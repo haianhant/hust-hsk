@@ -20,8 +20,8 @@ import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Joystick from '../components/ui/Joystick';
 import Minimap from '../components/ui/Minimap';
-import { bikeInput, bikeState, playerInput, playerState } from '../lib/playerState';
-import { CLASSROOM, CLASSROOM_DOOR, FAST_TRAVEL_DESTINATIONS } from '../lib/campus';
+import { bikeInput, bikeState, playerInput, playerState, type TimeOfDay } from '../lib/playerState';
+import { CLASSROOM, CLASSROOM_DOOR, FAST_TRAVEL_DESTINATIONS, LIBRARY_DOOR, LIBRARY_LOBBY } from '../lib/campus';
 import { ALL_HSK3_LEXEMES as LEXEMES, HSK3_LESSONS, HSK3_LESSON_LEXEMES } from '../content/hsk3-index';
 import { ALL_HSK4_LEXEMES, HSK4_LESSONS, HSK4_LESSON_LEXEMES } from '../content/hsk4-index';
 import {
@@ -70,6 +70,9 @@ const MINH_RADIUS = 2.5;
 type BkhnHook = {
   enterClassroom: () => void;
   exitClassroom: () => void;
+  enterLibraryLobby?: () => void;
+  exitLibraryLobby?: () => void;
+  isInLibraryLobby?: () => boolean;
   teleport: (x: number, z: number, yaw?: number, pitch?: number) => void;
   getPos: () => { x: number; z: number };
   getYaw?: () => number;
@@ -418,6 +421,9 @@ export default function HomePage() {
   // Phiên ôn nhanh (Bước 8): mở từ Lịch ôn / Sổ lỗi trong sổ tay.
   const [reviewSession, setReviewSession] = useState<{ ids: string[]; mode: 'review' | 'error'; title: string } | null>(null);
   const [inClassroom, setInClassroom] = useState(false);
+  const [inLibraryLobby, setInLibraryLobby] = useState(false);
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('day');
+  const [lobbyModal, setLobbyModal] = useState<'statue' | 'vocab-board' | 'info-desk' | null>(null);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [homework, setHomework] = useState<HomeworkState>('desk');
   const [actionDone, setActionDone] = useState(false);
@@ -620,22 +626,33 @@ export default function HomePage() {
   // (Bỏ effect cũ "hiển thị mặc định trên desktop, thu gọn trên mobile":
   // mặc định giờ đã thu gọn ở mọi cỡ màn hình — xem useState helpOpen.)
 
-  // Khi panel học hoặc menu chọn bài mở: khóa di chuyển (Player đọc flag mỗi frame).
+  // Khi panel học, menu chọn bài hoặc bảng thông tin sảnh thư viện mở: khóa di chuyển.
   useEffect(() => {
-    playerState.uiLocked = panel !== null || lessonsOpen;
+    playerState.uiLocked = panel !== null || lessonsOpen || lobbyModal !== null;
     return () => {
       playerState.uiLocked = false;
     };
-  }, [panel, lessonsOpen]);
+  }, [panel, lessonsOpen, lobbyModal]);
 
-  // Đồng bộ mode phòng học từ hook Player (enter/exitClassroom).
+  // Đồng bộ mode phòng học & sảnh thư viện từ hook Player.
   useEffect(() => {
     const onMode = (e: Event) => {
       const d = (e as CustomEvent<{ inClassroom: boolean }>).detail;
       if (d) setInClassroom(d.inClassroom);
     };
+    const onLobbyMode = (e: Event) => {
+      const d = (e as CustomEvent<{ inLibraryLobby: boolean }>).detail;
+      if (d) {
+        setInLibraryLobby(d.inLibraryLobby);
+        if (!d.inLibraryLobby) setLobbyModal(null);
+      }
+    };
     window.addEventListener('bkhn:classroom', onMode);
-    return () => window.removeEventListener('bkhn:classroom', onMode);
+    window.addEventListener('bkhn:library-lobby', onLobbyMode);
+    return () => {
+      window.removeEventListener('bkhn:classroom', onMode);
+      window.removeEventListener('bkhn:library-lobby', onLobbyMode);
+    };
   }, []);
 
   // Đợt 5 multiplayer — theo dõi snapshot phòng cho HUD (chỉ re-render
@@ -661,7 +678,7 @@ export default function HomePage() {
     let lastSent = { x: 0, z: 0, facing: 0, state: 'idle' as RemoteState };
     let lastSentAt = 0;
     const id = setInterval(() => {
-      if (playerState.inClassroom) return;
+      if (playerState.inClassroom || playerState.inLibraryLobby) return;
       const state: RemoteState = bikeState.riding
         ? 'riding'
         : playerState.moving
@@ -751,7 +768,15 @@ export default function HomePage() {
         showToast(bikeState.notice.text);
       }
       let found: { id: string; label: string } | null = null;
-      if (!inClassroom && bikeState.riding) {
+      if (inLibraryLobby) {
+        if (dist(LIBRARY_LOBBY.statue.x, LIBRARY_LOBBY.statue.z) <= 2.6) {
+          found = { id: 'lobby-statue', label: 'E — Tìm hiểu Tượng GS. Tạ Quang Bửu' };
+        } else if (dist(LIBRARY_LOBBY.vocabBoard.x, LIBRARY_LOBBY.vocabBoard.z) <= 2.4) {
+          found = { id: 'lobby-vocab-board', label: 'E — Xem bảng từ vựng Thư viện' };
+        } else if (dist(LIBRARY_LOBBY.infoDesk.x, LIBRARY_LOBBY.infoDesk.z) <= 2.4) {
+          found = { id: 'lobby-info-desk', label: 'E — Quầy thông tin & mượn sách' };
+        }
+      } else if (!inClassroom && bikeState.riding) {
         found = {
           id: 'bike-dismount',
           label: Math.abs(bikeState.speed) <= 0.5 ? 'E — Xuống xe' : 'E — Xuống xe (chỉ khi dừng hẳn)',
@@ -764,11 +789,12 @@ export default function HomePage() {
         } else if (questActive && step?.id === 'greet-minh' && dist(MINH_POS.x, MINH_POS.z) <= MINH_RADIUS) {
           found = { id: 'npc-minh', label: 'E — Nói chuyện với Minh' };
         } else if (
-          (questActive && step?.id === 'goto-door') || anyQuestDone
+          ((questActive && step?.id === 'goto-door') || anyQuestDone) &&
+          dist(CLASSROOM_DOOR.pos.x, CLASSROOM_DOOR.pos.z) <= CLASSROOM_DOOR.triggerRadius
         ) {
-          if (dist(CLASSROOM_DOOR.pos.x, CLASSROOM_DOOR.pos.z) <= CLASSROOM_DOOR.triggerRadius) {
-            found = { id: 'classroom-door', label: 'E — Vào phòng học' };
-          }
+          found = { id: 'classroom-door', label: 'E — Vào phòng học' };
+        } else if (dist(LIBRARY_DOOR.pos.x, LIBRARY_DOOR.pos.z) <= LIBRARY_DOOR.triggerRadius) {
+          found = { id: 'library-door', label: 'E — Vào sảnh Thư viện Tạ Quang Bửu' };
         }
       } else {
         if (questActive && step?.id === 'find-board' && dist(CLASSROOM.board.x, CLASSROOM.board.z) <= 2.5) {
@@ -783,7 +809,7 @@ export default function HomePage() {
       setInteractLabel(found?.label ?? null);
     }, 200);
     return () => clearInterval(id);
-  }, [entered, inClassroom, questActive, questDoneBefore, anyQuestDone, step?.id]);
+  }, [entered, inClassroom, inLibraryLobby, questActive, questDoneBefore, anyQuestDone, step?.id]);
 
   // --- Ghi đáp án vào store -----------------------------------------------------
   const handleAnswer = useCallback((a: QuestAnswer) => {
@@ -864,6 +890,21 @@ export default function HomePage() {
       if (panelRef.current === 'handbook') return;
       const pos = playerState.pos;
       const near = (x: number, z: number, r: number) => Math.hypot(pos.x - x, pos.z - z) <= r;
+      if (id === 'statue') {
+        setLobbyModal('statue');
+        speakText('谢光宝教授图书馆');
+        return;
+      }
+      if (id === 'vocab-board') {
+        setLobbyModal('vocab-board');
+        speakText('图书馆，科学，技术，借书，阅读');
+        return;
+      }
+      if (id === 'info-desk') {
+        setLobbyModal('info-desk');
+        speakText('你好，我想借书');
+        return;
+      }
       if (id === 'board') {
         if (!near(CLASSROOM.board.x, CLASSROOM.board.z, 2.5)) {
           showToast('Hãy đến gần bảng hơn để chọn.');
@@ -885,10 +926,10 @@ export default function HomePage() {
         window.dispatchEvent(new CustomEvent('bkhn:quest-object', { detail: { id } }));
       }
     },
-    [handleObjectAction, showToast, step?.kind],
+    [handleObjectAction, showToast, speakText, step?.kind],
   );
 
-  // --- Vào / ra phòng học (fade) ---------------------------------------------------
+  // --- Vào / ra phòng học & Sảnh Thư viện (fade) -----------------------------------
   const enterClassroomFade = useCallback(() => {
     setFade(true);
     window.setTimeout(() => {
@@ -906,6 +947,35 @@ export default function HomePage() {
       setFade(false);
     }, 350);
   }, []);
+
+  const enterLibraryLobbyFade = useCallback(() => {
+    setFade(true);
+    window.setTimeout(() => {
+      getHook()?.enterLibraryLobby?.();
+      setInLibraryLobby(true);
+      setFade(false);
+    }, 350);
+  }, []);
+
+  const exitLibraryLobbyFade = useCallback(() => {
+    setLobbyModal(null);
+    setFade(true);
+    window.setTimeout(() => {
+      getHook()?.exitLibraryLobby?.();
+      setInLibraryLobby(false);
+      setFade(false);
+    }, 350);
+  }, []);
+
+  const cycleTimeOfDay = useCallback(() => {
+    setTimeOfDay((prev) => {
+      const next: TimeOfDay = prev === 'day' ? 'sunset' : prev === 'sunset' ? 'night' : 'day';
+      playerState.timeOfDay = next;
+      const label = next === 'day' ? 'Ban ngày ☀️' : next === 'sunset' ? 'Hoàng hôn 🌇' : 'Ban đêm 🌙';
+      showToast(`Đã chuyển sang chế độ: ${label}`);
+      return next;
+    });
+  }, [showToast]);
 
   // --- Dịch chuyển nhanh (đợt 3 giai đoạn 5) -----------------------------------
   // Chỉ thay vị trí + hướng nhìn — không chạm quest/progress/điểm (hook
@@ -1022,6 +1092,25 @@ export default function HomePage() {
       }
       return;
     }
+    if (id === 'library-door') {
+      enterLibraryLobbyFade();
+      return;
+    }
+    if (id === 'lobby-statue') {
+      setLobbyModal('statue');
+      speakText('谢光宝教授图书馆');
+      return;
+    }
+    if (id === 'lobby-vocab-board') {
+      setLobbyModal('vocab-board');
+      speakText('图书馆，科学，技术，借书，阅读');
+      return;
+    }
+    if (id === 'lobby-info-desk') {
+      setLobbyModal('info-desk');
+      speakText('你好，我想借书');
+      return;
+    }
     if (id === 'board') {
       window.dispatchEvent(new CustomEvent('bkhn:quest-object', { detail: { id: 'board' } }));
       return;
@@ -1029,7 +1118,7 @@ export default function HomePage() {
     if (id === 'notebook' || id === 'homework') {
       handleObjectAction(id);
     }
-  }, [questActive, questDoneBefore, anyQuestDone, step?.id, startQuest, enterClassroomFade, advance, handleObjectAction, showToast]);
+  }, [questActive, questDoneBefore, anyQuestDone, step?.id, startQuest, enterClassroomFade, enterLibraryLobbyFade, advance, handleObjectAction, showToast, speakText]);
 
   useEffect(() => {
     if (!entered) return;
@@ -1386,6 +1475,8 @@ export default function HomePage() {
       <div className="absolute inset-0">
         <CampusScene
           inClassroom={inClassroom}
+          inLibraryLobby={inLibraryLobby}
+          timeOfDay={timeOfDay}
           notebookOpen={notebookOpen}
           homework={homework}
           onObjectClick={handleObjectClick}
@@ -1408,7 +1499,11 @@ export default function HomePage() {
         {/* Góc trên-trái: tên khu + điểm. */}
         <div className="absolute left-3 top-3 flex flex-col gap-2">
           <div className="w-fit rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm">
-            {inClassroom ? 'Phòng học mô phỏng' : zone}
+            {inClassroom
+              ? 'Phòng học mô phỏng'
+              : inLibraryLobby
+                ? 'Sảnh Thư viện Tạ Quang Bửu'
+                : zone}
           </div>
           <div className="w-fit rounded-full bg-[#A54432]/90 px-4 py-1.5 text-sm font-bold text-white backdrop-blur-sm">
             ⭐ {progress?.points ?? 0} điểm
@@ -1467,10 +1562,19 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Góc trên-phải: minimap + nút sổ tay/âm thanh/tốc độ/đổi bài. */}
+        {/* Góc trên-phải: minimap + nút ngày/đêm, sổ tay, âm thanh, tốc độ, đổi bài. */}
         <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
-          {!inClassroom && <Minimap onFastTravel={doFastTravel} />}
-          <div className="pointer-events-auto flex gap-2">
+          {!inClassroom && !inLibraryLobby && <Minimap onFastTravel={doFastTravel} />}
+          <div className="pointer-events-auto flex flex-wrap justify-end gap-2">
+            <button
+              id="toggle-time"
+              type="button"
+              onClick={cycleTimeOfDay}
+              aria-label="Chuyển đổi thời gian Ngày / Hoàng hôn / Đêm"
+              className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
+            >
+              {timeOfDay === 'day' ? '☀️ Ngày' : timeOfDay === 'sunset' ? '🌇 Hoàng hôn' : '🌙 Đêm'}
+            </button>
             <button
               id="change-lesson"
               type="button"
@@ -1579,7 +1683,7 @@ export default function HomePage() {
           </button>
           {/* Đợt 3 giai đoạn 4 — xe máy: chỉ ngoài sân (không gọi xe trong
               phòng học); "Gọi xe" ẩn khi đang lái vì đã ngồi trên xe rồi. */}
-          {!inClassroom && !riding && (
+          {!inClassroom && !inLibraryLobby && !riding && (
             <button
               id="call-bike"
               type="button"
@@ -1594,7 +1698,7 @@ export default function HomePage() {
               🛵 Gọi xe
             </button>
           )}
-          {!inClassroom && (
+          {!inClassroom && !inLibraryLobby && (
             <button
               id="recall-bike"
               type="button"
@@ -1606,6 +1710,16 @@ export default function HomePage() {
               className="pointer-events-auto rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
             >
               🛵 Đưa xe về đường
+            </button>
+          )}
+          {inLibraryLobby && (
+            <button
+              id="exit-library-lobby"
+              type="button"
+              onClick={exitLibraryLobbyFade}
+              className="pointer-events-auto relative z-30 rounded-full bg-black/65 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/80"
+            >
+              🚪 Ra khỏi sảnh Thư viện
             </button>
           )}
           {inClassroom && (
@@ -1811,6 +1925,126 @@ export default function HomePage() {
             onClose={() => setLessonsOpen(false)}
             onHome={goToMenu}
           />
+        </div>
+      )}
+
+      {/* Bảng tương tác Sảnh tầng 1 Thư viện Tạ Quang Bửu */}
+      {lobbyModal && inLibraryLobby && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/45 p-4">
+          <div
+            data-testid="library-lobby-modal"
+            className="w-full max-w-lg rounded-2xl border border-[#C9A227]/40 bg-[#FDF8EE] p-5 text-left shadow-2xl"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-[#3B2214]">
+                {lobbyModal === 'statue'
+                  ? '🏛️ Tượng GS. Tạ Quang Bửu & Bức tường Nhị phân 0/1'
+                  : lobbyModal === 'vocab-board'
+                    ? '📚 Từ vựng Hán ngữ chuyên đề Thư viện & Khoa học'
+                    : '💁 Quầy Thông tin & Mượn sách Thư viện'}
+              </h2>
+              <button
+                type="button"
+                aria-label="Đóng thông tin sảnh thư viện"
+                onClick={() => setLobbyModal(null)}
+                className="rounded-full bg-black/10 px-2.5 py-1 font-bold text-[#3B2214] hover:bg-black/20"
+              >
+                ✕
+              </button>
+            </div>
+
+            {lobbyModal === 'statue' && (
+              <div className="space-y-3 text-sm leading-relaxed text-[#2B2B2B]">
+                <p>
+                  <strong>Giáo sư Tạ Quang Bửu (1910 – 1986)</strong> là nhà khoa học lớn, Hiệu trưởng đầu tiên của
+                  Trường Đại học Bách khoa Hà Nội và nguyên Bộ trưởng Bộ Đại học và Trung học chuyên nghiệp.
+                </p>
+                <p>
+                  Tại trung tâm sảnh tầng 1 Thư viện Tạ Quang Bửu, tượng bán thân đồng của Giáo sư đặt trang trọng trước{' '}
+                  <strong>bức tường gỗ khắc họa tiết nhị phân 0/1 và diềm hồi văn phát sáng vàng ấm</strong> — biểu
+                  tượng cho sự giao thoa giữa truyền thống văn hiến và khoa học công nghệ hiện đại của Bách khoa.
+                </p>
+                <div className="rounded-xl border border-[#C9A227]/40 bg-[#FFF8E6] p-3">
+                  <p className="font-bold text-[#A54432]">谢光宝教授图书馆 (Xiè Guāngbǎo Jiàoshòu Túshūguǎn)</p>
+                  <p className="text-xs text-[#2B2B2B]/75">
+                    Thư viện Giáo sư Tạ Quang Bửu · 科学先驱 (Kēxué xiānqū — Người tiên phong khoa học)
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => speakText('谢光宝教授是河内百科大学的第一任校长')}
+                    className="mt-2 rounded-full bg-[#1c5c3a] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#16492e]"
+                  >
+                    🔊 Nghe câu giới thiệu tiếng Trung
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {lobbyModal === 'vocab-board' && (
+              <div className="space-y-2.5 text-sm text-[#2B2B2B]">
+                {[
+                  { zh: '图书馆', py: 'túshūguǎn', vi: 'Thư viện' },
+                  { zh: '科学', py: 'kēxué', vi: 'Khoa học' },
+                  { zh: '技术', py: 'jìshù', vi: 'Kỹ thuật / Công nghệ' },
+                  { zh: '阅读', py: 'yuèdú', vi: 'Đọc sách, nghiên cứu' },
+                  { zh: '借书', py: 'jièshū', vi: 'Mượn sách' },
+                ].map((item) => (
+                  <div
+                    key={item.zh}
+                    className="flex items-center justify-between rounded-xl border border-[#1c2b1f]/15 bg-white px-3.5 py-2"
+                  >
+                    <div>
+                      <span className="text-base font-bold text-[#A54432]">{item.zh}</span>{' '}
+                      <span className="text-xs font-semibold text-[#1c5c3a]">({item.py})</span>
+                      <p className="text-xs text-[#2B2B2B]/80">{item.vi}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => speakText(item.zh)}
+                      className="rounded-full bg-[#1c5c3a]/15 px-3 py-1 text-xs font-bold text-[#1c5c3a] hover:bg-[#1c5c3a]/25"
+                    >
+                      🔊 Phát âm
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {lobbyModal === 'info-desk' && (
+              <div className="space-y-3 text-sm leading-relaxed text-[#2B2B2B]">
+                <p>
+                  Chào mừng bạn đến với <strong>Quầy thông tin & Mượn trả sách tầng 1</strong>. Sinh viên Bách khoa sử
+                  dụng thẻ sinh viên (学生证 xuéshengzhèng) để qua cổng từ và mượn giáo trình tại các phòng đọc chuyên
+                  ngành từ tầng 3 đến tầng 9.
+                </p>
+                <div className="rounded-xl border border-[#1c5c3a]/30 bg-white p-3">
+                  <p className="font-bold text-[#1c5c3a]">
+                    “你好！我想在谢光宝图书馆借一本汉娜词典。”
+                  </p>
+                  <p className="mt-1 text-xs text-[#2B2B2B]/75">
+                    Xin chào! Tôi muốn mượn một cuốn từ điển tại Thư viện Tạ Quang Bửu.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => speakText('你好，我想在图书馆借书')}
+                    className="mt-2 rounded-full bg-[#A54432] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#8A3828]"
+                  >
+                    🔊 Nghe hội thoại mẫu
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setLobbyModal(null)}
+                className="rounded-full bg-[#3B2214] px-5 py-2 text-sm font-bold text-white hover:bg-[#24140B]"
+              >
+                Đóng (Tiếp tục tham quan sảnh)
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

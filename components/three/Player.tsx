@@ -49,6 +49,8 @@ import {
   CLASSROOM,
   CLASSROOM_DOOR,
   FAST_TRAVEL_DESTINATIONS,
+  LIBRARY_DOOR,
+  LIBRARY_LOBBY,
   ROADS,
   SPAWN,
   findFreeSpotNear,
@@ -56,6 +58,7 @@ import {
   resolveBikeCollisions,
   resolveClassroomCollisions,
   resolveCollisions,
+  resolveLibraryLobbyCollisions,
   type Vec2,
 } from '../../lib/campus';
 import { bikeInput, bikeState, fastTravelState, playerInput, playerState, updatePlayerState } from '../../lib/playerState';
@@ -175,7 +178,7 @@ export default function Player() {
   // (tạo một lần trong useEffect) không bao giờ đọc closure cũ.
   const mountBike = (): { ok: boolean; reason?: string } => {
     if (ridingRef.current) return { ok: false, reason: 'riding' };
-    if (playerState.inClassroom) return { ok: false, reason: 'classroom' };
+    if (playerState.inClassroom || playerState.inLibraryLobby) return { ok: false, reason: 'classroom' };
     if (playerState.uiLocked) return { ok: false, reason: 'ui-locked' };
     const d = Math.hypot(posRef.current.x - bikePosRef.current.x, posRef.current.z - bikePosRef.current.z);
     if (d > BIKE_MOUNT_RADIUS) return { ok: false, reason: 'too-far' };
@@ -243,7 +246,7 @@ export default function Player() {
     return { ok: true };
   };
   const callBike = (): { ok: boolean; reason?: string } => {
-    if (playerState.inClassroom) return { ok: false, reason: 'classroom' };
+    if (playerState.inClassroom || playerState.inLibraryLobby) return { ok: false, reason: 'classroom' };
     if (ridingRef.current) return { ok: false, reason: 'riding' };
     // Chỉ di chuyển CÙNG MỘT xe (không tạo instance mới — Motorbike chỉ
     // mount 1 lần trong CampusScene, bikeState.instances luôn = 1).
@@ -256,7 +259,7 @@ export default function Player() {
     return { ok: true };
   };
   const recallBike = (): { ok: boolean; reason?: string } => {
-    if (playerState.inClassroom) return { ok: false, reason: 'classroom' };
+    if (playerState.inClassroom || playerState.inLibraryLobby) return { ok: false, reason: 'classroom' };
     const road = nearestRoadPoint(bikePosRef.current);
     const spot = findFreeSpotNear(road, 0, 4);
     if (!spot) return { ok: false, reason: 'no-spot' };
@@ -354,10 +357,14 @@ export default function Player() {
       bikeHeadingRef.current = Math.atan2(dest.x - spot.x, dest.z - spot.z);
       syncBikeState();
     }
-    // Đang trong phòng học → ra khỏi phòng trước (page đồng bộ qua sự kiện).
+    // Đang trong phòng học hoặc sảnh thư viện → ra khỏi phòng trước (page đồng bộ qua sự kiện).
     if (playerState.inClassroom) {
       playerState.inClassroom = false;
       window.dispatchEvent(new CustomEvent('bkhn:classroom', { detail: { inClassroom: false } }));
+    }
+    if (playerState.inLibraryLobby) {
+      playerState.inLibraryLobby = false;
+      window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: false } }));
     }
     posRef.current = resolveCollisions({ x: dest.x, z: dest.z }, AVATAR.radius).pos;
     facingRef.current = dest.facing;
@@ -392,7 +399,9 @@ export default function Player() {
         // đó vì va chạm đã chặn lúc di chuyển.
         const resolved = playerState.inClassroom
           ? resolveClassroomCollisions({ x, z }, AVATAR.radius).pos
-          : resolveCollisions({ x, z }, AVATAR.radius).pos;
+          : playerState.inLibraryLobby
+            ? resolveLibraryLobbyCollisions({ x, z }, AVATAR.radius).pos
+            : resolveCollisions({ x, z }, AVATAR.radius).pos;
         posRef.current = resolved;
         // Đợt 5 — ghi playerState ngay để cầu nối multiplayer gửi vị trí
         // mới trong 100 ms (không chờ frame sau — xem mountBike).
@@ -542,6 +551,40 @@ export default function Player() {
         window.dispatchEvent(new CustomEvent('bkhn:classroom', { detail: { inClassroom: false } }));
       },
       isInClassroom: () => playerState.inClassroom,
+      enterLibraryLobby: () => {
+        if (ridingRef.current) {
+          ridingRef.current = false;
+          bikeSpeedRef.current = 0;
+          bikeSteerRef.current = 0;
+          bikeLeanRef.current = 0;
+          syncBikeState();
+        }
+        playerState.inClassroom = false;
+        playerState.inLibraryLobby = true;
+        posRef.current = { ...LIBRARY_LOBBY.spawn };
+        facingRef.current = Math.PI;
+        yawRef.current = 0; // nhìn thẳng về bắc (-Z), hướng tượng GS. Tạ Quang Bửu & tường nhị phân 0/1
+        playerState.cameraYaw = 0;
+        pitchRef.current = 0.2;
+        playerState.cameraPitch = 0.2;
+        distRef.current = 3.8;
+        viewModeRef.current = 'follow';
+        window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: true } }));
+      },
+      exitLibraryLobby: () => {
+        playerState.inLibraryLobby = false;
+        // Ra khỏi sảnh về trước mái hiên Thư viện (x = 38, z = 20.5), nhìn về bắc (yaw = 0) ra chữ HUST & sân trước
+        posRef.current = { x: LIBRARY_DOOR.pos.x, z: 20.5 };
+        facingRef.current = Math.PI;
+        yawRef.current = 0;
+        playerState.cameraYaw = 0;
+        pitchRef.current = 0.18;
+        playerState.cameraPitch = 0.18;
+        distRef.current = 7;
+        viewModeRef.current = 'follow';
+        window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: false } }));
+      },
+      isInLibraryLobby: () => playerState.inLibraryLobby,
     };
     (window as unknown as { __bkhn?: unknown }).__bkhn = hook;
     return () => {
@@ -664,10 +707,14 @@ export default function Player() {
         bikeLeanRef.current = 0;
         syncBikeState();
       }
-      posRef.current = playerState.inClassroom ? { ...CLASSROOM.spawn } : { ...SPAWN };
-      if (playerState.inClassroom) {
+      posRef.current = playerState.inClassroom
+        ? { ...CLASSROOM.spawn }
+        : playerState.inLibraryLobby
+          ? { ...LIBRARY_LOBBY.spawn }
+          : { ...SPAWN };
+      if (playerState.inClassroom || playerState.inLibraryLobby) {
         yawRef.current = 0;
-        pitchRef.current = 0.25;
+        pitchRef.current = playerState.inLibraryLobby ? 0.2 : 0.25;
       } else {
         yawRef.current = -Math.PI / 2;
         pitchRef.current = 0.18;
@@ -812,7 +859,9 @@ export default function Player() {
       };
       const { pos, hit } = playerState.inClassroom
         ? resolveClassroomCollisions(next, AVATAR.radius)
-        : resolveCollisions(next, AVATAR.radius);
+        : playerState.inLibraryLobby
+          ? resolveLibraryLobbyCollisions(next, AVATAR.radius)
+          : resolveCollisions(next, AVATAR.radius);
       posRef.current = pos;
       // Đếm va chạm: chỉ đếm một lần khi vừa chạm vật mới (không đếm mỗi frame
       // khi đang trượt dọc tường).
@@ -958,14 +1007,25 @@ export default function Player() {
     // Đang lái: camera bám sau xe, xa + cao hơn để thấy đường trước.
     if (ridingRef.current) d = Math.max(d, 7.5);
     if (playerState.inClassroom) d = Math.min(d, 4.5);
+    if (playerState.inLibraryLobby) d = Math.min(d, 5.2);
     let camPos = placeCamera(d);
     if (playerState.inClassroom) {
       camPos.x = clamp(camPos.x, -4.3, 4.3);
       camPos.z = clamp(camPos.z, -2.8, 2.8);
       camPos.y = Math.min(camPos.y, 2.85);
+    } else if (playerState.inLibraryLobby) {
+      camPos.x = clamp(camPos.x, -5.6, 5.6);
+      camPos.z = clamp(camPos.z, -3.9, 3.9);
+      camPos.y = Math.min(camPos.y, 3.85);
     }
     let guard = 0;
-    while (guard < 24 && d > 2.2 && !playerState.inClassroom && pointInBuilding(camPos.x, camPos.z)) {
+    while (
+      guard < 24 &&
+      d > 2.2 &&
+      !playerState.inClassroom &&
+      !playerState.inLibraryLobby &&
+      pointInBuilding(camPos.x, camPos.z)
+    ) {
       d *= 0.85;
       camPos = placeCamera(d);
       guard += 1;

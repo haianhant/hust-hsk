@@ -40,11 +40,16 @@
 // LAKE_WILLOWS). Không đổi collider — xem ghi chú cuối file.
 // ---------------------------------------------------------------------------
 
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { LAKE, LAKE_BANK, LAKE_BENCHES, LAKE_WILLOWS } from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
+import {
+  makeStoneBankTexture,
+  makeWalkwayBrickTexture,
+  makeWaterRippleBumpTexture,
+} from './materials';
 
 // --- Bảng màu chốt (reference-visual §0, ước lượng từ ảnh; nước + hoa sửa
 // theo brief đợt 2 §3) --------------------------------------------------------
@@ -520,39 +525,58 @@ export function TienLake() {
   const l = LAKE.halfL * 2; // 88 m
   const willowSpecs = useMemo(() => buildWillowSpecs(), []);
   const waterRef = useRef<THREE.Mesh>(null);
+  const lakeTextures = useMemo(() => {
+    const waterBump = makeWaterRippleBumpTexture(10, 18);
+    const stoneBank = makeStoneBankTexture(16, 1);
+    const walkwayBrick = makeWalkwayBrickTexture(2, 32);
+    return { waterBump, stoneBank, walkwayBrick };
+  }, []);
 
-  // Gợn nhẹ, chậm: mặt nước dao động ±0,008 m quanh y = 0,05 — vẫn thấp hơn
-  // lá thấp nhất (bèo y = 0,08) nên không bao giờ chạm/đè lên lá.
+  useEffect(
+    () => () => {
+      lakeTextures.waterBump.dispose();
+      lakeTextures.stoneBank.dispose();
+      lakeTextures.walkwayBrick.dispose();
+    },
+    [lakeTextures],
+  );
+
+  // Gợn nhẹ, chậm: mặt nước dao động ±0,008 m quanh y = 0,05 + dịch chuyển
+  // vân sóng gợn (bumpMap offset) tạo hiệu ứng lấp lánh tự nhiên.
   useFrame((state) => {
+    const t = state.clock.elapsedTime;
     if (waterRef.current) {
-      waterRef.current.position.y = WATER_Y + Math.sin(state.clock.elapsedTime * 0.45) * 0.008;
+      waterRef.current.position.y = WATER_Y + Math.sin(t * 0.45) * 0.008;
     }
+    lakeTextures.waterBump.offset.x = (t * 0.025) % 1;
+    lakeTextures.waterBump.offset.y = (t * 0.018) % 1;
   });
 
   return (
     <group>
       {/* Mặt nước hình chữ nhật 45 × 88 m, y = 0,05 — thấp hơn gờ bê tông
-          (y = 0,51) 0,46 m. Màu xanh xám/ôliu dịu, roughness 0,28 (phản
-          chiếu nhẹ); KHÔNG nhận bóng để mặt nước không loang lổ bóng lá. */}
+          (y = 0,51) 0,46 m. Màu xanh xám/ôliu dịu, có bumpMap gợn sóng
+          chuyển động mượt; KHÔNG nhận bóng để mặt nước không loang lổ bóng lá. */}
       <mesh ref={waterRef} rotation-x={-Math.PI / 2} position={[LAKE.center.x, WATER_Y, LAKE.center.z]}>
         <planeGeometry args={[w, l]} />
-        <meshStandardMaterial color={LAKE_WATER} roughness={0.28} metalness={0.05} />
+        <meshStandardMaterial
+          color={LAKE_WATER}
+          bumpMap={lakeTextures.waterBump}
+          bumpScale={0.018}
+          roughness={0.22}
+          metalness={0.08}
+        />
       </mesh>
 
       {/* Bờ kè đá hộc THẤP: tường kè cao 0,45 m ôm mép nước + bệ chân kè
           thấp nhô về phía nước + gờ bê tông phẳng trên cùng (mặt trên
-          y = 0,51). Chỉ là hình học hiển thị — collider AABB trong
-          campus.ts KHÔNG đổi nên bờ vẫn chặn người chơi rơi xuống nước. */}
+          y = 0,51). Áp dụng vân đá hộc xếp lớp + rêu ẩm chân kè. */}
       {LAKE_BANK.map((b, i) => {
         const cx = (b.minX + b.maxX) / 2;
         const cz = (b.minZ + b.maxZ) / 2;
         const bw = b.maxX - b.minX;
         const bl = b.maxZ - b.minZ;
-        // Bệ chân kè: nhô 0,06 m về PHÍA NƯỚC (phía avatar không tới được
-        // nhờ pointInLake) để không lấn ra ngoài collider AABB của bờ kè.
-        // Bờ dài theo X (bắc/nam) thì nhô theo Z; bờ dài theo Z (đông/tây)
-        // thì nhô theo X.
-        const horizontal = bw > bl; // bờ bắc/nam: dài theo X
+        const horizontal = bw > bl;
         const inwardX = horizontal ? 0 : cx < LAKE.center.x ? 1 : -1;
         const inwardZ = horizontal ? (cz < LAKE.center.z ? 1 : -1) : 0;
         const baseW = bw + (inwardX !== 0 ? 0.06 : 0);
@@ -563,15 +587,21 @@ export function TienLake() {
           <group key={`bank-${i}`}>
             <mesh position={[cx, BANK_H / 2, cz]} castShadow receiveShadow>
               <boxGeometry args={[bw, BANK_H, bl]} />
-              <meshStandardMaterial color={BANK_STONE} roughness={1} />
+              <meshStandardMaterial
+                color="#FFFFFF"
+                map={lakeTextures.stoneBank}
+                bumpMap={lakeTextures.stoneBank}
+                bumpScale={0.022}
+                roughness={0.92}
+              />
             </mesh>
             <mesh position={[baseCx, BANK_BASE_H / 2, baseCz]} receiveShadow>
               <boxGeometry args={[baseW, BANK_BASE_H, baseL]} />
-              <meshStandardMaterial color={BANK_STONE_DARK} roughness={1} />
+              <meshStandardMaterial color={BANK_STONE_DARK} roughness={0.95} />
             </mesh>
             <mesh position={[cx, BANK_H + RIM_H / 2, cz]}>
               <boxGeometry args={[bw + 0.12, RIM_H, bl + 0.12]} />
-              <meshStandardMaterial color={BANK_RIM} roughness={1} />
+              <meshStandardMaterial color={BANK_RIM} roughness={0.9} />
             </mesh>
           </group>
         );
@@ -582,7 +612,14 @@ export function TienLake() {
         <group key={`walk-${i}`}>
           <mesh rotation-x={-Math.PI / 2} position={[wk.cx, WALKWAY_Y, wk.cz]} receiveShadow>
             <planeGeometry args={[wk.w, wk.l]} />
-            <meshStandardMaterial color={PAVE} roughness={0.95} metalness={0} />
+            <meshStandardMaterial
+              color="#FFFFFF"
+              map={lakeTextures.walkwayBrick}
+              bumpMap={lakeTextures.walkwayBrick}
+              bumpScale={0.01}
+              roughness={0.9}
+              metalness={0}
+            />
           </mesh>
           {/* Viền sẫm dọc mép ngoài của dải lát. */}
           <mesh

@@ -9,7 +9,8 @@
 // Chữ trong scene dùng canvas texture (components/three/TextPlate.tsx).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   I_LOVE_BK,
@@ -314,22 +315,57 @@ function TranDaiNghiaSquare() {
         </group>
       </group>
 
-      {/* Bia tượng đài: cẩm thạch trắng + chữ khắc đỏ. KHÔNG dựng pho tượng
-          "mũ cối trên sách mở" — chưa có ảnh toàn cảnh (reference-visual §5). */}
+      {/* Bia tượng đài "Xếp bút nghiên" trước Hội trường C2: bia cẩm thạch trắng +
+          chữ khắc đỏ + cụm điêu khắc Trang sách mở & Mũ cối cẩm thạch trắng + đôi bình gốm. */}
       <group position={[MONUMENT.center.x, 0, MONUMENT.center.z]}>
         <mesh position={[0, 0.2, 0]} castShadow receiveShadow>
-          <boxGeometry args={[1.4, 0.4, 3]} />
-          <meshStandardMaterial color={MARBLE} roughness={0.8} />
+          <boxGeometry args={[1.6, 0.4, 3.2]} />
+          <meshStandardMaterial color={MARBLE} roughness={0.75} />
         </mesh>
         <mesh position={[0, 1.9, 0]} castShadow>
           <boxGeometry args={[0.5, 3, 2.2]} />
-          <meshStandardMaterial color={MARBLE} roughness={0.8} />
+          <meshStandardMaterial color={MARBLE} roughness={0.75} />
         </mesh>
         {/* Tấm nghiêng thấp hơn, tựa vào chân bia. */}
         <mesh position={[-0.75, 0.65, 0]} rotation-z={0.45} castShadow>
           <boxGeometry args={[0.25, 1.4, 1.6]} />
-          <meshStandardMaterial color={MARBLE} roughness={0.8} />
+          <meshStandardMaterial color={MARBLE} roughness={0.75} />
         </mesh>
+        {/* Trang sách mở cẩm thạch trắng đặt trên bệ trước bia */}
+        <group position={[-0.55, 0.92, 0]} rotation={[0, 0, 0.35]}>
+          <mesh position={[0, 0, -0.36]} rotation={[0.18, 0, 0]} castShadow>
+            <boxGeometry args={[0.55, 0.08, 0.68]} />
+            <meshStandardMaterial color="#FAF9F5" roughness={0.65} />
+          </mesh>
+          <mesh position={[0, 0, 0.36]} rotation={[-0.18, 0, 0]} castShadow>
+            <boxGeometry args={[0.55, 0.08, 0.68]} />
+            <meshStandardMaterial color="#FAF9F5" roughness={0.65} />
+          </mesh>
+          {/* Chiếc mũ cối sinh viên đặt trên trang sách mở */}
+          <group position={[-0.04, 0.14, 0.12]}>
+            <mesh castShadow>
+              <cylinderGeometry args={[0.24, 0.28, 0.05, 20]} />
+              <meshStandardMaterial color="#F2EFE9" roughness={0.6} />
+            </mesh>
+            <mesh position={[0, 0.04, 0]} scale={[1, 0.68, 1]} castShadow>
+              <sphereGeometry args={[0.2, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2]} />
+              <meshStandardMaterial color="#F7F5F0" roughness={0.6} />
+            </mesh>
+          </group>
+        </group>
+        {/* Đôi bình hoa gốm sứ xanh trắng đặt đối xứng hai bên chân bia */}
+        {[-1.25, 1.25].map((vz) => (
+          <group key={`vase-${vz}`} position={[-0.45, 0.4, vz]}>
+            <mesh position={[0, 0.22, 0]} castShadow>
+              <cylinderGeometry args={[0.14, 0.11, 0.44, 16]} />
+              <meshStandardMaterial color="#EBF2FA" roughness={0.35} />
+            </mesh>
+            <mesh position={[0, 0.46, 0]}>
+              <cylinderGeometry args={[0.16, 0.12, 0.06, 16]} />
+              <meshStandardMaterial color="#2B5B84" roughness={0.4} />
+            </mesh>
+          </group>
+        ))}
         <LabelPlane
           textureKey="monument"
           canvasW={512}
@@ -344,6 +380,206 @@ function TranDaiNghiaSquare() {
   );
 }
 
+// --- Đài phun nước & Hồ cảnh quan trước Tòa C1 (góc tây Quảng trường C1) -----
+function C1Fountain() {
+  const sprayRef = useRef<THREE.Group>(null!);
+  useFrame((state) => {
+    if (!sprayRef.current) return;
+    const t = state.clock.elapsedTime;
+    sprayRef.current.scale.y = 0.92 + Math.sin(t * 4.2) * 0.08;
+    sprayRef.current.rotation.y = t * 0.6;
+  });
+
+  // Đặt ở (-78, -36.5), phía bắc Khối đá trắng (-78, -31), hoàn toàn ngoài đường đi và chặng leg2
+  return (
+    <group position={[-78, 0, -36.5]}>
+      {/* Thành bể đá hình chữ nhật vát góc 4.8 × 2.6 m */}
+      <mesh position={[0, 0.18, 0]} castShadow receiveShadow>
+        <boxGeometry args={[4.8, 0.36, 2.6]} />
+        <meshStandardMaterial color="#B5B2A8" roughness={0.85} />
+      </mesh>
+      {/* Lòng nước xanh trong */}
+      <mesh position={[0, 0.31, 0]} receiveShadow>
+        <boxGeometry args={[4.3, 0.12, 2.1]} />
+        <meshStandardMaterial color="#2C6E7A" roughness={0.22} metalness={0.12} />
+      </mesh>
+      {/* Tháp phun nước đá 2 tầng ở giữa bể */}
+      <mesh position={[0, 0.52, 0]} castShadow>
+        <cylinderGeometry args={[0.38, 0.48, 0.45, 16]} />
+        <meshStandardMaterial color="#D8D5CC" roughness={0.75} />
+      </mesh>
+      <mesh position={[0, 0.82, 0]} castShadow>
+        <cylinderGeometry args={[0.72, 0.28, 0.18, 18]} />
+        <meshStandardMaterial color="#E5E2D9" roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 1.05, 0]} castShadow>
+        <cylinderGeometry args={[0.14, 0.2, 0.35, 14]} />
+        <meshStandardMaterial color="#D8D5CC" roughness={0.75} />
+      </mesh>
+      {/* Tia nước phun trắng bạc chuyển động */}
+      <group ref={sprayRef} position={[0, 1.22, 0]}>
+        <mesh position={[0, 0.32, 0]}>
+          <coneGeometry args={[0.36, 0.68, 16, 1, true]} />
+          <meshStandardMaterial color="#E6F7FF" transparent opacity={0.55} roughness={0.2} side={THREE.DoubleSide} />
+        </mesh>
+        {[0, 1, 2, 3, 4, 5].map((k) => {
+          const ang = (k / 6) * Math.PI * 2;
+          return (
+            <mesh
+              key={`jet-${k}`}
+              position={[Math.cos(ang) * 0.42, -0.08, Math.sin(ang) * 0.42]}
+              rotation={[0, -ang, 0.48]}
+            >
+              <cylinderGeometry args={[0.02, 0.04, 0.62, 8]} />
+              <meshStandardMaterial color="#F0FAFF" transparent opacity={0.6} roughness={0.2} />
+            </mesh>
+          );
+        })}
+      </group>
+    </group>
+  );
+}
+
+// --- Hội trường / Nhà C2 (Phía bắc Quảng trường Trần Đại Nghĩa & Tượng đài) ---
+function drawC2Sign(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  ctx.fillStyle = '#F5F2EB';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#8A6B48';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(8, 8, w - 16, h - 16);
+  ctx.fillStyle = '#B02A24';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 68px Arial, sans-serif';
+  ctx.fillText('HỘI TRƯỜNG C2', w / 2, h * 0.52);
+}
+
+function C2Building() {
+  // Đặt ở (83, 0, -27), phía bắc TDN_SQUARE (z -18..6), không chạm đường hay collider nào
+  return (
+    <group position={[83, 0, -27]}>
+      {/* Khối hội trường chính 16 × 10 m, cao 7.6 m */}
+      <mesh position={[0, 3.8, 0]} castShadow receiveShadow>
+        <boxGeometry args={[16, 7.6, 10]} />
+        <meshStandardMaterial color="#F2EFE6" roughness={0.88} />
+      </mesh>
+      {/* Mái vòm cong đặc trưng của Hội trường C2 */}
+      <mesh position={[0, 7.6, 0]} rotation={[0, 0, Math.PI / 2]} scale={[0.32, 1, 1]} castShadow>
+        <cylinderGeometry args={[5.2, 5.2, 16.4, 24, 1, false, 0, Math.PI]} />
+        <meshStandardMaterial color="#D6CFC2" roughness={0.85} />
+      </mesh>
+      {/* Hàng cột hiên mặt nam (quay ra Quảng trường Trần Đại Nghĩa & Tượng đài) */}
+      {[-6, -3, 0, 3, 6].map((cx) => (
+        <mesh key={`c2-col-${cx}`} position={[cx, 3.4, 5.2]} castShadow>
+          <boxGeometry args={[0.45, 6.8, 0.45]} />
+          <meshStandardMaterial color="#FFFFFF" roughness={0.82} />
+        </mesh>
+      ))}
+      {/* Mái hiên sảnh mặt nam */}
+      <mesh position={[0, 4.2, 5.6]} castShadow>
+        <boxGeometry args={[14.5, 0.35, 1.4]} />
+        <meshStandardMaterial color="#E5DEC9" roughness={0.85} />
+      </mesh>
+      {/* Cửa kính lớn tầng 1 & tầng 2 */}
+      {[-4.5, -1.5, 1.5, 4.5].map((wx) => (
+        <group key={`c2-win-${wx}`}>
+          <mesh position={[wx, 1.8, 5.03]}>
+            <planeGeometry args={[2.1, 2.6]} />
+            <meshStandardMaterial color="#3A5368" roughness={0.35} metalness={0.2} />
+          </mesh>
+          <mesh position={[wx, 5.5, 5.03]}>
+            <planeGeometry args={[2.1, 1.8]} />
+            <meshStandardMaterial color="#4A657A" roughness={0.35} metalness={0.2} />
+          </mesh>
+        </group>
+      ))}
+      <LabelPlane
+        textureKey="c2-hall-sign"
+        canvasW={512}
+        canvasH={128}
+        draw={drawC2Sign}
+        size={[3.8, 0.95]}
+        position={[0, 4.9, 5.08]}
+        transparent={false}
+      />
+    </group>
+  );
+}
+
+// --- Cổng chính Số 1 Đại Cồ Việt (Rìa bắc sau Tòa C1, z = -73.5) --------------
+function drawDaiCoVietGateSign(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  ctx.fillStyle = '#A81C24';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#F5C518';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(10, 10, w - 20, h - 20);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 46px Arial, sans-serif';
+  ctx.fillText('ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, h * 0.36);
+  ctx.fillStyle = '#FFD966';
+  ctx.font = '700 30px Arial, sans-serif';
+  ctx.fillText('SỐ 1 ĐẠI CỒ VIỆT · HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY', w / 2, h * 0.74);
+}
+
+function DaiCoVietGate() {
+  return (
+    <group position={[-58, 0, -73.5]}>
+      {/* Hai trụ cổng chính ốp đá trang nghiêm */}
+      {[-5.2, 5.2].map((gx) => (
+        <group key={`dcv-pillar-${gx}`} position={[gx, 0, 0]}>
+          <mesh position={[0, 2.8, 0]} castShadow receiveShadow>
+            <boxGeometry args={[1.3, 5.6, 1.3]} />
+            <meshStandardMaterial color="#EAE4D7" roughness={0.85} />
+          </mesh>
+          <mesh position={[0, 5.75, 0]} castShadow>
+            <boxGeometry args={[1.55, 0.3, 1.55]} />
+            <meshStandardMaterial color="#C8C0B0" roughness={0.8} />
+          </mesh>
+        </group>
+      ))}
+      {/* Dầm ngang cổng chính mang biển tên trường */}
+      <mesh position={[0, 5.1, 0]} castShadow>
+        <boxGeometry args={[11.8, 1.15, 0.9]} />
+        <meshStandardMaterial color="#EAE4D7" roughness={0.85} />
+      </mesh>
+      <LabelPlane
+        textureKey="dcv-gate-sign-south"
+        canvasW={1024}
+        canvasH={220}
+        draw={drawDaiCoVietGateSign}
+        size={[9.6, 1.02]}
+        position={[0, 5.1, 0.48]}
+        transparent={false}
+      />
+      <LabelPlane
+        textureKey="dcv-gate-sign-north"
+        canvasW={1024}
+        canvasH={220}
+        draw={drawDaiCoVietGateSign}
+        size={[9.6, 1.02]}
+        position={[0, 5.1, -0.48]}
+        rotation={[0, Math.PI, 0]}
+        transparent={false}
+      />
+      {/* Hàng rào sắt thoáng hai bên cổng Đại Cồ Việt */}
+      {[-12, -8.5, 8.5, 12].map((fx) => (
+        <group key={`dcv-fence-${fx}`} position={[fx, 0, 0]}>
+          <mesh position={[0, 0.35, 0]}>
+            <boxGeometry args={[3.4, 0.7, 0.35]} />
+            <meshStandardMaterial color="#D8D2C5" roughness={0.9} />
+          </mesh>
+          <mesh position={[0, 1.35, 0]}>
+            <boxGeometry args={[3.3, 1.3, 0.08]} />
+            <meshStandardMaterial color="#2B2F33" roughness={0.5} metalness={0.5} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
 export default function Landmarks() {
   return (
     <group>
@@ -354,7 +590,10 @@ export default function Landmarks() {
       <TienLake />
       <C9Building />
       <WhiteRock />
+      <C1Fountain />
       <TranDaiNghiaSquare />
+      <C2Building />
+      <DaiCoVietGate />
       {/* Cây + ghế dọc đường tình yêu (không dùng để che lỗi hình khối). */}
       {LOVE_ROAD_TREES.map((t, i) => (
         <ImprovedTree key={`love-tree-${i}`} x={t.x} z={t.z} />

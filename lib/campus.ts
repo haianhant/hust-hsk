@@ -492,6 +492,72 @@ export function resolveClassroomCollisions(p: Vec2, radius: number): { pos: Vec2
   return { pos: { x, z }, hit };
 }
 
+// --- Sảnh tầng 1 Thư viện Tạ Quang Bửu (LibraryLobby) ------------------------
+// Dựng theo tư liệu ảnh thật Sảnh tầng 1 Thư viện Tạ Quang Bửu (docs/reference-visual.md §3):
+//   - Tượng bán thân đồng GS. Tạ Quang Bửu đặt trên bệ gỗ cao có biển đồng
+//     "GIÁO SƯ TẠ QUANG BỬU (1910–1986)", bao quanh bởi 4 trụ inox mạ vàng + dây nhung đỏ.
+//   - Bức tường hậu cảnh gỗ nâu với các dải số nhị phân 0/1 (vòng tròn & vạch dọc)
+//     phát sáng màu vàng hổ phách ấm + diềm hồi văn phát sáng phía trên.
+//   - Sàn đá hoa văn rẻ quạt (nâu đỏ đất nung, kem sáng, xám đá) và thông tầng lửng.
+export const LIBRARY_DOOR = {
+  /** Dưới mái hiên sảnh chính phía bắc Thư viện (ngoài collider khối đế minZ 23,5) */
+  pos: { x: 38, z: 22.8 },
+  triggerRadius: 3.6,
+} as const;
+
+export const LIBRARY_LOBBY = {
+  bounds: { minX: -5.4, maxX: 5.4, minZ: -3.8, maxZ: 3.8 },
+  spawn: { x: 0, z: 2.4 },
+  statue: { x: 0, z: -2.1 },
+  vocabBoard: { x: 3.6, z: -0.6 },
+  infoDesk: { x: -3.6, z: -0.6 },
+} as const;
+
+export const LIBRARY_LOBBY_COLLIDERS: { name: string; box: AABB }[] = [
+  { name: 'Tường bắc sảnh thư viện', box: { minX: -6.0, maxX: 6.0, minZ: -4.3, maxZ: -3.95 } },
+  { name: 'Tường nam sảnh thư viện', box: { minX: -6.0, maxX: 6.0, minZ: 3.95, maxZ: 4.3 } },
+  { name: 'Tường tây sảnh thư viện', box: { minX: -6.0, maxX: -5.55, minZ: -4.2, maxZ: 4.2 } },
+  { name: 'Tường đông sảnh thư viện', box: { minX: 5.55, maxX: 6.0, minZ: -4.2, maxZ: 4.2 } },
+  { name: 'Tượng GS. Tạ Quang Bửu', box: { minX: -1.35, maxX: 1.35, minZ: -3.1, maxZ: -1.1 } },
+  { name: 'Quầy thông tin thư viện', box: { minX: -4.5, maxX: -2.7, minZ: -1.4, maxZ: 0.2 } },
+  { name: 'Bảng từ vựng thư viện', box: { minX: 2.9, maxX: 4.4, minZ: -1.2, maxZ: 0.0 } },
+];
+
+export function resolveLibraryLobbyCollisions(p: Vec2, radius: number): { pos: Vec2; hit: string | null } {
+  let { x, z } = p;
+  let hit: string | null = null;
+  const b = LIBRARY_LOBBY.bounds;
+  x = Math.min(Math.max(x, b.minX), b.maxX);
+  z = Math.min(Math.max(z, b.minZ), b.maxZ);
+  for (const c of LIBRARY_LOBBY_COLLIDERS) {
+    const box = c.box;
+    const cx = Math.min(Math.max(x, box.minX), box.maxX);
+    const cz = Math.min(Math.max(z, box.minZ), box.maxZ);
+    const dx = x - cx;
+    const dz = z - cz;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < radius * radius) {
+      if (d2 > 1e-9) {
+        const d = Math.sqrt(d2);
+        x = cx + (dx / d) * radius;
+        z = cz + (dz / d) * radius;
+      } else {
+        const dl = x - (box.minX - radius);
+        const dr = box.maxX + radius - x;
+        const dt = z - (box.minZ - radius);
+        const db = box.maxZ + radius - z;
+        const m = Math.min(dl, dr, dt, db);
+        if (m === dl) x = box.minX - radius;
+        else if (m === dr) x = box.maxX + radius;
+        else if (m === dt) z = box.minZ - radius;
+        else z = box.maxZ + radius;
+      }
+      hit = c.name;
+    }
+  }
+  return { pos: { x, z }, hit };
+}
+
 // --- Helper xe máy (đợt 3 giai đoạn 4) ---------------------------------------
 // Cây KHÔNG có collider cho người đi bộ (quyết định đợt 3 giai đoạn 3: tán
 // thoáng, không kẹt dưới tán) — nhưng xe chạy nhanh đâm vào thân cây thì

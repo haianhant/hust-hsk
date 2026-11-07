@@ -60,6 +60,8 @@ export const fastTravelState = {
   lastDestId: null as string | null,
 };
 
+export type TimeOfDay = 'day' | 'sunset' | 'night';
+
 export const playerState = {
   pos: { ...SPAWN } as Vec2,
   zone: 'Cổng Parabol',
@@ -78,6 +80,10 @@ export const playerState = {
   /** Bước 5 — true khi đang ở phòng học mô phỏng (mode phòng học, tọa độ
    *  cục bộ CLASSROOM thay cho campus). */
   inClassroom: false,
+  /** Giai đoạn 4 — true khi đang ở Sảnh tầng 1 Thư viện Tạ Quang Bửu (tọa độ cục bộ LIBRARY_LOBBY). */
+  inLibraryLobby: false,
+  /** Giai đoạn 2 — chế độ thời gian ngày / hoàng hôn / đêm. */
+  timeOfDay: 'day' as TimeOfDay,
   /**
    * Góc camera (yaw/pitch, radian) đã lưu — Player khởi tạo từ đây khi
    * mount (reload trong phòng khôi phục đúng hướng nhìn, F5b) và ghi đè
