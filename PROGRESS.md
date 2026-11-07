@@ -408,7 +408,7 @@ tsc exit 0; build PASS; engine **45/45**; leg-sim **4/4**; verify-step4fix **24/
 ### Vận hành đợt 4
 - Làm trực tiếp, không spawn worker con. Lệnh nền dài bị kill SIGTERM 1 lần (chụp bổ sung 3/4 + mái, chết ở ảnh thứ 3 — đã chụp lại ảnh mái bằng script riêng 1 ảnh). Log test trong workspace (`test-shots/*.log`), không ghi `/tmp`. Chỉ tin file trên đĩa.
 
-## Đợt 5 — Multiplayer: nhiều người cùng vào trường (tên + MSSV) (07/11, XONG + KIỂM CHỨNG, CHƯA deploy/push)
+## Đợt 5 — Multiplayer: nhiều người cùng vào trường (tên + MSSV) (07/11, ĐÃ DEPLOY tối 07/11 — push GitHub d83abfc5, Vercel tự deploy dpl_F5z7mpY1wMgQ5pnHHCR999CDCsci, site live)
 
 Báo cáo đầy đủ: `docs/round5-multiplayer-report.md`. Yêu cầu user 07/11 16:18 ("quên chưa làm kiểu nhiều người cùng vào web với điền tên, mã số sinh viên rồi, cần connect cloudflare gì không") — đã chốt: CẦN Cloudflare như bên chùa; làm luôn; bảng tên hiện TÊN + MSSV.
 
@@ -434,7 +434,7 @@ Báo cáo đầy đủ: `docs/round5-multiplayer-report.md`. Yêu cầu user 07/
 - Hai client qua shim `test/mp-client.cjs --shim` run 14: **15/15 PASS, EXIT=0** (2026-11-07 10:55 UTC). A "Hải Anh (20226010)" + B "Minh (20226011)" cùng phòng hsk-1; HUD cả hai "Phòng hsk-1 · 2 người"; B thấy A đi bộ/hội tụ teleport; vị trí render thực tế lúc chụp ảnh: B thấy A đúng (-68,22), A thấy B đúng (-72,22); 0 console/page errors. Ảnh `test-shots/r5-mp-two-players.png`, `r5-mp-two-players-a.png` (+ crop bảng tên `r5-crop-b-tag4.png`, `r5-crop-a-tag5.png`), `r5-mp-entry.png`.
 - Offline `test/mp-offline.cjs --shim`: **5/5 PASS** (chặn WS → offline, chơi một mình, chip "Chơi một mình (mất kết nối)", không người chơi giả).
 - **Live Worker thật (`--real`) CHƯA ĐẠT:** Chromium qua egress proxy lỗi `Establishing a tunnel via proxy server failed` (proxy VM không cho mở tunnel WebSocket tới workers.dev; curl HTTPS vẫn OK; Node ws trực tiếp EPROTO, qua proxy timeout). Cả hai client rơi về chơi một mình đúng thiết kế, 0 page errors. **Chưa chứng minh hai client thật gặp nhau trên Worker thật — cần parent kiểm chứng qua trình duyệt managed hoặc user trên điện thoại thật.**
-- Hồi quy trên bản build production cuối: tsc exit 0; build PASS (First Load JS 239 kB); engine **45/45**; leg-sim **4/4**; walk-to-library-door **PASS** (30 m, 7,5 s, 0 chạm); fast-travel-check **19/20** (19 chức năng PASS; duy nhất `[console-clean]` FAIL vì lỗi console WS do proxy VM — không phải lỗi sản phẩm); pinyin-input **11/11** (0 page error); verify-step4fix **24/24** (0 page error); play-all-quests **ĐANG CHẠY — cập nhật sau**.
+- Hồi quy trên bản build production cuối: tsc exit 0; build PASS (First Load JS 239 kB); engine **45/45**; leg-sim **4/4**; walk-to-library-door **PASS** (30 m, 7,5 s, 0 chạm); fast-travel-check **19/20** (19 chức năng PASS; duy nhất `[console-clean]` FAIL vì lỗi console WS do proxy VM — không phải lỗi sản phẩm); pinyin-input **11/11** (0 page error); verify-step4fix **24/24** (0 page error); play-all-quests **CHƯA CHẠY XONG đợt 5** (dừng ở hsk4-xia-l14b: browser bị đóng khi parent dừng bên làm theo lệnh user đẩy lên ngay tối 07/11 — không phải lỗi sản phẩm; user test trên máy thật).
 - Test hồi quy cũ cập nhật theo identity: `verify-step4fix` (enterFresh + C-fix seed + E-fix mobile), `fast-travel-check`, `play-all-quests`, `pinyin-input` — điền form tên/MSSV nếu hiện trước khi bấm `#enter-campus`.
 - Dọn dẹp: xóa `test/r5-diag-*.cjs` + crop thừa (giữ `r5-crop-b-tag4.png`, `r5-crop-a-tag5.png`). `out/` là bản production cuối (fallback URL Worker thật đã bake sẵn).
 
