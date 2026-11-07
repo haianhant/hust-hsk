@@ -1,0 +1,2285 @@
+// ---------------------------------------------------------------------------
+// quest-data-hsk4-xia.ts — 20 quest cho HSK 4 quyển HẠ, bài 11–20.
+// Mỗi bài có 2 quest ngắn (chia buổi nhỏ): quest A = nửa đầu từ của bài
+// (theo thứ tự nguồn), quest B = nửa sau. Mỗi quest 8 bước theo đúng khung
+// Bước 6 trong quest-data.ts (greet-minh → goto-door → talk cô giáo →
+// 2 × pick-meaning → order / choose-number / choose-goal → review 5 từ
+// → result). KHÔNG dùng pick-object / interact-object (gắn cứng vật phòng
+// học bài 10).
+//
+// TỪ VỰNG: id lexeme lấy đúng từ content/hsk4-xia-l<n>.ts (mỗi bài hạ chỉ
+// có 1 nhóm duy nhất g1, đúng thứ tự nguồn): bài 11 = 41 từ, 12 = 43,
+// 13 = 43, 14 = 41, 15 = 37, 16 = 41, 17 = 41, 18 = 39, 19 = 40,
+// 20 = 41 — tổng 407 từ.
+//
+// MỌI CÂU TIẾNG TRUNG TRONG FILE NÀY ĐỀU TỰ SOẠN (hội thoại / tình huống
+// ngắn, dùng từ của bài) hoặc TÁI DÙNG câu ví dụ authored đã có trong
+// content của bài đó; KHÔNG sao chép toàn văn bài khóa, KHÔNG dịch toàn
+// văn bài khóa, KHÔNG trình bày là trích giáo trình. Câu order ghi cờ
+// source: 'authored' như khung Bước 6.
+//
+// Tích hợp: file này CHỈ export dữ liệu; luồng tích hợp sẽ nối
+// HSK4_XIA_QUEST_DEFS vào registry trong quest-data.ts sau.
+// ---------------------------------------------------------------------------
+
+import type { Quest } from './types';
+import type { QuestDef, QuestStep } from './quest-data';
+
+const GOTO_DOOR_VI =
+  'Đi tới cửa phòng học ở chân bậc tam cấp nhà C1 (theo đường chính về phía bắc, qua quảng trường), rồi bấm E để vào lớp.';
+
+const ORDER_VI =
+  'Xếp các thẻ từ thành câu đúng (câu tự soạn để luyện từ của bài, không phải trích nguyên văn giáo trình).';
+
+// --- Bài 11 — Học tập suốt đời (41 từ: A = 21 từ đầu, B = 20 từ sau) --------
+export const L11A_LEXEME_IDS = [
+  'hsk4-xia-l11-g1-laonian',
+  'hsk4-xia-l11-g1-sanbu',
+  'hsk4-xia-l11-g1-fengfu',
+  'hsk4-xia-l11-g1-xianmu',
+  'hsk4-xia-l11-g1-jishi',
+  'hsk4-xia-l11-g1-huo',
+  'hsk4-xia-l11-g1-jixu',
+  'hsk4-xia-l11-g1-wangyou',
+  'hsk4-xia-l11-g1-wuliao',
+  'hsk4-xia-l11-g1-shuzi',
+  'hsk4-xia-l11-g1-dianming',
+  'hsk4-xia-l11-g1-jiaoshou',
+  'hsk4-xia-l11-g1-xianshang',
+  'hsk4-xia-l11-g1-xianxia',
+  'hsk4-xia-l11-g1-shipin',
+  'hsk4-xia-l11-g1-jilu',
+  'hsk4-xia-l11-g1-ziliao',
+  'hsk4-xia-l11-g1-zixue',
+  'hsk4-xia-l11-g1-kouyu',
+  'hsk4-xia-l11-g1-keji',
+  'hsk4-xia-l11-g1-huoqu',
+] as const;
+
+export const L11A_QUEST = {
+  id: 'hsk4-xia-l11a',
+  title: 'Bài 11 — Học tập suốt đời · Phần 1',
+  lessonId: 'hsk4-xia-l11',
+  lexemeIds: [...L11A_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l11a',
+} as const;
+
+export const L11A_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l11-g1-laonian',
+  'hsk4-xia-l11-g1-huo',
+  'hsk4-xia-l11-g1-dianming',
+  'hsk4-xia-l11-g1-jilu',
+  'hsk4-xia-l11-g1-huoqu',
+] as const;
+
+export const L11A_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们一起学习汉语，活到老，学到老。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình cùng học tiếng Hán nhé — sống đến già, học đến già. Bài 11 nói về học tập suốt đời; phần đầu học 21 từ đầu.',
+    speakText: '你好！我是明。今天我们一起学习汉语，活到老，学到老。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l11a-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '请你继续说。',
+    vi: 'Xin bạn hãy nói tiếp.',
+    lexemeId: 'hsk4-xia-l11-g1-jixu',
+    speakText: '请你继续说。',
+  },
+  {
+    id: 'hsk4-xia-l11a-pick-fengfu',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l11-g1-fengfu',
+    scenario: '丰富 nghĩa là phong phú. Câu nào nói rằng cuộc sống của anh ấy rất phong phú?',
+    options: [
+      {
+        text: '他的生活很丰富。',
+        correct: true,
+        explain: '他的生活很丰富 — cuộc sống của anh ấy rất phong phú.',
+      },
+      {
+        text: '他的生活不丰富。',
+        correct: false,
+        explain: '他的生活不丰富 — cuộc sống của anh ấy không phong phú.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l11a-pick-xianmu',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l11-g1-xianmu',
+    scenario: '羡慕 nghĩa là ngưỡng mộ. Câu nào nói rằng bạn rất ngưỡng mộ cuộc sống của anh ấy?',
+    options: [
+      {
+        text: '我很羡慕他的生活。',
+        correct: true,
+        explain: '我很羡慕他的生活 — tôi rất ngưỡng mộ cuộc sống của anh ấy.',
+      },
+      {
+        text: '我不羡慕他的生活。',
+        correct: false,
+        explain: '我不羡慕他的生活 — tôi không ngưỡng mộ cuộc sống của anh ấy.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l11a-order',
+    kind: 'order',
+    lexemeId: 'hsk4-xia-l11-g1-zixue',
+    zh: '他通过自学学会了汉语。',
+    vi: ORDER_VI,
+    tiles: ['他', '通过', '自学', '学会', '了', '汉语', '。'],
+    answer: '他通过自学学会了汉语。',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L11A_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+export const L11B_LEXEME_IDS = [
+  'hsk4-xia-l11-g1-limao',
+  'hsk4-xia-l11-g1-dazhaohu',
+  'hsk4-xia-l11-g1-jiazhang',
+  'hsk4-xia-l11-g1-chenggong',
+  'hsk4-xia-l11-g1-fenshu',
+  'hsk4-xia-l11-g1-mudi',
+  'hsk4-xia-l11-g1-yangcheng',
+  'hsk4-xia-l11-g1-liu',
+  'hsk4-xia-l11-g1-zuofa',
+  'hsk4-xia-l11-g1-bang',
+  'hsk4-xia-l11-g1-yisheng',
+  'hsk4-xia-l11-g1-kuaisu',
+  'hsk4-xia-l11-g1-youxiu',
+  'hsk4-xia-l11-g1-lushi',
+  'hsk4-xia-l11-g1-reng',
+  'hsk4-xia-l11-g1-zhunshi',
+  'hsk4-xia-l11-g1-wangye',
+  'hsk4-xia-l11-g1-tan',
+  'hsk4-xia-l11-g1-gangqin',
+  'hsk4-xia-l11-g1-chongxin',
+] as const;
+
+export const L11B_QUEST = {
+  id: 'hsk4-xia-l11b',
+  title: 'Bài 11 — Học tập suốt đời · Phần 2',
+  lessonId: 'hsk4-xia-l11',
+  lexemeIds: [...L11B_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l11b',
+} as const;
+
+export const L11B_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l11-g1-limao',
+  'hsk4-xia-l11-g1-mudi',
+  'hsk4-xia-l11-g1-yisheng',
+  'hsk4-xia-l11-g1-zhunshi',
+  'hsk4-xia-l11-g1-chongxin',
+] as const;
+
+export const L11B_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们继续学习，养成好习惯。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình học tiếp phần sau của bài 11 — 20 từ còn lại, về thói quen tốt và mục đích học tập.',
+    speakText: '你好！我是明。今天我们继续学习，养成好习惯。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l11b-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '我们要养成好习惯。',
+    vi: 'Chúng ta phải hình thành thói quen tốt.',
+    lexemeId: 'hsk4-xia-l11-g1-yangcheng',
+    speakText: '我们要养成好习惯。',
+  },
+  {
+    id: 'hsk4-xia-l11b-pick-chenggong',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l11-g1-chenggong',
+    scenario: '成功 nghĩa là thành công. Câu nào nói rằng cuối cùng anh ấy đã thành công?',
+    options: [
+      {
+        text: '他终于成功了。',
+        correct: true,
+        explain: '他终于成功了 — cuối cùng anh ấy đã thành công.',
+      },
+      {
+        text: '他还没有成功。',
+        correct: false,
+        explain: '他还没有成功 — anh ấy vẫn chưa thành công.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l11b-pick-zhunshi',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l11-g1-zhunshi',
+    scenario: '准时 nghĩa là đúng giờ. Câu nào nói rằng anh ấy đi làm đúng giờ mỗi ngày?',
+    options: [
+      {
+        text: '他每天都准时上班。',
+        correct: true,
+        explain: '他每天都准时上班 — anh ấy đi làm đúng giờ mỗi ngày.',
+      },
+      {
+        text: '他每天都不准时上班。',
+        correct: false,
+        explain: '他每天都不准时上班 — anh ấy đi làm không đúng giờ mỗi ngày.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l11b-goal',
+    kind: 'choose-goal',
+    lexemeId: 'hsk4-xia-l11-g1-mudi',
+    zh: '你来这里的目的是什么？',
+    vi: '目的 nghĩa là mục đích. Bạn đến lớp học này với mục đích gì? (Cả hai lựa chọn đều đúng — chỉ để ghi nhận mục tiêu của bạn.)',
+    options: [
+      { text: '我的目的是学好汉语。', vi: 'Mục đích của tôi là học giỏi tiếng Trung.' },
+      { text: '我的目的是认识新朋友。', vi: 'Mục đích của tôi là quen thêm bạn mới.' },
+    ],
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L11B_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+// --- Bài 12 — Gia đình hạnh phúc (43 từ: A = 22 từ đầu, B = 21 từ sau) ------
+export const L12A_LEXEME_IDS = [
+  'hsk4-xia-l12-g1-maoyi',
+  'hsk4-xia-l12-g1-yangzi',
+  'hsk4-xia-l12-g1-shihe',
+  'hsk4-xia-l12-g1-shouhuoyuan',
+  'hsk4-xia-l12-g1-zhiliang',
+  'hsk4-xia-l12-g1-qiang',
+  'hsk4-xia-l12-g1-niandi',
+  'hsk4-xia-l12-g1-quan',
+  'hsk4-xia-l12-g1-dazhe',
+  'hsk4-xia-l12-g1-zhi',
+  'hsk4-xia-l12-g1-guji',
+  'hsk4-xia-l12-g1-qi',
+  'hsk4-xia-l12-g1-tingli',
+  'hsk4-xia-l12-g1-fan',
+  'hsk4-xia-l12-g1-tuo',
+  'hsk4-xia-l12-g1-gua',
+  'hsk4-xia-l12-g1-piqi',
+  'hsk4-xia-l12-g1-shangxin',
+  'hsk4-xia-l12-g1-piping',
+  'hsk4-xia-l12-g1-daoqian',
+  'hsk4-xia-l12-g1-laojia',
+  'hsk4-xia-l12-g1-zi',
+] as const;
+
+export const L12A_QUEST = {
+  id: 'hsk4-xia-l12a',
+  title: 'Bài 12 — Gia đình hạnh phúc · Phần 1',
+  lessonId: 'hsk4-xia-l12',
+  lexemeIds: [...L12A_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l12a',
+} as const;
+
+export const L12A_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l12-g1-maoyi',
+  'hsk4-xia-l12-g1-qiang',
+  'hsk4-xia-l12-g1-guji',
+  'hsk4-xia-l12-g1-gua',
+  'hsk4-xia-l12-g1-zi',
+] as const;
+
+export const L12A_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们去买毛衣，学习买东西的中文。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình cùng đi mua áo len và học tiếng Trung khi mua sắm nhé. Bài 12 nói về gia đình hạnh phúc; phần đầu học 22 từ đầu.',
+    speakText: '你好！我是明。今天我们去买毛衣，学习买东西的中文。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l12a-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '这件毛衣很适合你。',
+    vi: 'Chiếc áo len này rất hợp với bạn.',
+    lexemeId: 'hsk4-xia-l12-g1-shihe',
+    speakText: '这件毛衣很适合你。',
+  },
+  {
+    id: 'hsk4-xia-l12a-pick-dazhe',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l12-g1-dazhe',
+    scenario: '打折 nghĩa là giảm giá. Câu nào nói rằng cửa hàng này hôm nay giảm giá?',
+    options: [
+      {
+        text: '这家店今天打折。',
+        correct: true,
+        explain: '这家店今天打折 — cửa hàng này hôm nay giảm giá.',
+      },
+      {
+        text: '这家店今天不打折。',
+        correct: false,
+        explain: '这家店今天不打折 — cửa hàng này hôm nay không giảm giá.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l12a-pick-daoqian',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l12-g1-daoqian',
+    scenario: '道歉 nghĩa là xin lỗi. Câu nào nói rằng anh ấy đã xin lỗi tôi?',
+    options: [
+      {
+        text: '他向我道歉了。',
+        correct: true,
+        explain: '他向我道歉了 — anh ấy đã xin lỗi tôi.',
+      },
+      {
+        text: '他没有向我道歉。',
+        correct: false,
+        explain: '他没有向我道歉 — anh ấy không xin lỗi tôi.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l12a-order',
+    kind: 'order',
+    lexemeId: 'hsk4-xia-l12-g1-gua',
+    zh: '请把衣服挂在衣架上。',
+    vi: ORDER_VI,
+    tiles: ['请', '把', '衣服', '挂', '在', '衣架', '上', '。'],
+    answer: '请把衣服挂在衣架上。',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L12A_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+export const L12B_LEXEME_IDS = [
+  'hsk4-xia-l12-g1-fumu',
+  'hsk4-xia-l12-g1-fuzi',
+  'hsk4-xia-l12-g1-muzi',
+  'hsk4-xia-l12-g1-wulun',
+  'hsk4-xia-l12-g1-tiaojian',
+  'hsk4-xia-l12-g1-yunxu',
+  'hsk4-xia-l12-g1-lingwai',
+  'hsk4-xia-l12-g1-weisheng',
+  'hsk4-xia-l12-g1-muqin',
+  'hsk4-xia-l12-g1-dai',
+  'hsk4-xia-l12-g1-jiang',
+  'hsk4-xia-l12-g1-wen',
+  'hsk4-xia-l12-g1-weidao',
+  'hsk4-xia-l12-g1-lengjing',
+  'hsk4-xia-l12-g1-bizi',
+  'hsk4-xia-l12-g1-fuqin',
+  'hsk4-xia-l12-g1-cheng',
+  'hsk4-xia-l12-g1-xian',
+  'hsk4-xia-l12-g1-nuan',
+  'hsk4-xia-l12-g1-yonggan',
+  'hsk4-xia-l12-g1-shangliang',
+] as const;
+
+export const L12B_QUEST = {
+  id: 'hsk4-xia-l12b',
+  title: 'Bài 12 — Gia đình hạnh phúc · Phần 2',
+  lessonId: 'hsk4-xia-l12',
+  lexemeIds: [...L12B_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l12b',
+} as const;
+
+export const L12B_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l12-g1-fumu',
+  'hsk4-xia-l12-g1-yunxu',
+  'hsk4-xia-l12-g1-jiang',
+  'hsk4-xia-l12-g1-fuqin',
+  'hsk4-xia-l12-g1-shangliang',
+] as const;
+
+export const L12B_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们说说父母和老家。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình học tiếp phần sau của bài 12 — 21 từ còn lại, về cha mẹ và quê nhà.',
+    speakText: '你好！我是明。今天我们说说父母和老家。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l12b-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '我的父母住在老家。',
+    vi: 'Cha mẹ tôi sống ở quê nhà.',
+    lexemeId: 'hsk4-xia-l12-g1-fumu',
+    speakText: '我的父母住在老家。',
+  },
+  {
+    id: 'hsk4-xia-l12b-pick-wulun',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l12-g1-wulun',
+    scenario: '无论 nghĩa là bất luận, dù cho. Câu nào nói rằng dù bận đến đâu, tôi cũng phải về nhà?',
+    options: [
+      {
+        text: '无论多忙，我都要回家。',
+        correct: true,
+        explain: '无论多忙，我都要回家 — dù bận đến đâu, tôi cũng phải về nhà.',
+      },
+      {
+        text: '无论多忙，我都不回家。',
+        correct: false,
+        explain: '无论多忙，我都不回家 — dù bận đến đâu, tôi cũng không về nhà.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l12b-pick-shangliang',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l12-g1-shangliang',
+    scenario: '商量 nghĩa là bàn bạc, thương lượng. Câu nào nói rằng chúng ta hãy bàn bạc một chút?',
+    options: [
+      {
+        text: '我们商量一下吧。',
+        correct: true,
+        explain: '我们商量一下吧 — chúng ta hãy bàn bạc một chút.',
+      },
+      {
+        text: '我们不商量了。',
+        correct: false,
+        explain: '我们不商量了 — chúng ta không bàn bạc nữa.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l12b-goal',
+    kind: 'choose-goal',
+    lexemeId: 'hsk4-xia-l12-g1-yonggan',
+    zh: '我要勇敢地试一试。',
+    vi: '勇敢 nghĩa là dũng cảm. Khi gặp khó khăn, bạn muốn làm gì? (Cả hai lựa chọn đều đúng — chỉ để ghi nhận mục tiêu của bạn.)',
+    options: [
+      { text: '我要勇敢地试一试。', vi: 'Tôi muốn dũng cảm thử một lần.' },
+      { text: '我要先和家人商量一下。', vi: 'Tôi muốn bàn bạc với gia đình trước đã.' },
+    ],
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L12B_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+// --- Bài 13 — Những ngày lễ tươi đẹp (43 từ: A = 22 từ đầu, B = 21 từ sau) ---
+export const L13A_LEXEME_IDS = [
+  'hsk4-xia-l13-g1-xiong',
+  'hsk4-xia-l13-g1-laohu',
+  'hsk4-xia-l13-g1-han',
+  'hsk4-xia-l13-g1-ji',
+  'hsk4-xia-l13-g1-shulin',
+  'hsk4-xia-l13-g1-jingqu',
+  'hsk4-xia-l13-g1-qu',
+  'hsk4-xia-l13-g1-mei',
+  'hsk4-xia-l13-g1-jiejiari',
+  'hsk4-xia-l13-g1-qianwan',
+  'hsk4-xia-l13-g1-kaiwanxiao',
+  'hsk4-xia-l13-g1-yuebing',
+  'hsk4-xia-l13-g1-putao',
+  'hsk4-xia-l13-g1-xiang',
+  'hsk4-xia-l13-g1-jiedao',
+  'hsk4-xia-l13-g1-juyuan',
+  'hsk4-xia-l13-g1-yanchu',
+  'hsk4-xia-l13-g1-gan',
+  'hsk4-xia-l13-g1-qiao',
+  'hsk4-xia-l13-g1-zhizhong',
+  'hsk4-xia-l13-g1-tielu',
+  'hsk4-xia-l13-g1-renyuan',
+] as const;
+
+export const L13A_QUEST = {
+  id: 'hsk4-xia-l13a',
+  title: 'Bài 13 — Những ngày lễ tươi đẹp · Phần 1',
+  lessonId: 'hsk4-xia-l13',
+  lexemeIds: [...L13A_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l13a',
+} as const;
+
+export const L13A_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l13-g1-xiong',
+  'hsk4-xia-l13-g1-jingqu',
+  'hsk4-xia-l13-g1-kaiwanxiao',
+  'hsk4-xia-l13-g1-juyuan',
+  'hsk4-xia-l13-g1-renyuan',
+] as const;
+
+export const L13A_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。节假日快到了，我们一起去景区玩吧。',
+    vi: 'Chào bạn! Mình là Minh. Ngày lễ sắp đến, mình cùng đi chơi khu danh lam thắng cảnh nhé. Bài 13 nói về những ngày lễ tươi đẹp; phần đầu học 22 từ đầu.',
+    speakText: '你好！我是明。节假日快到了，我们一起去景区玩吧。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l13a-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '这个景区很美。',
+    vi: 'Khu danh lam thắng cảnh này rất đẹp.',
+    lexemeId: 'hsk4-xia-l13-g1-jingqu',
+    speakText: '这个景区很美。',
+  },
+  {
+    id: 'hsk4-xia-l13a-pick-kaiwanxiao',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l13-g1-kaiwanxiao',
+    scenario: '开玩笑 nghĩa là nói đùa, đùa giỡn. Câu nào nói rằng tôi đang đùa với bạn?',
+    options: [
+      {
+        text: '我跟你开玩笑呢。',
+        correct: true,
+        explain: '我跟你开玩笑呢 — tôi đang đùa với bạn đấy.',
+      },
+      {
+        text: '我没有跟你开玩笑。',
+        correct: false,
+        explain: '我没有跟你开玩笑 — tôi không đùa với bạn.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l13a-pick-yuebing',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l13-g1-yuebing',
+    scenario: '月饼 nghĩa là bánh trung thu. Câu nào nói rằng Tết Trung thu chúng ta ăn bánh trung thu?',
+    options: [
+      {
+        text: '中秋节我们吃月饼。',
+        correct: true,
+        explain: '中秋节我们吃月饼 — Tết Trung thu chúng ta ăn bánh trung thu.',
+      },
+      {
+        text: '中秋节我们不吃月饼。',
+        correct: false,
+        explain: '中秋节我们不吃月饼 — Tết Trung thu chúng ta không ăn bánh trung thu.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l13a-order',
+    kind: 'order',
+    lexemeId: 'hsk4-xia-l13-g1-gan',
+    zh: '我赶上了最后一班车。',
+    vi: ORDER_VI,
+    tiles: ['我', '赶上', '了', '最后', '一', '班', '车', '。'],
+    answer: '我赶上了最后一班车。',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L13A_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+export const L13B_LEXEME_IDS = [
+  'hsk4-xia-l13-g1-fanxiang',
+  'hsk4-xia-l13-g1-tuanyuan',
+  'hsk4-xia-l13-g1-zuoyou',
+  'hsk4-xia-l13-g1-dayue',
+  'hsk4-xia-l13-g1-kao',
+  'hsk4-xia-l13-g1-xihongshi',
+  'hsk4-xia-l13-g1-chuxian',
+  'hsk4-xia-l13-g1-zuowei',
+  'hsk4-xia-l13-g1-chuantong',
+  'hsk4-xia-l13-g1-youzhe',
+  'hsk4-xia-l13-g1-yiyi',
+  'hsk4-xia-l13-g1-daolai',
+  'hsk4-xia-l13-g1-meishi',
+  'hsk4-xia-l13-g1-nianyefan',
+  'hsk4-xia-l13-g1-huiyi',
+  'hsk4-xia-l13-g1-tongnian',
+  'hsk4-xia-l13-g1-jiyi',
+  'hsk4-xia-l13-g1-yi',
+  'hsk4-xia-l13-g1-zhongnian',
+  'hsk4-xia-l13-g1-rengran',
+  'hsk4-xia-l13-g1-xiongdi',
+] as const;
+
+export const L13B_QUEST = {
+  id: 'hsk4-xia-l13b',
+  title: 'Bài 13 — Những ngày lễ tươi đẹp · Phần 2',
+  lessonId: 'hsk4-xia-l13',
+  lexemeIds: [...L13B_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l13b',
+} as const;
+
+export const L13B_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l13-g1-fanxiang',
+  'hsk4-xia-l13-g1-xihongshi',
+  'hsk4-xia-l13-g1-yiyi',
+  'hsk4-xia-l13-g1-tongnian',
+  'hsk4-xia-l13-g1-xiongdi',
+] as const;
+
+export const L13B_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们说说团圆和童年的回忆。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình học tiếp phần sau của bài 13 — 21 từ còn lại, về đoàn viên và ký ức tuổi thơ.',
+    speakText: '你好！我是明。今天我们说说团圆和童年的回忆。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l13b-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '全家人团圆了。',
+    vi: 'Cả gia đình đã đoàn viên.',
+    lexemeId: 'hsk4-xia-l13-g1-tuanyuan',
+    speakText: '全家人团圆了。',
+  },
+  {
+    id: 'hsk4-xia-l13b-pick-chuantong',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l13-g1-chuantong',
+    scenario: '传统 nghĩa là truyền thống. Câu nào nói rằng Tết là ngày lễ truyền thống của Trung Quốc?',
+    options: [
+      {
+        text: '春节是中国传统节日。',
+        correct: true,
+        explain: '春节是中国传统节日 — Tết là ngày lễ truyền thống của Trung Quốc.',
+      },
+      {
+        text: '春节不是中国传统节日。',
+        correct: false,
+        explain: '春节不是中国传统节日 — Tết không phải là ngày lễ truyền thống của Trung Quốc.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l13b-pick-huiyi',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l13-g1-huiyi',
+    scenario: '回忆 nghĩa là hồi tưởng, nhớ lại. Câu nào nói rằng tôi thường nhớ lại tuổi thơ?',
+    options: [
+      {
+        text: '我常常回忆童年。',
+        correct: true,
+        explain: '我常常回忆童年 — tôi thường nhớ lại tuổi thơ.',
+      },
+      {
+        text: '我从来不回忆童年。',
+        correct: false,
+        explain: '我从来不回忆童年 — tôi chưa bao giờ nhớ lại tuổi thơ.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l13b-count',
+    kind: 'choose-number',
+    lexemeId: 'hsk4-xia-l13-g1-dayue',
+    zh: '大约有十个人。',
+    vi: '大约 nghĩa là khoảng, chừng. Ở đây có khoảng mấy người?',
+    options: [5, 8, 10, 12],
+    correct: 10,
+    unit: 'người',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L13B_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+// --- Bài 14 — Mua sắm tỉnh táo (41 từ: A = 21 từ đầu, B = 20 từ sau) --------
+export const L14A_LEXEME_IDS = [
+  'hsk4-xia-l14-g1-chaye',
+  'hsk4-xia-l14-g1-jiujing',
+  'hsk4-xia-l14-g1-fenwei',
+  'hsk4-xia-l14-g1-baoqian',
+  'hsk4-xia-l14-g1-zanshi',
+  'hsk4-xia-l14-g1-man',
+  'hsk4-xia-l14-g1-liang',
+  'hsk4-xia-l14-g1-chaoguo',
+  'hsk4-xia-l14-g1-hezi',
+  'hsk4-xia-l14-g1-zhuang',
+  'hsk4-xia-l14-g1-gewei',
+  'hsk4-xia-l14-g1-guke',
+  'hsk4-xia-l14-g1-ben',
+  'hsk4-xia-l14-g1-jiari',
+  'hsk4-xia-l14-g1-dijia',
+  'hsk4-xia-l14-g1-cuxiao',
+  'hsk4-xia-l14-g1-guangbo',
+  'hsk4-xia-l14-g1-jian',
+  'hsk4-xia-l14-g1-guanggao',
+  'hsk4-xia-l14-g1-shouxian',
+  'hsk4-xia-l14-g1-paizi',
+] as const;
+
+export const L14A_QUEST = {
+  id: 'hsk4-xia-l14a',
+  title: 'Bài 14 — Mua sắm tỉnh táo · Phần 1',
+  lessonId: 'hsk4-xia-l14',
+  lexemeIds: [...L14A_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l14a',
+} as const;
+
+export const L14A_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l14-g1-chaye',
+  'hsk4-xia-l14-g1-man',
+  'hsk4-xia-l14-g1-gewei',
+  'hsk4-xia-l14-g1-cuxiao',
+  'hsk4-xia-l14-g1-paizi',
+] as const;
+
+export const L14A_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们去买茶叶，学习买东西的中文。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình cùng đi mua trà và học tiếng Trung khi mua sắm nhé. Bài 14 nói về mua sắm tỉnh táo; phần đầu học 21 từ đầu.',
+    speakText: '你好！我是明。今天我们去买茶叶，学习买东西的中文。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l14a-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '这种茶叶很香。',
+    vi: 'Loại trà này rất thơm.',
+    lexemeId: 'hsk4-xia-l14-g1-chaye',
+    speakText: '这种茶叶很香。',
+  },
+  {
+    id: 'hsk4-xia-l14a-pick-chaoguo',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l14-g1-chaoguo',
+    scenario: '超过 nghĩa là vượt quá, hơn. Câu nào nói rằng giá này đã vượt quá ngân sách của tôi?',
+    options: [
+      {
+        text: '这个价格超过了我的预算。',
+        correct: true,
+        explain: '这个价格超过了我的预算 — giá này đã vượt quá ngân sách của tôi.',
+      },
+      {
+        text: '这个价格没有超过我的预算。',
+        correct: false,
+        explain: '这个价格没有超过我的预算 — giá này không vượt quá ngân sách của tôi.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l14a-pick-cuxiao',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l14-g1-cuxiao',
+    scenario: '促销 nghĩa là khuyến mãi. Câu nào nói rằng cửa hàng đang khuyến mãi?',
+    options: [
+      {
+        text: '商店正在促销。',
+        correct: true,
+        explain: '商店正在促销 — cửa hàng đang khuyến mãi.',
+      },
+      {
+        text: '商店没有在促销。',
+        correct: false,
+        explain: '商店没有在促销 — cửa hàng không khuyến mãi.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l14a-order',
+    kind: 'order',
+    lexemeId: 'hsk4-xia-l14-g1-zhuang',
+    zh: '请把茶装进盒子里。',
+    vi: ORDER_VI,
+    tiles: ['请', '把', '茶', '装', '进', '盒子', '里', '。'],
+    answer: '请把茶装进盒子里。',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L14A_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+export const L14B_LEXEME_IDS = [
+  'hsk4-xia-l14-g1-jiangjia',
+  'hsk4-xia-l14-g1-yangshi',
+  'hsk4-xia-l14-g1-jiaqian',
+  'hsk4-xia-l14-g1-shangye',
+  'hsk4-xia-l14-g1-shangpin',
+  'hsk4-xia-l14-g1-zhonglei',
+  'hsk4-xia-l14-g1-manghe',
+  'hsk4-xia-l14-g1-que',
+  'hsk4-xia-l14-g1-xuduo',
+  'hsk4-xia-l14-g1-biaoshi',
+  'hsk4-xia-l14-g1-jiashang',
+  'hsk4-xia-l14-g1-taidu',
+  'hsk4-xia-l14-g1-youhao',
+  'hsk4-xia-l14-g1-shide',
+  'hsk4-xia-l14-g1-zhe',
+  'hsk4-xia-l14-g1-zixi',
+  'hsk4-xia-l14-g1-duiyu',
+  'hsk4-xia-l14-g1-buguang',
+  'hsk4-xia-l14-g1-waitao',
+  'hsk4-xia-l14-g1-wazi',
+] as const;
+
+export const L14B_QUEST = {
+  id: 'hsk4-xia-l14b',
+  title: 'Bài 14 — Mua sắm tỉnh táo · Phần 2',
+  lessonId: 'hsk4-xia-l14',
+  lexemeIds: [...L14B_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l14b',
+} as const;
+
+export const L14B_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l14-g1-jiangjia',
+  'hsk4-xia-l14-g1-zhonglei',
+  'hsk4-xia-l14-g1-jiashang',
+  'hsk4-xia-l14-g1-zixi',
+  'hsk4-xia-l14-g1-wazi',
+] as const;
+
+export const L14B_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们继续说买东西：价钱、商品和态度。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình học tiếp phần sau của bài 14 — 20 từ còn lại, về giá cả, hàng hóa và thái độ mua bán.',
+    speakText: '你好！我是明。今天我们继续说买东西：价钱、商品和态度。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l14b-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '这件衣服的价钱是多少？',
+    vi: 'Giá của bộ quần áo này là bao nhiêu?',
+    lexemeId: 'hsk4-xia-l14-g1-jiaqian',
+    speakText: '这件衣服的价钱是多少？',
+  },
+  {
+    id: 'hsk4-xia-l14b-pick-youhao',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l14-g1-youhao',
+    scenario: '友好 nghĩa là thân thiện, hữu hảo. Câu nào nói rằng họ rất thân thiện với tôi?',
+    options: [
+      {
+        text: '他们对我很友好。',
+        correct: true,
+        explain: '他们对我很友好 — họ rất thân thiện với tôi.',
+      },
+      {
+        text: '他们对我不友好。',
+        correct: false,
+        explain: '他们对我不友好 — họ không thân thiện với tôi.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l14b-pick-taidu',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l14-g1-taidu',
+    scenario: '态度 nghĩa là thái độ. Câu nào nói rằng thái độ của anh ấy rất tốt?',
+    options: [
+      {
+        text: '他的态度很好。',
+        correct: true,
+        explain: '他的态度很好 — thái độ của anh ấy rất tốt.',
+      },
+      {
+        text: '他的态度不好。',
+        correct: false,
+        explain: '他的态度不好 — thái độ của anh ấy không tốt.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l14b-goal',
+    kind: 'choose-goal',
+    lexemeId: 'hsk4-xia-l14-g1-biaoshi',
+    zh: '我想表示感谢。',
+    vi: '表示 nghĩa là bày tỏ. Hôm nay bạn muốn bày tỏ điều gì? (Cả hai lựa chọn đều đúng — chỉ để ghi nhận mục tiêu của bạn.)',
+    options: [
+      { text: '我想表示感谢。', vi: 'Tôi muốn bày tỏ lòng biết ơn.' },
+      { text: '我想表示祝贺。', vi: 'Tôi muốn bày tỏ lời chúc mừng.' },
+    ],
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L14B_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+// --- Bài 15 — Đi ứng tuyển (37 từ: A = 19 từ đầu, B = 18 từ sau) ------------
+export const L15A_LEXEME_IDS = [
+  'hsk4-xia-l15-g1-qizhong',
+  'hsk4-xia-l15-g1-yiyao',
+  'hsk4-xia-l15-g1-yingpin',
+  'hsk4-xia-l15-g1-zhaopin',
+  'hsk4-xia-l15-g1-shixi',
+  'hsk4-xia-l15-g1-kaolu',
+  'hsk4-xia-l15-g1-danwei',
+  'hsk4-xia-l15-g1-biyesheng',
+  'hsk4-xia-l15-g1-jingli',
+  'hsk4-xia-l15-g1-xiaoxi',
+  'hsk4-xia-l15-g1-baoming',
+  'hsk4-xia-l15-g1-tianxie',
+  'hsk4-xia-l15-g1-bishi',
+  'hsk4-xia-l15-g1-mianshi',
+  'hsk4-xia-l15-g1-da',
+  'hsk4-xia-l15-g1-you',
+  'hsk4-xia-l15-g1-bumen',
+  'hsk4-xia-l15-g1-fuzeren',
+  'hsk4-xia-l15-g1-bulun',
+] as const;
+
+export const L15A_QUEST = {
+  id: 'hsk4-xia-l15a',
+  title: 'Bài 15 — Đi ứng tuyển · Phần 1',
+  lessonId: 'hsk4-xia-l15',
+  lexemeIds: [...L15A_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l15a',
+} as const;
+
+export const L15A_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l15-g1-qizhong',
+  'hsk4-xia-l15-g1-shixi',
+  'hsk4-xia-l15-g1-xiaoxi',
+  'hsk4-xia-l15-g1-da',
+  'hsk4-xia-l15-g1-bulun',
+] as const;
+
+export const L15A_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我去应聘了，我们一起学习找工作的中文。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình đi ứng tuyển, cùng học tiếng Trung khi tìm việc nhé. Bài 15 nói về đi ứng tuyển và thực tập; phần đầu học 19 từ đầu.',
+    speakText: '你好！我是明。今天我去应聘了，我们一起学习找工作的中文。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l15a-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '我去那家公司应聘了。',
+    vi: 'Tôi đã đến công ty đó ứng tuyển.',
+    lexemeId: 'hsk4-xia-l15-g1-yingpin',
+    speakText: '我去那家公司应聘了。',
+  },
+  {
+    id: 'hsk4-xia-l15a-pick-baoming',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l15-g1-baoming',
+    scenario: '报名 nghĩa là đăng ký, ghi danh. Câu nào nói rằng bạn đã đăng ký rồi?',
+    options: [
+      {
+        text: '我已经报名了。',
+        correct: true,
+        explain: '我已经报名了 — tôi đã đăng ký rồi.',
+      },
+      {
+        text: '我还没有报名。',
+        correct: false,
+        explain: '我还没有报名 — tôi vẫn chưa đăng ký.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l15a-pick-mianshi',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l15-g1-mianshi',
+    scenario: '面试 nghĩa là phỏng vấn; buổi phỏng vấn. Câu nào nói rằng buổi phỏng vấn vào chiều mai?',
+    options: [
+      {
+        text: '面试在明天下午。',
+        correct: true,
+        explain: '面试在明天下午 — buổi phỏng vấn vào chiều mai.',
+      },
+      {
+        text: '面试不在明天下午。',
+        correct: false,
+        explain: '面试不在明天下午 — buổi phỏng vấn không vào chiều mai.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l15a-order',
+    kind: 'order',
+    lexemeId: 'hsk4-xia-l15-g1-tianxie',
+    zh: '请你填写这张表。',
+    vi: ORDER_VI,
+    tiles: ['请', '你', '填写', '这', '张', '表', '。'],
+    answer: '请你填写这张表。',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L15A_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+export const L15B_LEXEME_IDS = [
+  'hsk4-xia-l15-g1-kending',
+  'hsk4-xia-l15-g1-duanxin',
+  'hsk4-xia-l15-g1-jidong',
+  'hsk4-xia-l15-g1-reng',
+  'hsk4-xia-l15-g1-lifa',
+  'hsk4-xia-l15-g1-jingzi',
+  'hsk4-xia-l15-g1-ziwo',
+  'hsk4-xia-l15-g1-nenggou',
+  'hsk4-xia-l15-g1-yunyong',
+  'hsk4-xia-l15-g1-gongchang',
+  'hsk4-xia-l15-g1-guiding',
+  'hsk4-xia-l15-g1-ketang',
+  'hsk4-xia-l15-g1-wanquan',
+  'hsk4-xia-l15-g1-liru',
+  'hsk4-xia-l15-g1-buru',
+  'hsk4-xia-l15-g1-xijie',
+  'hsk4-xia-l15-g1-daan',
+  'hsk4-xia-l15-g1-zhiye',
+] as const;
+
+export const L15B_QUEST = {
+  id: 'hsk4-xia-l15b',
+  title: 'Bài 15 — Đi ứng tuyển · Phần 2',
+  lessonId: 'hsk4-xia-l15',
+  lexemeIds: [...L15B_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l15b',
+} as const;
+
+export const L15B_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l15-g1-kending',
+  'hsk4-xia-l15-g1-lifa',
+  'hsk4-xia-l15-g1-yunyong',
+  'hsk4-xia-l15-g1-liru',
+  'hsk4-xia-l15-g1-zhiye',
+] as const;
+
+export const L15B_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们说说职业和工作的细节。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình học tiếp phần sau của bài 15 — 18 từ còn lại, về nghề nghiệp và những chi tiết trong công việc.',
+    speakText: '你好！我是明。今天我们说说职业和工作的细节。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l15b-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '你的职业是什么？',
+    vi: 'Nghề nghiệp của bạn là gì?',
+    lexemeId: 'hsk4-xia-l15-g1-zhiye',
+    speakText: '你的职业是什么？',
+  },
+  {
+    id: 'hsk4-xia-l15b-pick-jidong',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l15-g1-jidong',
+    scenario: '激动 nghĩa là xúc động, phấn khích. Câu nào nói rằng nghe tin tốt, tôi rất xúc động?',
+    options: [
+      {
+        text: '听到好消息，我很激动。',
+        correct: true,
+        explain: '听到好消息，我很激动 — nghe tin tốt, tôi rất xúc động.',
+      },
+      {
+        text: '听到好消息，我不激动。',
+        correct: false,
+        explain: '听到好消息，我不激动 — nghe tin tốt, tôi không xúc động.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l15b-pick-wanquan',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l15-g1-wanquan',
+    scenario: '完全 nghĩa là hoàn toàn. Câu nào nói rằng tôi hoàn toàn đồng ý với ý kiến của bạn?',
+    options: [
+      {
+        text: '我完全同意你的意见。',
+        correct: true,
+        explain: '我完全同意你的意见 — tôi hoàn toàn đồng ý với ý kiến của bạn.',
+      },
+      {
+        text: '我不完全同意你的意见。',
+        correct: false,
+        explain: '我不完全同意你的意见 — tôi không hoàn toàn đồng ý với ý kiến của bạn.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l15b-goal',
+    kind: 'choose-goal',
+    lexemeId: 'hsk4-xia-l15-g1-ziwo',
+    zh: '请你做一个自我介绍。',
+    vi: '自我介绍 nghĩa là tự giới thiệu bản thân. Trong buổi phỏng vấn, bạn muốn giới thiệu điều gì trước? (Cả hai lựa chọn đều đúng — chỉ để ghi nhận mục tiêu của bạn.)',
+    options: [
+      { text: '我想先介绍我的学习经历。', vi: 'Tôi muốn giới thiệu kinh nghiệm học tập của mình trước.' },
+      { text: '我想先介绍我的实习经历。', vi: 'Tôi muốn giới thiệu kinh nghiệm thực tập của mình trước.' },
+    ],
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L15B_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+// --- Bài 16 — Kế hoạch và thay đổi (41 từ: A = 21 từ đầu, B = 20 từ sau) ----
+export const L16A_LEXEME_IDS = [
+  'hsk4-xia-l16-g1-benlai',
+  'hsk4-xia-l16-g1-zhihao',
+  'hsk4-xia-l16-g1-ganshang',
+  'hsk4-xia-l16-g1-luxing',
+  'hsk4-xia-l16-g1-tuichi',
+  'hsk4-xia-l16-g1-quxiao',
+  'hsk4-xia-l16-g1-kexi',
+  'hsk4-xia-l16-g1-queshi',
+  'hsk4-xia-l16-g1-dengdao',
+  'hsk4-xia-l16-g1-zaochen',
+  'hsk4-xia-l16-g1-huran',
+  'hsk4-xia-l16-g1-zengjia',
+  'hsk4-xia-l16-g1-tiaozheng',
+  'hsk4-xia-l16-g1-cuowu',
+  'hsk4-xia-l16-g1-bingqie',
+  'hsk4-xia-l16-g1-lizi',
+  'hsk4-xia-l16-g1-guanjian',
+  'hsk4-xia-l16-g1-xiangxi',
+  'hsk4-xia-l16-g1-shijianbiao',
+  'hsk4-xia-l16-g1-bawo',
+  'hsk4-xia-l16-g1-xiangfan',
+] as const;
+
+export const L16A_QUEST = {
+  id: 'hsk4-xia-l16a',
+  title: 'Bài 16 — Kế hoạch và thay đổi · Phần 1',
+  lessonId: 'hsk4-xia-l16',
+  lexemeIds: [...L16A_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l16a',
+} as const;
+
+export const L16A_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l16-g1-benlai',
+  'hsk4-xia-l16-g1-quxiao',
+  'hsk4-xia-l16-g1-huran',
+  'hsk4-xia-l16-g1-lizi',
+  'hsk4-xia-l16-g1-xiangfan',
+] as const;
+
+export const L16A_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。我本来想去旅行，可是下雨了，我们只好改变计划。',
+    vi: 'Chào bạn! Mình là Minh. Mình vốn định đi du lịch, nhưng trời mưa nên đành phải đổi kế hoạch. Bài 16 nói về kế hoạch và thay đổi; phần đầu học 21 từ đầu.',
+    speakText: '你好！我是明。我本来想去旅行，可是下雨了，我们只好改变计划。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l16a-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '我喜欢和家人一起旅行。',
+    vi: 'Tôi thích đi du lịch cùng gia đình.',
+    lexemeId: 'hsk4-xia-l16-g1-luxing',
+    speakText: '我喜欢和家人一起旅行。',
+  },
+  {
+    id: 'hsk4-xia-l16a-pick-quxiao',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l16-g1-quxiao',
+    scenario: '取消 nghĩa là hủy bỏ. Câu nào nói rằng vì trời mưa nên trận đấu bị hủy?',
+    options: [
+      {
+        text: '因为下雨，比赛取消了。',
+        correct: true,
+        explain: '因为下雨，比赛取消了 — vì trời mưa nên trận đấu bị hủy.',
+      },
+      {
+        text: '因为下雨，比赛没有取消。',
+        correct: false,
+        explain: '因为下雨，比赛没有取消 — vì trời mưa nhưng trận đấu không bị hủy.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l16a-pick-tuichi',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l16-g1-tuichi',
+    scenario: '推迟 nghĩa là trì hoãn, lùi lại. Câu nào nói rằng cuộc họp lùi sang ngày mai?',
+    options: [
+      {
+        text: '会议推迟到明天。',
+        correct: true,
+        explain: '会议推迟到明天 — cuộc họp lùi sang ngày mai.',
+      },
+      {
+        text: '会议没有推迟到明天。',
+        correct: false,
+        explain: '会议没有推迟到明天 — cuộc họp không lùi sang ngày mai.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l16a-order',
+    kind: 'order',
+    lexemeId: 'hsk4-xia-l16-g1-dengdao',
+    zh: '等到春天，我们一起去旅行。',
+    vi: ORDER_VI,
+    tiles: ['等到', '春天', '，', '我们', '一起', '去', '旅行', '。'],
+    answer: '等到春天，我们一起去旅行。',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L16A_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+export const L16B_LEXEME_IDS = [
+  'hsk4-xia-l16-g1-bufen',
+  'hsk4-xia-l16-g1-qingsong',
+  'hsk4-xia-l16-g1-biaozhun',
+  'hsk4-xia-l16-g1-yange',
+  'hsk4-xia-l16-g1-qude',
+  'hsk4-xia-l16-g1-shuobuding',
+  'hsk4-xia-l16-g1-linghuo',
+  'hsk4-xia-l16-g1-yiqie',
+  'hsk4-xia-l16-g1-que',
+  'hsk4-xia-l16-g1-budebu',
+  'hsk4-xia-l16-g1-yue',
+  'hsk4-xia-l16-g1-bubian',
+  'hsk4-xia-l16-g1-shiwang',
+  'hsk4-xia-l16-g1-yexu',
+  'hsk4-xia-l16-g1-guang',
+  'hsk4-xia-l16-g1-youqu',
+  'hsk4-xia-l16-g1-guankan',
+  'hsk4-xia-l16-g1-bu',
+  'hsk4-xia-l16-g1-wufa',
+  'hsk4-xia-l16-g1-jieshou',
+] as const;
+
+export const L16B_QUEST = {
+  id: 'hsk4-xia-l16b',
+  title: 'Bài 16 — Kế hoạch và thay đổi · Phần 2',
+  lessonId: 'hsk4-xia-l16',
+  lexemeIds: [...L16B_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l16b',
+} as const;
+
+export const L16B_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l16-g1-bufen',
+  'hsk4-xia-l16-g1-shuobuding',
+  'hsk4-xia-l16-g1-yue',
+  'hsk4-xia-l16-g1-guankan',
+  'hsk4-xia-l16-g1-jieshou',
+] as const;
+
+export const L16B_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们说说计划改变以后怎么办，要灵活一点儿。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình học tiếp phần sau của bài 16 — 20 từ còn lại, về cách ứng biến khi kế hoạch thay đổi.',
+    speakText: '你好！我是明。今天我们说说计划改变以后怎么办，要灵活一点儿。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l16b-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '我们要灵活一点儿。',
+    vi: 'Chúng ta phải linh hoạt một chút.',
+    lexemeId: 'hsk4-xia-l16-g1-linghuo',
+    speakText: '我们要灵活一点儿。',
+  },
+  {
+    id: 'hsk4-xia-l16b-pick-shiwang',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l16-g1-shiwang',
+    scenario: '失望 nghĩa là thất vọng. Câu nào nói rằng anh ấy rất thất vọng về kết quả này?',
+    options: [
+      {
+        text: '他对这个结果很失望。',
+        correct: true,
+        explain: '他对这个结果很失望 — anh ấy rất thất vọng về kết quả này.',
+      },
+      {
+        text: '他对这个结果不失望。',
+        correct: false,
+        explain: '他对这个结果不失望 — anh ấy không thất vọng về kết quả này.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l16b-pick-youqu',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l16-g1-youqu',
+    scenario: '有趣 nghĩa là thú vị, hay. Câu nào nói rằng câu chuyện này rất thú vị?',
+    options: [
+      {
+        text: '这个故事很有趣。',
+        correct: true,
+        explain: '这个故事很有趣 — câu chuyện này rất thú vị.',
+      },
+      {
+        text: '这个故事不有趣。',
+        correct: false,
+        explain: '这个故事不有趣 — câu chuyện này không thú vị.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l16b-count',
+    kind: 'choose-number',
+    lexemeId: 'hsk4-xia-l16-g1-bu',
+    zh: '我看了一部电影。',
+    vi: '部 là lượng từ dùng cho phim, sách. “一部电影” là mấy bộ phim?',
+    options: [1, 2, 3, 4],
+    correct: 1,
+    unit: 'bộ',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L16B_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+// --- Bài 17 — Vận động và sức khỏe (41 từ: A = 21 từ đầu, B = 20 từ sau) ---
+export const L17A_LEXEME_IDS = [
+  'hsk4-xia-l17-g1-luguo',
+  'hsk4-xia-l17-g1-tang',
+  'hsk4-xia-l17-g1-jianshenfang',
+  'hsk4-xia-l17-g1-jianshen',
+  'hsk4-xia-l17-g1-tizhong',
+  'hsk4-xia-l17-g1-huiyuan',
+  'hsk4-xia-l17-g1-binggan',
+  'hsk4-xia-l17-g1-suannai',
+  'hsk4-xia-l17-g1-guozhi',
+  'hsk4-xia-l17-g1-jiaolian',
+  'hsk4-xia-l17-g1-dongzuo',
+  'hsk4-xia-l17-g1-kexue',
+  'hsk4-xia-l17-g1-shoushang',
+  'hsk4-xia-l17-g1-caochang',
+  'hsk4-xia-l17-g1-qizhong',
+  'hsk4-xia-l17-g1-zhi',
+  'hsk4-xia-l17-g1-huo',
+  'hsk4-xia-l17-g1-haochu',
+  'hsk4-xia-l17-g1-shebei',
+  'hsk4-xia-l17-g1-quanshen',
+  'hsk4-xia-l17-g1-zhunque',
+] as const;
+
+export const L17A_QUEST = {
+  id: 'hsk4-xia-l17a',
+  title: 'Bài 17 — Vận động và sức khỏe · Phần 1',
+  lessonId: 'hsk4-xia-l17',
+  lexemeIds: [...L17A_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l17a',
+} as const;
+
+export const L17A_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l17-g1-luguo',
+  'hsk4-xia-l17-g1-huiyuan',
+  'hsk4-xia-l17-g1-dongzuo',
+  'hsk4-xia-l17-g1-zhi',
+  'hsk4-xia-l17-g1-zhunque',
+] as const;
+
+export const L17A_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们去健身房运动，身体更健康。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình cùng đến phòng tập gym vận động cho khỏe nhé. Bài 17 nói về vận động và sức khỏe; phần đầu học 21 từ đầu.',
+    speakText: '你好！我是明。今天我们去健身房运动，身体更健康。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l17a-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '他每天去健身。',
+    vi: 'Anh ấy đi tập gym mỗi ngày.',
+    lexemeId: 'hsk4-xia-l17-g1-jianshen',
+    speakText: '他每天去健身。',
+  },
+  {
+    id: 'hsk4-xia-l17a-pick-zhunque',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l17-g1-zhunque',
+    scenario: '准确 nghĩa là chính xác, chuẩn xác. Câu nào nói rằng câu trả lời của bạn rất chính xác?',
+    options: [
+      {
+        text: '你的回答很准确。',
+        correct: true,
+        explain: '你的回答很准确 — câu trả lời của bạn rất chính xác.',
+      },
+      {
+        text: '你的回答不准确。',
+        correct: false,
+        explain: '你的回答不准确 — câu trả lời của bạn không chính xác.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l17a-pick-haochu',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l17-g1-haochu',
+    scenario: '好处 nghĩa là lợi ích, điểm tốt. Câu nào nói rằng vận động có rất nhiều lợi ích?',
+    options: [
+      {
+        text: '运动有很多好处。',
+        correct: true,
+        explain: '运动有很多好处 — vận động có rất nhiều lợi ích.',
+      },
+      {
+        text: '运动没有好处。',
+        correct: false,
+        explain: '运动没有好处 — vận động không có lợi ích gì.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l17a-count',
+    kind: 'choose-number',
+    lexemeId: 'hsk4-xia-l17-g1-tang',
+    zh: '这周我去了两趟健身房。',
+    vi: '趟 là lượng từ chỉ chuyến, lượt đi lại. Tuần này tôi đã đi phòng tập gym mấy chuyến?',
+    options: [1, 2, 3, 4],
+    correct: 2,
+    unit: 'chuyến',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L17A_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+export const L17B_LEXEME_IDS = [
+  'hsk4-xia-l17-g1-jinjin',
+  'hsk4-xia-l17-g1-biaoyang',
+  'hsk4-xia-l17-g1-jinbu',
+  'hsk4-xia-l17-g1-guli',
+  'hsk4-xia-l17-g1-shuai',
+  'hsk4-xia-l17-g1-pingpangqiu',
+  'hsk4-xia-l17-g1-dui',
+  'hsk4-xia-l17-g1-xiang',
+  'hsk4-xia-l17-g1-yingde',
+  'hsk4-xia-l17-g1-jiaozuo',
+  'hsk4-xia-l17-g1-meng',
+  'hsk4-xia-l17-g1-buduan',
+  'hsk4-xia-l17-g1-duiyuan',
+  'hsk4-xia-l17-g1-xunlian',
+  'hsk4-xia-l17-g1-qiudui',
+  'hsk4-xia-l17-g1-qiumi',
+  'hsk4-xia-l17-g1-mengxiang',
+  'hsk4-xia-l17-g1-dasai',
+  'hsk4-xia-l17-g1-ying',
+  'hsk4-xia-l17-g1-lian',
+] as const;
+
+export const L17B_QUEST = {
+  id: 'hsk4-xia-l17b',
+  title: 'Bài 17 — Vận động và sức khỏe · Phần 2',
+  lessonId: 'hsk4-xia-l17',
+  lexemeIds: [...L17B_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l17b',
+} as const;
+
+export const L17B_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l17-g1-jinjin',
+  'hsk4-xia-l17-g1-pingpangqiu',
+  'hsk4-xia-l17-g1-meng',
+  'hsk4-xia-l17-g1-qiumi',
+  'hsk4-xia-l17-g1-lian',
+] as const;
+
+export const L17B_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们说说乒乓球和梦想。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình học tiếp phần sau của bài 17 — 20 từ còn lại, về bóng bàn và ước mơ.',
+    speakText: '你好！我是明。今天我们说说乒乓球和梦想。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l17b-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '你的汉语进步很快。',
+    vi: 'Tiếng Trung của bạn tiến bộ rất nhanh.',
+    lexemeId: 'hsk4-xia-l17-g1-jinbu',
+    speakText: '你的汉语进步很快。',
+  },
+  {
+    id: 'hsk4-xia-l17b-pick-guli',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l17-g1-guli',
+    scenario: '鼓励 nghĩa là khuyến khích, động viên. Câu nào nói rằng cô giáo thường động viên chúng tôi?',
+    options: [
+      {
+        text: '老师常常鼓励我们。',
+        correct: true,
+        explain: '老师常常鼓励我们 — cô giáo thường động viên chúng tôi.',
+      },
+      {
+        text: '老师从来不鼓励我们。',
+        correct: false,
+        explain: '老师从来不鼓励我们 — cô giáo chưa bao giờ động viên chúng tôi.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l17b-pick-mengxiang',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l17-g1-mengxiang',
+    scenario: '梦想 nghĩa là ước mơ. Câu nào nói rằng ước mơ của tôi là làm giáo viên?',
+    options: [
+      {
+        text: '我的梦想是当一名老师。',
+        correct: true,
+        explain: '我的梦想是当一名老师 — ước mơ của tôi là làm giáo viên.',
+      },
+      {
+        text: '我的梦想不是当一名老师。',
+        correct: false,
+        explain: '我的梦想不是当一名老师 — ước mơ của tôi không phải là làm giáo viên.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l17b-goal',
+    kind: 'choose-goal',
+    lexemeId: 'hsk4-xia-l17-g1-ying',
+    zh: '我们一定会赢。',
+    vi: '赢 nghĩa là thắng, giành chiến thắng. Trước trận đấu sắp tới, mục tiêu của bạn là gì? (Cả hai lựa chọn đều đúng — chỉ để ghi nhận mục tiêu của bạn.)',
+    options: [
+      { text: '我们一定会赢。', vi: 'Chúng tôi nhất định sẽ thắng.' },
+      { text: '我们要不断练习。', vi: 'Chúng tôi sẽ luyện tập không ngừng.' },
+    ],
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L17B_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+// --- Bài 18 — Công nghệ thay đổi cuộc sống (39 từ: A = 20 từ đầu, B = 19 từ sau)
+export const L18A_LEXEME_IDS = [
+  'hsk4-xia-l18-g1-cai',
+  'hsk4-xia-l18-g1-gongxiangdanche',
+  'hsk4-xia-l18-g1-chukou',
+  'hsk4-xia-l18-g1-tui',
+  'hsk4-xia-l18-g1-dui',
+  'hsk4-xia-l18-g1-erweima',
+  'hsk4-xia-l18-g1-zhuce',
+  'hsk4-xia-l18-g1-feiyong',
+  'hsk4-xia-l18-g1-shuoming',
+  'hsk4-xia-l18-g1-banshi',
+  'hsk4-xia-l18-g1-chadianr',
+  'hsk4-xia-l18-g1-pai',
+  'hsk4-xia-l18-g1-gege',
+  'hsk4-xia-l18-g1-xiaozu',
+  'hsk4-xia-l18-g1-taolun',
+  'hsk4-xia-l18-g1-yan',
+  'hsk4-xia-l18-g1-chushi',
+  'hsk4-xia-l18-g1-gedi',
+  'hsk4-xia-l18-g1-zhuming',
+  'hsk4-xia-l18-g1-xiaochi',
+] as const;
+
+export const L18A_QUEST = {
+  id: 'hsk4-xia-l18a',
+  title: 'Bài 18 — Công nghệ thay đổi cuộc sống · Phần 1',
+  lessonId: 'hsk4-xia-l18',
+  lexemeIds: [...L18A_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l18a',
+} as const;
+
+export const L18A_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l18-g1-cai',
+  'hsk4-xia-l18-g1-erweima',
+  'hsk4-xia-l18-g1-chadianr',
+  'hsk4-xia-l18-g1-yan',
+  'hsk4-xia-l18-g1-xiaochi',
+] as const;
+
+export const L18A_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们骑共享单车去上课，看看科技怎么改变生活。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình cùng đạp xe đạp chia sẻ đi học và xem công nghệ thay đổi cuộc sống ra sao nhé. Bài 18 nói về công nghệ thay đổi cuộc sống; phần đầu học 20 từ đầu.',
+    speakText: '你好！我是明。今天我们骑共享单车去上课，看看科技怎么改变生活。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l18a-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '我每天骑共享单车去上课。',
+    vi: 'Tôi đạp xe đạp chia sẻ đi học mỗi ngày.',
+    lexemeId: 'hsk4-xia-l18-g1-gongxiangdanche',
+    speakText: '我每天骑共享单车去上课。',
+  },
+  {
+    id: 'hsk4-xia-l18a-pick-taolun',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l18-g1-taolun',
+    scenario: '讨论 nghĩa là thảo luận. Câu nào nói rằng chúng ta cùng thảo luận vấn đề này?',
+    options: [
+      {
+        text: '我们一起讨论这个问题。',
+        correct: true,
+        explain: '我们一起讨论这个问题 — chúng ta cùng thảo luận vấn đề này.',
+      },
+      {
+        text: '我们不讨论这个问题。',
+        correct: false,
+        explain: '我们不讨论这个问题 — chúng ta không thảo luận vấn đề này.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l18a-pick-zhuming',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l18-g1-zhuming',
+    scenario: '著名 nghĩa là nổi tiếng, trứ danh. Câu nào nói rằng đây là một quán ăn nổi tiếng?',
+    options: [
+      {
+        text: '这是一家著名的饭馆。',
+        correct: true,
+        explain: '这是一家著名的饭馆 — đây là một quán ăn nổi tiếng.',
+      },
+      {
+        text: '这不是一家著名的饭馆。',
+        correct: false,
+        explain: '这不是一家著名的饭馆 — đây không phải là một quán ăn nổi tiếng.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l18a-order',
+    kind: 'order',
+    lexemeId: 'hsk4-xia-l18-g1-erweima',
+    zh: '请你扫一下二维码。',
+    vi: ORDER_VI,
+    tiles: ['请', '你', '扫', '一下', '二维码', '。'],
+    answer: '请你扫一下二维码。',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L18A_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+export const L18B_LEXEME_IDS = [
+  'hsk4-xia-l18-g1-hulianwang',
+  'hsk4-xia-l18-g1-dianzan',
+  'hsk4-xia-l18-g1-aiyanjing',
+  'hsk4-xia-l18-g1-3ddayinji',
+  'hsk4-xia-l18-g1-shangmen',
+  'hsk4-xia-l18-g1-daodi',
+  'hsk4-xia-l18-g1-jin',
+  'hsk4-xia-l18-g1-duoyang',
+  'hsk4-xia-l18-g1-tuichu',
+  'hsk4-xia-l18-g1-yuyue',
+  'hsk4-xia-l18-g1-qu',
+  'hsk4-xia-l18-g1-yuanyin',
+  'hsk4-xia-l18-g1-raner',
+  'hsk4-xia-l18-g1-bubi',
+  'hsk4-xia-l18-g1-qinqi',
+  'hsk4-xia-l18-g1-an',
+  'hsk4-xia-l18-g1-tichu',
+  'hsk4-xia-l18-g1-dada',
+  'hsk4-xia-l18-g1-xianyou',
+] as const;
+
+export const L18B_QUEST = {
+  id: 'hsk4-xia-l18b',
+  title: 'Bài 18 — Công nghệ thay đổi cuộc sống · Phần 2',
+  lessonId: 'hsk4-xia-l18',
+  lexemeIds: [...L18B_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l18b',
+} as const;
+
+export const L18B_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l18-g1-hulianwang',
+  'hsk4-xia-l18-g1-shangmen',
+  'hsk4-xia-l18-g1-yuyue',
+  'hsk4-xia-l18-g1-qinqi',
+  'hsk4-xia-l18-g1-xianyou',
+] as const;
+
+export const L18B_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们说说互联网和上门服务。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình học tiếp phần sau của bài 18 — 19 từ còn lại, về internet và dịch vụ đến tận nhà.',
+    speakText: '你好！我是明。今天我们说说互联网和上门服务。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l18b-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '现在人人都用互联网。',
+    vi: 'Bây giờ ai cũng dùng internet.',
+    lexemeId: 'hsk4-xia-l18-g1-hulianwang',
+    speakText: '现在人人都用互联网。',
+  },
+  {
+    id: 'hsk4-xia-l18b-pick-bubi',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l18-g1-bubi',
+    scenario: '不必 nghĩa là không cần, không nhất thiết. Câu nào nói rằng bạn không cần lo lắng?',
+    options: [
+      {
+        text: '你不必担心。',
+        correct: true,
+        explain: '你不必担心 — bạn không cần lo lắng.',
+      },
+      {
+        text: '你必须担心。',
+        correct: false,
+        explain: '你必须担心 — bạn nhất định phải lo lắng (trái nghĩa với 不必).',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l18b-pick-tichu',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l18-g1-tichu',
+    scenario: '提出 nghĩa là đưa ra, đề xuất. Câu nào nói rằng anh ấy đã đưa ra một cách làm mới?',
+    options: [
+      {
+        text: '他提出了一个新办法。',
+        correct: true,
+        explain: '他提出了一个新办法 — anh ấy đã đưa ra một cách làm mới.',
+      },
+      {
+        text: '他没有提出新办法。',
+        correct: false,
+        explain: '他没有提出新办法 — anh ấy không đưa ra cách làm mới.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l18b-goal',
+    kind: 'choose-goal',
+    lexemeId: 'hsk4-xia-l18-g1-shangmen',
+    zh: '师傅上门来修电脑。',
+    vi: '上门 nghĩa là đến tận nhà để cung cấp dịch vụ. Hôm nay bạn muốn đặt dịch vụ nào đến tận nhà? (Cả hai lựa chọn đều đúng — chỉ để ghi nhận mục tiêu của bạn.)',
+    options: [
+      { text: '我想请师傅上门来修电脑。', vi: 'Tôi muốn mời thợ đến tận nhà sửa máy tính.' },
+      { text: '我想请师傅上门来修空调。', vi: 'Tôi muốn mời thợ đến tận nhà sửa điều hòa.' },
+    ],
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L18B_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+// --- Bài 19 — Nghệ thuật và sân khấu (40 từ: A = 20 từ đầu, B = 20 từ sau) --
+export const L19A_LEXEME_IDS = [
+  'hsk4-xia-l19-g1-huaju',
+  'hsk4-xia-l19-g1-pai',
+  'hsk4-xia-l19-g1-yishu',
+  'hsk4-xia-l19-g1-neixin',
+  'hsk4-xia-l19-g1-zixin',
+  'hsk4-xia-l19-g1-shaonian',
+  'hsk4-xia-l19-g1-geshou',
+  'hsk4-xia-l19-g1-gesheng',
+  'hsk4-xia-l19-g1-dujia',
+  'hsk4-xia-l19-g1-yanyuan',
+  'hsk4-xia-l19-g1-yanchang',
+  'hsk4-xia-l19-g1-liuxia',
+  'hsk4-xia-l19-g1-qingnian',
+  'hsk4-xia-l19-g1-guanzhong',
+  'hsk4-xia-l19-g1-gongke',
+  'hsk4-xia-l19-g1-zhuanfa',
+  'hsk4-xia-l19-g1-rukou',
+  'hsk4-xia-l19-g1-ru',
+  'hsk4-xia-l19-g1-zhi',
+  'hsk4-xia-l19-g1-gongfu',
+] as const;
+
+export const L19A_QUEST = {
+  id: 'hsk4-xia-l19a',
+  title: 'Bài 19 — Nghệ thuật và sân khấu · Phần 1',
+  lessonId: 'hsk4-xia-l19',
+  lexemeIds: [...L19A_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l19a',
+} as const;
+
+export const L19A_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l19-g1-huaju',
+  'hsk4-xia-l19-g1-shaonian',
+  'hsk4-xia-l19-g1-yanchang',
+  'hsk4-xia-l19-g1-zhuanfa',
+  'hsk4-xia-l19-g1-gongfu',
+] as const;
+
+export const L19A_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们学校要演一场话剧，我们一起去看吧。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay trường mình diễn một vở kịch nói, mình cùng đi xem nhé. Bài 19 nói về nghệ thuật và sân khấu; phần đầu học 20 từ đầu.',
+    speakText: '你好！我是明。今天我们学校要演一场话剧，我们一起去看吧。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l19a-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '我们学校要演一场话剧。',
+    vi: 'Trường chúng tôi sắp diễn một vở kịch nói.',
+    lexemeId: 'hsk4-xia-l19-g1-huaju',
+    speakText: '我们学校要演一场话剧。',
+  },
+  {
+    id: 'hsk4-xia-l19a-pick-gesheng',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l19-g1-gesheng',
+    scenario: '歌声 nghĩa là giọng hát, tiếng hát. Câu nào nói rằng giọng hát của cô ấy rất hay?',
+    options: [
+      {
+        text: '她的歌声很好听。',
+        correct: true,
+        explain: '她的歌声很好听 — giọng hát của cô ấy rất hay.',
+      },
+      {
+        text: '她的歌声不好听。',
+        correct: false,
+        explain: '她的歌声不好听 — giọng hát của cô ấy không hay.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l19a-pick-guanzhong',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l19-g1-guanzhong',
+    scenario: '观众 nghĩa là khán giả. Câu nào nói rằng khán giả đều rất thích buổi biểu diễn này?',
+    options: [
+      {
+        text: '观众都很喜欢这场演出。',
+        correct: true,
+        explain: '观众都很喜欢这场演出 — khán giả đều rất thích buổi biểu diễn này.',
+      },
+      {
+        text: '观众都不喜欢这场演出。',
+        correct: false,
+        explain: '观众都不喜欢这场演出 — khán giả đều không thích buổi biểu diễn này.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l19a-order',
+    kind: 'order',
+    lexemeId: 'hsk4-xia-l19-g1-pai',
+    zh: '我们每天排话剧。',
+    vi: ORDER_VI,
+    tiles: ['我们', '每天', '排', '话剧', '。'],
+    answer: '我们每天排话剧。',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L19A_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+export const L19B_LEXEME_IDS = [
+  'hsk4-xia-l19-g1-huojiang',
+  'hsk4-xia-l19-g1-jiang',
+  'hsk4-xia-l19-g1-qidai',
+  'hsk4-xia-l19-g1-guzhang',
+  'hsk4-xia-l19-g1-yaoqing',
+  'hsk4-xia-l19-g1-qingzhu',
+  'hsk4-xia-l19-g1-diantou',
+  'hsk4-xia-l19-g1-zuopin',
+  'hsk4-xia-l19-g1-zuozhe',
+  'hsk4-xia-l19-g1-shiji',
+  'hsk4-xia-l19-g1-duzhe',
+  'hsk4-xia-l19-g1-zuojia',
+  'hsk4-xia-l19-g1-ban',
+  'hsk4-xia-l19-g1-wenzhang',
+  'hsk4-xia-l19-g1-quanbu',
+  'hsk4-xia-l19-g1-zhengli',
+  'hsk4-xia-l19-g1-wenzi',
+  'hsk4-xia-l19-g1-tupian',
+  'hsk4-xia-l19-g1-baokao',
+  'hsk4-xia-l19-g1-wenxue',
+] as const;
+
+export const L19B_QUEST = {
+  id: 'hsk4-xia-l19b',
+  title: 'Bài 19 — Nghệ thuật và sân khấu · Phần 2',
+  lessonId: 'hsk4-xia-l19',
+  lexemeIds: [...L19B_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l19b',
+} as const;
+
+export const L19B_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l19-g1-huojiang',
+  'hsk4-xia-l19-g1-qingzhu',
+  'hsk4-xia-l19-g1-duzhe',
+  'hsk4-xia-l19-g1-zhengli',
+  'hsk4-xia-l19-g1-wenxue',
+] as const;
+
+export const L19B_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们说说获奖、作家和文学。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình học tiếp phần sau của bài 19 — 20 từ còn lại, về đoạt giải, nhà văn và văn học.',
+    speakText: '你好！我是明。今天我们说说获奖、作家和文学。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l19b-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '他是一位有名的作家。',
+    vi: 'Anh ấy là một nhà văn nổi tiếng.',
+    lexemeId: 'hsk4-xia-l19-g1-zuojia',
+    speakText: '他是一位有名的作家。',
+  },
+  {
+    id: 'hsk4-xia-l19b-pick-qidai',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l19-g1-qidai',
+    scenario: '期待 nghĩa là mong đợi, kỳ vọng. Câu nào nói rằng tôi rất mong đợi buổi biểu diễn này?',
+    options: [
+      {
+        text: '我很期待这场演出。',
+        correct: true,
+        explain: '我很期待这场演出 — tôi rất mong đợi buổi biểu diễn này.',
+      },
+      {
+        text: '我不期待这场演出。',
+        correct: false,
+        explain: '我不期待这场演出 — tôi không mong đợi buổi biểu diễn này.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l19b-pick-wenxue',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l19-g1-wenxue',
+    scenario: '文学 nghĩa là văn học. Câu nào nói rằng tôi rất thích văn học Trung Quốc?',
+    options: [
+      {
+        text: '我很喜欢中国文学。',
+        correct: true,
+        explain: '我很喜欢中国文学 — tôi rất thích văn học Trung Quốc.',
+      },
+      {
+        text: '我不喜欢中国文学。',
+        correct: false,
+        explain: '我不喜欢中国文学 — tôi không thích văn học Trung Quốc.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l19b-goal',
+    kind: 'choose-goal',
+    lexemeId: 'hsk4-xia-l19-g1-yaoqing',
+    zh: '我邀请你来看话剧。',
+    vi: '邀请 nghĩa là mời. Bạn muốn mời ai cùng đi xem kịch nói? (Cả hai lựa chọn đều đúng — chỉ để ghi nhận mục tiêu của bạn.)',
+    options: [
+      { text: '我邀请我的朋友来看话剧。', vi: 'Tôi mời bạn tôi cùng đi xem kịch nói.' },
+      { text: '我邀请我的家人来看话剧。', vi: 'Tôi mời gia đình tôi cùng đi xem kịch nói.' },
+    ],
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L19B_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+// --- Bài 20 — Du lịch khắp Trung Quốc (41 từ: A = 21 từ đầu, B = 20 từ sau) ---
+export const L20A_LEXEME_IDS = [
+  'hsk4-xia-l20-g1-duche',
+  'hsk4-xia-l20-g1-cheng',
+  'hsk4-xia-l20-g1-nandao',
+  'hsk4-xia-l20-g1-wu',
+  'hsk4-xia-l20-g1-dongche',
+  'hsk4-xia-l20-g1-chesu',
+  'hsk4-xia-l20-g1-lie',
+  'hsk4-xia-l20-g1-wancan',
+  'hsk4-xia-l20-g1-ye',
+  'hsk4-xia-l20-g1-daba',
+  'hsk4-xia-l20-g1-anjian',
+  'hsk4-xia-l20-g1-dengji',
+  'hsk4-xia-l20-g1-xiaoshuo',
+  'hsk4-xia-l20-g1-hangban',
+  'hsk4-xia-l20-g1-zhiji',
+  'hsk4-xia-l20-g1-luke',
+  'hsk4-xia-l20-g1-pai',
+  'hsk4-xia-l20-g1-kao',
+  'hsk4-xia-l20-g1-chuanghu',
+  'hsk4-xia-l20-g1-zhuanji',
+  'hsk4-xia-l20-g1-congzhong',
+] as const;
+
+export const L20A_QUEST = {
+  id: 'hsk4-xia-l20a',
+  title: 'Bài 20 — Du lịch khắp Trung Quốc · Phần 1',
+  lessonId: 'hsk4-xia-l20',
+  lexemeIds: [...L20A_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l20a',
+} as const;
+
+export const L20A_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l20-g1-duche',
+  'hsk4-xia-l20-g1-chesu',
+  'hsk4-xia-l20-g1-anjian',
+  'hsk4-xia-l20-g1-luke',
+  'hsk4-xia-l20-g1-congzhong',
+] as const;
+
+export const L20A_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们乘火车去北京，学习坐车的中文。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình cùng đi tàu hỏa đến Bắc Kinh và học tiếng Trung khi đi xe nhé. Bài 20 nói về du lịch khắp Trung Quốc; phần đầu học 21 từ đầu.',
+    speakText: '你好！我是明。今天我们乘火车去北京，学习坐车的中文。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l20a-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '我们乘火车去北京。',
+    vi: 'Chúng tôi đi tàu hỏa đến Bắc Kinh.',
+    lexemeId: 'hsk4-xia-l20-g1-cheng',
+    speakText: '我们乘火车去北京。',
+  },
+  {
+    id: 'hsk4-xia-l20a-pick-duche',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l20-g1-duche',
+    scenario: '堵车 nghĩa là tắc xe, kẹt xe. Câu nào nói rằng buổi sáng thường tắc xe?',
+    options: [
+      {
+        text: '早上常常堵车。',
+        correct: true,
+        explain: '早上常常堵车 — buổi sáng thường tắc xe.',
+      },
+      {
+        text: '早上从来不堵车。',
+        correct: false,
+        explain: '早上从来不堵车 — buổi sáng chưa bao giờ tắc xe.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l20a-pick-zhuanji',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l20-g1-zhuanji',
+    scenario: '转机 nghĩa là chuyển máy bay, quá cảnh. Câu nào nói rằng chúng tôi phải chuyển máy bay ở Thượng Hải?',
+    options: [
+      {
+        text: '我们要在上海转机。',
+        correct: true,
+        explain: '我们要在上海转机 — chúng tôi phải chuyển máy bay ở Thượng Hải.',
+      },
+      {
+        text: '我们不在上海转机。',
+        correct: false,
+        explain: '我们不在上海转机 — chúng tôi không chuyển máy bay ở Thượng Hải.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l20a-order',
+    kind: 'order',
+    lexemeId: 'hsk4-xia-l20-g1-dengji',
+    zh: '我们开始登机了。',
+    vi: ORDER_VI,
+    tiles: ['我们', '开始', '登机', '了', '。'],
+    answer: '我们开始登机了。',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L20A_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+export const L20B_LEXEME_IDS = [
+  'hsk4-xia-l20-g1-zongjie',
+  'hsk4-xia-l20-g1-daolu',
+  'hsk4-xia-l20-g1-tedian',
+  'hsk4-xia-l20-g1-suoyou',
+  'hsk4-xia-l20-g1-yijian',
+  'hsk4-xia-l20-g1-xi',
+  'hsk4-xia-l20-g1-fannao',
+  'hsk4-xia-l20-g1-baifenzhi',
+  'hsk4-xia-l20-g1-jiesheng',
+  'hsk4-xia-l20-g1-dang',
+  'hsk4-xia-l20-g1-hongbao',
+  'hsk4-xia-l20-g1-juan',
+  'hsk4-xia-l20-g1-li',
+  'hsk4-xia-l20-g1-yaoshi',
+  'hsk4-xia-l20-g1-shaoshu',
+  'hsk4-xia-l20-g1-minzu',
+  'hsk4-xia-l20-g1-daoyou',
+  'hsk4-xia-l20-g1-jieshi',
+  'hsk4-xia-l20-g1-po',
+  'hsk4-xia-l20-g1-liuli',
+] as const;
+
+export const L20B_QUEST = {
+  id: 'hsk4-xia-l20b',
+  title: 'Bài 20 — Du lịch khắp Trung Quốc · Phần 2',
+  lessonId: 'hsk4-xia-l20',
+  lexemeIds: [...L20B_LEXEME_IDS],
+  rewardPoints: 50,
+  badgeId: 'hsk4-xia-l20b',
+} as const;
+
+export const L20B_REVIEW_LEXEME_IDS = [
+  'hsk4-xia-l20-g1-zongjie',
+  'hsk4-xia-l20-g1-fannao',
+  'hsk4-xia-l20-g1-hongbao',
+  'hsk4-xia-l20-g1-minzu',
+  'hsk4-xia-l20-g1-liuli',
+] as const;
+
+export const L20B_STEPS: QuestStep[] = [
+  {
+    id: 'greet-minh',
+    kind: 'talk',
+    npc: 'minh',
+    zh: '你好！我是明。今天我们总结这次旅行，看看中国有多大。',
+    vi: 'Chào bạn! Mình là Minh. Hôm nay mình học tiếp phần sau của bài 20 — 20 từ còn lại, để tổng kết chuyến đi và xem Trung Quốc rộng lớn ra sao.',
+    speakText: '你好！我是明。今天我们总结这次旅行，看看中国有多大。',
+  },
+  { id: 'goto-door', kind: 'goto', targetId: 'classroom-door', vi: GOTO_DOOR_VI },
+  {
+    id: 'hsk4-xia-l20b-teacher',
+    kind: 'talk',
+    npc: 'teacher',
+    zh: '导游给我们解释了很多。',
+    vi: 'Hướng dẫn viên du lịch đã giải thích cho chúng tôi rất nhiều điều.',
+    lexemeId: 'hsk4-xia-l20-g1-daoyou',
+    speakText: '导游给我们解释了很多。',
+  },
+  {
+    id: 'hsk4-xia-l20b-pick-jiesheng',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l20-g1-jiesheng',
+    scenario: '节省 nghĩa là tiết kiệm. Câu nào nói rằng đi tàu hỏa có thể tiết kiệm thời gian?',
+    options: [
+      {
+        text: '坐火车可以节省时间。',
+        correct: true,
+        explain: '坐火车可以节省时间 — đi tàu hỏa có thể tiết kiệm thời gian.',
+      },
+      {
+        text: '坐火车不可以节省时间。',
+        correct: false,
+        explain: '坐火车不可以节省时间 — đi tàu hỏa không thể tiết kiệm thời gian.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l20b-pick-liuli',
+    kind: 'pick-meaning',
+    lexemeId: 'hsk4-xia-l20-g1-liuli',
+    scenario: '流利 nghĩa là lưu loát, trôi chảy. Câu nào nói rằng tiếng Trung của anh ấy nói rất lưu loát?',
+    options: [
+      {
+        text: '他的汉语说得很流利。',
+        correct: true,
+        explain: '他的汉语说得很流利 — tiếng Trung của anh ấy nói rất lưu loát.',
+      },
+      {
+        text: '他的汉语说得不流利。',
+        correct: false,
+        explain: '他的汉语说得不流利 — tiếng Trung của anh ấy nói không lưu loát.',
+      },
+    ],
+  },
+  {
+    id: 'hsk4-xia-l20b-count',
+    kind: 'choose-number',
+    lexemeId: 'hsk4-xia-l20-g1-juan',
+    zh: '这套书一共有五卷。',
+    vi: '卷 là lượng từ dùng cho sách. Bộ sách này tổng cộng có mấy cuốn?',
+    options: [3, 4, 5, 6],
+    correct: 5,
+    unit: 'cuốn',
+    source: 'authored',
+  },
+  { id: 'final-review', kind: 'review', lexemeIds: [...L20B_REVIEW_LEXEME_IDS] },
+  { id: 'result', kind: 'result' },
+];
+
+// --- Tổng hợp: 20 quest HSK 4 quyển hạ (luồng tích hợp sẽ nối vào registry) ---
+export const HSK4_XIA_QUEST_DEFS: QuestDef[] = [
+  { quest: { ...L11A_QUEST, lexemeIds: [...L11A_QUEST.lexemeIds] }, steps: L11A_STEPS },
+  { quest: { ...L11B_QUEST, lexemeIds: [...L11B_QUEST.lexemeIds] }, steps: L11B_STEPS },
+  { quest: { ...L12A_QUEST, lexemeIds: [...L12A_QUEST.lexemeIds] }, steps: L12A_STEPS },
+  { quest: { ...L12B_QUEST, lexemeIds: [...L12B_QUEST.lexemeIds] }, steps: L12B_STEPS },
+  { quest: { ...L13A_QUEST, lexemeIds: [...L13A_QUEST.lexemeIds] }, steps: L13A_STEPS },
+  { quest: { ...L13B_QUEST, lexemeIds: [...L13B_QUEST.lexemeIds] }, steps: L13B_STEPS },
+  { quest: { ...L14A_QUEST, lexemeIds: [...L14A_QUEST.lexemeIds] }, steps: L14A_STEPS },
+  { quest: { ...L14B_QUEST, lexemeIds: [...L14B_QUEST.lexemeIds] }, steps: L14B_STEPS },
+  { quest: { ...L15A_QUEST, lexemeIds: [...L15A_QUEST.lexemeIds] }, steps: L15A_STEPS },
+  { quest: { ...L15B_QUEST, lexemeIds: [...L15B_QUEST.lexemeIds] }, steps: L15B_STEPS },
+  { quest: { ...L16A_QUEST, lexemeIds: [...L16A_QUEST.lexemeIds] }, steps: L16A_STEPS },
+  { quest: { ...L16B_QUEST, lexemeIds: [...L16B_QUEST.lexemeIds] }, steps: L16B_STEPS },
+  { quest: { ...L17A_QUEST, lexemeIds: [...L17A_QUEST.lexemeIds] }, steps: L17A_STEPS },
+  { quest: { ...L17B_QUEST, lexemeIds: [...L17B_QUEST.lexemeIds] }, steps: L17B_STEPS },
+  { quest: { ...L18A_QUEST, lexemeIds: [...L18A_QUEST.lexemeIds] }, steps: L18A_STEPS },
+  { quest: { ...L18B_QUEST, lexemeIds: [...L18B_QUEST.lexemeIds] }, steps: L18B_STEPS },
+  { quest: { ...L19A_QUEST, lexemeIds: [...L19A_QUEST.lexemeIds] }, steps: L19A_STEPS },
+  { quest: { ...L19B_QUEST, lexemeIds: [...L19B_QUEST.lexemeIds] }, steps: L19B_STEPS },
+  { quest: { ...L20A_QUEST, lexemeIds: [...L20A_QUEST.lexemeIds] }, steps: L20A_STEPS },
+  { quest: { ...L20B_QUEST, lexemeIds: [...L20B_QUEST.lexemeIds] }, steps: L20B_STEPS },
+];
+
+/** lessonId → [id quest A (nửa đầu), id quest B (nửa sau)]. */
+export const HSK4_XIA_LESSON_QUEST_IDS: Record<string, [string, string]> = {
+  'hsk4-xia-l11': ['hsk4-xia-l11a', 'hsk4-xia-l11b'],
+  'hsk4-xia-l12': ['hsk4-xia-l12a', 'hsk4-xia-l12b'],
+  'hsk4-xia-l13': ['hsk4-xia-l13a', 'hsk4-xia-l13b'],
+  'hsk4-xia-l14': ['hsk4-xia-l14a', 'hsk4-xia-l14b'],
+  'hsk4-xia-l15': ['hsk4-xia-l15a', 'hsk4-xia-l15b'],
+  'hsk4-xia-l16': ['hsk4-xia-l16a', 'hsk4-xia-l16b'],
+  'hsk4-xia-l17': ['hsk4-xia-l17a', 'hsk4-xia-l17b'],
+  'hsk4-xia-l18': ['hsk4-xia-l18a', 'hsk4-xia-l18b'],
+  'hsk4-xia-l19': ['hsk4-xia-l19a', 'hsk4-xia-l19b'],
+  'hsk4-xia-l20': ['hsk4-xia-l20a', 'hsk4-xia-l20b'],
+};

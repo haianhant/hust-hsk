@@ -1,0 +1,258 @@
+// ---------------------------------------------------------------------------
+// BackgroundBuildings.tsx — khối nhà phụ + cây nền + ghế/đèn (đợt sửa lần 2,
+// brief §4). Mục đích: cảnh không kết thúc đột ngột ở khoảng trời trống ở
+// rìa campus. Khối nhà phụ CHỈ là hình khối sáng màu, thấp (5-8 m), không
+// chi tiết, KHÔNG đặt tên, KHÔNG biển chữ, KHÔNG chắn mặt đứng công trình
+// chính hay lối đi. Cây nền dùng ImprovedTree (Trees.tsx) — cây rìa, không
+// dùng để che mặt đứng nào. Ghế/đèn đặt NGOÀI đường đi chính (cách mép đường
+// ≥ 1 m), không có collider mới nên leg-sim (lib/campus.ts) không đổi.
+// Vị trí đã đối chiếu với ROADS/LEGS/collider trong lib/campus.ts (xem ghi
+// chú cuối file). Export default, không props — luồng tích hợp gắn vào
+// CampusScene (đã gắn sẵn trong bản sao này; KHÔNG gắn lần 2).
+// ---------------------------------------------------------------------------
+
+import { ImprovedTree } from './Trees';
+
+const WALL_TONES = ['#EDE8DC', '#E4DDCE', '#E8E4DA', '#DDE3E6'];
+const ROOF_TONE = '#C9C2B2';
+const WINDOW_TONE = '#7E93A3';
+const LAMP_POLE = '#3A3A3A';
+const LAMP_HEAD = '#FFF3C4';
+const BENCH_WOOD = '#7A5230';
+const BENCH_IRON = '#1A1A1A';
+const PAVE_TONE = '#A8A8A2';
+
+type Facing = 's' | 'n' | 'e' | 'w';
+
+// Khối nhà phụ: x/z tâm, w (trục X), d (trục Z), h cao; face = mặt quay về
+// phía campus (đặt dải cửa sổ mờ trên mặt đó, không chữ, không biển).
+const BUILDINGS: Array<{
+  x: number; z: number; w: number; d: number; h: number; face: Facing; tone: number;
+}> = [
+  // Hàng bắc, sau lưng C1 (C1: z -63..-49, mặt tiền quay về nam) — không chắn C1.
+  { x: -8, z: -70, w: 14, d: 8, h: 7, face: 's', tone: 0 },
+  { x: 14, z: -71, w: 12, d: 7, h: 6, face: 's', tone: 1 },
+  { x: 34, z: -70, w: 16, d: 9, h: 8, face: 's', tone: 2 },
+  // Phía đông: sau quảng trường Trần Đại Nghĩa / đông thư viện.
+  { x: 64, z: -2, w: 10, d: 8, h: 6, face: 'w', tone: 3 },
+  { x: 58, z: -52, w: 12, d: 8, h: 6, face: 'w', tone: 0 },
+  { x: 62, z: 62, w: 14, d: 8, h: 7, face: 'w', tone: 1 },
+  // Phía nam-tây, ngoài hồ (hồ: x -24,5..20,5, z -4..84).
+  { x: -58, z: 72, w: 16, d: 9, h: 7, face: 'n', tone: 2 },
+  // Rìa tây: sau cổng Parabol, ngoài đường chính.
+  { x: -84, z: 48, w: 10, d: 7, h: 5, face: 'e', tone: 3 },
+  { x: -93, z: -38, w: 6, d: 8, h: 6, face: 'e', tone: 0 },
+];
+
+function BackgroundBuilding({ b }: { b: (typeof BUILDINGS)[number] }) {
+  // Dải cửa sổ mờ trên mặt quay về campus: 2 hàng, mỗi hàng 3-5 ô.
+  const along = b.face === 's' || b.face === 'n' ? b.w : b.d;
+  const count = Math.max(3, Math.floor(along / 3));
+  const rows = b.h >= 7 ? 2 : 1;
+  const wins: Array<{ u: number; y: number }> = [];
+  for (let r = 0; r < rows; r++) {
+    for (let k = 0; k < count; k++) {
+      wins.push({
+        u: -along / 2 + ((k + 0.5) / count) * along,
+        y: 2.2 + r * 2.6,
+      });
+    }
+  }
+  // Vị trí mặt + hướng quay của ô cửa theo mặt.
+  const faceOffset = ((): [number, number, number] => {
+    switch (b.face) {
+      case 's': return [0, 0, b.d / 2 + 0.06];
+      case 'n': return [0, 0, -b.d / 2 - 0.06];
+      case 'e': return [b.w / 2 + 0.06, 0, 0];
+      case 'w': return [-b.w / 2 - 0.06, 0, 0];
+    }
+  })();
+  const faceRotY = b.face === 's' ? 0 : b.face === 'n' ? Math.PI : b.face === 'e' ? Math.PI / 2 : -Math.PI / 2;
+  return (
+    <group position={[b.x, 0, b.z]}>
+      <mesh position={[0, b.h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[b.w, b.h, b.d]} />
+        <meshStandardMaterial color={WALL_TONES[b.tone]} roughness={0.95} />
+      </mesh>
+      {/* Mái phẳng, nhô nhẹ khỏi tường. */}
+      <mesh position={[0, b.h + 0.15, 0]} castShadow>
+        <boxGeometry args={[b.w + 0.6, 0.3, b.d + 0.6]} />
+        <meshStandardMaterial color={ROOF_TONE} roughness={1} />
+      </mesh>
+      {wins.map((wn, i) => (
+        <group
+          key={`win-${i}`}
+          position={[faceOffset[0], wn.y, faceOffset[2]]}
+          rotation-y={faceRotY}
+        >
+          {/* Ô cửa: u chạy dọc mặt (trục X cục bộ sau khi xoay). */}
+          <mesh position={[wn.u, 0, 0]}>
+            <planeGeometry args={[1.3, 1.1]} />
+            <meshStandardMaterial color={WINDOW_TONE} roughness={0.6} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+// --- Cây nền ở rìa campus (tránh footprint khối nhà phụ + đường + hồ) --------
+// Hàng bắc — ĐÃ DỜI (đợt r2p-A mục 1, quyết theo hình học, xem ghi chú cuối
+// file): z = -72,5 → -62, x -28..80 cách 12 m — phía TRƯỚC (nam) các khối
+// nhà bắc, phía đông C1, nhìn thấy được từ sân/đường tình yêu.
+const BACKGROUND_TREES: Array<{ x: number; z: number; trunkH: number; canopyR: number }> = [
+  // Hàng bắc z = -62 (trước mặt nam 3 khối nhà bắc, đông C1).
+  { x: -28, z: -62, trunkH: 2.6, canopyR: 1.6 },
+  { x: -16, z: -62, trunkH: 3.0, canopyR: 1.8 },
+  { x: -4, z: -62, trunkH: 2.4, canopyR: 1.5 },
+  { x: 8, z: -62, trunkH: 2.8, canopyR: 1.7 },
+  { x: 20, z: -62, trunkH: 2.5, canopyR: 1.5 },
+  { x: 32, z: -62, trunkH: 3.1, canopyR: 1.9 },
+  { x: 44, z: -62, trunkH: 2.7, canopyR: 1.6 },
+  { x: 56, z: -62, trunkH: 2.4, canopyR: 1.5 },
+  { x: 68, z: -62, trunkH: 3.0, canopyR: 1.8 },
+  { x: 80, z: -62, trunkH: 2.6, canopyR: 1.6 },
+  // Hàng đông x = 88 (né quảng trường Trần Đại Nghĩa z -18..6).
+  { x: 88, z: -64, trunkH: 2.8, canopyR: 1.7 },
+  { x: 88, z: -52, trunkH: 2.5, canopyR: 1.5 },
+  { x: 88, z: -40, trunkH: 3.0, canopyR: 1.8 },
+  { x: 88, z: -28, trunkH: 2.6, canopyR: 1.6 },
+  { x: 88, z: 20, trunkH: 2.7, canopyR: 1.6 },
+  { x: 88, z: 32, trunkH: 2.4, canopyR: 1.5 },
+  { x: 88, z: 44, trunkH: 3.0, canopyR: 1.8 },
+  { x: 88, z: 56, trunkH: 2.6, canopyR: 1.6 },
+  { x: 88, z: 68, trunkH: 2.8, canopyR: 1.7 },
+  // Hàng nam z = 80 (né hồ x -24,5..20,5 + khối nhà phụ nam x -66..-50).
+  { x: -80, z: 80, trunkH: 2.7, canopyR: 1.6 },
+  { x: -68, z: 80, trunkH: 2.5, canopyR: 1.5 },
+  { x: -44, z: 80, trunkH: 3.0, canopyR: 1.8 },
+  { x: -32, z: 80, trunkH: 2.6, canopyR: 1.6 },
+  { x: 28, z: 80, trunkH: 2.8, canopyR: 1.7 },
+  { x: 40, z: 80, trunkH: 2.5, canopyR: 1.5 },
+  { x: 52, z: 80, trunkH: 3.0, canopyR: 1.8 },
+  { x: 64, z: 80, trunkH: 2.6, canopyR: 1.6 },
+  { x: 76, z: 80, trunkH: 2.7, canopyR: 1.6 },
+  // Hàng tây x = -92 (né cổng Parabol z 3,5..16,5 và đường tình yêu).
+  { x: -92, z: -60, trunkH: 2.8, canopyR: 1.7 },
+  { x: -92, z: -48, trunkH: 2.5, canopyR: 1.5 },
+  { x: -92, z: -36, trunkH: 3.0, canopyR: 1.8 },
+  { x: -92, z: 36, trunkH: 2.6, canopyR: 1.6 },
+  { x: -92, z: 48, trunkH: 2.8, canopyR: 1.7 },
+  { x: -92, z: 60, trunkH: 2.5, canopyR: 1.5 },
+  { x: -92, z: 72, trunkH: 3.0, canopyR: 1.8 },
+  // Lấp góc trống: đông-bắc + nam.
+  { x: 72, z: -44, trunkH: 2.9, canopyR: 1.7 },
+  { x: -70, z: 60, trunkH: 2.7, canopyR: 1.6 },
+  { x: 30, z: 70, trunkH: 2.8, canopyR: 1.7 },
+];
+
+// --- Đèn đường mảnh dọc tuyến hiện có (ngoài mép đường ≥ 1 m) ----------------
+const LAMPS: Array<{ x: number; z: number }> = [
+  // Dọc đường tình yêu, phía bắc đường (mép đường z = -18,5), xen giữa cây cũ.
+  { x: -32, z: -19.8 }, { x: -8, z: -19.8 }, { x: 16, z: -19.8 },
+  { x: 40, z: -19.8 }, { x: 64, z: -19.8 },
+  // Dọc đường ven hồ phía đông (mép đường x = 27), ngoài bờ kè.
+  { x: 28, z: -10 }, { x: 28, z: 10 }, { x: 28, z: 60 }, { x: 28, z: 78 },
+];
+
+function Lamp({ x, z }: { x: number; z: number }) {
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, 1.3, 0]} castShadow>
+        <cylinderGeometry args={[0.05, 0.07, 2.6, 8]} />
+        <meshStandardMaterial color={LAMP_POLE} roughness={0.6} metalness={0.4} />
+      </mesh>
+      <mesh position={[0, 2.65, 0]}>
+        <sphereGeometry args={[0.16, 12, 8]} />
+        <meshStandardMaterial color={LAMP_HEAD} roughness={0.4} emissive="#FFE9A8" emissiveIntensity={0.35} />
+      </mesh>
+    </group>
+  );
+}
+
+// --- Ghế bổ sung (ngoài đường đi) --------------------------------------------
+function BgBench({ x, z, rotationY = 0 }: { x: number; z: number; rotationY?: number }) {
+  return (
+    <group position={[x, 0, z]} rotation-y={rotationY}>
+      <mesh position={[0, 0.45, 0]} castShadow>
+        <boxGeometry args={[1.8, 0.12, 0.55]} />
+        <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0.78, -0.24]} castShadow>
+        <boxGeometry args={[1.8, 0.55, 0.1]} />
+        <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+      </mesh>
+      {[-0.8, 0.8].map((dx) => (
+        <mesh key={dx} position={[dx, 0.22, 0]}>
+          <boxGeometry args={[0.08, 0.45, 0.5]} />
+          <meshStandardMaterial color={BENCH_IRON} roughness={0.6} metalness={0.4} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+export default function BackgroundBuildings() {
+  return (
+    <group>
+      {BUILDINGS.map((b, i) => (
+        <BackgroundBuilding key={`bg-building-${i}`} b={b} />
+      ))}
+      {BACKGROUND_TREES.map((t, i) => (
+        <ImprovedTree
+          key={`bg-tree-${i}`}
+          x={t.x}
+          z={t.z}
+          trunkH={t.trunkH}
+          canopyR={t.canopyR}
+          canopyY={t.trunkH + 0.9}
+        />
+      ))}
+      {LAMPS.map((l, i) => (
+        <Lamp key={`lamp-${i}`} x={l.x} z={l.z} />
+      ))}
+      {/* Sân lát nhỏ + ghế ngắm đường tình yêu (x 13..19, z -12,3..-9,3:
+          ngoài mép đường z = -13,5; y = 0,025, trên cỏ y = 0, không chồng mặt nào). */}
+      <mesh rotation-x={-Math.PI / 2} position={[16, 0.025, -10.8]} receiveShadow>
+        <planeGeometry args={[6, 3]} />
+        <meshStandardMaterial color={PAVE_TONE} roughness={0.95} />
+      </mesh>
+      <BgBench x={16} z={-10.8} rotationY={Math.PI} />
+      {/* Ghế bờ tây hồ bổ sung, quay mặt ra hồ (như ghế hồ hiện có). */}
+      <BgBench x={-27.5} z={45} rotationY={Math.PI / 2} />
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ĐỐI CHIẾU VỊ TRÍ (lib/campus.ts) — để luồng tích hợp / leg-sim kiểm lại:
+// - Khối nhà phụ: không khối nào nằm trên ROADS hay trong BUILDING_COLLIDERS;
+//   khối gần nhất với đường là E1 (64,-2): cách đường tình yêu (60,-16)-(92,-6)
+//   ~8,7 m theo trục Z; khối bắc cách đường C1-Thư viện > 40 m.
+// - Cây nền: hàng bắc z=-62 cách C1 (x≤-34) ≥ 6 m về phía đông, cách mặt
+//   nam 3 khối nhà bắc (z -65,5..-67,5) 3,5-5,5 m về phía nam — đứng
+//   TRƯỚC nhà, không chạm footprint nào, không chắn đường đi; hàng đông
+//   x=88 cách thư viện (x≤50) 38 m; hàng nam z=80 cách hồ (z≤84,6,
+//   nhưng x ngoài -24,5..20,5) — cây (-32,80)/(-44,80) cách mép tây hồ 7,5 m;
+//   hàng tây x=-92 cách chân cổng Parabol (x≥-89,2) 2,8 m theo trục X nhưng
+//   z=-60..-36/36..72 đều ngoài khoảng z của cổng (3,5..16,5).
+//   LÝ DO DỜI HÀNG BẮC (đợt r2p-A mục 1, tự quyết theo hình học — xem
+//   PROGRESS.md): hàng cũ z=-72,5 nằm TRONG dải z của 3 khối nhà bắc
+//   (z -74,5..-65,5) mà tán chỉ cao ~4,8-5,9 m, thấp hơn nhà (6-8 m) nên
+//   từ sân nhìn ra, cây nào đứng sau nhà là bị che kín; 5 cây phía tây
+//   (x -88..-40) còn bị C1 (cao > 13 m, x -82..-34, z -63..-49) che thêm
+//   một lớp — ảnh r2-round2-bg-trees-north.png chỉ thấy nhà, không thấy
+//   cây nào. Phương án (b) nhét cây vào khe giữa các nhà bị loại: chỉ có
+//   2 khe (x -1..8 rộng 9 m, x 20..26 rộng 6 m), cây vẫn nằm sau tuyến
+//   nhà, chỉ nhìn thấy qua khe hẹp. Phương án (c) hạ chiều cao nhà bắc bị
+//   loại: nhà 4 m đọc thành lán thấp kề bên C1 4 tầng, tán cây vẫn bị che
+//   một nửa. Phương án (a) ĐÃ CHỌN: dời cả hàng ra z=-62 — phía trước
+//   (nam) mặt nam các khối nhà bắc, phía đông C1 (x≥-28 > -34, ngoài
+//   footprint C1; không chạm đường C1–Thư viện x=24 hay đường tình yêu
+//   z=-16) — nhìn từ đường tình yêu/sân C1 thấy đủ 10 cây đứng trước nhà.
+// - Đèn đường tình yêu z=-19,8: mép đường z=-18,5, cách 1,3 m; đèn ven hồ
+//   x=28: mép đường x=27, cách 1 m. Ghế (16,-10,8): mép đường z=-13,5, cách
+//   2,7 m. Ghế (-27,5,45) trùng tuyến ghế hồ hiện có (x=-27,5).
+// - Không vật nào có collider mới: leg-sim chỉ đọc lib/campus.ts nên 4/4
+//   không đổi vì file này; kiểm chứng bằng mắt + ảnh là chính.
+// ---------------------------------------------------------------------------

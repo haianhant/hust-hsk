@@ -1,0 +1,67 @@
+{
+  "spawnCheck": {
+    "pass": true,
+    "movedM": 0,
+    "hit": null
+  },
+  "legs": [
+    {
+      "id": "leg1",
+      "name": "Cổng Parabol → Nhà C9",
+      "pass": true,
+      "reason": "đến đích trong 1,5 m",
+      "steps": 490,
+      "seconds": 8.2,
+      "distanceM": 32.7,
+      "endPos": {
+        "x": -43.46,
+        "z": 11.78
+      },
+      "hits": {}
+    },
+    {
+      "id": "leg2",
+      "name": "Nhà C9 → Quảng trường C1",
+      "pass": true,
+      "reason": "đến đích trong 1,5 m",
+      "steps": 848,
+      "seconds": 14.1,
+      "distanceM": 56.5,
+      "endPos": {
+        "x": -57.32,
+        "z": -34.74
+      },
+      "hits": {}
+    },
+    {
+      "id": "leg3",
+      "name": "Quảng trường C1 → Thư viện",
+      "pass": true,
+      "reason": "đến đích trong 1,5 m",
+      "steps": 2300,
+      "seconds": 38.3,
+      "distanceM": 132.4,
+      "endPos": {
+        "x": 23.96,
+        "z": 26.51
+      },
+      "hits": {
+        "Bồn cỏ C1Building (đông)": 385
+      }
+    },
+    {
+      "id": "leg4",
+      "name": "Thư viện → Bờ Hồ Tiền",
+      "pass": true,
+      "reason": "đến đích trong 1,5 m",
+      "steps": 249,
+      "seconds": 4.2,
+      "distanceM": 16.6,
+      "endPos": {
+        "x": 23.19,
+        "z": 44.55
+      },
+      "hits": {}
+    }
+  ]
+}
