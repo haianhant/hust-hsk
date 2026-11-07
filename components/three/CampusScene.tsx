@@ -16,6 +16,8 @@ import Classroom, { type HomeworkState } from './Classroom';
 import LibraryLobby from './LibraryLobby';
 import { MinhNpc } from './Npc';
 import BackgroundBuildings from './BackgroundBuildings';
+import CampusExpansion from './CampusExpansion';
+import AmbientLife from './AmbientLife';
 import Motorbike from './Motorbike';
 import type { TimeOfDay } from '../../lib/playerState';
 
@@ -267,6 +269,10 @@ export default function CampusScene({
           {/* Khối nhà phụ + cây nền + ghế/đèn rìa campus (đợt sửa lần 2 §4).
               Đã gắn ở đây — luồng tích hợp KHÔNG gắn lần 2. */}
           <BackgroundBuildings />
+          {/* Mở rộng toàn bộ khuôn viên Bách khoa (Wave 2: C7, VDZ, Khu Thể thao, KTX B6–B10, Cổng Nam, Tường rào). */}
+          <CampusExpansion />
+          {/* Quần thể sinh viên NPC đi dạo & sinh hoạt trong sân trường. */}
+          <AmbientLife />
           {/* NPC bạn đồng hành Minh đứng gần cổng Parabol, gần spawn. */}
           <MinhNpc />
           {/* Xe máy cá nhân (đợt 3 giai đoạn 4) — chỉ ngoài sân, không vào phòng học. */}

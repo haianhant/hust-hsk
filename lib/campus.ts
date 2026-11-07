@@ -191,6 +191,54 @@ export const MONUMENT = {
 
 export const TRAN_DAI_NGHIA_GATE = { center: { x: 92, z: -6 } } as const;
 
+// --- Mở rộng toàn bộ khuôn viên Bách khoa (Wave 2: Trụ cột 1) ----------------
+// Tất cả công trình mới được quy hoạch trên các phân khu đất trống thực tế của
+// HUST (Bắc-Trung tâm, Tây-Nam, Đông-Nam, Rìa Nam), hoàn toàn ngoài ROADS,
+// LEGS 1–4, BIKE_PARK và 6 điểm FAST_TRAVEL_DESTINATIONS.
+export const C7_BUILDING = {
+  center: { x: -16, z: -48 },
+  size: { x: 24, z: 11 },
+  floors: 7,
+  floorHeight: 3.2,
+  box: { minX: -28, maxX: -4, minZ: -53.5, maxZ: -42.5 },
+} as const;
+
+export const VDZ_CENTER = {
+  center: { x: 10, z: -36 },
+  size: { x: 14, z: 8.5 },
+  floors: 3,
+  floorHeight: 3.3,
+  box: { minX: 3, maxX: 17, minZ: -40.25, maxZ: -31.75 },
+} as const;
+
+export const SPORTS_COMPLEX = {
+  courtCenter: { x: -52, z: 42 },
+  courtSize: { x: 22, z: 14 },
+  stadiumCenter: { x: -72, z: 42 },
+  stadiumSize: { x: 11, z: 16 },
+  stadiumBox: { minX: -77.5, maxX: -66.5, minZ: 34, maxZ: 50 },
+} as const;
+
+export const DORM_COMPLEX = {
+  b6Center: { x: 76, z: 26 },
+  b6Size: { x: 15, z: 8 },
+  b6Box: { minX: 68.5, maxX: 83.5, minZ: 22, maxZ: 30 },
+  b10Center: { x: 76, z: 42 },
+  b10Size: { x: 15, z: 8 },
+  b10Box: { minX: 68.5, maxX: 83.5, minZ: 38, maxZ: 46 },
+  canteenCenter: { x: 58, z: 25 },
+  canteenSize: { x: 10, z: 7 },
+  canteenBox: { minX: 53, maxX: 63, minZ: 21.5, maxZ: 28.5 },
+} as const;
+
+export const TA_QUANG_BUU_GATE = {
+  center: { x: 38, z: 83 },
+} as const;
+
+export const PARABOL_BUS_STOP = {
+  center: { x: -88, z: 23 },
+} as const;
+
 // --- Đường đi (polyline, rộng 6 m) ------------------------------------------
 // Bước 3: đường C1–Thư viện đi vòng ĐÔNG hồ (x = 24, ven bờ đông) thay vì cắt
 // chéo qua đầu bắc hồ; đường tình yêu dời xuống z = −16 (đi vòng bắc hồ, không
@@ -318,6 +366,14 @@ export const BUILDING_COLLIDERS: { name: string; box: AABB }[] = [
   { name: 'Ghế đường tình yêu', box: { minX: -30.95, maxX: -29.05, minZ: -13.35, maxZ: -12.65 } },
   { name: 'Ghế đường tình yêu', box: { minX: 19.05, maxX: 20.95, minZ: -13.35, maxZ: -12.65 } },
   { name: 'Ghế đường tình yêu', box: { minX: 69.05, maxX: 70.95, minZ: -13.35, maxZ: -12.65 } },
+  // Các công trình mở rộng toàn trường (Wave 2: hoàn toàn ngoài ROADS/LEGS/FAST_TRAVEL)
+  { name: 'Tòa nhà C7', box: C7_BUILDING.box },
+  { name: 'Trung tâm Việt – Đức', box: VDZ_CENTER.box },
+  { name: 'Nhà thi đấu Bách Khoa', box: SPORTS_COMPLEX.stadiumBox },
+  { name: 'Hội trường C2', box: { minX: 75, maxX: 91, minZ: -32, maxZ: -22 } },
+  { name: 'KTX B6', box: DORM_COMPLEX.b6Box },
+  { name: 'KTX B10', box: DORM_COMPLEX.b10Box },
+  { name: 'Căng-tin SV', box: DORM_COMPLEX.canteenBox },
 ];
 
 /** Điểm có nằm trong lòng Hồ Tiền (hình chữ nhật) không. margin thu hẹp hồ
@@ -388,6 +444,44 @@ export const ZONES: { name: string; center: Vec2; radius: number }[] = [
   { name: 'Hồ Tiền', center: { x: -2, z: 40 }, radius: 34 }, // bán kính chỉ để tham khảo — nearestZone kiểm tra theo hình chữ nhật (xem dưới)
   { name: 'Quảng trường Trần Đại Nghĩa', center: { x: 82, z: -6 }, radius: 12 },
   { name: 'Đường tình yêu', center: { x: 0, z: -16 }, radius: 11 },
+  { name: 'Tòa nhà C7', center: { x: -16, z: -48 }, radius: 14 },
+  { name: 'Trung tâm Việt – Đức (VDZ)', center: { x: 10, z: -36 }, radius: 10 },
+  { name: 'Khu Thể thao & Nhà thi đấu', center: { x: -58, z: 42 }, radius: 18 },
+  { name: 'Ký túc xá B6 – B10 & Căng-tin', center: { x: 70, z: 34 }, radius: 16 },
+  { name: 'Hội trường C2', center: { x: 83, z: -27 }, radius: 11 },
+  { name: 'Cổng Đại Cồ Việt', center: { x: -58, z: -72 }, radius: 9 },
+  { name: 'Cổng Tạ Quang Bửu', center: { x: 38, z: 82 }, radius: 9 },
+];
+
+/** Danh sách công trình & khu vực vẽ trên Bản đồ thu nhỏ / Bản đồ toàn cảnh (Phím M). */
+export const CAMPUS_MAP_BUILDINGS: {
+  code: string;
+  label: string;
+  box: AABB;
+  kind: 'main' | 'lecture' | 'sport' | 'dorm' | 'gate';
+}[] = [
+  { code: 'C1', label: 'Tòa C1 (Hành chính)', box: { minX: -82, maxX: -34, minZ: -63, maxZ: -49 }, kind: 'main' },
+  { code: 'C7', label: 'Tòa nhà C7', box: C7_BUILDING.box, kind: 'main' },
+  { code: 'C9', label: 'Cầu đỏ C9', box: { minX: -52, maxX: -32, minZ: -8, maxZ: 4 }, kind: 'main' },
+  { code: 'C2', label: 'Hội trường C2', box: { minX: 75, maxX: 91, minZ: -32, maxZ: -22 }, kind: 'main' },
+  { code: 'TQB', label: 'Thư viện TQB', box: { minX: 27.5, maxX: 48.5, minZ: 23.5, maxZ: 43.5 }, kind: 'main' },
+  { code: 'VDZ', label: 'TT Việt – Đức', box: VDZ_CENTER.box, kind: 'main' },
+  { code: 'C4', label: 'C4', box: { minX: -15, maxX: -1, minZ: -74, maxZ: -66 }, kind: 'lecture' },
+  { code: 'C5', label: 'C5', box: { minX: 8, maxX: 20, minZ: -74.5, maxZ: -67.5 }, kind: 'lecture' },
+  { code: 'C3', label: 'C3', box: { minX: 26, maxX: 42, minZ: -74.5, maxZ: -65.5 }, kind: 'lecture' },
+  { code: 'C10', label: 'C10', box: { minX: -34, maxX: -22, minZ: -74, maxZ: -66 }, kind: 'lecture' },
+  { code: 'D4', label: 'D4', box: { minX: -96, maxX: -90, minZ: -42, maxZ: -34 }, kind: 'lecture' },
+  { code: 'D5', label: 'D5', box: { minX: 52, maxX: 64, minZ: -56, maxZ: -48 }, kind: 'lecture' },
+  { code: 'D3', label: 'D3', box: { minX: 59, maxX: 69, minZ: -6, maxZ: 2 }, kind: 'lecture' },
+  { code: 'D7', label: 'D7', box: { minX: 56, maxX: 68, minZ: 46, maxZ: 54 }, kind: 'lecture' },
+  { code: 'D9', label: 'D9', box: { minX: 55, maxX: 69, minZ: 58, maxZ: 66 }, kind: 'lecture' },
+  { code: 'D6', label: 'D6', box: { minX: -89, maxX: -79, minZ: 44.5, maxZ: 51.5 }, kind: 'lecture' },
+  { code: 'D8', label: 'D8', box: { minX: -66, maxX: -50, minZ: 67.5, maxZ: 76.5 }, kind: 'lecture' },
+  { code: 'NTĐ', label: 'Nhà thi đấu', box: SPORTS_COMPLEX.stadiumBox, kind: 'sport' },
+  { code: 'SÂN', label: 'Sân thể thao', box: { minX: -63, maxX: -41, minZ: 35, maxZ: 49 }, kind: 'sport' },
+  { code: 'B6', label: 'KTX B6', box: DORM_COMPLEX.b6Box, kind: 'dorm' },
+  { code: 'B10', label: 'KTX B10', box: DORM_COMPLEX.b10Box, kind: 'dorm' },
+  { code: 'ĂN', label: 'Căng-tin SV', box: DORM_COMPLEX.canteenBox, kind: 'dorm' },
 ];
 
 export function nearestZone(p: Vec2): string {

@@ -317,3 +317,188 @@ export function makeWaterRippleBumpTexture(repeatX = 10, repeatY = 18): THREE.Ca
 
   return configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, false);
 }
+
+/**
+ * Mặt sân Quảng trường Trần Đại Nghĩa cảm hứng Bản mạch điện tử (PCB Circuit Plaza,
+ * khánh thành 19/05/2025): nền đá xanh ngọc khắc đường mạch trắng-vàng đồng và vi điểm nối.
+ */
+export function makeCircuitPlazaTexture(repeatX = 2, repeatY = 2): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+  const rnd = createSeededRandom(20250519);
+
+  // Nền đá xanh ngọc mạch in
+  ctx.fillStyle = '#9BCBC0';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Ô gạch đá ngầm
+  ctx.strokeStyle = 'rgba(72, 118, 108, 0.25)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= 512; i += 64) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, 512);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, i);
+    ctx.lineTo(512, i);
+    ctx.stroke();
+  }
+
+  // Hạt khoáng mịn
+  for (let i = 0; i < 1600; i++) {
+    const v = 135 + Math.floor(rnd() * 80);
+    ctx.fillStyle = `rgba(${v - 15}, ${v + 12}, ${v + 6}, 0.14)`;
+    ctx.fillRect(rnd() * 512, rnd() * 512, 2, 2);
+  }
+
+  // Chip trung tâm & đường mạch điện tử 45°/90°
+  ctx.strokeStyle = 'rgba(246, 252, 250, 0.82)';
+  ctx.lineWidth = 5;
+  ctx.strokeRect(196, 196, 120, 120);
+  ctx.fillStyle = 'rgba(56, 104, 96, 0.45)';
+  ctx.fillRect(204, 204, 104, 104);
+
+  const traces: Array<Array<[number, number]>> = [
+    [[256, 196], [256, 96], [192, 32], [64, 32]],
+    [[220, 196], [220, 128], [144, 52], [32, 52]],
+    [[292, 196], [292, 112], [368, 36], [480, 36]],
+    [[316, 256], [416, 256], [472, 200], [472, 88]],
+    [[316, 292], [396, 292], [456, 352], [456, 476]],
+    [[256, 316], [256, 416], [320, 480], [440, 480]],
+    [[216, 316], [216, 396], [152, 460], [44, 460]],
+    [[196, 256], [104, 256], [48, 312], [48, 420]],
+    [[196, 220], [120, 220], [64, 164], [64, 88]],
+  ];
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const path of traces) {
+    ctx.strokeStyle = 'rgba(248, 252, 250, 0.85)';
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    path.forEach(([x, y], idx) => {
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Pad tròn ở đầu và cuối đường mạch
+    const last = path[path.length - 1];
+    ctx.fillStyle = '#F7FAF9';
+    ctx.beginPath();
+    ctx.arc(last[0], last[1], 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#D4AF37';
+    ctx.beginPath();
+    ctx.arc(last[0], last[1], 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true);
+}
+
+/**
+ * Mặt sân Bóng rổ & Thể chất Bách Khoa (Khu Liên hợp Thể thao):
+ * nền xanh lá thể thao, khu vực giới hạn đỏ đất nung và vạch sơn trắng chuẩn.
+ */
+export function makeSportsCourtTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  // Viền ngoài xanh lá cây đậm thể thao
+  ctx.fillStyle = '#2E6F4E';
+  ctx.fillRect(0, 0, 1024, 512);
+
+  // Sân chính bên trong màu đỏ nâu Acrylic
+  ctx.fillStyle = '#B84A39';
+  ctx.fillRect(64, 44, 896, 424);
+
+  // Khu vực dưới rổ 2 đầu (xanh lá)
+  ctx.fillStyle = '#2E6F4E';
+  ctx.fillRect(64, 176, 170, 160);
+  ctx.fillRect(790, 176, 170, 160);
+
+  // Vạch sơn trắng
+  ctx.strokeStyle = '#F7F9F7';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(64, 44, 896, 424);
+
+  // Vạch giữa sân + vòng tròn trung tâm
+  ctx.beginPath();
+  ctx.moveTo(512, 44);
+  ctx.lineTo(512, 468);
+  ctx.stroke();
+
+  ctx.fillStyle = '#2E6F4E';
+  ctx.beginPath();
+  ctx.arc(512, 256, 62, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Khu dưới rổ + vòng ném phạt 2 bên
+  ctx.strokeRect(64, 176, 170, 160);
+  ctx.beginPath();
+  ctx.arc(234, 256, 56, -Math.PI / 2, Math.PI / 2);
+  ctx.stroke();
+
+  ctx.strokeRect(790, 176, 170, 160);
+  ctx.beginPath();
+  ctx.arc(790, 256, 56, Math.PI / 2, (Math.PI * 3) / 2);
+  ctx.stroke();
+
+  // Vòng 3 điểm hai đầu sân
+  ctx.beginPath();
+  ctx.arc(118, 256, 178, -Math.PI * 0.42, Math.PI * 0.42);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(906, 256, 178, Math.PI * 0.58, Math.PI * 1.42);
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Vân vải dệt vi mô (Procedural Fabric Weave) dùng cho trang phục nhân vật
+ * (áo Polo, Hoodie, Sơ mi, Quần): sắc trắng-xám trung tính để nhân trực tiếp với color.
+ */
+export function makeFabricTexture(repeatX = 5, repeatY = 5): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+  const rnd = createSeededRandom(20260905);
+
+  ctx.fillStyle = '#F7F7F7';
+  ctx.fillRect(0, 0, 128, 128);
+
+  // Sợi dệt ngang dọc rất mảnh
+  for (let y = 0; y < 128; y += 4) {
+    ctx.fillStyle = y % 8 === 0 ? 'rgba(215, 215, 215, 0.35)' : 'rgba(255, 255, 255, 0.25)';
+    ctx.fillRect(0, y, 128, 2);
+  }
+  for (let x = 0; x < 128; x += 4) {
+    ctx.fillStyle = x % 8 === 0 ? 'rgba(220, 220, 220, 0.3)' : 'rgba(255, 255, 255, 0.2)';
+    ctx.fillRect(x, 0, 2, 128);
+  }
+
+  for (let i = 0; i < 400; i++) {
+    const v = 225 + Math.floor(rnd() * 30);
+    ctx.fillStyle = `rgba(${v}, ${v}, ${v}, 0.22)`;
+    ctx.fillRect(rnd() * 128, rnd() * 128, 2, 2);
+  }
+
+  return configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true);
+}

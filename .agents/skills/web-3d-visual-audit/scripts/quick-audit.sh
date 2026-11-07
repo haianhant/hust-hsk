@@ -4,7 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
-cd "$PROJECT_ROOT"
+if [ -d "$PROJECT_ROOT/hust-hsk" ]; then
+  cd "$PROJECT_ROOT/hust-hsk"
+else
+  cd "$PROJECT_ROOT"
+fi
 
 echo "=== [1/4] TypeScript Check (tsc --noEmit) ==="
 npx tsc --noEmit

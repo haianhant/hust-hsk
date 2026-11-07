@@ -35,19 +35,62 @@ type Facing = 's' | 'n' | 'e' | 'w';
 const BUILDINGS: Array<{
   code: string; x: number; z: number; w: number; d: number; h: number; face: Facing; tone: number;
 }> = [
-  // Hàng bắc (dãy nhà C3, C4, C5), sau lưng C1 / dọc phía bắc Đường Tình Yêu.
+  // Hàng bắc (dãy nhà C10, C4, C5, C3), sau lưng C1 / dọc phía bắc Đường Tình Yêu.
+  { code: 'C10', x: -24, z: -70, w: 11, d: 8, h: 10.5, face: 's', tone: 1 },
   { code: 'C4', x: -8, z: -70, w: 14, d: 8, h: 10.5, face: 's', tone: 0 },
   { code: 'C5', x: 14, z: -71, w: 12, d: 7, h: 10.5, face: 's', tone: 1 },
   { code: 'C3', x: 34, z: -70, w: 16, d: 9, h: 11.2, face: 's', tone: 2 },
-  // Phía đông: khu giảng đường D3, D5, D9 phía đông Thư viện & Quảng trường TĐN.
+  // Phía đông: khu giảng đường D3, D5, D7, D9 phía đông Thư viện & Quảng trường TĐN.
   { code: 'D3', x: 64, z: -2, w: 10, d: 8, h: 10.2, face: 'w', tone: 3 },
   { code: 'D5', x: 58, z: -52, w: 12, d: 8, h: 10.2, face: 'w', tone: 0 },
+  { code: 'D7', x: 62, z: 50, w: 12, d: 8, h: 10.8, face: 'w', tone: 2 },
   { code: 'D9', x: 62, z: 62, w: 14, d: 8, h: 10.8, face: 'w', tone: 1 },
   // Phía nam-tây & tây Hồ Tiền: khu giảng đường D6, D8, D4.
   { code: 'D8', x: -58, z: 72, w: 16, d: 9, h: 10.8, face: 'n', tone: 2 },
   { code: 'D6', x: -84, z: 48, w: 10, d: 7, h: 9.8, face: 'e', tone: 3 },
   { code: 'D4', x: -93, z: -38, w: 6, d: 8, h: 9.8, face: 'e', tone: 0 },
 ];
+
+// Cầu nối trên cao có mái che (Covered Skybridges) giữa các dãy giảng đường C & D
+function LectureSkybridges() {
+  const bridges: Array<{ x: number; z: number; w: number; d: number; y: number }> = [
+    // Nối C10 (-18.5) ↔ C4 (-15)
+    { x: -16.75, z: -70, w: 3.8, d: 2.2, y: 3.6 },
+    // Nối C4 (-1) ↔ C5 (8)
+    { x: 3.5, z: -70.5, w: 9.2, d: 2.2, y: 3.6 },
+    // Nối C5 (20) ↔ C3 (26)
+    { x: 23, z: -70.5, w: 6.2, d: 2.2, y: 3.6 },
+    // Nối D7 (z=54) ↔ D9 (z=58)
+    { x: 62, z: 56, w: 2.4, d: 4.4, y: 3.6 },
+  ];
+  return (
+    <group>
+      {bridges.map((br, idx) => (
+        <group key={`skybridge-${idx}`} position={[br.x, br.y, br.z]}>
+          {/* Sàn cầu nối bê tông trắng */}
+          <mesh position={[0, 0, 0]} castShadow>
+            <boxGeometry args={[br.w, 0.28, br.d]} />
+            <meshStandardMaterial color="#F2EFE6" roughness={0.88} />
+          </mesh>
+          {/* Lan can đỏ HUST 2 bên cầu nối */}
+          <mesh position={[0, 0.55, br.d / 2 - 0.08]}>
+            <boxGeometry args={[br.w, 0.72, 0.08]} />
+            <meshStandardMaterial color={HUST_RAIL_RED} roughness={0.55} metalness={0.25} />
+          </mesh>
+          <mesh position={[0, 0.55, -br.d / 2 + 0.08]}>
+            <boxGeometry args={[br.w, 0.72, 0.08]} />
+            <meshStandardMaterial color={HUST_RAIL_RED} roughness={0.55} metalness={0.25} />
+          </mesh>
+          {/* Mái che cầu nối */}
+          <mesh position={[0, 2.55, 0]} castShadow>
+            <boxGeometry args={[br.w + 0.2, 0.18, br.d + 0.35]} />
+            <meshStandardMaterial color={ROOF_TONE} roughness={0.9} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
 
 function BackgroundBuilding({ b }: { b: (typeof BUILDINGS)[number] }) {
   const along = b.face === 's' || b.face === 'n' ? b.w : b.d;
@@ -341,6 +384,7 @@ export default function BackgroundBuildings() {
       {BUILDINGS.map((b, i) => (
         <BackgroundBuilding key={`bg-building-${i}`} b={b} />
       ))}
+      <LectureSkybridges />
       {BACKGROUND_TREES.map((t, i) => (
         <ImprovedTree
           key={`bg-tree-${i}`}

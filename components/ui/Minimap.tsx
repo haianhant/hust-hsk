@@ -1,23 +1,29 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { BOUNDS, BUILDING_COLLIDERS, FAST_TRAVEL_DESTINATIONS, LAKE, ROADS, TDN_SQUARE } from '../../lib/campus';
+import {
+  BOUNDS,
+  BUILDING_COLLIDERS,
+  CAMPUS_MAP_BUILDINGS,
+  FAST_TRAVEL_DESTINATIONS,
+  LAKE,
+  ROADS,
+  TDN_SQUARE,
+} from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
 
-// Minimap 2D vẽ từ lib/campus (single source of truth — không bịa tọa độ).
+// Minimap 2D + Bản đồ Toàn cảnh Khuôn viên Bách Khoa (Phím M) vẽ từ lib/campus.ts.
 // -Z = bắc nên phía trên canvas là hướng Bắc ("B").
-// Hướng mũi tên suy từ hướng di chuyển thực tế (delta vị trí giữa các lần
-// vẽ): playerState không lưu góc xoay, nên khi đứng yên giữ hướng cũ.
 
 const SIZE = 150;
 const PAD = 8;
 
-function makeProject() {
+function makeProject(size: number, pad: number) {
   const rangeX = BOUNDS.maxX - BOUNDS.minX;
   const rangeZ = BOUNDS.maxZ - BOUNDS.minZ;
-  const scale = (SIZE - PAD * 2) / Math.max(rangeX, rangeZ);
-  const offsetX = (SIZE - rangeX * scale) / 2;
-  const offsetY = (SIZE - rangeZ * scale) / 2;
+  const scale = (size - pad * 2) / Math.max(rangeX, rangeZ);
+  const offsetX = (size - rangeX * scale) / 2;
+  const offsetY = (size - rangeZ * scale) / 2;
   return {
     x: (wx: number) => offsetX + (wx - BOUNDS.minX) * scale,
     y: (wz: number) => offsetY + (wz - BOUNDS.minZ) * scale,
@@ -25,11 +31,174 @@ function makeProject() {
   };
 }
 
+function renderCampusMap(
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  pad: number,
+  heading: number,
+  detailed: boolean,
+) {
+  const project = makeProject(size, pad);
+  ctx.clearRect(0, 0, size, size);
+
+  // Nền bản đồ
+  ctx.fillStyle = detailed ? 'rgba(14, 24, 18, 0.96)' : 'rgba(15, 23, 18, 0.84)';
+  ctx.fillRect(0, 0, size, size);
+
+  // Khung bounds (4 tuyến phố bao quanh)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.lineWidth = detailed ? 2 : 1;
+  ctx.strokeRect(
+    project.x(BOUNDS.minX),
+    project.y(BOUNDS.minZ),
+    (BOUNDS.maxX - BOUNDS.minX) * project.s,
+    (BOUNDS.maxZ - BOUNDS.minZ) * project.s,
+  );
+
+  // Hồ Tiền
+  ctx.fillStyle = 'rgba(20, 62, 72, 0.95)';
+  ctx.fillRect(
+    project.x(LAKE.center.x - LAKE.halfW),
+    project.y(LAKE.center.z - LAKE.halfL),
+    LAKE.halfW * 2 * project.s,
+    LAKE.halfL * 2 * project.s,
+  );
+  ctx.strokeStyle = 'rgba(72, 168, 148, 0.9)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(
+    project.x(LAKE.center.x - LAKE.halfW),
+    project.y(LAKE.center.z - LAKE.halfL),
+    LAKE.halfW * 2 * project.s,
+    LAKE.halfL * 2 * project.s,
+  );
+
+  // Quảng trường Trần Đại Nghĩa
+  ctx.fillStyle = 'rgba(155, 203, 192, 0.55)';
+  ctx.fillRect(
+    project.x(TDN_SQUARE.minX),
+    project.y(TDN_SQUARE.minZ),
+    (TDN_SQUARE.maxX - TDN_SQUARE.minX) * project.s,
+    (TDN_SQUARE.maxZ - TDN_SQUARE.minZ) * project.s,
+  );
+
+  // Đường (polyline)
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const road of ROADS) {
+    ctx.beginPath();
+    road.points.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(project.x(p.x), project.y(p.z));
+      else ctx.lineTo(project.x(p.x), project.y(p.z));
+    });
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.lineWidth = Math.max(1.5, road.width * project.s * 0.6);
+    ctx.stroke();
+  }
+
+  // Các tòa nhà trong toàn khuôn viên (CAMPUS_MAP_BUILDINGS + BUILDING_COLLIDERS)
+  ctx.font = detailed ? '700 11px system-ui, sans-serif' : '600 8px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  for (const b of CAMPUS_MAP_BUILDINGS) {
+    const x = project.x(b.box.minX);
+    const y = project.y(b.box.minZ);
+    const w = (b.box.maxX - b.box.minX) * project.s;
+    const h = (b.box.maxZ - b.box.minZ) * project.s;
+
+    if (b.kind === 'main') {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.72)';
+      ctx.strokeStyle = 'rgba(252, 165, 165, 0.95)';
+    } else if (b.kind === 'sport') {
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.55)';
+      ctx.strokeStyle = 'rgba(110, 231, 183, 0.9)';
+    } else if (b.kind === 'dorm') {
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.62)';
+      ctx.strokeStyle = 'rgba(253, 224, 71, 0.9)';
+    } else {
+      ctx.fillStyle = 'rgba(248, 113, 113, 0.45)';
+      ctx.strokeStyle = 'rgba(248, 113, 113, 0.82)';
+    }
+
+    ctx.lineWidth = 1;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+
+    const text = detailed ? b.label : b.code;
+    if (detailed || (w >= 11 && h >= 6)) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(text, x + w / 2, y + h / 2);
+    }
+  }
+
+  // Đảm bảo các collider nhỏ khác vẫn hiển thị nhẹ trên minimap
+  if (!detailed) {
+    for (const b of BUILDING_COLLIDERS) {
+      if (b.name.startsWith('Ghế') || b.name.startsWith('Bờ kè')) continue;
+      const x = project.x(b.box.minX);
+      const y = project.y(b.box.minZ);
+      const w = (b.box.maxX - b.box.minX) * project.s;
+      const h = (b.box.maxZ - b.box.minZ) * project.s;
+      ctx.strokeStyle = 'rgba(248, 113, 113, 0.4)';
+      ctx.strokeRect(x, y, w, h);
+    }
+  }
+
+  // Tên 4 tuyến phố bao quanh trên bản đồ chi tiết
+  if (detailed) {
+    ctx.font = '700 11px system-ui, sans-serif';
+    ctx.fillStyle = '#FDE047';
+    ctx.fillText('⬆ ĐƯỜNG ĐẠI CỒ VIỆT (Cổng chính Số 1)', size / 2, 12);
+    ctx.fillText('⬇ ĐƯỜNG TẠ QUANG BỬU / LÊ THANH NGHỊ (Cổng Nam)', size / 2, size - 10);
+  }
+
+  // Vị trí + hướng player (mũi tên vàng)
+  const px = project.x(playerState.pos.x);
+  const py = project.y(playerState.pos.z);
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.rotate(heading);
+  ctx.beginPath();
+  const arrowScale = detailed ? 1.35 : 1;
+  ctx.moveTo(0, -6 * arrowScale);
+  ctx.lineTo(4.5 * arrowScale, 5 * arrowScale);
+  ctx.lineTo(0, 2.5 * arrowScale);
+  ctx.lineTo(-4.5 * arrowScale, 5 * arrowScale);
+  ctx.closePath();
+  ctx.fillStyle = '#facc15';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.restore();
+
+  if (!detailed) {
+    ctx.font = '700 10px system-ui, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('B', size / 2, 2);
+  }
+}
+
 export default function Minimap({ onFastTravel }: { onFastTravel?: (destId: string) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Đợt 3 giai đoạn 5 — nút "Đi nhanh" trên bản đồ: mở danh sách 6 điểm đến
-  // (cùng danh sách với nút 🚀 Đi nhanh ở HUD dưới-phải).
+  const fullCanvasRef = useRef<HTMLCanvasElement>(null);
   const [open, setOpen] = useState(false);
+  const [fullMapOpen, setFullMapOpen] = useState(false);
+
+  // Phím M mở/đóng Bản đồ toàn cảnh Bách khoa
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (e.code === 'KeyM' && !e.repeat) {
+        setFullMapOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -42,21 +211,16 @@ export default function Minimap({ onFastTravel }: { onFastTravel?: (destId: stri
     canvas.height = SIZE * dpr;
     ctx.scale(dpr, dpr);
 
-    const project = makeProject();
-
     let raf = 0;
     let lastDraw = 0;
     let lastPos = { ...playerState.pos };
-    // Hướng mặc định: quay về phía đông (hướng đi từ cổng vào trường).
     let heading = 0;
 
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
-      // Throttle vẽ ~10 fps là đủ cho minimap.
       if (now - lastDraw < 100) return;
       lastDraw = now;
 
-      // Cập nhật hướng từ hướng di chuyển thực tế.
       const dx = playerState.pos.x - lastPos.x;
       const dz = playerState.pos.z - lastPos.z;
       if (Math.hypot(dx, dz) > 0.05) {
@@ -64,114 +228,15 @@ export default function Minimap({ onFastTravel }: { onFastTravel?: (destId: stri
         lastPos = { ...playerState.pos };
       }
 
-      ctx.clearRect(0, 0, SIZE, SIZE);
+      renderCampusMap(ctx, SIZE, PAD, heading, false);
 
-      // Nền tối giản.
-      ctx.fillStyle = 'rgba(15, 23, 18, 0.82)';
-      ctx.fillRect(0, 0, SIZE, SIZE);
-
-      // Khung bounds.
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(
-        project.x(BOUNDS.minX),
-        project.y(BOUNDS.minZ),
-        (BOUNDS.maxX - BOUNDS.minX) * project.s,
-        (BOUNDS.maxZ - BOUNDS.minZ) * project.s,
-      );
-
-      // Hồ Tiền (hình chữ nhật bắc–nam, nước xanh-đen rất tối).
-      ctx.fillStyle = 'rgba(18, 36, 31, 0.95)';
-      ctx.fillRect(
-        project.x(LAKE.center.x - LAKE.halfW),
-        project.y(LAKE.center.z - LAKE.halfL),
-        LAKE.halfW * 2 * project.s,
-        LAKE.halfL * 2 * project.s,
-      );
-      ctx.strokeStyle = 'rgba(47, 93, 58, 0.9)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(
-        project.x(LAKE.center.x - LAKE.halfW),
-        project.y(LAKE.center.z - LAKE.halfL),
-        LAKE.halfW * 2 * project.s,
-        LAKE.halfL * 2 * project.s,
-      );
-
-      // Quảng trường Trần Đại Nghĩa (xanh ngọc nhạt).
-      ctx.fillStyle = 'rgba(191, 227, 216, 0.55)';
-      ctx.fillRect(
-        project.x(TDN_SQUARE.minX),
-        project.y(TDN_SQUARE.minZ),
-        (TDN_SQUARE.maxX - TDN_SQUARE.minX) * project.s,
-        (TDN_SQUARE.maxZ - TDN_SQUARE.minZ) * project.s,
-      );
-
-      // Đường (polyline).
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      for (const road of ROADS) {
-        ctx.beginPath();
-        road.points.forEach((p, i) => {
-          if (i === 0) ctx.moveTo(project.x(p.x), project.y(p.z));
-          else ctx.lineTo(project.x(p.x), project.y(p.z));
-        });
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-        ctx.lineWidth = Math.max(1.5, road.width * project.s * 0.6);
-        ctx.stroke();
-      }
-
-      // Tòa nhà (hình chữ nhật) + tên khi đủ chỗ.
-      ctx.font = '600 9px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (const b of BUILDING_COLLIDERS) {
-        const x = project.x(b.box.minX);
-        const y = project.y(b.box.minZ);
-        const w = (b.box.maxX - b.box.minX) * project.s;
-        const h = (b.box.maxZ - b.box.minZ) * project.s;
-        ctx.fillStyle = 'rgba(248, 113, 113, 0.55)';
-        ctx.fillRect(x, y, w, h);
-        ctx.strokeStyle = 'rgba(248, 113, 113, 0.9)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x, y, w, h);
-        // Tên ngắn gọn: chỉ ghi khi chữ vừa trong hình.
-        const shortName =
-          b.name === 'Thư viện Tạ Quang Bửu'
-            ? 'Thư viện'
-            : b.name.startsWith('Chân cổng')
-              ? ''
-              : b.name;
-        if (shortName && ctx.measureText(shortName).width + 4 <= w && h >= 11) {
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(shortName, x + w / 2, y + h / 2);
+      const fullCanvas = fullCanvasRef.current;
+      if (fullCanvas) {
+        const fctx = fullCanvas.getContext('2d');
+        if (fctx) {
+          renderCampusMap(fctx, 420, 24, heading, true);
         }
       }
-
-      // Vị trí + hướng player (mũi tên).
-      const px = project.x(playerState.pos.x);
-      const py = project.y(playerState.pos.z);
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(heading);
-      ctx.beginPath();
-      ctx.moveTo(0, -6);
-      ctx.lineTo(4.5, 5);
-      ctx.lineTo(0, 2.5);
-      ctx.lineTo(-4.5, 5);
-      ctx.closePath();
-      ctx.fillStyle = '#facc15';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.restore();
-
-      // Chữ "B" chỉ hướng Bắc ở mép trên.
-      ctx.font = '700 10px system-ui, sans-serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText('B', SIZE / 2, 2);
     };
 
     raf = requestAnimationFrame(draw);
@@ -180,13 +245,25 @@ export default function Minimap({ onFastTravel }: { onFastTravel?: (destId: stri
 
   return (
     <div className="pointer-events-auto relative flex flex-col items-end gap-1">
-      <canvas
-        ref={canvasRef}
-        width={SIZE}
-        height={SIZE}
-        aria-label="Bản đồ thu nhỏ khuôn viên Bách khoa"
-        className="h-[150px] w-[150px] rounded-xl border border-white/20 shadow-lg"
-      />
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          width={SIZE}
+          height={SIZE}
+          onClick={() => setFullMapOpen(true)}
+          title="Bấm vào bản đồ (hoặc phím M) để mở Bản đồ Toàn cảnh ĐHBK Hà Nội"
+          aria-label="Bản đồ thu nhỏ khuôn viên Bách khoa"
+          className="h-[150px] w-[150px] cursor-pointer rounded-xl border border-white/20 shadow-lg"
+        />
+        <button
+          id="open-full-map"
+          type="button"
+          onClick={() => setFullMapOpen(true)}
+          className="absolute bottom-1.5 right-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-black/85"
+        >
+          🗺️ M
+        </button>
+      </div>
       {onFastTravel && (
         <>
           <button
@@ -223,6 +300,65 @@ export default function Minimap({ onFastTravel }: { onFastTravel?: (destId: stri
             </div>
           )}
         </>
+      )}
+
+      {/* Modal Bản đồ Toàn cảnh ĐHBK Hà Nội (Phím M) */}
+      {fullMapOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div
+            data-testid="full-campus-map-modal"
+            className="w-full max-w-2xl rounded-2xl border border-white/20 bg-[#142018] p-4 text-white shadow-2xl"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-[#FDE047]">
+                  🗺️ SƠ ĐỒ TỔNG THỂ ĐẠI HỌC BÁCH KHOA HÀ NỘI · 河内百科大学全景图
+                </h2>
+                <p className="text-xs text-white/70">
+                  C1 · C2 · C3–C10 · D3–D9 · Thư viện TQB · Hồ Tiền · VDZ · Nhà thi đấu · KTX B6–B10
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Đóng bản đồ toàn cảnh"
+                onClick={() => setFullMapOpen(false)}
+                className="rounded-full bg-white/15 px-3 py-1 text-sm font-bold text-white hover:bg-white/25"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex flex-col items-center gap-4 sm:flex-row">
+              <canvas
+                ref={fullCanvasRef}
+                width={420}
+                height={420}
+                className="h-[320px] w-[320px] shrink-0 rounded-xl border border-white/20 sm:h-[380px] sm:w-[380px]"
+              />
+              <div className="flex-1 space-y-2 text-xs">
+                <p className="font-bold text-[#86EFAC]">🚀 Dịch chuyển nhanh tới các khu chính:</p>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {FAST_TRAVEL_DESTINATIONS.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => {
+                        setFullMapOpen(false);
+                        onFastTravel?.(d.id);
+                      }}
+                      className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-left transition hover:bg-white/20"
+                    >
+                      <span>{d.icon}</span>
+                      <div>
+                        <div className="font-bold text-white">{d.name}</div>
+                        <div className="text-[11px] text-white/65">{d.desc}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

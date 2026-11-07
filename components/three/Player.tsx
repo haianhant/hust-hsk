@@ -61,7 +61,15 @@ import {
   resolveLibraryLobbyCollisions,
   type Vec2,
 } from '../../lib/campus';
-import { bikeInput, bikeState, fastTravelState, playerInput, playerState, updatePlayerState } from '../../lib/playerState';
+import {
+  bikeInput,
+  bikeState,
+  fastTravelState,
+  playerInput,
+  playerState,
+  updatePlayerState,
+  type AvatarOutfitId,
+} from '../../lib/playerState';
 import StudentAvatar, { type FigureJoints } from './StudentAvatar';
 
 const CAM_MIN_DIST = 4;
@@ -141,6 +149,21 @@ export default function Player() {
     backpackRef.current = !!v;
     setBackpackOn(!!v);
   };
+
+  // Wave 2 — Tùy chỉnh trang phục, kính cận & dây đeo thẻ SV từ HUD
+  const [outfit, setOutfit] = useState<AvatarOutfitId>(playerState.avatarOutfit);
+  const [glassesOn, setGlassesOn] = useState<boolean>(playerState.avatarGlasses);
+  const [lanyardOn, setLanyardOn] = useState<boolean>(playerState.avatarLanyard);
+
+  useEffect(() => {
+    const onOutfitChange = () => {
+      setOutfit(playerState.avatarOutfit);
+      setGlassesOn(playerState.avatarGlasses);
+      setLanyardOn(playerState.avatarLanyard);
+    };
+    window.addEventListener('bkhn:outfit', onOutfitChange);
+    return () => window.removeEventListener('bkhn:outfit', onOutfitChange);
+  }, []);
 
   // Vị trí logic (mặt đất) — nguồn thật duy nhất; group.position chỉ để hiển thị.
   const posRef = useRef<Vec2>({ ...playerState.pos });
@@ -1039,7 +1062,13 @@ export default function Player() {
   // chân chạm đất (đế giày y = 0), khớp hông y = 0,8, khớp vai y = 1,29.
   return (
     <group ref={groupRef} position={[SPAWN.x, 0, SPAWN.z]}>
-      <StudentAvatar joints={joints} showBackpack={backpackOn} />
+      <StudentAvatar
+        joints={joints}
+        showBackpack={backpackOn}
+        outfit={outfit}
+        glasses={glassesOn}
+        lanyard={lanyardOn}
+      />
     </group>
   );
 }

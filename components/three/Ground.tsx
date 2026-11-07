@@ -17,6 +17,7 @@ import {
   createSeededRandom,
   makeAsphaltTexture,
   makeC1PlazaStoneTexture,
+  makeCircuitPlazaTexture,
   makeGrassTexture,
   makeTerracottaTileTexture,
 } from './materials';
@@ -220,7 +221,8 @@ export default function Ground() {
     const asphalt = makeAsphaltTexture(4, 1);
     const c1Stone = makeC1PlazaStoneTexture(12, 6);
     const libTile = makeTerracottaTileTexture(14, 22);
-    return { grass, asphalt, c1Stone, libTile };
+    const tdnCircuit = makeCircuitPlazaTexture(2, 2);
+    return { grass, asphalt, c1Stone, libTile, tdnCircuit };
   }, []);
 
   useEffect(
@@ -230,6 +232,7 @@ export default function Ground() {
       textures.c1Stone.dispose();
       textures.libTile.map.dispose();
       textures.libTile.bumpMap.dispose();
+      textures.tdnCircuit.dispose();
     },
     [textures],
   );
@@ -247,8 +250,32 @@ export default function Ground() {
         />
       </mesh>
 
+      {/* Các lối dạo bộ lát đá nối đường chính vào Tòa C7, VDZ, Khu Thể thao, KTX B6–B10 & Cổng Nam (y = 0,012). */}
+      {[
+        { cx: -16, cz: -38.5, w: 6, d: 8 }, // Lối vào sảnh Tòa C7
+        { cx: 10, cz: -28.5, w: 4.5, d: 6.5 }, // Lối vào Trung tâm Việt – Đức VDZ
+        { cx: -54, cz: 22.5, w: 4.5, d: 24 }, // Đường nội bộ từ trục Parabol xuống Khu Thể thao & Nhà thi đấu
+        { cx: 61, cz: 34, w: 22, d: 4.5 }, // Đường nội bộ nối Thư viện sang Căng-tin & KTX B6–B10
+        { cx: 38, cz: 69.5, w: 5.5, d: 27 }, // Trục đường phía Nam từ Thư viện ra Cổng Tạ Quang Bửu
+      ].map((p, idx) => (
+        <mesh
+          key={`sub-walkway-${idx}`}
+          rotation-x={-Math.PI / 2}
+          position={[p.cx, 0.012, p.cz]}
+          receiveShadow
+        >
+          <planeGeometry args={[p.w, p.d]} />
+          <meshStandardMaterial
+            color="#D2CEC4"
+            map={textures.c1Stone}
+            roughness={0.9}
+            metalness={0}
+          />
+        </mesh>
+      ))}
+
       {/* Sàn quảng trường: C1 đá rửa, Thư viện gạch đất nung có bumpMap,
-          Trần Đại Nghĩa xanh ngọc — y = 0,015. */}
+          Trần Đại Nghĩa bản mạch điện tử xanh ngọc — y = 0,015. */}
       {PLAZAS.map((pl, i) => (
         <mesh
           key={`plaza-${i}`}
@@ -276,7 +303,14 @@ export default function Ground() {
               metalness={0}
             />
           ) : (
-            <meshStandardMaterial color={pl.color} roughness={0.85} metalness={0} />
+            <meshStandardMaterial
+              color="#FFFFFF"
+              map={textures.tdnCircuit}
+              bumpMap={textures.tdnCircuit}
+              bumpScale={0.008}
+              roughness={0.82}
+              metalness={0.05}
+            />
           )}
         </mesh>
       ))}

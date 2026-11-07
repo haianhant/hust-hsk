@@ -20,7 +20,7 @@ import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Joystick from '../components/ui/Joystick';
 import Minimap from '../components/ui/Minimap';
-import { bikeInput, bikeState, playerInput, playerState, type TimeOfDay } from '../lib/playerState';
+import { bikeInput, bikeState, playerInput, playerState, type AvatarOutfitId, type TimeOfDay } from '../lib/playerState';
 import { CLASSROOM, CLASSROOM_DOOR, FAST_TRAVEL_DESTINATIONS, LIBRARY_DOOR, LIBRARY_LOBBY } from '../lib/campus';
 import { ALL_HSK3_LEXEMES as LEXEMES, HSK3_LESSONS, HSK3_LESSON_LEXEMES } from '../content/hsk3-index';
 import { ALL_HSK4_LEXEMES, HSK4_LESSONS, HSK4_LESSON_LEXEMES } from '../content/hsk4-index';
@@ -423,6 +423,10 @@ export default function HomePage() {
   const [inClassroom, setInClassroom] = useState(false);
   const [inLibraryLobby, setInLibraryLobby] = useState(false);
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('day');
+  const [outfitOpen, setOutfitOpen] = useState(false);
+  const [avatarOutfit, setAvatarOutfit] = useState<AvatarOutfitId>('polo-red');
+  const [avatarGlasses, setAvatarGlasses] = useState<boolean>(true);
+  const [avatarLanyard, setAvatarLanyard] = useState<boolean>(true);
   const [lobbyModal, setLobbyModal] = useState<'statue' | 'vocab-board' | 'info-desk' | null>(null);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [homework, setHomework] = useState<HomeworkState>('desk');
@@ -976,6 +980,20 @@ export default function HomePage() {
       return next;
     });
   }, [showToast]);
+
+  const applyAvatarStyle = useCallback(
+    (nextOutfit: AvatarOutfitId, nextGlasses: boolean, nextLanyard: boolean, label?: string) => {
+      setAvatarOutfit(nextOutfit);
+      setAvatarGlasses(nextGlasses);
+      setAvatarLanyard(nextLanyard);
+      playerState.avatarOutfit = nextOutfit;
+      playerState.avatarGlasses = nextGlasses;
+      playerState.avatarLanyard = nextLanyard;
+      window.dispatchEvent(new CustomEvent('bkhn:outfit'));
+      if (label) showToast(`Trang phục: ${label}`);
+    },
+    [showToast],
+  );
 
   // --- Dịch chuyển nhanh (đợt 3 giai đoạn 5) -----------------------------------
   // Chỉ thay vị trí + hướng nhìn — không chạm quest/progress/điểm (hook
@@ -1576,6 +1594,15 @@ export default function HomePage() {
               {timeOfDay === 'day' ? '☀️ Ngày' : timeOfDay === 'sunset' ? '🌇 Hoàng hôn' : '🌙 Đêm'}
             </button>
             <button
+              id="toggle-outfit"
+              type="button"
+              onClick={() => setOutfitOpen((o) => !o)}
+              aria-label="Tùy chỉnh trang phục nhân vật"
+              className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
+            >
+              👕 Trang phục
+            </button>
+            <button
               id="change-lesson"
               type="button"
               onClick={() => setLessonsOpen(true)}
@@ -1610,6 +1637,70 @@ export default function HomePage() {
               {speechRate.toFixed(1)}×
             </button>
           </div>
+          {outfitOpen && (
+            <div
+              data-testid="outfit-panel"
+              className="pointer-events-auto w-[270px] rounded-2xl border border-white/20 bg-[#142018]/90 p-3 text-white shadow-2xl backdrop-blur-md"
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-300">
+                  👕 Trang phục Sinh viên BK
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOutfitOpen(false)}
+                  className="rounded-full px-1.5 py-0.5 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-1.5">
+                {[
+                  { id: 'polo-red' as AvatarOutfitId, label: '🔴 Áo Polo đỏ Bách Khoa' },
+                  { id: 'hoodie-hust' as AvatarOutfitId, label: '🧥 Áo khoác gió HUST' },
+                  { id: 'shirt-white' as AvatarOutfitId, label: '👔 Sơ mi trắng sinh viên' },
+                  { id: 'sport-pe' as AvatarOutfitId, label: '🏃 Đồng phục Thể chất BK' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    data-testid={`outfit-${item.id}`}
+                    onClick={() => applyAvatarStyle(item.id, avatarGlasses, avatarLanyard, item.label)}
+                    className={`flex items-center justify-between rounded-xl px-3 py-1.5 text-left text-xs font-semibold transition ${
+                      avatarOutfit === item.id
+                        ? 'bg-[#A54432] text-white shadow'
+                        : 'bg-white/10 text-white/85 hover:bg-white/20'
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    {avatarOutfit === item.id && <span>✓</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-white/15 pt-2 text-xs">
+                <button
+                  type="button"
+                  data-testid="toggle-glasses"
+                  onClick={() => applyAvatarStyle(avatarOutfit, !avatarGlasses, avatarLanyard)}
+                  className={`flex-1 rounded-lg px-2 py-1.5 font-semibold transition ${
+                    avatarGlasses ? 'bg-emerald-700/80 text-white' : 'bg-white/10 text-white/60'
+                  }`}
+                >
+                  👓 Kính: {avatarGlasses ? 'Bật' : 'Tắt'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="toggle-lanyard"
+                  onClick={() => applyAvatarStyle(avatarOutfit, avatarGlasses, !avatarLanyard)}
+                  className={`flex-1 rounded-lg px-2 py-1.5 font-semibold transition ${
+                    avatarLanyard ? 'bg-emerald-700/80 text-white' : 'bg-white/10 text-white/60'
+                  }`}
+                >
+                  🪪 Thẻ SV: {avatarLanyard ? 'Bật' : 'Tắt'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Chip mục tiêu hiện tại. F5a — trong phòng học thì dời sang góc

@@ -62,6 +62,8 @@ export const fastTravelState = {
 
 export type TimeOfDay = 'day' | 'sunset' | 'night';
 
+export type AvatarOutfitId = 'polo-red' | 'hoodie-hust' | 'shirt-white' | 'sport-pe';
+
 export const playerState = {
   pos: { ...SPAWN } as Vec2,
   zone: 'Cổng Parabol',
@@ -84,6 +86,10 @@ export const playerState = {
   inLibraryLobby: false,
   /** Giai đoạn 2 — chế độ thời gian ngày / hoàng hôn / đêm. */
   timeOfDay: 'day' as TimeOfDay,
+  /** Wave 2 — Tùy chỉnh trang phục sinh viên Bách khoa trên HUD. */
+  avatarOutfit: 'polo-red' as AvatarOutfitId,
+  avatarGlasses: false,
+  avatarLanyard: true,
   /**
    * Góc camera (yaw/pitch, radian) đã lưu — Player khởi tạo từ đây khi
    * mount (reload trong phòng khôi phục đúng hướng nhìn, F5b) và ghi đè
