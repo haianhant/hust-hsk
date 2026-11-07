@@ -614,57 +614,57 @@ function Head({
         <meshStandardMaterial color={SKIN} roughness={0.68} />
       </mesh>
 
-      {/* --- Tóc nền đa lớp & 5 kiểu tóc tạo khối (che kín 100% hộp sọ da 1,680m, đỉnh tóc đạt đúng 1,707m) --- */}
-      {/* Vòm tóc chính: bọc hoàn toàn ngoài ellipsoid sọ [0.92, 1.16, 0.96]*0.108 trên cả 3 trục X, Y, Z */}
-      <mesh position={[0, 1.562, -0.002]} rotation={[-0.14, 0, 0]} scale={[0.98, 1.25, 1.05]} castShadow>
-        <sphereGeometry args={[0.114, 28, 18, 0, Math.PI * 2, 0, Math.PI * 0.62]} />
+      {/* --- Tóc nền đa lớp & 5 kiểu tóc tạo khối (che kín 100% hộp sọ da 1,680m, nhưng chừa thoáng vùng trán dưới/lông mày 1,586m và mắt 1,560m) --- */}
+      {/* Vòm tóc chính: thetaLength = 0.44*PI và nghiêng -0.32 rad để chân tóc trước cao ở y >= 1,620m (cao hơn lông mày 3,4cm), đỉnh đạt 1,704m */}
+      <mesh position={[0, 1.566, -0.008]} rotation={[-0.32, 0, 0]} scale={[0.98, 1.22, 1.04]} castShadow>
+        <sphereGeometry args={[0.115, 28, 18, 0, Math.PI * 2, 0, Math.PI * 0.44]} />
         <meshStandardMaterial color={HAIR} roughness={0.82} />
       </mesh>
-      {/* Khối tóc sau đầu & ôm gáy dày dặn (không lộ da đầu khi camera nhìn từ phía sau/trên xuống) */}
-      <mesh position={[0, 1.545, -0.024]} scale={[0.97, 1.16, 0.98]} castShadow>
-        <sphereGeometry args={[0.112, 24, 18]} />
+      {/* Khối tóc sau đầu & ôm gáy (scaleZ = 0,78 và lùi về z = -0,038 để chỉ phủ nửa sau đầu, tuyệt đối không tràn ra mặt trước) */}
+      <mesh position={[0, 1.558, -0.038]} rotation={[0.15, 0, 0]} scale={[0.97, 1.15, 0.78]} castShadow>
+        <sphereGeometry args={[0.114, 24, 18]} />
         <meshStandardMaterial color={HAIR} roughness={0.84} />
       </mesh>
-      {/* Lớp tóc phồng đỉnh đầu (Crown Volume + lọn tóc bóng nhẹ) tạo độ dày tự nhiên */}
-      <mesh position={[0, 1.662, 0.006]} scale={[0.88, 0.38, 0.92]} castShadow>
-        <sphereGeometry args={[0.11, 20, 14]} />
+      {/* Lớp tóc phồng đỉnh đầu (Crown Volume + lọn tóc bóng nhẹ) tạo độ dày tự nhiên ở cao độ 1,67–1,707m */}
+      <mesh position={[0, 1.668, -0.004]} scale={[0.88, 0.36, 0.88]} castShadow>
+        <sphereGeometry args={[0.106, 20, 14]} />
         <meshStandardMaterial color={HAIR} roughness={0.8} />
       </mesh>
-      <mesh position={[-0.022, 1.674, 0.018]} rotation={[0.1, 0, 0.16]} scale={[0.42, 0.24, 0.68]}>
-        <sphereGeometry args={[0.088, 14, 10]} />
+      <mesh position={[-0.022, 1.678, 0.008]} rotation={[0.06, 0, 0.16]} scale={[0.42, 0.22, 0.62]}>
+        <sphereGeometry args={[0.084, 14, 10]} />
         <meshStandardMaterial color={HAIR_HIGHLIGHT} roughness={0.78} />
       </mesh>
-      <mesh position={[0.024, 1.672, 0.015]} rotation={[0.08, 0, -0.15]} scale={[0.42, 0.24, 0.68]}>
-        <sphereGeometry args={[0.088, 14, 10]} />
+      <mesh position={[0.024, 1.676, 0.006]} rotation={[0.06, 0, -0.15]} scale={[0.42, 0.22, 0.62]}>
+        <sphereGeometry args={[0.084, 14, 10]} />
         <meshStandardMaterial color={HAIR} roughness={0.82} />
       </mesh>
-      {/* Tóc mai 2 bên thái dương (Sideburns) nối liền vòm tóc xuống ngang tai */}
-      {[-0.092, 0.092].map((sx, idx) => (
+      {/* Tóc mai 2 bên thái dương (Sideburns) ôm gọn sát tai (z = 0,012), không chạm vùng mắt/lông mày */}
+      {[-0.094, 0.094].map((sx, idx) => (
         <mesh
           key={`sideburn-${idx}`}
-          position={[sx, 1.568, 0.026]}
-          rotation={[0.12, 0, sx > 0 ? -0.08 : 0.08]}
-          scale={[0.32, 0.78, 0.46]}
+          position={[sx, 1.576, 0.012]}
+          rotation={[0.08, 0, sx > 0 ? -0.08 : 0.08]}
+          scale={[0.28, 0.68, 0.38]}
         >
-          <sphereGeometry args={[0.052, 12, 10]} />
+          <sphereGeometry args={[0.048, 12, 10]} />
           <meshStandardMaterial color={HAIR} roughness={0.84} />
         </mesh>
       ))}
 
       {hairStyle === 'short' && (
         <group>
-          {/* Vòm mái trước trán nối liền đỉnh đầu */}
-          <mesh position={[0, 1.642, 0.056]} scale={[1.18, 0.52, 0.68]}>
-            <sphereGeometry args={[0.082, 18, 12]} />
+          {/* Vòm mái cao trên trán (minFrontY >= 1,618m, cách trên lông mày 3,2cm) */}
+          <mesh position={[0, 1.65, 0.052]} rotation={[-0.12, 0, 0]} scale={[1.14, 0.42, 0.62]}>
+            <sphereGeometry args={[0.076, 18, 12]} />
             <meshStandardMaterial color={HAIR} roughness={0.82} />
           </mesh>
-          {/* Lọn tóc mái trước trán tạo nét trẻ trung */}
-          <mesh position={[-0.03, 1.624, 0.088]} rotation={[0.22, 0, 0.18]} scale={[0.62, 0.42, 0.42]}>
-            <sphereGeometry args={[0.056, 12, 10]} />
+          {/* Hai lọn tóc mái gọn trên trán, hoàn toàn không che lông mày hay mắt */}
+          <mesh position={[-0.028, 1.636, 0.082]} rotation={[0.15, 0, 0.18]} scale={[0.58, 0.36, 0.38]}>
+            <sphereGeometry args={[0.048, 12, 10]} />
             <meshStandardMaterial color={HAIR_HIGHLIGHT} roughness={0.8} />
           </mesh>
-          <mesh position={[0.028, 1.626, 0.088]} rotation={[0.22, 0, -0.15]} scale={[0.62, 0.42, 0.42]}>
-            <sphereGeometry args={[0.056, 12, 10]} />
+          <mesh position={[0.028, 1.638, 0.082]} rotation={[0.15, 0, -0.15]} scale={[0.58, 0.36, 0.38]}>
+            <sphereGeometry args={[0.048, 12, 10]} />
             <meshStandardMaterial color={HAIR} roughness={0.82} />
           </mesh>
         </group>
@@ -672,12 +672,12 @@ function Head({
 
       {hairStyle === 'swept' && (
         <group>
-          <mesh position={[0.018, 1.642, 0.056]} rotation={[0, 0, -0.15]} scale={[1.22, 0.5, 0.66]}>
-            <sphereGeometry args={[0.082, 18, 12]} />
+          <mesh position={[0.016, 1.65, 0.052]} rotation={[-0.12, 0, -0.14]} scale={[1.16, 0.42, 0.62]}>
+            <sphereGeometry args={[0.076, 18, 12]} />
             <meshStandardMaterial color={HAIR} roughness={0.82} />
           </mesh>
-          <mesh position={[-0.036, 1.622, 0.086]} rotation={[0.2, 0, 0.25]} scale={[0.68, 0.38, 0.42]}>
-            <sphereGeometry args={[0.058, 12, 10]} />
+          <mesh position={[-0.032, 1.636, 0.08]} rotation={[0.14, 0, 0.24]} scale={[0.62, 0.34, 0.38]}>
+            <sphereGeometry args={[0.048, 12, 10]} />
             <meshStandardMaterial color={HAIR_HIGHLIGHT} roughness={0.8} />
           </mesh>
         </group>
@@ -685,9 +685,9 @@ function Head({
 
       {hairStyle === 'bun' && (
         <group>
-          {/* Mái trước mềm mại cho kiểu tóc búi để không bị hở trán */}
-          <mesh position={[0, 1.64, 0.056]} scale={[1.14, 0.48, 0.62]}>
-            <sphereGeometry args={[0.078, 16, 12]} />
+          {/* Mái trước cao gọn trên trán cho kiểu tóc búi */}
+          <mesh position={[0, 1.65, 0.05]} rotation={[-0.12, 0, 0]} scale={[1.12, 0.4, 0.6]}>
+            <sphereGeometry args={[0.074, 16, 12]} />
             <meshStandardMaterial color={HAIR} roughness={0.82} />
           </mesh>
           <mesh position={[0, 1.615, -0.145]} scale={[1, 0.9, 0.9]} castShadow>
@@ -707,9 +707,9 @@ function Head({
 
       {hairStyle === 'ponytail' && (
         <group>
-          {/* Mái rẽ nhẹ trước trán nối liền vòm tóc */}
-          <mesh position={[0, 1.64, 0.058]} scale={[1.16, 0.48, 0.64]}>
-            <sphereGeometry args={[0.08, 16, 12]} />
+          {/* Mái rẽ nhẹ cao trên trán nối liền vòm tóc */}
+          <mesh position={[0, 1.65, 0.052]} rotation={[-0.12, 0, 0]} scale={[1.14, 0.4, 0.6]}>
+            <sphereGeometry args={[0.075, 16, 12]} />
             <meshStandardMaterial color={HAIR} roughness={0.82} />
           </mesh>
           {/* Dây buộc tóc đỏ HUST + đuôi ngựa năng động phía sau */}
@@ -726,14 +726,14 @@ function Head({
 
       {hairStyle === 'bob' && (
         <group>
-          {/* Mái ngang dày + hai lọn tóc ngắn ôm sát má nữ sinh */}
-          <mesh position={[0, 1.642, 0.058]} scale={[1.18, 0.5, 0.66]}>
-            <sphereGeometry args={[0.082, 16, 12]} />
+          {/* Mái ngang gọn trên trán + hai lọn tóc ngắn ôm sát hai bên thái dương/má sau */}
+          <mesh position={[0, 1.65, 0.052]} rotation={[-0.12, 0, 0]} scale={[1.14, 0.42, 0.62]}>
+            <sphereGeometry args={[0.076, 16, 12]} />
             <meshStandardMaterial color={HAIR} roughness={0.82} />
           </mesh>
-          {[-0.088, 0.088].map((bx, i) => (
-            <mesh key={`bob-side-${i}`} position={[bx, 1.51, 0.012]} scale={[0.38, 1.18, 0.76]} castShadow>
-              <sphereGeometry args={[0.07, 12, 10]} />
+          {[-0.09, 0.09].map((bx, i) => (
+            <mesh key={`bob-side-${i}`} position={[bx, 1.51, -0.004]} scale={[0.36, 1.15, 0.68]} castShadow>
+              <sphereGeometry args={[0.068, 12, 10]} />
               <meshStandardMaterial color={HAIR} roughness={0.84} />
             </mesh>
           ))}
