@@ -86,6 +86,15 @@ export const playerState = {
    */
   cameraYaw: null as number | null,
   cameraPitch: null as number | null,
+  /**
+   * Đợt 5 multiplayer — hướng nhân vật đang quay (radian, cùng quy ước
+   * facing của Player: forward = (sin f, cos f)) và trạng thái đang lái
+   * xe. Player ghi đè mỗi frame; cầu nối multiplayer (page.tsx) đọc để
+   * gửi lên server. Chỉ dùng cho hiển thị người chơi khác, không ảnh
+   * hưởng gameplay hay điểm số.
+   */
+  facing: -Math.PI / 2,
+  riding: false,
 };
 
 export function updatePlayerState(pos: Vec2, moving: boolean): void {

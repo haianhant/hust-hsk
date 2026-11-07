@@ -9,6 +9,7 @@ import { Canvas } from '@react-three/fiber';
 import Ground from './Ground';
 import Landmarks from './Landmarks';
 import Player from './Player';
+import RemotePlayers from './RemotePlayers';
 import Classroom, { type HomeworkState } from './Classroom';
 import { MinhNpc } from './Npc';
 import BackgroundBuildings from './BackgroundBuildings';
@@ -94,6 +95,8 @@ export default function CampusScene({
           <MinhNpc />
           {/* Xe máy cá nhân (đợt 3 giai đoạn 4) — chỉ ngoài sân, không vào phòng học. */}
           <Motorbike />
+          {/* Người chơi khác (đợt 5 multiplayer) — chỉ ngoài sân. */}
+          <RemotePlayers />
         </>
       )}
       <Player />

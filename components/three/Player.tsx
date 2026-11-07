@@ -189,6 +189,12 @@ export default function Player() {
     pitchRef.current = Math.max(pitchRef.current, 0.18);
     distRef.current = Math.max(distRef.current, 8);
     posRef.current = { ...bikePosRef.current };
+    // Đợt 5 — ghi playerState ngay (cầu nối multiplayer đọc playerState
+    // mỗi 100 ms, không chờ frame sau — SwiftShader chậm, frame có thể
+    // cách nhau vài giây).
+    playerState.pos = { ...posRef.current };
+    playerState.facing = facingRef.current;
+    playerState.riding = true;
     syncBikeState();
     return { ok: true };
   };
@@ -223,6 +229,10 @@ export default function Player() {
     posRef.current = spot;
     facingRef.current = h;
     ridingRef.current = false;
+    // Đợt 5 — ghi playerState ngay (xem mountBike).
+    playerState.pos = { ...spot };
+    playerState.facing = h;
+    playerState.riding = false;
     bikeSpeedRef.current = 0;
     bikeSteerRef.current = 0;
     bikeLeanRef.current = 0;
@@ -353,6 +363,10 @@ export default function Player() {
     facingRef.current = dest.facing;
     yawRef.current = dest.yaw;
     playerState.cameraYaw = dest.yaw;
+    // Đợt 5 — ghi playerState ngay để cầu nối multiplayer gửi vị trí
+    // mới trong 100 ms (không chờ frame sau — xem mountBike).
+    playerState.pos = { ...posRef.current };
+    playerState.facing = dest.facing;
     pitchRef.current = 0.18;
     playerState.cameraPitch = 0.18;
     distRef.current = 7;
@@ -376,9 +390,13 @@ export default function Player() {
         // Đẩy ra khỏi collider (hồ/tòa nhà) để một điểm teleport lỗi không đặt
         // avatar vào trong nước/tường — gameplay thật không bao giờ vào được
         // đó vì va chạm đã chặn lúc di chuyển.
-        posRef.current = playerState.inClassroom
+        const resolved = playerState.inClassroom
           ? resolveClassroomCollisions({ x, z }, AVATAR.radius).pos
           : resolveCollisions({ x, z }, AVATAR.radius).pos;
+        posRef.current = resolved;
+        // Đợt 5 — ghi playerState ngay để cầu nối multiplayer gửi vị trí
+        // mới trong 100 ms (không chờ frame sau — xem mountBike).
+        playerState.pos = { ...resolved };
         if (typeof yaw === 'number') yawRef.current = yaw;
         if (typeof pitch === 'number') pitchRef.current = pitch;
         viewModeRef.current = 'follow';
@@ -904,6 +922,10 @@ export default function Player() {
     playerState.cameraPitch = pitchRef.current;
     // Đồng bộ chế độ camera cho HUD (tự ẩn hộp hướng dẫn khi top-view).
     playerState.viewMode = viewModeRef.current;
+    // Đợt 5 multiplayer — đồng bộ hướng + trạng thái lái xe để cầu nối
+    // (page.tsx) gửi lên server; chỉ dùng cho hiển thị người chơi khác.
+    playerState.facing = facingRef.current;
+    playerState.riding = ridingRef.current;
 
     // --- Camera thứ ba: nhìn vào điểm cao ~1,2 m trên avatar -----------------
     // TEST HOOK: chế độ top — camera trên cao nhìn thẳng xuống campus (chụp ảnh

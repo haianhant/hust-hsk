@@ -1,0 +1,10 @@
+{
+  "name": "hsk-ws-shim",
+  "version": "1.0.0",
+  "description": "Local WebSocket shim mirroring hust-hsk-rooms protocol for tests (no Cloudflare needed).",
+  "private": true,
+  "dependencies": {
+    "https-proxy-agent": "^9.1.0",
+    "ws": "^8.22.1"
+  }
+}

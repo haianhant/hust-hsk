@@ -102,6 +102,11 @@ async function waitPos(page, pred, timeoutMs = 30000) {
 async function enterFresh(page) {
   await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForSelector('#enter-campus', { timeout: 30000 });
+  // Đợt 5: vào trường cần tên + MSSV — điền form nếu hiện (chưa lưu).
+  if (await page.$('#identity-name')) {
+    await page.fill('#identity-name', 'Kiểm tra');
+    await page.fill('#identity-mssv', '20226010');
+  }
   await page.click('#enter-campus');
   await page.waitForFunction(() => window.__bkhn, { timeout: 90000 });
   await sleep(2500);

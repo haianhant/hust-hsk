@@ -1,0 +1,278 @@
+// ---------------------------------------------------------------------------
+// RemotePlayers.tsx — Vẽ người chơi khác trong trường (đợt 5 multiplayer).
+// - Mỗi người chơi khác là một HumanFigure (tái dùng StudentAvatar) với
+//   variant polo, màu áo do server hash từ sessionId (KHÔNG có đỏ HUST —
+//   người chơi chính luôn mặc polo đỏ nên phân biệt ngay).
+// - Bảng tên Billboard trên đầu ghi "Tên (MSSV)". Billboard PHẢI đứng
+//   ngoài nhóm xoay của figure (như Npc.tsx) — không thì chữ đọc ngược.
+// - Vị trí nội suy (lerp) về target nhận từ server; đi/chạy vung chân
+//   tay; lái xe thì ngồi tư thế lái + xe máy đơn giản dưới chân.
+// - Chỉ render ngoài sân (CampusScene không mount trong phòng học).
+// - Vị trí cập nhật qua ref trong useFrame — không re-render React khi
+//   nhận tin move (10 tin/giây/người), chỉ re-render khi có người vào/ra.
+// ---------------------------------------------------------------------------
+
+import { useEffect, useMemo, useReducer, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
+import { Billboard } from '@react-three/drei';
+import * as THREE from 'three';
+import { HumanFigure, type FigureJoints } from './StudentAvatar';
+import { multiplayer, type RemotePlayer, type RemoteState } from '../../lib/multiplayer';
+
+function useFigureJoints(): FigureJoints {
+  return {
+    body: useRef<THREE.Group>(null!),
+    armL: useRef<THREE.Group>(null!),
+    armR: useRef<THREE.Group>(null!),
+    elbowL: useRef<THREE.Group>(null!),
+    elbowR: useRef<THREE.Group>(null!),
+    legL: useRef<THREE.Group>(null!),
+    legR: useRef<THREE.Group>(null!),
+    kneeL: useRef<THREE.Group>(null!),
+    kneeR: useRef<THREE.Group>(null!),
+    footL: useRef<THREE.Group>(null!),
+    footR: useRef<THREE.Group>(null!),
+  };
+}
+
+/** Texture bảng tên "Tên (MSSV)" — canvas rộng hơn của Npc (tên + MSSV dài). */
+function useNameTagTexture(label: string): THREE.CanvasTexture {
+  return useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.beginPath();
+      ctx.roundRect(4, 4, 504, 56, 16);
+      ctx.fill();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // Co chữ vừa khung nếu tên dài (tối đa 30 ký tự + " (12345678)").
+      let size = 32;
+      ctx.font = `bold ${size}px Arial, sans-serif`;
+      const w = ctx.measureText(label).width;
+      if (w > 470) size = Math.max(18, Math.floor((size * 470) / w));
+      ctx.font = `bold ${size}px Arial, sans-serif`;
+      ctx.fillText(label, 256, 34);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }, [label]);
+}
+
+function darken(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, ((n >> 16) & 255) - 38);
+  const g = Math.max(0, ((n >> 8) & 255) - 38);
+  const b = Math.max(0, (n & 255) - 38);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+/** Xe máy đơn giản cho người chơi khác đang lái (2 bánh + thân + tay lái). */
+function SimpleBike({ color }: { color: string }) {
+  return (
+    <group>
+      {/* bánh trước/sau */}
+      <mesh position={[0, 0.25, 0.55]} rotation={[0, 0, Math.PI / 2]}>
+        <torusGeometry args={[0.25, 0.07, 10, 20]} />
+        <meshStandardMaterial color="#1A1A1A" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0.25, -0.55]} rotation={[0, 0, Math.PI / 2]}>
+        <torusGeometry args={[0.25, 0.07, 10, 20]} />
+        <meshStandardMaterial color="#1A1A1A" roughness={0.9} />
+      </mesh>
+      {/* thân xe + yên + tay lái */}
+      <mesh position={[0, 0.42, 0]}>
+        <boxGeometry args={[0.22, 0.16, 1.05]} />
+        <meshStandardMaterial color={color} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.52, -0.28]}>
+        <boxGeometry args={[0.2, 0.07, 0.4]} />
+        <meshStandardMaterial color="#222222" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0.62, 0.5]} rotation={[0.5, 0, 0]}>
+        <boxGeometry args={[0.5, 0.04, 0.04]} />
+        <meshStandardMaterial color="#333333" roughness={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+function lerpAngle(a: number, b: number, t: number): number {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
+
+const SPEED_CAP: Record<RemoteState, number> = {
+  idle: 0,
+  walking: 4.5,
+  running: 7,
+  riding: 15,
+};
+
+/** Vị trí render thực tế (đã nội suy) của từng người chơi khác — hook
+ * debug cho test: window.__bkhnMpRender() trả { [id]: {x, z, facing} }. */
+export const remoteRenderPos = new Map<string, { x: number; z: number; facing: number }>();
+
+/** Một người chơi khác: nội suy vị trí + hoạt hình chân tay mỗi frame. */
+function RemotePlayerView({ player }: { player: RemotePlayer }) {
+  const groupRef = useRef<THREE.Group>(null!);
+  const joints = useFigureJoints();
+  const cur = useRef({ x: player.x, z: player.z, facing: player.facing });
+  const phase = useRef(0);
+  const label = `${player.name} (${player.mssv})`;
+  const tagTex = useNameTagTexture(label);
+
+  useFrame((_, delta) => {
+    // Kẹp delta ở 0,5 s/khung: khung chậm (điện thoại yếu, SwiftShader
+    // khi test ~0,4 fps) vẫn bắt kịp vị trí thật — kẹp 0,1 s cũ làm
+    // người chơi khác bò 0,45 m/khung, mất ~40 s mới đuổi kịp sau
+    // teleport. Nhảy cóc > 8 m vẫn snap ngay (dưới), nên không sợ vọt.
+    const dt = Math.min(delta, 0.5);
+    const target = player;
+    // Nội suy vị trí về target (kẹp tốc độ theo trạng thái); nhảy cóc
+    // nếu lệch > 8 m (vd vừa dịch chuyển nhanh / mới vào).
+    // TỐC ĐỘ TỐI THIỂU 4,5 m/s kể cả khi target đứng yên ('idle' có cap
+    // 0 trong bảng): người khác teleport/dịch chuyển nhanh rồi đứng yên
+    // thì avatar vẫn phải đuổi kịp chỗ mới — cap 0 cũ làm figure đóng
+    // băng vĩnh viễn ở chỗ cũ cho tới khi người đó đi tiếp (đã gặp:
+    // tag hiện ở spawn trong khi dữ liệu đã ở (-70,14)).
+    const dx = target.x - cur.current.x;
+    const dz = target.z - cur.current.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > 8) {
+      cur.current.x = target.x;
+      cur.current.z = target.z;
+    } else if (dist > 0.001) {
+      const cap = Math.max(4.5, SPEED_CAP[target.state]) * dt;
+      const step = Math.min(dist, cap);
+      cur.current.x += (dx / dist) * step;
+      cur.current.z += (dz / dist) * step;
+    }
+    cur.current.facing = lerpAngle(cur.current.facing, target.facing, Math.min(1, dt * 10));
+
+    const g = groupRef.current;
+    if (!g) return;
+    g.position.set(cur.current.x, target.state === 'riding' ? 0.12 : 0, cur.current.z);
+    g.rotation.y = cur.current.facing;
+    remoteRenderPos.set(player.id, { x: cur.current.x, z: cur.current.z, facing: cur.current.facing });
+
+    const j = joints;
+    const set = (ref: React.RefObject<THREE.Group>, axis: 'x', v: number) => {
+      if (ref.current) ref.current.rotation[axis] = v;
+    };
+    if (target.state === 'riding') {
+      // Tư thế ngồi lái (cùng số với Player): hông -1,25/-1,35, gối
+      // 1,15/1,25, vai -0,95, khuỷu -0,55.
+      set(j.legL, 'x', -1.25);
+      set(j.legR, 'x', -1.35);
+      set(j.kneeL, 'x', 1.15);
+      set(j.kneeR, 'x', 1.25);
+      set(j.armL, 'x', -0.95);
+      set(j.armR, 'x', -0.95);
+      set(j.elbowL, 'x', -0.55);
+      set(j.elbowR, 'x', -0.55);
+      set(j.body, 'x', 0.08);
+    } else if (target.state === 'walking' || target.state === 'running') {
+      const speed = target.state === 'running' ? 11 : 8;
+      const amp = target.state === 'running' ? 0.75 : 0.55;
+      phase.current += dt * speed;
+      const s = Math.sin(phase.current);
+      set(j.legL, 'x', s * amp);
+      set(j.legR, 'x', -s * amp);
+      set(j.kneeL, 'x', Math.max(0, -s) * amp * 0.9);
+      set(j.kneeR, 'x', Math.max(0, s) * amp * 0.9);
+      set(j.armL, 'x', -s * amp * 0.7);
+      set(j.armR, 'x', s * amp * 0.7);
+      set(j.elbowL, 'x', -0.3);
+      set(j.elbowR, 'x', -0.3);
+      set(j.body, 'x', 0.06);
+    } else {
+      // Đứng yên: thở nhẹ, tay hơi gập (như NPC).
+      const t = performance.now() / 1000;
+      set(j.legL, 'x', 0);
+      set(j.legR, 'x', 0);
+      set(j.kneeL, 'x', 0.05);
+      set(j.kneeR, 'x', 0.05);
+      set(j.armL, 'x', 0.09);
+      set(j.armR, 'x', -0.05);
+      set(j.elbowL, 'x', -0.3);
+      set(j.elbowR, 'x', -0.42);
+      if (j.body.current) {
+        j.body.current.scale.y = 1 + Math.sin(t * 1.4) * 0.008;
+        j.body.current.rotation.x = 0;
+      }
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={[player.x, 0, player.z]}>
+      <group rotation={[0, player.facing, 0]}>
+        <HumanFigure
+          variant="polo"
+          shirt={player.color}
+          shirtDark={darken(player.color)}
+          pants="#2B2F36"
+          shoe="#F5F5F5"
+          shoeSole="#1A1A1A"
+          hairStyle="short"
+          backpack
+          backpackColors={{ pack: '#2A2E33', packLight: '#3A3E44', packZip: '#1A1A1A' }}
+          joints={joints}
+        />
+        {player.state === 'riding' && <SimpleBike color="#166534" />}
+      </group>
+      {/* Billboard ngoài nhóm xoay — chữ luôn đọc xuôi (như Npc.tsx). */}
+      <Billboard position={[0, 1.95, 0]}>
+        <mesh>
+          <planeGeometry args={[1.6, 0.2]} />
+          <meshStandardMaterial map={tagTex} transparent roughness={0.8} side={THREE.DoubleSide} />
+        </mesh>
+      </Billboard>
+    </group>
+  );
+}
+
+export default function RemotePlayers() {
+  const [, force] = useReducer((x: number) => x + 1, 0);
+  const playersRef = useRef<RemotePlayer[]>([]);
+
+  useEffect(() => {
+    const unsub = multiplayer.subscribe((snap) => {
+      const next = snap.players;
+      const prev = playersRef.current;
+      // Chỉ re-render khi danh sách người (id) thay đổi — tin move chỉ
+      // đổi tọa độ trong object cũ, useFrame đọc trực tiếp, không cần
+      // re-render.
+      const same =
+        prev.length === next.length && prev.every((p, i) => p.id === next[i]?.id);
+      playersRef.current = next;
+      if (!same) force();
+    });
+    playersRef.current = multiplayer.snapshot.players;
+    // Vẽ ngay những người ĐÃ ở trong phòng khi scene mount: welcome có
+    // thể tới trước khi CampusScene tải xong (chunk dynamic + SwiftShader
+    // chậm) — nếu chỉ trông vào emit thì không còn sự kiện nào kích hoạt
+    // re-render nữa và người đó không bao giờ hiện (đã gặp: B vào sau,
+    // thấy A trong snapshot nhưng không thấy avatar của A).
+    force();
+    // Hook debug cho test: vị trí render thực tế của người chơi khác.
+    (window as unknown as { __bkhnMpRender?: () => Record<string, { x: number; z: number; facing: number }> }).__bkhnMpRender = () =>
+      Object.fromEntries(remoteRenderPos);
+    return unsub;
+  }, []);
+
+  return (
+    <group>
+      {playersRef.current.map((p) => (
+        <RemotePlayerView key={p.id} player={p} />
+      ))}
+    </group>
+  );
+}

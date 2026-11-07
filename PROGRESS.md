@@ -407,3 +407,42 @@ tsc exit 0; build PASS; engine **45/45**; leg-sim **4/4**; verify-step4fix **24/
 
 ### Vận hành đợt 4
 - Làm trực tiếp, không spawn worker con. Lệnh nền dài bị kill SIGTERM 1 lần (chụp bổ sung 3/4 + mái, chết ở ảnh thứ 3 — đã chụp lại ảnh mái bằng script riêng 1 ảnh). Log test trong workspace (`test-shots/*.log`), không ghi `/tmp`. Chỉ tin file trên đĩa.
+
+## Đợt 5 — Multiplayer: nhiều người cùng vào trường (tên + MSSV) (07/11, XONG + KIỂM CHỨNG, CHƯA deploy/push)
+
+Báo cáo đầy đủ: `docs/round5-multiplayer-report.md`. Yêu cầu user 07/11 16:18 ("quên chưa làm kiểu nhiều người cùng vào web với điền tên, mã số sinh viên rồi, cần connect cloudflare gì không") — đã chốt: CẦN Cloudflare như bên chùa; làm luôn; bảng tên hiện TÊN + MSSV.
+
+### Worker `hust-hsk-rooms` — ĐÃ LIVE
+- Script mới riêng (không dùng chung Worker chùa), account `692d45feec834c9219a6e331393bbc5c`, subdomain `hunganhz179`. URL `wss://hust-hsk-rooms.hunganhz179.workers.dev/ws`, `GET /health`, `GET /api/rooms`. Durable Object class riêng `HskRoom`, binding `HSK_ROOM`, migration v1. Phòng `hsk-1`..`hsk-5`, tối đa 15 người/phòng, vào phòng đầu tiên còn chỗ. Trạng thái phòng chỉ trong bộ nhớ — không lưu tên/MSSV/vị trí vào storage/log; `/api/rooms` chỉ trả số người mỗi phòng.
+- Upload lần đầu 09:28 UTC 07/11 (HTTP 200, deployment `0aa31c49818b4365bfb3e69f8fdcd648`); enable subdomain 200. Kiểm chứng live bằng curl: `/health` → 5 phòng, capacity 15; `/api/rooms` → 5 phòng × 0 người.
+- Env Vercel đã set 07/11: `NEXT_PUBLIC_HUST_MULTIPLAYER_WS_URL = wss://hust-hsk-rooms.hunganhz179.workers.dev/ws` (encrypted, Production + Preview). Frontend có fallback hardcode cùng URL.
+- Protocol: `join {sessionId, name, mssv}` (MSSV 8 chữ số, sai → error), `move {x, z, facing, state}` (idle/walking/running/riding), `state`, `ping`; server trả `welcome {id, roomId, players, count}`, `join`, `leave`, `move`, `state`, `count`, `full`, `error`, `pong`. Kẹp biên x −96..96, z −76..86; tốc độ đi/chạy ≤ 7 m/s, lái ≤ 15 m/s; tên ≤ 30 ký tự, lọc ký tự nguy hiểm; rate limit 20 msg/s; reconnect cùng sessionId thay socket cũ.
+
+### Frontend
+- Mới: `lib/identity.ts` (localStorage `bkhn-identity-v1`, `MSSV_RE = /^\d{8}$/`), `lib/multiplayer.ts` (singleton, reconnect backoff 1 s → 15 s tối đa 10 lần, ping 30 s; move/state không emit React update), `components/three/RemotePlayers.tsx` (HumanFigure polo, màu áo hash từ sessionId — bảng 8 màu, KHÔNG đỏ HUST; bảng tên Billboard ngoài nhóm xoay, "Tên (MSSV)"; nội suy vị trí; tư thế lái + xe đơn giản khi riding; hook debug `window.__bkhnMpRender()`).
+- Sửa: `lib/playerState.ts` (+facing/riding); `Player.tsx` (ghi facing/riding mỗi frame + ghi `playerState.pos` ngay trong teleport/fastTravel/mount/dismount); `CampusScene.tsx` (mount RemotePlayers ngoài sân); `app/page.tsx` (form identity `#identity-name`/`#identity-mssv`, `tryEnter` validate rồi mới vào, mọi điểm vào qua `tryEnter`, `goToMenu` disconnect, cầu nối 100 ms + gửi lại vị trí tối thiểu 2 lần/giây, HUD chip `data-testid="mp-chip"`).
+- KHÔNG đồng bộ điểm/quest/SRS/sổ lỗi/huy hiệu. KHÔNG người chơi giả/điểm giả/bảng giả.
+
+### Bốn lỗi thật đã sửa
+1. Hydration React #425/#418 (identity đọc localStorage ở useState initializer) → khởi tạo rỗng, đọc trong useEffect sau mount.
+2. Teleport không đồng bộ (playerState.pos chỉ cập nhật trong useFrame; SwiftShader chậm) → ghi ngay trong teleport/fastTravel/mount/dismount.
+3. RemotePlayers không vẽ người đã ở trong phòng khi scene mount (welcome tới trước khi chunk tải xong) → `force()` một lần sau khi gán snapshot ở mount.
+4. Nội suy đóng băng khi target idle (`SPEED_CAP['idle'] = 0`) → tốc độ tối thiểu 4,5 m/s; cầu nối chỉ gửi khi đổi nên server kẹt ở bước kẹp đầu tiên sau teleport → gửi lại vị trí tối thiểu 2 lần/giây; kẹp delta nội suy 0,1 s → 0,5 s/khung.
+
+### Kiểm chứng
+- Protocol qua shim `test/mp-protocol.cjs`: **18/18 PASS**.
+- Hai client qua shim `test/mp-client.cjs --shim` run 14: **15/15 PASS, EXIT=0** (2026-11-07 10:55 UTC). A "Hải Anh (20226010)" + B "Minh (20226011)" cùng phòng hsk-1; HUD cả hai "Phòng hsk-1 · 2 người"; B thấy A đi bộ/hội tụ teleport; vị trí render thực tế lúc chụp ảnh: B thấy A đúng (-68,22), A thấy B đúng (-72,22); 0 console/page errors. Ảnh `test-shots/r5-mp-two-players.png`, `r5-mp-two-players-a.png` (+ crop bảng tên `r5-crop-b-tag4.png`, `r5-crop-a-tag5.png`), `r5-mp-entry.png`.
+- Offline `test/mp-offline.cjs --shim`: **5/5 PASS** (chặn WS → offline, chơi một mình, chip "Chơi một mình (mất kết nối)", không người chơi giả).
+- **Live Worker thật (`--real`) CHƯA ĐẠT:** Chromium qua egress proxy lỗi `Establishing a tunnel via proxy server failed` (proxy VM không cho mở tunnel WebSocket tới workers.dev; curl HTTPS vẫn OK; Node ws trực tiếp EPROTO, qua proxy timeout). Cả hai client rơi về chơi một mình đúng thiết kế, 0 page errors. **Chưa chứng minh hai client thật gặp nhau trên Worker thật — cần parent kiểm chứng qua trình duyệt managed hoặc user trên điện thoại thật.**
+- Hồi quy trên bản build production cuối: tsc exit 0; build PASS (First Load JS 239 kB); engine **45/45**; leg-sim **4/4**; walk-to-library-door **PASS** (30 m, 7,5 s, 0 chạm); fast-travel-check **19/20** (19 chức năng PASS; duy nhất `[console-clean]` FAIL vì lỗi console WS do proxy VM — không phải lỗi sản phẩm); pinyin-input **11/11** (0 page error); verify-step4fix **24/24** (0 page error); play-all-quests **ĐANG CHẠY — cập nhật sau**.
+- Test hồi quy cũ cập nhật theo identity: `verify-step4fix` (enterFresh + C-fix seed + E-fix mobile), `fast-travel-check`, `play-all-quests`, `pinyin-input` — điền form tên/MSSV nếu hiện trước khi bấm `#enter-campus`.
+- Dọn dẹp: xóa `test/r5-diag-*.cjs` + crop thừa (giữ `r5-crop-b-tag4.png`, `r5-crop-a-tag5.png`). `out/` là bản production cuối (fallback URL Worker thật đã bake sẵn).
+
+### Còn tồn / chưa xác minh (đợt 5)
+- Kiểm chứng live hai client thật trên Worker thật (xem trên) — việc số 1 còn mở.
+- Console errors WS trong VM ở mọi test trình duyệt trên bản production (proxy chặn tunnel) — rào cản môi trường; trên máy thật mất mạng console cũng có các lỗi này (trình duyệt tự log lỗi mạng WS), app vẫn chơi một mình bình thường.
+- Chưa xác minh trên điện thoại/máy thật: FPS multiplayer, người khác di chuyển/lái xe ở 60 fps, gõ tên/MSSV bằng IME thật, HUD phòng + số người trên màn hẹp.
+- Cùng tên gõ giống nhau thì server coi là 2 người khác nhau (phân biệt bằng sessionId). Không chống gian lận mạnh (client tự báo vị trí; server chỉ kẹp biên + tốc độ). Trong phòng học không thấy người khác (theo thiết kế).
+
+### Vận hành đợt 5
+- Làm trực tiếp, không spawn worker con. KHÔNG deploy Vercel, KHÔNG tự push GitHub (parent push file text qua connector sau khi xong). KHÔNG chạm hoc-hsk / chua-online (chỉ ĐỌC worker chùa làm mẫu). Log test trong workspace (`test-shots/*.log`), không ghi /tmp. Chỉ tin file trên đĩa.

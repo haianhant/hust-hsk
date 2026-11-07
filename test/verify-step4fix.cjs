@@ -69,6 +69,11 @@ const rectsOverlap = (a, b) => a && b && a.x < b.x + b.w && b.x < a.x + a.w && a
 async function enterFresh(page) {
   await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForSelector('#enter-campus', { timeout: 30000 });
+  // Đợt 5: vào trường cần tên + MSSV — điền form nếu hiện (chưa lưu).
+  if (await page.$('#identity-name')) {
+    await page.fill('#identity-name', 'Kiểm tra');
+    await page.fill('#identity-mssv', '20226010');
+  }
   await page.click('#enter-campus');
   await page.waitForFunction(() => window.__bkhn, { timeout: 90000 });
   await sleep(2500);
@@ -391,6 +396,8 @@ async function checkResultButtons(page, run, id) {
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
       await ctx.addInitScript((snap) => {
         window.localStorage.setItem('bkhn-progress-v1', snap);
+        // Đợt 5: vào trường cần tên + MSSV — seed sẵn để bấm bài là vào.
+        window.localStorage.setItem('bkhn-identity-v1', JSON.stringify({ name: 'Kiểm tra', mssv: '20226010' }));
       }, seed);
       const page = await ctx.newPage();
       attachErrorHooks(page);
@@ -440,7 +447,12 @@ async function checkResultButtons(page, run, id) {
       const page = await ctx.newPage();
       attachErrorHooks(page);
       await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      await page.waitForSelector('#enter-campus', { timeout: 30000 });
+      await page.waitForSelector('#enter-campus', { timeout: 60000 });
+      // Đợt 5: vào trường cần tên + MSSV — điền form nếu hiện (chưa lưu).
+      if (await page.$('#identity-name')) {
+        await page.fill('#identity-name', 'Kiểm tra');
+        await page.fill('#identity-mssv', '20226010');
+      }
       await page.click('#enter-campus');
       await page.waitForFunction(() => window.__bkhn, { timeout: 90000 });
       await sleep(3000);

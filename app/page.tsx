@@ -45,6 +45,8 @@ import {
   todayKey,
 } from '../lib/learn/store';
 import { hasChineseVoice, speak, stopSpeaking } from '../lib/learn/speech';
+import { getSessionId, loadIdentity, saveIdentity, validateIdentity, type Identity } from '../lib/identity';
+import { multiplayer, type MultiplayerSnapshot, type RemoteState } from '../lib/multiplayer';
 import { getEarnedGlobalBadgeIds, GLOBAL_BADGES } from '../lib/learn/badges';
 import { getNextSuggestion } from '../lib/learn/suggest';
 import QuestPanel, { type QuestAnswer } from '../components/learn/QuestPanel';
@@ -425,6 +427,29 @@ export default function HomePage() {
   const [riding, setRiding] = useState(false);
   const [bikeSpeed, setBikeSpeed] = useState(0);
   const lastBikeNoticeRef = useRef(0);
+  // Đợt 5 multiplayer — tên + MSSV nhập ở màn hình vào (lưu localStorage,
+  // chỉ nhập một lần); snapshot phòng để HUD hiện số người thật.
+  const [savedIdentity, setSavedIdentity] = useState<Identity | null>(null);
+  const [identityName, setIdentityName] = useState<string>('');
+  const [identityMssv, setIdentityMssv] = useState<string>('');
+  const [identityError, setIdentityError] = useState<string | null>(null);
+  const [editingIdentity, setEditingIdentity] = useState<boolean>(true);
+  const [mpSnap, setMpSnap] = useState<MultiplayerSnapshot>(() => multiplayer.snapshot);
+
+  // Đợt 5 — đọc identity đã lưu SAU khi mount (client-only). Đọc
+  // localStorage trong useState initializer làm lần render đầu ở client
+  // khác bản prerender ở server (form vs dòng đã lưu) → lỗi hydration
+  // React #425/#418. Trước khi effect chạy, màn vào hiện form trống
+  // (giống hệt bản server), rồi đổi sang dòng đã lưu nếu có.
+  useEffect(() => {
+    const saved = loadIdentity();
+    if (saved) {
+      setSavedIdentity(saved);
+      setIdentityName(saved.name);
+      setIdentityMssv(saved.mssv);
+      setEditingIdentity(false);
+    }
+  }, []);
   const [noVoice, setNoVoice] = useState(false);
   // Đã đóng banner thiếu giọng trong phiên: chặn setNoVoice(true) gọi lại
   // (lỗi TTS mỗi lần đọc / kiểm tra lại khi vào trường) để banner không tự
@@ -612,6 +637,51 @@ export default function HomePage() {
     window.addEventListener('bkhn:classroom', onMode);
     return () => window.removeEventListener('bkhn:classroom', onMode);
   }, []);
+
+  // Đợt 5 multiplayer — theo dõi snapshot phòng cho HUD (chỉ re-render
+  // khi trạng thái/phòng/số người đổi; tin move không emit — xem
+  // lib/multiplayer.ts). Test hook __bkhnMp() trả snapshot hiện tại.
+  useEffect(() => {
+    const unsub = multiplayer.subscribe(setMpSnap);
+    (window as unknown as { __bkhnMp?: () => MultiplayerSnapshot }).__bkhnMp = () =>
+      multiplayer.snapshot;
+    return unsub;
+  }, []);
+
+  // Đợt 5 multiplayer — cầu nối vị trí: gửi lên server 10 lần/giây khi
+  // vị trí/hướng/trạng thái đổi; không gửi khi trong phòng học (người
+  // khác chỉ thấy nhau ngoài sân). Điểm/quest/SRS không bao giờ gửi.
+  // Ngoài ra gửi lại vị trí hiện tại tối thiểu 2 lần/giây kể cả khi
+  // đứng yên: server kẹp mỗi tin move theo tốc độ tối đa kể từ lần cập
+  // nhật trước, nên sau teleport/dịch chuyển nhanh cần nhiều tin liên
+  // tiếp mới đuổi kịp điểm đến — chỉ gửi khi đổi thì server kẹt ở bước
+  // kẹp đầu tiên (đã gặp: B thấy A dừng ở (-72,6, 11,9) thay vì (-70,14)).
+  useEffect(() => {
+    if (!entered) return;
+    let lastSent = { x: 0, z: 0, facing: 0, state: 'idle' as RemoteState };
+    let lastSentAt = 0;
+    const id = setInterval(() => {
+      if (playerState.inClassroom) return;
+      const state: RemoteState = bikeState.riding
+        ? 'riding'
+        : playerState.moving
+          ? playerInput.run
+            ? 'running'
+            : 'walking'
+          : 'idle';
+      const { x, z } = playerState.pos;
+      const facing = playerState.facing;
+      const moved = Math.hypot(x - lastSent.x, z - lastSent.z) > 0.05;
+      const turned = Math.abs(facing - lastSent.facing) > 0.05;
+      const stale = Date.now() - lastSentAt > 500;
+      if (moved || turned || state !== lastSent.state || stale) {
+        multiplayer.sendMove(x, z, facing, state);
+        lastSent = { x, z, facing, state };
+        lastSentAt = Date.now();
+      }
+    }, 100);
+    return () => clearInterval(id);
+  }, [entered]);
 
   // --- Bắt đầu / chơi lại quest (mặc định tuyến bài 10 nhóm 1) ----------------
   const startQuest = useCallback((questId: string = FIRST_LESSON_QUEST.id) => {
@@ -906,6 +976,9 @@ export default function HomePage() {
     }
     setInClassroom(false);
     setEntered(false);
+    // Đợt 5 multiplayer — về menu là rời phòng: avatar biến khỏi trường
+    // người khác ngay, không để lại bóng đứng yên ở vị trí cũ.
+    multiplayer.disconnect();
   }, []);
 
   // --- Xử lý phím E / nút Tương tác -------------------------------------------------
@@ -1013,6 +1086,29 @@ export default function HomePage() {
       }
     },
     [],
+  );
+
+  // Đợt 5 multiplayer — vào trường: bắt buộc có tên + MSSV hợp lệ mới
+  // vào được. Lưu identity (chỉ nhập một lần) rồi nối WebSocket với tên
+  // + MSSV đó; nếu Worker không tới được thì vẫn vào trường chơi một
+  // mình (multiplayer tự báo offline, HUD ghi rõ).
+  const tryEnter = useCallback(
+    (resumeQuest: boolean) => {
+      const err = validateIdentity(identityName, identityMssv);
+      if (err) {
+        setIdentityError(err);
+        setEditingIdentity(true);
+        return;
+      }
+      const identity: Identity = { name: identityName.trim(), mssv: identityMssv.trim() };
+      saveIdentity(identity);
+      setSavedIdentity(identity);
+      setIdentityError(null);
+      setEditingIdentity(false);
+      multiplayer.connect(getSessionId(), identity.name, identity.mssv);
+      enterCampus(resumeQuest);
+    },
+    [identityName, identityMssv, enterCampus],
   );
 
   const toggleSound = useCallback(() => {
@@ -1145,11 +1241,69 @@ export default function HomePage() {
           Dự án học tập độc lập, tái hiện Bách khoa Hà Nội; không phải website chính thức của Đại học. Campus được cô
           đọng, không phải digital twin chính xác.
         </p>
+        {/* Đợt 5 multiplayer — tên + MSSV: hỏi một lần, lưu trên máy này.
+            Đã lưu thì chỉ hiện gọn + nút Đổi; chưa có thì hiện form nhập. */}
+        {savedIdentity && !editingIdentity ? (
+          <div className="flex flex-col items-center gap-1 rounded-2xl border border-[#1c5c3a]/20 bg-white/70 px-5 py-3">
+            <p className="text-base font-semibold text-[#1c2b1f]">
+              👤 {savedIdentity.name} ({savedIdentity.mssv})
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setIdentityName(savedIdentity.name);
+                setIdentityMssv(savedIdentity.mssv);
+                setEditingIdentity(true);
+              }}
+              className="text-sm font-semibold text-[#1c5c3a] underline hover:text-[#16492e]"
+            >
+              Đổi tên/MSSV
+            </button>
+          </div>
+        ) : (
+          <div className="w-full max-w-md rounded-2xl border border-[#1c5c3a]/20 bg-white/70 px-5 py-4 text-left">
+            <p className="text-base font-bold text-[#1c2b1f]">👤 Bạn là ai trong trường?</p>
+            <p className="mt-1 text-sm text-[#1c2b1f]/60">
+              Tên + MSSV hiện trên bảng tên của bạn — bạn khác trong trường sẽ thấy. Chỉ nhập một lần, lưu trên máy
+              này.
+            </p>
+            <label className="mt-3 block text-sm font-semibold text-[#1c2b1f]">
+              Tên của bạn
+              <input
+                id="identity-name"
+                type="text"
+                value={identityName}
+                maxLength={30}
+                placeholder="vd Hải Anh"
+                onChange={(e) => setIdentityName(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-[#1c5c3a]/30 px-3 py-2 text-base font-normal outline-none focus:border-[#1c5c3a]"
+              />
+            </label>
+            <label className="mt-2 block text-sm font-semibold text-[#1c2b1f]">
+              MSSV (8 chữ số)
+              <input
+                id="identity-mssv"
+                type="text"
+                inputMode="numeric"
+                value={identityMssv}
+                maxLength={8}
+                placeholder="vd 20226010"
+                onChange={(e) => setIdentityMssv(e.target.value.replace(/[^0-9]/g, '').slice(0, 8))}
+                className="mt-1 w-full rounded-xl border border-[#1c5c3a]/30 px-3 py-2 text-base font-normal outline-none focus:border-[#1c5c3a]"
+              />
+            </label>
+            {identityError && (
+              <p role="alert" className="mt-2 text-sm font-semibold text-[#A54432]">
+                {identityError}
+              </p>
+            )}
+          </div>
+        )}
         <div className="flex flex-col items-center gap-3 sm:flex-row">
           <button
             id="enter-campus"
             type="button"
-            onClick={() => enterCampus(false)}
+            onClick={() => tryEnter(false)}
             className="rounded-full bg-[#1c5c3a] px-8 py-3 text-lg font-semibold text-white shadow-lg transition hover:bg-[#16492e] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1c5c3a] focus-visible:ring-offset-2"
           >
             Vào trường
@@ -1158,7 +1312,7 @@ export default function HomePage() {
             <button
               id="continue-learning"
               type="button"
-              onClick={() => enterCampus(true)}
+              onClick={() => tryEnter(true)}
               className="rounded-full bg-[#A54432] px-8 py-3 text-lg font-semibold text-white shadow-lg transition hover:bg-[#8A3828] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A54432] focus-visible:ring-offset-2"
             >
               Tiếp tục học
@@ -1179,7 +1333,7 @@ export default function HomePage() {
             completedQuests={progress?.completedQuests ?? {}}
             onPick={(questId) => {
               setLessonsOpen(false);
-              enterCampus(true);
+              tryEnter(true);
               startQuest(questId);
             }}
             onClose={() => setLessonsOpen(false)}
@@ -1199,7 +1353,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => {
-                    enterCampus(true);
+                    tryEnter(true);
                     openHandbook('calendar');
                   }}
                   className="rounded-full bg-[#2E7D32] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#256B29]"
@@ -1211,7 +1365,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => {
-                    enterCampus(true);
+                    tryEnter(true);
                     startQuest(suggestion.questId as string);
                   }}
                   className="rounded-full bg-[#A54432] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#8A3828]"
@@ -1259,6 +1413,18 @@ export default function HomePage() {
           <div className="w-fit rounded-full bg-[#A54432]/90 px-4 py-1.5 text-sm font-bold text-white backdrop-blur-sm">
             ⭐ {progress?.points ?? 0} điểm
             {progress?.streak && progress.streak.count > 0 ? ` · 🔥 ${progress.streak.count} ngày` : ''}
+          </div>
+          {/* Đợt 5 multiplayer — phòng + số người THẬT trong phòng; mất
+              kết nối thì ghi rõ đang chơi một mình, không báo số giả. */}
+          <div
+            data-testid="mp-chip"
+            className="w-fit rounded-full bg-black/50 px-4 py-1.5 text-sm font-semibold text-white backdrop-blur-sm"
+          >
+            {mpSnap.status === 'online'
+              ? `👥 Phòng ${mpSnap.roomId ?? '—'} · ${mpSnap.count} người`
+              : mpSnap.status === 'connecting'
+                ? '👥 Đang kết nối…'
+                : '👥 Chơi một mình (mất kết nối)'}
           </div>
           {/* Đợt 3 giai đoạn 4 — tốc độ xe khi đang lái (tối đa 14 m/s). */}
           {riding && (

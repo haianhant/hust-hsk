@@ -70,6 +70,11 @@ const getPos = (page) => page.evaluate(() => window.__bkhn.getPos());
 async function enterFresh(page) {
   await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForSelector('#enter-campus', { timeout: 30000 });
+  // Đợt 5: vào trường cần tên + MSSV — điền form nếu hiện (chưa lưu).
+  if (await page.$('#identity-name')) {
+    await page.fill('#identity-name', 'Kiểm tra');
+    await page.fill('#identity-mssv', '20226010');
+  }
   await page.click('#enter-campus');
   await page.waitForFunction(() => window.__bkhn, { timeout: 90000 });
   await sleep(2500);
@@ -208,6 +213,12 @@ async function main() {
       // Nhãn tên Minh: chụp từ 2 góc (góc cũ từng đọc ngược "dniM").
       await pageB.reload({ waitUntil: 'domcontentloaded' });
       await pageB.waitForSelector('#enter-campus', { timeout: 30000 });
+      // Đợt 5: identity đã lưu (localStorage còn nguyên) nên form không
+      // hiện — chỉ điền nếu hiện.
+      if (await pageB.$('#identity-name')) {
+        await pageB.fill('#identity-name', 'Kiểm tra');
+        await pageB.fill('#identity-mssv', '20226010');
+      }
       await pageB.click('#enter-campus');
       await pageB.waitForFunction(() => window.__bkhn, { timeout: 90000 });
       await sleep(2500);

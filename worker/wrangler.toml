@@ -1,0 +1,13 @@
+name = "hust-hsk-rooms"
+main = "dist/worker.js"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[durable_objects]
+bindings = [
+  { name = "HSK_ROOM", class_name = "HskRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HskRoom"]
