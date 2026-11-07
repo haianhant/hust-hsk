@@ -440,7 +440,9 @@ function C1Fountain() {
   );
 }
 
-// --- Hội trường / Nhà C2 (Phía bắc Quảng trường Trần Đại Nghĩa & Tượng đài) ---
+// --- Nhà C2 (VP Đoàn Thanh niên C2-208, VP Đảng ủy C2-203 & Hội trường C2) ---
+// Theo Bản đồ Bách Khoa (khuon-vien-truong.png): Nhà C2 là khối nhà dọc Bắc–Nam
+// nằm ở phía Tây vườn hoa C1, ngay phía Bắc của Nhà C9 (center: -86, -22; 7.5 × 15 m).
 function drawC2Sign(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = '#F5F2EB';
   ctx.fillRect(0, 0, w, h);
@@ -450,45 +452,50 @@ function drawC2Sign(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = '#B02A24';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '900 68px Arial, sans-serif';
-  ctx.fillText('HỘI TRƯỜNG C2', w / 2, h * 0.52);
+  ctx.font = '900 44px Arial, sans-serif';
+  ctx.fillText('NHÀ C2 · VP ĐOÀN TN & ĐẢNG ỦY', w / 2, h * 0.52);
 }
 
 function C2Building() {
-  // Đặt ở (83, 0, -27), phía bắc TDN_SQUARE (z -18..6), không chạm đường hay collider nào
+  // Đặt ở (-86, 0, -22), trục dài theo hướng Bắc–Nam (size 7.5 × 15 m), mặt chính hướng Đông (+X) ra vườn hoa C1
   return (
-    <group position={[83, 0, -27]}>
-      {/* Khối hội trường chính 16 × 10 m, cao 7.6 m */}
-      <mesh position={[0, 3.8, 0]} castShadow receiveShadow>
-        <boxGeometry args={[16, 7.6, 10]} />
-        <meshStandardMaterial color="#F2EFE6" roughness={0.88} />
+    <group position={[-86, 0, -22]} rotation-y={Math.PI / 2}>
+      {/* Khối nhà C2 15 × 7.5 m (sau khi xoay 90°: dọc Bắc–Nam 15 m, ngang Đông–Tây 7.5 m), cao 7.8 m */}
+      <mesh position={[0, 3.9, 0]} castShadow receiveShadow>
+        <boxGeometry args={[15, 7.8, 7.5]} />
+        <meshStandardMaterial color="#D9B38C" roughness={0.86} />
       </mesh>
-      {/* Mái vòm cong đặc trưng của Hội trường C2 */}
-      <mesh position={[0, 7.6, 0]} rotation={[0, 0, Math.PI / 2]} scale={[0.32, 1, 1]} castShadow>
-        <cylinderGeometry args={[5.2, 5.2, 16.4, 24, 1, false, 0, Math.PI]} />
-        <meshStandardMaterial color="#D6CFC2" roughness={0.85} />
+      {/* Chân đế sẫm màu */}
+      <mesh position={[0, 0.45, 0]} receiveShadow>
+        <boxGeometry args={[15.12, 0.9, 7.62]} />
+        <meshStandardMaterial color="#A67F58" roughness={0.9} />
       </mesh>
-      {/* Hàng cột hiên mặt nam (quay ra Quảng trường Trần Đại Nghĩa & Tượng đài) */}
-      {[-6, -3, 0, 3, 6].map((cx) => (
-        <mesh key={`c2-col-${cx}`} position={[cx, 3.4, 5.2]} castShadow>
-          <boxGeometry args={[0.45, 6.8, 0.45]} />
-          <meshStandardMaterial color="#FFFFFF" roughness={0.82} />
+      {/* Mái vòm/phẳng đặc trưng của Nhà C2 */}
+      <mesh position={[0, 7.8, 0]} rotation={[0, 0, Math.PI / 2]} scale={[0.28, 1, 1]} castShadow>
+        <cylinderGeometry args={[3.9, 3.9, 15.4, 20, 1, false, 0, Math.PI]} />
+        <meshStandardMaterial color="#B89470" roughness={0.85} />
+      </mesh>
+      {/* Hàng cột hiên mặt Đông (quay ra Quảng trường / Vườn hoa C1) */}
+      {[-5.5, -2.75, 0, 2.75, 5.5].map((cx) => (
+        <mesh key={`c2-col-${cx}`} position={[cx, 3.5, 3.95]} castShadow>
+          <boxGeometry args={[0.42, 7.0, 0.42]} />
+          <meshStandardMaterial color="#FAF6EE" roughness={0.82} />
         </mesh>
       ))}
-      {/* Mái hiên sảnh mặt nam */}
-      <mesh position={[0, 4.2, 5.6]} castShadow>
-        <boxGeometry args={[14.5, 0.35, 1.4]} />
-        <meshStandardMaterial color="#E5DEC9" roughness={0.85} />
+      {/* Mái hiên sảnh mặt Đông */}
+      <mesh position={[0, 4.1, 4.35]} castShadow>
+        <boxGeometry args={[13.6, 0.32, 1.3]} />
+        <meshStandardMaterial color="#EDE4D3" roughness={0.85} />
       </mesh>
       {/* Cửa kính lớn tầng 1 & tầng 2 */}
-      {[-4.5, -1.5, 1.5, 4.5].map((wx) => (
+      {[-4.2, -1.4, 1.4, 4.2].map((wx) => (
         <group key={`c2-win-${wx}`}>
-          <mesh position={[wx, 1.8, 5.03]}>
-            <planeGeometry args={[2.1, 2.6]} />
+          <mesh position={[wx, 1.8, 3.78]}>
+            <planeGeometry args={[1.95, 2.5]} />
             <meshStandardMaterial color="#3A5368" roughness={0.35} metalness={0.2} />
           </mesh>
-          <mesh position={[wx, 5.5, 5.03]}>
-            <planeGeometry args={[2.1, 1.8]} />
+          <mesh position={[wx, 5.5, 3.78]}>
+            <planeGeometry args={[1.95, 1.75]} />
             <meshStandardMaterial color="#4A657A" roughness={0.35} metalness={0.2} />
           </mesh>
         </group>
@@ -498,8 +505,8 @@ function C2Building() {
         canvasW={512}
         canvasH={128}
         draw={drawC2Sign}
-        size={[3.8, 0.95]}
-        position={[0, 4.9, 5.08]}
+        size={[4.2, 0.95]}
+        position={[0, 4.8, 3.83]}
         transparent={false}
       />
     </group>

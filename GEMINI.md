@@ -12,6 +12,8 @@
   - Toàn bộ chữ, biển hiệu, mặt đồng hồ, quốc kỳ và vân bề mặt (procedural textures) phải sinh bằng **Canvas 2D (`THREE.CanvasTexture`)** qua `components/three/TextPlate.tsx` hoặc helper cục bộ có seed cố định (`mulberry32` / LCG).
 
 ## 2. Nguyên tắc Tái hiện Đại học Bách khoa Hà Nội (HUST Authenticity)
+- **Bắt buộc lấy Bản đồ Khuôn viên ĐHBK Hà Nội làm chuẩn (Official Campus Map Ground Truth):**
+  - Mọi việc lập kế hoạch (`plan`), quy hoạch phân khu, định vị tọa độ `(x, z)`, hướng mặt tiền (`facing`) và hình thái mặt bằng (`footprint`) của các tòa nhà, giảng đường, cổng trường, hồ nước, sân vận động **bắt buộc** phải đối chiếu và bám sát **Bản đồ Khuôn viên chính thức của Đại học Bách khoa Hà Nội** (kết hợp ảnh vệ tinh thực tế). Tuyệt đối không tự ý đặt vị trí công trình ngẫu nhiên trái với sơ đồ khuôn viên trường.
 - **Mốc không gian:** Khuôn viên HUST **trước đợt di dời cổng Parabol tháng 11/2026** (Cổng Parabol nằm tại biên đường Giải Phóng).
 - **Nhận diện bằng kiến trúc thật, không chỉ bằng biển tên:**
   - **Cổng Parabol:** Dải băng bê tông phẳng uốn parabol (không phải ống tròn), chân chôn trực tiếp xuống đất (không đặt trên bệ cao đồ sộ), có gờ chia khoang và 6 huy hiệu tròn nổi trên cả hai mặt đông/tây, nhà gác trắng và cổng xếp sắt đen.

@@ -5,8 +5,8 @@
 // <Classroom/> thay cho Ground/Landmarks (+ NPC Minh chỉ ở campus).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { useEffect, useMemo, useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import Ground from './Ground';
 import Landmarks from './Landmarks';
@@ -107,8 +107,19 @@ const ATMOSPHERE: Record<
   },
 };
 
-// --- Bầu trời sao & mặt trăng/mặt trời chiều + đèn sân trường ban đêm ----------
+// --- Bầu trời mây 3D trôi nhẹ + sao & mặt trăng/mặt trời chiều + đèn sân trường ---
+const CLOUD_CLUSTERS: Array<{ x: number; y: number; z: number; scale: number; speed: number }> = [
+  { x: -110, y: 115, z: -140, scale: 1.2, speed: 0.9 },
+  { x: -35, y: 128, z: -165, scale: 1.45, speed: 0.7 },
+  { x: 55, y: 118, z: -135, scale: 1.15, speed: 1.0 },
+  { x: 135, y: 122, z: -110, scale: 1.35, speed: 0.8 },
+  { x: -95, y: 120, z: 125, scale: 1.25, speed: 0.85 },
+  { x: 25, y: 130, z: 145, scale: 1.5, speed: 0.65 },
+  { x: 120, y: 116, z: 115, scale: 1.1, speed: 0.95 },
+];
+
 function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
+  const cloudsRef = useRef<THREE.Group>(null!);
   const starGeo = useMemo(() => {
     const g = new THREE.BufferGeometry();
     const count = 260;
@@ -132,68 +143,111 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
 
   useEffect(() => () => starGeo.dispose(), [starGeo]);
 
-  if (timeOfDay === 'day') return null;
+  useFrame(({ clock }) => {
+    if (!cloudsRef.current) return;
+    const t = clock.getElapsedTime();
+    cloudsRef.current.position.x = Math.sin(t * 0.03) * 14;
+  });
+
+  const cloudColor =
+    timeOfDay === 'day' ? '#F8FBFF' : timeOfDay === 'sunset' ? '#FFD2B3' : '#2C3E5A';
 
   return (
     <group>
-      {/* Đĩa mặt trời hoàng hôn hướng tây (phía cổng Parabol / đường Giải Phóng) */}
-      {timeOfDay === 'sunset' && (
-        <mesh position={[-240, 68, 25]}>
-          <sphereGeometry args={[14, 24, 20]} />
-          <meshBasicMaterial color="#FFB067" fog={false} />
-        </mesh>
-      )}
+      {/* Các cụm mây 3D xốp nhẹ trôi chậm trên bầu trời Hà Nội */}
+      <group ref={cloudsRef}>
+        {CLOUD_CLUSTERS.map((c, idx) => (
+          <group key={`cloud-${idx}`} position={[c.x, c.y, c.z]} scale={c.scale}>
+            <mesh position={[0, 0, 0]} scale={[1.8, 0.65, 1.1]}>
+              <sphereGeometry args={[9, 14, 10]} />
+              <meshBasicMaterial color={cloudColor} transparent opacity={timeOfDay === 'night' ? 0.35 : 0.82} fog={false} />
+            </mesh>
+            <mesh position={[-8, -1.5, 2]} scale={[1.3, 0.55, 0.95]}>
+              <sphereGeometry args={[7.5, 12, 10]} />
+              <meshBasicMaterial color={cloudColor} transparent opacity={timeOfDay === 'night' ? 0.3 : 0.76} fog={false} />
+            </mesh>
+            <mesh position={[8.5, -1.2, -1.5]} scale={[1.4, 0.58, 1.0]}>
+              <sphereGeometry args={[7.8, 12, 10]} />
+              <meshBasicMaterial color={cloudColor} transparent opacity={timeOfDay === 'night' ? 0.3 : 0.76} fog={false} />
+            </mesh>
+          </group>
+        ))}
+      </group>
 
-      {/* Bầu trời sao + mặt trăng sáng dịu khi về đêm */}
-      {timeOfDay === 'night' && (
+      {timeOfDay !== 'day' && (
         <>
-          <points geometry={starGeo}>
-            <pointsMaterial color="#E8F1FF" size={1.8} sizeAttenuation={false} fog={false} />
-          </points>
-          <mesh position={[-160, 185, -110]}>
-            <sphereGeometry args={[9.5, 24, 20]} />
-            <meshBasicMaterial color="#F4F8FF" fog={false} />
-          </mesh>
+          {/* Đĩa mặt trời hoàng hôn hướng tây (phía cổng Parabol / đường Giải Phóng) */}
+          {timeOfDay === 'sunset' && (
+            <mesh position={[-240, 68, 25]}>
+              <sphereGeometry args={[14, 24, 20]} />
+              <meshBasicMaterial color="#FFB067" fog={false} />
+            </mesh>
+          )}
+
+          {/* Bầu trời sao + mặt trăng sáng dịu khi về đêm */}
+          {timeOfDay === 'night' && (
+            <>
+              <points geometry={starGeo}>
+                <pointsMaterial color="#E8F1FF" size={1.8} sizeAttenuation={false} fog={false} />
+              </points>
+              <mesh position={[-160, 185, -110]}>
+                <sphereGeometry args={[9.5, 24, 20]} />
+                <meshBasicMaterial color="#F4F8FF" fog={false} />
+              </mesh>
+            </>
+          )}
+
+          {/* Hệ thống đèn chiếu sáng khuôn viên Bách khoa khi Hoàng hôn & Đêm */}
+          <pointLight
+            position={[-84, 7.5, 10]}
+            color="#FFD892"
+            intensity={timeOfDay === 'night' ? 2.4 : 1.1}
+            distance={36}
+          />
+          <pointLight
+            position={[-58, 8.5, -42]}
+            color="#FFE0A6"
+            intensity={timeOfDay === 'night' ? 2.8 : 1.2}
+            distance={44}
+          />
+          <pointLight
+            position={[38, 9.0, 18]}
+            color="#FFE0A6"
+            intensity={timeOfDay === 'night' ? 3.0 : 1.3}
+            distance={46}
+          />
+          <pointLight
+            position={[-30, 6.5, -2]}
+            color="#FFD48A"
+            intensity={timeOfDay === 'night' ? 2.0 : 0.9}
+            distance={32}
+          />
+          <pointLight
+            position={[24, 5.5, 36]}
+            color="#FFD892"
+            intensity={timeOfDay === 'night' ? 2.2 : 0.9}
+            distance={40}
+          />
+          <pointLight
+            position={[0, 5.5, -16]}
+            color="#FFD892"
+            intensity={timeOfDay === 'night' ? 2.0 : 0.85}
+            distance={38}
+          />
+          <pointLight
+            position={[112, 8.0, 14]}
+            color="#FFE0A6"
+            intensity={timeOfDay === 'night' ? 2.4 : 1.0}
+            distance={45}
+          />
+          <pointLight
+            position={[132, 11.0, 78]}
+            color="#FFF3C4"
+            intensity={timeOfDay === 'night' ? 3.0 : 1.2}
+            distance={55}
+          />
         </>
       )}
-
-      {/* Hệ thống đèn chiếu sáng khuôn viên Bách khoa khi Hoàng hôn & Đêm */}
-      <pointLight
-        position={[-84, 7.5, 10]}
-        color="#FFD892"
-        intensity={timeOfDay === 'night' ? 2.4 : 1.1}
-        distance={36}
-      />
-      <pointLight
-        position={[-58, 8.5, -42]}
-        color="#FFE0A6"
-        intensity={timeOfDay === 'night' ? 2.8 : 1.2}
-        distance={44}
-      />
-      <pointLight
-        position={[38, 9.0, 18]}
-        color="#FFE0A6"
-        intensity={timeOfDay === 'night' ? 3.0 : 1.3}
-        distance={46}
-      />
-      <pointLight
-        position={[-30, 6.5, -2]}
-        color="#FFD48A"
-        intensity={timeOfDay === 'night' ? 2.0 : 0.9}
-        distance={32}
-      />
-      <pointLight
-        position={[24, 5.5, 36]}
-        color="#FFD892"
-        intensity={timeOfDay === 'night' ? 2.2 : 0.9}
-        distance={40}
-      />
-      <pointLight
-        position={[0, 5.5, -16]}
-        color="#FFD892"
-        intensity={timeOfDay === 'night' ? 2.0 : 0.85}
-        distance={38}
-      />
     </group>
   );
 }
@@ -268,9 +322,9 @@ export default function CampusScene({
           <Landmarks />
           {/* Khối nhà phụ + cây nền + ghế/đèn rìa campus (đợt sửa lần 2 §4).
               Đã gắn ở đây — luồng tích hợp KHÔNG gắn lần 2. */}
-          <BackgroundBuildings />
-          {/* Mở rộng toàn bộ khuôn viên Bách khoa (Wave 2: C7, VDZ, Khu Thể thao, KTX B6–B10, Cổng Nam, Tường rào). */}
-          <CampusExpansion />
+          <BackgroundBuildings timeOfDay={timeOfDay} />
+          {/* Mở rộng toàn bộ khuôn viên Bách khoa theo Bản đồ Bách Khoa (khuon-vien-truong.png). */}
+          <CampusExpansion timeOfDay={timeOfDay} />
           {/* Quần thể sinh viên NPC đi dạo & sinh hoạt trong sân trường. */}
           <AmbientLife />
           {/* NPC bạn đồng hành Minh đứng gần cổng Parabol, gần spawn. */}

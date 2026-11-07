@@ -35,8 +35,8 @@ const PLAZA_Y = 0.015;
 const ROAD_Y = 0.02;
 const JOINT_Y = 0.03;
 
-const GRASS_SIZE: [number, number] = [220, 190];
-const GRASS_CENTER: [number, number, number] = [0, GRASS_Y, 5];
+const GRASS_SIZE: [number, number] = [290, 220];
+const GRASS_CENTER: [number, number, number] = [36, GRASS_Y, 16];
 
 type Rect = { minX: number; maxX: number; minZ: number; maxZ: number };
 
@@ -250,13 +250,15 @@ export default function Ground() {
         />
       </mesh>
 
-      {/* Các lối dạo bộ lát đá nối đường chính vào Tòa C7, VDZ, Khu Thể thao, KTX B6–B10 & Cổng Nam (y = 0,012). */}
+      {/* Hệ thống đường nội bộ & phố Trần Đại Nghĩa, Tạ Quang Bửu, Lê Thanh Nghị theo Bản đồ Bách Khoa (y = 0,012). */}
       {[
-        { cx: -16, cz: -38.5, w: 6, d: 8 }, // Lối vào sảnh Tòa C7
-        { cx: 10, cz: -28.5, w: 4.5, d: 6.5 }, // Lối vào Trung tâm Việt – Đức VDZ
-        { cx: -54, cz: 22.5, w: 4.5, d: 24 }, // Đường nội bộ từ trục Parabol xuống Khu Thể thao & Nhà thi đấu
-        { cx: 61, cz: 34, w: 22, d: 4.5 }, // Đường nội bộ nối Thư viện sang Căng-tin & KTX B6–B10
-        { cx: 38, cz: 69.5, w: 5.5, d: 27 }, // Trục đường phía Nam từ Thư viện ra Cổng Tạ Quang Bửu
+        { cx: 90, cz: -20, w: 6.5, d: 108 }, // Trục Đường Trần Đại Nghĩa (giữa Khu C/D và Khu KTX/B1)
+        { cx: 126, cz: -38, w: 5.5, d: 64 }, // Trục Đường Tạ Quang Bửu chia đôi Khu KTX Bách Khoa
+        { cx: 122, cz: -6, w: 64, d: 5.5 }, // Trục đường ngang nối Cổng Trần Đại Nghĩa sang KTX & Nhà B1
+        { cx: 120, cz: 62, w: 56, d: 5.5 }, // Đường Lê Thanh Nghị giữa Nhà thi đấu TC/Bể bơi và SVĐ Bách Khoa
+        { cx: -30, cz: -52, w: 4.5, d: 44 }, // Đường nội bộ giữa Vườn hoa C1 và dãy C3–C4–C5–C10
+        { cx: 16, cz: -46, w: 4.5, d: 48 }, // Đường nội bộ giữa dãy C3–C10 và cụm C6–C7–C8
+        { cx: -60, cz: 46, w: 4.5, d: 42 }, // Đường nội bộ Khu D4 – D6 – D8
       ].map((p, idx) => (
         <mesh
           key={`sub-walkway-${idx}`}

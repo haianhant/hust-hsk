@@ -13,6 +13,7 @@
 
 import { ImprovedTree } from './Trees';
 import { LabelPlane } from './TextPlate';
+import { playerState } from '../../lib/playerState';
 
 const WALL_TONES = ['#F4F2EA', '#EDE8DC', '#F0ECE1', '#E8E4DA'];
 const PLINTH_BEIGE = '#DFC99B';
@@ -28,40 +29,131 @@ const PAVE_TONE = '#A8A8A2';
 
 type Facing = 's' | 'n' | 'e' | 'w';
 
-// Các giảng đường & tòa nhà học tập quanh khuôn viên (C3, C4, C5, D3, D4, D5, D6, D8, D9):
-// Giữ nguyên tâm x/z và kích thước footprint w/d đã đối chiếu an toàn với ROADS/LEGS/colliders;
-// nâng cấp mặt đứng chuẩn giảng đường Bách khoa: tầng 1 ốp vàng kem, các tầng trên trắng kem,
-// dải lan can hành lang đỏ HUST (#D22630), đố cửa sổ trắng, gờ mái và biển tên tòa nhà.
+// Quy hoạch các dãy giảng đường C & D khớp 100% với Bản đồ Bách Khoa (docs/khuon-vien-truong.png):
+// 1. Cụm C3 – C4 – C5 – C10: xếp thành 4 dãy ngang song song từ Bắc xuống Nam ở phía Đông vườn hoa C1 (x = -12).
+// 2. Cụm D6 – D8: xếp 2 dãy ngang Bắc–Nam ở phía Tây Hồ Tiền (x = -46).
+// 3. Nhà D9: nằm ngay phía Nam Thư viện Tạ Quang Bửu (38, 63).
+// 4. Cụm D3 – D5 – D3-5 & D7 (xoay chéo): nằm phía Đông Thư viện Tạ Quang Bửu, sát đường Trần Đại Nghĩa.
 const BUILDINGS: Array<{
-  code: string; x: number; z: number; w: number; d: number; h: number; face: Facing; tone: number;
+  code: string;
+  subtitle?: string;
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  h: number;
+  face: Facing;
+  tone: number;
+  rotY?: number;
 }> = [
-  // Hàng bắc (dãy nhà C10, C4, C5, C3), sau lưng C1 / dọc phía bắc Đường Tình Yêu.
-  { code: 'C10', x: -24, z: -70, w: 11, d: 8, h: 10.5, face: 's', tone: 1 },
-  { code: 'C4', x: -8, z: -70, w: 14, d: 8, h: 10.5, face: 's', tone: 0 },
-  { code: 'C5', x: 14, z: -71, w: 12, d: 7, h: 10.5, face: 's', tone: 1 },
-  { code: 'C3', x: 34, z: -70, w: 16, d: 9, h: 11.2, face: 's', tone: 2 },
-  // Phía đông: khu giảng đường D3, D5, D7, D9 phía đông Thư viện & Quảng trường TĐN.
-  { code: 'D3', x: 64, z: -2, w: 10, d: 8, h: 10.2, face: 'w', tone: 3 },
-  { code: 'D5', x: 58, z: -52, w: 12, d: 8, h: 10.2, face: 'w', tone: 0 },
-  { code: 'D7', x: 62, z: 50, w: 12, d: 8, h: 10.8, face: 'w', tone: 2 },
-  { code: 'D9', x: 62, z: 62, w: 14, d: 8, h: 10.8, face: 'w', tone: 1 },
-  // Phía nam-tây & tây Hồ Tiền: khu giảng đường D6, D8, D4.
-  { code: 'D8', x: -58, z: 72, w: 16, d: 9, h: 10.8, face: 'n', tone: 2 },
-  { code: 'D6', x: -84, z: 48, w: 10, d: 7, h: 9.8, face: 'e', tone: 3 },
-  { code: 'D4', x: -93, z: -38, w: 6, d: 8, h: 9.8, face: 'e', tone: 0 },
+  // Cụm 4 dãy ngang C3 – C4 – C5 – C10 từ Bắc xuống Nam (phía Đông vườn hoa C1)
+  { code: 'C3', subtitle: 'GIẢNG ĐƯỜNG C3', x: -12, z: -68, w: 22, d: 6.5, h: 10.8, face: 's', tone: 2 },
+  { code: 'C4', subtitle: 'VIỆN KT HÓA HỌC & CN SINH - THỰC PHẨM', x: -12, z: -57, w: 22, d: 6.5, h: 10.8, face: 's', tone: 0 },
+  { code: 'C5', subtitle: 'VIỆN KH&KT VẬT LIỆU · DỆT MAY', x: -12, z: -46, w: 22, d: 6.5, h: 10.8, face: 's', tone: 1 },
+  { code: 'C10', subtitle: 'VIỆN CƠ KHÍ · VLKT · MÔI TRƯỜNG', x: -12, z: -35, w: 22, d: 6.5, h: 10.8, face: 's', tone: 2 },
+
+  // Cụm D6 – D8 phía Tây Hồ Tiền (giữa D4 và bờ Tây Hồ Tiền)
+  { code: 'D6', subtitle: 'GIẢNG ĐƯỜNG D6', x: -46, z: 38, w: 18, d: 7.5, h: 10.2, face: 's', tone: 3 },
+  { code: 'D8', subtitle: 'GIẢNG ĐƯỜNG D8', x: -46, z: 54, w: 18, d: 7.5, h: 10.2, face: 'n', tone: 2 },
+
+  // Nhà D9 ngay phía Nam Thư viện Tạ Quang Bửu
+  { code: 'D9', subtitle: 'GIẢNG ĐƯỜNG D9', x: 38, z: 63, w: 18, d: 7.5, h: 10.8, face: 'n', tone: 1 },
+
+  // Cụm D3 – D5 – D3-5 & D7 phía Đông Thư viện Tạ Quang Bửu
+  { code: 'D3', subtitle: 'VIỆN TOÁN ỨNG DỤNG & TIN HỌC', x: 62, z: 18, w: 14, d: 7, h: 10.5, face: 's', tone: 3 },
+  { code: 'D5', subtitle: 'GIẢNG ĐƯỜNG D5', x: 62, z: 32, w: 14, d: 7, h: 10.5, face: 'n', tone: 0 },
+  { code: 'D3-5', subtitle: 'KHỐI GIẢNG ĐƯỜNG D3-5', x: 75, z: 25, w: 6.5, d: 21, h: 10.5, face: 'w', tone: 1 },
+  { code: 'D7', subtitle: 'GIẢNG ĐƯỜNG D7', x: 60, z: 50, w: 15, d: 7, h: 10.5, face: 'n', tone: 2, rotY: Math.PI / 4 },
 ];
 
-// Cầu nối trên cao có mái che (Covered Skybridges) giữa các dãy giảng đường C & D
+// Nhà D4 (Viện Ngoại ngữ — khối nhà hình chữ L ở góc Tây-Nam sát đường Giải Phóng theo đúng bản đồ)
+function D4ForeignLanguagesBuilding({ isNight }: { isNight: boolean }) {
+  return (
+    <group position={[-78, 0, 44]}>
+      {/* Cánh ngang phía Nam (18 × 7 m) */}
+      <mesh position={[0, 5.1, 4.5]} castShadow receiveShadow>
+        <boxGeometry args={[18, 10.2, 7]} />
+        <meshStandardMaterial color="#EAE3D2" roughness={0.88} />
+      </mesh>
+      {/* Cánh dọc phía Đông tạo hình chữ L (7 × 13 m) */}
+      <mesh position={[5.5, 5.1, -2.0]} castShadow receiveShadow>
+        <boxGeometry args={[7, 10.2, 13]} />
+        <meshStandardMaterial color="#EAE3D2" roughness={0.88} />
+      </mesh>
+      {/* Chân đế ốp màu vàng kem */}
+      <mesh position={[0, 1.6, 4.5]} receiveShadow>
+        <boxGeometry args={[18.1, 3.2, 7.1]} />
+        <meshStandardMaterial color={PLINTH_BEIGE} roughness={0.9} />
+      </mesh>
+      <mesh position={[5.5, 1.6, -2.0]} receiveShadow>
+        <boxGeometry args={[7.1, 3.2, 13.1]} />
+        <meshStandardMaterial color={PLINTH_BEIGE} roughness={0.9} />
+      </mesh>
+      {/* Mái phẳng chữ L */}
+      <mesh position={[0, 10.38, 4.5]} castShadow>
+        <boxGeometry args={[18.5, 0.36, 7.5]} />
+        <meshStandardMaterial color={ROOF_TONE} roughness={0.92} />
+      </mesh>
+      <mesh position={[5.5, 10.38, -2.0]} castShadow>
+        <boxGeometry args={[7.5, 0.36, 13.5]} />
+        <meshStandardMaterial color={ROOF_TONE} roughness={0.92} />
+      </mesh>
+      {/* Cửa sổ mặt Bắc cánh ngang */}
+      {[0, 1, 2].map((fl) =>
+        [-6.5, -3.5, -0.5].map((wx, idx) => (
+          <mesh key={`d4-win-${fl}-${idx}`} position={[wx, fl * 3.3 + 1.8, 0.96]}>
+            <planeGeometry args={[1.4, 1.1]} />
+            <meshStandardMaterial
+              color={isNight ? '#FFE4A0' : WINDOW_TONE}
+              emissive={isNight ? '#FFB84D' : '#000000'}
+              emissiveIntensity={isNight ? 0.65 : 0}
+              roughness={0.35}
+            />
+          </mesh>
+        )),
+      )}
+      <LabelPlane
+        textureKey="bldg-sign-D4-lshape"
+        canvasW={512}
+        canvasH={128}
+        draw={(ctx, w, h) => {
+          ctx.fillStyle = '#B81D24';
+          ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#F5C518';
+          ctx.lineWidth = 7;
+          ctx.strokeRect(6, 6, w - 12, h - 12);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '900 44px Arial, sans-serif';
+          ctx.fillText('NHÀ D4 · VIỆN NGOẠI NGỮ', w / 2, h * 0.42);
+          ctx.fillStyle = '#FFD166';
+          ctx.font = '700 24px Arial, sans-serif';
+          ctx.fillText('SCHOOL OF FOREIGN LANGUAGES · 外语学院', w / 2, h * 0.76);
+        }}
+        size={[4.2, 0.95]}
+        position={[-2.5, 9.2, 0.94]}
+        rotation={[0, Math.PI, 0]}
+        transparent={false}
+      />
+    </group>
+  );
+}
+
+// Cầu nối trên cao có mái che (Covered Skybridges) nối liên hoàn 4 dãy C3 ↔ C4 ↔ C5 ↔ C10 và D3 ↔ D5
 function LectureSkybridges() {
   const bridges: Array<{ x: number; z: number; w: number; d: number; y: number }> = [
-    // Nối C10 (-18.5) ↔ C4 (-15)
-    { x: -16.75, z: -70, w: 3.8, d: 2.2, y: 3.6 },
-    // Nối C4 (-1) ↔ C5 (8)
-    { x: 3.5, z: -70.5, w: 9.2, d: 2.2, y: 3.6 },
-    // Nối C5 (20) ↔ C3 (26)
-    { x: 23, z: -70.5, w: 6.2, d: 2.2, y: 3.6 },
-    // Nối D7 (z=54) ↔ D9 (z=58)
-    { x: 62, z: 56, w: 2.4, d: 4.4, y: 3.6 },
+    // Cầu nối dọc Bắc–Nam giữa C3 (-68) ↔ C4 (-57) ↔ C5 (-46) ↔ C10 (-35)
+    { x: -18.5, z: -62.5, w: 2.2, d: 4.8, y: 3.6 },
+    { x: -5.5, z: -62.5, w: 2.2, d: 4.8, y: 3.6 },
+    { x: -18.5, z: -51.5, w: 2.2, d: 4.8, y: 3.6 },
+    { x: -5.5, z: -51.5, w: 2.2, d: 4.8, y: 3.6 },
+    { x: -18.5, z: -40.5, w: 2.2, d: 4.8, y: 3.6 },
+    { x: -5.5, z: -40.5, w: 2.2, d: 4.8, y: 3.6 },
+    // Cầu nối giữa D3 (z=18) ↔ D5 (z=32)
+    { x: 58, z: 25, w: 2.2, d: 7.2, y: 3.5 },
+    // Cầu nối giữa D6 (z=38) ↔ D8 (z=54)
+    { x: -46, z: 46, w: 2.4, d: 8.6, y: 3.4 },
   ];
   return (
     <group>
@@ -73,17 +165,17 @@ function LectureSkybridges() {
             <meshStandardMaterial color="#F2EFE6" roughness={0.88} />
           </mesh>
           {/* Lan can đỏ HUST 2 bên cầu nối */}
-          <mesh position={[0, 0.55, br.d / 2 - 0.08]}>
-            <boxGeometry args={[br.w, 0.72, 0.08]} />
+          <mesh position={[br.w / 2 - 0.06, 0.55, 0]}>
+            <boxGeometry args={[0.08, 0.72, br.d]} />
             <meshStandardMaterial color={HUST_RAIL_RED} roughness={0.55} metalness={0.25} />
           </mesh>
-          <mesh position={[0, 0.55, -br.d / 2 + 0.08]}>
-            <boxGeometry args={[br.w, 0.72, 0.08]} />
+          <mesh position={[-br.w / 2 + 0.06, 0.55, 0]}>
+            <boxGeometry args={[0.08, 0.72, br.d]} />
             <meshStandardMaterial color={HUST_RAIL_RED} roughness={0.55} metalness={0.25} />
           </mesh>
           {/* Mái che cầu nối */}
           <mesh position={[0, 2.55, 0]} castShadow>
-            <boxGeometry args={[br.w + 0.2, 0.18, br.d + 0.35]} />
+            <boxGeometry args={[br.w + 0.35, 0.18, br.d + 0.2]} />
             <meshStandardMaterial color={ROOF_TONE} roughness={0.9} />
           </mesh>
         </group>
@@ -92,17 +184,19 @@ function LectureSkybridges() {
   );
 }
 
-function BackgroundBuilding({ b }: { b: (typeof BUILDINGS)[number] }) {
+function BackgroundBuilding({ b, isNight }: { b: (typeof BUILDINGS)[number]; isNight: boolean }) {
   const along = b.face === 's' || b.face === 'n' ? b.w : b.d;
   const count = Math.max(3, Math.floor(along / 3));
   const floors = 3;
   const floorH = b.h / floors;
-  const wins: Array<{ u: number; y: number }> = [];
+  const wins: Array<{ u: number; y: number; lit: boolean }> = [];
   for (let r = 0; r < floors; r++) {
     for (let k = 0; k < count; k++) {
+      const lit = ((r * 7 + k * 13 + b.code.charCodeAt(0)) % 3) !== 0;
       wins.push({
         u: -along / 2 + ((k + 0.5) / count) * along,
         y: (r + 0.56) * floorH,
+        lit,
       });
     }
   }
@@ -117,7 +211,7 @@ function BackgroundBuilding({ b }: { b: (typeof BUILDINGS)[number] }) {
   const faceRotY = b.face === 's' ? 0 : b.face === 'n' ? Math.PI : b.face === 'e' ? Math.PI / 2 : -Math.PI / 2;
 
   return (
-    <group position={[b.x, 0, b.z]}>
+    <group position={[b.x, 0, b.z]} rotation-y={b.rotY ?? 0}>
       {/* Thân nhà chính màu trắng kem */}
       <mesh position={[0, b.h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[b.w, b.h, b.d]} />
@@ -133,8 +227,32 @@ function BackgroundBuilding({ b }: { b: (typeof BUILDINGS)[number] }) {
         <boxGeometry args={[b.w + 0.6, 0.36, b.d + 0.6]} />
         <meshStandardMaterial color={ROOF_TONE} roughness={0.95} />
       </mesh>
-      {/* Mặt chính: các dải hành lang & lan can đỏ HUST + hệ cửa sổ có đố trắng + biển tên tòa */}
+      {/* Ống thoát nước mưa & dàn nóng điều hòa ở đầu hồi giúp khối nhà chân thực */}
+      {[-b.w / 2 + 0.6, b.w / 2 - 0.6].map((pipeX, idx) => (
+        <mesh key={`pipe-${idx}`} position={[pipeX, b.h / 2, -b.d / 2 - 0.04]}>
+          <cylinderGeometry args={[0.04, 0.04, b.h - 0.2, 6]} />
+          <meshStandardMaterial color="#94A3B8" roughness={0.6} metalness={0.3} />
+        </mesh>
+      ))}
+      {[1, 2].map((fl) => (
+        <mesh key={`ac-${fl}`} position={[b.w / 2 + 0.18, fl * floorH + 0.8, 0]} castShadow>
+          <boxGeometry args={[0.32, 0.52, 0.72]} />
+          <meshStandardMaterial color="#E2E8F0" roughness={0.7} />
+        </mesh>
+      ))}
+
+      {/* Mặt chính: sảnh tầng 1 + các dải hành lang & lan can đỏ HUST + hệ cửa sổ phát sáng ban đêm + biển tên tòa */}
       <group position={[faceOffset[0], 0, faceOffset[2]]} rotation-y={faceRotY}>
+        {/* Mái hiên cửa chính tầng 1 & bậc tam cấp */}
+        <mesh position={[0, floorH * 0.88, 0.48]} castShadow>
+          <boxGeometry args={[3.4, 0.2, 0.95]} />
+          <meshStandardMaterial color={WINDOW_FRAME} roughness={0.85} />
+        </mesh>
+        <mesh position={[0, 0.12, 0.42]} receiveShadow>
+          <boxGeometry args={[3.2, 0.24, 0.85]} />
+          <meshStandardMaterial color="#9E9B93" roughness={0.9} />
+        </mesh>
+
         {[1, 2].map((fl) => (
           <group key={`rail-${fl}`} position={[0, fl * floorH, 0]}>
             {/* Dầm sàn hành lang trắng */}
@@ -154,24 +272,33 @@ function BackgroundBuilding({ b }: { b: (typeof BUILDINGS)[number] }) {
           </group>
         ))}
 
-        {/* Cửa sổ các tầng */}
-        {wins.map((wn, i) => (
-          <group key={`win-${i}`} position={[wn.u, wn.y, 0.02]}>
-            <mesh position={[0, 0, -0.01]}>
-              <planeGeometry args={[1.42, 1.22]} />
-              <meshStandardMaterial color={WINDOW_FRAME} roughness={0.85} />
-            </mesh>
-            <mesh position={[0, 0, 0.01]}>
-              <planeGeometry args={[1.24, 1.04]} />
-              <meshStandardMaterial color={WINDOW_TONE} roughness={0.35} metalness={0.2} />
-            </mesh>
-          </group>
-        ))}
+        {/* Cửa sổ các tầng (tự động phát sáng ấm áp khi về chiều tối / ban đêm) */}
+        {wins.map((wn, i) => {
+          const glow = isNight && wn.lit;
+          return (
+            <group key={`win-${i}`} position={[wn.u, wn.y, 0.02]}>
+              <mesh position={[0, 0, -0.01]}>
+                <planeGeometry args={[1.42, 1.22]} />
+                <meshStandardMaterial color={WINDOW_FRAME} roughness={0.85} />
+              </mesh>
+              <mesh position={[0, 0, 0.01]}>
+                <planeGeometry args={[1.24, 1.04]} />
+                <meshStandardMaterial
+                  color={glow ? '#FFE59E' : WINDOW_TONE}
+                  emissive={glow ? '#FFB84D' : '#000000'}
+                  emissiveIntensity={glow ? 0.7 : 0}
+                  roughness={0.35}
+                  metalness={0.2}
+                />
+              </mesh>
+            </group>
+          );
+        })}
 
-        {/* Biển tên giảng đường (C3, C4, C5, D3, D5, D6, D8, D9...) gắn gần cổ mái */}
+        {/* Biển tên giảng đường gắn gần cổ mái */}
         <LabelPlane
           textureKey={`bldg-sign-${b.code}`}
-          canvasW={256}
+          canvasW={384}
           canvasH={128}
           draw={(ctx, w, h) => {
             ctx.fillStyle = '#B81D24';
@@ -182,11 +309,11 @@ function BackgroundBuilding({ b }: { b: (typeof BUILDINGS)[number] }) {
             ctx.fillStyle = '#FFFFFF';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.font = '900 72px Arial, sans-serif';
-            ctx.fillText(b.code, w / 2, h / 2 + 4);
+            ctx.font = '900 58px Arial, sans-serif';
+            ctx.fillText(`NHÀ ${b.code}`, w / 2, h / 2 + 2);
           }}
-          size={[1.5, 0.75]}
-          position={[-along / 2 + 1.2, b.h - 0.65, 0.09]}
+          size={[2.1, 0.75]}
+          position={[-along / 2 + 1.5, b.h - 0.65, 0.09]}
           transparent={false}
         />
       </group>
@@ -194,54 +321,33 @@ function BackgroundBuilding({ b }: { b: (typeof BUILDINGS)[number] }) {
   );
 }
 
-// --- Cây nền ở rìa campus (tránh footprint khối nhà phụ + đường + hồ) --------
-// Hàng bắc — ĐÃ DỜI (đợt r2p-A mục 1, quyết theo hình học, xem ghi chú cuối
-// file): z = -72,5 → -62, x -28..80 cách 12 m — phía TRƯỚC (nam) các khối
-// nhà bắc, phía đông C1, nhìn thấy được từ sân/đường tình yêu.
+// --- Cây nền quanh khuôn viên (đặt ngoài footprint của mọi tòa nhà & đường đi) ---
 const BACKGROUND_TREES: Array<{ x: number; z: number; trunkH: number; canopyR: number }> = [
-  // Hàng bắc z = -62 (trước mặt nam 3 khối nhà bắc, đông C1).
+  // Hàng cây phía Bắc & dọc trục C1 – C3..C10 – C6..C8
   { x: -28, z: -62, trunkH: 2.6, canopyR: 1.6 },
-  { x: -16, z: -62, trunkH: 3.0, canopyR: 1.8 },
-  { x: -4, z: -62, trunkH: 2.4, canopyR: 1.5 },
-  { x: 8, z: -62, trunkH: 2.8, canopyR: 1.7 },
-  { x: 20, z: -62, trunkH: 2.5, canopyR: 1.5 },
-  { x: 32, z: -62, trunkH: 3.1, canopyR: 1.9 },
-  { x: 44, z: -62, trunkH: 2.7, canopyR: 1.6 },
-  { x: 56, z: -62, trunkH: 2.4, canopyR: 1.5 },
+  { x: -28, z: -48, trunkH: 2.8, canopyR: 1.7 },
+  { x: 4, z: -62, trunkH: 2.5, canopyR: 1.5 },
+  { x: 4, z: -46, trunkH: 2.8, canopyR: 1.7 },
+  { x: 26, z: -60, trunkH: 2.9, canopyR: 1.7 },
+  { x: 26, z: -42, trunkH: 2.6, canopyR: 1.6 },
   { x: 68, z: -62, trunkH: 3.0, canopyR: 1.8 },
   { x: 80, z: -62, trunkH: 2.6, canopyR: 1.6 },
-  // Hàng đông x = 88 (né quảng trường Trần Đại Nghĩa z -18..6).
-  { x: 88, z: -64, trunkH: 2.8, canopyR: 1.7 },
+  // Hàng dọc đường Trần Đại Nghĩa (x = 88)
   { x: 88, z: -52, trunkH: 2.5, canopyR: 1.5 },
-  { x: 88, z: -40, trunkH: 3.0, canopyR: 1.8 },
-  { x: 88, z: -28, trunkH: 2.6, canopyR: 1.6 },
-  { x: 88, z: 20, trunkH: 2.7, canopyR: 1.6 },
+  { x: 88, z: -38, trunkH: 3.0, canopyR: 1.8 },
+  { x: 88, z: 14, trunkH: 2.7, canopyR: 1.6 },
   { x: 88, z: 32, trunkH: 2.4, canopyR: 1.5 },
-  { x: 88, z: 44, trunkH: 3.0, canopyR: 1.8 },
-  { x: 88, z: 56, trunkH: 2.6, canopyR: 1.6 },
-  { x: 88, z: 68, trunkH: 2.8, canopyR: 1.7 },
-  // Hàng nam z = 80 (né hồ x -24,5..20,5 + khối nhà phụ nam x -66..-50).
-  { x: -80, z: 80, trunkH: 2.7, canopyR: 1.6 },
-  { x: -68, z: 80, trunkH: 2.5, canopyR: 1.5 },
-  { x: -44, z: 80, trunkH: 3.0, canopyR: 1.8 },
-  { x: -32, z: 80, trunkH: 2.6, canopyR: 1.6 },
-  { x: 28, z: 80, trunkH: 2.8, canopyR: 1.7 },
-  { x: 40, z: 80, trunkH: 2.5, canopyR: 1.5 },
-  { x: 52, z: 80, trunkH: 3.0, canopyR: 1.8 },
-  { x: 64, z: 80, trunkH: 2.6, canopyR: 1.6 },
-  { x: 76, z: 80, trunkH: 2.7, canopyR: 1.6 },
-  // Hàng tây x = -92 (né cổng Parabol z 3,5..16,5 và đường tình yêu).
+  // Hàng phía Nam (z = 78..82)
+  { x: -80, z: 78, trunkH: 2.7, canopyR: 1.6 },
+  { x: -64, z: 78, trunkH: 2.5, canopyR: 1.5 },
+  { x: -32, z: 78, trunkH: 2.6, canopyR: 1.6 },
+  { x: 28, z: 78, trunkH: 2.8, canopyR: 1.7 },
+  { x: 52, z: 78, trunkH: 3.0, canopyR: 1.8 },
+  // Hàng phía Tây sát đường Giải Phóng (x = -92)
   { x: -92, z: -60, trunkH: 2.8, canopyR: 1.7 },
-  { x: -92, z: -48, trunkH: 2.5, canopyR: 1.5 },
-  { x: -92, z: -36, trunkH: 3.0, canopyR: 1.8 },
-  { x: -92, z: 36, trunkH: 2.6, canopyR: 1.6 },
-  { x: -92, z: 48, trunkH: 2.8, canopyR: 1.7 },
-  { x: -92, z: 60, trunkH: 2.5, canopyR: 1.5 },
-  { x: -92, z: 72, trunkH: 3.0, canopyR: 1.8 },
-  // Lấp góc trống: đông-bắc + nam.
-  { x: 72, z: -44, trunkH: 2.9, canopyR: 1.7 },
-  { x: -70, z: 60, trunkH: 2.7, canopyR: 1.6 },
-  { x: 30, z: 70, trunkH: 2.8, canopyR: 1.7 },
+  { x: -92, z: -46, trunkH: 2.5, canopyR: 1.5 },
+  { x: -92, z: 62, trunkH: 2.8, canopyR: 1.7 },
+  { x: -92, z: 74, trunkH: 3.0, canopyR: 1.8 },
 ];
 
 // --- Đèn đường mảnh dọc tuyến hiện có (ngoài mép đường ≥ 1 m) ----------------
@@ -378,12 +484,14 @@ function BikeParkingShed() {
   );
 }
 
-export default function BackgroundBuildings() {
+export default function BackgroundBuildings({ timeOfDay = 'day' }: { timeOfDay?: 'day' | 'sunset' | 'night' }) {
+  const isNight = (timeOfDay ?? playerState.timeOfDay) !== 'day';
   return (
     <group>
       {BUILDINGS.map((b, i) => (
-        <BackgroundBuilding key={`bg-building-${i}`} b={b} />
+        <BackgroundBuilding key={`bg-building-${i}`} b={b} isNight={isNight} />
       ))}
+      <D4ForeignLanguagesBuilding isNight={isNight} />
       <LectureSkybridges />
       {BACKGROUND_TREES.map((t, i) => (
         <ImprovedTree

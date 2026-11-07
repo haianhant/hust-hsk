@@ -798,6 +798,36 @@ export function C1Building() {
         position={[-48.6, 2.0, SOUTH_Z + 0.08]}
       />
 
+      {/* Mặt Bắc Tòa C1 (nhìn ra Cổng Số 1 Đại Cồ Việt): Dải chữ nổi ĐẠI HỌC BÁCH KHOA HÀ NỘI & mái hiên Bắc */}
+      <LabelPlane
+        textureKey="c1-north-title"
+        canvasW={1024}
+        canvasH={160}
+        draw={(ctx, w, h) => {
+          ctx.fillStyle = '#B81D24';
+          ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#FFD166';
+          ctx.lineWidth = 6;
+          ctx.strokeRect(8, 8, w - 16, h - 16);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '900 44px Arial, sans-serif';
+          ctx.fillText('ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, h * 0.38);
+          ctx.fillStyle = '#FFD966';
+          ctx.font = '700 26px Arial, sans-serif';
+          ctx.fillText('HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY · NHÀ C1', w / 2, h * 0.75);
+        }}
+        size={[13.5, 1.4]}
+        position={[CX, 13.4, NORTH_Z - 0.06]}
+        rotation={[0, Math.PI, 0]}
+        transparent={false}
+      />
+      <mesh position={[CX, 3.65, NORTH_Z - 0.9]} castShadow>
+        <boxGeometry args={[9.2, 0.28, 1.8]} />
+        <meshStandardMaterial color={C1_WALL} roughness={0.85} />
+      </mesh>
+
       {/* Cột cờ + quốc kỳ CÓ sao vàng trên nóc, chính giữa. */}
       <mesh position={[CX, 17.23, CZ]} castShadow>
         <cylinderGeometry args={[0.06, 0.08, 5, 8]} />

@@ -12,10 +12,12 @@ Quy trình thiết kế, mở rộng và đồng bộ các công trình kiến t
 
 ## Quy trình 5 bước khi thêm hoặc chỉnh sửa công trình HUST
 
-### Bước 1: Đối chiếu Tư liệu & Bảng thông số Kiến trúc HUST
-1. Đọc bảng thông số kiến trúc chuẩn của từng công trình tại:
+### Bước 1: Đối chiếu Bản đồ Khuôn viên Chuẩn & Bảng thông số Kiến trúc HUST
+1. **Bắt buộc lấy Bản đồ Khuôn viên ĐHBK Hà Nội làm chuẩn (Ground Truth):**
+   - Trước khi lập plan hoặc xây dựng bất kỳ tòa nhà/công trình nào, phải đối chiếu trực tiếp với **Bản đồ Khuôn viên trường ĐHBK Hà Nội** (tài liệu bản đồ chuẩn do người dùng cung cấp hoặc lưu trong `docs/`) để xác định chính xác vị trí tương đối giữa 4 tuyến phố (Đại Cồ Việt – Giải Phóng – Trần Đại Nghĩa – Tạ Quang Bửu), hướng mặt chính và kết nối giao thông nội bộ.
+2. Đọc bảng thông số kiến trúc chuẩn của từng công trình tại:
    - [hust-landmarks-spec.md](./references/hust-landmarks-spec.md)
-2. Kiểm tra kỹ tư liệu gốc trong `docs/campus-reference.md`, `docs/reference-visual.md`, `docs/satellite-and-c9.md` và `docs/ref-library-studywithhuster.md`.
+3. Kiểm tra kỹ tư liệu gốc trong `docs/campus-reference.md`, `docs/reference-visual.md`, `docs/satellite-and-c9.md` và `docs/ref-library-studywithhuster.md`.
 3. **Nguyên tắc vàng:**
    - Chi tiết nào đã xác minh qua ảnh thật (như 9 sóng mái C1, gạch hoa gió khe chữ nhật đứng, dải băng phẳng Parabol + huy hiệu tròn, cầu thang đỏ zic-zac C9, tháp 3 nhịp + đồng hồ thấp của Thư viện Tạ Quang Bửu) phải dựng đúng tỉ lệ và hình khối.
    - Chi tiết nào chưa có tư liệu ảnh xác thực thì ghi chú rõ trong comment code, không tự bịa truyền thuyết hay chữ khắc sai lệch lịch sử.

@@ -81,7 +81,7 @@ function renderCampusMap(
     (TDN_SQUARE.maxZ - TDN_SQUARE.minZ) * project.s,
   );
 
-  // Đường (polyline)
+  // Đường (polyline) + các trục đường phố chính theo khuon-vien-truong.png
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   for (const road of ROADS) {
@@ -90,13 +90,30 @@ function renderCampusMap(
       if (i === 0) ctx.moveTo(project.x(p.x), project.y(p.z));
       else ctx.lineTo(project.x(p.x), project.y(p.z));
     });
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.48)';
     ctx.lineWidth = Math.max(1.5, road.width * project.s * 0.6);
+    ctx.stroke();
+  }
+  // Vẽ thêm Đường Trần Đại Nghĩa (x=90), Đường Tạ Quang Bửu (x=126) và Đường Lê Thanh Nghị trên bản đồ
+  const extraStreets: Array<Array<{ x: number; z: number }>> = [
+    [{ x: 90, z: -74 }, { x: 90, z: 32 }, { x: 64, z: 68 }],
+    [{ x: 90, z: -6 }, { x: 158, z: -6 }],
+    [{ x: 126, z: -68 }, { x: 126, z: -6 }],
+    [{ x: 94, z: 62 }, { x: 156, z: 62 }],
+  ];
+  for (const st of extraStreets) {
+    ctx.beginPath();
+    st.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(project.x(p.x), project.y(p.z));
+      else ctx.lineTo(project.x(p.x), project.y(p.z));
+    });
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.36)';
+    ctx.lineWidth = detailed ? 3.5 : 1.5;
     ctx.stroke();
   }
 
   // Các tòa nhà trong toàn khuôn viên (CAMPUS_MAP_BUILDINGS + BUILDING_COLLIDERS)
-  ctx.font = detailed ? '700 11px system-ui, sans-serif' : '600 8px system-ui, sans-serif';
+  ctx.font = detailed ? '700 9.5px system-ui, sans-serif' : '600 7.5px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -107,27 +124,26 @@ function renderCampusMap(
     const h = (b.box.maxZ - b.box.minZ) * project.s;
 
     if (b.kind === 'main') {
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.72)';
-      ctx.strokeStyle = 'rgba(252, 165, 165, 0.95)';
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.72)';
+      ctx.strokeStyle = 'rgba(191, 219, 254, 0.95)';
     } else if (b.kind === 'sport') {
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.55)';
-      ctx.strokeStyle = 'rgba(110, 231, 183, 0.9)';
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.65)';
+      ctx.strokeStyle = 'rgba(167, 243, 208, 0.95)';
     } else if (b.kind === 'dorm') {
-      ctx.fillStyle = 'rgba(245, 158, 11, 0.62)';
-      ctx.strokeStyle = 'rgba(253, 224, 71, 0.9)';
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.68)';
+      ctx.strokeStyle = 'rgba(253, 224, 71, 0.95)';
     } else {
-      ctx.fillStyle = 'rgba(248, 113, 113, 0.45)';
-      ctx.strokeStyle = 'rgba(248, 113, 113, 0.82)';
+      ctx.fillStyle = 'rgba(217, 119, 6, 0.55)';
+      ctx.strokeStyle = 'rgba(253, 186, 116, 0.9)';
     }
 
     ctx.lineWidth = 1;
     ctx.fillRect(x, y, w, h);
     ctx.strokeRect(x, y, w, h);
 
-    const text = detailed ? b.label : b.code;
-    if (detailed || (w >= 11 && h >= 6)) {
+    if (detailed || (w >= 9 && h >= 5)) {
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(text, x + w / 2, y + h / 2);
+      ctx.fillText(b.code, x + w / 2, y + h / 2);
     }
   }
 

@@ -100,11 +100,11 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     lanyard: false,
     backpack: true,
   },
-  // 4. Nam sinh viên đi trước sảnh Tòa nhà C7
+  // 4. Nam sinh viên đi dọc sân giữa cụm C3–C10 và C6–C8
   {
     id: 'walk-c7',
-    a: [-26, -38],
-    b: [-4, -38],
+    a: [18, -62],
+    b: [18, -28],
     speed: 1.6,
     phaseOffset: 0.8,
     variant: 'polo',
@@ -116,11 +116,11 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     lanyard: true,
     backpack: true,
   },
-  // 5. Sinh viên đi giữa Căng-tin và Ký túc xá B6 – B10
+  // 5. Sinh viên đi dọc Đường Tạ Quang Bửu giữa Khu Ký túc xá Bách Khoa (B3–B13)
   {
     id: 'walk-dorm',
-    a: [52, 34],
-    b: [66, 34],
+    a: [126, -58],
+    b: [126, -12],
     speed: 1.5,
     phaseOffset: 2.3,
     variant: 'polo',
@@ -131,11 +131,11 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     lanyard: true,
     backpack: false,
   },
-  // 6. Sinh viên tập chạy bộ ở Sân Thể thao Bách Khoa
+  // 6. Sinh viên tập chạy bộ ở Sân Bóng rổ / Khu Thể chất Bách Khoa
   {
     id: 'walk-sport-1',
-    a: [-59, 39],
-    b: [-45, 39],
+    a: [74, 59],
+    b: [86, 59],
     speed: 2.4,
     phaseOffset: 1.1,
     variant: 'polo',
@@ -146,12 +146,12 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     lanyard: false,
     backpack: false,
   },
-  // 7. Bạn cùng sân bóng rổ
+  // 7. Sinh viên đá bóng trên Sân vận động Bách Khoa
   {
     id: 'walk-sport-2',
-    a: [-45, 45],
-    b: [-59, 45],
-    speed: 2.2,
+    a: [134, 68],
+    b: [158, 68],
+    speed: 2.5,
     phaseOffset: 4.0,
     variant: 'polo',
     shirt: '#DA1E26',
@@ -160,6 +160,22 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     hairStyle: 'swept',
     lanyard: false,
     backpack: false,
+  },
+  // 8. Sinh viên đi bộ trước Viện CNTT&TT (Nhà B1 — SoICT)
+  {
+    id: 'walk-soict-b1',
+    a: [98, 25],
+    b: [124, 25],
+    speed: 1.55,
+    phaseOffset: 1.5,
+    variant: 'shirt',
+    shirt: '#F8FAFC',
+    shirtDark: '#CBD5E1',
+    pants: '#1E293B',
+    hairStyle: 'short',
+    glasses: true,
+    lanyard: true,
+    backpack: true,
   },
 ];
 

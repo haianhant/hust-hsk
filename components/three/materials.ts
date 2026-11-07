@@ -502,3 +502,134 @@ export function makeFabricTexture(repeatX = 5, repeatY = 5): THREE.CanvasTexture
 
   return configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true);
 }
+
+/**
+ * Sân vận động Bách Khoa (SVĐ Bách Khoa): Đường chạy điền kinh Tartan đỏ gạch bao quanh
+ * sân bóng đá cỏ xanh kẻ sọc 2 tông + vạch vôi trắng (vòng tròn trung tâm, vòng cấm địa 16m50, khung 5m50).
+ */
+export function makeFootballFieldTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 680;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  // Viền đường chạy điền kinh màu đỏ gạch Bách Khoa
+  ctx.fillStyle = '#B84234';
+  ctx.fillRect(0, 0, 1024, 680);
+
+  // Vạch phân làn chạy điền kinh trắng mảnh
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+  ctx.lineWidth = 2;
+  for (let lane = 1; lane <= 3; lane++) {
+    const pad = lane * 14;
+    ctx.strokeRect(pad, pad, 1024 - pad * 2, 680 - pad * 2);
+  }
+
+  // Lòng sân cỏ bóng đá xanh mướt kẻ sọc đậm nhạt
+  const fx = 56;
+  const fy = 52;
+  const fw = 1024 - fx * 2;
+  const fh = 680 - fy * 2;
+  const stripes = 12;
+  const sw = fw / stripes;
+  for (let i = 0; i < stripes; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#3E8E3A' : '#489B42';
+    ctx.fillRect(fx + i * sw, fy, sw + 1, fh);
+  }
+
+  // Vạch vôi trắng chuẩn sân bóng đá (như hình vẽ trên khuon-vien-truong.png)
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(fx + 16, fy + 16, fw - 32, fh - 32);
+
+  // Đường giữa sân & vòng tròn giao bóng
+  ctx.beginPath();
+  ctx.moveTo(512, fy + 16);
+  ctx.lineTo(512, fy + fh - 16);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(512, 340, 74, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Chấm giao bóng giữa sân
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.arc(512, 340, 7, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Khu vực cấm địa 2 đầu sân (16m50 & 5m50 + cung phạt đền)
+  const leftX = fx + 16;
+  const rightX = fx + fw - 16;
+  ctx.strokeRect(leftX, 340 - 145, 135, 290);
+  ctx.strokeRect(leftX, 340 - 72, 52, 144);
+  ctx.beginPath();
+  ctx.arc(leftX + 98, 340, 58, -0.62, 0.62);
+  ctx.stroke();
+
+  ctx.strokeRect(rightX - 135, 340 - 145, 135, 290);
+  ctx.strokeRect(rightX - 52, 340 - 72, 52, 144);
+  ctx.beginPath();
+  ctx.arc(rightX - 98, 340, 58, Math.PI - 0.62, Math.PI + 0.62);
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Bể bơi Bách Khoa: Mặt nước xanh ngọc lam kèm 6 làn phao bơi đỏ - trắng - xanh.
+ */
+export function makeSwimmingPoolTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  ctx.fillStyle = '#1CA3DE';
+  ctx.fillRect(0, 0, 512, 256);
+
+  // Ô gạch đáy bể mờ dưới làn nước
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= 512; x += 16) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, 256);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= 256; y += 16) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(512, y);
+    ctx.stroke();
+  }
+
+  // Vạch kẻ chữ T đáy làn bơi & dây phao phân làn
+  for (let lane = 1; lane <= 5; lane++) {
+    const y = (lane * 256) / 6;
+    ctx.strokeStyle = '#0D47A1';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(28, y - 14);
+    ctx.lineTo(484, y - 14);
+    ctx.stroke();
+
+    // Dây phao đỏ-trắng nổi trên mặt nước
+    for (let x = 8; x < 504; x += 12) {
+      ctx.fillStyle = (x / 12) % 2 === 0 ? '#E53935' : '#FFFFFF';
+      ctx.fillRect(x, y - 2, 10, 4);
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
