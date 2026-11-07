@@ -34,6 +34,9 @@
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { PARABOL_GATE } from '../../lib/campus';
+import type { TimeOfDay } from '../../lib/playerState';
+import { makeWeatheredConcreteTexture } from './materials';
+import { ImprovedTree } from './Trees';
 
 // --- Màu chốt (reference-visual §0, ước lượng từ ảnh) ------------------------
 const GATE_WHITE = '#F2EFE6'; // bê tông cổng Parabol, trắng ấm
@@ -164,7 +167,10 @@ function SimpleTree({ x, z, trunkH = 3.4, canopyR = 3.2, canopyY = 5 }: {
   );
 }
 
-export function ParabolGate() {
+export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
+  const isNight = timeOfDay === 'night' || timeOfDay === 'sunset';
+  const concretePbr = useMemo(() => makeWeatheredConcreteTexture(2, 6), []);
+
   // Dải băng chính: một kết cấu liên tục, hai chân nối mượt với đỉnh
   // (parabol liền mạch, đỉnh cong mềm), mặt cắt chữ nhật 1,2 × 0,6 m có
   // cạnh, mặt ngoài, mặt trong và bề dày — tuyệt đối không ống tròn.
@@ -195,10 +201,6 @@ export function ParabolGate() {
   // đồng phẳng → không nhấp nháy z-fighting ở chỗ giao nhau.
   const railGeos = useMemo(() => {
     const geos: THREE.ExtrudeGeometry[] = [];
-    // Dải mép trong: offset 0..0,10; dải mép ngoài: offset W-0,10..W.
-    // buildRibbonPiece chỉ nhận expand chung nên dựng dải mép bằng tiết
-    // diện riêng: dùng expand âm để thu hẹp — thay bằng cách dựng trực
-    // tiếp ở đây bằng cùng công thức với offset bắt đầu khác 0.
     const buildRail = (off0: number, off1: number, xCenter: number) => {
       const N = 96;
       const lo: Array<[number, number]> = [];
@@ -220,7 +222,6 @@ export function ParabolGate() {
       return g;
     };
     const cx = PARABOL_GATE.center.x;
-    // Mặt tây: khối chiếm x ∈ [cx-0,34, cx-0,30]; mặt đông: [cx+0,30, cx+0,34].
     geos.push(buildRail(0, 0.1, cx - 0.32));
     geos.push(buildRail(W - 0.1, W, cx - 0.32));
     geos.push(buildRail(0, 0.1, cx + 0.32));
@@ -233,12 +234,12 @@ export function ParabolGate() {
       ribbonGeo.dispose();
       collarGeos.forEach((g) => g.dispose());
       railGeos.forEach((g) => g.dispose());
+      concretePbr.map.dispose();
+      concretePbr.bumpMap.dispose();
     },
-    [ribbonGeo, collarGeos, railGeos],
+    [ribbonGeo, collarGeos, railGeos, concretePbr],
   );
 
-  // Huy hiệu tròn: đường kính 0,4 m, đặt đúng giữa mặt dải băng, cả hai
-  // mặt đông/tây, nhô 0,06 m khỏi mặt băng; nhân nhỏ ở giữa tạo độ nổi.
   const medallions = useMemo(() => {
     const list: Array<{ x: number; y: number; z: number }> = [];
     for (const s of [-1, 1]) {
@@ -251,8 +252,6 @@ export function ParabolGate() {
     return list;
   }, []);
 
-  // Vết ố xám-xanh: đĩa tròn mỏng dán trên mặt tây, tâm đúng giữa dải
-  // băng, nhô 0,015 m khỏi mặt + polygonOffset để không nhấp nháy.
   const stains = useMemo(
     () => STAIN_U.map(({ u, r }) => ({ ...midAt(u), r })),
     [],
@@ -260,18 +259,36 @@ export function ParabolGate() {
 
   return (
     <group>
-      {/* Dải băng chính + gờ dọc mép + gờ chia khoang. */}
+      {/* Dải băng chính + gờ dọc mép + gờ chia khoang với vân bê tông PBR. */}
       <mesh geometry={ribbonGeo} castShadow receiveShadow>
-        <meshStandardMaterial color={GATE_WHITE} roughness={0.9} />
+        <meshStandardMaterial
+          color={GATE_WHITE}
+          map={concretePbr.map}
+          bumpMap={concretePbr.bumpMap}
+          bumpScale={0.012}
+          roughness={0.86}
+        />
       </mesh>
       {railGeos.map((g, i) => (
         <mesh key={`rail-${i}`} geometry={g} castShadow>
-          <meshStandardMaterial color={GATE_WHITE} roughness={0.9} />
+          <meshStandardMaterial
+            color={GATE_WHITE}
+            map={concretePbr.map}
+            bumpMap={concretePbr.bumpMap}
+            bumpScale={0.01}
+            roughness={0.85}
+          />
         </mesh>
       ))}
       {collarGeos.map((g, i) => (
         <mesh key={`collar-${i}`} geometry={g} castShadow receiveShadow>
-          <meshStandardMaterial color={GATE_WHITE} roughness={0.9} />
+          <meshStandardMaterial
+            color={GATE_WHITE}
+            map={concretePbr.map}
+            bumpMap={concretePbr.bumpMap}
+            bumpScale={0.01}
+            roughness={0.85}
+          />
         </mesh>
       ))}
 
@@ -300,17 +317,45 @@ export function ParabolGate() {
         <group key={`medal-${i}`} position={[m.x, m.y, m.z]}>
           <mesh rotation-z={Math.PI / 2} castShadow>
             <cylinderGeometry args={[0.2, 0.2, 0.08, 20]} />
-            <meshStandardMaterial color={MEDAL} roughness={0.85} />
+            <meshStandardMaterial
+              color={MEDAL}
+              map={concretePbr.map}
+              bumpMap={concretePbr.bumpMap}
+              bumpScale={0.008}
+              roughness={0.8}
+            />
           </mesh>
           <mesh
             rotation-z={Math.PI / 2}
             position={[m.x < PARABOL_GATE.center.x ? -0.045 : 0.045, 0, 0]}
           >
             <cylinderGeometry args={[0.11, 0.11, 0.03, 16]} />
-            <meshStandardMaterial color={MEDAL_CORE} roughness={0.85} />
+            <meshStandardMaterial color={MEDAL_CORE} roughness={0.8} />
           </mesh>
         </group>
       ))}
+
+      {/* Đèn pha hắt sáng chân vòm Parabol khi Hoàng hôn & Ban đêm */}
+      {isNight && (
+        <>
+          {[6.2, 13.8].map((fz, i) => (
+            <group key={`parabol-flood-${i}`} position={[-87.2, 0.15, fz]}>
+              <mesh>
+                <boxGeometry args={[0.35, 0.22, 0.35]} />
+                <meshStandardMaterial color={IRON_BLACK} roughness={0.5} metalness={0.5} />
+              </mesh>
+              <mesh position={[0, 0.12, 0]}>
+                <planeGeometry args={[0.24, 0.24]} />
+                <meshStandardMaterial
+                  color="#FFF2CC"
+                  emissive="#FFCC66"
+                  emissiveIntensity={1.6}
+                />
+              </mesh>
+            </group>
+          ))}
+        </>
+      )}
 
       {/* Nhà gác trắng phía bắc cổng: hộp 4 × 3 × 3, mái bằng, cửa sổ đông
           + cửa ra mặt nam (hướng đường vào cổng). Vị trí đúng
@@ -318,15 +363,27 @@ export function ParabolGate() {
       <group position={[-88, 0, 1]}>
         <mesh position={[0, 1.5, 0]} castShadow receiveShadow>
           <boxGeometry args={[4, 3, 3]} />
-          <meshStandardMaterial color={GATE_WHITE} roughness={0.95} />
+          <meshStandardMaterial
+            color={GATE_WHITE}
+            map={concretePbr.map}
+            bumpMap={concretePbr.bumpMap}
+            bumpScale={0.01}
+            roughness={0.88}
+          />
         </mesh>
         <mesh position={[0, 3.1, 0]}>
           <boxGeometry args={[4.4, 0.2, 3.4]} />
-          <meshStandardMaterial color={C1_ROOF} roughness={0.95} />
+          <meshStandardMaterial color={C1_ROOF} roughness={0.9} />
         </mesh>
         <mesh position={[2.02, 1.6, 0]}>
           <boxGeometry args={[0.06, 1.1, 1.4]} />
-          <meshStandardMaterial color={C1_GLASS} roughness={0.5} />
+          <meshStandardMaterial
+            color={isNight ? '#FFD27D' : C1_GLASS}
+            emissive={isNight ? '#FFB84D' : '#000000'}
+            emissiveIntensity={isNight ? 0.75 : 0}
+            roughness={0.25}
+            metalness={0.25}
+          />
         </mesh>
         <mesh position={[0, 1, 1.53]}>
           <boxGeometry args={[0.9, 2, 0.06]} />
@@ -334,13 +391,17 @@ export function ParabolGate() {
         </mesh>
       </group>
 
-      {/* Mái che phẳng phía nam cổng trên 4 cột + cổng xếp sắt đen.
-          Cổng xếp: 6 thanh đứng + thanh ngang trên/dưới + thanh chéo chữ X
-          giữa các khoang (kiểu cổng xếp kéo ngang), khép hờ tại x = -88. */}
+      {/* Mái che phẳng phía nam cổng trên 4 cột + cổng xếp sắt đen. */}
       <group position={[-88, 0, 19]}>
         <mesh position={[0, 3.2, 0]} castShadow>
           <boxGeometry args={[5, 0.25, 4]} />
-          <meshStandardMaterial color={GATE_WHITE} roughness={0.95} />
+          <meshStandardMaterial
+            color={GATE_WHITE}
+            map={concretePbr.map}
+            bumpMap={concretePbr.bumpMap}
+            bumpScale={0.01}
+            roughness={0.88}
+          />
         </mesh>
         {[-2.2, 2.2].map((dx) =>
           [-1.7, 1.7].map((dz) => (
@@ -364,8 +425,6 @@ export function ParabolGate() {
           <boxGeometry args={[0.12, 0.12, 3.4]} />
           <meshStandardMaterial color={IRON_BLACK} roughness={0.5} metalness={0.5} />
         </mesh>
-        {/* Thanh chéo chữ X giữa các thanh đứng: mỗi khoang 0,6 m × cao
-            2,0 m, xoay quanh trục X ±73° trong mặt phẳng ZY. */}
         {[-1.2, -0.6, 0, 0.6, 1.2].map((dz, i) => (
           <mesh
             key={`xbrace-${dz}`}
@@ -378,11 +437,11 @@ export function ParabolGate() {
         ))}
       </group>
 
-      {/* Cây lớn hai bên cổng (như bản cũ). */}
-      <SimpleTree x={-93.5} z={4} trunkH={3.4} canopyR={3.2} canopyY={5} />
-      <SimpleTree x={-93.5} z={16} trunkH={3.4} canopyR={3.2} canopyY={5} />
-      <SimpleTree x={-82.5} z={2.5} trunkH={3} canopyR={2.6} canopyY={4.4} />
-      <SimpleTree x={-82.5} z={17.5} trunkH={3} canopyR={2.6} canopyY={4.4} />
+      {/* Cây lớn hai bên cổng sử dụng ImprovedTree có vân vỏ cây + tán lá PBR */}
+      <ImprovedTree x={-93.5} z={4} trunkH={3.4} canopyR={3.2} canopyY={5} />
+      <ImprovedTree x={-93.5} z={16} trunkH={3.4} canopyR={3.2} canopyY={5} />
+      <ImprovedTree x={-82.5} z={2.5} trunkH={3} canopyR={2.6} canopyY={4.4} />
+      <ImprovedTree x={-82.5} z={17.5} trunkH={3} canopyR={2.6} canopyY={4.4} />
     </group>
   );
 }

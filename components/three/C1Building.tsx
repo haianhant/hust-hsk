@@ -31,7 +31,14 @@
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { C1, C1_BENCHES } from '../../lib/campus';
+import type { TimeOfDay } from '../../lib/playerState';
 import { LabelPlane, drawC1Label } from './TextPlate';
+import {
+  makeGraniteStoneTexture,
+  makeWeatheredConcreteTexture,
+  makeWoodGrainTexture,
+} from './materials';
+import { ImprovedTree } from './Trees';
 
 // --- Bảng màu chốt (reference-visual §0) ------------------------------------
 const C1_WALL = '#F4F3EF'; // tường C1, trắng hơi ngả kem
@@ -208,6 +215,7 @@ function WindTower({
   baseY,
   solidBase,
   bottomRib,
+  isNight = false,
 }: {
   position: [number, number, number];
   rotationY?: number;
@@ -219,6 +227,7 @@ function WindTower({
   baseY: number;
   solidBase: boolean;
   bottomRib: boolean;
+  isNight?: boolean;
 }) {
   const pierW = 0.5;
   const ribW = 0.3;
@@ -313,10 +322,15 @@ function WindTower({
   return (
     <group position={position} rotation-y={rotationY}>
       <mesh geometry={whiteGeo} castShadow receiveShadow>
-        <meshStandardMaterial color={C1_WALL} roughness={0.95} />
+        <meshStandardMaterial color={C1_WALL} roughness={0.9} />
       </mesh>
       <mesh geometry={darkGeo}>
-        <meshStandardMaterial color={TOWER_DARK} roughness={0.95} />
+        <meshStandardMaterial
+          color={isNight ? '#8A6330' : TOWER_DARK}
+          emissive={isNight ? '#FFB84D' : '#000000'}
+          emissiveIntensity={isNight ? 0.55 : 0}
+          roughness={0.95}
+        />
       </mesh>
       {cells.map(([x, y], i) => (
         <mesh
@@ -326,86 +340,61 @@ function WindTower({
           castShadow
           receiveShadow
         >
-          <meshStandardMaterial color={C1_WALL} roughness={0.95} />
+          <meshStandardMaterial color={C1_WALL} roughness={0.9} />
         </mesh>
       ))}
     </group>
   );
 }
 
-// --- Cây Lipa tán phân lớp (thân + cụm tán lệch) ----------------------------
-// Đợt r2p-A mục 6: bỏ 3 cầu xếp chồng (2,4 + 1,5 + 1,4 m) đọc thành 1 quả
-// cầu lớn — tán mới là 5 khối lệch nhau (khối chính lệch tâm + khối phụ
-// lệch cao/thấp/ngang), dẹt không đều, silhouette không còn tròn hoàn hảo.
+// --- Cây Lipa tán phân lớp có vân vỏ cây + tán lá PBR & đung đưa nhẹ ----------
 function LocalTree({ x, z, canopyColor }: { x: number; z: number; canopyColor: string }) {
-  return (
-    <group position={[x, 0, z]}>
-      <mesh position={[0, 1.6, 0]} castShadow>
-        <cylinderGeometry args={[0.16, 0.22, 3.2, 10]} />
-        <meshStandardMaterial color={TRUNK} roughness={1} />
-      </mesh>
-      <mesh position={[0.5, 4.7, 0.2]} scale={[1, 0.7, 1]} castShadow>
-        <sphereGeometry args={[1.6, 16, 12]} />
-        <meshStandardMaterial color={canopyColor} roughness={1} />
-      </mesh>
-      <mesh position={[-1.3, 5.3, -0.3]} scale={[1, 0.6, 1]} castShadow>
-        <sphereGeometry args={[1.1, 14, 10]} />
-        <meshStandardMaterial color={canopyColor} roughness={1} />
-      </mesh>
-      <mesh position={[1.3, 4.1, -0.6]} scale={[1, 0.62, 1]} castShadow>
-        <sphereGeometry args={[0.95, 14, 10]} />
-        <meshStandardMaterial color={canopyColor} roughness={1} />
-      </mesh>
-      <mesh position={[-0.3, 5.9, 0.5]} scale={[1, 0.65, 1]} castShadow>
-        <sphereGeometry args={[0.8, 12, 10]} />
-        <meshStandardMaterial color={canopyColor} roughness={1} />
-      </mesh>
-      <mesh position={[0.9, 3.6, 0.7]} scale={[1, 0.6, 1]} castShadow>
-        <sphereGeometry args={[0.7, 12, 10]} />
-        <meshStandardMaterial color={canopyColor} roughness={1} />
-      </mesh>
-    </group>
-  );
+  return <ImprovedTree x={x} z={z} trunkH={3.2} canopyR={2.4} canopyY={4.7} canopyColor={canopyColor} />;
 }
 
 // --- Ghế gỗ nâu, khung sắt đen -------------------------------------------------
-function LocalBench({ x, z }: { x: number; z: number }) {
+function LocalBench({ x, z, woodTex }: { x: number; z: number; woodTex?: THREE.CanvasTexture }) {
   return (
     <group position={[x, 0, z]}>
       <mesh position={[0, 0.45, 0]} castShadow>
         <boxGeometry args={[1.8, 0.12, 0.55]} />
-        <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+        <meshStandardMaterial color={BENCH_WOOD} map={woodTex} roughness={0.85} />
       </mesh>
       <mesh position={[0, 0.78, -0.24]} castShadow>
         <boxGeometry args={[1.8, 0.55, 0.1]} />
-        <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+        <meshStandardMaterial color={BENCH_WOOD} map={woodTex} roughness={0.85} />
       </mesh>
       {[-0.8, 0.8].map((dx) => (
         <mesh key={dx} position={[dx, 0.22, 0]}>
           <boxGeometry args={[0.08, 0.45, 0.5]} />
-          <meshStandardMaterial color={BENCH_IRON} roughness={0.6} metalness={0.4} />
+          <meshStandardMaterial color={BENCH_IRON} roughness={0.5} metalness={0.5} />
         </mesh>
       ))}
     </group>
   );
 }
 
-// --- Cột đèn xanh đậm, 2 quả cầu trắng -----------------------------------------
-function LocalLamp({ x, z }: { x: number; z: number }) {
+// --- Cột đèn xanh đậm, 2 quả cầu trắng phát sáng ban đêm ----------------------
+function LocalLamp({ x, z, isNight = false }: { x: number; z: number; isNight?: boolean }) {
   return (
     <group position={[x, 0, z]}>
       <mesh position={[0, 1.7, 0]} castShadow>
         <cylinderGeometry args={[0.07, 0.1, 3.4, 8]} />
-        <meshStandardMaterial color={LAMP_GREEN} roughness={0.7} />
+        <meshStandardMaterial color={LAMP_GREEN} roughness={0.6} metalness={0.3} />
       </mesh>
       <mesh position={[0, 3.45, 0]}>
         <boxGeometry args={[1.3, 0.08, 0.08]} />
-        <meshStandardMaterial color={LAMP_GREEN} roughness={0.7} />
+        <meshStandardMaterial color={LAMP_GREEN} roughness={0.6} metalness={0.3} />
       </mesh>
       {[-0.6, 0.6].map((dx) => (
         <mesh key={dx} position={[dx, 3.62, 0]}>
           <sphereGeometry args={[0.26, 14, 10]} />
-          <meshStandardMaterial color="#F5F5F5" roughness={0.4} />
+          <meshStandardMaterial
+            color="#F5F5F5"
+            emissive={isNight ? '#FFE099' : '#000000'}
+            emissiveIntensity={isNight ? 1.35 : 0}
+            roughness={0.35}
+          />
         </mesh>
       ))}
     </group>
@@ -486,7 +475,11 @@ function drawVnFlag(ctx: CanvasRenderingContext2D, w: number, h: number) {
 }
 
 // --- Nhà C1 ----------------------------------------------------------------------
-export function C1Building() {
+export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
+  const isNight = timeOfDay === 'night' || timeOfDay === 'sunset';
+  const concretePbr = useMemo(() => makeWeatheredConcreteTexture(6, 3), []);
+  const granitePbr = useMemo(() => makeGraniteStoneTexture(4, 4), []);
+  const woodTex = useMemo(() => makeWoodGrainTexture(2, 1), []);
   const geos = useMemo(() => {
     const white: BoxSpec[] = [];
     const glass: BoxSpec[] = [];
@@ -663,8 +656,13 @@ export function C1Building() {
       geos.pinkGeo.dispose();
       geos.wavesGeo.dispose();
       geos.fasciaGeo.dispose();
+      concretePbr.map.dispose();
+      concretePbr.bumpMap.dispose();
+      granitePbr.map.dispose();
+      granitePbr.bumpMap.dispose();
+      woodTex.dispose();
     },
-    [geos],
+    [geos, concretePbr, granitePbr, woodTex],
   );
 
   return (
@@ -672,21 +670,34 @@ export function C1Building() {
       {/* Thân nhà đặc 48 × 14,4 × 11,0 (mặt nam lùi 3,0 m làm hành lang). */}
       <mesh position={[CX, H / 2, -57.5]} castShadow receiveShadow>
         <boxGeometry args={[W, H, CORE_DEPTH]} />
-        <meshStandardMaterial color={C1_WALL} roughness={0.95} />
+        <meshStandardMaterial
+          color={C1_WALL}
+          map={concretePbr.map}
+          bumpMap={concretePbr.bumpMap}
+          bumpScale={0.012}
+          roughness={0.88}
+        />
       </mesh>
 
       {/* Mặt đứng + khung cửa + sảnh + mái (trắng, gộp một geometry). */}
       <mesh geometry={geos.whiteGeo} castShadow receiveShadow>
-        <meshStandardMaterial color={C1_WALL} roughness={0.95} />
+        <meshStandardMaterial
+          color={C1_WALL}
+          map={concretePbr.map}
+          bumpMap={concretePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.88}
+        />
       </mesh>
 
-      {/* Kính lùi (xám-xanh, emissive nhẹ để không đọc thành đen). */}
+      {/* Kính lùi (xám-xanh ban ngày, phát sáng vàng ấm áp khi Hoàng hôn & Đêm). */}
       <mesh geometry={geos.glassGeo}>
         <meshStandardMaterial
-          color={C1_GLASS}
-          emissive={C1_GLASS}
-          emissiveIntensity={0.35}
-          roughness={0.35}
+          color={isNight ? '#FFD27D' : C1_GLASS}
+          emissive={isNight ? '#FFB84D' : C1_GLASS}
+          emissiveIntensity={isNight ? 0.78 : 0.25}
+          roughness={0.22}
+          metalness={0.28}
         />
       </mesh>
 
@@ -695,14 +706,26 @@ export function C1Building() {
         <meshStandardMaterial color="#2E3438" roughness={1} />
       </mesh>
 
-      {/* Bậc tam cấp đá xám-đen. */}
+      {/* Bậc tam cấp đá granite xám-đen. */}
       <mesh geometry={geos.stepsGeo} receiveShadow>
-        <meshStandardMaterial color={STEP_STONE} roughness={0.95} />
+        <meshStandardMaterial
+          color={STEP_STONE}
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.82}
+        />
       </mesh>
 
-      {/* Bệ sảnh + lề bồn cỏ (đá xám nhạt). */}
+      {/* Bệ sảnh + lề bồn cỏ (đá granite xám nhạt). */}
       <mesh geometry={geos.stoneGeo} receiveShadow>
-        <meshStandardMaterial color={PORCH_STONE} roughness={0.95} />
+        <meshStandardMaterial
+          color={PORCH_STONE}
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.008}
+          roughness={0.85}
+        />
       </mesh>
 
       {/* Cỏ bồn + thân hoa giấy. */}
@@ -719,7 +742,13 @@ export function C1Building() {
           trường 0,035 m — không trùng mặt). */}
       <mesh position={[CX, 0.03, -35.9]} receiveShadow>
         <boxGeometry args={[8, 0.04, 15.8]} />
-        <meshStandardMaterial color={PATH_STONE} roughness={0.95} />
+        <meshStandardMaterial
+          color={PATH_STONE}
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.008}
+          roughness={0.88}
+        />
       </mesh>
 
       {/* Mái 9 vòm nông — đúng 9 nhịp, mỗi vòm cao 0,5 m, vỏ dày 0,28 m. */}
@@ -730,7 +759,13 @@ export function C1Building() {
           position={[CX - W / 2 + (i + 0.5) * (W / C1.waves), 14.73, CZ]}
           castShadow
         >
-          <meshStandardMaterial color={C1_ROOF} roughness={0.95} />
+          <meshStandardMaterial
+            color={C1_ROOF}
+            map={concretePbr.map}
+            bumpMap={concretePbr.bumpMap}
+            bumpScale={0.012}
+            roughness={0.9}
+          />
         </mesh>
       ))}
 
@@ -752,9 +787,7 @@ export function C1Building() {
         </group>
       ))}
 
-      {/* Tháp hoa gió giữa mặt tiền (lưới từ mặt trên mái sảnh) + tháp
-          tương tự ở đầu hồi đông (nhúng 0,03 m vào tường hồi để không
-          trùng mặt; vẫn nằm trong collider cũ). */}
+      {/* Tháp hoa gió giữa mặt tiền + tháp đầu hồi đông (hốc cầu thang sáng đèn ấm về đêm) */}
       <WindTower
         position={[CX, 0, SOUTH_Z + 0.8]}
         w={10.2}
@@ -765,6 +798,7 @@ export function C1Building() {
         baseY={0.75}
         solidBase={false}
         bottomRib={false}
+        isNight={isNight}
       />
       <WindTower
         position={[-33.23, 0, CZ]}
@@ -777,10 +811,10 @@ export function C1Building() {
         baseY={0}
         solidBase
         bottomRib
+        isNight={isNight}
       />
 
-      {/* Biểu trưng dọc đỏ/vàng trên dải tường đặc (sao vàng trên, chữ
-          "BÁCH KHOA" vàng bên dưới) + chữ "C1" nâu-đồng RIÊNG ở vị trí thấp. */}
+      {/* Biểu trưng dọc đỏ/vàng trên dải tường đặc + chữ "C1" nâu-đồng */}
       <LabelPlane
         textureKey="hust-emblem-v"
         canvasW={420}
@@ -843,26 +877,18 @@ export function C1Building() {
         transparent={false}
       />
 
-      {/* Sân C1: 2 cây Lipa (đúng vị trí C1.lipaTrees), đèn, ghế, chậu hoa.
-          Không có vật nào trên trục lối vào (x = -58) ngoài logo I LOVE BK
-          vốn thuộc Landmarks.tsx. */}
+      {/* Sân C1: 2 cây Lipa, đèn sân phát sáng ban đêm, ghế gỗ có vân gỗ, chậu hoa. */}
       <LocalTree x={C1.lipaTrees[0].x} z={C1.lipaTrees[0].z} canopyColor="#5A7D2A" />
       <LocalTree x={C1.lipaTrees[1].x} z={C1.lipaTrees[1].z} canopyColor="#D9A419" />
-      {/* Đèn sân C1: cột (-76,-30) dời → (-72,5,-30) ngày 06/11 vì cột cũ
-          đứng ngay trước mép đông bia đá (WHITE_ROCK maxX -75,2), che mất
-          chữ cuối 2 dòng "HÀ NỘ[I]" / "TECHNOLOG[Y]" khi nhìn chính diện
-          từ sân nam. Cột mới vẫn trên hàng đèn z=-30, cách mép đá 2,7 m. */}
-      <LocalLamp x={-72.5} z={-30} />
-      <LocalLamp x={-40} z={-30} />
-      <LocalLamp x={-76} z={-44} />
-      <LocalLamp x={-40} z={-44} />
+      <LocalLamp x={-72.5} z={-30} isNight={isNight} />
+      <LocalLamp x={-40} z={-30} isNight={isNight} />
+      <LocalLamp x={-76} z={-44} isNight={isNight} />
+      <LocalLamp x={-40} z={-44} isNight={isNight} />
       {C1_BENCHES.map((b, i) => (
-        <LocalBench key={`c1-bench-${i}`} x={b.x} z={b.z} />
+        <LocalBench key={`c1-bench-${i}`} x={b.x} z={b.z} woodTex={woodTex} />
       ))}
       <LocalFlowerPot x={-65} z={-45.5} />
       <LocalFlowerPot x={-51} z={-45.5} />
-      {/* Chậu hoa giấy trong hành lang tầng trệt (sát tường lõi, không
-          chắn lối — theo ảnh, hành lang có cây/chậu). */}
       <LocalFlowerPot x={-80} z={-51.2} />
       <LocalFlowerPot x={-70} z={-51.2} />
       <LocalFlowerPot x={-40.5} z={-51.2} />

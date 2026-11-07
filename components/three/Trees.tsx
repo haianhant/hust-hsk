@@ -19,8 +19,14 @@
 // lib/campus.ts nên không bị ảnh hưởng); đặt cây ngoài đường đi chính.
 // ---------------------------------------------------------------------------
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import {
+  makeBarkTexture,
+  makeFoliageCanopyTexture,
+  makeSoftShadowTexture,
+} from './materials';
 
 export interface TreeProps {
   x: number;
@@ -31,7 +37,25 @@ export interface TreeProps {
   canopyColor?: string;
 }
 
-const TRUNK = '#6B5138';
+const TRUNK = '#7A5E42';
+
+// Shared singleton PBR textures for all campus trees (avoids duplicating 50+ CanvasTextures in VRAM)
+let sharedTreeTex: {
+  bark: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+  foliage: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+  shadow: THREE.CanvasTexture;
+} | null = null;
+
+function getSharedTreeTextures() {
+  if (!sharedTreeTex) {
+    sharedTreeTex = {
+      bark: makeBarkTexture(2, 4),
+      foliage: makeFoliageCanopyTexture(3, 3),
+      shadow: makeSoftShadowTexture(),
+    };
+  }
+  return sharedTreeTex;
+}
 
 // Seed cố định theo vị trí: cùng (x, z) luôn cho cùng một cây.
 function mulberry32(seed: number) {
@@ -140,40 +164,78 @@ export function ImprovedTree({
     [x, z, trunkH, canopyR, canopyY],
   );
   const tones = useMemo(() => leafTones(canopyColor), [canopyColor]);
+  const tex = useMemo(() => getSharedTreeTextures(), []);
+  const canopyRef = useRef<THREE.Group>(null!);
+  const phase = useMemo(() => (seedFromXZ(x, z) % 1000) * 0.00628, [x, z]);
+
+  useFrame((state) => {
+    if (!canopyRef.current) return;
+    const t = state.clock.elapsedTime;
+    canopyRef.current.rotation.z = Math.sin(t * 1.15 + phase) * 0.018;
+    canopyRef.current.rotation.x = Math.cos(t * 0.85 + phase * 1.3) * 0.014;
+  });
+
   return (
     <group position={[x, 0, z]} rotation-y={spec.rotY} scale={spec.s} rotation-z={spec.lean}>
-      {/* Thân thuôn dần (đáy to, ngọn nhỏ). */}
-      <mesh position={[0, trunkH / 2, 0]} castShadow>
-        <cylinderGeometry args={[spec.trunkTopR, spec.trunkBotR, trunkH, 10]} />
-        <meshStandardMaterial color={TRUNK} roughness={1} />
+      {/* Bóng đổ tiếp xúc mềm dưới gốc cây (Ambient Occlusion / Contact Shadow) */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.022 / spec.s, 0]}>
+        <planeGeometry args={[canopyR * 2.2, canopyR * 2.2]} />
+        <meshBasicMaterial
+          map={tex.shadow}
+          transparent
+          opacity={0.38}
+          depthWrite={false}
+        />
       </mesh>
-      {/* Nhánh: 1 nhánh/cụm tán, ngắm thẳng từ ngọn thân tới tâm cụm.
-          Gốc nhánh đặt ĐÚNG tại điểm chĩa trên trục thân (bán kính gốc
-          0,06–0,08 m < bán kính thân tại đó ~0,10–0,13 m nên gốc nằm hẳn
-          trong thân — không chôn sâu dọc trục vì nhánh nghiêng sẽ đẩy
-          gốc lệch khỏi thân thành đoạn thừa lơ lửng). Ngọn tới trong tán. */}
+      {/* Thân thuôn dần (đáy to, ngọn nhỏ) có vân vỏ cây PBR. */}
+      <mesh position={[0, trunkH / 2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[spec.trunkTopR, spec.trunkBotR, trunkH, 10]} />
+        <meshStandardMaterial
+          color={TRUNK}
+          map={tex.bark.map}
+          bumpMap={tex.bark.bumpMap}
+          bumpScale={0.025}
+          roughness={0.92}
+        />
+      </mesh>
+      {/* Nhánh: 1 nhánh/cụm tán, ngắm thẳng từ ngọn thân tới tâm cụm. */}
       {spec.branches.map((b, i) => (
         <group key={`br-${i}`} position={[0, spec.pivotY, 0]} rotation-y={-b.az}>
           <group rotation-z={b.tilt}>
             <mesh position={[0, b.len / 2, 0]} castShadow>
               <cylinderGeometry args={[b.r * 0.55, b.r, b.len, 6]} />
-              <meshStandardMaterial color={TRUNK} roughness={1} />
+              <meshStandardMaterial
+                color={TRUNK}
+                map={tex.bark.map}
+                bumpMap={tex.bark.bumpMap}
+                bumpScale={0.018}
+                roughness={0.92}
+              />
             </mesh>
           </group>
         </group>
       ))}
-      {/* Tán nhiều cụm lệch nhau, 3 sắc xanh gần nhau. */}
-      {spec.lobes.map((l, i) => (
-        <mesh
-          key={`lobe-${i}`}
-          position={[l.dx, l.dy, l.dz]}
-          scale={[1, l.sy, 1]}
-          castShadow
-        >
-          <sphereGeometry args={[l.r, 16, 12]} />
-          <meshStandardMaterial color={tones[l.tone]} roughness={1} />
-        </mesh>
-      ))}
+      {/* Tán nhiều cụm lệch nhau, 3 sắc xanh gần nhau + vân tán lá PBR + đung đưa nhẹ theo gió. */}
+      <group ref={canopyRef}>
+        {spec.lobes.map((l, i) => (
+          <mesh
+            key={`lobe-${i}`}
+            position={[l.dx, l.dy, l.dz]}
+            scale={[1, l.sy, 1]}
+            castShadow
+            receiveShadow
+          >
+            <sphereGeometry args={[l.r, 16, 12]} />
+            <meshStandardMaterial
+              color={tones[l.tone]}
+              map={tex.foliage.map}
+              bumpMap={tex.foliage.bumpMap}
+              bumpScale={0.032}
+              roughness={0.86}
+            />
+          </mesh>
+        ))}
+      </group>
     </group>
   );
 }
@@ -230,17 +292,34 @@ export function DroopingTree({
     [x, z, trunkH, canopyR, canopyY],
   );
   const tones = useMemo(() => leafTones(canopyColor), [canopyColor]);
+  const tex = useMemo(() => getSharedTreeTextures(), []);
   return (
     <group position={[x, 0, z]} rotation-y={spec.rotY} scale={spec.s}>
-      <mesh position={[0, trunkH / 2, 0]} castShadow>
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.022 / spec.s, 0]}>
+        <planeGeometry args={[canopyR * 2.2, canopyR * 2.2]} />
+        <meshBasicMaterial map={tex.shadow} transparent opacity={0.38} depthWrite={false} />
+      </mesh>
+      <mesh position={[0, trunkH / 2, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[0.13, 0.23, trunkH, 10]} />
-        <meshStandardMaterial color={TRUNK} roughness={1} />
+        <meshStandardMaterial
+          color={TRUNK}
+          map={tex.bark.map}
+          bumpMap={tex.bark.bumpMap}
+          bumpScale={0.025}
+          roughness={0.92}
+        />
       </mesh>
       {/* Tán trên 3 cụm lệch. */}
       {spec.lobes.map((l, i) => (
-        <mesh key={`top-${i}`} position={[l.dx, l.dy, l.dz]} scale={[1, l.sy, 1]} castShadow>
+        <mesh key={`top-${i}`} position={[l.dx, l.dy, l.dz]} scale={[1, l.sy, 1]} castShadow receiveShadow>
           <sphereGeometry args={[l.r, 16, 12]} />
-          <meshStandardMaterial color={tones[l.tone]} roughness={1} />
+          <meshStandardMaterial
+            color={tones[l.tone]}
+            map={tex.foliage.map}
+            bumpMap={tex.foliage.bumpMap}
+            bumpScale={0.032}
+            roughness={0.86}
+          />
         </mesh>
       ))}
       {/* Cành rủ cong: đoạn 1 chéo ra, đoạn 2 gập xuống + cụm lá dọc đoạn 2. */}
@@ -249,13 +328,13 @@ export function DroopingTree({
           <group rotation-z={a.tilt1}>
             <mesh position={[0, a.len1 / 2, 0]} castShadow>
               <cylinderGeometry args={[0.03, 0.05, a.len1, 5]} />
-              <meshStandardMaterial color={TRUNK} roughness={1} />
+              <meshStandardMaterial color={TRUNK} roughness={0.92} />
             </mesh>
             {/* Khớp cong: đoạn 2 gập thêm ~65° so với đoạn 1 (rủ xuống). */}
             <group position={[0, a.len1, 0]} rotation-z={1.15}>
               <mesh position={[0, a.len2 / 2, 0]} castShadow>
                 <cylinderGeometry args={[0.012, 0.03, a.len2, 5]} />
-                <meshStandardMaterial color={TRUNK} roughness={1} />
+                <meshStandardMaterial color={TRUNK} roughness={0.92} />
               </mesh>
               {a.leafs.map((lf, j) => (
                 <mesh
@@ -265,7 +344,13 @@ export function DroopingTree({
                   castShadow
                 >
                   <sphereGeometry args={[lf.r, 10, 8]} />
-                  <meshStandardMaterial color={tones[lf.tone]} roughness={1} />
+                  <meshStandardMaterial
+                    color={tones[lf.tone]}
+                    map={tex.foliage.map}
+                    bumpMap={tex.foliage.bumpMap}
+                    bumpScale={0.025}
+                    roughness={0.86}
+                  />
                 </mesh>
               ))}
             </group>

@@ -50,10 +50,13 @@
 // Chữ dùng canvas texture (TextPlate.tsx), không dùng drei Text.
 // ---------------------------------------------------------------------------
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { LIBRARY } from '../../lib/campus';
+import type { TimeOfDay } from '../../lib/playerState';
 import { LabelPlane, drawClockFace } from './TextPlate';
+import { makeGraniteStoneTexture, makeWeatheredConcreteTexture } from './materials';
+import { ImprovedTree } from './Trees';
 
 // --- Màu chốt (theo tư liệu studywithhuster — màu phẳng low-poly) -----------
 const LIB_WHITE = '#F2F3F5'; // tường thư viện, trắng ngà
@@ -96,30 +99,14 @@ function LibTree({ x, z, trunkH = 2, canopyR = 1.3, canopyY = 2.9, canopyColor =
   x: number; z: number; trunkH?: number; canopyR?: number; canopyY?: number; canopyColor?: string;
 }) {
   return (
-    <group position={[x, 0, z]}>
-      <mesh position={[0, trunkH / 2, 0]} castShadow>
-        <cylinderGeometry args={[0.16, 0.22, trunkH, 10]} />
-        <meshStandardMaterial color={TRUNK} roughness={1} />
-      </mesh>
-      {/* Tán cụm lệch: khối chính lệch tâm + 3 khối phụ lệch cao/lệch ngang,
-          dẹt không đều — không còn 1 cầu tròn hoàn hảo. */}
-      <mesh position={[0.25, canopyY, 0.1]} scale={[1, 0.72, 1]} castShadow>
-        <sphereGeometry args={[canopyR * 0.68, 16, 12]} />
-        <meshStandardMaterial color={canopyColor} roughness={1} />
-      </mesh>
-      <mesh position={[-0.75, canopyY + 0.35, -0.2]} scale={[1, 0.62, 1]} castShadow>
-        <sphereGeometry args={[canopyR * 0.5, 14, 10]} />
-        <meshStandardMaterial color={canopyColor} roughness={1} />
-      </mesh>
-      <mesh position={[0.7, canopyY - 0.25, -0.45]} scale={[1, 0.6, 1]} castShadow>
-        <sphereGeometry args={[canopyR * 0.45, 14, 10]} />
-        <meshStandardMaterial color={canopyColor} roughness={1} />
-      </mesh>
-      <mesh position={[-0.15, canopyY + 0.75, 0.45]} scale={[1, 0.65, 1]} castShadow>
-        <sphereGeometry args={[canopyR * 0.38, 12, 10]} />
-        <meshStandardMaterial color={canopyColor} roughness={1} />
-      </mesh>
-    </group>
+    <ImprovedTree
+      x={x}
+      z={z}
+      trunkH={trunkH}
+      canopyR={canopyR}
+      canopyY={canopyY}
+      canopyColor={canopyColor}
+    />
   );
 }
 
@@ -247,7 +234,7 @@ function LibFanPalm({ x, z }: { x: number; z: number }) {
 
 // --- Đèn sân trước: cột đen mảnh, đầu chùm bóng trắng hình cầu ------------
 // Loại chính 5 bóng (dọc lối đi, cao 3,2 m) và loại 3 bóng nhỏ hơn (cao 2,5 m).
-function LibLamp({ x, z, balls = 5 }: { x: number; z: number; balls?: 5 | 3 }) {
+function LibLamp({ x, z, balls = 5, isNight = false }: { x: number; z: number; balls?: 5 | 3; isNight?: boolean }) {
   const h = balls === 5 ? 3.2 : 2.5;
   const r = balls === 5 ? 0.14 : 0.12;
   const offsets =
@@ -263,7 +250,12 @@ function LibLamp({ x, z, balls = 5 }: { x: number; z: number; balls?: 5 | 3 }) {
       {offsets.map(([dx, dy, dz], i) => (
         <mesh key={`ball-${i}`} position={[dx, h + dy, dz]} castShadow>
           <sphereGeometry args={[r, 12, 10]} />
-          <meshStandardMaterial color={LAMP_BALL} roughness={0.4} />
+          <meshStandardMaterial
+            color={LAMP_BALL}
+            emissive={isNight ? '#FFE099' : '#000000'}
+            emissiveIntensity={isNight ? 1.3 : 0}
+            roughness={0.35}
+          />
         </mesh>
       ))}
     </group>
@@ -277,16 +269,16 @@ function LibBench({ x, z }: { x: number; z: number }) {
       {/* Mặt ngồi hướng về phía tây (ra sân) — tựa lưng ở phía đông. */}
       <mesh position={[0, 0.45, 0]} castShadow>
         <boxGeometry args={[0.5, 0.08, 1.8]} />
-        <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+        <meshStandardMaterial color={BENCH_WOOD} roughness={0.85} />
       </mesh>
       <mesh position={[0.24, 0.75, 0]} rotation-z={-0.15} castShadow>
         <boxGeometry args={[0.08, 0.55, 1.8]} />
-        <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+        <meshStandardMaterial color={BENCH_WOOD} roughness={0.85} />
       </mesh>
       {[-0.8, 0.8].map((dz) => (
         <mesh key={`leg-${dz}`} position={[0, 0.22, dz]}>
           <boxGeometry args={[0.4, 0.45, 0.08]} />
-          <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+          <meshStandardMaterial color={BENCH_WOOD} roughness={0.85} />
         </mesh>
       ))}
     </group>
@@ -294,8 +286,6 @@ function LibBench({ x, z }: { x: number; z: number }) {
 }
 
 // --- Chữ "HUST" đỏ khối 3D: mỗi chữ ghép từ các hộp (font khối) -------------
-// Mỗi chữ rộng 1,1 m, cao 1,8 m, dày 0,5 m; nét 0,28 m. Đoạn [dx, dy, w, h]
-// tính từ góc dưới-trái của chữ.
 const LETTER_SEGMENTS: Record<string, Array<[number, number, number, number]>> = {
   H: [[0, 0, 0.28, 1.8], [0.82, 0, 0.28, 1.8], [0.28, 0.76, 0.54, 0.28]],
   U: [[0, 0.28, 0.28, 1.52], [0.82, 0.28, 0.28, 1.52], [0, 0, 1.1, 0.28]],
@@ -303,14 +293,32 @@ const LETTER_SEGMENTS: Record<string, Array<[number, number, number, number]>> =
   T: [[0, 1.52, 1.1, 0.28], [0.41, 0, 0.28, 1.52]],
 };
 
-function BlockLetter({ letter, x, y, z }: { letter: string; x: number; y: number; z: number }) {
+function BlockLetter({
+  letter,
+  x,
+  y,
+  z,
+  isNight = false,
+}: {
+  letter: string;
+  x: number;
+  y: number;
+  z: number;
+  isNight?: boolean;
+}) {
   const segs = LETTER_SEGMENTS[letter] ?? [];
   return (
     <group position={[x, y, z]}>
       {segs.map(([dx, dy, w, h], i) => (
         <mesh key={`${letter}-${i}`} position={[dx + w / 2, dy + h / 2, 0]} castShadow>
           <boxGeometry args={[w, h, 0.5]} />
-          <meshStandardMaterial color={HUST_RED} roughness={0.6} />
+          <meshStandardMaterial
+            color={HUST_RED}
+            emissive={isNight ? '#FF3A44' : '#000000'}
+            emissiveIntensity={isNight ? 0.55 : 0}
+            roughness={0.45}
+            metalness={0.15}
+          />
         </mesh>
       ))}
     </group>
@@ -324,20 +332,19 @@ function drawLibraryName(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   let size = 88;
-  // Nét 700 (không 900) + viền mỏng: chữ không quá dày, đọc rõ trên trắng.
   ctx.font = `700 ${size}px Arial, sans-serif`;
   while (ctx.measureText(text).width > w * 0.96 && size > 10) {
     size -= 2;
     ctx.font = `700 ${size}px Arial, sans-serif`;
   }
   ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(90, 70, 20, 0.55)'; // viền sẫm mỏng để chữ vàng đọc được trên tường trắng
+  ctx.strokeStyle = 'rgba(90, 70, 20, 0.55)';
   ctx.strokeText(text, w / 2, h / 2 + 2);
   ctx.fillStyle = '#C9A227';
   ctx.fillText(text, w / 2, h / 2 + 2);
 }
 
-// --- Hộp kính / hộp trắng dùng chung (vật liệu chốt, không mặt trùng nhau) ----
+// --- Hộp kính / hộp trắng dùng chung (có phản chiếu IBL & sáng đèn phòng đọc ban đêm) ----
 function GlassBox({ p, s }: { p: [number, number, number]; s: [number, number, number] }) {
   return (
     <mesh position={p}>
@@ -345,9 +352,9 @@ function GlassBox({ p, s }: { p: [number, number, number]; s: [number, number, n
       <meshStandardMaterial
         color={LIB_GLASS}
         emissive={LIB_GLASS}
-        emissiveIntensity={1}
-        roughness={0.3}
-        metalness={0.1}
+        emissiveIntensity={0.45}
+        roughness={0.18}
+        metalness={0.32}
       />
     </mesh>
   );
@@ -359,12 +366,15 @@ function WhiteBox({ p, s, shadow = false }: {
   return (
     <mesh position={p} castShadow={shadow} receiveShadow>
       <boxGeometry args={s} />
-      <meshStandardMaterial color={LIB_WHITE} roughness={0.9} />
+      <meshStandardMaterial color={LIB_WHITE} roughness={0.86} />
     </mesh>
   );
 }
 
-export function LibraryBuilding() {
+export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
+  const isNight = timeOfDay === 'night' || timeOfDay === 'sunset';
+  const concretePbr = useMemo(() => makeWeatheredConcreteTexture(4, 8), []);
+  const granitePbr = useMemo(() => makeGraniteStoneTexture(4, 4), []);
   const clockR = LIBRARY.clock.radius; // 1,3 m — giữ đúng hằng số (đợt 4)
   const clock = LIBRARY.clock; // (38, 7,3, 23,9), mặt bắc
 
@@ -380,6 +390,17 @@ export function LibraryBuilding() {
     return tex;
   }, []);
 
+  useEffect(
+    () => () => {
+      clockTex.dispose();
+      concretePbr.map.dispose();
+      concretePbr.bumpMap.dispose();
+      granitePbr.map.dispose();
+      granitePbr.bumpMap.dispose();
+    },
+    [clockTex, concretePbr, granitePbr],
+  );
+
   // Lam khối đế: 13 thanh/cụm, cách nhau 0,25 m, dày 0,14 m — khe sáng giữa
   // các thanh 0,11 m, từ xa vẫn tách được từng thanh.
   const slatY = Array.from({ length: 13 }, (_, i) => 6.25 + i * 0.25);
@@ -391,42 +412,71 @@ export function LibraryBuilding() {
   const centerGroupX = Array.from({ length: 7 }, (_, i) => 33.5 + i * 1.5);
   // Cột sảnh: 6 cột vuông, cách nhau 1,9 m.
   const colX = [33.5, 35.4, 37.3, 39.2, 41.1, 43.0];
-  // Chữ HUST: 4 chữ, mỗi chữ rộng 1,1 m, khe 0,25 m → tổng 5,15 m, tâm (38, 14).
-  // Mép trái tương đối so với tâm: -(4*1,1 + 3*0,25)/2 = -2,575 (dùng trực
-  // tiếp trong nhóm chữ đã xoay π; xem chú thích ở phần chữ HUST).
 
   return (
     <group>
       {/* ============ BỆ CHÂN (y 0..0,6) — nâng toàn bộ công trình ============ */}
-      {/* Bệ sảnh (x 32,5..43,5, z 19..30): sàn sảnh + chỗ đứng của cột hiên. */}
       <mesh position={[38, 0.3, 24.5]} receiveShadow>
         <boxGeometry args={[11, 0.6, 11]} />
-        <meshStandardMaterial color={STONE} roughness={0.95} />
+        <meshStandardMaterial
+          color={STONE}
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.85}
+        />
       </mesh>
-      {/* Bệ cánh tây/đông (dưới tháp, z 30..43) — bệ khối giữa đã có ở bệ sảnh. */}
       <mesh position={[30, 0.3, 36.5]} receiveShadow>
         <boxGeometry args={[5, 0.6, 13]} />
-        <meshStandardMaterial color={STONE} roughness={0.95} />
+        <meshStandardMaterial
+          color={STONE}
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.85}
+        />
       </mesh>
       <mesh position={[46, 0.3, 36.5]} receiveShadow>
         <boxGeometry args={[5, 0.6, 13]} />
-        <meshStandardMaterial color={STONE} roughness={0.95} />
+        <meshStandardMaterial
+          color={STONE}
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.85}
+        />
       </mesh>
 
-      {/* ============ KHỐI THÁP — 3 nhịp (tường trắng, kính xanh đen) ============ */}
-      {/* Khối giữa: x 32,5..43,5, z 28..43, y 0,6..32,6 — nhô trước 2 m, cao hơn nửa tầng. */}
+      {/* ============ KHỐI THÁP — 3 nhịp (tường trắng PBR, kính xanh đen IBL) ============ */}
       <mesh position={[38, (PLINTH + CENTER_TOP) / 2, 35.5]} castShadow receiveShadow>
         <boxGeometry args={[11, CENTER_TOP - PLINTH, 15]} />
-        <meshStandardMaterial color={LIB_WHITE} roughness={0.9} />
+        <meshStandardMaterial
+          color={LIB_WHITE}
+          map={concretePbr.map}
+          bumpMap={concretePbr.bumpMap}
+          bumpScale={0.012}
+          roughness={0.86}
+        />
       </mesh>
-      {/* Cánh tây/đông: x 27,5..32,5 / 43,5..48,5, z 30..43, y 0,6..31,0. */}
       <mesh position={[30, (PLINTH + WING_TOP) / 2, 36.5]} castShadow receiveShadow>
         <boxGeometry args={[5, WING_TOP - PLINTH, 13]} />
-        <meshStandardMaterial color={LIB_WHITE} roughness={0.9} />
+        <meshStandardMaterial
+          color={LIB_WHITE}
+          map={concretePbr.map}
+          bumpMap={concretePbr.bumpMap}
+          bumpScale={0.012}
+          roughness={0.86}
+        />
       </mesh>
       <mesh position={[46, (PLINTH + WING_TOP) / 2, 36.5]} castShadow receiveShadow>
         <boxGeometry args={[5, WING_TOP - PLINTH, 13]} />
-        <meshStandardMaterial color={LIB_WHITE} roughness={0.9} />
+        <meshStandardMaterial
+          color={LIB_WHITE}
+          map={concretePbr.map}
+          bumpMap={concretePbr.bumpMap}
+          bumpScale={0.012}
+          roughness={0.86}
+        />
       </mesh>
 
       {/* Dải kính đứng tối, hẹp, lõm vào giữa khối giữa và cánh phải (lõi thang):
@@ -590,11 +640,16 @@ export function LibraryBuilding() {
       <group position={[clock.x, clock.y, clock.z]} rotation-y={Math.PI}>
         <mesh>
           <circleGeometry args={[clockR, 48]} />
-          <meshStandardMaterial map={clockTex} roughness={0.6} />
+          <meshStandardMaterial
+            map={clockTex}
+            emissive={isNight ? '#FFF4D2' : '#000000'}
+            emissiveIntensity={isNight ? 0.65 : 0}
+            roughness={0.5}
+          />
         </mesh>
         <mesh>
           <torusGeometry args={[clockR + 0.04, 0.08, 12, 64]} />
-          <meshStandardMaterial color={LIB_BLUE} roughness={0.7} />
+          <meshStandardMaterial color={LIB_BLUE} roughness={0.65} metalness={0.2} />
         </mesh>
         <group position={[0, 0, 0.08]}>
           <group rotation-z={-((10 * 30 + 10 * 0.5) * Math.PI) / 180}>
@@ -625,8 +680,7 @@ export function LibraryBuilding() {
           <meshStandardMaterial color={LIB_BLUE} roughness={0.85} />
         </mesh>
       ))}
-      {/* Gờ mái đế thấp phía trước (lớp xanh thứ hai, song song mái chính
-          khi nhìn chéo) + mái đế xanh dương đậm. */}
+      {/* Gờ mái đế thấp phía trước + mái đế xanh dương đậm. */}
       <mesh position={[38, 9.95, 24.0]} castShadow>
         <boxGeometry args={[11, 0.3, 1.0]} />
         <meshStandardMaterial color={LIB_BLUE} roughness={0.85} />
@@ -636,11 +690,7 @@ export function LibraryBuilding() {
         <meshStandardMaterial color={LIB_BLUE} roughness={0.85} />
       </mesh>
 
-      {/* Biển tên vàng trên mặt tháp (đợt 4, đã sửa vị trí): y 13,8, rộng 8 m —
-          NGAY TRÊN mái xanh của khối đế (y 11,3) nhưng DƯỚI hàng cửa tầng 4
-          (y 14,55..16,05). Vị trí cũ y 12,3 BỊ MÁI ĐẾ CHE KHUẤT từ sân trước
-          (tia nhìn từ camera thấp qua mép mái z=24 chạm tường tháp ở
-          y ≈ 12,7; biển 11,8..12,8 gần như khuất hẳn). Chữ giữ nguyên. */}
+      {/* Biển tên vàng trên mặt tháp */}
       <LabelPlane
         textureKey="library-name"
         canvasW={1024}
@@ -651,22 +701,48 @@ export function LibraryBuilding() {
         rotation={[0, Math.PI, 0]}
       />
 
+      {/* Các ô cửa sổ phòng đọc sáng đèn ấm áp trên tháp 10 tầng khi Hoàng hôn & Đêm */}
+      {isNight && (
+        <group>
+          {[4, 5, 6, 7, 8].map((f) =>
+            centerGroupX
+              .filter((_, idx) => (f + idx) % 2 === 0)
+              .map((x) => (
+                <mesh key={`lib-night-win-${f}-${x}`} position={[x, bandY(f), 27.88]}>
+                  <planeGeometry args={[1.15, 1.42]} />
+                  <meshStandardMaterial
+                    color="#FFD27D"
+                    emissive="#FFB84D"
+                    emissiveIntensity={0.82}
+                    roughness={0.3}
+                  />
+                </mesh>
+              )),
+          )}
+        </group>
+      )}
+
       {/* ============ SẢNH — mái hiên + 6 cột vuông + cửa kính + bậc ============ */}
-      {/* Mái hiên phẳng trắng/xám nhô ra z 18..24,5 + dầm ngang dưới mép mái. */}
       <mesh position={[38, 5.8, 21.25]} castShadow>
         <boxGeometry args={[11, 0.4, 6.5]} />
-        <meshStandardMaterial color={LIB_WHITE} roughness={0.9} />
+        <meshStandardMaterial
+          color={LIB_WHITE}
+          map={concretePbr.map}
+          bumpMap={concretePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.88}
+        />
       </mesh>
       <mesh position={[38, 5.4, 24.35]} castShadow>
         <boxGeometry args={[11, 0.4, 0.3]} />
-        <meshStandardMaterial color={LIB_WHITE} roughness={0.9} />
+        <meshStandardMaterial
+          color={LIB_WHITE}
+          map={concretePbr.map}
+          bumpMap={concretePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.88}
+        />
       </mesh>
-      {/* Trần hiên (soffit) — tấm mỏng xám nhạt KHÔNG CHỊU SÁNG
-          (meshBasicMaterial) ngay dưới mái hiên + dưới dầm. Lý do: mặt dưới
-          của mái/dầm trắng nhận màu nền của hemisphereLight (#8a9a72, xanh
-          ô-liu) nên render ra TRẦN XANH — sai tư liệu (mái hiên trắng/xám).
-          Tấm basic giữ đúng màu xám nhạt ở mọi góc nhìn; không đổi ánh sáng
-          toàn cục (ảnh hưởng cả campus). */}
       <mesh position={[38, 5.56, 21.25]}>
         <boxGeometry args={[11, 0.08, 6.5]} />
         <meshBasicMaterial color="#DDDCD7" />
@@ -679,11 +755,15 @@ export function LibraryBuilding() {
       {colX.map((x) => (
         <mesh key={`lib-col-${x}`} position={[x, 3.3, 19.5]} castShadow>
           <boxGeometry args={[0.5, 5.4, 0.5]} />
-          <meshStandardMaterial color={COLUMN_GREY} roughness={0.9} />
+          <meshStandardMaterial
+            color={COLUMN_GREY}
+            map={concretePbr.map}
+            bumpMap={concretePbr.bumpMap}
+            bumpScale={0.012}
+            roughness={0.85}
+          />
         </mesh>
       ))}
-      {/* Cửa kính đôi ở giữa + panel kính xanh đậm hai bên, khung dọc xanh dương.
-          Bên trong tối (hộp tối lùi 0,1 m sau cửa). */}
       <mesh position={[38, 3.3, 27.3]}>
         <boxGeometry args={[7, 5.4, 1.4]} />
         <meshStandardMaterial color={INTERIOR_DARK} roughness={1} />
@@ -706,8 +786,7 @@ export function LibraryBuilding() {
           <meshStandardMaterial color={LIB_BLUE} roughness={0.85} />
         </mesh>
       ))}
-      {/* Bậc tiếp cận rộng (4 bậc, mỗi bậc cao 0,15 m, sâu 0,5 m) + bậc bên
-          2 đầu (mỗi đầu 1 khối 2 bậc). */}
+      {/* Bậc tiếp cận rộng (4 bậc đá granite) + bậc bên 2 đầu */}
       {[
         { y: 0.525, z: 18.75 },
         { y: 0.375, z: 18.25 },
@@ -716,29 +795,43 @@ export function LibraryBuilding() {
       ].map(({ y, z }) => (
         <mesh key={`lib-step-${z}`} position={[38, y, z]} receiveShadow>
           <boxGeometry args={[11, 0.15, 0.5]} />
-          <meshStandardMaterial color={STONE} roughness={0.95} />
+          <meshStandardMaterial
+            color={STONE}
+            map={granitePbr.map}
+            bumpMap={granitePbr.bumpMap}
+            bumpScale={0.01}
+            roughness={0.85}
+          />
         </mesh>
       ))}
       {[32, 44].map((x) => (
         <mesh key={`lib-step-side-${x}`} position={[x, 0.15, 18]} receiveShadow>
           <boxGeometry args={[1, 0.3, 2]} />
-          <meshStandardMaterial color={STONE} roughness={0.95} />
+          <meshStandardMaterial
+            color={STONE}
+            map={granitePbr.map}
+            bumpMap={granitePbr.bumpMap}
+            bumpScale={0.01}
+            roughness={0.85}
+          />
         </mesh>
       ))}
 
       {/* ============ TIỀN CẢNH PHÍA BẮC — sân trước mới (z 10..19) ============ */}
-      {/* Lối đi chính màu nâu đỏ (x 24..33, z 12..16) + sân lát xám trước sảnh
-          (x 33..46, z 12..16). Vẽ trên mặt plaza (y 0,015) ở y ~0,035. */}
       <mesh rotation-x={-Math.PI / 2} position={[28.5, 0.035, 14]} receiveShadow>
         <planeGeometry args={[9, 4]} />
-        <meshStandardMaterial color={WALK_RED} roughness={0.95} />
+        <meshStandardMaterial color={WALK_RED} roughness={0.92} />
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position={[39.5, 0.035, 14]} receiveShadow>
         <planeGeometry args={[13, 4]} />
-        <meshStandardMaterial color={YARD_GREY} roughness={0.95} />
+        <meshStandardMaterial
+          color={YARD_GREY}
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.008}
+          roughness={0.88}
+        />
       </mesh>
-      {/* 2 bồn cỏ đối xứng hai bên lối đi chính (bắc: x 25..32, z 10..12;
-          nam: x 25..32, z 16..19) + bồn cỏ lớn đầu đông (x 46..49,5, z 11..19). */}
       <mesh rotation-x={-Math.PI / 2} position={[28.5, 0.04, 11]} receiveShadow>
         <planeGeometry args={[7, 2]} />
         <meshStandardMaterial color={LAWN} roughness={1} />
@@ -751,40 +844,33 @@ export function LibraryBuilding() {
         <planeGeometry args={[3.5, 8]} />
         <meshStandardMaterial color={LAWN} roughness={1} />
       </mesh>
-      {/* Cây tròn tán lớn trong bồn cỏ: bồn nam 1 cây lớn + bồn bắc 1 cây nhỏ
-          + bồn đông 1 cây tròn. */}
       <LibTree x={28.5} z={17.5} trunkH={2.2} canopyR={1.5} canopyY={3.2} />
       <LibTree x={28.5} z={11} trunkH={1.6} canopyR={0.9} canopyY={2.4} />
       <LibTree x={47.5} z={15} trunkH={1.8} canopyR={1.2} canopyY={2.7} />
-      {/* 2 cây cọ cao ở bồn cỏ đầu đông (theo tư liệu: đầu phía phải khi nhìn
-          từ mặt tiền có bồn lớn với 2 cây cọ cao). */}
       <LibFanPalm x={47} z={12.5} />
       <LibFanPalm x={48.5} z={17.5} />
-      {/* Ghế gỗ nâu nhỏ ở bồn cỏ đầu đông, mặt hướng ra sân. */}
       <LibBench x={48.5} z={13.5} />
-      {/* Đèn 5 bóng dọc mép lối đi + trong bồn cỏ; đèn 3 bóng nhỏ ở bồn đông. */}
-      <LibLamp x={26} z={11} balls={5} />
-      <LibLamp x={30} z={11} balls={5} />
-      <LibLamp x={26} z={17.5} balls={5} />
-      <LibLamp x={30} z={17.5} balls={5} />
-      <LibLamp x={46.8} z={12} balls={3} />
-      <LibLamp x={46.8} z={18} balls={3} />
-      {/* Thùng rác xanh nhỏ ở 2 mép lối đi chính, gần bồn cỏ. */}
+      <LibLamp x={26} z={11} balls={5} isNight={isNight} />
+      <LibLamp x={30} z={11} balls={5} isNight={isNight} />
+      <LibLamp x={26} z={17.5} balls={5} isNight={isNight} />
+      <LibLamp x={30} z={17.5} balls={5} isNight={isNight} />
+      <LibLamp x={46.8} z={12} balls={3} isNight={isNight} />
+      <LibLamp x={46.8} z={18} balls={3} isNight={isNight} />
       {[12.4, 15.6].map((z) => (
         <mesh key={`lib-bin-${z}`} position={[24.8, 0.3, z]} castShadow>
           <cylinderGeometry args={[0.25, 0.22, 0.6, 12]} />
           <meshStandardMaterial color={BIN_GREEN} roughness={0.8} />
         </mesh>
       ))}
-      {/* Chữ "HUST" đỏ khối 3D trên bệ đen, trên trục giữa sân xám — rộng
-          ~5,15 m (khoảng nửa chiều rộng sảnh 11 m), mặt chữ hướng về bắc
-          (ra phía đường vào). Nhóm chữ xoay π quanh Y (như mặt đồng hồ):
-          nhìn từ phía bắc (hướng vào sảnh) chữ phải đọc H-U-S-T từ trái
-          sang phải — đặt trực tiếp theo +X sẽ bị ĐẢO ("TƧUH") vì từ phía
-          bắc, +X (đông) nằm bên TRÁI người nhìn. */}
       <mesh position={[38, 0.25, 14]} castShadow receiveShadow>
         <boxGeometry args={[5.6, 0.5, 1.2]} />
-        <meshStandardMaterial color={INK} roughness={0.85} />
+        <meshStandardMaterial
+          color={INK}
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.75}
+        />
       </mesh>
       <group position={[38, 0.5, 14]} rotation={[0, Math.PI, 0]}>
         {['H', 'U', 'S', 'T'].map((letter, i) => (
@@ -794,11 +880,12 @@ export function LibraryBuilding() {
             x={-2.575 + i * 1.35}
             y={0}
             z={0}
+            isNight={isNight}
           />
         ))}
       </group>
 
-      {/* ============ SÂN SAU PHÍA NAM — đảo cỏ + lộc vừng (giữ nguyên) ============ */}
+      {/* ============ SÂN SAU PHÍA NAM — đảo cỏ + lộc vừng lá đỏ PBR ============ */}
       <mesh rotation-x={-Math.PI / 2} position={[30, 0.03, 52]} receiveShadow>
         <circleGeometry args={[3, 32]} />
         <meshStandardMaterial color={LEAF} roughness={1} />
@@ -806,25 +893,7 @@ export function LibraryBuilding() {
       <LibTree x={30} z={52} trunkH={1.8} canopyR={1.2} canopyY={2.6} />
       <LibPalm x={33} z={15.5} />
       <LibPalm x={43} z={15.5} />
-      {/* Lộc vừng: cụm 3 tán lệch nhau thay vì 1 cầu tròn hoàn hảo. */}
-      <group position={[49, 0, 52]}>
-        <mesh position={[0, 1.1, 0]} castShadow>
-          <cylinderGeometry args={[0.16, 0.22, 2.2, 10]} />
-          <meshStandardMaterial color={TRUNK} roughness={1} />
-        </mesh>
-        <mesh position={[0, 3.0, 0]} castShadow>
-          <sphereGeometry args={[1.05, 16, 12]} />
-          <meshStandardMaterial color={RED_LEAF} roughness={1} />
-        </mesh>
-        <mesh position={[0.85, 2.6, 0.35]} castShadow>
-          <sphereGeometry args={[0.7, 14, 10]} />
-          <meshStandardMaterial color={RED_LEAF} roughness={1} />
-        </mesh>
-        <mesh position={[-0.7, 2.7, -0.3]} castShadow>
-          <sphereGeometry args={[0.65, 14, 10]} />
-          <meshStandardMaterial color={RED_LEAF} roughness={1} />
-        </mesh>
-      </group>
+      <ImprovedTree x={49} z={52} trunkH={2.2} canopyR={1.35} canopyY={3.0} canopyColor={RED_LEAF} />
     </group>
   );
 }

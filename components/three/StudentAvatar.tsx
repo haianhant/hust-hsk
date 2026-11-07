@@ -15,8 +15,28 @@
 import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { makeFabricTexture } from './materials';
+import {
+  makeFabricTexture,
+  makeHairStrandTexture,
+  makeSoftShadowTexture,
+} from './materials';
 import type { AvatarOutfitId } from '../../lib/playerState';
+
+// Shared singleton textures for all human figures (Player + AmbientLife NPCs)
+let sharedAvatarTex: {
+  hair: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+  shadow: THREE.CanvasTexture;
+} | null = null;
+
+function getSharedAvatarTextures() {
+  if (!sharedAvatarTex) {
+    sharedAvatarTex = {
+      hair: makeHairStrandTexture(3, 3),
+      shadow: makeSoftShadowTexture(),
+    };
+  }
+  return sharedAvatarTex;
+}
 
 // --- Bảng màu chuẩn ----------------------------------------------------------
 const POLO_RED = '#DA1E26'; // đỏ polo tươi HUST
@@ -589,6 +609,7 @@ function Head({
 }) {
   const eyelidLRef = useRef<THREE.Mesh>(null!);
   const eyelidRRef = useRef<THREE.Mesh>(null!);
+  const { hair: hairPbr } = useMemo(() => getSharedAvatarTextures(), []);
 
   // Hoạt họa chớp mắt tự nhiên mỗi ~3,4 giây (không làm thay đổi bounding box của đầu)
   useFrame(({ clock }) => {
@@ -618,25 +639,55 @@ function Head({
       {/* Vòm tóc chính: thetaLength = 0.44*PI và nghiêng -0.32 rad để chân tóc trước cao ở y >= 1,620m (cao hơn lông mày 3,4cm), đỉnh đạt 1,704m */}
       <mesh position={[0, 1.566, -0.008]} rotation={[-0.32, 0, 0]} scale={[0.98, 1.22, 1.04]} castShadow>
         <sphereGeometry args={[0.115, 28, 18, 0, Math.PI * 2, 0, Math.PI * 0.44]} />
-        <meshStandardMaterial color={HAIR} roughness={0.82} />
+        <meshStandardMaterial
+          color={HAIR}
+          map={hairPbr.map}
+          bumpMap={hairPbr.bumpMap}
+          bumpScale={0.008}
+          roughness={0.72}
+        />
       </mesh>
       {/* Khối tóc sau đầu & ôm gáy (scaleZ = 0,78 và lùi về z = -0,038 để chỉ phủ nửa sau đầu, tuyệt đối không tràn ra mặt trước) */}
       <mesh position={[0, 1.558, -0.038]} rotation={[0.15, 0, 0]} scale={[0.97, 1.15, 0.78]} castShadow>
         <sphereGeometry args={[0.114, 24, 18]} />
-        <meshStandardMaterial color={HAIR} roughness={0.84} />
+        <meshStandardMaterial
+          color={HAIR}
+          map={hairPbr.map}
+          bumpMap={hairPbr.bumpMap}
+          bumpScale={0.008}
+          roughness={0.74}
+        />
       </mesh>
       {/* Lớp tóc phồng đỉnh đầu (Crown Volume + lọn tóc bóng nhẹ) tạo độ dày tự nhiên ở cao độ 1,67–1,707m */}
       <mesh position={[0, 1.668, -0.004]} scale={[0.88, 0.36, 0.88]} castShadow>
         <sphereGeometry args={[0.106, 20, 14]} />
-        <meshStandardMaterial color={HAIR} roughness={0.8} />
+        <meshStandardMaterial
+          color={HAIR}
+          map={hairPbr.map}
+          bumpMap={hairPbr.bumpMap}
+          bumpScale={0.008}
+          roughness={0.7}
+        />
       </mesh>
       <mesh position={[-0.022, 1.678, 0.008]} rotation={[0.06, 0, 0.16]} scale={[0.42, 0.22, 0.62]}>
         <sphereGeometry args={[0.084, 14, 10]} />
-        <meshStandardMaterial color={HAIR_HIGHLIGHT} roughness={0.78} />
+        <meshStandardMaterial
+          color={HAIR_HIGHLIGHT}
+          map={hairPbr.map}
+          bumpMap={hairPbr.bumpMap}
+          bumpScale={0.006}
+          roughness={0.66}
+        />
       </mesh>
       <mesh position={[0.024, 1.676, 0.006]} rotation={[0.06, 0, -0.15]} scale={[0.42, 0.22, 0.62]}>
         <sphereGeometry args={[0.084, 14, 10]} />
-        <meshStandardMaterial color={HAIR} roughness={0.82} />
+        <meshStandardMaterial
+          color={HAIR}
+          map={hairPbr.map}
+          bumpMap={hairPbr.bumpMap}
+          bumpScale={0.006}
+          roughness={0.72}
+        />
       </mesh>
       {/* Tóc mai 2 bên thái dương (Sideburns) ôm gọn sát tai (z = 0,012), không chạm vùng mắt/lông mày */}
       {[-0.094, 0.094].map((sx, idx) => (
@@ -647,7 +698,13 @@ function Head({
           scale={[0.28, 0.68, 0.38]}
         >
           <sphereGeometry args={[0.048, 12, 10]} />
-          <meshStandardMaterial color={HAIR} roughness={0.84} />
+          <meshStandardMaterial
+            color={HAIR}
+            map={hairPbr.map}
+            bumpMap={hairPbr.bumpMap}
+            bumpScale={0.006}
+            roughness={0.74}
+          />
         </mesh>
       ))}
 
@@ -656,16 +713,34 @@ function Head({
           {/* Vòm mái cao trên trán (minFrontY >= 1,618m, cách trên lông mày 3,2cm) */}
           <mesh position={[0, 1.65, 0.052]} rotation={[-0.12, 0, 0]} scale={[1.14, 0.42, 0.62]}>
             <sphereGeometry args={[0.076, 18, 12]} />
-            <meshStandardMaterial color={HAIR} roughness={0.82} />
+            <meshStandardMaterial
+              color={HAIR}
+              map={hairPbr.map}
+              bumpMap={hairPbr.bumpMap}
+              bumpScale={0.006}
+              roughness={0.72}
+            />
           </mesh>
           {/* Hai lọn tóc mái gọn trên trán, hoàn toàn không che lông mày hay mắt */}
           <mesh position={[-0.028, 1.636, 0.082]} rotation={[0.15, 0, 0.18]} scale={[0.58, 0.36, 0.38]}>
             <sphereGeometry args={[0.048, 12, 10]} />
-            <meshStandardMaterial color={HAIR_HIGHLIGHT} roughness={0.8} />
+            <meshStandardMaterial
+              color={HAIR_HIGHLIGHT}
+              map={hairPbr.map}
+              bumpMap={hairPbr.bumpMap}
+              bumpScale={0.006}
+              roughness={0.68}
+            />
           </mesh>
           <mesh position={[0.028, 1.638, 0.082]} rotation={[0.15, 0, -0.15]} scale={[0.58, 0.36, 0.38]}>
             <sphereGeometry args={[0.048, 12, 10]} />
-            <meshStandardMaterial color={HAIR} roughness={0.82} />
+            <meshStandardMaterial
+              color={HAIR}
+              map={hairPbr.map}
+              bumpMap={hairPbr.bumpMap}
+              bumpScale={0.006}
+              roughness={0.72}
+            />
           </mesh>
         </group>
       )}
@@ -674,11 +749,23 @@ function Head({
         <group>
           <mesh position={[0.016, 1.65, 0.052]} rotation={[-0.12, 0, -0.14]} scale={[1.16, 0.42, 0.62]}>
             <sphereGeometry args={[0.076, 18, 12]} />
-            <meshStandardMaterial color={HAIR} roughness={0.82} />
+            <meshStandardMaterial
+              color={HAIR}
+              map={hairPbr.map}
+              bumpMap={hairPbr.bumpMap}
+              bumpScale={0.006}
+              roughness={0.72}
+            />
           </mesh>
           <mesh position={[-0.032, 1.636, 0.08]} rotation={[0.14, 0, 0.24]} scale={[0.62, 0.34, 0.38]}>
             <sphereGeometry args={[0.048, 12, 10]} />
-            <meshStandardMaterial color={HAIR_HIGHLIGHT} roughness={0.8} />
+            <meshStandardMaterial
+              color={HAIR_HIGHLIGHT}
+              map={hairPbr.map}
+              bumpMap={hairPbr.bumpMap}
+              bumpScale={0.006}
+              roughness={0.68}
+            />
           </mesh>
         </group>
       )}
@@ -688,11 +775,23 @@ function Head({
           {/* Mái trước cao gọn trên trán cho kiểu tóc búi */}
           <mesh position={[0, 1.65, 0.05]} rotation={[-0.12, 0, 0]} scale={[1.12, 0.4, 0.6]}>
             <sphereGeometry args={[0.074, 16, 12]} />
-            <meshStandardMaterial color={HAIR} roughness={0.82} />
+            <meshStandardMaterial
+              color={HAIR}
+              map={hairPbr.map}
+              bumpMap={hairPbr.bumpMap}
+              bumpScale={0.006}
+              roughness={0.72}
+            />
           </mesh>
           <mesh position={[0, 1.615, -0.145]} scale={[1, 0.9, 0.9]} castShadow>
             <sphereGeometry args={[0.068, 14, 12]} />
-            <meshStandardMaterial color={HAIR} roughness={0.85} />
+            <meshStandardMaterial
+              color={HAIR}
+              map={hairPbr.map}
+              bumpMap={hairPbr.bumpMap}
+              bumpScale={0.008}
+              roughness={0.74}
+            />
           </mesh>
           <mesh position={[0, 1.625, -0.145]} rotation={[0, 0, Math.PI / 2 - 0.18]}>
             <cylinderGeometry args={[0.007, 0.005, 0.19, 8]} />
@@ -710,7 +809,13 @@ function Head({
           {/* Mái rẽ nhẹ cao trên trán nối liền vòm tóc */}
           <mesh position={[0, 1.65, 0.052]} rotation={[-0.12, 0, 0]} scale={[1.14, 0.4, 0.6]}>
             <sphereGeometry args={[0.075, 16, 12]} />
-            <meshStandardMaterial color={HAIR} roughness={0.82} />
+            <meshStandardMaterial
+              color={HAIR}
+              map={hairPbr.map}
+              bumpMap={hairPbr.bumpMap}
+              bumpScale={0.006}
+              roughness={0.72}
+            />
           </mesh>
           {/* Dây buộc tóc đỏ HUST + đuôi ngựa năng động phía sau */}
           <mesh position={[0, 1.56, -0.118]} rotation={[Math.PI / 3, 0, 0]}>
@@ -719,7 +824,13 @@ function Head({
           </mesh>
           <mesh position={[0, 1.48, -0.155]} rotation={[0.38, 0, 0]} scale={[0.78, 1.38, 0.78]} castShadow>
             <sphereGeometry args={[0.058, 14, 12]} />
-            <meshStandardMaterial color={HAIR} roughness={0.84} />
+            <meshStandardMaterial
+              color={HAIR}
+              map={hairPbr.map}
+              bumpMap={hairPbr.bumpMap}
+              bumpScale={0.008}
+              roughness={0.74}
+            />
           </mesh>
         </group>
       )}
@@ -729,12 +840,24 @@ function Head({
           {/* Mái ngang gọn trên trán + hai lọn tóc ngắn ôm sát hai bên thái dương/má sau */}
           <mesh position={[0, 1.65, 0.052]} rotation={[-0.12, 0, 0]} scale={[1.14, 0.42, 0.62]}>
             <sphereGeometry args={[0.076, 16, 12]} />
-            <meshStandardMaterial color={HAIR} roughness={0.82} />
+            <meshStandardMaterial
+              color={HAIR}
+              map={hairPbr.map}
+              bumpMap={hairPbr.bumpMap}
+              bumpScale={0.006}
+              roughness={0.72}
+            />
           </mesh>
           {[-0.09, 0.09].map((bx, i) => (
             <mesh key={`bob-side-${i}`} position={[bx, 1.51, -0.004]} scale={[0.36, 1.15, 0.68]} castShadow>
               <sphereGeometry args={[0.068, 12, 10]} />
-              <meshStandardMaterial color={HAIR} roughness={0.84} />
+              <meshStandardMaterial
+                color={HAIR}
+                map={hairPbr.map}
+                bumpMap={hairPbr.bumpMap}
+                bumpScale={0.008}
+                roughness={0.74}
+              />
             </mesh>
           ))}
         </group>
@@ -964,6 +1087,7 @@ export function HumanFigure(props: FigureProps) {
   const hustTex = useHustTexture();
   const idTex = useStudentIdTexture();
   const fabricTex = useMemo(() => makeFabricTexture(5, 5), []);
+  const { shadow: shadowTex } = useMemo(() => getSharedAvatarTextures(), []);
   useEffect(() => () => fabricTex.dispose(), [fabricTex]);
 
   const sleeve: 'short' | 'long' = variant === 'polo' ? 'short' : 'long';
@@ -971,6 +1095,11 @@ export function HumanFigure(props: FigureProps) {
 
   return (
     <group>
+      {/* Đĩa bóng tiếp xúc mềm dưới chân nhân vật (Contact Shadow / Ambient Occlusion) */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.036, 0]}>
+        <planeGeometry args={[0.68, 0.68]} />
+        <meshBasicMaterial map={shadowTex} transparent opacity={0.42} depthWrite={false} />
+      </mesh>
       <LegSide
         side={1}
         pants={pants}

@@ -20,6 +20,7 @@ import {
   TRAN_DAI_NGHIA_GATE,
   WHITE_ROCK,
 } from '../../lib/campus';
+import type { TimeOfDay } from '../../lib/playerState';
 import {
   LabelPlane,
   drawLetterBK,
@@ -34,6 +35,11 @@ import { LibraryBuilding } from './LibraryBuilding';
 import { C9Building } from './C9Building';
 import { TienLake } from './TienLake';
 import ImprovedTree from './Trees'; // đợt sửa lần 2 §4: cây đường tình yêu dùng ImprovedTree (cùng chữ ký props với SimpleTree cũ)
+import {
+  makeGraniteStoneTexture,
+  makeWeatheredConcreteTexture,
+  makeWoodGrainTexture,
+} from './materials';
 
 // --- Bảng màu chốt (reference-visual §0, ước lượng từ ảnh) --------------------
 const GATE_WHITE = '#F2EFE6'; // bê tông cổng Parabol, trắng ấm
@@ -46,21 +52,43 @@ const BENCH_WOOD = '#7A5230'; // ghế gỗ nâu
 const BENCH_IRON = '#1A1A1A'; // khung ghế sắt đen
 
 // --- Ghế gỗ nâu, khung sắt đen ------------------------------------------------
-function SimpleBench({ x, z, rotationY = 0 }: { x: number; z: number; rotationY?: number }) {
+function SimpleBench({
+  x,
+  z,
+  rotationY = 0,
+  woodTex,
+}: {
+  x: number;
+  z: number;
+  rotationY?: number;
+  woodTex?: THREE.CanvasTexture;
+}) {
   return (
     <group position={[x, 0, z]} rotation-y={rotationY}>
       <mesh position={[0, 0.45, 0]} castShadow>
         <boxGeometry args={[1.8, 0.12, 0.55]} />
-        <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+        <meshStandardMaterial
+          color={BENCH_WOOD}
+          map={woodTex}
+          bumpMap={woodTex}
+          bumpScale={0.01}
+          roughness={0.85}
+        />
       </mesh>
       <mesh position={[0, 0.78, -0.24]} castShadow>
         <boxGeometry args={[1.8, 0.55, 0.1]} />
-        <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+        <meshStandardMaterial
+          color={BENCH_WOOD}
+          map={woodTex}
+          bumpMap={woodTex}
+          bumpScale={0.01}
+          roughness={0.85}
+        />
       </mesh>
       {[-0.8, 0.8].map((dx) => (
         <mesh key={dx} position={[dx, 0.22, 0]}>
           <boxGeometry args={[0.08, 0.45, 0.5]} />
-          <meshStandardMaterial color={BENCH_IRON} roughness={0.6} metalness={0.4} />
+          <meshStandardMaterial color={BENCH_IRON} roughness={0.5} metalness={0.45} />
         </mesh>
       ))}
     </group>
@@ -68,7 +96,7 @@ function SimpleBench({ x, z, rotationY = 0 }: { x: number; z: number; rotationY?
 }
 
 // --- Logo "I LOVE BK" đúng hình: I trắng + tim đỏ + BK trắng, bệ đen ---------
-function ILoveBK() {
+function ILoveBK({ isNight = false }: { isNight?: boolean }) {
   const heartGeo = useMemo(() => {
     const s = new THREE.Shape();
     s.moveTo(0, 0.35);
@@ -80,14 +108,26 @@ function ILoveBK() {
     g.translate(0, 0, -0.225);
     return g;
   }, []);
-  useEffect(() => () => heartGeo.dispose(), [heartGeo]);
+  const granitePbr = useMemo(() => makeGraniteStoneTexture(3, 1), []);
+  useEffect(() => () => {
+    heartGeo.dispose();
+    granitePbr.map.dispose();
+    granitePbr.bumpMap.dispose();
+  }, [heartGeo, granitePbr]);
 
   return (
     <group position={[I_LOVE_BK.center.x, 0, I_LOVE_BK.center.z]}>
-      {/* Bệ đen thấp. */}
+      {/* Bệ đá granite đen bóng thấp. */}
       <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
         <boxGeometry args={[5.6, 0.5, 1.2]} />
-        <meshStandardMaterial color={PLINTH_BLACK} roughness={0.85} />
+        <meshStandardMaterial
+          color={PLINTH_BLACK}
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.55}
+          metalness={0.12}
+        />
       </mesh>
       <LabelPlane
         textureKey="letter-i"
@@ -98,7 +138,13 @@ function ILoveBK() {
         position={[-2.2, 1.5, 0.62]}
       />
       <mesh geometry={heartGeo} position={[-0.9, 1.55, 0.3]} scale={[1.35, 1.35, 1]} castShadow>
-        <meshStandardMaterial color={HUST_RED} roughness={0.6} />
+        <meshStandardMaterial
+          color={HUST_RED}
+          emissive={isNight ? '#FF2A36' : '#000000'}
+          emissiveIntensity={isNight ? 0.52 : 0}
+          roughness={0.45}
+          metalness={0.08}
+        />
       </mesh>
       <LabelPlane
         textureKey="letter-bk"
@@ -456,14 +502,29 @@ function drawC2Sign(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillText('NHÀ C2 · VP ĐOÀN TN & ĐẢNG ỦY', w / 2, h * 0.52);
 }
 
-function C2Building() {
+function C2Building({ isNight = false }: { isNight?: boolean }) {
+  const concretePbr = useMemo(() => makeWeatheredConcreteTexture(3, 2), []);
+  useEffect(
+    () => () => {
+      concretePbr.map.dispose();
+      concretePbr.bumpMap.dispose();
+    },
+    [concretePbr],
+  );
+
   // Đặt ở (-86, 0, -22), trục dài theo hướng Bắc–Nam (size 7.5 × 15 m), mặt chính hướng Đông (+X) ra vườn hoa C1
   return (
     <group position={[-86, 0, -22]} rotation-y={Math.PI / 2}>
       {/* Khối nhà C2 15 × 7.5 m (sau khi xoay 90°: dọc Bắc–Nam 15 m, ngang Đông–Tây 7.5 m), cao 7.8 m */}
       <mesh position={[0, 3.9, 0]} castShadow receiveShadow>
         <boxGeometry args={[15, 7.8, 7.5]} />
-        <meshStandardMaterial color="#D9B38C" roughness={0.86} />
+        <meshStandardMaterial
+          color="#D9B38C"
+          map={concretePbr.map}
+          bumpMap={concretePbr.bumpMap}
+          bumpScale={0.015}
+          roughness={0.86}
+        />
       </mesh>
       {/* Chân đế sẫm màu */}
       <mesh position={[0, 0.45, 0]} receiveShadow>
@@ -487,19 +548,34 @@ function C2Building() {
         <boxGeometry args={[13.6, 0.32, 1.3]} />
         <meshStandardMaterial color="#EDE4D3" roughness={0.85} />
       </mesh>
-      {/* Cửa kính lớn tầng 1 & tầng 2 */}
-      {[-4.2, -1.4, 1.4, 4.2].map((wx) => (
-        <group key={`c2-win-${wx}`}>
-          <mesh position={[wx, 1.8, 3.78]}>
-            <planeGeometry args={[1.95, 2.5]} />
-            <meshStandardMaterial color="#3A5368" roughness={0.35} metalness={0.2} />
-          </mesh>
-          <mesh position={[wx, 5.5, 3.78]}>
-            <planeGeometry args={[1.95, 1.75]} />
-            <meshStandardMaterial color="#4A657A" roughness={0.35} metalness={0.2} />
-          </mesh>
-        </group>
-      ))}
+      {/* Cửa kính lớn tầng 1 & tầng 2 (phản chiếu bầu trời IBL ban ngày, sáng ấm về đêm) */}
+      {[-4.2, -1.4, 1.4, 4.2].map((wx, idx) => {
+        const lit = isNight && idx !== 2;
+        return (
+          <group key={`c2-win-${wx}`}>
+            <mesh position={[wx, 1.8, 3.78]}>
+              <planeGeometry args={[1.95, 2.5]} />
+              <meshStandardMaterial
+                color={lit ? '#FFE0A3' : '#3A5368'}
+                emissive={lit ? '#FFB84D' : '#000000'}
+                emissiveIntensity={lit ? 0.65 : 0}
+                roughness={0.22}
+                metalness={0.35}
+              />
+            </mesh>
+            <mesh position={[wx, 5.5, 3.78]}>
+              <planeGeometry args={[1.95, 1.75]} />
+              <meshStandardMaterial
+                color={lit ? '#FFE0A3' : '#4A657A'}
+                emissive={lit ? '#FFB84D' : '#000000'}
+                emissiveIntensity={lit ? 0.55 : 0}
+                roughness={0.22}
+                metalness={0.35}
+              />
+            </mesh>
+          </group>
+        );
+      })}
       <LabelPlane
         textureKey="c2-hall-sign"
         canvasW={512}
@@ -587,26 +663,29 @@ function DaiCoVietGate() {
   );
 }
 
-export default function Landmarks() {
+export default function Landmarks({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
+  const isNight = timeOfDay === 'night' || timeOfDay === 'sunset';
+  const benchWoodTex = useMemo(() => makeWoodGrainTexture(2, 1), []);
+  useEffect(() => () => benchWoodTex.dispose(), [benchWoodTex]);
   return (
     <group>
-      <ParabolGate />
-      <C1Building />
-      <ILoveBK />
-      <LibraryBuilding />
+      <ParabolGate timeOfDay={timeOfDay} />
+      <C1Building timeOfDay={timeOfDay} />
+      <ILoveBK isNight={isNight} />
+      <LibraryBuilding timeOfDay={timeOfDay} />
       <TienLake />
-      <C9Building />
+      <C9Building timeOfDay={timeOfDay} />
       <WhiteRock />
       <C1Fountain />
       <TranDaiNghiaSquare />
-      <C2Building />
+      <C2Building isNight={isNight} />
       <DaiCoVietGate />
       {/* Cây + ghế dọc đường tình yêu (không dùng để che lỗi hình khối). */}
       {LOVE_ROAD_TREES.map((t, i) => (
         <ImprovedTree key={`love-tree-${i}`} x={t.x} z={t.z} />
       ))}
       {LOVE_ROAD_BENCHES.map((b, i) => (
-        <SimpleBench key={`love-bench-${i}`} x={b.x} z={b.z} />
+        <SimpleBench key={`love-bench-${i}`} x={b.x} z={b.z} woodTex={benchWoodTex} />
       ))}
     </group>
   );

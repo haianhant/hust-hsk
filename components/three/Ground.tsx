@@ -11,8 +11,9 @@
 // đá rửa sân C1, và lá vàng Lipa rụng trên sân C1).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo } from 'react';
-import { C1, LIBRARY, ROADS, TDN_SQUARE, type Vec2 } from '../../lib/campus';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import * as THREE from 'three';
+import { C1, LIBRARY, LOVE_ROAD_TREES, ROADS, TDN_SQUARE, type Vec2 } from '../../lib/campus';
 import {
   createSeededRandom,
   makeAsphaltTexture,
@@ -215,6 +216,165 @@ function buildJointDiscs(): Array<{ center: Vec2; radius: number }> {
 const ROAD_PIECES = buildRoadPieces();
 const JOINT_DISCS = buildJointDiscs();
 
+/** Cụm cỏ 3D & hoa dại nhỏ dọc bồn cỏ C1, ven Đường Tình Yêu và thảm cỏ quanh Hồ Tiền (2 InstancedMesh = 2 draw calls). */
+function GrassAndFlowerTufts() {
+  const grassRef = useRef<THREE.InstancedMesh>(null);
+  const flowerRef = useRef<THREE.InstancedMesh>(null);
+
+  const { grassGeo, flowerGeo, grassItems, flowerItems } = useMemo(() => {
+    const rnd = createSeededRandom(20261108);
+    // Hình học bụi cỏ: nón ngược 5 cạnh thuôn nhẹ ở gốc
+    const gGeo = new THREE.ConeGeometry(0.11, 0.24, 5);
+    gGeo.translate(0, 0.12, 0);
+    // Hình học bông hoa nhỏ trên thảm cỏ
+    const fGeo = new THREE.DodecahedronGeometry(0.055, 0);
+    fGeo.translate(0, 0.22, 0);
+
+    const gList: Array<{ x: number; y: number; z: number; sx: number; sy: number; rot: number; color: string }> = [];
+    const fList: Array<{ x: number; y: number; z: number; s: number; color: string }> = [];
+    const grassTones = ['#5B873B', '#6A9946', '#4E7832', '#75A44F'];
+    const flowerTones = ['#FFD54F', '#FFF176', '#FF8A65', '#F48FB1', '#FFFFFF'];
+
+    // 1. Trên 2 bồn cỏ C1 (y = 0,20)
+    for (const bed of C1_GRASS_BEDS) {
+      for (let i = 0; i < 95; i++) {
+        const x = bed.cx + (rnd() - 0.5) * 13.2;
+        const z = bed.cz + (rnd() - 0.5) * 2.4;
+        gList.push({
+          x,
+          y: 0.19,
+          z,
+          sx: 0.75 + rnd() * 0.6,
+          sy: 0.7 + rnd() * 0.65,
+          rot: rnd() * Math.PI * 2,
+          color: grassTones[i % grassTones.length],
+        });
+        if (i % 3 === 0) {
+          fList.push({
+            x: x + (rnd() - 0.5) * 0.12,
+            y: 0.19,
+            z: z + (rnd() - 0.5) * 0.12,
+            s: 0.8 + rnd() * 0.45,
+            color: flowerTones[i % flowerTones.length],
+          });
+        }
+      }
+    }
+
+    // 2. Quanh gốc các cây dọc Đường Tình Yêu (trên cỏ y = 0,01)
+    for (const tree of LOVE_ROAD_TREES) {
+      for (let i = 0; i < 18; i++) {
+        const ang = rnd() * Math.PI * 2;
+        const r = 0.45 + rnd() * 1.15;
+        const x = tree.x + Math.cos(ang) * r;
+        const z = tree.z + Math.sin(ang) * r;
+        gList.push({
+          x,
+          y: 0.01,
+          z,
+          sx: 0.85 + rnd() * 0.6,
+          sy: 0.8 + rnd() * 0.7,
+          rot: rnd() * Math.PI * 2,
+          color: grassTones[i % grassTones.length],
+        });
+        if (i % 4 === 0) {
+          fList.push({
+            x,
+            y: 0.01,
+            z,
+            s: 0.85 + rnd() * 0.4,
+            color: flowerTones[(i + 1) % flowerTones.length],
+          });
+        }
+      }
+    }
+
+    // 3. Dải thảm cỏ phía tây lối dạo Hồ Tiền (x = -31..-28.2, z = -2..78)
+    for (let i = 0; i < 120; i++) {
+      const x = -31.2 + rnd() * 2.8;
+      const z = -2 + rnd() * 80;
+      gList.push({
+        x,
+        y: 0.01,
+        z,
+        sx: 0.85 + rnd() * 0.65,
+        sy: 0.75 + rnd() * 0.75,
+        rot: rnd() * Math.PI * 2,
+        color: grassTones[i % grassTones.length],
+      });
+      if (i % 4 === 0) {
+        fList.push({
+          x,
+          y: 0.01,
+          z,
+          s: 0.85 + rnd() * 0.45,
+          color: flowerTones[(i + 2) % flowerTones.length],
+        });
+      }
+    }
+
+    return { grassGeo: gGeo, flowerGeo: fGeo, grassItems: gList, flowerItems: fList };
+  }, []);
+
+  useEffect(
+    () => () => {
+      grassGeo.dispose();
+      flowerGeo.dispose();
+    },
+    [grassGeo, flowerGeo],
+  );
+
+  useLayoutEffect(() => {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const v = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    const col = new THREE.Color();
+
+    if (grassRef.current) {
+      grassItems.forEach((it, idx) => {
+        e.set(0, it.rot, 0);
+        q.setFromEuler(e);
+        v.set(it.x, it.y, it.z);
+        s.set(it.sx, it.sy, it.sx);
+        m.compose(v, q, s);
+        grassRef.current!.setMatrixAt(idx, m);
+        col.set(it.color);
+        grassRef.current!.setColorAt(idx, col);
+      });
+      grassRef.current.instanceMatrix.needsUpdate = true;
+      if (grassRef.current.instanceColor) grassRef.current.instanceColor.needsUpdate = true;
+    }
+
+    if (flowerRef.current) {
+      flowerItems.forEach((it, idx) => {
+        e.set(0, idx * 0.7, 0);
+        q.setFromEuler(e);
+        v.set(it.x, it.y, it.z);
+        s.set(it.s, it.s, it.s);
+        m.compose(v, q, s);
+        flowerRef.current!.setMatrixAt(idx, m);
+        col.set(it.color);
+        flowerRef.current!.setColorAt(idx, col);
+      });
+      flowerRef.current.instanceMatrix.needsUpdate = true;
+      if (flowerRef.current.instanceColor) flowerRef.current.instanceColor.needsUpdate = true;
+    }
+  }, [grassItems, flowerItems]);
+
+  return (
+    <group>
+      <instancedMesh ref={grassRef} args={[grassGeo, undefined, grassItems.length]}>
+        <meshStandardMaterial color="#FFFFFF" roughness={0.9} />
+      </instancedMesh>
+      <instancedMesh ref={flowerRef} args={[flowerGeo, undefined, flowerItems.length]}>
+        <meshStandardMaterial color="#FFFFFF" roughness={0.75} />
+      </instancedMesh>
+    </group>
+  );
+}
+
 export default function Ground() {
   const textures = useMemo(() => {
     const grass = makeGrassTexture(28, 24);
@@ -239,16 +399,19 @@ export default function Ground() {
 
   return (
     <group>
-      {/* Cỏ khuôn viên: mặt phẳng 220 × 190 tại y = 0, có vân cỏ tự nhiên. */}
+      {/* Cỏ khuôn viên: mặt phẳng 220 × 190 tại y = 0, có vân cỏ tự nhiên + bumpMap. */}
       <mesh rotation-x={-Math.PI / 2} position={GRASS_CENTER} receiveShadow>
         <planeGeometry args={GRASS_SIZE} />
         <meshStandardMaterial
           color={GRASS_COLOR}
           map={textures.grass}
+          bumpMap={textures.grass}
+          bumpScale={0.008}
           roughness={0.96}
           metalness={0}
         />
       </mesh>
+      <GrassAndFlowerTufts />
 
       {/* Hệ thống đường nội bộ & phố Trần Đại Nghĩa, Tạ Quang Bửu, Lê Thanh Nghị theo Bản đồ Bách Khoa (y = 0,012). */}
       {[

@@ -46,9 +46,13 @@ import * as THREE from 'three';
 import { LAKE, LAKE_BANK, LAKE_BENCHES, LAKE_WILLOWS } from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
 import {
+  makeBarkTexture,
+  makeFoliageCanopyTexture,
+  makeSoftShadowTexture,
   makeStoneBankTexture,
   makeWalkwayBrickTexture,
   makeWaterRippleBumpTexture,
+  makeWoodGrainTexture,
 } from './materials';
 
 // --- Bảng màu chốt (reference-visual §0, ước lượng từ ảnh; nước + hoa sửa
@@ -453,54 +457,121 @@ function buildWillowSpecs(): WillowSpec[] {
   });
 }
 
-function LakeWillow({ x, z, spec }: { x: number; z: number; spec: WillowSpec }) {
+function LakeWillow({
+  x,
+  z,
+  spec,
+  barkPbr,
+  foliagePbr,
+  shadowTex,
+}: {
+  x: number;
+  z: number;
+  spec: WillowSpec;
+  barkPbr: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+  foliagePbr: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+  shadowTex: THREE.CanvasTexture;
+}) {
+  const canopyRef = useRef<THREE.Group>(null!);
+  useFrame((state) => {
+    if (!canopyRef.current) return;
+    const t = state.clock.elapsedTime;
+    canopyRef.current.rotation.z = Math.sin(t * 1.1 + x * 0.2) * 0.02;
+    canopyRef.current.rotation.x = Math.cos(t * 0.85 + z * 0.2) * 0.015;
+  });
+
   return (
     <group position={[x, 0, z]} scale={spec.s} rotation-y={spec.rotY} rotation-z={spec.tilt}>
-      {/* Thân thuôn, hơi nghiêng theo cả cây. */}
-      <mesh position={[0, spec.trunkH / 2, 0]} castShadow>
-        <cylinderGeometry args={[0.14, 0.24, spec.trunkH, 10]} />
-        <meshStandardMaterial color={TRUNK} roughness={1} />
+      {/* Bóng tiếp xúc mềm dưới gốc cây liễu ven hồ */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.048 / spec.s, 0]}>
+        <planeGeometry args={[4.2, 4.2]} />
+        <meshBasicMaterial map={shadowTex} transparent opacity={0.36} depthWrite={false} />
       </mesh>
-      {/* 4 cành nhánh từ ngọn thân chĩa ra tán (trục nghiêng = cành thật,
-          không phải cành thẳng đứng cắm vào quả cầu). */}
+      {/* Thân thuôn, hơi nghiêng theo cả cây + vân vỏ cây PBR. */}
+      <mesh position={[0, spec.trunkH / 2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.14, 0.24, spec.trunkH, 10]} />
+        <meshStandardMaterial
+          color={TRUNK}
+          map={barkPbr.map}
+          bumpMap={barkPbr.bumpMap}
+          bumpScale={0.025}
+          roughness={0.92}
+        />
+      </mesh>
+      {/* 4 cành nhánh từ ngọn thân chĩa ra tán. */}
       {spec.branches.map((b, i) => (
         <group key={`br-${i}`} position={[0, spec.trunkH, 0]} rotation-y={-b.az}>
           <group rotation-z={b.tilt}>
             <mesh position={[0, b.len / 2, 0]} castShadow>
               <cylinderGeometry args={[b.r * 0.6, b.r, b.len, 6]} />
-              <meshStandardMaterial color={TRUNK} roughness={1} />
+              <meshStandardMaterial
+                color={TRUNK}
+                map={barkPbr.map}
+                bumpMap={barkPbr.bumpMap}
+                bumpScale={0.018}
+                roughness={0.92}
+              />
             </mesh>
           </group>
         </group>
       ))}
-      {/* 7 cụm tán lệch nhau, dẹt/tròn KHÔNG đều (sy riêng từng cụm) —
-          không còn cành rủ (đợt 3 đã xóa hẳn ống cong + cụm lá dọc cành). */}
-      {spec.lobes.map((l, i) => (
-        <mesh key={`lobe-${i}`} position={[l.dx, l.dy, l.dz]} scale={[1, l.sy, 1]} castShadow>
-          <sphereGeometry args={[l.r, 16, 12]} />
-          <meshStandardMaterial color={l.color} roughness={1} />
-        </mesh>
-      ))}
+      {/* 7 cụm tán lệch nhau, dẹt/tròn KHÔNG đều + vân tán lá PBR + đung đưa nhẹ theo gió. */}
+      <group ref={canopyRef}>
+        {spec.lobes.map((l, i) => (
+          <mesh key={`lobe-${i}`} position={[l.dx, l.dy, l.dz]} scale={[1, l.sy, 1]} castShadow receiveShadow>
+            <sphereGeometry args={[l.r, 16, 12]} />
+            <meshStandardMaterial
+              color={l.color}
+              map={foliagePbr.map}
+              bumpMap={foliagePbr.bumpMap}
+              bumpScale={0.032}
+              roughness={0.86}
+            />
+          </mesh>
+        ))}
+      </group>
     </group>
   );
 }
 
 // --- Ghế gỗ nâu, khung sắt đen (bản sao SimpleBench trong Landmarks.tsx) -----
-function LakeBench({ x, z, rotationY = 0 }: { x: number; z: number; rotationY?: number }) {
+function LakeBench({
+  x,
+  z,
+  rotationY = 0,
+  woodTex,
+}: {
+  x: number;
+  z: number;
+  rotationY?: number;
+  woodTex: THREE.CanvasTexture;
+}) {
   return (
     <group position={[x, 0, z]} rotation-y={rotationY}>
       <mesh position={[0, 0.45, 0]} castShadow>
         <boxGeometry args={[1.8, 0.12, 0.55]} />
-        <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+        <meshStandardMaterial
+          color={BENCH_WOOD}
+          map={woodTex}
+          bumpMap={woodTex}
+          bumpScale={0.01}
+          roughness={0.85}
+        />
       </mesh>
       <mesh position={[0, 0.78, -0.24]} castShadow>
         <boxGeometry args={[1.8, 0.55, 0.1]} />
-        <meshStandardMaterial color={BENCH_WOOD} roughness={0.9} />
+        <meshStandardMaterial
+          color={BENCH_WOOD}
+          map={woodTex}
+          bumpMap={woodTex}
+          bumpScale={0.01}
+          roughness={0.85}
+        />
       </mesh>
       {[-0.8, 0.8].map((dx) => (
         <mesh key={dx} position={[dx, 0.22, 0]}>
           <boxGeometry args={[0.08, 0.45, 0.5]} />
-          <meshStandardMaterial color={BENCH_IRON} roughness={0.6} metalness={0.4} />
+          <meshStandardMaterial color={BENCH_IRON} roughness={0.5} metalness={0.45} />
         </mesh>
       ))}
     </group>
@@ -529,7 +600,11 @@ export function TienLake() {
     const waterBump = makeWaterRippleBumpTexture(10, 18);
     const stoneBank = makeStoneBankTexture(16, 1);
     const walkwayBrick = makeWalkwayBrickTexture(2, 32);
-    return { waterBump, stoneBank, walkwayBrick };
+    const barkPbr = makeBarkTexture(2, 4);
+    const foliagePbr = makeFoliageCanopyTexture(3, 3);
+    const woodTex = makeWoodGrainTexture(2, 1);
+    const shadowTex = makeSoftShadowTexture();
+    return { waterBump, stoneBank, walkwayBrick, barkPbr, foliagePbr, woodTex, shadowTex };
   }, []);
 
   useEffect(
@@ -537,6 +612,12 @@ export function TienLake() {
       lakeTextures.waterBump.dispose();
       lakeTextures.stoneBank.dispose();
       lakeTextures.walkwayBrick.dispose();
+      lakeTextures.barkPbr.map.dispose();
+      lakeTextures.barkPbr.bumpMap.dispose();
+      lakeTextures.foliagePbr.map.dispose();
+      lakeTextures.foliagePbr.bumpMap.dispose();
+      lakeTextures.woodTex.dispose();
+      lakeTextures.shadowTex.dispose();
     },
     [lakeTextures],
   );
@@ -548,23 +629,24 @@ export function TienLake() {
     if (waterRef.current) {
       waterRef.current.position.y = WATER_Y + Math.sin(t * 0.45) * 0.008;
     }
-    lakeTextures.waterBump.offset.x = (t * 0.025) % 1;
-    lakeTextures.waterBump.offset.y = (t * 0.018) % 1;
+    lakeTextures.waterBump.offset.x = (t * 0.032) % 1;
+    lakeTextures.waterBump.offset.y = (t * 0.022) % 1;
   });
 
   return (
     <group>
       {/* Mặt nước hình chữ nhật 45 × 88 m, y = 0,05 — thấp hơn gờ bê tông
           (y = 0,51) 0,46 m. Màu xanh xám/ôliu dịu, có bumpMap gợn sóng
-          chuyển động mượt; KHÔNG nhận bóng để mặt nước không loang lổ bóng lá. */}
+          chuyển động mượt + phản chiếu IBL bầu trời; KHÔNG nhận bóng để mặt nước không loang lổ bóng lá. */}
       <mesh ref={waterRef} rotation-x={-Math.PI / 2} position={[LAKE.center.x, WATER_Y, LAKE.center.z]}>
         <planeGeometry args={[w, l]} />
         <meshStandardMaterial
           color={LAKE_WATER}
           bumpMap={lakeTextures.waterBump}
-          bumpScale={0.018}
-          roughness={0.22}
-          metalness={0.08}
+          bumpScale={0.022}
+          roughness={0.16}
+          metalness={0.12}
+          envMapIntensity={1.25}
         />
       </mesh>
 
@@ -641,7 +723,15 @@ export function TienLake() {
 
       {/* Liễu ven hồ (đợt 3: không cành rủ): thân + nhánh + 7 cụm tán lệch. */}
       {LAKE_WILLOWS.map((wl, i) => (
-        <LakeWillow key={`willow-${i}`} x={wl.x} z={wl.z} spec={willowSpecs[i]} />
+        <LakeWillow
+          key={`willow-${i}`}
+          x={wl.x}
+          z={wl.z}
+          spec={willowSpecs[i]}
+          barkPbr={lakeTextures.barkPbr}
+          foliagePbr={lakeTextures.foliagePbr}
+          shadowTex={lakeTextures.shadowTex}
+        />
       ))}
 
       {/* Ghế gỗ dọc bờ, quay mặt ra hồ. */}
@@ -651,6 +741,7 @@ export function TienLake() {
           x={b.x}
           z={b.z}
           rotationY={b.x < LAKE.center.x ? Math.PI / 2 : -Math.PI / 2}
+          woodTex={lakeTextures.woodTex}
         />
       ))}
     </group>

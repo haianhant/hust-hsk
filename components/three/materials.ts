@@ -633,3 +633,405 @@ export function makeSwimmingPoolTexture(): THREE.CanvasTexture {
   tex.needsUpdate = true;
   return tex;
 }
+
+// ===========================================================================
+// WAVE 4 — HIGH-FIDELITY 3D GRAPHICS OVERHAUL (IBL, PBR ARCHITECTURE, FOLIAGE)
+// ===========================================================================
+
+/**
+ * Bản đồ môi trường Equirectangular (512×256) phục vụ Image-Based Lighting (IBL)
+ * qua THREE.PMREMGenerator và vòm trời chuyển sắc 3D (SkyDome).
+ */
+export function makeSkyEnvEquirectTexture(
+  timeOfDay: 'day' | 'sunset' | 'night' = 'day',
+): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  if (timeOfDay === 'day') {
+    grad.addColorStop(0.0, '#4E88C7'); // Thiên đỉnh xanh trong
+    grad.addColorStop(0.32, '#8EBCE6'); // Bầu trời cao
+    grad.addColorStop(0.49, '#DCEBF7'); // Đường chân trời sáng
+    grad.addColorStop(0.52, '#C8D8C2'); // Tiếp giáp mặt đất
+    grad.addColorStop(0.75, '#7A9668'); // Phản xạ cỏ xanh
+    grad.addColorStop(1.0, '#5A6E4E');
+  } else if (timeOfDay === 'sunset') {
+    grad.addColorStop(0.0, '#3D4E78'); // Thiên đỉnh tím chiều
+    grad.addColorStop(0.28, '#9E6B78');
+    grad.addColorStop(0.45, '#EB9560'); // Chân trời cam hồng hoàng hôn
+    grad.addColorStop(0.5, '#FFD099');
+    grad.addColorStop(0.55, '#8A6E5A');
+    grad.addColorStop(1.0, '#4A3C32');
+  } else {
+    grad.addColorStop(0.0, '#0B1324'); // Thiên đỉnh đêm sâu
+    grad.addColorStop(0.38, '#162442');
+    grad.addColorStop(0.5, '#253A60'); // Chân trời đêm Hà Nội
+    grad.addColorStop(0.55, '#1B2622');
+    grad.addColorStop(1.0, '#0F1514');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 256);
+
+  // Đốm sáng mặt trời / mặt trăng trên bản đồ phản xạ để tạo specular highlight sống động trên kính & mặt nước
+  const sunX = timeOfDay === 'day' ? 140 : timeOfDay === 'sunset' ? 380 : 210;
+  const sunY = timeOfDay === 'day' ? 68 : timeOfDay === 'sunset' ? 112 : 76;
+  const sunR = timeOfDay === 'sunset' ? 76 : 56;
+  const sunGrad = ctx.createRadialGradient(sunX, sunY, 2, sunX, sunY, sunR);
+  if (timeOfDay === 'day') {
+    sunGrad.addColorStop(0, 'rgba(255, 255, 245, 0.98)');
+    sunGrad.addColorStop(0.3, 'rgba(255, 250, 225, 0.55)');
+    sunGrad.addColorStop(1, 'rgba(255, 250, 225, 0)');
+  } else if (timeOfDay === 'sunset') {
+    sunGrad.addColorStop(0, 'rgba(255, 235, 180, 0.98)');
+    sunGrad.addColorStop(0.35, 'rgba(255, 160, 85, 0.65)');
+    sunGrad.addColorStop(1, 'rgba(255, 130, 65, 0)');
+  } else {
+    sunGrad.addColorStop(0, 'rgba(225, 238, 255, 0.85)');
+    sunGrad.addColorStop(0.35, 'rgba(150, 185, 240, 0.35)');
+    sunGrad.addColorStop(1, 'rgba(120, 160, 220, 0)');
+  }
+  ctx.fillStyle = sunGrad;
+  ctx.fillRect(sunX - sunR, sunY - sunR, sunR * 2, sunR * 2);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Đĩa hào quang Mặt trời / Mặt trăng mềm (Sun Corona / Moon Glow Halo).
+ */
+export function makeSunHaloTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const g = ctx.createRadialGradient(128, 128, 4, 128, 128, 124);
+  g.addColorStop(0.0, 'rgba(255, 255, 245, 0.95)');
+  g.addColorStop(0.18, 'rgba(255, 240, 200, 0.65)');
+  g.addColorStop(0.48, 'rgba(255, 210, 145, 0.22)');
+  g.addColorStop(1.0, 'rgba(255, 200, 120, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Đĩa bóng đổ tiếp đất mềm (Ambient Occlusion Contact Shadow) dưới chân nhân vật, gốc cây, ghế đá.
+ */
+export function makeSoftShadowTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const g = ctx.createRadialGradient(64, 64, 6, 64, 64, 60);
+  g.addColorStop(0.0, 'rgba(18, 24, 16, 0.46)');
+  g.addColorStop(0.45, 'rgba(18, 24, 16, 0.24)');
+  g.addColorStop(0.78, 'rgba(18, 24, 16, 0.07)');
+  g.addColorStop(1.0, 'rgba(18, 24, 16, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Vân tường bê tông / vữa trát nắng Bách Khoa (Weathered Concrete / Stucco PBR)
+ * dùng cho Cổng Parabol, Nhà C1, Thư viện Tạ Quang Bửu và Nhà C9.
+ * Sắc nền trắng ngà rất sáng để nhân trực tiếp với màu đặc trưng của từng công trình.
+ */
+export function makeWeatheredConcreteTexture(
+  repeatX = 4,
+  repeatY = 2,
+): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const b = document.createElement('canvas');
+  b.width = 256;
+  b.height = 256;
+  const bctx = b.getContext('2d');
+  if (!bctx) throw new Error('Canvas 2D không khả dụng');
+
+  const rnd = createSeededRandom(19561015);
+
+  ctx.fillStyle = '#FAF9F6';
+  ctx.fillRect(0, 0, 256, 256);
+  bctx.fillStyle = '#808080';
+  bctx.fillRect(0, 0, 256, 256);
+
+  // Vệt loang thời gian rất nhẹ trên mặt vữa trát
+  for (let i = 0; i < 24; i++) {
+    const x = rnd() * 256;
+    const y = rnd() * 256;
+    const r = 18 + rnd() * 44;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const dark = rnd() > 0.4;
+    g.addColorStop(0, dark ? 'rgba(140, 136, 126, 0.055)' : 'rgba(255, 255, 252, 0.06)');
+    g.addColorStop(1, 'rgba(140, 136, 126, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+
+  // Hạt khoáng vữa mịn + bump vi mô
+  for (let i = 0; i < 2200; i++) {
+    const x = rnd() * 256;
+    const y = rnd() * 256;
+    const v = 228 + Math.floor((rnd() - 0.5) * 34);
+    ctx.fillStyle = `rgba(${v}, ${v - 1}, ${v - 3}, 0.22)`;
+    ctx.fillRect(x, y, 1.8, 1.8);
+
+    const bv = 110 + Math.floor(rnd() * 36);
+    bctx.fillStyle = `rgb(${bv}, ${bv}, ${bv})`;
+    bctx.fillRect(x, y, 2, 2);
+  }
+
+  return {
+    map: configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true),
+    bumpMap: configureTexture(new THREE.CanvasTexture(b), repeatX, repeatY, false),
+  };
+}
+
+/**
+ * Vân đá Granite tự nhiên (dùng cho bậc tam cấp C1, Thư viện, bệ chữ I ❤️ BK, HUST, Khối đá trắng).
+ */
+export function makeGraniteStoneTexture(
+  repeatX = 3,
+  repeatY = 3,
+): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const b = document.createElement('canvas');
+  b.width = 256;
+  b.height = 256;
+  const bctx = b.getContext('2d');
+  if (!bctx) throw new Error('Canvas 2D không khả dụng');
+
+  const rnd = createSeededRandom(20260715);
+  ctx.fillStyle = '#ECEAE4';
+  ctx.fillRect(0, 0, 256, 256);
+  bctx.fillStyle = '#808080';
+  bctx.fillRect(0, 0, 256, 256);
+
+  for (let i = 0; i < 3200; i++) {
+    const x = rnd() * 256;
+    const y = rnd() * 256;
+    const v = 185 + Math.floor((rnd() - 0.5) * 90);
+    ctx.fillStyle = `rgba(${v}, ${v}, ${v - 2}, 0.25)`;
+    ctx.fillRect(x, y, 2, 2);
+
+    const bv = 95 + Math.floor(rnd() * 60);
+    bctx.fillStyle = `rgb(${bv}, ${bv}, ${bv})`;
+    bctx.fillRect(x, y, 2, 2);
+  }
+
+  return {
+    map: configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true),
+    bumpMap: configureTexture(new THREE.CanvasTexture(b), repeatX, repeatY, false),
+  };
+}
+
+/**
+ * Vân gỗ tự nhiên (dùng cho cửa gỗ tầng trệt C9, ghế băng sân trường, bục giảng).
+ */
+export function makeWoodGrainTexture(repeatX = 2, repeatY = 2): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+  const rnd = createSeededRandom(20260808);
+
+  ctx.fillStyle = '#F2E8D8';
+  ctx.fillRect(0, 0, 256, 256);
+
+  // Thớ gỗ dọc
+  for (let x = 0; x < 256; x += 3) {
+    const alpha = 0.06 + rnd() * 0.1;
+    ctx.fillStyle = rnd() > 0.5 ? `rgba(120, 82, 42, ${alpha})` : `rgba(255, 245, 225, ${alpha})`;
+    ctx.fillRect(x, 0, 2, 256);
+  }
+
+  return configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true);
+}
+
+/**
+ * Vân vỏ cây cổ thụ có rãnh dọc (Bark PBR Texture + BumpMap) dùng cho thân và cành cây.
+ */
+export function makeBarkTexture(
+  repeatX = 2,
+  repeatY = 4,
+): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const b = document.createElement('canvas');
+  b.width = 128;
+  b.height = 256;
+  const bctx = b.getContext('2d');
+  if (!bctx) throw new Error('Canvas 2D không khả dụng');
+
+  const rnd = createSeededRandom(20260321);
+  ctx.fillStyle = '#EBE3D8';
+  ctx.fillRect(0, 0, 128, 256);
+  bctx.fillStyle = '#808080';
+  bctx.fillRect(0, 0, 128, 256);
+
+  // Rãnh vỏ cây chạy dọc
+  for (let i = 0; i < 220; i++) {
+    const x = rnd() * 128;
+    const y = rnd() * 256;
+    const w = 2 + rnd() * 3;
+    const h = 18 + rnd() * 42;
+    const dark = rnd() > 0.35;
+    ctx.fillStyle = dark ? 'rgba(95, 72, 50, 0.22)' : 'rgba(255, 245, 230, 0.16)';
+    ctx.fillRect(x, y, w, h);
+
+    bctx.fillStyle = dark ? '#454545' : '#B8B8B8';
+    bctx.fillRect(x, y, w, h);
+  }
+
+  return {
+    map: configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true),
+    bumpMap: configureTexture(new THREE.CanvasTexture(b), repeatX, repeatY, false),
+  };
+}
+
+/**
+ * Vân tán lá đa sắc có độ xốp nổi khối (Dappled Foliage Canopy PBR Texture + BumpMap).
+ * Sắc nền trắng-xanh rất sáng để nhân trực tiếp với màu tán lá riêng của từng loài cây.
+ */
+export function makeFoliageCanopyTexture(
+  repeatX = 3,
+  repeatY = 3,
+): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const b = document.createElement('canvas');
+  b.width = 256;
+  b.height = 256;
+  const bctx = b.getContext('2d');
+  if (!bctx) throw new Error('Canvas 2D không khả dụng');
+
+  const rnd = createSeededRandom(20260505);
+  ctx.fillStyle = '#EEF5E8';
+  ctx.fillRect(0, 0, 256, 256);
+  bctx.fillStyle = '#787878';
+  bctx.fillRect(0, 0, 256, 256);
+
+  // Các chùm lá xếp lớp sáng tối
+  for (let i = 0; i < 650; i++) {
+    const x = rnd() * 256;
+    const y = rnd() * 256;
+    const rx = 5 + rnd() * 8;
+    const ry = 3 + rnd() * 6;
+    const rot = rnd() * Math.PI;
+    const isLight = rnd() > 0.42;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.fillStyle = isLight ? 'rgba(255, 255, 238, 0.25)' : 'rgba(65, 92, 52, 0.22)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    bctx.save();
+    bctx.translate(x, y);
+    bctx.rotate(rot);
+    bctx.fillStyle = isLight ? '#C8C8C8' : '#424242';
+    bctx.beginPath();
+    bctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    bctx.fill();
+    bctx.restore();
+  }
+
+  return {
+    map: configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true),
+    bumpMap: configureTexture(new THREE.CanvasTexture(b), repeatX, repeatY, false),
+  };
+}
+
+/**
+ * Vân sợi tóc Anisotropic (Hair Strand PBR Texture + BumpMap) dùng cho mái tóc nhân vật 3D.
+ */
+export function makeHairStrandTexture(
+  repeatX = 4,
+  repeatY = 3,
+): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const b = document.createElement('canvas');
+  b.width = 256;
+  b.height = 256;
+  const bctx = b.getContext('2d');
+  if (!bctx) throw new Error('Canvas 2D không khả dụng');
+
+  const rnd = createSeededRandom(20261112);
+  ctx.fillStyle = '#E8E2DC';
+  ctx.fillRect(0, 0, 256, 256);
+  bctx.fillStyle = '#808080';
+  bctx.fillRect(0, 0, 256, 256);
+
+  // Dải ánh bóng ngang nhẹ kiểu tóc bóng mượt (anisotropic highlight band)
+  const sheen = ctx.createLinearGradient(0, 48, 0, 172);
+  sheen.addColorStop(0.0, 'rgba(255, 255, 255, 0)');
+  sheen.addColorStop(0.5, 'rgba(255, 248, 238, 0.24)');
+  sheen.addColorStop(1.0, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 48, 256, 124);
+
+  // Sợi tóc mảnh chạy dọc
+  for (let i = 0; i < 900; i++) {
+    const x = rnd() * 256;
+    const y = rnd() * 256;
+    const h = 24 + rnd() * 56;
+    const isLight = rnd() > 0.5;
+    ctx.fillStyle = isLight ? 'rgba(255, 248, 240, 0.18)' : 'rgba(55, 40, 32, 0.22)';
+    ctx.fillRect(x, y, 1.5, h);
+
+    bctx.fillStyle = isLight ? '#B5B5B5' : '#4E4E4E';
+    bctx.fillRect(x, y, 1.5, h);
+  }
+
+  return {
+    map: configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true),
+    bumpMap: configureTexture(new THREE.CanvasTexture(b), repeatX, repeatY, false),
+  };
+}

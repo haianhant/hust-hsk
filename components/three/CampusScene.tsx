@@ -6,7 +6,8 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import Ground from './Ground';
 import Landmarks from './Landmarks';
@@ -19,6 +20,7 @@ import BackgroundBuildings from './BackgroundBuildings';
 import CampusExpansion from './CampusExpansion';
 import AmbientLife from './AmbientLife';
 import Motorbike from './Motorbike';
+import { makeSkyEnvEquirectTexture, makeSunHaloTexture } from './materials';
 import type { TimeOfDay } from '../../lib/playerState';
 
 export interface CampusSceneProps {
@@ -118,8 +120,42 @@ const CLOUD_CLUSTERS: Array<{ x: number; y: number; z: number; scale: number; sp
   { x: 120, y: 116, z: 115, scale: 1.1, speed: 0.95 },
 ];
 
+/**
+ * Tạo bản đồ phản xạ môi trường vật lý (IBL — Image-Based Lighting) bằng THREE.PMREMGenerator
+ * từ texture Equirectangular tự sinh để mọi mặt kính, mặt nước Hồ Tiền, kim loại có phản chiếu chân thực.
+ */
+function ProceduralEnvironment({ timeOfDay }: { timeOfDay: TimeOfDay }) {
+  const { gl, scene } = useThree();
+
+  useEffect(() => {
+    const equirect = makeSkyEnvEquirectTexture(timeOfDay);
+    const pmrem = new THREE.PMREMGenerator(gl);
+    pmrem.compileEquirectangularShader();
+    const envTarget = pmrem.fromEquirectangular(equirect);
+
+    scene.environment = envTarget.texture;
+    if ('environmentIntensity' in scene) {
+      (scene as THREE.Scene & { environmentIntensity: number }).environmentIntensity =
+        timeOfDay === 'night' ? 0.3 : 0.55;
+    }
+
+    return () => {
+      if (scene.environment === envTarget.texture) {
+        scene.environment = null;
+      }
+      envTarget.dispose();
+      equirect.dispose();
+      pmrem.dispose();
+    };
+  }, [gl, scene, timeOfDay]);
+
+  return null;
+}
+
 function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
   const cloudsRef = useRef<THREE.Group>(null!);
+  const skyDomeTex = useMemo(() => makeSkyEnvEquirectTexture(timeOfDay), [timeOfDay]);
+  const sunHaloTex = useMemo(() => makeSunHaloTexture(), []);
   const starGeo = useMemo(() => {
     const g = new THREE.BufferGeometry();
     const count = 260;
@@ -141,7 +177,14 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
     return g;
   }, []);
 
-  useEffect(() => () => starGeo.dispose(), [starGeo]);
+  useEffect(
+    () => () => {
+      starGeo.dispose();
+      skyDomeTex.dispose();
+      sunHaloTex.dispose();
+    },
+    [starGeo, skyDomeTex, sunHaloTex],
+  );
 
   useFrame(({ clock }) => {
     if (!cloudsRef.current) return;
@@ -154,6 +197,36 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
 
   return (
     <group>
+      {/* Vòm trời chuyển sắc 3D (SkyDome) từ thiên đỉnh xuống đường chân trời */}
+      <mesh position={[0, -10, 0]} scale={[-1, 1, 1]}>
+        <sphereGeometry args={[460, 32, 20]} />
+        <meshBasicMaterial map={skyDomeTex} side={THREE.BackSide} depthWrite={false} fog={false} />
+      </mesh>
+
+      {/* Đĩa Mặt trời + Hào quang Corona ban ngày */}
+      {timeOfDay === 'day' && (
+        <group position={[180, 210, 90]}>
+          <mesh>
+            <sphereGeometry args={[11, 20, 16]} />
+            <meshBasicMaterial color="#FFFDF2" fog={false} />
+          </mesh>
+          <Billboard>
+            <mesh>
+              <planeGeometry args={[68, 68]} />
+              <meshBasicMaterial
+                map={sunHaloTex}
+                color="#FFF5D6"
+                transparent
+                opacity={0.75}
+                depthWrite={false}
+                blending={THREE.AdditiveBlending}
+                fog={false}
+              />
+            </mesh>
+          </Billboard>
+        </group>
+      )}
+
       {/* Các cụm mây 3D xốp nhẹ trôi chậm trên bầu trời Hà Nội */}
       <group ref={cloudsRef}>
         {CLOUD_CLUSTERS.map((c, idx) => (
@@ -176,24 +249,56 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
 
       {timeOfDay !== 'day' && (
         <>
-          {/* Đĩa mặt trời hoàng hôn hướng tây (phía cổng Parabol / đường Giải Phóng) */}
+          {/* Đĩa mặt trời hoàng hôn hướng tây (phía cổng Parabol / đường Giải Phóng) + Hào quang cam ấm */}
           {timeOfDay === 'sunset' && (
-            <mesh position={[-240, 68, 25]}>
-              <sphereGeometry args={[14, 24, 20]} />
-              <meshBasicMaterial color="#FFB067" fog={false} />
-            </mesh>
+            <group position={[-240, 68, 25]}>
+              <mesh>
+                <sphereGeometry args={[14, 24, 20]} />
+                <meshBasicMaterial color="#FFB067" fog={false} />
+              </mesh>
+              <Billboard>
+                <mesh>
+                  <planeGeometry args={[86, 86]} />
+                  <meshBasicMaterial
+                    map={sunHaloTex}
+                    color="#FF944D"
+                    transparent
+                    opacity={0.82}
+                    depthWrite={false}
+                    blending={THREE.AdditiveBlending}
+                    fog={false}
+                  />
+                </mesh>
+              </Billboard>
+            </group>
           )}
 
-          {/* Bầu trời sao + mặt trăng sáng dịu khi về đêm */}
+          {/* Bầu trời sao + mặt trăng sáng dịu có quầng trăng khi về đêm */}
           {timeOfDay === 'night' && (
             <>
               <points geometry={starGeo}>
                 <pointsMaterial color="#E8F1FF" size={1.8} sizeAttenuation={false} fog={false} />
               </points>
-              <mesh position={[-160, 185, -110]}>
-                <sphereGeometry args={[9.5, 24, 20]} />
-                <meshBasicMaterial color="#F4F8FF" fog={false} />
-              </mesh>
+              <group position={[-160, 185, -110]}>
+                <mesh>
+                  <sphereGeometry args={[9.5, 24, 20]} />
+                  <meshBasicMaterial color="#F4F8FF" fog={false} />
+                </mesh>
+                <Billboard>
+                  <mesh>
+                    <planeGeometry args={[52, 52]} />
+                    <meshBasicMaterial
+                      map={sunHaloTex}
+                      color="#B8D4FF"
+                      transparent
+                      opacity={0.58}
+                      depthWrite={false}
+                      blending={THREE.AdditiveBlending}
+                      fog={false}
+                    />
+                  </mesh>
+                </Billboard>
+              </group>
             </>
           )}
 
@@ -268,11 +373,13 @@ export default function CampusScene({
     <Canvas
       shadows
       dpr={[1, 1.75]}
+      gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.06 }}
       camera={{ fov: 55, near: 0.1, far: 600, position: [-70, 10, 26] }}
       style={{ width: '100%', height: '100%', touchAction: 'none' }}
     >
       <color attach="background" args={[activeAtm.bg]} />
       <fog attach="fog" args={[activeAtm.fogColor, activeAtm.fogNear, activeAtm.fogFar]} />
+      <ProceduralEnvironment timeOfDay={isIndoor ? 'day' : timeOfDay} />
 
       <hemisphereLight args={[activeAtm.hemiSky, activeAtm.hemiGround, activeAtm.hemiIntensity]} />
       <directionalLight
@@ -282,12 +389,12 @@ export default function CampusScene({
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
-        shadow-camera-left={-120}
-        shadow-camera-right={120}
-        shadow-camera-top={120}
-        shadow-camera-bottom={-120}
+        shadow-camera-left={-140}
+        shadow-camera-right={175}
+        shadow-camera-top={125}
+        shadow-camera-bottom={-115}
         shadow-camera-near={10}
-        shadow-camera-far={300}
+        shadow-camera-far={340}
         shadow-bias={-0.0003}
         shadow-normalBias={0.03}
       />
@@ -319,7 +426,7 @@ export default function CampusScene({
         <>
           <SkyAtmosphereAndNightLights timeOfDay={timeOfDay} />
           <Ground />
-          <Landmarks />
+          <Landmarks timeOfDay={timeOfDay} />
           {/* Khối nhà phụ + cây nền + ghế/đèn rìa campus (đợt sửa lần 2 §4).
               Đã gắn ở đây — luồng tích hợp KHÔNG gắn lần 2. */}
           <BackgroundBuildings timeOfDay={timeOfDay} />
