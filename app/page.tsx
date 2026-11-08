@@ -918,9 +918,7 @@ export default function HomePage() {
           streakCount={progress?.streak?.count ?? 0}
           mpSnap={mpSnap}
           session={study.session}
-          evaluation={study.evaluation}
-          displayRemainingMmSs={study.displayRemainingMmSs}
-          activePreset={study.activePreset}
+          onReconcileAt={study.reconcileAt}
           onExitZen2D={study.exitFocusMode}
           onOpenHandbook={() => openHandbook('lesson')}
           onStartSession={() => study.startSession()}
@@ -980,11 +978,10 @@ export default function HomePage() {
             traveling={traveling}
             helpOpen={helpOpen}
             toast={toast}
-            pomodoroPhase={study.evaluation.state.phase}
-            pomodoroRunning={study.evaluation.state.running}
-            pomodoroRemainingMmSs={study.displayRemainingMmSs}
+            pomodoro={study.session.pomodoro}
             focusPolicy={study.focusPolicy}
             onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
+            onReconcileStudyAt={study.reconcileAt}
             onExitFocusMode={study.exitFocusMode}
             onDismissNoVoice={() => {
               noVoiceDismissedRef.current = true;
@@ -1015,12 +1012,10 @@ export default function HomePage() {
           open={study.studyPanelOpen}
           zoneLabel={currentZoneLabel}
           session={study.session}
-          evaluation={study.evaluation}
-          displayRemainingMmSs={study.displayRemainingMmSs}
-          activePreset={study.activePreset}
           focusPrefs={study.focusPrefs}
           focusPolicy={study.focusPolicy}
           onClose={() => study.setStudyPanelOpen(false)}
+          onReconcileAt={study.reconcileAt}
           onStartSession={() => study.startSession()}
           onEndSession={study.endSession}
           onUpdateSubject={study.updateSubject}

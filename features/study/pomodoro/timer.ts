@@ -296,7 +296,7 @@ export function evaluatePomodoroAt(
     };
   }
 
-  let cur = { ...state };
+  let cur: PomodoroState = state;
   let focusDelta = 0;
   const completedFocusWindows: CompletedFocusWindow[] = [];
   let transitioned = false;

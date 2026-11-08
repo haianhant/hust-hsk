@@ -3,20 +3,12 @@
 // ---------------------------------------------------------------------------
 // features/study/focus-mode/FocusModeView.tsx — Lightweight Zen 2D study view
 // (`feature.study.focus-mode`).
-//
-// ARCHITECTURAL INVARIANT:
-// - Rendered when `focusPolicy.suspend3DRendering === true` (`zen-2d`).
-// - Runs Pomodoro countdown, Study Session, Task List, and HSK Handbook access
-//   with zero WebGL / Three.js rendering overhead.
-// - Preserves multiplayer connection and player coordinates in `playerState`,
-//   so clicking "Quay lại khuôn viên 3D" remounts `<CampusScene />` at the
-//   exact previous location and facing.
 // ---------------------------------------------------------------------------
 
 import type { MultiplayerSnapshot } from '../../../lib/multiplayer';
 import { MultiplayerStatusChip } from '../../social/multiplayer/MultiplayerStatusBar';
 import { PomodoroTimer } from '../pomodoro/PomodoroTimer';
-import type { PomodoroEvaluation, PomodoroPresetId } from '../pomodoro/timer';
+import type { PomodoroPresetId } from '../pomodoro/timer';
 import { StudyTaskList } from '../study-session/StudyTaskList';
 import type { StudySessionState } from '../study-session/session';
 import { StudySessionSummary } from '../ui/StudySessionSummary';
@@ -27,9 +19,7 @@ export interface FocusModeViewProps {
   streakCount: number;
   mpSnap: MultiplayerSnapshot;
   session: StudySessionState;
-  evaluation: PomodoroEvaluation;
-  displayRemainingMmSs: string;
-  activePreset: PomodoroPresetId | 'custom';
+  onReconcileAt?: (nowMs: number) => void;
   onExitZen2D: () => void;
   onOpenHandbook: () => void;
   onStartSession: () => void;
@@ -52,9 +42,7 @@ export function FocusModeView({
   streakCount,
   mpSnap,
   session,
-  evaluation,
-  displayRemainingMmSs,
-  activePreset,
+  onReconcileAt,
   onExitZen2D,
   onOpenHandbook,
   onStartSession,
@@ -153,9 +141,8 @@ export function FocusModeView({
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <PomodoroTimer
-            evaluation={evaluation}
-            displayRemainingMmSs={displayRemainingMmSs}
-            activePreset={activePreset}
+            pomodoro={session.pomodoro}
+            onReconcileAt={onReconcileAt}
             onSelectPreset={onSelectPreset}
             onStart={onStartFocus}
             onPause={onPauseTimer}
@@ -173,8 +160,8 @@ export function FocusModeView({
         </div>
 
         <StudySessionSummary
-          completedFocusBlocks={evaluation.state.completedFocusBlocks}
-          totalFocusedMs={evaluation.state.totalFocusedMs}
+          completedFocusBlocks={session.pomodoro.completedFocusBlocks}
+          totalFocusedMs={session.pomodoro.totalFocusedMs}
           tasks={session.tasks}
           history={session.history}
         />

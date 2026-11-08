@@ -44,6 +44,6 @@ Sau mỗi thay đổi về 3D, kiến trúc hoặc logic, phải đảm bảo 6 
 5. `npm run test:mp` (`node test/mp-protocol.cjs`) — 12/12 kịch bản kiểm thử giao thức WebSocket Multiplayer qua shim.
 6. `npm run build` — Xuất bản tĩnh Next.js (`out/`) thành công.
 
-## 5. Quy trình Git An toàn (Safe Git Policy)
-- **Không tự động commit, push, merge hoặc deploy** lên nhánh `main` hay `master` khi chưa có yêu cầu rõ ràng từ người dùng.
-- Chỉ thực hiện `git commit` hoặc `git push` khi người dùng yêu cầu trực tiếp và sau khi toàn bộ các cổng kiểm thử ở Mục 4 đã PASS.
+## 5. Quy trình Git & Tự động Commit/Push (Git Policy)
+- **Tự động `git commit` và `git push` sau khi hoàn thành công việc:** Sau khi hoàn tất yêu cầu và toàn bộ các cổng kiểm thử ở Mục 4 đã PASS (`exit code 0`), **luôn chủ động tạo commit và push thẳng lên nhánh làm việc hiện tại trên remote (`origin`)**.
+- **Bảo vệ nhánh chính:** Không tự ý merge vào `main`/`master` hoặc deploy nếu nhiệm vụ yêu cầu làm việc trên nhánh tính năng riêng (`feat/*`), trừ khi người dùng yêu cầu trực tiếp.

@@ -127,20 +127,39 @@ async function run() {
     await studyPanel.waitFor({ state: 'visible', timeout: 10000 });
 
     await page.locator('[data-testid="study-subject-input"]').fill('Ôn HSK 4 · Bài 5');
+    await page.locator('[data-testid="study-hsk-lesson-select"]').selectOption('hsk4-shang-l5');
     await page.locator('[data-testid="study-task-input"]').fill('Ghi nhớ 15 từ mới Bài 5');
     await page.locator('[data-testid="study-task-add"]').click();
 
     const taskCountText = await page.locator('[data-testid="study-task-counter"]').innerText();
     assert.equal(taskCountText.trim(), '0/1 hoàn thành');
-    console.log('  PASS: Study Panel opened, subject & task added.');
+    console.log('  PASS: Study Panel opened, subject, canonical HSK lesson & task added.');
 
-    // 3. Start a focus session
+    // 3. Start a focus session & verify zero localStorage writes on countdown UI ticks
     console.log('[3/9] Starting Pomodoro focus session...');
     await page.locator('[data-testid="pomodoro-start"]').click();
     const phaseBadgeText = await page.locator('[data-testid="pomodoro-phase-badge"]').innerText();
     assert.ok(phaseBadgeText.includes('Đang Tập trung'));
+
+    await page.evaluate(() => {
+      window.__studySetItemCalls = 0;
+      const origSetItem = window.Storage.prototype.setItem;
+      window.Storage.prototype.setItem = function (k, v) {
+        if (k === 'bkhn_study_session_v1') {
+          window.__studySetItemCalls += 1;
+        }
+        return origSetItem.call(this, k, v);
+      };
+    });
+    await new Promise((r) => setTimeout(r, 1500));
+    const tickWrites = await page.evaluate(() => window.__studySetItemCalls);
+    assert.equal(tickWrites, 0, 'Must not write StudySessionState to localStorage on UI ticks');
+    const storedLessonId = await page.evaluate(
+      () => JSON.parse(window.localStorage.getItem('bkhn_study_session_v1')).linkedHskLessonId,
+    );
+    assert.equal(storedLessonId, 'hsk4-shang-l5');
     await page.screenshot({ path: path.join(SHOT_DIR, 'pr7-01-study-panel-focus.png') });
-    console.log('  PASS: Focus session started:', phaseBadgeText);
+    console.log('  PASS: Focus session started (0 localStorage writes during 1.5s countdown ticks).');
 
     // 4. Pause / resume
     console.log('[4/9] Testing Pause and Resume...');

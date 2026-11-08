@@ -55,7 +55,7 @@ flowchart LR
    - Tích hợp nút **`🍅 Tự học`** vào [`features/campus/ui/CampusHud.tsx`](../../features/campus/ui/CampusHud.tsx) và bảng điều khiển [`features/study/ui/StudyPanel.tsx`](../../features/study/ui/StudyPanel.tsx).
    - Hỗ trợ đồng hồ Pomodoro wall-clock (`25/5` và `50/10`, Start, Pause, Resume, Skip phase, Reset), danh sách việc cần làm ([`StudyTaskList.tsx`](../../features/study/study-session/StudyTaskList.tsx)), thống kê phiên học ([`StudySessionSummary.tsx`](../../features/study/ui/StudySessionSummary.tsx)) và lưu trữ đơn nguồn tại `bkhn_study_session_v1`.
    - Tích hợp 3 chế độ Focus Mode (`Normal 3D`, `Minimal HUD`, `Zen 2D` qua [`FocusModeView.tsx`](../../features/study/focus-mode/FocusModeView.tsx)), bảo toàn vị trí nhân vật và kết nối Multiplayer khi chuyển qua lại giữa `Zen 2D` và `3D Campus`.
-   - Kiểm chứng bằng unit test [`test/study-social-contracts.test.cjs`](../../test/study-social-contracts.test.cjs) (`9/9` PASS) và smoke test trình duyệt [`test/study-mvp-smoke.cjs`](../../test/study-mvp-smoke.cjs) (`9/9` bước PASS).
+   - Kiểm chứng bằng unit test [`test/study-social-contracts.test.cjs`](../../test/study-social-contracts.test.cjs) (`12/12` PASS) và smoke test trình duyệt [`test/study-mvp-smoke.cjs`](../../test/study-mvp-smoke.cjs) (`9/9` bước PASS).
 
 ---
 

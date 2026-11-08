@@ -8,21 +8,22 @@
 
 import type { FocusModeLevel, FocusModePreferences, FocusRuntimePolicy } from '../focus-mode/focus-mode';
 import { PomodoroTimer } from '../pomodoro/PomodoroTimer';
-import type { PomodoroEvaluation, PomodoroPresetId } from '../pomodoro/timer';
+import type { PomodoroPresetId } from '../pomodoro/timer';
 import { StudyTaskList } from '../study-session/StudyTaskList';
-import type { StudySessionState } from '../study-session/session';
+import {
+  CANONICAL_HSK_LESSON_OPTIONS,
+  type StudySessionState,
+} from '../study-session/session';
 import { StudySessionSummary } from './StudySessionSummary';
 
 export interface StudyPanelProps {
   open: boolean;
   zoneLabel: string;
   session: StudySessionState;
-  evaluation: PomodoroEvaluation;
-  displayRemainingMmSs: string;
-  activePreset: PomodoroPresetId | 'custom';
   focusPrefs: FocusModePreferences;
   focusPolicy: FocusRuntimePolicy;
   onClose: () => void;
+  onReconcileAt?: (nowMs: number) => void;
   onStartSession: () => void;
   onEndSession: () => void;
   onUpdateSubject: (subject: string) => void;
@@ -40,26 +41,14 @@ export interface StudyPanelProps {
   onSetAutoHideHudOnFocus: (enabled: boolean) => void;
 }
 
-const HSK_LESSON_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: '', label: 'Không gắn bài cụ thể' },
-  { id: 'HSK 3 · Bài 10', label: 'HSK 3 · Bài 10 (Toán học / Lịch sử)' },
-  { id: 'HSK 3 · Bài 11', label: 'HSK 3 · Bài 11 (Thư viện / Mượn sách)' },
-  { id: 'HSK 3 · Bài 12', label: 'HSK 3 · Bài 12 (Họp / Văn phòng)' },
-  { id: 'HSK 4 · Bài 1', label: 'HSK 4 · Bài 1 (Tình bạn / Giao tiếp)' },
-  { id: 'HSK 4 · Bài 5', label: 'HSK 4 · Bài 5 (Mua sắm / Lựa chọn)' },
-  { id: 'HSK 4 · Bài 10', label: 'HSK 4 · Bài 10 (Hạnh phúc / Cuộc sống)' },
-];
-
 export function StudyPanel({
   open,
   zoneLabel,
   session,
-  evaluation,
-  displayRemainingMmSs,
-  activePreset,
   focusPrefs,
   focusPolicy,
   onClose,
+  onReconcileAt,
   onStartSession,
   onEndSession,
   onUpdateSubject,
@@ -179,7 +168,8 @@ export function StudyPanel({
                   onChange={(e) => onSetLinkedHskLesson(e.target.value || null)}
                   className="mt-1 w-full rounded-xl border border-stone-300 bg-stone-50 px-3 py-2 text-sm font-medium text-[#1c2b1f] focus:border-[#A54432] focus:bg-white focus:outline-none"
                 >
-                  {HSK_LESSON_OPTIONS.map((opt) => (
+                  <option value="">Không gắn bài cụ thể</option>
+                  {CANONICAL_HSK_LESSON_OPTIONS.map((opt) => (
                     <option key={opt.id} value={opt.id}>
                       {opt.label}
                     </option>
@@ -191,9 +181,8 @@ export function StudyPanel({
 
           {/* Đồng hồ Pomodoro */}
           <PomodoroTimer
-            evaluation={evaluation}
-            displayRemainingMmSs={displayRemainingMmSs}
-            activePreset={activePreset}
+            pomodoro={session.pomodoro}
+            onReconcileAt={onReconcileAt}
             onSelectPreset={onSelectPreset}
             onStart={onStartFocus}
             onPause={onPauseTimer}
@@ -291,8 +280,8 @@ export function StudyPanel({
 
           {/* Thống kê phiên tự học */}
           <StudySessionSummary
-            completedFocusBlocks={evaluation.state.completedFocusBlocks}
-            totalFocusedMs={evaluation.state.totalFocusedMs}
+            completedFocusBlocks={session.pomodoro.completedFocusBlocks}
+            totalFocusedMs={session.pomodoro.totalFocusedMs}
             tasks={session.tasks}
             history={session.history}
           />

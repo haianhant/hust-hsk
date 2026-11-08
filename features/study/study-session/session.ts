@@ -10,6 +10,8 @@
 //    Study Session only stores optional non-intrusive references (`linkedHskLessonId`).
 // ---------------------------------------------------------------------------
 
+import { HSK3_LESSONS } from '../../../content/hsk3-index';
+import { HSK4_LESSONS } from '../../../content/hsk4-index';
 import {
   isValidStudyRoomZone,
   sanitizeSubjectTag,
@@ -27,6 +29,35 @@ import {
 export const STUDY_SESSION_STORAGE_KEY = 'bkhn_study_session_v1';
 export const MAX_STUDY_TASKS = 25;
 export const MAX_FOCUS_HISTORY = 50;
+
+export interface HskLessonOption {
+  id: string;
+  label: string;
+}
+
+export const CANONICAL_HSK_LESSON_OPTIONS: readonly HskLessonOption[] = [
+  ...HSK3_LESSONS.map((l) => ({
+    id: l.id,
+    label: `HSK 3 · Bài ${l.number} — ${l.topic}`,
+  })),
+  ...HSK4_LESSONS.map((l) => ({
+    id: l.id,
+    label: `HSK 4 · Bài ${l.number} — ${l.topic}`,
+  })),
+];
+
+const HSK_LESSON_LABEL_BY_ID = new Map<string, string>(
+  CANONICAL_HSK_LESSON_OPTIONS.map((opt) => [opt.id, opt.label]),
+);
+
+export function isValidCanonicalHskLessonId(value: unknown): value is string {
+  return typeof value === 'string' && HSK_LESSON_LABEL_BY_ID.has(value);
+}
+
+export function formatHskLessonLabel(lessonId: string | null | undefined): string | null {
+  if (!lessonId) return null;
+  return HSK_LESSON_LABEL_BY_ID.get(lessonId) ?? lessonId;
+}
 
 export interface StudyTaskItem {
   id: string;
@@ -252,17 +283,40 @@ export function syncStudySessionAt(
           pomodoro: evaluation.state,
         };
 
-  const beforeLen = nextSession.history.length;
+  let newlyCompletedBlocks = 0;
   for (const win of evaluation.completedFocusWindows) {
+    const prevHistory = nextSession.history;
     nextSession = recordFocusBlockCompletion(nextSession, win);
+    if (nextSession.history !== prevHistory) {
+      newlyCompletedBlocks += 1;
+    }
   }
-  const newlyCompletedBlocks = nextSession.history.length - beforeLen;
 
   return {
     session: nextSession,
     evaluation,
     newlyCompletedBlocks,
   };
+}
+
+/**
+ * Pure deduplication helper for focus completion notifications. Returns only
+ * blocks whose `id` is not yet in `notifiedIds`, mutating `notifiedIds` so
+ * each completed block triggers at most one notification even under React
+ * Strict Mode double-invocations.
+ */
+export function collectUnnotifiedFocusBlocks(
+  history: readonly CompletedFocusBlock[],
+  notifiedIds: Set<string>,
+): CompletedFocusBlock[] {
+  const newlyNotified: CompletedFocusBlock[] = [];
+  for (const block of history) {
+    if (!notifiedIds.has(block.id)) {
+      notifiedIds.add(block.id);
+      newlyNotified.push(block);
+    }
+  }
+  return newlyNotified;
 }
 
 export function saveStudySession(

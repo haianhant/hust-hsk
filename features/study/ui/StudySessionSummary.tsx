@@ -6,7 +6,11 @@
 // ---------------------------------------------------------------------------
 
 import { formatTotalFocusedDuration } from '../pomodoro/timer';
-import type { CompletedFocusBlock, StudyTaskItem } from '../study-session/session';
+import {
+  formatHskLessonLabel,
+  type CompletedFocusBlock,
+  type StudyTaskItem,
+} from '../study-session/session';
 
 export interface StudySessionSummaryProps {
   completedFocusBlocks: number;
@@ -85,24 +89,27 @@ export function StudySessionSummary({
           </p>
         ) : (
           <ul data-testid="study-history-list" className="space-y-1.5 text-xs">
-            {recentHistory.map((item) => (
-              <li
-                key={item.id}
-                data-testid="study-history-item"
-                className="flex items-center justify-between gap-2 rounded-xl bg-stone-50 px-3 py-1.5 text-stone-700"
-              >
-                <span className="truncate font-semibold">
-                  🍅 {item.subjectTag || 'Tự học HSK'}
-                  {item.linkedHskLessonId ? ` · ${item.linkedHskLessonId}` : ''}
-                </span>
-                <span className="shrink-0 text-stone-500">
-                  {Math.max(1, Math.round(item.durationMs / 60000))} phút
-                  {item.startedAtMs && item.endedAtMs
-                    ? ` (${formatBlockTimeRange(item.startedAtMs, item.endedAtMs)})`
-                    : ''}
-                </span>
-              </li>
-            ))}
+            {recentHistory.map((item) => {
+              const lessonLabel = formatHskLessonLabel(item.linkedHskLessonId);
+              return (
+                <li
+                  key={item.id}
+                  data-testid="study-history-item"
+                  className="flex items-center justify-between gap-2 rounded-xl bg-stone-50 px-3 py-1.5 text-stone-700"
+                >
+                  <span className="truncate font-semibold">
+                    🍅 {item.subjectTag || 'Tự học HSK'}
+                    {lessonLabel ? ` · ${lessonLabel}` : ''}
+                  </span>
+                  <span className="shrink-0 text-stone-500">
+                    {Math.max(1, Math.round(item.durationMs / 60000))} phút
+                    {item.startedAtMs && item.endedAtMs
+                      ? ` (${formatBlockTimeRange(item.startedAtMs, item.endedAtMs)})`
+                      : ''}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

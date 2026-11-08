@@ -18,8 +18,56 @@ import type { HandbookTab } from '../../learning/hsk/EntryScreen';
 import type { LearningPanelType } from '../../learning/hsk/LearningOverlayModal';
 import { MultiplayerStatusChip } from '../../social/multiplayer/MultiplayerStatusBar';
 import type { FocusRuntimePolicy } from '../../study/focus-mode/focus-mode';
-import type { PomodoroPhase } from '../../../shared/contracts/study';
+import type { PomodoroState } from '../../study/pomodoro/timer';
+import { usePomodoro } from '../../study/pomodoro/usePomodoro';
 import { getHook } from '../interaction/bridge';
+
+function StudyHudButton({
+  pomodoro,
+  onOpenStudyPanel,
+  onReconcileStudyAt,
+}: {
+  pomodoro?: PomodoroState;
+  onOpenStudyPanel: () => void;
+  onReconcileStudyAt?: (nowMs: number) => void;
+}) {
+  const fallbackPomodoro: PomodoroState = pomodoro ?? {
+    version: 1,
+    phase: 'idle',
+    running: false,
+    config: {
+      focusDurationMs: 25 * 60 * 1000,
+      shortBreakDurationMs: 5 * 60 * 1000,
+      longBreakDurationMs: 15 * 60 * 1000,
+      cyclesBeforeLongBreak: 4,
+    },
+    phaseStartedAtMs: null,
+    phaseEndsAtMs: null,
+    pausedRemainingMs: null,
+    completedFocusBlocks: 0,
+    totalFocusedMs: 0,
+  };
+  const { evaluation, displayRemainingMmSs } = usePomodoro(fallbackPomodoro, onReconcileStudyAt);
+  const hasActivePomodoro = evaluation.state.phase !== 'idle';
+
+  return (
+    <button
+      id="open-study-panel"
+      data-testid="open-study-panel"
+      type="button"
+      onClick={onOpenStudyPanel}
+      className={`rounded-full px-4 py-2 text-sm font-bold text-white shadow-lg backdrop-blur-sm transition ${
+        hasActivePomodoro
+          ? 'bg-[#A54432] hover:bg-[#8A3828]'
+          : 'bg-[#1c5c3a]/90 hover:bg-[#16492e]'
+      }`}
+    >
+      {hasActivePomodoro
+        ? `🍅 Tự học · ${displayRemainingMmSs}${evaluation.state.running ? '' : ' (Tạm dừng)'}`
+        : '🍅 Tự học'}
+    </button>
+  );
+}
 
 export interface CampusHudProps {
   inClassroom: boolean;
@@ -42,11 +90,10 @@ export interface CampusHudProps {
   traveling: boolean;
   helpOpen: boolean;
   toast: string | null;
-  pomodoroPhase?: PomodoroPhase;
-  pomodoroRunning?: boolean;
-  pomodoroRemainingMmSs?: string;
+  pomodoro?: PomodoroState;
   focusPolicy?: FocusRuntimePolicy;
   onOpenStudyPanel?: () => void;
+  onReconcileStudyAt?: (nowMs: number) => void;
   onExitFocusMode?: () => void;
   onDismissNoVoice: () => void;
   onSetPanel: (panel: LearningPanelType) => void;
@@ -87,11 +134,10 @@ export function CampusHud({
   traveling,
   helpOpen,
   toast,
-  pomodoroPhase = 'idle',
-  pomodoroRunning = false,
-  pomodoroRemainingMmSs,
+  pomodoro,
   focusPolicy,
   onOpenStudyPanel,
+  onReconcileStudyAt,
   onExitFocusMode,
   onDismissNoVoice,
   onSetPanel,
@@ -113,7 +159,6 @@ export function CampusHud({
   const hideNav = focusPolicy?.hideNavigationHud ?? false;
   const hideMove = focusPolicy?.hideMovementControls ?? false;
   const isMinimalHud = focusPolicy?.effectiveLevel === 'minimal-hud';
-  const hasActivePomodoro = pomodoroPhase !== 'idle' && Boolean(pomodoroRemainingMmSs);
 
   return (
     <div className="pointer-events-none absolute inset-0">
@@ -188,21 +233,11 @@ export function CampusHud({
         {!inClassroom && !inLibraryLobby && !hideNav && <Minimap onFastTravel={onFastTravel} />}
         <div className="pointer-events-auto flex flex-wrap justify-end gap-2">
           {onOpenStudyPanel && (
-            <button
-              id="open-study-panel"
-              data-testid="open-study-panel"
-              type="button"
-              onClick={onOpenStudyPanel}
-              className={`rounded-full px-4 py-2 text-sm font-bold text-white shadow-lg backdrop-blur-sm transition ${
-                hasActivePomodoro
-                  ? 'bg-[#A54432] hover:bg-[#8A3828]'
-                  : 'bg-[#1c5c3a]/90 hover:bg-[#16492e]'
-              }`}
-            >
-              {hasActivePomodoro
-                ? `🍅 Tự học · ${pomodoroRemainingMmSs}${pomodoroRunning ? '' : ' (Tạm dừng)'}`
-                : '🍅 Tự học'}
-            </button>
+            <StudyHudButton
+              pomodoro={pomodoro}
+              onOpenStudyPanel={onOpenStudyPanel}
+              onReconcileStudyAt={onReconcileStudyAt}
+            />
           )}
           {!hideNav && (
             <button

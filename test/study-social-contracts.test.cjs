@@ -49,6 +49,10 @@ const {
 const {
   STUDY_SESSION_STORAGE_KEY,
   MAX_STUDY_TASKS,
+  MAX_FOCUS_HISTORY,
+  CANONICAL_HSK_LESSON_OPTIONS,
+  isValidCanonicalHskLessonId,
+  formatHskLessonLabel,
   createInitialStudySession,
   startStudySession,
   endStudySession,
@@ -58,6 +62,7 @@ const {
   linkHskLessonToSession,
   recordFocusBlockCompletion,
   syncStudySessionAt,
+  collectUnnotifiedFocusBlocks,
   saveStudySession,
   loadStudySession,
 } = require('../features/study/study-session/session.ts');
@@ -519,4 +524,101 @@ test('PR7 (9) Corrupted Storage Recovery, Legacy Migration, Task CRUD & Focus Pr
   assert.equal(normalDuringFocusPolicy.suspend3DRendering, false);
   assert.equal(normalDuringFocusPolicy.hideNavigationHud, false);
 });
+
+test('PR7 Review Fix (10) Referential Identity on Non-Transition Ticks & Strict Mode Notification Deduplication', () => {
+  const t0 = 1_700_000_000_000;
+  let session = startStudySession(createInitialStudySession(), {
+    nowMs: t0,
+    subjectTag: 'HSK 4 · Bài 5',
+  });
+  session = {
+    ...session,
+    pomodoro: startPomodoro(session.pomodoro, t0, 'focus'),
+  };
+
+  // Evaluating at +250ms, +500ms, +10s (before phaseEndsAtMs) must preserve
+  // exact object references (===) so React state and localStorage are not dirtied.
+  const eval250 = evaluatePomodoroAt(session.pomodoro, t0 + 250);
+  assert.equal(eval250.transitioned, false);
+  assert.equal(eval250.state, session.pomodoro);
+
+  const sync250 = syncStudySessionAt(session, t0 + 250);
+  assert.equal(sync250.newlyCompletedBlocks, 0);
+  assert.equal(sync250.session, session);
+
+  // When phase boundary IS reached at +25m, a new session is returned and
+  // collectUnnotifiedFocusBlocks emits the completed block AT MOST ONCE even
+  // when invoked twice (React Strict Mode double effect invocation).
+  const syncDone = syncStudySessionAt(session, t0 + 25 * 60 * 1000);
+  assert.equal(syncDone.newlyCompletedBlocks, 1);
+  assert.notEqual(syncDone.session, session);
+
+  const notifiedIds = new Set();
+  const firstEffectPass = collectUnnotifiedFocusBlocks(syncDone.session.history, notifiedIds);
+  const secondStrictModePass = collectUnnotifiedFocusBlocks(syncDone.session.history, notifiedIds);
+  assert.equal(firstEffectPass.length, 1);
+  assert.equal(secondStrictModePass.length, 0);
+});
+
+test('PR7 Review Fix (11) 50-Entry Focus History Cap (MAX_FOCUS_HISTORY) & Duplicate Reconciliation', () => {
+  const t0 = 1_700_000_000_000;
+  const focusMs = POMODORO_PRESET_25_5.focusDurationMs;
+  const shortBreakMs = POMODORO_PRESET_25_5.shortBreakDurationMs;
+
+  let session = startStudySession(createInitialStudySession(), {
+    nowMs: t0,
+    subjectTag: 'Ôn tập dài hạn',
+  });
+
+  // Pre-populate exactly MAX_FOCUS_HISTORY (50) completed focus blocks
+  for (let i = 1; i <= MAX_FOCUS_HISTORY; i++) {
+    const startMs = t0 + (i - 1) * 30 * 60 * 1000;
+    session = recordFocusBlockCompletion(session, {
+      startedAtMs: startMs,
+      endedAtMs: startMs + focusMs,
+      durationMs: focusMs,
+    });
+  }
+  assert.equal(session.history.length, MAX_FOCUS_HISTORY);
+  assert.equal(session.history[0].id, `focus-${t0 + focusMs}`);
+
+  // Start the 51st focus block after the first 50 blocks
+  const t51Start = t0 + 60 * 60 * 60 * 1000;
+  session = {
+    ...session,
+    pomodoro: startPomodoro(session.pomodoro, t51Start, 'focus'),
+  };
+
+  // Complete the 51st focus block: history stays capped at 50, AND newlyCompletedBlocks === 1
+  const sync51 = syncStudySessionAt(session, t51Start + focusMs);
+  assert.equal(sync51.newlyCompletedBlocks, 1);
+  assert.equal(sync51.session.history.length, MAX_FOCUS_HISTORY);
+  assert.equal(sync51.session.history[MAX_FOCUS_HISTORY - 1].endedAtMs, t51Start + focusMs);
+
+  // Advance across short break + 52nd focus + short break + 53rd focus (2 more focus blocks at once)
+  const elapsedTwoMoreFocus = shortBreakMs + focusMs + shortBreakMs + focusMs;
+  const sync53 = syncStudySessionAt(sync51.session, t51Start + focusMs + elapsedTwoMoreFocus);
+  assert.equal(sync53.newlyCompletedBlocks, 2);
+  assert.equal(sync53.session.history.length, MAX_FOCUS_HISTORY);
+
+  // Re-running sync at the same timestamp or recording the 53rd block again produces 0 new blocks
+  const sync53Dup = syncStudySessionAt(sync53.session, t51Start + focusMs + elapsedTwoMoreFocus);
+  assert.equal(sync53Dup.newlyCompletedBlocks, 0);
+  assert.equal(sync53Dup.session, sync53.session);
+});
+
+test('PR7 Review Fix (12) Canonical HSK Lesson IDs & Friendly Labels', () => {
+  // 9 HSK 3 lessons (l10..l18) + 20 HSK 4 lessons (shang l1..l10, xia l11..l20) = 29 lessons
+  assert.equal(CANONICAL_HSK_LESSON_OPTIONS.length, 29);
+  assert.equal(CANONICAL_HSK_LESSON_OPTIONS[0].id, 'hsk3-l10');
+  assert.ok(CANONICAL_HSK_LESSON_OPTIONS[0].label.includes('HSK 3 · Bài 10'));
+  assert.ok(isValidCanonicalHskLessonId('hsk3-l10'));
+  assert.ok(isValidCanonicalHskLessonId('hsk4-shang-l5'));
+  assert.ok(isValidCanonicalHskLessonId('hsk4-xia-l20'));
+  assert.equal(isValidCanonicalHskLessonId('HSK 3 · Bài 10'), false);
+
+  const label = formatHskLessonLabel('hsk4-shang-l5');
+  assert.ok(label && label.startsWith('HSK 4 · Bài 5 — '));
+});
+
 

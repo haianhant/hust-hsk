@@ -35,10 +35,10 @@
 
 | Hạng mục | Trạng thái | Kiểm thử Đã Chạy |
 |---|---|---|
-| **Hợp đồng `shared/contracts/study.ts` & State Machine thuần (`PR6`)** | **Đã triển khai & kiểm thử** | `npm run test:study` (`9/9` unit/integration tests PASS) |
-| **Giao diện Tự học (`StudyPanel`), Đồng hồ Pomodoro (`25/5` & `50/10`), Danh sách việc cần làm (`StudyTaskList`), Thống kê (`StudySessionSummary`) (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` + Playwright `node test/study-mvp-smoke.cjs` (`9/9` bước PASS) |
-| **Lưu trữ Authoritative đơn nguồn (`bkhn_study_session_v1`) & Chống đếm trùng phiên Focus qua F5 / ẩn tab (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` + Playwright `node test/study-mvp-smoke.cjs` |
-| **Focus Mode (`off` Normal 3D, `minimal-hud`, `zen-2d` tắt WebGL & bảo toàn tọa độ nhân vật khi quay lại 3D) (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` + Playwright `node test/study-mvp-smoke.cjs` |
+| **Hợp đồng `shared/contracts/study.ts` & State Machine thuần (`PR6`)** | **Đã triển khai & kiểm thử** | `npm run test:study` (`12/12` unit/integration tests PASS) |
+| **Giao diện Tự học (`StudyPanel`), Đồng hồ Pomodoro (`25/5` & `50/10`), Danh sách việc cần làm (`StudyTaskList`), Thống kê (`StudySessionSummary`) & 29 mã bài HSK chuẩn (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` (`12/12` PASS) + Playwright `node test/study-mvp-smoke.cjs` (`9/9` bước PASS) |
+| **Lưu trữ Authoritative đơn nguồn (`bkhn_study_session_v1`), Cô lập tick hiển thị khỏi `HomePage`/`localStorage` & Chống đếm/thông báo trùng phiên Focus qua F5 / ẩn tab / React Strict Mode (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` (`12/12` PASS) + Playwright `node test/study-mvp-smoke.cjs` |
+| **Focus Mode (`off` Normal 3D, `minimal-hud`, `zen-2d` tắt WebGL & bảo toàn tọa độ nhân vật khi quay lại 3D) (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` (`12/12` PASS) + Playwright `node test/study-mvp-smoke.cjs` |
 | **Đặt chỗ ngồi thời gian thực qua WebSocket (`study:claim-seat`), phát quảng bá `study:presence` từ Cloudflare Worker và hoạt cảnh ngồi ghế 3D (`PR8+`)** | **Lên kế hoạch cho `PR8+`** (Đã có state machine & unit test tại `seat-manager.ts`, chưa nối vào luồng WebSocket/UI) | Unit test logic tại `test/study-social-contracts.test.cjs` |
 
 ---

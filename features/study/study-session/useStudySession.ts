@@ -4,12 +4,17 @@
 // features/study/study-session/useStudySession.ts — Authoritative React state
 // and persistence hook for Study Session, Wall-Clock Pomodoro, and Focus Mode.
 //
-// PERSISTENCE STRATEGY:
-// - `STUDY_SESSION_STORAGE_KEY` (`bkhn_study_session_v1`) is the single
-//   authoritative store for the active StudySessionState and its embedded
-//   `pomodoro: PomodoroState`. We never write to two separate timer keys.
-// - `FOCUS_MODE_STORAGE_KEY` (`bkhn_focus_mode_v1`) persists user Focus Mode
-//   preferences (`off`, `minimal-hud`, `zen-2d`).
+// ARCHITECTURAL INVARIANTS:
+// 1. `STUDY_SESSION_STORAGE_KEY` (`bkhn_study_session_v1`) is the single
+//    authoritative store for the active StudySessionState and its embedded
+//    `pomodoro: PomodoroState`.
+// 2. Does NOT run a 250ms UI tick at the top-level `HomePage`. Business state
+//    (`session`) and `localStorage` only update when a user action occurs or
+//    when a phase boundary (`nowMs >= phaseEndsAtMs`) is reached.
+// 3. All `setSession` functional updaters are 100% pure (zero side effects).
+//    Focus block completion notifications are emitted in a dedicated `useEffect`
+//    via `collectUnnotifiedFocusBlocks` so each completed block triggers at most
+//    one notification even under React Strict Mode.
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,12 +36,11 @@ import {
   resumePomodoro,
   skipPomodoroPhase,
   startPomodoro,
-  type PomodoroEvaluation,
   type PomodoroPresetId,
 } from '../pomodoro/timer';
-import { usePomodoro } from '../pomodoro/usePomodoro';
 import {
   addStudyTask,
+  collectUnnotifiedFocusBlocks,
   createInitialStudySession,
   endStudySession,
   linkHskLessonToSession,
@@ -55,14 +59,11 @@ export interface UseStudySessionOptions {
 
 export interface UseStudySessionResult {
   session: StudySessionState;
-  evaluation: PomodoroEvaluation;
-  displayRemainingMmSs: string;
-  displayTotalFocused: string;
-  activePreset: PomodoroPresetId | 'custom';
   focusPrefs: FocusModePreferences;
   focusPolicy: FocusRuntimePolicy;
   studyPanelOpen: boolean;
   setStudyPanelOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+  reconcileAt: (nowMs?: number) => void;
   startSession: (params?: { subjectTag?: string | null; linkedHskLessonId?: string | null }) => void;
   endSession: () => void;
   updateSubject: (subjectTag: string) => void;
@@ -92,6 +93,7 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
     ...DEFAULT_FOCUS_PREFERENCES,
   }));
   const [studyPanelOpen, setStudyPanelOpen] = useState(false);
+  const notifiedBlockIdsRef = useRef<Set<string>>(new Set());
 
   // Load persisted session and focus preferences on client mount
   useEffect(() => {
@@ -99,6 +101,8 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
       const nowMs = Date.now();
       const loadedSession = loadStudySession(window.localStorage, nowMs);
       const loadedFocus = loadFocusPreferences(window.localStorage);
+      // Seed notified set with blocks already present at mount so reload doesn't re-toast old history
+      notifiedBlockIdsRef.current = new Set(loadedSession.history.map((b) => b.id));
       setSession(loadedSession);
       setFocusPrefs(loadedFocus);
       saveStudySession(window.localStorage, loadedSession);
@@ -109,7 +113,7 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
     }
   }, []);
 
-  // Persist session changes to authoritative localStorage key
+  // Persist session changes to authoritative localStorage key (only when session state changes)
   useEffect(() => {
     if (!hydrated) return;
     try {
@@ -129,37 +133,78 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
     }
   }, [hydrated, focusPrefs]);
 
-  // Reconcile wall-clock transitions and record completed focus blocks idempotently
-  const handleSyncAt = useCallback((nowMs: number) => {
+  // Emit at most one notification per newly completed focus block outside state updaters
+  useEffect(() => {
+    if (!hydrated) return;
+    const freshBlocks = collectUnnotifiedFocusBlocks(
+      session.history,
+      notifiedBlockIdsRef.current,
+    );
+    if (freshBlocks.length > 0) {
+      onNotifyRef.current?.(
+        `🎉 Hoàn thành ${freshBlocks.length} phiên Focus! Chuyển sang pha nghỉ.`,
+      );
+    }
+  }, [hydrated, session.history]);
+
+  // Pure wall-clock phase reconciliation (no side effects inside setSession)
+  const reconcileAt = useCallback((nowMs: number = Date.now()) => {
     setSession((prev) => {
       if (!prev.pomodoro.running || prev.pomodoro.phase === 'idle') {
         return prev;
       }
-      const synced = syncStudySessionAt(prev, nowMs, { autoAdvance: true });
-      if (
-        synced.newlyCompletedBlocks > 0 ||
-        synced.evaluation.transitioned ||
-        synced.session.pomodoro !== prev.pomodoro
-      ) {
-        if (synced.newlyCompletedBlocks > 0) {
-          onNotifyRef.current?.(
-            `🎉 Hoàn thành ${synced.newlyCompletedBlocks} phiên Focus! Chuyển sang pha nghỉ.`,
-          );
-        }
-        return synced.session;
+      if (prev.pomodoro.phaseEndsAtMs !== null && nowMs < prev.pomodoro.phaseEndsAtMs) {
+        return prev;
       }
-      return prev;
+      const synced = syncStudySessionAt(prev, nowMs, { autoAdvance: true });
+      return synced.session;
     });
   }, []);
 
-  const { evaluation, displayRemainingMmSs, displayTotalFocused, activePreset } = usePomodoro(
-    session.pomodoro,
-    handleSyncAt,
-  );
+  // Schedule exact boundary wakeup + background tab visibility reconciliation
+  useEffect(() => {
+    if (!session.pomodoro.running || session.pomodoro.phase === 'idle') {
+      return;
+    }
+
+    const onVisibility = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        reconcileAt(Date.now());
+      }
+    };
+    const onFocus = () => reconcileAt(Date.now());
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    const endsAt = session.pomodoro.phaseEndsAtMs;
+    if (endsAt === null) {
+      return () => {
+        window.removeEventListener('focus', onFocus);
+        document.removeEventListener('visibilitychange', onVisibility);
+      };
+    }
+
+    const delayMs = Math.max(0, endsAt - Date.now() + 15);
+    const timeoutId = window.setTimeout(() => {
+      reconcileAt(Date.now());
+    }, delayMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [
+    session.pomodoro.running,
+    session.pomodoro.phase,
+    session.pomodoro.phaseEndsAtMs,
+    reconcileAt,
+  ]);
 
   const focusPolicy = useMemo(
-    () => computeFocusRuntimePolicy(focusPrefs, evaluation.state.phase),
-    [focusPrefs, evaluation.state.phase],
+    () => computeFocusRuntimePolicy(focusPrefs, session.pomodoro.phase),
+    [focusPrefs, session.pomodoro.phase],
   );
 
   const startSession = useCallback(
@@ -273,8 +318,6 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
     setFocusPrefs((prev) => ({
       ...prev,
       level,
-      // When the user explicitly selects Normal 3D ('off'), disable auto-hide so
-      // they immediately see the full 3D HUD even during an active focus block.
       autoHideHudOnFocus: level === 'off' ? false : prev.autoHideHudOnFocus,
     }));
     if (level === 'zen-2d') {
@@ -300,14 +343,11 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
 
   return {
     session,
-    evaluation,
-    displayRemainingMmSs,
-    displayTotalFocused,
-    activePreset,
     focusPrefs,
     focusPolicy,
     studyPanelOpen,
     setStudyPanelOpen,
+    reconcileAt,
     startSession,
     endSession,
     updateSubject,

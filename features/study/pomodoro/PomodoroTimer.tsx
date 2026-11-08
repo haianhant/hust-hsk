@@ -3,19 +3,23 @@
 // ---------------------------------------------------------------------------
 // features/study/pomodoro/PomodoroTimer.tsx — Pomodoro countdown & controls UI
 // component (`feature.study.pomodoro`).
+//
+// Subscribes locally to `usePomodoro(pomodoro, onReconcileAt)` so countdown
+// display ticks stay isolated inside this leaf component without re-rendering
+// `HomePage` or `<CampusScene />`.
 // ---------------------------------------------------------------------------
 
 import type { PomodoroPhase } from '../../../shared/contracts/study';
 import {
   formatTotalFocusedDuration,
-  type PomodoroEvaluation,
   type PomodoroPresetId,
+  type PomodoroState,
 } from './timer';
+import { usePomodoro } from './usePomodoro';
 
 export interface PomodoroTimerProps {
-  evaluation: PomodoroEvaluation;
-  displayRemainingMmSs: string;
-  activePreset: PomodoroPresetId | 'custom';
+  pomodoro: PomodoroState;
+  onReconcileAt?: (nowMs: number) => void;
   onSelectPreset: (preset: PomodoroPresetId) => void;
   onStart: () => void;
   onPause: () => void;
@@ -44,9 +48,8 @@ const PHASE_LABELS: Record<PomodoroPhase, { title: string; badgeClass: string }>
 };
 
 export function PomodoroTimer({
-  evaluation,
-  displayRemainingMmSs,
-  activePreset,
+  pomodoro,
+  onReconcileAt,
   onSelectPreset,
   onStart,
   onPause,
@@ -54,6 +57,10 @@ export function PomodoroTimer({
   onSkipPhase,
   onReset,
 }: PomodoroTimerProps) {
+  const { evaluation, displayRemainingMmSs, activePreset } = usePomodoro(
+    pomodoro,
+    onReconcileAt,
+  );
   const { state, progressRatio } = evaluation;
   const phaseMeta = PHASE_LABELS[state.phase] ?? PHASE_LABELS.idle;
   const isIdle = state.phase === 'idle';
