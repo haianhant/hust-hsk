@@ -25,6 +25,7 @@ export interface CharacterProfile {
   gender: AvatarGender;
   hairStyle: AvatarHairStyle;
   outfit: AvatarOutfitId;
+  skirt?: boolean;
   backpack: boolean;
   glasses: boolean;
   lanyard: boolean;
@@ -40,6 +41,7 @@ export const DEFAULT_CHARACTER_PROFILE: CharacterProfile = {
   gender: 'male',
   hairStyle: 'short',
   outfit: 'windbreaker-hust',
+  skirt: false,
   backpack: true,
   glasses: false,
   lanyard: true,
@@ -75,6 +77,8 @@ const VALID_OUTFITS: AvatarOutfitId[] = [
   'bomber-red-navy',
   'polo-red',
   'hoodie-hust',
+  'tshirt-navy',
+  'sweater-cream',
   'shirt-white',
   'sport-pe',
 ];
@@ -84,6 +88,7 @@ export function syncCharacterToPlayerState(profile: CharacterProfile): void {
   playerState.avatarGender = profile.gender;
   playerState.avatarHairStyle = profile.hairStyle;
   playerState.avatarOutfit = profile.outfit;
+  playerState.avatarSkirt = Boolean(profile.skirt);
   playerState.avatarBackpack = profile.backpack;
   playerState.avatarGlasses = profile.glasses;
   playerState.avatarLanyard = profile.lanyard;
@@ -137,6 +142,10 @@ export function loadCharacterProfile(): CharacterProfile | null {
       gender,
       hairStyle,
       outfit,
+      skirt:
+        typeof parsedChar.skirt === 'boolean'
+          ? parsedChar.skirt
+          : gender === 'female' && (outfit === 'tshirt-navy' || outfit === 'shirt-white'),
       backpack: typeof parsedChar.backpack === 'boolean' ? parsedChar.backpack : true,
       glasses: typeof parsedChar.glasses === 'boolean' ? parsedChar.glasses : false,
       lanyard: typeof parsedChar.lanyard === 'boolean' ? parsedChar.lanyard : true,

@@ -71,6 +71,8 @@ export type AvatarOutfitId =
   | 'bomber-red-navy'
   | 'polo-red'
   | 'hoodie-hust'
+  | 'tshirt-navy'
+  | 'sweater-cream'
   | 'shirt-white'
   | 'sport-pe';
 
@@ -109,6 +111,7 @@ export const playerState = {
   avatarGender: 'male' as AvatarGender,
   avatarHairStyle: 'short' as AvatarHairStyle,
   avatarOutfit: 'windbreaker-hust' as AvatarOutfitId,
+  avatarSkirt: false,
   avatarBackpack: true,
   avatarGlasses: false,
   avatarLanyard: true,

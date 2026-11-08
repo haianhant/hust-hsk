@@ -56,12 +56,16 @@ import { useEffect, useMemo } from 'react';
 import { C9 } from '../../lib/campus';
 import type { TimeOfDay } from '../../lib/playerState';
 import { makeWeatheredConcreteTexture, makeWoodGrainTexture } from './materials';
+import { LabelPlane } from './TextPlate';
 
 // --- Màu chốt (reference-visual §0) ------------------------------------------
 const WALL = '#F4F3EF'; // tường C9 / bê tông thang, trắng hơi ngả kem
 const STAIR_WHITE = '#F4F3EF'; // bản thang + chiếu nghỉ, trắng/xám rất nhạt
 const PLINTH_GREY = '#E9E7E1'; // chân tường, xám rất nhạt
-const GLASS = '#6E7F8C'; // kính cửa sổ, xám-xanh
+const GLASS = '#5E7382'; // kính cửa sổ, xám-xanh có chiều sâu
+const WIN_FRAME = '#FDFCFA'; // khung bao & đố cửa sổ sơn trắng kem nổi khối 3D
+const WIN_SILL = '#E2DFD7'; // bệ cửa sổ bê tông đúc nhô ra tạo bóng đổ
+const GRILLE_DARK = '#3B4248'; // hoa sắt / chấn song ô thoáng trên cửa tầng trệt
 const STAIR_RED = '#E8202A'; // lan can kim loại đỏ, đỏ tươi
 const DOOR_YELLOW = '#D9A441'; // cửa gỗ vàng tầng trệt + cửa ra chiếu nghỉ
 const RECESS_DARK = '#55504A'; // khung hõm tối sau cửa (lớp lùi, brief §7)
@@ -183,37 +187,83 @@ export function C9Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         />
       </mesh>
 
-      {/* Dải cửa sổ mặt bắc + mặt nam: phản xạ IBL ban ngày, sáng đèn ấm về đêm */}
+      {/* Dải cửa sổ 3D mặt bắc + mặt nam: khung bao nổi, bệ cửa, đố chia ô & kính lùi sâu */}
       {floors.map((f) =>
         ([-1, 1] as const).map((side) => {
           const lit = isNight && (f + side) % 2 !== 0;
-          if (f === 0 && side === 1) {
-            return ([-46.5, -37.5] as const).map((wx) => (
-              <mesh
-                key={`c9-win-${f}-${side}-${wx}`}
-                position={[wx, windowY(f), C9.center.z + side * (HZ + 0.07)]}
-              >
-                <boxGeometry args={[7, 1.3, 0.1]} />
-                <meshStandardMaterial
-                  color={lit ? '#FFD27D' : GLASS}
-                  emissive={lit ? '#FFB84D' : '#000000'}
-                  emissiveIntensity={lit ? 0.78 : 0}
-                  roughness={0.22}
-                  metalness={0.28}
-                />
-              </mesh>
-            ));
-          }
-          return (
-            <mesh
-              key={`c9-win-${f}-${side}`}
-              position={[
-                C9.center.x,
-                windowY(f),
-                C9.center.z + side * (HZ + 0.07),
-              ]}
-            >
-              <boxGeometry args={[C9.size.x - 3, 1.3, 0.1]} />
+          const wy = windowY(f);
+          const zFrame = C9.center.z + side * (HZ + 0.03);
+          const zGlass = C9.center.z + side * (HZ + 0.036);
+          const zMullion = C9.center.z + side * (HZ + 0.055);
+          const zSill = C9.center.z + side * (HZ + 0.068);
+          const bands: Array<{ cx: number; w: number; cols: number }> =
+            f === 0 && side === 1
+              ? [
+                  { cx: -46.5, w: 7.0, cols: 3 },
+                  { cx: -37.5, w: 7.0, cols: 3 },
+                ]
+              : [{ cx: C9.center.x, w: C9.size.x - 3, cols: 7 }];
+          return bands.map(({ cx, w, cols }) => {
+            const mullionXs = Array.from({ length: cols + 1 }, (_, idx) => cx - w / 2 + (idx * w) / cols);
+            return (
+              <group key={`c9-win-${f}-${side}-${cx}`}>
+                {/* Khung bao cửa sổ sơn trắng kem nổi khỏi tường */}
+                <mesh position={[cx, wy, zFrame]}>
+                  <boxGeometry args={[w + 0.18, 1.44, 0.06]} />
+                  <meshStandardMaterial color={WIN_FRAME} roughness={0.78} />
+                </mesh>
+                {/* Bệ cửa sổ bê tông đúc nhô ra dưới đáy tạo bóng đổ */}
+                <mesh position={[cx, wy - 0.74, zSill]} castShadow>
+                  <boxGeometry args={[w + 0.28, 0.08, 0.14]} />
+                  <meshStandardMaterial color={WIN_SILL} roughness={0.88} />
+                </mesh>
+                {/* Mặt kính lùi sâu bên trong khung */}
+                <mesh position={[cx, wy, zGlass]}>
+                  <boxGeometry args={[w, 1.28, 0.05]} />
+                  <meshStandardMaterial
+                    color={lit ? '#FFD27D' : GLASS}
+                    emissive={lit ? '#FFB84D' : '#000000'}
+                    emissiveIntensity={lit ? 0.78 : 0}
+                    roughness={0.22}
+                    metalness={0.28}
+                  />
+                </mesh>
+                {/* Đố ngang chia ô thoáng phía trên (transom bar) */}
+                <mesh position={[cx, wy + 0.34, zMullion]}>
+                  <boxGeometry args={[w + 0.06, 0.055, 0.04]} />
+                  <meshStandardMaterial color={WIN_FRAME} roughness={0.75} />
+                </mesh>
+                {/* Các đố dọc chia khoang cửa sổ 3D */}
+                {mullionXs.map((mx, mIdx) => (
+                  <mesh key={`mul-${mIdx}`} position={[mx, wy, zMullion]}>
+                    <boxGeometry args={[0.06, 1.34, 0.045]} />
+                    <meshStandardMaterial color={WIN_FRAME} roughness={0.75} />
+                  </mesh>
+                ))}
+              </group>
+            );
+          });
+        }),
+      )}
+      {/* Dải cửa sổ 3D mặt tây (x = -52): khung bao, bệ cửa, đố chia 4 khoang. */}
+      {floors.map((f) => {
+        const lit = isNight && f % 2 === 1;
+        const wy = windowY(f);
+        const wZ = C9.size.z - 3; // 9 m
+        const cols = 4;
+        const mullionZs = Array.from({ length: cols + 1 }, (_, idx) => C9.center.z - wZ / 2 + (idx * wZ) / cols);
+        return (
+          <group key={`c9-win-w-${f}`}>
+            <mesh position={[C9.center.x - HX - 0.03, wy, C9.center.z]}>
+              <boxGeometry args={[0.06, 1.44, wZ + 0.18]} />
+              <meshStandardMaterial color={WIN_FRAME} roughness={0.78} />
+            </mesh>
+            <mesh position={[C9.center.x - HX - 0.068, wy - 0.74, C9.center.z]} castShadow>
+              <boxGeometry args={[0.14, 0.08, wZ + 0.28]} />
+              <meshStandardMaterial color={WIN_SILL} roughness={0.88} />
+            </mesh>
+            <mesh position={[C9.center.x - HX - 0.036, wy, C9.center.z]}>
+              <boxGeometry args={[0.05, 1.28, wZ]} />
               <meshStandardMaterial
                 color={lit ? '#FFD27D' : GLASS}
                 emissive={lit ? '#FFB84D' : '#000000'}
@@ -222,26 +272,17 @@ export function C9Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
                 metalness={0.28}
               />
             </mesh>
-          );
-        }),
-      )}
-      {/* Dải cửa sổ mặt tây (x = -52). */}
-      {floors.map((f) => {
-        const lit = isNight && f % 2 === 1;
-        return (
-          <mesh
-            key={`c9-win-w-${f}`}
-            position={[C9.center.x - HX - 0.07, windowY(f), C9.center.z]}
-          >
-            <boxGeometry args={[0.1, 1.3, C9.size.z - 3]} />
-            <meshStandardMaterial
-              color={lit ? '#FFD27D' : GLASS}
-              emissive={lit ? '#FFB84D' : '#000000'}
-              emissiveIntensity={lit ? 0.78 : 0}
-              roughness={0.22}
-              metalness={0.28}
-            />
-          </mesh>
+            <mesh position={[C9.center.x - HX - 0.055, wy + 0.34, C9.center.z]}>
+              <boxGeometry args={[0.04, 0.055, wZ + 0.06]} />
+              <meshStandardMaterial color={WIN_FRAME} roughness={0.75} />
+            </mesh>
+            {mullionZs.map((mz, mIdx) => (
+              <mesh key={`wmul-${mIdx}`} position={[C9.center.x - HX - 0.055, wy, mz]}>
+                <boxGeometry args={[0.045, 1.34, 0.06]} />
+                <meshStandardMaterial color={WIN_FRAME} roughness={0.75} />
+              </mesh>
+            ))}
+          </group>
         );
       })}
 
@@ -312,32 +353,105 @@ export function C9Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         <meshStandardMaterial color={WALL} roughness={0.9} />
       </mesh>
 
-      {/* Cửa gỗ vàng tầng trệt, mặt nam (vân gỗ tự nhiên) + khung hõm tối. */}
-      <mesh position={[C9.center.x, 1.5, C9.center.z + HZ + 0.03]}>
-        <boxGeometry args={[2.0, 3.0, 0.06]} />
+      {/* Cửa gỗ vàng tầng trệt, mặt nam (vân gỗ tự nhiên) + khung bao 3D + ô thoáng song sắt. */}
+      <mesh position={[C9.center.x, 1.55, C9.center.z + HZ + 0.03]}>
+        <boxGeometry args={[2.1, 3.1, 0.06]} />
+        <meshStandardMaterial color={WIN_FRAME} roughness={0.8} />
+      </mesh>
+      <mesh position={[C9.center.x, 1.48, C9.center.z + HZ + 0.045]}>
+        <boxGeometry args={[1.92, 2.96, 0.06]} />
         <meshStandardMaterial color={RECESS_DARK} roughness={0.9} />
       </mesh>
-      <mesh position={[C9.center.x, 1.4, C9.center.z + HZ + 0.06]}>
-        <boxGeometry args={[1.8, 2.8, 0.12]} />
+      <mesh position={[C9.center.x, 1.25, C9.center.z + HZ + 0.068]}>
+        <boxGeometry args={[1.82, 2.45, 0.08]} />
         <meshStandardMaterial color={DOOR_YELLOW} map={woodTex} roughness={0.75} />
       </mesh>
+      {/* Khe chia 2 cánh cửa mặt nam + tay nắm */}
+      <mesh position={[C9.center.x, 1.25, C9.center.z + HZ + 0.112]}>
+        <boxGeometry args={[0.03, 2.42, 0.02]} />
+        <meshStandardMaterial color={RECESS_DARK} roughness={0.85} />
+      </mesh>
+      {/* Ô thoáng kính có song sắt phía trên cửa mặt nam */}
+      <mesh position={[C9.center.x, 2.72, C9.center.z + HZ + 0.06]}>
+        <boxGeometry args={[1.82, 0.42, 0.05]} />
+        <meshStandardMaterial color={GLASS} roughness={0.28} metalness={0.25} />
+      </mesh>
+      {[-0.6, -0.3, 0, 0.3, 0.6].map((dx) => (
+        <mesh key={`s-door-bar-${dx}`} position={[C9.center.x + dx, 2.72, C9.center.z + HZ + 0.092]}>
+          <boxGeometry args={[0.025, 0.42, 0.025]} />
+          <meshStandardMaterial color={GRILLE_DARK} roughness={0.6} metalness={0.4} />
+        </mesh>
+      ))}
 
-      {/* Cửa ra chiếu nghỉ ở các tầng 1–3, mặt đông: cửa gỗ vàng có vân gỗ + đèn chiếu nghỉ ban đêm */}
+      {/* Cửa đôi gỗ vàng tầng trệt ở mặt Đông cạnh chân cầu thang đỏ (y = 0, z = LAND_N_Z)
+          khớp 100% ảnh thật tham-khao/c9/c9-cau-thang-do-01.jpg (cửa 2 cánh chia pano + ô thoáng song sắt phía trên) */}
+      <group position={[EAST_WALL_X, 0, LAND_N_Z]}>
+        <mesh position={[0.03, 1.52, 0]}>
+          <boxGeometry args={[0.06, 3.04, 1.56]} />
+          <meshStandardMaterial color={WIN_FRAME} roughness={0.8} />
+        </mesh>
+        <mesh position={[0.045, 1.48, 0]}>
+          <boxGeometry args={[0.06, 2.92, 1.42]} />
+          <meshStandardMaterial color={RECESS_DARK} roughness={0.9} />
+        </mesh>
+        <mesh position={[0.068, 1.22, 0]}>
+          <boxGeometry args={[0.08, 2.4, 1.34]} />
+          <meshStandardMaterial color={DOOR_YELLOW} map={woodTex} roughness={0.74} />
+        </mesh>
+        {/* Khe giữa 2 cánh cửa đôi mặt Đông */}
+        <mesh position={[0.112, 1.22, 0]}>
+          <boxGeometry args={[0.02, 2.38, 0.03]} />
+          <meshStandardMaterial color={RECESS_DARK} roughness={0.85} />
+        </mesh>
+        {/* Ô thoáng có chấn song sắt phía trên cửa tầng trệt mặt Đông */}
+        <mesh position={[0.06, 2.68, 0]}>
+          <boxGeometry args={[0.05, 0.44, 1.34]} />
+          <meshStandardMaterial color={GLASS} roughness={0.28} metalness={0.25} />
+        </mesh>
+        {[-0.44, -0.22, 0, 0.22, 0.44].map((dz) => (
+          <mesh key={`e-gdoor-bar-${dz}`} position={[0.092, 2.68, dz]}>
+            <boxGeometry args={[0.025, 0.44, 0.025]} />
+            <meshStandardMaterial color={GRILLE_DARK} roughness={0.6} metalness={0.4} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* Cửa ra chiếu nghỉ ở các tầng 1–3, mặt đông: cửa gỗ vàng có khung bao + ô thoáng song sắt + đèn ban đêm */}
       {([1, 2, 3] as const).map((k) => {
         const landZ = k % 2 === 0 ? LAND_N_Z : LAND_S_Z;
         const doorY = k * RISE;
         return (
           <group key={`c9-door-${k}`}>
-            <mesh position={[EAST_WALL_X + 0.03, doorY + 1.2, landZ]}>
-              <boxGeometry args={[0.06, 2.4, 1.3]} />
+            <mesh position={[EAST_WALL_X + 0.03, doorY + 1.35, landZ]}>
+              <boxGeometry args={[0.06, 2.7, 1.38]} />
+              <meshStandardMaterial color={WIN_FRAME} roughness={0.8} />
+            </mesh>
+            <mesh position={[EAST_WALL_X + 0.045, doorY + 1.32, landZ]}>
+              <boxGeometry args={[0.06, 2.62, 1.26]} />
               <meshStandardMaterial color={RECESS_DARK} roughness={0.9} />
             </mesh>
-            <mesh position={[EAST_WALL_X + 0.05, doorY + 1.1, landZ]}>
-              <boxGeometry args={[0.1, 2.2, 1.1]} />
+            <mesh position={[EAST_WALL_X + 0.068, doorY + 1.1, landZ]}>
+              <boxGeometry args={[0.08, 2.18, 1.16]} />
               <meshStandardMaterial color={DOOR_YELLOW} map={woodTex} roughness={0.75} />
             </mesh>
+            {/* Khe chia 2 cánh cửa chiếu nghỉ */}
+            <mesh position={[EAST_WALL_X + 0.112, doorY + 1.1, landZ]}>
+              <boxGeometry args={[0.02, 2.16, 0.028]} />
+              <meshStandardMaterial color={RECESS_DARK} roughness={0.85} />
+            </mesh>
+            {/* Ô thoáng kính có song sắt phía trên cửa chiếu nghỉ */}
+            <mesh position={[EAST_WALL_X + 0.06, doorY + 2.41, landZ]}>
+              <boxGeometry args={[0.05, 0.36, 1.16]} />
+              <meshStandardMaterial color={GLASS} roughness={0.28} metalness={0.25} />
+            </mesh>
+            {[-0.36, -0.18, 0, 0.18, 0.36].map((dz) => (
+              <mesh key={`c9-ldoor-bar-${k}-${dz}`} position={[EAST_WALL_X + 0.092, doorY + 2.41, landZ + dz]}>
+                <boxGeometry args={[0.022, 0.36, 0.022]} />
+                <meshStandardMaterial color={GRILLE_DARK} roughness={0.6} metalness={0.4} />
+              </mesh>
+            ))}
             {isNight && (
-              <mesh position={[EAST_WALL_X + 0.12, doorY + 2.48, landZ]}>
+              <mesh position={[EAST_WALL_X + 0.12, doorY + 2.74, landZ]}>
                 <boxGeometry args={[0.12, 0.1, 0.36]} />
                 <meshStandardMaterial color="#FFF3CC" emissive="#FFCC66" emissiveIntensity={1.4} />
               </mesh>
@@ -345,6 +459,50 @@ export function C9Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
           </group>
         );
       })}
+
+      {/* Biển tên tòa nhà "NHÀ C9" gắn ở mặt Đông (ngoài cột chiếu nghỉ nam z <= 2.42) và mặt Nam cạnh cửa chính */}
+      <LabelPlane
+        textureKey="c9-building-sign"
+        canvasW={384}
+        canvasH={128}
+        draw={(ctx, w, h) => {
+          ctx.fillStyle = '#B81D24';
+          ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#F5C518';
+          ctx.lineWidth = 8;
+          ctx.strokeRect(6, 6, w - 12, h - 12);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '900 58px Arial, sans-serif';
+          ctx.fillText('NHÀ C9', w / 2, h / 2 + 2);
+        }}
+        size={[1.36, 0.48]}
+        position={[EAST_WALL_X + 0.065, 3.65, 3.18]}
+        rotation={[0, Math.PI / 2, 0]}
+        transparent={false}
+      />
+      <LabelPlane
+        textureKey="c9-building-sign"
+        canvasW={384}
+        canvasH={128}
+        draw={(ctx, w, h) => {
+          ctx.fillStyle = '#B81D24';
+          ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#F5C518';
+          ctx.lineWidth = 8;
+          ctx.strokeRect(6, 6, w - 12, h - 12);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '900 58px Arial, sans-serif';
+          ctx.fillText('NHÀ C9', w / 2, h / 2 + 2);
+        }}
+        size={[1.45, 0.5]}
+        position={[C9.center.x + 2.2, 2.65, C9.center.z + HZ + 0.068]}
+        rotation={[0, 0, 0]}
+        transparent={false}
+      />
 
       {/* --- Cầu thang zic-zac 4 vế ------------------------------------------- */}
       {Array.from({ length: FLIGHTS }, (_, k) => {

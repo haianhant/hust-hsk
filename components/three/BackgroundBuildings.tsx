@@ -290,14 +290,14 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
 
 // --- Cây nền quanh khuôn viên (đặt ngoài footprint của mọi tòa nhà & đường đi) ---
 const BACKGROUND_TREES: Array<{ x: number; z: number; trunkH: number; canopyR: number }> = [
-  // Hàng cây phía Bắc & dọc trục C1 – C3..C10 – C6..C8
+  // Hàng cây phía Bắc & dọc trục C1 – C3..C10 – C7 (đặt trên dải cỏ thoáng, không chạm C7 x=27..65)
   { x: -28, z: -62, trunkH: 2.6, canopyR: 1.6 },
   { x: -28, z: -48, trunkH: 2.8, canopyR: 1.7 },
   { x: 4, z: -62, trunkH: 2.5, canopyR: 1.5 },
   { x: 4, z: -46, trunkH: 2.8, canopyR: 1.7 },
-  { x: 26, z: -60, trunkH: 2.9, canopyR: 1.7 },
-  { x: 26, z: -42, trunkH: 2.6, canopyR: 1.6 },
-  { x: 68, z: -62, trunkH: 3.0, canopyR: 1.8 },
+  { x: 18, z: -60, trunkH: 2.9, canopyR: 1.7 },
+  { x: 18, z: -42, trunkH: 2.6, canopyR: 1.6 },
+  { x: 70, z: -62, trunkH: 3.0, canopyR: 1.8 },
   { x: 80, z: -62, trunkH: 2.6, canopyR: 1.6 },
   // Hàng dọc đường Trần Đại Nghĩa (x = 88)
   { x: 88, z: -52, trunkH: 2.5, canopyR: 1.5 },

@@ -446,3 +446,28 @@ Báo cáo đầy đủ: `docs/round5-multiplayer-report.md`. Yêu cầu user 07/
 
 ### Vận hành đợt 5
 - Làm trực tiếp, không spawn worker con. KHÔNG deploy Vercel, KHÔNG tự push GitHub (parent push file text qua connector sau khi xong). KHÔNG chạm hoc-hsk / chua-online (chỉ ĐỌC worker chùa làm mẫu). Log test trong workspace (`test-shots/*.log`), không ghi /tmp. Chỉ tin file trên đĩa.
+
+## Đợt 6 — Chuẩn hóa Bản đồ Khuôn viên (Việc 1) & Hệ thống Tùy biến Nhân vật (Việc 2) (08/11/2026 — ĐÃ DEPLOY & PUSH `main` + `master`)
+- **Việc 1 (Kiến trúc & Quy hoạch):**
+  - Tách cụm giảng đường phía Tây Hồ Tiền thành 3 tòa độc lập `D2`, `D2a`, `D2b` trong `lib/campus.ts` và `BackgroundBuildings.tsx`.
+  - Xác nhận mặt đồng hồ Thư viện Tạ Quang Bửu hướng chuẩn về phía Bắc (`-Z`), cầu thang bộ zic-zac đỏ C9 gắn mặt Đông (`+X`).
+  - Nâng cấp Cổng Trần Đại Nghĩa (`Cổng B8`) đối xứng 2 trụ lớn + 2 trụ phụ + cổng sắt sơn vàng kem có biển số `55` & `57`.
+- **Việc 2 (Tạo & Tùy biến Nhân vật Nam/Nữ + Đồng phục HUST):**
+  - Bổ sung giới tính (`male` / `female`), mẫu đồng phục (`windbreaker`, `bomber`, `polo`, `shirt`, `hoodie`) và lưu `localStorage` (`bkhn-character-v1`) trong `lib/identity.ts` & `lib/playerState.ts`.
+  - Xây dựng `components/ui/CharacterCreatorModal.tsx` với Canvas 3D xem trước trực tiếp (Idle / Đi bộ / Chạy bộ, xoay 360°).
+  - Thêm bảng tên 3D nổi (`Billboard`) `"Tên · MSSV"` trên đầu nhân vật chính trong `Player.tsx`.
+
+## Đợt 7 — Nâng cấp toàn diện theo 37 ảnh thật `tham-khao/` & Hoàn thiện 4 hạng mục tồn đọng (08/11/2026 — ĐÃ DEPLOY & PUSH `main` + `master`)
+- **Gỡ bỏ 4 hạn chế trong Rules (`GEMINI.md` & 3 Skills):** mở khóa diện tích khuôn viên & kích thước công trình, tích hợp Ground Truth từ Bản đồ Khuôn viên ĐHBK Hà Nội & 37 ảnh thật `tham-khao/`, nâng cấp `test/leg-sim.cjs` tìm đường thông minh theo mạng lưới `ROADS`.
+- **Nâng cấp các công trình biểu tượng sát ảnh thật:**
+  - **Thư viện Tạ Quang Bửu (`LibraryBuilding.tsx`):** mở rộng tháp chính lên `25m × 13m` (3 nhịp đứng), khối đế `14m`, 6 cột tròn lớn màu xám bạc đỡ mái hiên, khung cửa kính xanh dương đậm `#1E5AA8`, chữ vàng 2 dòng `"THƯ VIỆN / TẠ QUANG BỬU"`, slogan `"ONE LOVE. ONE FUTURE."` trên mặt trước bệ đá chữ `HUST`, và cây cau vua (`LibPalm`) có thân đốt vòng + bẹ cau xanh + 10 tàu lá cong rủ.
+  - **Tổ hợp Tòa C7 9 tầng hình chữ E (`EastCampus.tsx`):** dựng đúng hình thái chữ E nhìn từ flycam (`38m × 28m`) với thân chính phía Bắc và 3 cánh nhô về phía Nam tạo 2 sân trong trồng cây xanh, tầng 1–2 vách kính atrium lớn, chữ `"C7"` đỏ kèm logo HUST trên đỉnh.
+  - **Tòa B1 SoICT góc cong (`EastCampus.tsx`):** khối góc bo cong 1/4 hình trụ với các dải kính cong liên tục, tầng trệt ốp gạch đỏ nâu, biển chữ `"B1"` nổi trên mái.
+  - **Khu KTX B9 & Tòa KTX mới cao tầng (`EastCampus.tsx`):** cổng chào `"TRUNG TÂM QUẢN LÝ KÝ TÚC XÁ"` + biển `"VĂN PHÒNG HỘI SINH VIÊN"`, nhà B9 vàng 4 tầng có hành lang và tòa KTX mới 9 tầng sơn trắng–xanh dương.
+  - **Quảng trường C1, Hồ Tiền & Tòa C9 (`C1Building.tsx`, `TienLake.tsx`, `C9Building.tsx`):** cụm chữ `"I ❤ BK"` khối hộp 3D dày có viền trắng; bồn gạch đỏ tròn quanh gốc liễu và cột đèn 5 chao cầu trắng ven Hồ Tiền; Tòa C9 có hệ **khung cửa sổ 3D nổi khối** (khung bao, bệ cửa, đố chia ô, kính lùi sâu), cửa đôi gỗ vàng tầng trệt kèm ô thoáng song sắt cạnh chân thang đỏ (`tham-khao/c9/c9-cau-thang-do-01.jpg`) và biển `"NHÀ C9"`.
+- **Mở rộng 10 bộ Đồng phục HUST & Chân váy xếp ly (`StudentAvatar.tsx`, `CharacterCreatorModal.tsx`):**
+  - Bổ sung **Áo phông xanh tím than HUST (`tshirt-navy`)**, **Sweater Kem Thu-Đông (`sweater-cream`)**, nâng cấp **Áo Hoodie đỏ BK (`hoodie-hust`)** (mũ trùm 3D có lòng mũ tối, dây rút đầu bịt kim loại, túi bụng kangaroo vát cạnh) và phù điêu tròn HUST trên cánh tay trái.
+  - Hỗ trợ tùy chọn **Chân váy xếp ly chữ A (`skirt`)** cho nhân vật Nữ (12 nếp gấp xếp ly 3D + tất cổ ngắn viền đỏ Bách khoa, có nút bật/tắt `👗 Phối đồ: Chân váy xếp ly / Quần dài`).
+- **Quần thể NPC Sinh viên sống động (`AmbientLife.tsx`):**
+  - Thêm `SittingStudent` ngồi đọc giáo trình/sách mở trên các ghế gỗ ven Hồ Tiền (bờ Tây & bờ Đông), cập nhật sinh viên đi dạo mặc đa dạng Áo khoác gió, Bomber, Áo phông xanh + chân váy trắng, Sweater, Hoodie.
+- **Kiểm thử 4 cổng Verification Gates:** `npx tsc --noEmit` (0 lỗi), `node test/learn.test.cjs` (45/45 PASS), `node test/leg-sim.cjs` (4/4 PASS), `npm run build` (PASS).

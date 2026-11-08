@@ -140,45 +140,59 @@ function makeFrondGeometry(len: number): THREE.ShapeGeometry {
 }
 
 function LibPalm({ x, z }: { x: number; z: number }) {
-  // Cau: 8 phiến dài 1,6–2,1 m xòe quanh ngọn thân, nghiêng 54–74° khỏi phương
-  // đứng, đầu phiến gập xuống; giữa có 3 búp non dựng đứng.
+  // Cau vua tiền cảnh Thư viện: thân xám có đốt vòng, bẹ cau xanh mướt trên ngọn,
+  // 10 tàu lá cong rủ đa sắc độ kèm sống tàu lá 3D và 3 búp non vươn đứng ở tâm.
   const fronds = useMemo(() => {
     const rand = mulberry32(Math.round(x * 100) + Math.round(z * 100) * 7 + 11);
-    return Array.from({ length: 8 }, (_, k) => ({
-      az: (k / 8) * Math.PI * 2 + (rand() - 0.5) * 0.5,
-      tilt: 0.95 + rand() * 0.35, // 54–74° khỏi phương đứng
-      len: 1.6 + rand() * 0.5,
+    return Array.from({ length: 10 }, (_, k) => ({
+      az: (k / 10) * Math.PI * 2 + (rand() - 0.5) * 0.35,
+      tilt: 0.88 + (k % 2) * 0.22 + rand() * 0.24, // 2 tầng tàu lá cao/thấp đan xen
+      len: 1.65 + rand() * 0.48,
+      shade: k % 2 === 0 ? LEAF : '#2F6B2F',
     }));
   }, [x, z]);
   const frondGeo = useMemo(() => makeFrondGeometry(1.9), []);
   useEffect(() => () => frondGeo.dispose(), [frondGeo]);
   return (
     <group position={[x, 0, z]}>
-      <mesh position={[0, 2.2, 0]} castShadow>
-        <cylinderGeometry args={[0.12, 0.18, 4.4, 8]} />
-        <meshStandardMaterial color={TRUNK} roughness={1} />
+      {/* Thân cau xám nâu thuôn nhẹ */}
+      <mesh position={[0, 1.9, 0]} castShadow>
+        <cylinderGeometry args={[0.12, 0.19, 3.8, 10]} />
+        <meshStandardMaterial color={TRUNK} roughness={0.92} />
+      </mesh>
+      {/* Các vòng đốt thân cau đặc trưng */}
+      {[0.7, 1.4, 2.1, 2.8, 3.4].map((ry) => (
+        <mesh key={`ring-${ry}`} position={[0, ry, 0]}>
+          <torusGeometry args={[0.165 - ry * 0.011, 0.012, 6, 12]} />
+          <meshStandardMaterial color="#584738" roughness={0.95} />
+        </mesh>
+      ))}
+      {/* Bẹ cau xanh mướt (crownshaft) ở đoạn cổ ngọn */}
+      <mesh position={[0, 4.12, 0]} castShadow>
+        <cylinderGeometry args={[0.135, 0.125, 0.68, 10]} />
+        <meshStandardMaterial color="#4A8B3B" roughness={0.78} />
       </mesh>
       {fronds.map((f, i) => (
-        <group key={`frond-${i}`} position={[0, 4.4, 0]} rotation-y={f.az}>
+        <group key={`frond-${i}`} position={[0, 4.42, 0]} rotation-y={f.az}>
           <mesh
             geometry={frondGeo}
             rotation-x={f.tilt}
             scale={[1, f.len / 1.9, 1]}
             castShadow
           >
-            <meshStandardMaterial color={LEAF} roughness={1} side={THREE.DoubleSide} />
+            <meshStandardMaterial color={f.shade} roughness={0.85} side={THREE.DoubleSide} />
           </mesh>
         </group>
       ))}
       {[0.1, 2.2, 4.2].map((az, i) => (
-        <group key={`spear-${i}`} position={[0, 4.4, 0]} rotation-y={az}>
+        <group key={`spear-${i}`} position={[0, 4.44, 0]} rotation-y={az}>
           <mesh
             geometry={frondGeo}
             rotation-x={0.22}
-            scale={[0.7, 0.55, 0.7]}
+            scale={[0.68, 0.58, 0.68]}
             castShadow
           >
-            <meshStandardMaterial color={LEAF} roughness={1} side={THREE.DoubleSide} />
+            <meshStandardMaterial color="#589E44" roughness={0.82} side={THREE.DoubleSide} />
           </mesh>
         </group>
       ))}

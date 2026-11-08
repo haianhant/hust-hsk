@@ -94,7 +94,14 @@ export interface FigureJoints {
   footR: RefObject<THREE.Group>;
 }
 
-export type FigureVariant = 'polo' | 'hoodie' | 'shirt' | 'windbreaker' | 'bomber';
+export type FigureVariant =
+  | 'polo'
+  | 'hoodie'
+  | 'shirt'
+  | 'windbreaker'
+  | 'bomber'
+  | 'tshirt'
+  | 'sweater';
 export type HairStyle = AvatarHairStyle;
 
 export interface FigureProps {
@@ -106,6 +113,10 @@ export interface FigureProps {
   upperYokeColor?: string;
   /** Màu tay áo phối riêng (dùng cho áo Bomber HUST) */
   sleeveColor?: string;
+  /** Bật chế độ chân váy xếp ly cho nhân vật Nữ (dùng màu skirtColor hoặc pants) */
+  skirt?: boolean;
+  /** Màu chân váy xếp ly (khi bật chế độ chân váy cho nhân vật Nữ) */
+  skirtColor?: string;
   pants: string;
   shoe: string;
   shoeSole: string;
@@ -326,9 +337,11 @@ function ArmSide({
   shoulderRef?: RefObject<THREE.Group>;
   elbowRef?: RefObject<THREE.Group>;
 }) {
-  const short = variant === 'polo';
+  const short = variant === 'polo' || variant === 'tshirt';
   const isWindbreaker = variant === 'windbreaker';
   const isBomber = variant === 'bomber';
+  const isSweater = variant === 'sweater';
+  const isHoodie = variant === 'hoodie';
   const topSleeveTone = isWindbreaker
     ? (upperYokeColor ?? WINDBREAKER_WHITE)
     : isBomber
@@ -349,8 +362,8 @@ function ArmSide({
       </mesh>
 
       {/* Phù hiệu tròn trắng-đỏ ĐHBK Hà Nội gắn ở mặt ngoài bắp tay trái (side === 1)
-          theo đúng ảnh thật ao-khoac-gio-do-chi-tiet-01.jpg & polo-do-nam-nu-01.jpg */}
-      {side === 1 && sleeveBadgeTex && (isWindbreaker || short || isBomber) && (
+          theo đúng ảnh thật ao-khoac-gio-do-chi-tiet-01.jpg, polo-do-nam-nu-01.jpg, ao-phong-xanh-nu-01.jpg */}
+      {side === 1 && sleeveBadgeTex && (isWindbreaker || short || isBomber || isHoodie || isSweater) && (
         <mesh
           position={[0.058 * armScale, -0.088, 0]}
           rotation={[0, Math.PI / 2, 0]}
@@ -425,7 +438,7 @@ function ArmSide({
               <cylinderGeometry args={[0.045, 0.042, 0.034, 16]} />
               <meshStandardMaterial color={shirtDark} roughness={0.86} />
             </mesh>
-            {isBomber && (
+            {(isBomber || isSweater) && (
               <mesh position={[0, -0.218, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[armScale, armScale, 1]}>
                 <torusGeometry args={[0.044, 0.0035, 8, 16]} />
                 <meshStandardMaterial color={WHITE} roughness={0.8} />
@@ -463,6 +476,7 @@ function LegSide({
   hipX,
   legScale,
   pants,
+  skirtColor,
   shoe,
   shoeSole,
   fabricTex,
@@ -474,6 +488,7 @@ function LegSide({
   hipX: number;
   legScale: number;
   pants: string;
+  skirtColor?: string;
   shoe: string;
   shoeSole: string;
   fabricTex: THREE.CanvasTexture;
@@ -481,52 +496,91 @@ function LegSide({
   kneeRef?: RefObject<THREE.Group>;
   footRef?: RefObject<THREE.Group>;
 }) {
+  const hasSkirt = Boolean(skirtColor);
+  const hipTone = skirtColor ?? pants;
+  const lowerLegTone = hasSkirt ? SKIN : pants;
+
   return (
     <group ref={hipRef} position={[side * hipX, 0.8, 0]}>
       {/* KHỚP CẦU HÁNG (Hip Ball-Joint Cap) đặt đúng tâm xoay (0,0,0) — không bao giờ hở háng */}
       <mesh position={[0, 0.01, 0]} scale={[legScale, 1.05, legScale]} castShadow>
         <sphereGeometry args={[0.102, 16, 14]} />
-        <meshStandardMaterial color={pants} map={fabricTex} roughness={0.86} />
+        <meshStandardMaterial color={hipTone} map={fabricTex} roughness={0.86} />
       </mesh>
 
-      {/* Đùi thuôn xuống gối (nhúng sâu vào cả cầu háng trên và cầu gối dưới) */}
-      <mesh position={[0, -0.19, 0]} scale={[legScale, 1, legScale]} castShadow>
-        <cylinderGeometry args={[0.1, 0.084, 0.39, 16]} />
-        <meshStandardMaterial color={pants} map={fabricTex} roughness={0.86} />
-      </mesh>
-      {/* Sọc trắng chạy dọc mép ngoài đùi quần thể thao xanh than (ao-khoac-gio-do-nhom-01.jpg, polo-do-nam-nu-01.jpg) */}
-      <mesh position={[side * 0.091 * legScale, -0.19, 0]} rotation={[0, 0, -side * 0.04]}>
-        <boxGeometry args={[0.008, 0.36, 0.018]} />
-        <meshStandardMaterial color={WHITE} roughness={0.78} />
-      </mesh>
+      {hasSkirt ? (
+        <>
+          {/* Phần đùi trên nằm trong lòng chân váy (đồng màu váy để khi bước rộng không lộ khe) */}
+          <mesh position={[0, -0.095, 0]} scale={[legScale, 1, legScale]} castShadow>
+            <cylinderGeometry args={[0.098, 0.09, 0.19, 16]} />
+            <meshStandardMaterial color={hipTone} map={fabricTex} roughness={0.84} />
+          </mesh>
+          {/* Phần đùi dưới lộ dưới gấu chân váy */}
+          <mesh position={[0, -0.275, 0]} scale={[legScale, 1, legScale]} castShadow>
+            <cylinderGeometry args={[0.086, 0.078, 0.22, 16]} />
+            <meshStandardMaterial color={SKIN} roughness={0.68} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          {/* Đùi thuôn xuống gối (nhúng sâu vào cả cầu háng trên và cầu gối dưới) */}
+          <mesh position={[0, -0.19, 0]} scale={[legScale, 1, legScale]} castShadow>
+            <cylinderGeometry args={[0.1, 0.084, 0.39, 16]} />
+            <meshStandardMaterial color={pants} map={fabricTex} roughness={0.86} />
+          </mesh>
+          {/* Sọc trắng chạy dọc mép ngoài đùi quần thể thao xanh than (ao-khoac-gio-do-nhom-01.jpg, polo-do-nam-nu-01.jpg) */}
+          <mesh position={[side * 0.091 * legScale, -0.19, 0]} rotation={[0, 0, -side * 0.04]}>
+            <boxGeometry args={[0.008, 0.36, 0.018]} />
+            <meshStandardMaterial color={WHITE} roughness={0.78} />
+          </mesh>
+        </>
+      )}
 
       {/* KHỚP CẦU GỐI (Knee Ball-Joint Cap) tại tâm xoay gối (0, -0.38, 0) */}
       <mesh position={[0, -0.38, 0]} scale={[legScale, legScale, legScale]}>
-        <sphereGeometry args={[0.083, 14, 12]} />
-        <meshStandardMaterial color={pants} map={fabricTex} roughness={0.86} />
+        <sphereGeometry args={[hasSkirt ? 0.077 : 0.083, 14, 12]} />
+        <meshStandardMaterial
+          color={lowerLegTone}
+          map={hasSkirt ? undefined : fabricTex}
+          roughness={hasSkirt ? 0.68 : 0.86}
+        />
       </mesh>
 
       {/* Cẳng chân xoay quanh gối (y = 0,42) */}
       <group ref={kneeRef} position={[0, -0.38, 0]}>
         <mesh position={[0, -0.165, 0]} scale={[legScale, 1, legScale]} castShadow>
-          <cylinderGeometry args={[0.082, 0.064, 0.34, 16]} />
-          <meshStandardMaterial color={pants} map={fabricTex} roughness={0.86} />
+          <cylinderGeometry args={[hasSkirt ? 0.075 : 0.082, hasSkirt ? 0.056 : 0.064, 0.34, 16]} />
+          <meshStandardMaterial
+            color={lowerLegTone}
+            map={hasSkirt ? undefined : fabricTex}
+            roughness={hasSkirt ? 0.68 : 0.86}
+          />
         </mesh>
-        {/* Sọc trắng chạy dọc mép ngoài ống quần dưới */}
-        <mesh position={[side * 0.073 * legScale, -0.165, 0]} rotation={[0, 0, -side * 0.05]}>
-          <boxGeometry args={[0.008, 0.31, 0.016]} />
-          <meshStandardMaterial color={WHITE} roughness={0.78} />
-        </mesh>
-        {/* Gấu quần gấp lai ôm cổ chân */}
-        <mesh position={[0, -0.318, 0]} scale={[legScale, 1, legScale]} castShadow>
-          <cylinderGeometry args={[0.067, 0.065, 0.042, 16]} />
-          <meshStandardMaterial color={pants} roughness={0.88} />
-        </mesh>
-        {/* Cổ tất thể thao cao + Cầu khớp cổ chân (nhúng sâu từ y=-0.305 xuống y=-0.365 xuyên vào cổ giày) */}
-        <mesh position={[0, -0.335, 0]} scale={[legScale, 1, legScale]}>
-          <cylinderGeometry args={[0.054, 0.054, 0.062, 14]} />
+        {!hasSkirt && (
+          <>
+            {/* Sọc trắng chạy dọc mép ngoài ống quần dưới */}
+            <mesh position={[side * 0.073 * legScale, -0.165, 0]} rotation={[0, 0, -side * 0.05]}>
+              <boxGeometry args={[0.008, 0.31, 0.016]} />
+              <meshStandardMaterial color={WHITE} roughness={0.78} />
+            </mesh>
+            {/* Gấu quần gấp lai ôm cổ chân */}
+            <mesh position={[0, -0.318, 0]} scale={[legScale, 1, legScale]} castShadow>
+              <cylinderGeometry args={[0.067, 0.065, 0.042, 16]} />
+              <meshStandardMaterial color={pants} roughness={0.88} />
+            </mesh>
+          </>
+        )}
+        {/* Cổ tất thể thao cao + Cầu khớp cổ chân (nhúng sâu từ y=-0.285 xuống y=-0.365 xuyên vào cổ giày) */}
+        <mesh position={[0, hasSkirt ? -0.315 : -0.335, 0]} scale={[legScale, 1, legScale]}>
+          <cylinderGeometry args={[0.056, 0.054, hasSkirt ? 0.095 : 0.062, 14]} />
           <meshStandardMaterial color={SOCK} roughness={0.82} />
         </mesh>
+        {hasSkirt && (
+          <mesh position={[0, -0.274, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[legScale, legScale, 1]}>
+            <torusGeometry args={[0.056, 0.004, 8, 16]} />
+            <meshStandardMaterial color={HUST_CRIMSON} roughness={0.75} />
+          </mesh>
+        )}
         <mesh position={[0, -0.35, 0]} scale={[legScale, legScale, legScale]}>
           <sphereGeometry args={[0.055, 12, 10]} />
           <meshStandardMaterial color={SOCK} roughness={0.82} />
@@ -617,6 +671,7 @@ function Torso({
   shirtDark,
   upperYokeColor,
   pants,
+  skirtColor,
   hustTex,
   hustCrimsonTex,
   idTex,
@@ -629,6 +684,7 @@ function Torso({
   shirtDark: string;
   upperYokeColor?: string;
   pants: string;
+  skirtColor?: string;
   hustTex: THREE.CanvasTexture;
   hustCrimsonTex: THREE.CanvasTexture;
   idTex: THREE.CanvasTexture;
@@ -642,18 +698,52 @@ function Torso({
   const isWindbreaker = variant === 'windbreaker';
   const isBomber = variant === 'bomber';
   const topColor = isWindbreaker ? (upperYokeColor ?? WINDBREAKER_WHITE) : shirt;
+  const pelvisTone = skirtColor ?? pants;
 
   return (
     <group>
       {/* KHỐI CẦU NỐI HÔNG – ĐÙI (Pelvis Bridge) phủ kín từ y=0.76..0.88 để nối liền đáy thân với 2 khớp đùi */}
       <mesh position={[0, 0.84, 0]} scale={[hipScaleX, 0.62, 0.74]} castShadow>
         <sphereGeometry args={[0.202, 18, 14]} />
-        <meshStandardMaterial color={pants} map={fabricTex} roughness={0.86} />
+        <meshStandardMaterial color={pelvisTone} map={fabricTex} roughness={0.86} />
       </mesh>
       <mesh position={[0, 0.805, 0]} scale={[hipScaleX, 1, 0.72]} castShadow>
         <cylinderGeometry args={[0.194, 0.186, 0.09, 18]} />
-        <meshStandardMaterial color={pants} map={fabricTex} roughness={0.86} />
+        <meshStandardMaterial color={pelvisTone} map={fabricTex} roughness={0.86} />
       </mesh>
+
+      {/* CHÂN VÁY XẾP LY CHỮ A (khi bật chế độ chân váy cho nhân vật Nữ — ao-phong-xanh-nu-01.jpg, so-mi-nu-01.jpg) */}
+      {skirtColor && (
+        <group>
+          {/* Cạp váy ôm gọn eo */}
+          <mesh position={[0, 0.835, 0]} scale={[hipScaleX * 0.96, 1, 0.72]} castShadow>
+            <cylinderGeometry args={[0.192, 0.198, 0.036, 20]} />
+            <meshStandardMaterial color={skirtColor} map={fabricTex} roughness={0.8} />
+          </mesh>
+          {/* Thân chân váy chữ A xòe nhẹ từ hông xuống giữa đùi */}
+          <mesh position={[0, 0.705, 0]} scale={[hipScaleX * 1.02, 1, 0.78]} castShadow>
+            <cylinderGeometry args={[0.194, 0.246, 0.24, 24]} />
+            <meshStandardMaterial color={skirtColor} map={fabricTex} roughness={0.82} />
+          </mesh>
+          {/* 12 nếp gấp xếp ly (pleat ridges) đều quanh chân váy */}
+          {Array.from({ length: 12 }, (_, idx) => {
+            const ang = (idx / 12) * Math.PI * 2;
+            const rx = Math.sin(ang) * 0.218 * hipScaleX;
+            const rz = Math.cos(ang) * 0.218 * 0.78;
+            return (
+              <mesh
+                key={`skirt-pleat-${idx}`}
+                position={[rx, 0.702, rz]}
+                rotation={[Math.cos(ang) * 0.19, ang, -Math.sin(ang) * 0.19]}
+                castShadow
+              >
+                <boxGeometry args={[0.022, 0.23, 0.012]} />
+                <meshStandardMaterial color={skirtColor} map={fabricTex} roughness={0.84} />
+              </mesh>
+            );
+          })}
+        </group>
+      )}
 
       {/* Phần bụng & eo (y = 0.84..1.10) */}
       <mesh position={[0, 0.97, 0]} scale={[waistScaleX, 1, 0.71]} castShadow>
@@ -840,36 +930,99 @@ function Torso({
         </group>
       )}
 
-      {/* --- 4. ÁO HOODIE (Dùng cho NPC Minh & Hoodie HUST) --- */}
+      {/* --- 4. ÁO HOODIE (Dùng cho NPC Minh & Hoodie HUST Thu-Đông) --- */}
       {variant === 'hoodie' && (
         <group>
-          <mesh position={[0, 0.94, 0.155]} castShadow>
-            <boxGeometry args={[0.28, 0.18, 0.032]} />
+          {/* Túi Kangaroo vát chéo 2 bên trước bụng */}
+          <mesh position={[0, 0.94, 0.152]} castShadow>
+            <boxGeometry args={[0.26, 0.17, 0.028]} />
             <meshStandardMaterial color={shirtDark} roughness={0.86} />
           </mesh>
-          <mesh position={[0, 1.03, 0.168]} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.015, 0.015, 0.26, 10]} />
+          {[-0.125, 0.125].map((kx, idx) => (
+            <mesh
+              key={`hoodie-pkt-edge-${idx}`}
+              position={[kx, 0.955, 0.158]}
+              rotation={[0, 0, kx > 0 ? 0.28 : -0.28]}
+            >
+              <boxGeometry args={[0.012, 0.12, 0.016]} />
+              <meshStandardMaterial color={shirt} roughness={0.82} />
+            </mesh>
+          ))}
+          <mesh position={[0, 1.025, 0.164]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.012, 0.012, 0.24, 10]} />
             <meshStandardMaterial color={shirtDark} roughness={0.86} />
           </mesh>
+          {/* Cổ áo nối liền mũ */}
           <mesh position={[0, 1.345, 0]}>
-            <cylinderGeometry args={[0.08, 0.09, 0.05, 16]} />
+            <cylinderGeometry args={[0.082, 0.092, 0.052, 16]} />
             <meshStandardMaterial color={shirtDark} roughness={0.86} />
           </mesh>
-          <mesh position={[-0.045, 1.26, 0.15]} rotation={[0, 0, 0.06]}>
-            <cylinderGeometry args={[0.006, 0.006, 0.11, 6]} />
-            <meshStandardMaterial color={WHITE} roughness={0.8} />
-          </mesh>
-          <mesh position={[0.045, 1.26, 0.15]} rotation={[0, 0, -0.06]}>
-            <cylinderGeometry args={[0.006, 0.006, 0.11, 6]} />
-            <meshStandardMaterial color={WHITE} roughness={0.8} />
-          </mesh>
-          <mesh position={[0, 1.36, -0.1]} scale={[1.05, 0.5, 0.75]} castShadow>
-            <sphereGeometry args={[0.12, 16, 12]} />
+          {/* Dây rút mũ + đầu bịt kim loại bạc */}
+          {[-0.044, 0.044].map((dx, idx) => (
+            <group key={`hood-cord-${idx}`} position={[dx, 1.255, 0.148]} rotation={[0, 0, dx > 0 ? -0.06 : 0.06]}>
+              <mesh>
+                <cylinderGeometry args={[0.0055, 0.0055, 0.115, 6]} />
+                <meshStandardMaterial color={WHITE} roughness={0.8} />
+              </mesh>
+              <mesh position={[0, -0.062, 0]}>
+                <cylinderGeometry args={[0.006, 0.006, 0.018, 6]} />
+                <meshStandardMaterial color={SILVER} roughness={0.35} metalness={0.75} />
+              </mesh>
+            </group>
+          ))}
+          {/* Mũ trùm 3D gấp sau gáy có lòng mũ tối màu tạo chiều sâu */}
+          <mesh position={[0, 1.365, -0.105]} scale={[1.08, 0.56, 0.8]} castShadow>
+            <sphereGeometry args={[0.122, 16, 12]} />
             <meshStandardMaterial color={shirtDark} roughness={0.88} />
           </mesh>
-          <mesh position={[0.065, 1.22, 0.138]} rotation={[0, 0.45, 0]}>
-            <planeGeometry args={[0.08, 0.025]} />
+          <mesh position={[0, 1.382, -0.095]} scale={[0.92, 0.38, 0.64]}>
+            <sphereGeometry args={[0.11, 14, 10]} />
+            <meshStandardMaterial color="#182232" roughness={0.9} />
+          </mesh>
+          <mesh position={[0.065, 1.22, 0.139]} rotation={[0, 0.45, 0]}>
+            <planeGeometry args={[0.084, 0.027]} />
             <meshStandardMaterial map={hustTex} transparent roughness={0.75} />
+          </mesh>
+        </group>
+      )}
+
+      {/* --- 4b. ÁO PHÔNG XANH TÍM THAN HUST (ao-phong-xanh-nu-01.jpg) --- */}
+      {variant === 'tshirt' && (
+        <group>
+          {/* Viền cổ tròn dệt kim */}
+          <mesh position={[0, 1.345, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.078, 0.009, 8, 18]} />
+            <meshStandardMaterial color={shirtDark} roughness={0.84} />
+          </mesh>
+          {/* Chữ HUST trắng lớn in chính giữa ngực đúng mẫu ao-phong-xanh-nu-01.jpg */}
+          <mesh position={[0, 1.195, 0.143]}>
+            <planeGeometry args={[0.155, 0.05]} />
+            <meshStandardMaterial map={hustTex} transparent roughness={0.7} />
+          </mesh>
+        </group>
+      )}
+
+      {/* --- 4c. ÁO SWEATER NỈ KEM THU ĐÔNG HUST (bomber-thu-dong-nhom-01.jpg) --- */}
+      {variant === 'sweater' && (
+        <group>
+          {/* Cổ tròn bo gân đỏ Bách khoa viền trắng */}
+          <mesh position={[0, 1.346, 0]}>
+            <cylinderGeometry args={[0.078, 0.088, 0.042, 18]} />
+            <meshStandardMaterial color={shirtDark} roughness={0.84} />
+          </mesh>
+          <mesh position={[0, 1.36, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.079, 0.0045, 8, 18]} />
+            <meshStandardMaterial color={WHITE} roughness={0.8} />
+          </mesh>
+          {/* Viền sọc trắng trên bo gấu áo sweater */}
+          <mesh position={[0, 0.845, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[hipScaleX, 0.72, 1]}>
+            <torusGeometry args={[0.199, 0.0045, 8, 20]} />
+            <meshStandardMaterial color={WHITE} roughness={0.8} />
+          </mesh>
+          {/* Phù hiệu BK | HUST đỏ đậm nổi bật giữa ngực */}
+          <mesh position={[0, 1.195, 0.143]}>
+            <planeGeometry args={[0.145, 0.054]} />
+            <meshStandardMaterial map={hustCrimsonTex} transparent roughness={0.68} />
           </mesh>
         </group>
       )}
@@ -1429,6 +1582,8 @@ export function HumanFigure(props: FigureProps) {
     shirtDark,
     upperYokeColor,
     sleeveColor,
+    skirt,
+    skirtColor,
     pants,
     shoe,
     shoeSole,
@@ -1456,6 +1611,7 @@ export function HumanFigure(props: FigureProps) {
   const legScale = isFemale ? 0.92 : 1.0;
   const armScale = isFemale ? 0.92 : 1.0;
   const packColors = backpackColors ?? { pack: PACK_BLACK, packLight: '#2A2E33', packZip: PACK_ZIP };
+  const effectiveSkirtColor = isFemale ? (skirtColor ?? (skirt ? pants : undefined)) : undefined;
 
   return (
     <group>
@@ -1473,6 +1629,7 @@ export function HumanFigure(props: FigureProps) {
         hipX={hipX}
         legScale={legScale}
         pants={pants}
+        skirtColor={effectiveSkirtColor}
         shoe={shoe}
         shoeSole={shoeSole}
         fabricTex={fabricTex}
@@ -1485,6 +1642,7 @@ export function HumanFigure(props: FigureProps) {
         hipX={hipX}
         legScale={legScale}
         pants={pants}
+        skirtColor={effectiveSkirtColor}
         shoe={shoe}
         shoeSole={shoeSole}
         fabricTex={fabricTex}
@@ -1500,6 +1658,7 @@ export function HumanFigure(props: FigureProps) {
           shirtDark={shirtDark}
           upperYokeColor={upperYokeColor}
           pants={pants}
+          skirtColor={effectiveSkirtColor}
           hustTex={hustTex}
           hustCrimsonTex={hustCrimsonTex}
           idTex={idTex}
@@ -1549,6 +1708,7 @@ export interface StudentAvatarProps {
   gender?: AvatarGender;
   hairStyle?: AvatarHairStyle;
   outfit?: AvatarOutfitId;
+  skirt?: boolean;
   glasses?: boolean;
   lanyard?: boolean;
 }
@@ -1563,6 +1723,7 @@ export const OUTFIT_PRESETS: Record<
     shirtDark: string;
     upperYokeColor?: string;
     sleeveColor?: string;
+    defaultSkirtColor?: string;
     pants: string;
     shoe: string;
     shoeSole: string;
@@ -1575,6 +1736,7 @@ export const OUTFIT_PRESETS: Record<
     shirt: HUST_CRIMSON,
     shirtDark: HUST_CRIMSON_DARK,
     upperYokeColor: WINDBREAKER_WHITE,
+    defaultSkirtColor: '#1E293B',
     pants: '#1E293B',
     shoe: SHOE_WHITE,
     shoeSole: SHOE_SOLE,
@@ -1586,6 +1748,7 @@ export const OUTFIT_PRESETS: Record<
     shirt: '#9E1B22',
     shirtDark: '#6E1117',
     sleeveColor: '#D8DCE3',
+    defaultSkirtColor: '#1E293B',
     pants: '#1E293B',
     shoe: SHOE_WHITE,
     shoeSole: SHOE_SOLE,
@@ -1597,6 +1760,7 @@ export const OUTFIT_PRESETS: Record<
     shirt: '#1B2A4A',
     shirtDark: '#111C33',
     sleeveColor: '#F1F5F9',
+    defaultSkirtColor: '#F8FAFC',
     pants: '#1E2430',
     shoe: SHOE_WHITE,
     shoeSole: SHOE_SOLE,
@@ -1608,6 +1772,7 @@ export const OUTFIT_PRESETS: Record<
     shirt: '#A6192E',
     shirtDark: '#75101F',
     sleeveColor: '#18243E',
+    defaultSkirtColor: '#18243E',
     pants: '#1E293B',
     shoe: SHOE_WHITE,
     shoeSole: SHOE_SOLE,
@@ -1618,26 +1783,51 @@ export const OUTFIT_PRESETS: Record<
     variant: 'polo',
     shirt: POLO_RED,
     shirtDark: POLO_DARK,
+    defaultSkirtColor: '#1E293B',
     pants: PANTS,
     shoe: SHOE_WHITE,
     shoeSole: SHOE_SOLE,
   },
   'hoodie-hust': {
     label: 'Áo Hoodie Đỏ BK',
-    desc: 'Áo nỉ có mũ mùa đông Bách khoa',
+    desc: 'Áo nỉ có mũ BST Thu-Đông Bách khoa',
     variant: 'hoodie',
     shirt: '#B81D24',
     shirtDark: '#7F1217',
+    defaultSkirtColor: '#1E293B',
+    pants: '#1E293B',
+    shoe: SHOE_WHITE,
+    shoeSole: SHOE_SOLE,
+  },
+  'tshirt-navy': {
+    label: 'Áo phông Xanh HUST',
+    desc: 'Áo phông xanh tím than chữ HUST trắng lớn (phối chân váy trắng ở Nữ)',
+    variant: 'tshirt',
+    shirt: '#1B2A4A',
+    shirtDark: '#111C33',
+    defaultSkirtColor: '#F8FAFC',
+    pants: '#E2E8F0',
+    shoe: SHOE_WHITE,
+    shoeSole: SHOE_SOLE,
+  },
+  'sweater-cream': {
+    label: 'Sweater Kem Thu-Đông',
+    desc: 'Áo nỉ cổ tròn màu kem phối bo đỏ Bách khoa (BST Thu-Đông)',
+    variant: 'sweater',
+    shirt: '#F3EFE6',
+    shirtDark: '#9E1B22',
+    defaultSkirtColor: '#1E293B',
     pants: '#1E293B',
     shoe: SHOE_WHITE,
     shoeSole: SHOE_SOLE,
   },
   'shirt-white': {
     label: 'Áo Sơ mi Trắng',
-    desc: 'Sơ mi trắng thanh lịch',
+    desc: 'Sơ mi thanh lịch (phối chân váy đen ở Nữ / quần âu ở Nam)',
     variant: 'shirt',
     shirt: SHIRT_WHITE,
     shirtDark: SHIRT_DARK,
+    defaultSkirtColor: '#1E293B',
     pants: '#1F2937',
     shoe: '#2B2623',
     shoeSole: '#141210',
@@ -1648,6 +1838,7 @@ export const OUTFIT_PRESETS: Record<
     variant: 'polo',
     shirt: '#1D4ED8',
     shirtDark: '#1E3A8A',
+    defaultSkirtColor: '#F8FAFC',
     pants: '#172554',
     shoe: SHOE_WHITE,
     shoeSole: SHOE_SOLE,
@@ -1703,10 +1894,12 @@ export default function StudentAvatar({
   gender = 'male',
   hairStyle = 'short',
   outfit = 'windbreaker-hust',
+  skirt = false,
   glasses = false,
   lanyard = true,
 }: StudentAvatarProps) {
   const preset = OUTFIT_PRESETS[outfit] ?? OUTFIT_PRESETS['windbreaker-hust'];
+  const skirtColor = gender === 'female' && skirt ? (preset.defaultSkirtColor ?? '#1E293B') : undefined;
   return (
     <HumanFigure
       variant={preset.variant}
@@ -1715,6 +1908,7 @@ export default function StudentAvatar({
       shirtDark={preset.shirtDark}
       upperYokeColor={preset.upperYokeColor}
       sleeveColor={preset.sleeveColor}
+      skirtColor={skirtColor}
       pants={preset.pants}
       shoe={preset.shoe}
       shoeSole={preset.shoeSole}

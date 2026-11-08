@@ -56,6 +56,8 @@ const OUTFIT_ORDER: AvatarOutfitId[] = [
   'bomber-red-navy',
   'polo-red',
   'hoodie-hust',
+  'tshirt-navy',
+  'sweater-cream',
   'shirt-white',
   'sport-pe',
 ];
@@ -67,6 +69,8 @@ const OUTFIT_SWATCHES: Record<AvatarOutfitId, [string, string]> = {
   'bomber-red-navy': ['#A6192E', '#18243E'],
   'polo-red': ['#DA1E26', '#232E3D'],
   'hoodie-hust': ['#B81D24', '#1E293B'],
+  'tshirt-navy': ['#1B2A4A', '#F8FAFC'],
+  'sweater-cream': ['#F3EFE6', '#9E1B22'],
   'shirt-white': ['#F5F5F0', '#1F2937'],
   'sport-pe': ['#1D4ED8', '#172554'],
 };
@@ -175,6 +179,7 @@ function AvatarPreviewRig({
           gender={profile.gender}
           hairStyle={profile.hairStyle}
           outfit={profile.outfit}
+          skirt={profile.skirt}
           glasses={profile.glasses}
           lanyard={profile.lanyard}
         />
@@ -214,6 +219,7 @@ export default function CharacterCreatorModal({
   const [gender, setGender] = useState<AvatarGender>(initialProfile.gender);
   const [hairStyle, setHairStyle] = useState<AvatarHairStyle>(initialProfile.hairStyle);
   const [outfit, setOutfit] = useState<AvatarOutfitId>(initialProfile.outfit);
+  const [skirt, setSkirt] = useState<boolean>(Boolean(initialProfile.skirt));
   const [backpack, setBackpack] = useState<boolean>(initialProfile.backpack);
   const [glasses, setGlasses] = useState<boolean>(initialProfile.glasses);
   const [lanyard, setLanyard] = useState<boolean>(initialProfile.lanyard);
@@ -238,6 +244,7 @@ export default function CharacterCreatorModal({
     setGender(initialProfile.gender);
     setHairStyle(initialProfile.hairStyle);
     setOutfit(initialProfile.outfit);
+    setSkirt(Boolean(initialProfile.skirt));
     setBackpack(initialProfile.backpack);
     setGlasses(initialProfile.glasses);
     setLanyard(initialProfile.lanyard);
@@ -245,6 +252,7 @@ export default function CharacterCreatorModal({
     initialProfile.gender,
     initialProfile.hairStyle,
     initialProfile.outfit,
+    initialProfile.skirt,
     initialProfile.backpack,
     initialProfile.glasses,
     initialProfile.lanyard,
@@ -260,6 +268,7 @@ export default function CharacterCreatorModal({
     gender,
     hairStyle,
     outfit,
+    skirt: gender === 'female' ? skirt : false,
     backpack,
     glasses,
     lanyard,
@@ -271,6 +280,22 @@ export default function CharacterCreatorModal({
       setHairStyle('ponytail');
     } else if (nextGender === 'male' && (hairStyle === 'ponytail' || hairStyle === 'bob' || hairStyle === 'bun')) {
       setHairStyle('short');
+    }
+    if (nextGender === 'female' && (outfit === 'tshirt-navy' || outfit === 'shirt-white')) {
+      setSkirt(true);
+    } else if (nextGender === 'male') {
+      setSkirt(false);
+    }
+  };
+
+  const handleOutfitChange = (nextOutfit: AvatarOutfitId) => {
+    setOutfit(nextOutfit);
+    if (gender === 'female') {
+      if (nextOutfit === 'tshirt-navy' || nextOutfit === 'shirt-white') {
+        setSkirt(true);
+      } else if (nextOutfit === 'sport-pe') {
+        setSkirt(false);
+      }
     }
   };
 
@@ -288,6 +313,7 @@ export default function CharacterCreatorModal({
         gender,
         hairStyle,
         outfit,
+        skirt: gender === 'female' ? skirt : false,
         backpack,
         glasses,
         lanyard,
@@ -573,7 +599,7 @@ export default function CharacterCreatorModal({
                   {OUTFIT_PRESETS[outfit]?.desc}
                 </span>
               </div>
-              <div className="mt-1 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <div className="mt-1 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
                 {OUTFIT_ORDER.map((id) => {
                   const preset = OUTFIT_PRESETS[id];
                   const [c1, c2] = OUTFIT_SWATCHES[id];
@@ -583,14 +609,14 @@ export default function CharacterCreatorModal({
                       key={id}
                       type="button"
                       data-testid={`outfit-${id}`}
-                      onClick={() => setOutfit(id)}
-                      className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left text-xs font-bold transition ${
+                      onClick={() => handleOutfitChange(id)}
+                      className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-left text-xs font-bold transition ${
                         active
                           ? 'border-[#B5121B] bg-[#B5121B]/10 text-[#8F1418] ring-2 ring-[#B5121B]'
                           : 'border-black/15 bg-white text-[#1E293B] hover:bg-black/5'
                       }`}
                     >
-                      <span className="flex h-4 w-4 shrink-0 overflow-hidden rounded-full border border-black/25">
+                      <span className="flex h-3.5 w-3.5 shrink-0 overflow-hidden rounded-full border border-black/25">
                         <span className="h-full w-1/2" style={{ backgroundColor: c1 }} />
                         <span className="h-full w-1/2" style={{ backgroundColor: c2 }} />
                       </span>
@@ -601,8 +627,22 @@ export default function CharacterCreatorModal({
               </div>
             </div>
 
-            {/* 5. Phụ kiện: Balo (Bật / Tắt), Kính tri thức, Dây đeo thẻ SV */}
+            {/* 5. Phụ kiện: Balo (Bật / Tắt), Chân váy (cho Nữ), Kính tri thức, Dây đeo thẻ SV */}
             <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              {gender === 'female' && (
+                <button
+                  type="button"
+                  data-testid="toggle-skirt"
+                  onClick={() => setSkirt((v) => !v)}
+                  className={`rounded-xl border px-3 py-1.5 text-xs font-bold transition ${
+                    skirt
+                      ? 'border-[#B5121B] bg-[#B5121B] text-white'
+                      : 'border-black/20 bg-white text-[#1E293B]'
+                  }`}
+                >
+                  👗 Phối đồ: {skirt ? 'Chân váy xếp ly' : 'Quần dài'}
+                </button>
+              )}
               <button
                 type="button"
                 data-testid="toggle-backpack"

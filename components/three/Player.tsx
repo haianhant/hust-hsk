@@ -199,6 +199,7 @@ export default function Player() {
   const [gender, setGender] = useState<AvatarGender>(playerState.avatarGender);
   const [hairStyle, setHairStyle] = useState<AvatarHairStyle>(playerState.avatarHairStyle);
   const [outfit, setOutfit] = useState<AvatarOutfitId>(playerState.avatarOutfit);
+  const [skirtOn, setSkirtOn] = useState<boolean>(playerState.avatarSkirt);
   const [glassesOn, setGlassesOn] = useState<boolean>(playerState.avatarGlasses);
   const [lanyardOn, setLanyardOn] = useState<boolean>(playerState.avatarLanyard);
   const nameplateTex = usePlayerNameplateTexture(avatarName);
@@ -209,6 +210,7 @@ export default function Player() {
       setGender(playerState.avatarGender);
       setHairStyle(playerState.avatarHairStyle);
       setOutfit(playerState.avatarOutfit);
+      setSkirtOn(!!playerState.avatarSkirt);
       setGlassesOn(playerState.avatarGlasses);
       setLanyardOn(playerState.avatarLanyard);
       backpackRef.current = !!playerState.avatarBackpack;
@@ -1132,6 +1134,7 @@ export default function Player() {
           gender={gender}
           hairStyle={hairStyle}
           outfit={outfit}
+          skirt={skirtOn}
           glasses={glassesOn}
           lanyard={lanyardOn}
         />
