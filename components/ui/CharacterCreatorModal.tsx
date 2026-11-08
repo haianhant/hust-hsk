@@ -351,7 +351,7 @@ export default function CharacterCreatorModal({
             </h1>
             <p className="mt-0.5 text-xs text-[#475569] sm:text-sm">
               {mode === 'entry'
-                ? 'Tùy chỉnh diện mạo, đồng phục áo khoác gió / bomber HUST và xem thử dáng đi trước khi bước qua cổng Parabol.'
+                ? 'Tùy chỉnh diện mạo, đồng phục áo khoác gió / bomber HUST và xem thử dáng đi trước khi bước qua cổng Trần Đại Nghĩa.'
                 : 'Thay đổi tên hiển thị, giới tính, kiểu tóc và đồng phục Bách khoa ngay trong sân trường.'}
             </p>
           </div>
@@ -724,7 +724,7 @@ export default function CharacterCreatorModal({
                 onClick={() => handleSubmit(false)}
                 className="w-full rounded-full bg-[#B5121B] px-6 py-3 text-base font-extrabold text-white shadow-lg transition hover:bg-[#8F1418] sm:w-auto"
               >
-                {mode === 'entry' ? 'Vào cổng Parabol →' : 'Lưu nhân vật & trang phục'}
+                {mode === 'entry' ? 'Vào cổng Trần Đại Nghĩa →' : 'Lưu nhân vật & trang phục'}
               </button>
             </div>
           </div>

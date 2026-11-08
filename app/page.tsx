@@ -14,7 +14,7 @@
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bikeState, playerState, type TimeOfDay } from '../lib/playerState';
-import { CLASSROOM, FAST_TRAVEL_DESTINATIONS } from '../lib/campus';
+import { CLASSROOM, FAST_TRAVEL_DESTINATIONS, SPAWN, nearestZone } from '../lib/campus';
 import { ALL_HSK3_LEXEMES as LEXEMES, HSK3_LESSON_LEXEMES } from '../content/hsk3-index';
 import { ALL_HSK4_LEXEMES, HSK4_LESSON_LEXEMES } from '../content/hsk4-index';
 import {
@@ -711,15 +711,22 @@ export default function HomePage() {
       const qs = p?.questState;
       if (qs && !qs.done && qs.stepIndex >= 2) {
         playerState.inClassroom = true;
+        playerState.inLibraryLobby = false;
         playerState.pos = { ...CLASSROOM.spawn };
         playerState.cameraYaw = typeof qs.yaw === 'number' ? qs.yaw : 0;
         playerState.cameraPitch = typeof qs.pitch === 'number' ? qs.pitch : 0.25;
         setInClassroom(true);
+        setInLibraryLobby(false);
       } else {
         playerState.inClassroom = false;
-        playerState.cameraYaw = null;
-        playerState.cameraPitch = null;
+        playerState.inLibraryLobby = false;
+        playerState.pos = { ...SPAWN };
+        playerState.facing = -Math.PI / 2;
+        playerState.zone = nearestZone(SPAWN);
+        playerState.cameraYaw = Math.PI / 2;
+        playerState.cameraPitch = 0.18;
         setInClassroom(false);
+        setInLibraryLobby(false);
       }
       setEntered(true);
       if (resumeQuest && qs && !qs.done) {

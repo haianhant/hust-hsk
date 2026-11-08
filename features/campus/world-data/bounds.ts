@@ -29,5 +29,5 @@ export {
   type Vec2,
 };
 
-/** Điểm xuất phát mặc định ngay phía trong Cổng Parabol. */
+/** Điểm xuất phát mặc định ngay phía trong Cổng Trần Đại Nghĩa. */
 export const SPAWN: Vec2 = { x: SHARED_SPAWN.x, z: SHARED_SPAWN.z };

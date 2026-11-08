@@ -223,8 +223,8 @@ export default function Player() {
   // Vị trí logic (mặt đất) — nguồn thật duy nhất; group.position chỉ để hiển thị.
   const posRef = useRef<Vec2>({ ...playerState.pos });
   // F5b — khởi tạo yaw/pitch từ góc đã lưu (reload trong phòng khôi phục
-  // hướng nhìn bảng); null thì dùng mặc định (yaw -π/2 hướng đông).
-  const yawRef = useRef(playerState.cameraYaw ?? -Math.PI / 2); // hướng nhìn ban đầu: +X (đông, vào trong trường)
+  // hướng nhìn bảng); null thì dùng mặc định (yaw π/2 hướng tây từ cổng Trần Đại Nghĩa vào trường).
+  const yawRef = useRef(playerState.cameraYaw ?? Math.PI / 2); // hướng nhìn ban đầu: -X (tây, từ cổng Trần Đại Nghĩa vào trong trường)
   const pitchRef = useRef(playerState.cameraPitch ?? 0.18); // nhìn hơi chúc xuống — đủ thấy ngọn các công trình cao
   const distRef = useRef(7);
   const facingRef = useRef(-Math.PI / 2);
@@ -790,11 +790,16 @@ export default function Player() {
         : playerState.inLibraryLobby
           ? { ...LIBRARY_LOBBY.spawn }
           : { ...SPAWN };
+      playerState.pos = { ...posRef.current };
       if (playerState.inClassroom || playerState.inLibraryLobby) {
+        facingRef.current = Math.PI;
+        playerState.facing = Math.PI;
         yawRef.current = 0;
         pitchRef.current = playerState.inLibraryLobby ? 0.2 : 0.25;
       } else {
-        yawRef.current = -Math.PI / 2;
+        facingRef.current = -Math.PI / 2;
+        playerState.facing = -Math.PI / 2;
+        yawRef.current = Math.PI / 2;
         pitchRef.current = 0.18;
       }
       prevHitRef.current = null;

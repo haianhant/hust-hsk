@@ -193,20 +193,22 @@ test('(5) HskRoom Durable Object: join, hibernation wakeup restoration, reconnec
 
   // After hibernation, Client A sends a `move` message — must NOT be dropped!
   wsB.sent.length = 0;
+  const targetX = world.SPAWN.x - 0.5;
+  const targetZ = world.SPAWN.z + 0.2;
   await hibernatedRoom.webSocketMessage(
     wsA,
     JSON.stringify({
       type: 'move',
-      x: -75.5,
-      z: 10.2,
-      facing: 1.1,
+      x: targetX,
+      z: targetZ,
+      facing: -Math.PI / 2,
       state: 'walking',
     }),
   );
   assert.equal(wsB.sent.length, 1, 'Client B must receive move broadcast after DO hibernation');
   assert.equal(wsB.sent[0].type, 'move');
   assert.equal(wsB.sent[0].id, 'sess-a');
-  assert.ok(Math.abs(wsB.sent[0].x - -75.5) < 0.01);
+  assert.ok(Math.abs(wsB.sent[0].x - targetX) < 0.01);
 
   // After hibernation, Client A reconnects with a new socket `wsA2` using the same sessionId 'sess-a'
   const wsA2 = createMockSocket();

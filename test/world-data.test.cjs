@@ -150,6 +150,9 @@ test('(6) nearestZone, nearestRoadPoint, findFreeSpotNear, and getFastTravelDest
     SPAWN,
   } = campusFacade;
 
+  // Default SPAWN is at Cổng Trần Đại Nghĩa (90, -6)
+  assert.deepEqual(SPAWN, { x: 90, z: -6 });
+  assert.equal(nearestZone(SPAWN), 'Cổng Trần Đại Nghĩa (Cổng B8)');
   assert.equal(nearestZone({ x: -88, z: 10 }), 'Cổng Parabol');
   assert.equal(nearestZone({ x: -29, z: -2 }), 'Nhà C9'); // C9 fast-travel spot must not be swallowed by Tien Lake
   assert.equal(nearestZone({ x: -2, z: 40 }), 'Hồ Tiền');
@@ -170,5 +173,8 @@ test('(6) nearestZone, nearestRoadPoint, findFreeSpotNear, and getFastTravelDest
 
   // getFastTravelDestination lookup
   assert.equal(getFastTravelDestination('library')?.name, 'Thư viện Tạ Quang Bửu');
+  assert.equal(getFastTravelDestination('spawn')?.desc, 'Cổng Trần Đại Nghĩa');
+  assert.equal(getFastTravelDestination('spawn')?.x, 90);
+  assert.equal(getFastTravelDestination('spawn')?.z, -6);
   assert.equal(getFastTravelDestination('non-existent'), undefined);
 });

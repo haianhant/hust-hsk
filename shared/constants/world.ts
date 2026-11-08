@@ -30,10 +30,10 @@ export const BOUNDS: Readonly<AABB> = {
   maxZ: 108,
 } as const;
 
-/** Default player spawn point inside the Parabol Gate, facing East (+X). */
+/** Default player spawn point inside Cổng Trần Đại Nghĩa, facing West (-X) into the campus. */
 export const SPAWN = {
-  x: -76,
-  z: 10,
+  x: 90,
+  z: -6,
   facing: -Math.PI / 2,
 } as const;
 

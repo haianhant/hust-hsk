@@ -30,7 +30,7 @@ export const FAST_TRAVEL_DESTINATIONS: FastTravelDestination[] = [
   { id: 'lake', name: 'Hồ Tiền', icon: '🌊', desc: 'Bờ đông ven hồ', x: 24, z: 40, yaw: Math.PI / 2, facing: -Math.PI / 2 },
   { id: 'parabol', name: 'Cổng Parabol', icon: '⛩️', desc: 'Giữa cổng, nhìn vào trường', x: -88, z: 10, yaw: -Math.PI / 2, facing: Math.PI / 2 },
   { id: 'c9', name: 'Khu C9', icon: '🏢', desc: 'Trước cầu thang đỏ', x: -29, z: -2, yaw: Math.PI / 2, facing: -Math.PI / 2 },
-  { id: 'spawn', name: 'Điểm bắt đầu', icon: '📍', desc: 'Trong cổng Parabol', x: SPAWN.x, z: SPAWN.z, yaw: -Math.PI / 2, facing: Math.PI / 2 },
+  { id: 'spawn', name: 'Điểm bắt đầu', icon: '📍', desc: 'Cổng Trần Đại Nghĩa', x: SPAWN.x, z: SPAWN.z, yaw: Math.PI / 2, facing: -Math.PI / 2 },
 ];
 
 export function getFastTravelDestination(id: string): FastTravelDestination | undefined {
@@ -50,7 +50,7 @@ export const LEGS: Leg[] = [
   {
     id: 'leg1',
     name: 'Cổng Parabol → Nhà C9',
-    from: { ...SPAWN },
+    from: { x: -76, z: 10 },
     waypoints: [
       { x: -54, z: 10 },
       { x: -42, z: 12 },
