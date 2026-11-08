@@ -16,6 +16,7 @@ import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import {
   HumanFigure,
+  computeNaturalGaitTargets,
   type FigureJoints,
   type FigureVariant,
   type HairStyle,
@@ -205,26 +206,31 @@ function WalkingStudent({ spec }: { spec: WalkerSpec }) {
     }
 
     const phase = t * spec.speed * 4.2;
-    const swing = 0.46;
-    const s = Math.sin(phase);
-    if (joints.legL.current) joints.legL.current.rotation.x = s * swing;
-    if (joints.legR.current) joints.legR.current.rotation.x = -s * swing;
-    if (joints.kneeL.current) joints.kneeL.current.rotation.x = 0.05 + Math.max(0, -Math.cos(phase)) * 0.65;
-    if (joints.kneeR.current) joints.kneeR.current.rotation.x = 0.05 + Math.max(0, Math.cos(phase)) * 0.65;
-    if (joints.armL.current) joints.armL.current.rotation.x = -s * swing * 0.7;
-    if (joints.armR.current) joints.armR.current.rotation.x = s * swing * 0.7;
-    if (joints.elbowL.current) joints.elbowL.current.rotation.x = -0.32;
-    if (joints.elbowR.current) joints.elbowR.current.rotation.x = -0.32;
+    const gait = computeNaturalGaitTargets(phase, 0.48, 1, t, spec.speed > 2.0);
+    if (joints.legL.current) joints.legL.current.rotation.x = gait.legLTarget;
+    if (joints.legR.current) joints.legR.current.rotation.x = gait.legRTarget;
+    if (joints.kneeL.current) joints.kneeL.current.rotation.x = gait.kneeLTarget;
+    if (joints.kneeR.current) joints.kneeR.current.rotation.x = gait.kneeRTarget;
+    if (joints.footL.current) joints.footL.current.rotation.x = gait.footLTarget;
+    if (joints.footR.current) joints.footR.current.rotation.x = gait.footRTarget;
+    if (joints.armL.current) joints.armL.current.rotation.x = gait.armLTarget;
+    if (joints.armR.current) joints.armR.current.rotation.x = gait.armRTarget;
+    if (joints.elbowL.current) joints.elbowL.current.rotation.x = gait.elbowLTarget;
+    if (joints.elbowR.current) joints.elbowR.current.rotation.x = gait.elbowRTarget;
     if (joints.body.current) {
-      joints.body.current.rotation.x = 0.04;
-      joints.body.current.position.y = Math.abs(Math.cos(phase)) * 0.015;
+      joints.body.current.rotation.x = gait.bodyLeanTarget;
+      joints.body.current.rotation.z = gait.bodyRollTarget;
+      joints.body.current.position.y = gait.bodyBobTarget;
     }
   });
+
+  const isFemale = spec.hairStyle === 'ponytail' || spec.hairStyle === 'bob' || spec.hairStyle === 'bun';
 
   return (
     <group ref={groupRef} position={[spec.a[0], 0, spec.a[1]]}>
       <HumanFigure
         variant={spec.variant}
+        gender={isFemale ? 'female' : 'male'}
         shirt={spec.shirt}
         shirtDark={spec.shirtDark}
         pants={spec.pants}

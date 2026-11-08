@@ -13,6 +13,12 @@
 
 import { ImprovedTree } from './Trees';
 import { LabelPlane } from './TextPlate';
+import {
+  BIKE_PARKING_SHED,
+  D4_BUILDING,
+  LECTURE_BUILDINGS,
+  type LectureBuildingSpec,
+} from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
 
 const WALL_TONES = ['#F4F2EA', '#EDE8DC', '#F0ECE1', '#E8E4DA'];
@@ -27,49 +33,10 @@ const BENCH_WOOD = '#7A5230';
 const BENCH_IRON = '#1A1A1A';
 const PAVE_TONE = '#A8A8A2';
 
-type Facing = 's' | 'n' | 'e' | 'w';
-
-// Quy hoạch các dãy giảng đường C & D khớp 100% với Bản đồ Bách Khoa (docs/khuon-vien-truong.png):
-// 1. Cụm C3 – C4 – C5 – C10: xếp thành 4 dãy ngang song song từ Bắc xuống Nam ở phía Đông vườn hoa C1 (x = -12).
-// 2. Cụm D6 – D8: xếp 2 dãy ngang Bắc–Nam ở phía Tây Hồ Tiền (x = -46).
-// 3. Nhà D9: nằm ngay phía Nam Thư viện Tạ Quang Bửu (38, 63).
-// 4. Cụm D3 – D5 – D3-5 & D7 (xoay chéo): nằm phía Đông Thư viện Tạ Quang Bửu, sát đường Trần Đại Nghĩa.
-const BUILDINGS: Array<{
-  code: string;
-  subtitle?: string;
-  x: number;
-  z: number;
-  w: number;
-  d: number;
-  h: number;
-  face: Facing;
-  tone: number;
-  rotY?: number;
-}> = [
-  // Cụm 4 dãy ngang C3 – C4 – C5 – C10 từ Bắc xuống Nam (phía Đông vườn hoa C1)
-  { code: 'C3', subtitle: 'GIẢNG ĐƯỜNG C3', x: -12, z: -68, w: 22, d: 6.5, h: 10.8, face: 's', tone: 2 },
-  { code: 'C4', subtitle: 'VIỆN KT HÓA HỌC & CN SINH - THỰC PHẨM', x: -12, z: -57, w: 22, d: 6.5, h: 10.8, face: 's', tone: 0 },
-  { code: 'C5', subtitle: 'VIỆN KH&KT VẬT LIỆU · DỆT MAY', x: -12, z: -46, w: 22, d: 6.5, h: 10.8, face: 's', tone: 1 },
-  { code: 'C10', subtitle: 'VIỆN CƠ KHÍ · VLKT · MÔI TRƯỜNG', x: -12, z: -35, w: 22, d: 6.5, h: 10.8, face: 's', tone: 2 },
-
-  // Cụm D6 – D8 phía Tây Hồ Tiền (giữa D4 và bờ Tây Hồ Tiền)
-  { code: 'D6', subtitle: 'GIẢNG ĐƯỜNG D6', x: -46, z: 38, w: 18, d: 7.5, h: 10.2, face: 's', tone: 3 },
-  { code: 'D8', subtitle: 'GIẢNG ĐƯỜNG D8', x: -46, z: 54, w: 18, d: 7.5, h: 10.2, face: 'n', tone: 2 },
-
-  // Nhà D9 ngay phía Nam Thư viện Tạ Quang Bửu
-  { code: 'D9', subtitle: 'GIẢNG ĐƯỜNG D9', x: 38, z: 63, w: 18, d: 7.5, h: 10.8, face: 'n', tone: 1 },
-
-  // Cụm D3 – D5 – D3-5 & D7 phía Đông Thư viện Tạ Quang Bửu
-  { code: 'D3', subtitle: 'VIỆN TOÁN ỨNG DỤNG & TIN HỌC', x: 62, z: 18, w: 14, d: 7, h: 10.5, face: 's', tone: 3 },
-  { code: 'D5', subtitle: 'GIẢNG ĐƯỜNG D5', x: 62, z: 32, w: 14, d: 7, h: 10.5, face: 'n', tone: 0 },
-  { code: 'D3-5', subtitle: 'KHỐI GIẢNG ĐƯỜNG D3-5', x: 75, z: 25, w: 6.5, d: 21, h: 10.5, face: 'w', tone: 1 },
-  { code: 'D7', subtitle: 'GIẢNG ĐƯỜNG D7', x: 60, z: 50, w: 15, d: 7, h: 10.5, face: 'n', tone: 2, rotY: Math.PI / 4 },
-];
-
 // Nhà D4 (Viện Ngoại ngữ — khối nhà hình chữ L ở góc Tây-Nam sát đường Giải Phóng theo đúng bản đồ)
 function D4ForeignLanguagesBuilding({ isNight }: { isNight: boolean }) {
   return (
-    <group position={[-78, 0, 44]}>
+    <group position={[D4_BUILDING.center.x, 0, D4_BUILDING.center.z]}>
       {/* Cánh ngang phía Nam (18 × 7 m) */}
       <mesh position={[0, 5.1, 4.5]} castShadow receiveShadow>
         <boxGeometry args={[18, 10.2, 7]} />
@@ -184,7 +151,7 @@ function LectureSkybridges() {
   );
 }
 
-function BackgroundBuilding({ b, isNight }: { b: (typeof BUILDINGS)[number]; isNight: boolean }) {
+function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: boolean }) {
   const along = b.face === 's' || b.face === 'n' ? b.w : b.d;
   const count = Math.max(3, Math.floor(along / 3));
   const floors = 3;
@@ -435,10 +402,10 @@ function CampusSignpost({ x, z, rotationY = 0 }: { x: number; z: number; rotatio
   );
 }
 
-// --- Nhà để xe sinh viên có mái che tôn xanh (ngoài đường đi, ở (-66, 22)) ----
+// --- Nhà để xe sinh viên có mái che tôn xanh (ngoài đường đi, đọc tọa độ từ lib/campus.ts) ----
 function BikeParkingShed() {
   return (
-    <group position={[-66, 0, 22]}>
+    <group position={[BIKE_PARKING_SHED.center.x, 0, BIKE_PARKING_SHED.center.z]}>
       {/* Nền bê tông nhà xe */}
       <mesh position={[0, 0.03, 0]} receiveShadow>
         <boxGeometry args={[9.2, 0.06, 4.2]} />
@@ -488,7 +455,7 @@ export default function BackgroundBuildings({ timeOfDay = 'day' }: { timeOfDay?:
   const isNight = (timeOfDay ?? playerState.timeOfDay) !== 'day';
   return (
     <group>
-      {BUILDINGS.map((b, i) => (
+      {LECTURE_BUILDINGS.map((b, i) => (
         <BackgroundBuilding key={`bg-building-${i}`} b={b} isNight={isNight} />
       ))}
       <D4ForeignLanguagesBuilding isNight={isNight} />

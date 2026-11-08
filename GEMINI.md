@@ -37,3 +37,6 @@ Sau mỗi thay đổi về 3D, kiến trúc hoặc logic, phải đảm bảo c�
 2. `node test/learn.test.cjs` — 45/45 unit test của engine học HSK & SRS.
 3. `node test/leg-sim.cjs` — 4/4 chặng di chuyển trong sân trường không bị kẹt collider.
 4. `npm run build` — Xuất bản tĩnh Next.js (`out/`) thành công.
+
+## 5. Quy trình Git & Đồng bộ Nhánh Bắt buộc (Git Push Policy)
+- Sau khi hoàn thành triển khai mỗi công việc/yêu cầu và vượt qua đầy đủ 4 cổng kiểm thử ở Mục 4, **bắt buộc** thực hiện `git commit` trong `/home/bao/Hust3D/hust-hsk` và đẩy (`git push`) đồng thời lên cả hai nhánh **`main`** và **`master`** (`git push origin HEAD:main HEAD:master`).

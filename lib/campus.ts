@@ -172,6 +172,14 @@ export const WHITE_ROCK = {
   box: { minX: -80.8, maxX: -75.2, minZ: -32.1, maxZ: -29.9 },
 } as const;
 
+export const C1_FOUNTAIN = {
+  center: { x: -78, z: -36.5 },
+} as const;
+
+export const DAI_CO_VIET_GATE = {
+  center: { x: -58, z: -73.5 },
+} as const;
+
 /** Quảng trường Trần Đại Nghĩa (reference-visual §7): sân xanh ngọc + vạch
  *  trắng kiểu mạch điện. Đặt cạnh cổng Trần Đại Nghĩa (phía đông). Kích thước
  *  sân và họa tiết mạch cụ thể CHƯA xác minh (chỉ có ảnh cận cảnh biển tên) —
@@ -318,6 +326,214 @@ export const PARABOL_BUS_STOP = {
   center: { x: -88, z: 23 },
 } as const;
 
+export const BIKE_PARKING_SHED = {
+  center: { x: -64, z: 30 },
+} as const;
+
+export type LectureBuildingFacing = 's' | 'n' | 'e' | 'w';
+
+export type LectureBuildingSpec = {
+  code: string;
+  subtitle: string;
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  h: number;
+  face: LectureBuildingFacing;
+  tone: number;
+  rotY?: number;
+  box: AABB;
+};
+
+// 8. Các dãy giảng đường Khu C (C3–C5, C10) & Khu D (D2, D2a, D2b, D6, D8, D9, D3, D5, D3-5, D7)
+// chuẩn hóa tập trung tại lib/campus.ts (Single Source of Truth):
+export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
+  // Cụm 4 dãy ngang C3 – C4 – C5 – C10 từ Bắc xuống Nam (phía Đông vườn hoa C1)
+  {
+    code: 'C3',
+    subtitle: 'GIẢNG ĐƯỜNG C3',
+    x: -12,
+    z: -68,
+    w: 22,
+    d: 6.5,
+    h: 10.8,
+    face: 's',
+    tone: 2,
+    box: { minX: -23, maxX: -1, minZ: -71.25, maxZ: -64.75 },
+  },
+  {
+    code: 'C4',
+    subtitle: 'VIỆN KT HÓA HỌC & CN SINH - THỰC PHẨM',
+    x: -12,
+    z: -57,
+    w: 22,
+    d: 6.5,
+    h: 10.8,
+    face: 's',
+    tone: 0,
+    box: { minX: -23, maxX: -1, minZ: -60.25, maxZ: -53.75 },
+  },
+  {
+    code: 'C5',
+    subtitle: 'VIỆN KH&KT VẬT LIỆU · DỆT MAY',
+    x: -12,
+    z: -46,
+    w: 22,
+    d: 6.5,
+    h: 10.8,
+    face: 's',
+    tone: 1,
+    box: { minX: -23, maxX: -1, minZ: -49.25, maxZ: -42.75 },
+  },
+  {
+    code: 'C10',
+    subtitle: 'VIỆN CƠ KHÍ · VLKT · MÔI TRƯỜNG',
+    x: -12,
+    z: -35,
+    w: 22,
+    d: 6.5,
+    h: 10.8,
+    face: 's',
+    tone: 2,
+    box: { minX: -23, maxX: -1, minZ: -38.25, maxZ: -31.75 },
+  },
+
+  // Cụm D2 – D2a – D2b phía Tây Hồ Tiền (giữa Nhà C9 và cụm D4/D6 theo đúng sơ đồ khuôn viên)
+  {
+    code: 'D2',
+    subtitle: 'GIẢNG ĐƯỜNG D2',
+    x: -46,
+    z: 24,
+    w: 16,
+    d: 6.5,
+    h: 10.2,
+    face: 'n',
+    tone: 1,
+    box: { minX: -54, maxX: -38, minZ: 20.75, maxZ: 27.25 },
+  },
+  {
+    code: 'D2a',
+    subtitle: 'GIẢNG ĐƯỜNG D2A',
+    x: -64,
+    z: 22,
+    w: 11,
+    d: 5.5,
+    h: 9.2,
+    face: 'n',
+    tone: 0,
+    box: { minX: -69.5, maxX: -58.5, minZ: 19.25, maxZ: 24.75 },
+  },
+  {
+    code: 'D2b',
+    subtitle: 'GIẢNG ĐƯỜNG D2B',
+    x: -79,
+    z: 22,
+    w: 11,
+    d: 5.5,
+    h: 9.2,
+    face: 'n',
+    tone: 2,
+    box: { minX: -84.5, maxX: -73.5, minZ: 19.25, maxZ: 24.75 },
+  },
+
+  // Cụm D6 – D8 phía Tây Hồ Tiền (giữa D4 và bờ Tây Hồ Tiền)
+  {
+    code: 'D6',
+    subtitle: 'GIẢNG ĐƯỜNG D6',
+    x: -46,
+    z: 38,
+    w: 18,
+    d: 7.5,
+    h: 10.2,
+    face: 's',
+    tone: 3,
+    box: { minX: -55, maxX: -37, minZ: 34.25, maxZ: 41.75 },
+  },
+  {
+    code: 'D8',
+    subtitle: 'GIẢNG ĐƯỜNG D8',
+    x: -46,
+    z: 54,
+    w: 18,
+    d: 7.5,
+    h: 10.2,
+    face: 'n',
+    tone: 2,
+    box: { minX: -55, maxX: -37, minZ: 50.25, maxZ: 57.75 },
+  },
+
+  // Nhà D9 ngay phía Nam Thư viện Tạ Quang Bửu
+  {
+    code: 'D9',
+    subtitle: 'GIẢNG ĐƯỜNG D9',
+    x: 38,
+    z: 63,
+    w: 18,
+    d: 7.5,
+    h: 10.8,
+    face: 'n',
+    tone: 1,
+    box: { minX: 29, maxX: 47, minZ: 59.25, maxZ: 66.75 },
+  },
+
+  // Cụm D3 – D5 – D3-5 & D7 phía Đông Thư viện Tạ Quang Bửu
+  {
+    code: 'D3',
+    subtitle: 'VIỆN TOÁN ỨNG DỤNG & TIN HỌC',
+    x: 62,
+    z: 18,
+    w: 14,
+    d: 7,
+    h: 10.5,
+    face: 's',
+    tone: 3,
+    box: { minX: 55, maxX: 69, minZ: 14.5, maxZ: 21.5 },
+  },
+  {
+    code: 'D5',
+    subtitle: 'GIẢNG ĐƯỜNG D5',
+    x: 62,
+    z: 32,
+    w: 14,
+    d: 7,
+    h: 10.5,
+    face: 'n',
+    tone: 0,
+    box: { minX: 55, maxX: 69, minZ: 28.5, maxZ: 35.5 },
+  },
+  {
+    code: 'D3-5',
+    subtitle: 'KHỐI GIẢNG ĐƯỜNG D3-5',
+    x: 75,
+    z: 25,
+    w: 6.5,
+    d: 21,
+    h: 10.5,
+    face: 'w',
+    tone: 1,
+    box: { minX: 71.75, maxX: 78.25, minZ: 14.5, maxZ: 35.5 },
+  },
+  {
+    code: 'D7',
+    subtitle: 'GIẢNG ĐƯỜNG D7',
+    x: 60,
+    z: 50,
+    w: 15,
+    d: 7,
+    h: 10.5,
+    face: 'n',
+    tone: 2,
+    rotY: Math.PI / 4,
+    box: { minX: 53, maxX: 67, minZ: 44, maxZ: 56 },
+  },
+];
+
+export const D4_BUILDING = {
+  center: { x: -78, z: 44 },
+  box: { minX: -87, maxX: -69, minZ: 34, maxZ: 54 },
+} as const;
+
 // --- Đường đi (polyline, rộng 6 m) ------------------------------------------
 // Bước 3: đường C1–Thư viện đi vòng ĐÔNG hồ (x = 24, ven bờ đông) thay vì cắt
 // chéo qua đầu bắc hồ; đường tình yêu dời xuống z = −16 (đi vòng bắc hồ, không
@@ -450,6 +666,8 @@ export const BUILDING_COLLIDERS: { name: string; box: AABB }[] = [
   { name: 'Tòa nhà C6', box: C6_BUILDING.box },
   { name: 'Tòa nhà C7', box: C7_BUILDING.box },
   { name: 'Tòa nhà C8', box: C8_BUILDING.box },
+  { name: 'Nhà D4 (Viện Ngoại ngữ)', box: D4_BUILDING.box },
+  ...LECTURE_BUILDINGS.map((b) => ({ name: `Nhà ${b.code}`, box: b.box })),
   { name: 'Trung tâm Việt – Đức', box: VDZ_CENTER.box },
   { name: 'Nhà B1 (SoICT)', box: SOICT_B1.box },
   { name: 'Tòa A17', box: EAST_CAMPUS_BLOCKS.a17.box },
@@ -541,10 +759,12 @@ export const ZONES: { name: string; center: Vec2; radius: number }[] = [
   { name: 'Cụm Tòa nhà C6 – C7 – C8', center: { x: 46, z: -46 }, radius: 22 },
   { name: 'Thư viện Tạ Quang Bửu', center: { x: 38, z: 32 }, radius: 20 },
   { name: 'Hồ Tiền', center: { x: -2, z: 40 }, radius: 34 }, // bán kính chỉ để tham khảo — nearestZone kiểm tra theo hình chữ nhật (xem dưới)
+  { name: 'Cụm Giảng đường D2 – D2a – D2b', center: { x: -60, z: 23 }, radius: 16 },
   { name: 'Nhà D4 (Viện Ngoại ngữ)', center: { x: -78, z: 44 }, radius: 15 },
   { name: 'Cụm Giảng đường D6 – D8', center: { x: -46, z: 46 }, radius: 16 },
   { name: 'Cụm Giảng đường D3 – D5 – D7 – D9', center: { x: 60, z: 36 }, radius: 22 },
   { name: 'Quảng trường Trần Đại Nghĩa', center: { x: 82, z: -6 }, radius: 12 },
+  { name: 'Cổng Trần Đại Nghĩa (Cổng B8)', center: { x: 92, z: -6 }, radius: 10 },
   { name: 'Đường tình yêu', center: { x: 0, z: -16 }, radius: 11 },
   { name: 'Nhà B1 (Viện CNTT&TT - SoICT)', center: { x: 112, z: 14 }, radius: 16 },
   { name: 'Khu Ký túc xá Bách Khoa (B3 – B13)', center: { x: 122, z: -40 }, radius: 28 },
@@ -572,7 +792,10 @@ export const CAMPUS_MAP_BUILDINGS: {
   { code: 'C7', label: 'Nhà C7 (Nhiệt lạnh & ĐH)', box: C7_BUILDING.box, kind: 'main' },
   { code: 'C8', label: 'Nhà C8', box: C8_BUILDING.box, kind: 'main' },
   // Khu D & Thư viện - Hồ Tiền (Nam trục đường chính)
-  { code: 'D4', label: 'Nhà D4 (Viện Ngoại ngữ)', box: { minX: -87, maxX: -69, minZ: 34, maxZ: 54 }, kind: 'lecture' },
+  { code: 'D2', label: 'Nhà D2', box: { minX: -54, maxX: -38, minZ: 20.75, maxZ: 27.25 }, kind: 'lecture' },
+  { code: 'D2a', label: 'Nhà D2a', box: { minX: -69.5, maxX: -58.5, minZ: 19.25, maxZ: 24.75 }, kind: 'lecture' },
+  { code: 'D2b', label: 'Nhà D2b', box: { minX: -84.5, maxX: -73.5, minZ: 19.25, maxZ: 24.75 }, kind: 'lecture' },
+  { code: 'D4', label: 'Nhà D4 (Viện Ngoại ngữ)', box: D4_BUILDING.box, kind: 'lecture' },
   { code: 'D6', label: 'Nhà D6', box: { minX: -55, maxX: -37, minZ: 34.25, maxZ: 41.75 }, kind: 'lecture' },
   { code: 'D8', label: 'Nhà D8', box: { minX: -55, maxX: -37, minZ: 50.25, maxZ: 57.75 }, kind: 'lecture' },
   { code: 'VDZ', label: 'Nhà Bắc Hồ Tiền (VDZ)', box: VDZ_CENTER.box, kind: 'main' },
@@ -603,6 +826,9 @@ export const CAMPUS_MAP_BUILDINGS: {
   { code: 'Bể bơi', label: 'Bể bơi Bách Khoa', box: SPORTS_COMPLEX.poolBox, kind: 'sport' },
   { code: 'SVĐ', label: 'SVĐ Bách Khoa (Sân bóng đá)', box: { minX: 115, maxX: 149, minZ: 67, maxZ: 89 }, kind: 'sport' },
   { code: 'KTX Lào', label: 'KTX Lào', box: SPORTS_COMPLEX.ktxLaoBox, kind: 'dorm' },
+  { code: 'Parabol', label: 'Cổng Parabol (Giải Phóng)', box: { minX: -90, maxX: -86, minZ: 3.5, maxZ: 16.5 }, kind: 'gate' },
+  { code: 'Cổng TĐN', label: 'Cổng Trần Đại Nghĩa (B8)', box: { minX: 90.5, maxX: 93.5, minZ: -11, maxZ: -1 }, kind: 'gate' },
+  { code: 'Cổng TQB', label: 'Cổng Tạ Quang Bửu', box: { minX: 121, maxX: 131, minZ: -69.5, maxZ: -66.5 }, kind: 'gate' },
 ];
 
 export function nearestZone(p: Vec2): string {
