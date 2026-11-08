@@ -266,103 +266,180 @@ function makeRockTexture(): THREE.CanvasTexture {
   c.height = 512;
   const ctx = c.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D không khả dụng');
-  ctx.fillStyle = '#DCDCD6';
+  ctx.fillStyle = '#E2E1DB';
   ctx.fillRect(0, 0, 512, 512);
   let seed = 20260808;
   const rnd = () => {
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
-  // Mảng loang xám/be nhạt.
-  for (let i = 0; i < 28; i++) {
+  // Mảng loang đá hoa cương tự nhiên (thạch anh trắng sáng + fenspat xám ấm).
+  for (let i = 0; i < 42; i++) {
     const x = rnd() * 512;
     const y = rnd() * 512;
-    const r = 20 + rnd() * 55;
+    const r = 24 + rnd() * 64;
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    const tone = rnd() > 0.5 ? '120,118,105' : '255,255,250';
-    g.addColorStop(0, `rgba(${tone},${0.05 + rnd() * 0.08})`);
+    const tone = rnd() > 0.45 ? '115,112,102' : '252,251,247';
+    g.addColorStop(0, `rgba(${tone},${0.07 + rnd() * 0.1})`);
     g.addColorStop(1, `rgba(${tone},0)`);
     ctx.fillStyle = g;
     ctx.fillRect(x - r, y - r, r * 2, r * 2);
   }
-  // Hạt đá nhỏ + lỗ sần.
-  for (let i = 0; i < 2600; i++) {
-    const v = 90 + Math.floor(rnd() * 110);
-    ctx.fillStyle = `rgba(${v},${v},${v - 6},${0.08 + rnd() * 0.18})`;
+  // Vân đá tự nhiên chéo nhẹ.
+  ctx.lineWidth = 1.4;
+  for (let i = 0; i < 18; i++) {
+    const x0 = rnd() * 512;
+    const y0 = rnd() * 512;
+    ctx.strokeStyle = `rgba(95,92,85,${0.08 + rnd() * 0.1})`;
     ctx.beginPath();
-    ctx.arc(rnd() * 512, rnd() * 512, 0.5 + rnd() * 1.8, 0, Math.PI * 2);
+    ctx.moveTo(x0, y0);
+    ctx.bezierCurveTo(
+      x0 + (rnd() - 0.5) * 140,
+      y0 + (rnd() - 0.5) * 90,
+      x0 + (rnd() - 0.5) * 180,
+      y0 + (rnd() - 0.5) * 120,
+      x0 + (rnd() - 0.5) * 220,
+      y0 + (rnd() - 0.5) * 150,
+    );
+    ctx.stroke();
+  }
+  // Hạt tinh thể đá granite (mica đen + thạch anh xám/trắng).
+  for (let i = 0; i < 3400; i++) {
+    const v = 85 + Math.floor(rnd() * 135);
+    ctx.fillStyle = `rgba(${v},${v},${v - 5},${0.1 + rnd() * 0.2})`;
+    ctx.beginPath();
+    ctx.arc(rnd() * 512, rnd() * 512, 0.5 + rnd() * 1.9, 0, Math.PI * 2);
     ctx.fill();
   }
-  for (let i = 0; i < 220; i++) {
-    ctx.fillStyle = `rgba(70,70,66,${0.2 + rnd() * 0.2})`;
+  for (let i = 0; i < 360; i++) {
+    ctx.fillStyle = `rgba(58,56,52,${0.22 + rnd() * 0.24})`;
     ctx.beginPath();
-    ctx.arc(rnd() * 512, rnd() * 512, 0.6 + rnd() * 1.6, 0, Math.PI * 2);
+    ctx.arc(rnd() * 512, rnd() * 512, 0.6 + rnd() * 1.7, 0, Math.PI * 2);
     ctx.fill();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(0.3, 0.3);
+  tex.repeat.set(0.32, 0.32);
   tex.anisotropy = 4;
   return tex;
 }
 
 function WhiteRock() {
-  // Đường viền mặt trước: bè ngang, mép trên lượn sóng nhẹ, vai bo tròn.
-  const rockGeo = useMemo(() => {
+  // Khối đá hoa cương tự nhiên 3D đa diện: chân bè vững chãi, thuôn dần lên
+  // đỉnh và hai vai, lưng đá vát tự nhiên có gờ lồi lõm, mặt trước phẳng vùng khắc chữ.
+  const { rockGeo, sideRockGeoL, sideRockGeoR } = useMemo(() => {
     const s = new THREE.Shape();
-    s.moveTo(-2.55, 0.1);
+    s.moveTo(-2.62, 0.08);
     s.splineThru([
-      new THREE.Vector2(-2.62, 0.85),
-      new THREE.Vector2(-2.45, 1.55),
-      new THREE.Vector2(-2.18, 2.02),
-      new THREE.Vector2(-1.65, 2.32),
-      new THREE.Vector2(-1.05, 2.48),
-      new THREE.Vector2(-0.45, 2.36),
-      new THREE.Vector2(0.15, 2.54),
-      new THREE.Vector2(0.75, 2.4),
-      new THREE.Vector2(1.35, 2.5),
-      new THREE.Vector2(1.88, 2.28),
-      new THREE.Vector2(2.28, 1.92),
-      new THREE.Vector2(2.52, 1.38),
-      new THREE.Vector2(2.58, 0.75),
-      new THREE.Vector2(2.48, 0.22),
-      new THREE.Vector2(1.8, 0.06),
+      new THREE.Vector2(-2.68, 0.82),
+      new THREE.Vector2(-2.5, 1.56),
+      new THREE.Vector2(-2.2, 2.05),
+      new THREE.Vector2(-1.68, 2.35),
+      new THREE.Vector2(-1.05, 2.52),
+      new THREE.Vector2(-0.42, 2.4),
+      new THREE.Vector2(0.18, 2.58),
+      new THREE.Vector2(0.78, 2.44),
+      new THREE.Vector2(1.38, 2.52),
+      new THREE.Vector2(1.92, 2.3),
+      new THREE.Vector2(2.32, 1.94),
+      new THREE.Vector2(2.56, 1.4),
+      new THREE.Vector2(2.62, 0.76),
+      new THREE.Vector2(2.52, 0.2),
+      new THREE.Vector2(1.85, 0.05),
       new THREE.Vector2(0, 0.02),
-      new THREE.Vector2(-1.8, 0.08),
+      new THREE.Vector2(-1.85, 0.06),
     ]);
     s.closePath();
     const g = new THREE.ExtrudeGeometry(s, {
-      depth: 1.7,
+      steps: 8,
+      depth: 1.72,
       bevelEnabled: true,
-      bevelThickness: 0.16,
-      bevelSize: 0.14,
-      bevelSegments: 3,
-      curveSegments: 10,
+      bevelThickness: 0.2,
+      bevelSize: 0.16,
+      bevelSegments: 5,
+      curveSegments: 14,
     });
-    g.translate(0, 0, -0.85); // mặt trước z ≈ +1,01, mặt sau z ≈ −1,01
-    // Biến dạng sin liên tục theo vị trí (không nứt mép): mảng lồi lõm
-    // ±0,045 m; mặt trước giảm một nửa để giữ phẳng vùng chữ.
+    g.translate(0, 0, -0.86); // mặt trước z ≈ +1,06, mặt sau z ≈ −1,06
+
     const pos = g.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const y = pos.getY(i);
-      const z = pos.getZ(i);
-      const front = z > 0.9 ? 0.5 : 1;
-      const dx = 0.045 * Math.sin(2.3 * y + 1.7) * Math.sin(1.9 * z + 0.4) * front;
-      const dy = 0.04 * Math.sin(1.7 * x + 0.9) * Math.sin(2.6 * z + 2.1) * front;
-      const dz = 0.03 * Math.sin(3.1 * x + 0.6) * Math.sin(2.7 * y + 1.2) * front;
-      pos.setXYZ(i, x + dx, y + dy, z + dz);
+      let x = pos.getX(i);
+      let y = pos.getY(i);
+      let z = pos.getZ(i);
+
+      // Độ cao chuẩn hóa (0 ở chân đá -> 1 ở đỉnh đá ~2.6m)
+      const hNorm = Math.max(0, Math.min(1, y / 2.65));
+      // Khối đá tự nhiên thuôn nhẹ về phía đỉnh và bo vát phần lưng/vai đá,
+      // trong khi chân đá bè rộng vững chãi.
+      const depthTaper = 1.08 - 0.24 * Math.pow(hNorm, 1.35);
+      const shoulderRatio = Math.min(1, Math.abs(x) / 2.65);
+      const sideDepthTaper = 1 - 0.18 * Math.pow(shoulderRatio, 2.1);
+
+      // Vùng khắc chữ mặt trước (z > 0.82, |x| < 2.2, 0.65 < y < 2.15) giữ phẳng
+      const inPlaqueZone =
+        z > 0.82 && Math.abs(x) < 2.22 && y > 0.62 && y < 2.15;
+
+      if (inPlaqueZone) {
+        z = Math.min(z, 1.03) + 0.008 * Math.sin(1.8 * x) * Math.cos(1.6 * y);
+      } else {
+        z *= depthTaper * sideDepthTaper;
+        // Lưng đá (z < 0) phồng tự nhiên ở phần bụng dưới và vát về phía đỉnh
+        if (z < 0) {
+          z -= 0.14 * (1 - hNorm) * Math.cos(shoulderRatio * 1.2);
+        }
+        // Biến dạng đa tần tạo thớ đá tự nhiên (không phẳng lì kiểu hộp 2D)
+        const facetX =
+          0.065 * Math.sin(2.1 * y + 1.4) * Math.sin(1.8 * z + 0.5) +
+          0.03 * Math.cos(4.3 * y + 2.2 * z);
+        const facetY =
+          0.055 * Math.sin(1.6 * x + 0.8) * Math.sin(2.4 * z + 1.9) +
+          0.025 * Math.cos(3.7 * x - 1.8 * z);
+        const facetZ =
+          0.05 * Math.sin(2.7 * x + 0.6) * Math.sin(2.3 * y + 1.1) +
+          0.028 * Math.cos(4.1 * x + 3.2 * y);
+        const frontDamp = z > 0.65 ? 0.35 : 1.0;
+        x += facetX * frontDamp;
+        y = Math.max(0.01, y + facetY * frontDamp);
+        z = Math.min(1.03, z + facetZ * frontDamp);
+      }
+
+      pos.setXYZ(i, x, y, z);
     }
     g.computeVertexNormals();
-    return g;
+
+    // Hai tảng đá cuội/granite phụ đặt ôm chân khối đá chính trong bồn cỏ
+    const makeBoulder = (rx: number, ry: number, rz: number, seedOffset: number) => {
+      const b = new THREE.DodecahedronGeometry(1, 2);
+      const bp = b.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < bp.count; i++) {
+        const vx = bp.getX(i);
+        const vy = bp.getY(i);
+        const vz = bp.getZ(i);
+        const n =
+          1 +
+          0.12 * Math.sin(3.1 * vx + seedOffset) * Math.cos(2.7 * vy - seedOffset) +
+          0.08 * Math.sin(4.2 * vz + 1.3);
+        bp.setXYZ(i, vx * rx * n, Math.max(-0.25 * ry, vy * ry * n), vz * rz * n);
+      }
+      b.computeVertexNormals();
+      return b;
+    };
+
+    return {
+      rockGeo: g,
+      sideRockGeoL: makeBoulder(0.62, 0.38, 0.48, 1.2),
+      sideRockGeoR: makeBoulder(0.54, 0.34, 0.44, 3.7),
+    };
   }, []);
   const rockTex = useMemo(() => makeRockTexture(), []);
   useEffect(() => () => {
     rockGeo.dispose();
+    sideRockGeoL.dispose();
+    sideRockGeoR.dispose();
     rockTex.dispose();
-  }, [rockGeo, rockTex]);
+  }, [rockGeo, sideRockGeoL, sideRockGeoR, rockTex]);
 
   return (
     <group position={[WHITE_ROCK.center.x, 0, WHITE_ROCK.center.z]}>
@@ -382,20 +459,33 @@ function WhiteRock() {
           <meshStandardMaterial color={BANK_RIM} roughness={1} />
         </mesh>
       ))}
-      {/* Đất sẫm dưới chân + bóng tiếp xúc (đá không lơ lửng). */}
-      <mesh position={[0, 0.05, 0]}>
-        <boxGeometry args={[5.5, 0.1, 2.1]} />
+      {/* Đất sẫm dưới chân + bệ đá tự nhiên chìm + bóng tiếp xúc (đá không lơ lửng). */}
+      <mesh position={[0, 0.05, 0]} receiveShadow>
+        <boxGeometry args={[5.6, 0.1, 2.3]} />
         <meshStandardMaterial color="#6B6258" roughness={1} />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.11, 0]}>
-        <planeGeometry args={[5.7, 2.3]} />
-        <meshStandardMaterial color="#1A1A1A" transparent opacity={0.32} roughness={1} />
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.105, 0]}>
+        <planeGeometry args={[5.9, 2.5]} />
+        <meshStandardMaterial color="#1A1A1A" transparent opacity={0.34} roughness={1} />
       </mesh>
-      {/* Tảng đá: chân chìm 0,06 m vào đất, mặt trước hướng nam (+Z). */}
-      <mesh geometry={rockGeo} position={[0, 0.06, 0]} castShadow receiveShadow>
-        <meshStandardMaterial map={rockTex} bumpMap={rockTex} bumpScale={0.02} roughness={1} />
+      {/* Tảng đá hoa cương chính: chân chìm vào đất, mặt trước hướng nam (+Z). */}
+      <mesh geometry={rockGeo} position={[0, 0.05, 0]} castShadow receiveShadow>
+        <meshStandardMaterial
+          color="#EAE8E1"
+          map={rockTex}
+          bumpMap={rockTex}
+          bumpScale={0.032}
+          roughness={0.88}
+        />
       </mesh>
-      {/* Chữ đen 2 dòng áp sát mặt đá (mặt trước z ≈ 1,01; chữ ở 1,09). */}
+      {/* Đá tảng nhỏ tự nhiên ôm hai bên chân bia */}
+      <mesh geometry={sideRockGeoL} position={[-2.65, 0.22, 0.42]} rotation={[0.08, 0.35, -0.06]} castShadow receiveShadow>
+        <meshStandardMaterial color="#DCD9D0" map={rockTex} bumpMap={rockTex} bumpScale={0.025} roughness={0.9} />
+      </mesh>
+      <mesh geometry={sideRockGeoR} position={[2.62, 0.2, 0.38]} rotation={[0.05, -0.42, 0.08]} castShadow receiveShadow>
+        <meshStandardMaterial color="#DFDCD3" map={rockTex} bumpMap={rockTex} bumpScale={0.025} roughness={0.9} />
+      </mesh>
+      {/* Chữ đen 2 dòng áp sát mặt đá (mặt trước phẳng ở z ≈ 1,03; chữ ở 1,09). */}
       <LabelPlane
         textureKey="rock-inscription"
         canvasW={1024}

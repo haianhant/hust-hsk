@@ -18,6 +18,7 @@ import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import {
   HumanFigure,
+  OUTFIT_PRESETS,
   computeNaturalGaitTargets,
   type FigureJoints,
 } from './StudentAvatar';
@@ -41,7 +42,7 @@ function useFigureJoints(): FigureJoints {
 
 /** Texture bảng tên "Tên (MSSV)" — canvas rộng hơn của Npc (tên + MSSV dài). */
 function useNameTagTexture(label: string): THREE.CanvasTexture {
-  return useMemo(() => {
+  const tex = useMemo(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 64;
@@ -62,10 +63,12 @@ function useNameTagTexture(label: string): THREE.CanvasTexture {
       ctx.font = `bold ${size}px Arial, sans-serif`;
       ctx.fillText(label, 256, 34);
     }
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
+    const t = new THREE.CanvasTexture(canvas);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
   }, [label]);
+  useEffect(() => () => tex.dispose(), [tex]);
+  return tex;
 }
 
 function darken(hex: string): string {
@@ -127,11 +130,18 @@ export const remoteRenderPos = new Map<string, { x: number; z: number; facing: n
 /** Một người chơi khác: nội suy vị trí + hoạt hình chân tay mỗi frame. */
 function RemotePlayerView({ player }: { player: RemotePlayer }) {
   const groupRef = useRef<THREE.Group>(null!);
+  const figureRef = useRef<THREE.Group>(null!);
   const joints = useFigureJoints();
   const cur = useRef({ x: player.x, z: player.z, facing: player.facing });
   const phase = useRef(0);
   const label = `${player.name} (${player.mssv})`;
   const tagTex = useNameTagTexture(label);
+
+  useEffect(() => {
+    return () => {
+      remoteRenderPos.delete(player.id);
+    };
+  }, [player.id]);
 
   useFrame((_, delta) => {
     // Kẹp delta ở 0,5 s/khung: khung chậm (điện thoại yếu, SwiftShader
@@ -164,7 +174,9 @@ function RemotePlayerView({ player }: { player: RemotePlayer }) {
     const g = groupRef.current;
     if (!g) return;
     g.position.set(cur.current.x, target.state === 'riding' ? 0.12 : 0, cur.current.z);
-    g.rotation.y = cur.current.facing;
+    if (figureRef.current) {
+      figureRef.current.rotation.y = cur.current.facing;
+    }
     remoteRenderPos.set(player.id, { x: cur.current.x, z: cur.current.z, facing: cur.current.facing });
 
     const j = joints;
@@ -226,18 +238,33 @@ function RemotePlayerView({ player }: { player: RemotePlayer }) {
     }
   });
 
+  const gender = player.gender ?? 'male';
+  const preset = player.outfit ? OUTFIT_PRESETS[player.outfit] : undefined;
+  const hairStyle = player.hairStyle ?? (gender === 'female' ? 'ponytail' : 'short');
+  const skirtColor =
+    gender === 'female' && player.skirt
+      ? (preset?.defaultSkirtColor ?? '#1E293B')
+      : undefined;
+
   return (
     <group ref={groupRef} position={[player.x, 0, player.z]}>
-      <group rotation={[0, player.facing, 0]}>
+      <group ref={figureRef}>
         <HumanFigure
-          variant="polo"
-          shirt={player.color}
-          shirtDark={darken(player.color)}
-          pants="#2B2F36"
-          shoe="#F5F5F5"
-          shoeSole="#1A1A1A"
-          hairStyle="short"
-          backpack
+          variant={preset ? preset.variant : 'polo'}
+          gender={gender}
+          shirt={preset ? preset.shirt : player.color}
+          shirtDark={preset ? preset.shirtDark : darken(player.color)}
+          upperYokeColor={preset?.upperYokeColor}
+          sleeveColor={preset?.sleeveColor}
+          skirtColor={skirtColor}
+          pants={preset ? preset.pants : '#2B2F36'}
+          shoe={preset ? preset.shoe : '#F5F5F5'}
+          shoeSole={preset ? preset.shoeSole : '#1A1A1A'}
+          hairStyle={hairStyle}
+          glasses={player.glasses ?? false}
+          lanyard
+          wristwatch
+          backpack={player.backpack ?? true}
           backpackColors={{ pack: '#2A2E33', packLight: '#3A3E44', packZip: '#1A1A1A' }}
           joints={joints}
         />
@@ -254,23 +281,26 @@ function RemotePlayerView({ player }: { player: RemotePlayer }) {
   );
 }
 
+function playerSignature(p: RemotePlayer): string {
+  return `${p.id}:${p.name}:${p.mssv}:${p.gender ?? ''}:${p.outfit ?? ''}:${p.hairStyle ?? ''}:${p.skirt ?? ''}:${p.glasses ?? ''}:${p.backpack ?? ''}`;
+}
+
 export default function RemotePlayers() {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const playersRef = useRef<RemotePlayer[]>([]);
+  const sigRef = useRef<string>('');
 
   useEffect(() => {
     const unsub = multiplayer.subscribe((snap) => {
       const next = snap.players;
-      const prev = playersRef.current;
-      // Chỉ re-render khi danh sách người (id) thay đổi — tin move chỉ
-      // đổi tọa độ trong object cũ, useFrame đọc trực tiếp, không cần
-      // re-render.
-      const same =
-        prev.length === next.length && prev.every((p, i) => p.id === next[i]?.id);
+      const nextSig = next.map(playerSignature).join('|');
+      const same = sigRef.current === nextSig;
       playersRef.current = next;
+      sigRef.current = nextSig;
       if (!same) force();
     });
     playersRef.current = multiplayer.snapshot.players;
+    sigRef.current = playersRef.current.map(playerSignature).join('|');
     // Vẽ ngay những người ĐÃ ở trong phòng khi scene mount: welcome có
     // thể tới trước khi CampusScene tải xong (chunk dynamic + SwiftShader
     // chậm) — nếu chỉ trông vào emit thì không còn sự kiện nào kích hoạt

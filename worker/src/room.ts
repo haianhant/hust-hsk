@@ -30,16 +30,44 @@ export interface Player {
   z: number;
   facing: number;
   state: PlayerState;
+  gender?: 'male' | 'female';
+  outfit?: string;
+  hairStyle?: string;
+  skirt?: boolean;
+  glasses?: boolean;
+  backpack?: boolean;
 }
 
 export const ROOM_CAPACITY = 15;
 /** Campus bounds, same numbers as lib/campus.ts BOUNDS. */
-export const BOUNDS = { minX: -96, maxX: 96, minZ: -76, maxZ: 86 };
+export const BOUNDS = { minX: -96, maxX: 162, minZ: -76, maxZ: 92 };
 /** Spawn inside the Parabol gate, same as lib/campus.ts SPAWN. */
 export const SPAWN = { x: -76, z: 10, facing: -Math.PI / 2 };
 const MAX_SPEED_WALK = 7; // m/s: walk 4, run ~6.5, plus jitter tolerance
 const MAX_SPEED_RIDE = 15; // m/s: bike max 14, plus jitter tolerance
 const MAX_MSG_PER_SEC = 20;
+
+const VALID_OUTFITS = new Set([
+  'windbreaker-hust',
+  'bomber-red-grey',
+  'bomber-navy-white',
+  'bomber-red-navy',
+  'polo-red',
+  'hoodie-hust',
+  'tshirt-navy',
+  'sweater-cream',
+  'shirt-white',
+  'sport-pe',
+]);
+
+const VALID_HAIRSTYLES = new Set([
+  'short',
+  'swept',
+  'layered',
+  'ponytail',
+  'bob',
+  'bun',
+]);
 
 /**
  * Shirt colours for remote players, hashed from sessionId. HUST red
@@ -92,8 +120,35 @@ interface Session {
   z: number;
   facing: number;
   state: PlayerState;
+  gender?: 'male' | 'female';
+  outfit?: string;
+  hairStyle?: string;
+  skirt?: boolean;
+  glasses?: boolean;
+  backpack?: boolean;
   lastUpdate: number;
   msgTimes: number[];
+}
+
+function applyAppearance(session: Session, msg: Record<string, unknown>) {
+  if (msg.gender === 'male' || msg.gender === 'female') {
+    session.gender = msg.gender;
+  }
+  if (typeof msg.outfit === 'string' && VALID_OUTFITS.has(msg.outfit)) {
+    session.outfit = msg.outfit;
+  }
+  if (typeof msg.hairStyle === 'string' && VALID_HAIRSTYLES.has(msg.hairStyle)) {
+    session.hairStyle = msg.hairStyle;
+  }
+  if (typeof msg.skirt === 'boolean') {
+    session.skirt = msg.skirt;
+  }
+  if (typeof msg.glasses === 'boolean') {
+    session.glasses = msg.glasses;
+  }
+  if (typeof msg.backpack === 'boolean') {
+    session.backpack = msg.backpack;
+  }
 }
 
 export class HskRoom {
@@ -154,6 +209,12 @@ export class HskRoom {
       z: s.z,
       facing: s.facing,
       state: s.state,
+      ...(s.gender !== undefined ? { gender: s.gender } : {}),
+      ...(s.outfit !== undefined ? { outfit: s.outfit } : {}),
+      ...(s.hairStyle !== undefined ? { hairStyle: s.hairStyle } : {}),
+      ...(s.skirt !== undefined ? { skirt: s.skirt } : {}),
+      ...(s.glasses !== undefined ? { glasses: s.glasses } : {}),
+      ...(s.backpack !== undefined ? { backpack: s.backpack } : {}),
     };
   }
 
@@ -210,6 +271,7 @@ export class HskRoom {
       };
       session.name = name;
       session.mssv = mssv;
+      applyAppearance(session, msg);
       session.msgTimes = [];
       this.sessions.set(sessionId, session);
       this.bySocket.set(ws, sessionId);
@@ -288,6 +350,18 @@ export class HskRoom {
         session.lastUpdate = now;
         this.broadcast({ type: 'state', id: sessionId, state }, sessionId);
       }
+      return;
+    }
+
+    if (msg.type === 'appearance') {
+      if (msg.name !== undefined) session.name = sanitizeName(msg.name);
+      if (msg.mssv !== undefined) {
+        const m = sanitizeMssv(msg.mssv);
+        if (m) session.mssv = m;
+      }
+      applyAppearance(session, msg);
+      session.lastUpdate = now;
+      this.broadcast({ type: 'appearance', player: this.publicPlayer(session) }, sessionId);
       return;
     }
 

@@ -13,7 +13,18 @@
 // status 'offline' để HUD ghi rõ — không bao giờ báo số người giả.
 // ---------------------------------------------------------------------------
 
+import type { AvatarGender, AvatarHairStyle, AvatarOutfitId } from './playerState';
+
 export type RemoteState = 'idle' | 'walking' | 'running' | 'riding';
+
+export interface RemoteAppearance {
+  gender?: AvatarGender;
+  outfit?: AvatarOutfitId;
+  hairStyle?: AvatarHairStyle;
+  skirt?: boolean;
+  glasses?: boolean;
+  backpack?: boolean;
+}
 
 export interface RemotePlayer {
   id: string;
@@ -24,6 +35,12 @@ export interface RemotePlayer {
   z: number;
   facing: number;
   state: RemoteState;
+  gender?: AvatarGender;
+  outfit?: AvatarOutfitId;
+  hairStyle?: AvatarHairStyle;
+  skirt?: boolean;
+  glasses?: boolean;
+  backpack?: boolean;
 }
 
 export type MpStatus = 'idle' | 'connecting' | 'online' | 'offline';
@@ -59,6 +76,7 @@ class MultiplayerClient {
   private sessionId = '';
   private name = '';
   private mssv = '';
+  private appearance: RemoteAppearance = {};
   private reconnects = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -100,14 +118,35 @@ class MultiplayerClient {
     this.emit();
   }
 
-  connect(sessionId: string, name: string, mssv: string) {
+  connect(sessionId: string, name: string, mssv: string, appearance: RemoteAppearance = {}) {
     this.sessionId = sessionId;
     this.name = name;
     this.mssv = mssv;
+    this.appearance = { ...appearance };
     this.intentionalClose = false;
     this.reconnects = 0;
     this.error = null;
     this.openSocket();
+  }
+
+  /** Cập nhật tên, MSSV và ngoại hình nhân vật ngay trong phòng đang kết nối. */
+  sendAppearance(name: string, mssv: string, appearance: RemoteAppearance) {
+    this.name = name;
+    this.mssv = mssv;
+    this.appearance = { ...appearance };
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.selfId) return;
+    try {
+      this.ws.send(
+        JSON.stringify({
+          type: 'appearance',
+          name: this.name,
+          mssv: this.mssv,
+          ...this.appearance,
+        }),
+      );
+    } catch {
+      // ignore
+    }
   }
 
   disconnect() {
@@ -169,6 +208,7 @@ class MultiplayerClient {
           sessionId: this.sessionId,
           name: this.name,
           mssv: this.mssv,
+          ...this.appearance,
         }),
       );
       this.startHeartbeat();
@@ -199,6 +239,26 @@ class MultiplayerClient {
           const rp = toRemotePlayer(msg.player);
           if (rp && rp.id !== this.selfId) this.players.set(rp.id, rp);
           this.emit();
+          break;
+        }
+        case 'appearance': {
+          const rp = toRemotePlayer(msg.player);
+          if (rp && rp.id !== this.selfId) {
+            const prev = this.players.get(rp.id);
+            if (prev) {
+              prev.name = rp.name;
+              prev.mssv = rp.mssv;
+              prev.gender = rp.gender;
+              prev.outfit = rp.outfit;
+              prev.hairStyle = rp.hairStyle;
+              prev.skirt = rp.skirt;
+              prev.glasses = rp.glasses;
+              prev.backpack = rp.backpack;
+            } else {
+              this.players.set(rp.id, rp);
+            }
+            this.emit();
+          }
           break;
         }
         case 'leave': {
@@ -301,10 +361,42 @@ function isRemoteState(s: string): s is RemoteState {
   return s === 'idle' || s === 'walking' || s === 'running' || s === 'riding';
 }
 
+const VALID_OUTFITS = new Set<AvatarOutfitId>([
+  'windbreaker-hust',
+  'bomber-red-grey',
+  'bomber-navy-white',
+  'bomber-red-navy',
+  'polo-red',
+  'hoodie-hust',
+  'tshirt-navy',
+  'sweater-cream',
+  'shirt-white',
+  'sport-pe',
+]);
+
+const VALID_HAIRSTYLES = new Set<AvatarHairStyle>([
+  'short',
+  'swept',
+  'layered',
+  'ponytail',
+  'bob',
+  'bun',
+]);
+
 function toRemotePlayer(raw: unknown): RemotePlayer | null {
   if (!raw || typeof raw !== 'object') return null;
   const p = raw as Record<string, unknown>;
   if (typeof p.id !== 'string') return null;
+  const gender: AvatarGender | undefined =
+    p.gender === 'male' || p.gender === 'female' ? p.gender : undefined;
+  const outfit: AvatarOutfitId | undefined =
+    typeof p.outfit === 'string' && VALID_OUTFITS.has(p.outfit as AvatarOutfitId)
+      ? (p.outfit as AvatarOutfitId)
+      : undefined;
+  const hairStyle: AvatarHairStyle | undefined =
+    typeof p.hairStyle === 'string' && VALID_HAIRSTYLES.has(p.hairStyle as AvatarHairStyle)
+      ? (p.hairStyle as AvatarHairStyle)
+      : undefined;
   return {
     id: p.id,
     name: typeof p.name === 'string' ? p.name : 'Bạn',
@@ -314,6 +406,12 @@ function toRemotePlayer(raw: unknown): RemotePlayer | null {
     z: typeof p.z === 'number' ? p.z : 10,
     facing: typeof p.facing === 'number' ? p.facing : 0,
     state: typeof p.state === 'string' && isRemoteState(p.state) ? p.state : 'idle',
+    ...(gender !== undefined ? { gender } : {}),
+    ...(outfit !== undefined ? { outfit } : {}),
+    ...(hairStyle !== undefined ? { hairStyle } : {}),
+    ...(typeof p.skirt === 'boolean' ? { skirt: p.skirt } : {}),
+    ...(typeof p.glasses === 'boolean' ? { glasses: p.glasses } : {}),
+    ...(typeof p.backpack === 'boolean' ? { backpack: p.backpack } : {}),
   };
 }
 

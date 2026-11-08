@@ -471,3 +471,13 @@ Báo cáo đầy đủ: `docs/round5-multiplayer-report.md`. Yêu cầu user 07/
 - **Quần thể NPC Sinh viên sống động (`AmbientLife.tsx`):**
   - Thêm `SittingStudent` ngồi đọc giáo trình/sách mở trên các ghế gỗ ven Hồ Tiền (bờ Tây & bờ Đông), cập nhật sinh viên đi dạo mặc đa dạng Áo khoác gió, Bomber, Áo phông xanh + chân váy trắng, Sweater, Hoodie.
 - **Kiểm thử 4 cổng Verification Gates:** `npx tsc --noEmit` (0 lỗi), `node test/learn.test.cjs` (45/45 PASS), `node test/leg-sim.cjs` (4/4 PASS), `npm run build` (PASS).
+
+## Đợt 8 — Đồng bộ Ngoại hình Multiplayer 10 Đồng phục HUST, Mở rộng `BOUNDS` Khu Đông & Khối Đá Trắng 3D (08/11/2026 — ĐÃ DEPLOY & PUSH `main` + `master`)
+- **Multiplayer (`lib/multiplayer.ts`, `worker/src/room.ts`, `test/ws-shim/server.js`, `components/three/RemotePlayers.tsx`, `app/page.tsx`):**
+  - Mở rộng `BOUNDS` trong `worker/src/room.ts` và `test/ws-shim/server.js` lên `{ minX: -96, maxX: 162, minZ: -76, maxZ: 92 }` khớp 100% với `lib/campus.ts` để hỗ trợ di chuyển đồng bộ toàn khu Đông (B1 SoICT, KTX B9 & KTX mới, Sân vận động Bách Khoa).
+  - Đồng bộ đầy đủ `gender`, `outfit` (10 mẫu đồng phục HUST), `hairStyle`, `skirt` (chân váy xếp ly), `glasses`, `backpack` khi vào phòng (`join`) và khi đổi trang phục trực tiếp trong game (`appearance` / `multiplayer.sendAppearance`).
+  - Sửa lỗi xoay kép (`double rotation`) trong `RemotePlayers.tsx`: tách `groupRef` (chỉ giữ `position`) và `figureRef` (xoay `cur.current.facing`), giúp nhân vật người chơi khác quay đúng hướng thật và `Billboard` bảng tên luôn đứng ngoài nhóm xoay; bổ sung `.dispose()` cho `CanvasTexture` bảng tên.
+- **Khối đá trắng Quảng trường C1 (`WhiteRock` trong `Landmarks.tsx`) & Nhãn `"Cô giáo"` (`Npc.tsx`):**
+  - Nâng cấp `WhiteRock` thành tảng đá hoa cương 3D đa diện có độ thuôn vát theo chiều cao và chiều sâu (`steps: 8`), bổ sung 2 tảng đá phụ ôm chân bia và vân đá granite thạch anh/mica rõ nét, giữ phẳng vùng khắc chữ mặt trước.
+  - Tinh chỉnh vị trí bảng tên `Billboard` của `"Cô giáo"` (`y = 1.84`) trong `Npc.tsx` để tách biệt hoàn toàn khỏi chip mục tiêu HUD.
+- **Kiểm thử:** `npx tsc --noEmit` (0 lỗi), `node test/learn.test.cjs` (45/45 PASS), `node test/leg-sim.cjs` (4/4 PASS), `node test/mp-protocol.cjs` (11/11 PASS), `npm run build` (PASS).

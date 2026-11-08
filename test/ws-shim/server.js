@@ -19,12 +19,41 @@ const { WebSocketServer } = require('ws');
 const PORT = Number(process.argv[2] || 8788);
 const ROOMS = ['hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5'];
 const CAPACITY = 15;
-const BOUNDS = { minX: -96, maxX: 96, minZ: -76, maxZ: 86 };
+const BOUNDS = { minX: -96, maxX: 162, minZ: -76, maxZ: 92 };
 const SPAWN = { x: -76, z: 10, facing: -Math.PI / 2 };
 const MAX_SPEED_WALK = 7;
 const MAX_SPEED_RIDE = 15;
 const MAX_MSG_PER_SEC = 20;
 const SHIRT_COLORS = ['#1F3A5F', '#2E7D32', '#F2A007', '#7C4DBE', '#0E7C7B', '#C2571B', '#546E7A', '#8E24AA'];
+const VALID_OUTFITS = new Set([
+  'windbreaker-hust',
+  'bomber-red-grey',
+  'bomber-navy-white',
+  'bomber-red-navy',
+  'polo-red',
+  'hoodie-hust',
+  'tshirt-navy',
+  'sweater-cream',
+  'shirt-white',
+  'sport-pe',
+]);
+const VALID_HAIRSTYLES = new Set([
+  'short',
+  'swept',
+  'layered',
+  'ponytail',
+  'bob',
+  'bun',
+]);
+
+function applyAppearance(session, msg) {
+  if (msg.gender === 'male' || msg.gender === 'female') session.gender = msg.gender;
+  if (typeof msg.outfit === 'string' && VALID_OUTFITS.has(msg.outfit)) session.outfit = msg.outfit;
+  if (typeof msg.hairStyle === 'string' && VALID_HAIRSTYLES.has(msg.hairStyle)) session.hairStyle = msg.hairStyle;
+  if (typeof msg.skirt === 'boolean') session.skirt = msg.skirt;
+  if (typeof msg.glasses === 'boolean') session.glasses = msg.glasses;
+  if (typeof msg.backpack === 'boolean') session.backpack = msg.backpack;
+}
 
 function hashString(s) {
   let h = 0;
@@ -62,7 +91,22 @@ class Room {
     }
   }
   publicPlayer(s) {
-    return { id: s.id, name: s.name, mssv: s.mssv, color: s.color, x: s.x, z: s.z, facing: s.facing, state: s.state };
+    return {
+      id: s.id,
+      name: s.name,
+      mssv: s.mssv,
+      color: s.color,
+      x: s.x,
+      z: s.z,
+      facing: s.facing,
+      state: s.state,
+      ...(s.gender !== undefined ? { gender: s.gender } : {}),
+      ...(s.outfit !== undefined ? { outfit: s.outfit } : {}),
+      ...(s.hairStyle !== undefined ? { hairStyle: s.hairStyle } : {}),
+      ...(s.skirt !== undefined ? { skirt: s.skirt } : {}),
+      ...(s.glasses !== undefined ? { glasses: s.glasses } : {}),
+      ...(s.backpack !== undefined ? { backpack: s.backpack } : {}),
+    };
   }
   onMessage(ws, raw) {
     let msg;
@@ -91,6 +135,7 @@ class Room {
       };
       session.name = name;
       session.mssv = mssv;
+      applyAppearance(session, msg);
       session.msgTimes = [];
       this.sessions.set(sessionId, session);
       this.sockets.set(ws, sessionId);
@@ -145,6 +190,17 @@ class Room {
         session.lastUpdate = now;
         this.broadcast({ type: 'state', id: sessionId, state }, sessionId);
       }
+      return;
+    }
+    if (msg.type === 'appearance') {
+      if (msg.name !== undefined) session.name = sanitizeName(msg.name);
+      if (msg.mssv !== undefined) {
+        const m = sanitizeMssv(msg.mssv);
+        if (m) session.mssv = m;
+      }
+      applyAppearance(session, msg);
+      session.lastUpdate = now;
+      this.broadcast({ type: 'appearance', player: this.publicPlayer(session) }, sessionId);
       return;
     }
     if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));

@@ -42,6 +42,7 @@ function useNameTexture(name: string): THREE.CanvasTexture {
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, [name]);
+  useEffect(() => () => texture.dispose(), [texture]);
   return texture;
 }
 
@@ -103,10 +104,10 @@ function LayeredFigure({
  * Đặt Billboard ở nhóm ngoài (chỉ position, không rotation) thì world
  * orientation đúng bằng camera, chữ luôn đọc xuôi, kể cả nhìn từ sau lưng.)
  */
-function NameLabel({ name }: { name: string }) {
+function NameLabel({ name, y = 1.95 }: { name: string; y?: number }) {
   const nameTex = useNameTexture(name);
   return (
-    <Billboard position={[0, 1.95, 0]}>
+    <Billboard position={[0, y, 0]}>
       <mesh>
         <planeGeometry args={[0.7, 0.175]} />
         <meshStandardMaterial map={nameTex} transparent roughness={0.8} side={THREE.DoubleSide} />
@@ -172,7 +173,7 @@ export function TeacherNpc({ position = [2.2, -2] as [number, number], rotationY
           )}
         </LayeredFigure>
       </group>
-      <NameLabel name="Cô giáo" />
+      <NameLabel name="Cô giáo" y={1.84} />
     </group>
   );
 }

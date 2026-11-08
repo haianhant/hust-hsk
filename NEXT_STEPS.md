@@ -1,6 +1,15 @@
 # NEXT STEPS — Bách khoa Hán ngữ 3D
 
 ## Trạng thái hiện tại (08/11/2026)
+- **ĐỢT 8 — ĐỒNG BỘ NGOẠI HÌNH MULTIPLAYER 10 BỘ ĐỒNG PHỤC HUST, MỞ RỘNG `BOUNDS` ĐÔNG CAMPUS, SỬA XOAY KÉP `RemotePlayers.tsx` & NÂNG CẤP KHỐI ĐÁ TRẮNG 3D — ĐÃ TRIỂN KHAI + PUSH `main` & `master` (08/11/2026):**
+  1. **Đồng bộ ngoại hình nhân vật trong Multiplayer (`lib/multiplayer.ts`, `worker/src/room.ts`, `test/ws-shim/server.js`, `components/three/RemotePlayers.tsx`, `app/page.tsx`):**
+     - Đồng bộ đầy đủ `gender`, `outfit` (10 mẫu đồng phục HUST), `hairStyle` (6 kiểu tóc), `skirt` (chân váy xếp ly chữ A), `glasses`, `backpack` khi `join` và khi đổi trang phục trực tiếp trong game qua gói tin `appearance` (`multiplayer.sendAppearance`).
+     - Mở rộng `BOUNDS` trên server (`worker/src/room.ts` & `test/ws-shim/server.js`) từ `{ minX: -96, maxX: 96, minZ: -76, maxZ: 86 }` lên `{ minX: -96, maxX: 162, minZ: -76, maxZ: 92 }` khớp với `lib/campus.ts`, giúp người chơi đi sang khu Đông (B1 SoICT, KTX B9/KTX mới, SVĐ Bách Khoa) không bị kẹp tọa độ ở `x = 96`.
+     - Sửa dứt điểm lỗi xoay kép góc nhìn (`facing`) và lỗi xoay theo cha của `Billboard` trong `RemotePlayers.tsx` (tách `groupRef` chỉ dịch chuyển vị trí và `figureRef` xoay `cur.current.facing`, đồng thời `.dispose()` `CanvasTexture` bảng tên khi đổi tên/unmount).
+  2. **Nâng cấp Khối đá trắng Quảng trường C1 3D đa diện (`WhiteRock` trong `components/three/Landmarks.tsx`) & Nhãn `"Cô giáo"` (`Npc.tsx`):**
+     - Nâng cấp `WhiteRock` thành khối đá hoa cương tự nhiên 3D đa diện (`steps: 8`, chân đá bè vững chãi, thuôn tự nhiên lên đỉnh và hai vai, lưng đá phồng vát tự nhiên, bổ sung 2 tảng đá cuội phụ ôm hai bên chân bia, texture granite vân thạch anh/mica độ tương phản cao) trong khi vẫn giữ phẳng vùng khắc chữ mặt trước.
+     - Hạ nhẹ độ cao bảng tên `Billboard` của `"Cô giáo"` trong phòng học (`y = 1.84`) để không chạm mép trái chip mục tiêu HUD.
+  3. **Kiểm thử Giao thức Multiplayer & 4 Cổng Verification Gates:** `npx tsc --noEmit` (0 lỗi), `node test/learn.test.cjs` (45/45 PASS), `node test/leg-sim.cjs` (4/4 PASS), `node test/mp-protocol.cjs` (11/11 PASS), `npm run build` (PASS).
 - **ĐỢT 7 — NÂNG CẤP TOÀN DIỆN THEO 37 ẢNH THẬT `tham-khao/` & HOÀN THIỆN 4 HẠNG MỤC TỒN ĐỌNG — ĐÃ TRIỂN KHAI + PUSH `main` & `master` (08/11/2026):**
   1. **Gỡ bỏ 4 giới hạn cứng trong Rules (`GEMINI.md` & 3 Skills):** mở khóa diện tích khuôn viên, đối chiếu bắt buộc với Bản đồ Khuôn viên ĐHBK Hà Nội & 37 ảnh thật `tham-khao/`, hỗ trợ tìm đường A* theo `ROADS` trong `test/leg-sim.cjs`.
   2. **Kiến trúc sát thực tế 37 ảnh `tham-khao/`:**

@@ -995,6 +995,14 @@ export default function HomePage() {
       setSavedIdentity({ name: nextProfile.name, mssv: nextProfile.mssv });
       setIdentityName(nextProfile.name);
       setIdentityMssv(nextProfile.mssv);
+      multiplayer.sendAppearance(nextProfile.name, nextProfile.mssv, {
+        gender: nextProfile.gender,
+        outfit: nextProfile.outfit,
+        hairStyle: nextProfile.hairStyle,
+        skirt: nextProfile.skirt,
+        glasses: nextProfile.glasses,
+        backpack: nextProfile.backpack,
+      });
       setOutfitOpen(false);
       showToast(`Đã lưu nhân vật: ${nextProfile.name} (${nextProfile.mssv})`);
     },
@@ -1216,7 +1224,14 @@ export default function HomePage() {
       setSavedIdentity(identity);
       setIdentityName(finalProfile.name);
       setIdentityMssv(finalProfile.mssv);
-      multiplayer.connect(getSessionId(), identity.name, identity.mssv);
+      multiplayer.connect(getSessionId(), identity.name, identity.mssv, {
+        gender: finalProfile.gender,
+        outfit: finalProfile.outfit,
+        hairStyle: finalProfile.hairStyle,
+        skirt: finalProfile.skirt,
+        glasses: finalProfile.glasses,
+        backpack: finalProfile.backpack,
+      });
       enterCampus(resumeQuest);
     },
     [characterProfile, identityName, identityMssv, enterCampus],

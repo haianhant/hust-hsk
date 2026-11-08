@@ -14,16 +14,37 @@
 // cùng lúc dễ làm browser chết).
 // Log: test-shots/r5-mp-client-<mode>.log ; ảnh: test-shots/r5-mp-*.
 'use strict';
-const { chromium } = require('/home/hatch/workspace/mobile-test/node_modules/playwright-core');
-const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
+
+function loadPlaywright() {
+  const candidates = [
+    'playwright-core',
+    '/usr/share/code/resources/app/node_modules/playwright-core',
+    '/home/hatch/workspace/mobile-test/node_modules/playwright-core',
+  ];
+  for (const c of candidates) {
+    try {
+      return require(c);
+    } catch {
+      // try next
+    }
+  }
+  throw new Error('Cannot find playwright-core');
+}
+const { chromium } = loadPlaywright();
 
 const MODE = process.argv.includes('--shim') ? 'shim' : 'real';
 const BASE = 'http://127.0.0.1:8339/';
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'test-shots');
-const EXE = '/home/hatch/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell';
+const EXE_CANDIDATES = [
+  '/home/bao/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell',
+  '/usr/bin/google-chrome',
+  '/home/hatch/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell',
+];
+const EXE = EXE_CANDIDATES.find((p) => fs.existsSync(p)) || EXE_CANDIDATES[0];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const LOG = path.join(OUT, `r5-mp-client-${MODE}.log`);
 
