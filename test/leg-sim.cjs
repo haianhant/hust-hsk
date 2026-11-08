@@ -1,18 +1,12 @@
 // Leg simulation — Kiểm thử điều hướng & va chạm sân trường (hỗ trợ tìm đường A*
 // trên mạng lưới đường ROADS + lưới né vật cản, thay vì ép bot cắt chéo đường
 // chim bay xuyên qua tòa nhà hay hồ nước).
+require('./register-ts.cjs');
 const fs = require('fs');
 const path = require('path');
-const ts = require('typescript');
 
 const repo = path.resolve(__dirname, '..');
-const src = fs.readFileSync(path.join(repo, 'lib/campus.ts'), 'utf8');
-const { outputText } = ts.transpileModule(src, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-});
-const tmp = path.join(__dirname, '_campus.compiled.cjs');
-fs.writeFileSync(tmp, outputText);
-const campus = require(tmp);
+const campus = require(path.join(repo, 'lib/campus.ts'));
 
 const SPEED = 4; // m/s — walk, đúng AVATAR.walkSpeed
 const DT = 1 / 60;
@@ -261,4 +255,3 @@ for (const leg of campus.LEGS) {
 }
 console.log(`spawnCheck: ${JSON.stringify(spawnCheck)}`);
 console.log(`Kết quả: ${results.filter((r) => r.pass).length}/${results.length} chặng pass → ${outFile}`);
-fs.unlinkSync(tmp);

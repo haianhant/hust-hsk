@@ -1,1 +1,12 @@
-{"compilerOptions":{"lib":["ES2021"],"module":"ESNext","moduleResolution":"bundler","noEmit":true,"skipLibCheck":true,"strict":true,"target":"ES2021","types":["@cloudflare/workers-types"]},"include":["src/**/*.ts"]}
+{
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022"
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "../shared/**/*.ts"]
+}

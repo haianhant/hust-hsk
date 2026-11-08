@@ -12,11 +12,12 @@
  */
 
 import { HskRoom } from './room';
+import { ROOM_CAPACITY, ROOM_IDS } from '../../shared/contracts/multiplayer';
 
 export { HskRoom };
 
-const ROOMS = ['hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5'];
-const CAPACITY = 15;
+const ROOMS: readonly string[] = ROOM_IDS;
+const CAPACITY = ROOM_CAPACITY;
 
 interface Env {
   HSK_ROOM: DurableObjectNamespace;

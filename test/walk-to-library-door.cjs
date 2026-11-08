@@ -7,17 +7,10 @@
 // Cột hiên mới (z 19,5), hàng cau (33/43, 15,5), đèn, thùng rác KHÔNG có
 // collider — test này xác minh collider thư viện mới không chặn lối đi; vị trí
 // cột/cau/đèn được kiểm bằng mắt trên ảnh chụp (xem báo cáo đợt 4).
-const fs = require('fs');
+require('./register-ts.cjs');
 const path = require('path');
-const ts = require('typescript');
 const repo = path.resolve(__dirname, '..');
-const src = fs.readFileSync(path.join(repo, 'lib/campus.ts'), 'utf8');
-const { outputText } = ts.transpileModule(src, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-});
-const tmp = path.join(__dirname, '_campus.walk.cjs');
-fs.writeFileSync(tmp, outputText);
-const campus = require(tmp);
+const campus = require(path.join(repo, 'lib/campus.ts'));
 const SPEED = 4, DT = 1 / 60, ARRIVE_R = 1.5;
 function walk(from, waypoints) {
   let pos = { ...from }, totalDist = 0, steps = 0, hits = {};
@@ -64,7 +57,6 @@ console.log('stand-tower-north (30,29.3) ->', JSON.stringify(tower));
 // Diem giua san nam cu (38, 52) nam ngoai collider (dao co khong co collider).
 const island = campus.resolveCollisions({ x: 38, z: 52 }, campus.AVATAR.radius);
 console.log('stand-island (38,52) ->', JSON.stringify(island));
-fs.unlinkSync(tmp);
 const ok = r1.pass
   && Math.abs(near.pos.z - 23.1) < 0.15
   && hust.hit === 'Bệ chữ HUST' && Math.abs(hust.pos.z - 13.0) < 0.15

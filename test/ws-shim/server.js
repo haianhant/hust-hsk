@@ -1,76 +1,41 @@
 /**
  * HSK WebSocket shim — a local stand-in for the hust-hsk-rooms Worker,
- * mirroring worker/src/room.ts + worker/src/index.ts closely enough that
- * the protocol test proves the frontend client and the server agree:
- * - rooms hsk-1..hsk-5, capacity 15, /ws assigns the first with space
- * - join validates MSSV (8 digits) and sanitises names (max 30)
- * - shirt colour hashed from sessionId (no HUST red)
- * - positions clamped to campus bounds; speed capped (walk/run 7, ride 15)
- * - rate limit 20 msg/s (drop; 2x -> close)
- * - reconnect with the same sessionId replaces the old socket
- * - welcome snapshot, join/leave/move/state/count/full/error/pong
- * - /health and /api/rooms (counts only) over plain HTTP on the same port
+ * importing the exact same authoritative shared constants and contracts as
+ * `worker/src/room.ts` + `worker/src/index.ts` (`shared/constants/world.ts`
+ * and `shared/contracts/multiplayer.ts`).
  *
  * Usage: node test/ws-shim/server.js [port]   (default 8788)
  */
+require('../register-ts.cjs');
+
 const http = require('http');
 const { WebSocketServer } = require('ws');
+const { BOUNDS, SPAWN } = require('../../shared/constants/world.ts');
+const {
+  MAX_MSG_PER_SEC,
+  ROOM_CAPACITY,
+  ROOM_IDS,
+  clampMoveStep,
+  extractValidAppearance,
+  isRemoteState,
+  pickShirtColor,
+  sanitizeMssv,
+  sanitizeName,
+} = require('../../shared/contracts/multiplayer.ts');
 
 const PORT = Number(process.argv[2] || 8788);
-const ROOMS = ['hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5'];
-const CAPACITY = 15;
-const BOUNDS = { minX: -96, maxX: 162, minZ: -76, maxZ: 92 };
-const SPAWN = { x: -76, z: 10, facing: -Math.PI / 2 };
-const MAX_SPEED_WALK = 7;
-const MAX_SPEED_RIDE = 15;
-const MAX_MSG_PER_SEC = 20;
-const SHIRT_COLORS = ['#1F3A5F', '#2E7D32', '#F2A007', '#7C4DBE', '#0E7C7B', '#C2571B', '#546E7A', '#8E24AA'];
-const VALID_OUTFITS = new Set([
-  'windbreaker-hust',
-  'bomber-red-grey',
-  'bomber-navy-white',
-  'bomber-red-navy',
-  'polo-red',
-  'hoodie-hust',
-  'tshirt-navy',
-  'sweater-cream',
-  'shirt-white',
-  'sport-pe',
-]);
-const VALID_HAIRSTYLES = new Set([
-  'short',
-  'swept',
-  'layered',
-  'ponytail',
-  'bob',
-  'bun',
-]);
+const ROOMS = [...ROOM_IDS];
+const CAPACITY = ROOM_CAPACITY;
 
 function applyAppearance(session, msg) {
-  if (msg.gender === 'male' || msg.gender === 'female') session.gender = msg.gender;
-  if (typeof msg.outfit === 'string' && VALID_OUTFITS.has(msg.outfit)) session.outfit = msg.outfit;
-  if (typeof msg.hairStyle === 'string' && VALID_HAIRSTYLES.has(msg.hairStyle)) session.hairStyle = msg.hairStyle;
-  if (typeof msg.skirt === 'boolean') session.skirt = msg.skirt;
-  if (typeof msg.glasses === 'boolean') session.glasses = msg.glasses;
-  if (typeof msg.backpack === 'boolean') session.backpack = msg.backpack;
+  const valid = extractValidAppearance(msg);
+  if (valid.gender !== undefined) session.gender = valid.gender;
+  if (valid.outfit !== undefined) session.outfit = valid.outfit;
+  if (valid.hairStyle !== undefined) session.hairStyle = valid.hairStyle;
+  if (valid.skirt !== undefined) session.skirt = valid.skirt;
+  if (valid.glasses !== undefined) session.glasses = valid.glasses;
+  if (valid.backpack !== undefined) session.backpack = valid.backpack;
 }
-
-function hashString(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
-}
-function sanitizeName(raw) {
-  if (typeof raw !== 'string') return 'Bạn';
-  const clean = raw.replace(/[<>&/\\]/g, '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 30);
-  return clean || 'Bạn';
-}
-function sanitizeMssv(raw) {
-  if (typeof raw !== 'string') return null;
-  const clean = raw.trim();
-  return /^\d{8}$/.test(clean) ? clean : null;
-}
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 class Room {
   constructor(id) {
@@ -127,7 +92,7 @@ class Room {
         return ws.send(JSON.stringify({ type: 'full', message: 'Room is full' }));
       }
       const name = sanitizeName(msg.name);
-      const color = SHIRT_COLORS[hashString(sessionId) % SHIRT_COLORS.length];
+      const color = pickShirtColor(sessionId);
       const existing = this.sessions.get(sessionId);
       const session = existing ?? {
         id: sessionId, name, mssv, color, x: SPAWN.x, z: SPAWN.z, facing: SPAWN.facing,
@@ -136,6 +101,7 @@ class Room {
       session.name = name;
       session.mssv = mssv;
       applyAppearance(session, msg);
+      session.lastUpdate = now;
       session.msgTimes = [];
       this.sessions.set(sessionId, session);
       this.sockets.set(ws, sessionId);
@@ -160,21 +126,10 @@ class Room {
     }
     if (session.msgTimes.length > MAX_MSG_PER_SEC) return;
     if (msg.type === 'move') {
-      const x = clamp(Number(msg.x) || 0, BOUNDS.minX, BOUNDS.maxX);
-      const z = clamp(Number(msg.z) || 0, BOUNDS.minZ, BOUNDS.maxZ);
       const facing = Number(msg.facing) || 0;
-      const state = ['idle', 'walking', 'running', 'riding'].includes(String(msg.state)) ? msg.state : session.state;
-      const dt = Math.max(0.05, (now - session.lastUpdate) / 1000);
-      const dx = x - session.x;
-      const dz = z - session.z;
-      const dist = Math.hypot(dx, dz);
-      const maxDist = (state === 'riding' ? MAX_SPEED_RIDE : MAX_SPEED_WALK) * dt + 0.5;
-      let nx = x;
-      let nz = z;
-      if (dist > maxDist && dist > 0) {
-        nx = session.x + (dx / dist) * maxDist;
-        nz = session.z + (dz / dist) * maxDist;
-      }
+      const state = isRemoteState(msg.state) ? msg.state : session.state;
+      const dt = (now - session.lastUpdate) / 1000;
+      const { x: nx, z: nz } = clampMoveStep(session.x, session.z, msg.x, msg.z, state, dt, BOUNDS);
       session.x = nx;
       session.z = nz;
       session.facing = facing;
@@ -184,11 +139,10 @@ class Room {
       return;
     }
     if (msg.type === 'state') {
-      const state = String(msg.state);
-      if (['idle', 'walking', 'running', 'riding'].includes(state)) {
-        session.state = state;
+      if (isRemoteState(msg.state)) {
+        session.state = msg.state;
         session.lastUpdate = now;
-        this.broadcast({ type: 'state', id: sessionId, state }, sessionId);
+        this.broadcast({ type: 'state', id: sessionId, state: msg.state }, sessionId);
       }
       return;
     }

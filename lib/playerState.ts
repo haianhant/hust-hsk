@@ -1,6 +1,13 @@
 // Trạng thái chạy chia sẻ giữa Player (3D, cập nhật mỗi frame) và HUD/Minimap (DOM).
 // Dùng object mutable thay vì React state để tránh re-render mỗi frame.
 import { SPAWN, nearestZone, type Vec2 } from './campus';
+import type {
+  AvatarGender,
+  AvatarHairStyle,
+  AvatarOutfitId,
+} from '../shared/contracts/multiplayer';
+
+export type { AvatarGender, AvatarHairStyle, AvatarOutfitId };
 
 export const playerInput = {
   /** vector di chuyển từ phím hoặc joystick: x = phải/trái, y = tiến/lùi (theo hướng camera) */
@@ -61,28 +68,6 @@ export const fastTravelState = {
 };
 
 export type TimeOfDay = 'day' | 'sunset' | 'night';
-
-export type AvatarGender = 'male' | 'female';
-
-export type AvatarOutfitId =
-  | 'windbreaker-hust'
-  | 'bomber-red-grey'
-  | 'bomber-navy-white'
-  | 'bomber-red-navy'
-  | 'polo-red'
-  | 'hoodie-hust'
-  | 'tshirt-navy'
-  | 'sweater-cream'
-  | 'shirt-white'
-  | 'sport-pe';
-
-export type AvatarHairStyle =
-  | 'short'
-  | 'swept'
-  | 'layered'
-  | 'ponytail'
-  | 'bob'
-  | 'bun';
 
 export const playerState = {
   pos: { ...SPAWN } as Vec2,

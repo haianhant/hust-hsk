@@ -13,6 +13,17 @@ import {
   type AvatarHairStyle,
   type AvatarOutfitId,
 } from './playerState';
+import {
+  MSSV_RE,
+  VALID_GENDERS,
+  VALID_HAIR_STYLES,
+  VALID_OUTFIT_IDS,
+  isAvatarGender,
+  isAvatarHairStyle,
+  isAvatarOutfitId,
+} from '../shared/contracts/multiplayer';
+
+export { MSSV_RE };
 
 export interface Identity {
   name: string;
@@ -47,8 +58,6 @@ export const DEFAULT_CHARACTER_PROFILE: CharacterProfile = {
   lanyard: true,
 };
 
-export const MSSV_RE = /^\d{8}$/;
-
 export function isValidMssv(mssv: string): boolean {
   return MSSV_RE.test(mssv.trim());
 }
@@ -68,20 +77,8 @@ export function validateIdentity(name: string, mssv: string): string | null {
   return null;
 }
 
-const VALID_GENDERS: AvatarGender[] = ['male', 'female'];
-const VALID_HAIRS: AvatarHairStyle[] = ['short', 'swept', 'layered', 'ponytail', 'bob', 'bun'];
-const VALID_OUTFITS: AvatarOutfitId[] = [
-  'windbreaker-hust',
-  'bomber-red-grey',
-  'bomber-navy-white',
-  'bomber-red-navy',
-  'polo-red',
-  'hoodie-hust',
-  'tshirt-navy',
-  'sweater-cream',
-  'shirt-white',
-  'sport-pe',
-];
+export const VALID_HAIRS = VALID_HAIR_STYLES;
+export const VALID_OUTFITS = VALID_OUTFIT_IDS;
 
 export function syncCharacterToPlayerState(profile: CharacterProfile): void {
   playerState.avatarName = profile.name.trim() || 'Sinh viên';
@@ -121,20 +118,17 @@ export function loadCharacterProfile(): CharacterProfile | null {
 
     if (!rawName && !rawMssv) return null;
 
-    const gender: AvatarGender =
-      parsedChar.gender && VALID_GENDERS.includes(parsedChar.gender)
-        ? parsedChar.gender
-        : DEFAULT_CHARACTER_PROFILE.gender;
-    const hairStyle: AvatarHairStyle =
-      parsedChar.hairStyle && VALID_HAIRS.includes(parsedChar.hairStyle)
-        ? parsedChar.hairStyle
-        : gender === 'female'
-          ? 'ponytail'
-          : 'short';
-    const outfit: AvatarOutfitId =
-      parsedChar.outfit && VALID_OUTFITS.includes(parsedChar.outfit)
-        ? parsedChar.outfit
-        : DEFAULT_CHARACTER_PROFILE.outfit;
+    const gender: AvatarGender = isAvatarGender(parsedChar.gender)
+      ? parsedChar.gender
+      : DEFAULT_CHARACTER_PROFILE.gender;
+    const hairStyle: AvatarHairStyle = isAvatarHairStyle(parsedChar.hairStyle)
+      ? parsedChar.hairStyle
+      : gender === 'female'
+        ? 'ponytail'
+        : 'short';
+    const outfit: AvatarOutfitId = isAvatarOutfitId(parsedChar.outfit)
+      ? parsedChar.outfit
+      : DEFAULT_CHARACTER_PROFILE.outfit;
 
     return {
       name: rawName || 'Sinh viên',

@@ -21,13 +21,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Dùng ĐÚNG code campus thật (transpile như leg-sim.cjs) để kiểm tra vị trí
 // xe sau "Đưa xe về đường" có nằm trên đường không.
-const campusSrc = fs.readFileSync(path.join(ROOT, 'lib/campus.ts'), 'utf8');
-const { outputText } = ts.transpileModule(campusSrc, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-});
-const tmpCampus = path.join(__dirname, '_campus-ride.compiled.cjs');
-fs.writeFileSync(tmpCampus, outputText);
-const campus = require(tmpCampus);
+require('./register-ts.cjs');
+const campus = require(path.join(ROOT, 'lib/campus.ts'));
 
 const report = { tool: 'ride-check', at: new Date().toISOString(), steps: [], frames: [], shots: {}, consoleErrors: [], pageErrors: [] };
 function logStep(id, name, ok, detail) {

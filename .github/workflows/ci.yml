@@ -1,0 +1,46 @@
+name: CI Verification Gates
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  verify:
+    name: Typecheck, Unit/Protocol Tests & Static Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Gate 1 — TypeScript Typecheck (Frontend + Worker + Shared Contracts)
+        run: npm run typecheck
+
+      - name: Gate 2 — HSK & SRS Learning Engine Unit Tests
+        run: npm run test:learn
+
+      - name: Gate 3 — Shared Contracts, Bounds & DO Hibernation Unit Tests
+        run: npm run test:contracts
+
+      - name: Gate 3b — Campus World Data, Avatar, UI/Gameplay & Study/Social Module Unit Tests
+        run: npm run test:world && npm run test:avatar && npm run test:ui && npm run test:study
+
+      - name: Gate 4 — Campus Navigation & Collision Simulation
+        run: npm run test:nav
+
+      - name: Gate 5 — Multiplayer WebSocket Protocol Tests
+        run: npm run test:mp
+
+      - name: Gate 6 — Next.js Static Export Build
+        run: npm run build

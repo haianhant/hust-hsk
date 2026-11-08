@@ -13,35 +13,16 @@
 // status 'offline' để HUD ghi rõ — không bao giờ báo số người giả.
 // ---------------------------------------------------------------------------
 
-import type { AvatarGender, AvatarHairStyle, AvatarOutfitId } from './playerState';
+import {
+  extractValidAppearance,
+  isRemoteState,
+  type RemoteAppearance,
+  type RemotePlayer,
+  type RemoteState,
+} from '../shared/contracts/multiplayer';
+import { SPAWN } from '../shared/constants/world';
 
-export type RemoteState = 'idle' | 'walking' | 'running' | 'riding';
-
-export interface RemoteAppearance {
-  gender?: AvatarGender;
-  outfit?: AvatarOutfitId;
-  hairStyle?: AvatarHairStyle;
-  skirt?: boolean;
-  glasses?: boolean;
-  backpack?: boolean;
-}
-
-export interface RemotePlayer {
-  id: string;
-  name: string;
-  mssv: string;
-  color: string;
-  x: number;
-  z: number;
-  facing: number;
-  state: RemoteState;
-  gender?: AvatarGender;
-  outfit?: AvatarOutfitId;
-  hairStyle?: AvatarHairStyle;
-  skirt?: boolean;
-  glasses?: boolean;
-  backpack?: boolean;
-}
+export type { RemoteAppearance, RemotePlayer, RemoteState };
 
 export type MpStatus = 'idle' | 'connecting' | 'online' | 'offline';
 
@@ -357,61 +338,21 @@ class MultiplayerClient {
   }
 }
 
-function isRemoteState(s: string): s is RemoteState {
-  return s === 'idle' || s === 'walking' || s === 'running' || s === 'riding';
-}
-
-const VALID_OUTFITS = new Set<AvatarOutfitId>([
-  'windbreaker-hust',
-  'bomber-red-grey',
-  'bomber-navy-white',
-  'bomber-red-navy',
-  'polo-red',
-  'hoodie-hust',
-  'tshirt-navy',
-  'sweater-cream',
-  'shirt-white',
-  'sport-pe',
-]);
-
-const VALID_HAIRSTYLES = new Set<AvatarHairStyle>([
-  'short',
-  'swept',
-  'layered',
-  'ponytail',
-  'bob',
-  'bun',
-]);
-
 function toRemotePlayer(raw: unknown): RemotePlayer | null {
   if (!raw || typeof raw !== 'object') return null;
   const p = raw as Record<string, unknown>;
   if (typeof p.id !== 'string') return null;
-  const gender: AvatarGender | undefined =
-    p.gender === 'male' || p.gender === 'female' ? p.gender : undefined;
-  const outfit: AvatarOutfitId | undefined =
-    typeof p.outfit === 'string' && VALID_OUTFITS.has(p.outfit as AvatarOutfitId)
-      ? (p.outfit as AvatarOutfitId)
-      : undefined;
-  const hairStyle: AvatarHairStyle | undefined =
-    typeof p.hairStyle === 'string' && VALID_HAIRSTYLES.has(p.hairStyle as AvatarHairStyle)
-      ? (p.hairStyle as AvatarHairStyle)
-      : undefined;
+  const appearance = extractValidAppearance(p);
   return {
     id: p.id,
     name: typeof p.name === 'string' ? p.name : 'Bạn',
     mssv: typeof p.mssv === 'string' ? p.mssv : '',
     color: typeof p.color === 'string' ? p.color : '#1F3A5F',
-    x: typeof p.x === 'number' ? p.x : -76,
-    z: typeof p.z === 'number' ? p.z : 10,
+    x: typeof p.x === 'number' ? p.x : SPAWN.x,
+    z: typeof p.z === 'number' ? p.z : SPAWN.z,
     facing: typeof p.facing === 'number' ? p.facing : 0,
-    state: typeof p.state === 'string' && isRemoteState(p.state) ? p.state : 'idle',
-    ...(gender !== undefined ? { gender } : {}),
-    ...(outfit !== undefined ? { outfit } : {}),
-    ...(hairStyle !== undefined ? { hairStyle } : {}),
-    ...(typeof p.skirt === 'boolean' ? { skirt: p.skirt } : {}),
-    ...(typeof p.glasses === 'boolean' ? { glasses: p.glasses } : {}),
-    ...(typeof p.backpack === 'boolean' ? { backpack: p.backpack } : {}),
+    state: isRemoteState(p.state) ? p.state : 'idle',
+    ...appearance,
   };
 }
 

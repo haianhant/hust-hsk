@@ -1,1 +1,38 @@
-{"dependencies":{"@react-three/drei":"9.114.3","@react-three/fiber":"8.17.10","next":"14.2.5","react":"18.3.1","react-dom":"18.3.1","three":"0.169.0"},"devDependencies":{"@types/node":"20.14.12","@types/react":"18.3.3","@types/react-dom":"18.3.0","@types/three":"0.169.0","autoprefixer":"10.4.20","postcss":"8.4.40","tailwindcss":"3.4.10","typescript":"5.5.4"},"name":"hust-hsk","private":true,"scripts":{"build":"next build","dev":"next dev","start":"next start"},"version":"0.1.0"}
+{
+  "name": "hust-hsk",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p worker/tsconfig.json",
+    "test:learn": "node test/learn.test.cjs",
+    "test:contracts": "node --test test/shared-contracts.test.cjs",
+    "test:world": "node --test test/world-data.test.cjs",
+    "test:avatar": "node --test test/avatar-modules.test.cjs",
+    "test:ui": "node --test test/ui-gameplay.test.cjs",
+    "test:study": "node --test test/study-social-contracts.test.cjs",
+    "test:nav": "node test/leg-sim.cjs",
+    "test:mp": "node test/mp-protocol.cjs",
+    "test": "npm run test:learn && npm run test:contracts && npm run test:world && npm run test:avatar && npm run test:ui && npm run test:study && npm run test:nav && npm run test:mp"
+  },
+  "dependencies": {
+    "@react-three/drei": "9.114.3",
+    "@react-three/fiber": "8.17.10",
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "three": "0.169.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.12",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "@types/three": "0.169.0",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.4.40",
+    "tailwindcss": "3.4.10",
+    "typescript": "5.5.4"
+  }
+}

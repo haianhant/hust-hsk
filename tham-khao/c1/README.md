@@ -12,5 +12,4 @@ các tầng với lan can đỏ, sảnh và bậc thềm phía trước, sân c�
 - c1-goc-duoi-ben-trai-06.jpg — Góc thấp từ dưới-bên trái nhìn lên: khối tháp lưới hoa gió, biển dọc, chữ C1, cánh phải, cây xanh, bậc thềm. — nguồn: https://gqefcpylonobj.vcdn.cloud/PUBLIC/MEDIA/e08c86cc-81f3-4b90-9439-4cf520ec49f8.jpg (CDN vcdn.cloud; không xác định được URL trang gốc)
 
 Ảnh của bên thứ ba, chỉ dùng làm tài liệu tham khảo cho mô hình 3D, giữ nguồn gốc.
-
-Hiện tại chữ I love BK đang bị quá gần tòa nhà, sai tỉ lệ, chưa giống mẫu
+Đặc tả kỹ thuật 3D tương ứng: [`docs/world/buildings/c1.md`](../../docs/world/buildings/c1.md) (Module ID: `building.c1`, `landmark.i-love-bk`).

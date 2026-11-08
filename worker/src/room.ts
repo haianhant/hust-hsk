@@ -4,111 +4,77 @@
  * Adapted from the temple worker (~/workspace/chua-online/worker/src/room.ts)
  * — same rules, different world:
  * - No database for continuous position. Player state lives only in
- *   this object's memory while connected, and is forgotten on leave.
- *   Nothing is stored: no name, no MSSV, no location after leave.
+ *   this object's memory (and WebSocket hibernation attachments while
+ *   connected), and is forgotten on leave.
+ *   Nothing is stored after leave: no name, no MSSV, no location.
  * - One player = one sessionId, chosen by the client and kept in its
  *   localStorage. Reconnecting with the same sessionId REPLACES the
  *   old socket, so a reconnect never creates a duplicate avatar.
  * - The server never trusts the client: it clamps positions to the
- *   campus, caps speed (riding is faster than running), sanitises
- *   names, validates MSSV (exactly 8 digits), and rate-limits
- *   messages.
- * - Only position, facing, movement state and riding state leave a
- *   client. No points, quests, SRS or progress are ever synced.
+ *   authoritative campus bounds (shared/constants/world.ts), caps speed
+ *   (riding is faster than running), sanitises names, validates MSSV
+ *   (exactly 8 digits), and rate-limits messages.
+ * - Only position, facing, movement state, riding state and appearance
+ *   leave a client. No points, quests, SRS or progress are ever synced.
  * - WebSocket hibernation is used (acceptWebSocket + webSocket*
- *   handlers) so an idle room costs no duration on the free tier.
+ *   handlers) with full session attachment serialization/restoration so
+ *   an idle room costs no duration on the free tier and wakes up
+ *   seamlessly without losing connected players.
  */
 
-export type PlayerState = 'idle' | 'walking' | 'running' | 'riding';
+import { BOUNDS, SPAWN } from '../../shared/constants/world';
+import {
+  MAX_MSG_PER_SEC,
+  ROOM_CAPACITY,
+  SHIRT_COLORS,
+  clampMoveStep,
+  extractValidAppearance,
+  hashString,
+  isRemoteState,
+  pickShirtColor,
+  sanitizeMssv,
+  sanitizeName,
+  type AvatarGender,
+  type AvatarHairStyle,
+  type AvatarOutfitId,
+  type Player,
+  type PlayerState,
+} from '../../shared/contracts/multiplayer';
 
-export interface Player {
+export {
+  BOUNDS,
+  ROOM_CAPACITY,
+  SHIRT_COLORS,
+  SPAWN,
+  hashString,
+  sanitizeMssv,
+  sanitizeName,
+  type Player,
+  type PlayerState,
+};
+
+export interface SocketAttachment {
   id: string;
-  name: string;
-  mssv: string;
-  color: string;
-  x: number;
-  z: number;
-  facing: number;
-  state: PlayerState;
-  gender?: 'male' | 'female';
-  outfit?: string;
-  hairStyle?: string;
+  roomId?: string;
+  name?: string;
+  mssv?: string;
+  color?: string;
+  x?: number;
+  z?: number;
+  facing?: number;
+  state?: PlayerState;
+  gender?: AvatarGender;
+  outfit?: AvatarOutfitId;
+  hairStyle?: AvatarHairStyle;
   skirt?: boolean;
   glasses?: boolean;
   backpack?: boolean;
+  lastUpdate?: number;
 }
 
-export const ROOM_CAPACITY = 15;
-/** Campus bounds, same numbers as lib/campus.ts BOUNDS. */
-export const BOUNDS = { minX: -96, maxX: 162, minZ: -76, maxZ: 92 };
-/** Spawn inside the Parabol gate, same as lib/campus.ts SPAWN. */
-export const SPAWN = { x: -76, z: 10, facing: -Math.PI / 2 };
-const MAX_SPEED_WALK = 7; // m/s: walk 4, run ~6.5, plus jitter tolerance
-const MAX_SPEED_RIDE = 15; // m/s: bike max 14, plus jitter tolerance
-const MAX_MSG_PER_SEC = 20;
-
-const VALID_OUTFITS = new Set([
-  'windbreaker-hust',
-  'bomber-red-grey',
-  'bomber-navy-white',
-  'bomber-red-navy',
-  'polo-red',
-  'hoodie-hust',
-  'tshirt-navy',
-  'sweater-cream',
-  'shirt-white',
-  'sport-pe',
-]);
-
-const VALID_HAIRSTYLES = new Set([
-  'short',
-  'swept',
-  'layered',
-  'ponytail',
-  'bob',
-  'bun',
-]);
-
-/**
- * Shirt colours for remote players, hashed from sessionId. HUST red
- * (#DA1E26) is deliberately NOT in the list: the local player always
- * wears the red HUST polo, so remotes are instantly distinguishable.
- */
-export const SHIRT_COLORS = [
-  '#1F3A5F', // navy
-  '#2E7D32', // green
-  '#F2A007', // amber
-  '#7C4DBE', // purple
-  '#0E7C7B', // teal
-  '#C2571B', // orange
-  '#546E7A', // slate
-  '#8E24AA', // magenta
-];
-
-export function hashString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
-}
-
-export function sanitizeName(raw: unknown): string {
-  if (typeof raw !== 'string') return 'Bạn';
-  // Strip anything that could break a UI: angle brackets, slashes,
-  // backslashes, control characters. React also renders names as text,
-  // never as HTML, so this is defence in depth.
-  const clean = raw.replace(/[<>&/\\]/g, '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 30);
-  return clean || 'Bạn';
-}
-
-/** MSSV HUST: exactly 8 digits. Anything else is rejected at join. */
-export function sanitizeMssv(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  const clean = raw.trim();
-  return /^\d{8}$/.test(clean) ? clean : null;
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
+interface HibernatableWebSocket extends WebSocket {
+  serializeAttachment?: (attachment: SocketAttachment) => void;
+  deserializeAttachment?: () => SocketAttachment | null | undefined;
 }
 
 interface Session {
@@ -120,9 +86,9 @@ interface Session {
   z: number;
   facing: number;
   state: PlayerState;
-  gender?: 'male' | 'female';
-  outfit?: string;
-  hairStyle?: string;
+  gender?: AvatarGender;
+  outfit?: AvatarOutfitId;
+  hairStyle?: AvatarHairStyle;
   skirt?: boolean;
   glasses?: boolean;
   backpack?: boolean;
@@ -131,24 +97,13 @@ interface Session {
 }
 
 function applyAppearance(session: Session, msg: Record<string, unknown>) {
-  if (msg.gender === 'male' || msg.gender === 'female') {
-    session.gender = msg.gender;
-  }
-  if (typeof msg.outfit === 'string' && VALID_OUTFITS.has(msg.outfit)) {
-    session.outfit = msg.outfit;
-  }
-  if (typeof msg.hairStyle === 'string' && VALID_HAIRSTYLES.has(msg.hairStyle)) {
-    session.hairStyle = msg.hairStyle;
-  }
-  if (typeof msg.skirt === 'boolean') {
-    session.skirt = msg.skirt;
-  }
-  if (typeof msg.glasses === 'boolean') {
-    session.glasses = msg.glasses;
-  }
-  if (typeof msg.backpack === 'boolean') {
-    session.backpack = msg.backpack;
-  }
+  const valid = extractValidAppearance(msg);
+  if (valid.gender !== undefined) session.gender = valid.gender;
+  if (valid.outfit !== undefined) session.outfit = valid.outfit;
+  if (valid.hairStyle !== undefined) session.hairStyle = valid.hairStyle;
+  if (valid.skirt !== undefined) session.skirt = valid.skirt;
+  if (valid.glasses !== undefined) session.glasses = valid.glasses;
+  if (valid.backpack !== undefined) session.backpack = valid.backpack;
 }
 
 export class HskRoom {
@@ -159,9 +114,98 @@ export class HskRoom {
 
   constructor(ctx: DurableObjectState) {
     this.ctx = ctx;
+    this.restoreHibernatedSessions();
+  }
+
+  /**
+   * Rehydrates `this.sessions`, `this.bySocket`, and `this.roomId` from
+   * Cloudflare Durable Object WebSocket attachments after waking from hibernation.
+   */
+  private restoreHibernatedSessions() {
+    let sockets: WebSocket[];
+    try {
+      sockets = this.ctx.getWebSockets();
+    } catch {
+      return;
+    }
+    const now = Date.now();
+    for (const rawWs of sockets) {
+      const ws = rawWs as HibernatableWebSocket;
+      if (this.bySocket.has(ws)) continue;
+      let att: SocketAttachment | null | undefined;
+      try {
+        att = ws.deserializeAttachment?.();
+      } catch {
+        att = null;
+      }
+      if (!att || typeof att.id !== 'string' || !att.id) continue;
+      if (typeof att.roomId === 'string' && att.roomId) {
+        this.roomId = att.roomId;
+      }
+      this.bySocket.set(ws, att.id);
+      if (!this.sessions.has(att.id)) {
+        const mssv = sanitizeMssv(att.mssv) ?? '20226010';
+        const session: Session = {
+          id: att.id,
+          name: sanitizeName(att.name),
+          mssv,
+          color: typeof att.color === 'string' ? att.color : pickShirtColor(att.id),
+          x: typeof att.x === 'number' ? att.x : SPAWN.x,
+          z: typeof att.z === 'number' ? att.z : SPAWN.z,
+          facing: typeof att.facing === 'number' ? att.facing : SPAWN.facing,
+          state: isRemoteState(att.state) ? att.state : 'idle',
+          lastUpdate: typeof att.lastUpdate === 'number' ? att.lastUpdate : now,
+          msgTimes: [],
+        };
+        applyAppearance(session, att as unknown as Record<string, unknown>);
+        this.sessions.set(att.id, session);
+      }
+    }
+  }
+
+  private persistSocketAttachment(ws: WebSocket, session: Session) {
+    try {
+      const hws = ws as HibernatableWebSocket;
+      hws.serializeAttachment?.({
+        id: session.id,
+        roomId: this.roomId,
+        name: session.name,
+        mssv: session.mssv,
+        color: session.color,
+        x: session.x,
+        z: session.z,
+        facing: session.facing,
+        state: session.state,
+        ...(session.gender !== undefined ? { gender: session.gender } : {}),
+        ...(session.outfit !== undefined ? { outfit: session.outfit } : {}),
+        ...(session.hairStyle !== undefined ? { hairStyle: session.hairStyle } : {}),
+        ...(session.skirt !== undefined ? { skirt: session.skirt } : {}),
+        ...(session.glasses !== undefined ? { glasses: session.glasses } : {}),
+        ...(session.backpack !== undefined ? { backpack: session.backpack } : {}),
+        lastUpdate: session.lastUpdate,
+      });
+    } catch {
+      // Older runtimes without attachments: bySocket covers in-memory state.
+    }
+  }
+
+  private getSocketSessionId(ws: WebSocket): string | undefined {
+    const fromMap = this.bySocket.get(ws);
+    if (fromMap) return fromMap;
+    try {
+      const att = (ws as HibernatableWebSocket).deserializeAttachment?.();
+      if (att && typeof att.id === 'string' && att.id) {
+        this.bySocket.set(ws, att.id);
+        return att.id;
+      }
+    } catch {
+      // ignore
+    }
+    return undefined;
   }
 
   async fetch(request: Request): Promise<Response> {
+    this.restoreHibernatedSessions();
     const url = new URL(request.url);
     if (url.pathname === '/__count') {
       return Response.json({ count: this.sessions.size });
@@ -182,8 +226,8 @@ export class HskRoom {
     const data = JSON.stringify(msg);
     for (const ws of this.ctx.getWebSockets()) {
       try {
-        const att = (ws as unknown as { deserializeAttachment?: () => { id?: string } }).deserializeAttachment?.();
-        if (exceptId && att?.id === exceptId) continue;
+        const sid = this.getSocketSessionId(ws);
+        if (exceptId && sid === exceptId) continue;
         ws.send(data);
       } catch {
         // A dead socket is cleaned up on webSocketClose.
@@ -219,6 +263,7 @@ export class HskRoom {
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    this.restoreHibernatedSessions();
     let msg: Record<string, unknown>;
     try {
       msg = JSON.parse(typeof message === 'string' ? message : new TextDecoder().decode(message));
@@ -238,10 +283,16 @@ export class HskRoom {
         this.send(ws, { type: 'error', message: 'MSSV phải là 8 chữ số' });
         return;
       }
-      // Reconnect with the same sessionId replaces the old socket:
-      // no duplicate avatar, ever.
-      for (const [oldWs, oldId] of this.bySocket.entries()) {
-        if (oldId === sessionId && oldWs !== ws) {
+      // Reconnect with the same sessionId replaces any old socket
+      // (both in-memory and hibernated sockets): no duplicate avatar, ever.
+      const allSockets = new Set<WebSocket>([
+        ...this.bySocket.keys(),
+        ...this.ctx.getWebSockets(),
+      ]);
+      for (const oldWs of allSockets) {
+        if (oldWs === ws) continue;
+        const oldId = this.getSocketSessionId(oldWs);
+        if (oldId === sessionId) {
           try {
             oldWs.close(1000, 'Replaced by reconnect');
           } catch {
@@ -255,7 +306,7 @@ export class HskRoom {
         return;
       }
       const name = sanitizeName(msg.name);
-      const color = SHIRT_COLORS[hashString(sessionId) % SHIRT_COLORS.length];
+      const color = pickShirtColor(sessionId);
       const existing = this.sessions.get(sessionId);
       const session: Session = existing ?? {
         id: sessionId,
@@ -272,14 +323,12 @@ export class HskRoom {
       session.name = name;
       session.mssv = mssv;
       applyAppearance(session, msg);
+      session.lastUpdate = now;
       session.msgTimes = [];
       this.sessions.set(sessionId, session);
       this.bySocket.set(ws, sessionId);
-      try {
-        (ws as unknown as { serializeAttachment: (v: unknown) => void }).serializeAttachment({ id: sessionId });
-      } catch {
-        // Older runtimes without attachments: bySocket covers it.
-      }
+      this.persistSocketAttachment(ws, session);
+
       // Snapshot to the newcomer (so they see everyone already here),
       // then a join broadcast to everyone else.
       this.send(ws, {
@@ -294,8 +343,7 @@ export class HskRoom {
       return;
     }
 
-    const att = (ws as unknown as { deserializeAttachment?: () => { id?: string } }).deserializeAttachment?.();
-    const sessionId = att?.id ?? this.bySocket.get(ws);
+    const sessionId = this.getSocketSessionId(ws);
     if (!sessionId) return;
     const session = this.sessions.get(sessionId);
     if (!session) return;
@@ -314,41 +362,34 @@ export class HskRoom {
     if (session.msgTimes.length > MAX_MSG_PER_SEC) return; // drop, don't broadcast
 
     if (msg.type === 'move') {
-      const x = clamp(Number(msg.x) || 0, BOUNDS.minX, BOUNDS.maxX);
-      const z = clamp(Number(msg.z) || 0, BOUNDS.minZ, BOUNDS.maxZ);
       const facing = Number(msg.facing) || 0;
-      const state = ['idle', 'walking', 'running', 'riding'].includes(String(msg.state))
-        ? (msg.state as PlayerState)
-        : session.state;
-      // Speed cap: clamp a jump to what is physically reachable since
-      // the last accepted update, instead of teleporting the avatar.
-      // Riding is faster than running, so the cap depends on state.
-      const dt = Math.max(0.05, (now - session.lastUpdate) / 1000);
-      const dx = x - session.x;
-      const dz = z - session.z;
-      const dist = Math.hypot(dx, dz);
-      const maxDist = (state === 'riding' ? MAX_SPEED_RIDE : MAX_SPEED_WALK) * dt + 0.5;
-      let nx = x;
-      let nz = z;
-      if (dist > maxDist && dist > 0) {
-        nx = session.x + (dx / dist) * maxDist;
-        nz = session.z + (dz / dist) * maxDist;
-      }
+      const state: PlayerState = isRemoteState(msg.state) ? msg.state : session.state;
+      const dt = (now - session.lastUpdate) / 1000;
+      const { x: nx, z: nz } = clampMoveStep(
+        session.x,
+        session.z,
+        msg.x,
+        msg.z,
+        state,
+        dt,
+        BOUNDS,
+      );
       session.x = nx;
       session.z = nz;
       session.facing = facing;
       session.state = state;
       session.lastUpdate = now;
+      this.persistSocketAttachment(ws, session);
       this.broadcast({ type: 'move', id: sessionId, x: nx, z: nz, facing, state, t: now }, sessionId);
       return;
     }
 
     if (msg.type === 'state') {
-      const state = String(msg.state);
-      if (['idle', 'walking', 'running', 'riding'].includes(state)) {
-        session.state = state as PlayerState;
+      if (isRemoteState(msg.state)) {
+        session.state = msg.state;
         session.lastUpdate = now;
-        this.broadcast({ type: 'state', id: sessionId, state }, sessionId);
+        this.persistSocketAttachment(ws, session);
+        this.broadcast({ type: 'state', id: sessionId, state: msg.state }, sessionId);
       }
       return;
     }
@@ -361,6 +402,7 @@ export class HskRoom {
       }
       applyAppearance(session, msg);
       session.lastUpdate = now;
+      this.persistSocketAttachment(ws, session);
       this.broadcast({ type: 'appearance', player: this.publicPlayer(session) }, sessionId);
       return;
     }
@@ -371,14 +413,19 @@ export class HskRoom {
   }
 
   async webSocketClose(ws: WebSocket) {
-    const att = (ws as unknown as { deserializeAttachment?: () => { id?: string } }).deserializeAttachment?.();
-    const sessionId = att?.id ?? this.bySocket.get(ws);
+    this.restoreHibernatedSessions();
+    const sessionId = this.getSocketSessionId(ws);
     this.bySocket.delete(ws);
     if (!sessionId) return;
-    // Only remove if this socket is still the current one for the
-    // session (a reconnect may already have replaced it).
-    const current = [...this.bySocket.entries()].find(([, id]) => id === sessionId);
-    if (current) return;
+    // Only remove if no other active socket is still bound to this sessionId
+    // (a reconnect may already have replaced it).
+    for (const [otherWs, id] of this.bySocket.entries()) {
+      if (otherWs !== ws && id === sessionId) return;
+    }
+    for (const otherWs of this.ctx.getWebSockets()) {
+      if (otherWs === ws) continue;
+      if (this.getSocketSessionId(otherWs) === sessionId) return;
+    }
     if (this.sessions.delete(sessionId)) {
       this.broadcast({ type: 'leave', id: sessionId });
       this.broadcast({ type: 'count', count: this.sessions.size });

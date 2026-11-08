@@ -171,9 +171,7 @@ function connectClient(room = 'hsk-1') {
       JSON.stringify(appMsg.player),
     );
 
-    // 6. Expanded BOUNDS test: walk/ride into East Campus (x > 96 up to 162, z up to 92)
-    // Wait a moment so dt allows a larger step or test clamping directly:
-    // Wait 120ms and send a move from spawn (-76, 10)
+    // 6. Move & authoritative BOUNDS clamping test
     await new Promise((r) => setTimeout(r, 120));
     const movePromise = wsB.waitFor((m) => m.type === 'move' && m.id === 'sess-a');
     wsA.send(JSON.stringify({ type: 'move', x: -75.2, z: 10.5, facing: 1.25, state: 'walking' }));
@@ -182,6 +180,17 @@ function connectClient(room = 'hsk-1') {
       'Move broadcast works and preserves facing',
       Math.abs(move1.x - -75.2) < 0.01 && Math.abs(move1.facing - 1.25) < 0.01,
       JSON.stringify(move1),
+    );
+
+    // Ride West past minX (-96) -> clamped to -96 and capped by riding speed
+    await new Promise((r) => setTimeout(r, 120));
+    const moveClampPromise = wsB.waitFor((m) => m.type === 'move' && m.id === 'sess-a');
+    wsA.send(JSON.stringify({ type: 'move', x: -150, z: 10.5, facing: -Math.PI / 2, state: 'riding' }));
+    const moveClamp = await moveClampPromise;
+    assert(
+      'Move beyond minX (-96) is speed-capped and stays >= -96',
+      moveClamp.x >= -96 && moveClamp.x < -75.2 && moveClamp.state === 'riding',
+      JSON.stringify(moveClamp),
     );
 
     // 7. Reconnect with same sessionId replaces old socket without duplicating count

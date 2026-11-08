@@ -24,13 +24,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Dùng ĐÚNG code campus thật (transpile như ride-check.cjs) để kiểm tra điểm
 // đến + vị trí xe sau dịch chuyển.
-const campusSrc = fs.readFileSync(path.join(ROOT, 'lib/campus.ts'), 'utf8');
-const { outputText } = ts.transpileModule(campusSrc, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-});
-const tmpCampus = path.join(__dirname, '_campus-ft.compiled.cjs');
-fs.writeFileSync(tmpCampus, outputText);
-const campus = require(tmpCampus);
+require('./register-ts.cjs');
+const campus = require(path.join(ROOT, 'lib/campus.ts'));
 const DESTS = campus.FAST_TRAVEL_DESTINATIONS;
 const destById = (id) => DESTS.find((d) => d.id === id);
 
