@@ -11,10 +11,18 @@ export {
   toggleStudyTask,
   removeStudyTask,
   recordFocusBlockCompletion,
+  syncStudySessionAt,
   saveStudySession,
   loadStudySession,
   type StudyTaskItem,
   type CompletedFocusBlock,
   type StudySessionState,
+  type StudySessionEvaluation,
   type StorageLike,
 } from './session';
+export {
+  useStudySession,
+  type UseStudySessionOptions,
+  type UseStudySessionResult,
+} from './useStudySession';
+export { StudyTaskList, type StudyTaskListProps } from './StudyTaskList';

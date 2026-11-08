@@ -1,5 +1,9 @@
 export {
   POMODORO_STORAGE_KEY,
+  POMODORO_PRESET_25_5,
+  POMODORO_PRESET_50_10,
+  POMODORO_PRESETS,
+  getPomodoroPresetId,
   getPhaseDurationMs,
   getNextPomodoroPhase,
   createPomodoroState,
@@ -7,11 +11,18 @@ export {
   pausePomodoro,
   resumePomodoro,
   resetPomodoro,
+  applyPomodoroConfig,
   skipPomodoroPhase,
   evaluatePomodoroAt,
   formatRemainingMmSs,
+  formatTotalFocusedDuration,
   serializePomodoroState,
+  parseStoredPomodoroSnapshot,
   deserializePomodoroState,
+  type PomodoroPresetId,
+  type CompletedFocusWindow,
   type PomodoroState,
   type PomodoroEvaluation,
 } from './timer';
+export { usePomodoro, type UsePomodoroDisplayResult } from './usePomodoro';
+export { PomodoroTimer, type PomodoroTimerProps } from './PomodoroTimer';

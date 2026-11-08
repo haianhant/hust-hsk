@@ -28,33 +28,47 @@ const {
 } = require('../shared/contracts/study.ts');
 
 const {
+  POMODORO_STORAGE_KEY,
+  POMODORO_PRESET_25_5,
+  POMODORO_PRESET_50_10,
+  getPomodoroPresetId,
   createPomodoroState,
   startPomodoro,
   pausePomodoro,
   resumePomodoro,
+  resetPomodoro,
+  applyPomodoroConfig,
+  skipPomodoroPhase,
   evaluatePomodoroAt,
   formatRemainingMmSs,
+  formatTotalFocusedDuration,
   serializePomodoroState,
   deserializePomodoroState,
 } = require('../features/study/pomodoro/timer.ts');
 
 const {
   STUDY_SESSION_STORAGE_KEY,
+  MAX_STUDY_TASKS,
   createInitialStudySession,
   startStudySession,
   endStudySession,
   addStudyTask,
   toggleStudyTask,
+  removeStudyTask,
   linkHskLessonToSession,
   recordFocusBlockCompletion,
+  syncStudySessionAt,
   saveStudySession,
   loadStudySession,
 } = require('../features/study/study-session/session.ts');
 
 const {
   DEFAULT_FOCUS_PREFERENCES,
+  FOCUS_MODE_STORAGE_KEY,
   sanitizeFocusPreferences,
   computeFocusRuntimePolicy,
+  saveFocusPreferences,
+  loadFocusPreferences,
 } = require('../features/study/focus-mode/focus-mode.ts');
 
 const {
@@ -335,3 +349,174 @@ test('PR6 (6) Player Presence Derivation & Badge Formatting', () => {
   assert.equal(presence.pomodoroPhase, 'focus');
   assert.equal(formatPresenceBadge(presence), '🍅 Đang tự học · HSK 4 · Bài 8');
 });
+
+test('PR7 (7) Pomodoro Presets (25/5 & 50/10), Skip Phase, Reset & Duration Formatting', () => {
+  const t0 = 1_700_000_000_000;
+  let state = createPomodoroState();
+  assert.equal(getPomodoroPresetId(state.config), '25-5');
+
+  // Switch to 50/10 preset
+  state = applyPomodoroConfig(state, POMODORO_PRESET_50_10);
+  assert.equal(getPomodoroPresetId(state.config), '50-10');
+  assert.equal(state.config.focusDurationMs, 50 * 60 * 1000);
+  assert.equal(state.config.shortBreakDurationMs, 10 * 60 * 1000);
+
+  // Start focus in 50/10 mode
+  state = startPomodoro(state, t0, 'focus');
+  assert.equal(state.phase, 'focus');
+  assert.equal(state.phaseEndsAtMs, t0 + 50 * 60 * 1000);
+
+  // Skip phase transitions focus -> short-break without crediting an unfinished focus block
+  const skipped = skipPomodoroPhase(state, t0 + 5 * 60 * 1000, true);
+  assert.equal(skipped.phase, 'short-break');
+  assert.equal(skipped.completedFocusBlocks, 0);
+  assert.equal(skipped.phaseEndsAtMs, t0 + 15 * 60 * 1000);
+
+  // Reset returns to idle while preserving completedFocusBlocks & totalFocusedMs
+  const withStats = {
+    ...skipped,
+    completedFocusBlocks: 3,
+    totalFocusedMs: 75 * 60 * 1000,
+  };
+  const reset = resetPomodoro(withStats);
+  assert.equal(reset.phase, 'idle');
+  assert.equal(reset.running, false);
+  assert.equal(reset.completedFocusBlocks, 3);
+  assert.equal(reset.totalFocusedMs, 75 * 60 * 1000);
+  assert.equal(formatTotalFocusedDuration(reset.totalFocusedMs), '1 giờ 15 phút');
+  assert.equal(formatTotalFocusedDuration(25 * 60 * 1000), '25 phút');
+  assert.equal(formatTotalFocusedDuration(120 * 60 * 1000), '2 giờ');
+});
+
+test('PR7 (8) Single-Counted Focus Block Completion across Reload, Background Tab & Duplicate Ticks', () => {
+  const mem = new Map();
+  const storage = {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, v),
+  };
+
+  const t0 = 1_700_000_000_000;
+  const focusMs = POMODORO_PRESET_25_5.focusDurationMs;
+
+  let session = startStudySession(createInitialStudySession(), {
+    nowMs: t0,
+    subjectTag: 'Giải tích 1',
+  });
+  session = {
+    ...session,
+    pomodoro: startPomodoro(session.pomodoro, t0, 'focus'),
+  };
+  saveStudySession(storage, session);
+
+  // 1) Reload while focusing (at +10m): still in focus, 15m remaining, 0 completed blocks
+  const reloadedMidFocus = loadStudySession(storage, t0 + 10 * 60 * 1000);
+  assert.equal(reloadedMidFocus.active, true);
+  assert.equal(reloadedMidFocus.pomodoro.phase, 'focus');
+  assert.equal(reloadedMidFocus.pomodoro.running, true);
+  assert.equal(reloadedMidFocus.pomodoro.completedFocusBlocks, 0);
+  assert.equal(reloadedMidFocus.history.length, 0);
+
+  // 2) Pause at +10m, save, and reload while paused at +40m: remains paused with 15m left
+  const pausedSession = {
+    ...reloadedMidFocus,
+    pomodoro: pausePomodoro(reloadedMidFocus.pomodoro, t0 + 10 * 60 * 1000),
+  };
+  saveStudySession(storage, pausedSession);
+  const reloadedPaused = loadStudySession(storage, t0 + 40 * 60 * 1000);
+  assert.equal(reloadedPaused.pomodoro.running, false);
+  assert.equal(reloadedPaused.pomodoro.phase, 'focus');
+  assert.equal(reloadedPaused.pomodoro.pausedRemainingMs, 15 * 60 * 1000);
+  assert.equal(reloadedPaused.history.length, 0);
+
+  // 3) Resume at +40m (ends at +55m). Simulate timer reaching zero while tab is hidden/closed,
+  //    then reload at +56m: block is counted ONCE in both pomodoro.completedFocusBlocks and history.
+  const resumedSession = {
+    ...reloadedPaused,
+    pomodoro: resumePomodoro(reloadedPaused.pomodoro, t0 + 40 * 60 * 1000),
+  };
+  saveStudySession(storage, resumedSession);
+
+  const reloadedAfterFinish1 = loadStudySession(storage, t0 + 56 * 60 * 1000);
+  const reloadedAfterFinish2 = loadStudySession(storage, t0 + 56 * 60 * 1000);
+  assert.equal(reloadedAfterFinish1.pomodoro.phase, 'short-break');
+  assert.equal(reloadedAfterFinish1.pomodoro.completedFocusBlocks, 1);
+  assert.equal(reloadedAfterFinish1.history.length, 1);
+  assert.equal(reloadedAfterFinish2.history.length, 1);
+
+  // Save the reconciled session and run multiple sync ticks: still counted exactly once
+  saveStudySession(storage, reloadedAfterFinish1);
+  const tick1 = syncStudySessionAt(reloadedAfterFinish1, t0 + 56 * 60 * 1000 + 250);
+  const tick2 = syncStudySessionAt(tick1.session, t0 + 56 * 60 * 1000 + 500);
+  assert.equal(tick1.newlyCompletedBlocks, 0);
+  assert.equal(tick2.newlyCompletedBlocks, 0);
+  assert.equal(tick2.session.pomodoro.completedFocusBlocks, 1);
+  assert.equal(tick2.session.history.length, 1);
+
+  // Duplicate manual recordFocusBlockCompletion with the same endedAtMs is a no-op
+  const dupAttempt = recordFocusBlockCompletion(tick2.session, {
+    startedAtMs: t0 + 30 * 60 * 1000,
+    endedAtMs: t0 + 55 * 60 * 1000,
+    durationMs: focusMs,
+  });
+  assert.equal(dupAttempt.history.length, 1);
+});
+
+test('PR7 (9) Corrupted Storage Recovery, Legacy Migration, Task CRUD & Focus Preferences', () => {
+  const mem = new Map();
+  const storage = {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, v),
+  };
+
+  // Corrupted JSON in both keys recovers cleanly without throwing
+  storage.setItem(STUDY_SESSION_STORAGE_KEY, '{corrupted-json');
+  storage.setItem(FOCUS_MODE_STORAGE_KEY, 'not-valid-json');
+  const recoveredSession = loadStudySession(storage, 1_700_000_000_000);
+  const recoveredFocus = loadFocusPreferences(storage);
+  assert.equal(recoveredSession.active, false);
+  assert.equal(recoveredSession.pomodoro.phase, 'idle');
+  assert.equal(recoveredFocus.level, 'off');
+
+  // Legacy POMODORO_STORAGE_KEY migration when STUDY_SESSION_STORAGE_KEY is absent
+  mem.delete(STUDY_SESSION_STORAGE_KEY);
+  const legacyTimer = startPomodoro(createPomodoroState(), 1_700_000_000_000, 'focus');
+  storage.setItem(POMODORO_STORAGE_KEY, serializePomodoroState(legacyTimer));
+  const migratedSession = loadStudySession(storage, 1_700_000_000_000 + 5 * 60 * 1000);
+  assert.equal(migratedSession.active, true);
+  assert.equal(migratedSession.pomodoro.phase, 'focus');
+
+  // Task CRUD: add, ignore blank, toggle, remove, cap at MAX_STUDY_TASKS
+  let s = createInitialStudySession();
+  s = addStudyTask(s, '   ', 1000);
+  assert.equal(s.tasks.length, 0);
+  s = addStudyTask(s, 'Đọc ngữ pháp bài 10', 1001);
+  s = addStudyTask(s, 'Làm bài tập đọc hiểu', 1002);
+  assert.equal(s.tasks.length, 2);
+  s = toggleStudyTask(s, s.tasks[0].id, 1005);
+  assert.equal(s.tasks[0].done, true);
+  assert.equal(s.tasks[0].completedAtMs, 1005);
+  s = removeStudyTask(s, s.tasks[0].id);
+  assert.equal(s.tasks.length, 1);
+  assert.equal(s.tasks[0].title, 'Làm bài tập đọc hiểu');
+
+  for (let i = 0; i < MAX_STUDY_TASKS + 5; i++) {
+    s = addStudyTask(s, `Task ${i}`, 2000 + i);
+  }
+  assert.equal(s.tasks.length, MAX_STUDY_TASKS);
+
+  // Focus Mode preference persistence & Normal 3D override during focus
+  saveFocusPreferences(storage, {
+    level: 'off',
+    ambientTrack: 'none',
+    ambientVolume: 0.4,
+    autoHideHudOnFocus: false,
+    muteMovementNotifications: true,
+  });
+  const loadedPrefs = loadFocusPreferences(storage);
+  assert.equal(loadedPrefs.autoHideHudOnFocus, false);
+  const normalDuringFocusPolicy = computeFocusRuntimePolicy(loadedPrefs, 'focus');
+  assert.equal(normalDuringFocusPolicy.effectiveLevel, 'off');
+  assert.equal(normalDuringFocusPolicy.suspend3DRendering, false);
+  assert.equal(normalDuringFocusPolicy.hideNavigationHud, false);
+});
+

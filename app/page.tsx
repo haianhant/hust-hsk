@@ -71,6 +71,7 @@ import {
   type ReviewSessionState,
 } from '../features/learning/hsk';
 import { useMultiplayerBridge } from '../features/social/multiplayer';
+import { FocusModeView, StudyPanel, useStudySession } from '../features/study';
 
 // CampusScene chỉ mount sau khi bấm "Vào trường" — tránh autoplay/WebGL
 // trước khi người dùng tương tác.
@@ -183,6 +184,8 @@ export default function HomePage() {
     toastTimerRef.current = setTimeout(() => setToast(null), TOAST_MS);
   }, []);
 
+  const study = useStudySession({ onNotify: showToast });
+
   // --- Nạp + lưu tiến độ (localStorage, không tài khoản) ----------------------
   useEffect(() => {
     try {
@@ -270,13 +273,26 @@ export default function HomePage() {
     if (viewMode === 'top') setHelpOpen(false);
   }, [viewMode]);
 
-  // Khi panel học, menu chọn bài, bảng thông tin sảnh thư viện hoặc modal nhân vật mở: khóa di chuyển.
+  // Khi panel học, menu chọn bài, bảng thông tin sảnh thư viện, bảng Tự học hoặc modal nhân vật mở: khóa di chuyển.
   useEffect(() => {
-    playerState.uiLocked = panel !== null || lessonsOpen || lobbyModal !== null || outfitOpen;
+    playerState.uiLocked =
+      panel !== null ||
+      lessonsOpen ||
+      lobbyModal !== null ||
+      outfitOpen ||
+      study.studyPanelOpen ||
+      study.focusPolicy.suspend3DRendering;
     return () => {
       playerState.uiLocked = false;
     };
-  }, [panel, lessonsOpen, lobbyModal, outfitOpen]);
+  }, [
+    panel,
+    lessonsOpen,
+    lobbyModal,
+    outfitOpen,
+    study.studyPanelOpen,
+    study.focusPolicy.suspend3DRendering,
+  ]);
 
   // Đồng bộ mode phòng học & sảnh thư viện từ hook Player.
   useEffect(() => {
@@ -887,70 +903,141 @@ export default function HomePage() {
     );
   }
 
+  const currentZoneLabel = inClassroom
+    ? 'Phòng học mô phỏng'
+    : inLibraryLobby
+      ? 'Sảnh Thư viện Tạ Quang Bửu'
+      : zone;
+
   return (
     <main className="relative h-dvh w-full overflow-hidden">
-      {/* Canvas chiếm toàn bộ viewport phía sau HUD. */}
-      <div className="absolute inset-0">
-        <CampusScene
-          inClassroom={inClassroom}
-          inLibraryLobby={inLibraryLobby}
-          timeOfDay={timeOfDay}
-          notebookOpen={notebookOpen}
-          homework={homework}
-          onObjectClick={handleObjectClick}
+      {study.focusPolicy.suspend3DRendering ? (
+        <FocusModeView
+          zoneLabel={currentZoneLabel}
+          points={progress?.points ?? 0}
+          streakCount={progress?.streak?.count ?? 0}
+          mpSnap={mpSnap}
+          session={study.session}
+          evaluation={study.evaluation}
+          displayRemainingMmSs={study.displayRemainingMmSs}
+          activePreset={study.activePreset}
+          onExitZen2D={study.exitFocusMode}
+          onOpenHandbook={() => openHandbook('lesson')}
+          onStartSession={() => study.startSession()}
+          onEndSession={study.endSession}
+          onUpdateSubject={study.updateSubject}
+          onAddTask={study.addTask}
+          onToggleTask={study.toggleTask}
+          onRemoveTask={study.removeTask}
+          onStartFocus={study.startFocus}
+          onPauseTimer={study.pauseTimer}
+          onResumeTimer={study.resumeTimer}
+          onSkipPhase={study.skipPhase}
+          onResetTimer={study.resetTimer}
+          onSelectPreset={study.selectPreset}
         />
-      </div>
+      ) : (
+        <>
+          {/* Canvas chiếm toàn bộ viewport phía sau HUD. */}
+          <div className="absolute inset-0">
+            <CampusScene
+              inClassroom={inClassroom}
+              inLibraryLobby={inLibraryLobby}
+              timeOfDay={timeOfDay}
+              notebookOpen={notebookOpen}
+              homework={homework}
+              onObjectClick={handleObjectClick}
+            />
+          </div>
 
-      {/* Fade chuyển cảnh vào/ra phòng học. */}
-      <div
-        aria-hidden
-        className={`pointer-events-none absolute inset-0 z-30 bg-black transition-opacity duration-300 ${
-          fade ? 'opacity-100' : 'opacity-0'
-        }`}
-      />
+          {/* Fade chuyển cảnh vào/ra phòng học. */}
+          <div
+            aria-hidden
+            className={`pointer-events-none absolute inset-0 z-30 bg-black transition-opacity duration-300 ${
+              fade ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
 
-      {/* HUD sân trường */}
-      <CampusHud
-        inClassroom={inClassroom}
-        inLibraryLobby={inLibraryLobby}
-        zone={zone}
-        progress={progress}
-        mpSnap={mpSnap}
-        riding={riding}
-        bikeSpeed={bikeSpeed}
-        noVoice={noVoice}
-        questActive={questActive}
-        panel={panel}
-        lessonsOpen={lessonsOpen}
-        timeOfDay={timeOfDay}
-        soundOn={soundOn}
-        speechRate={speechRate}
-        objectiveText={objectiveText}
-        interactLabel={interactLabel}
-        fastTravelOpen={fastTravelOpen}
-        traveling={traveling}
-        helpOpen={helpOpen}
-        toast={toast}
-        onDismissNoVoice={() => {
-          noVoiceDismissedRef.current = true;
-          setNoVoice(false);
-        }}
-        onSetPanel={setPanel}
-        onSetReReviewIds={setReReviewIds}
-        onFastTravel={doFastTravel}
-        onSetFastTravelOpen={setFastTravelOpen}
-        onCycleTimeOfDay={cycleTimeOfDay}
-        onToggleOutfit={() => setOutfitOpen((o) => !o)}
-        onOpenLessons={() => setLessonsOpen(true)}
-        onOpenHandbook={openHandbook}
-        onToggleSound={toggleSound}
-        onCycleRate={cycleRate}
-        onExitLibraryLobby={exitLibraryLobbyFade}
-        onExitClassroom={exitClassroomFade}
-        onInteract={handleInteract}
-        onSetHelpOpen={setHelpOpen}
-        onShowToast={showToast}
-      />
+          {/* HUD sân trường */}
+          <CampusHud
+            inClassroom={inClassroom}
+            inLibraryLobby={inLibraryLobby}
+            zone={zone}
+            progress={progress}
+            mpSnap={mpSnap}
+            riding={riding}
+            bikeSpeed={bikeSpeed}
+            noVoice={noVoice}
+            questActive={questActive}
+            panel={panel}
+            lessonsOpen={lessonsOpen}
+            timeOfDay={timeOfDay}
+            soundOn={soundOn}
+            speechRate={speechRate}
+            objectiveText={objectiveText}
+            interactLabel={interactLabel}
+            fastTravelOpen={fastTravelOpen}
+            traveling={traveling}
+            helpOpen={helpOpen}
+            toast={toast}
+            pomodoroPhase={study.evaluation.state.phase}
+            pomodoroRunning={study.evaluation.state.running}
+            pomodoroRemainingMmSs={study.displayRemainingMmSs}
+            focusPolicy={study.focusPolicy}
+            onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
+            onExitFocusMode={study.exitFocusMode}
+            onDismissNoVoice={() => {
+              noVoiceDismissedRef.current = true;
+              setNoVoice(false);
+            }}
+            onSetPanel={setPanel}
+            onSetReReviewIds={setReReviewIds}
+            onFastTravel={doFastTravel}
+            onSetFastTravelOpen={setFastTravelOpen}
+            onCycleTimeOfDay={cycleTimeOfDay}
+            onToggleOutfit={() => setOutfitOpen((o) => !o)}
+            onOpenLessons={() => setLessonsOpen(true)}
+            onOpenHandbook={openHandbook}
+            onToggleSound={toggleSound}
+            onCycleRate={cycleRate}
+            onExitLibraryLobby={exitLibraryLobbyFade}
+            onExitClassroom={exitClassroomFade}
+            onInteract={handleInteract}
+            onSetHelpOpen={setHelpOpen}
+            onShowToast={showToast}
+          />
+        </>
+      )}
+
+      {/* Bảng Tự học Bách khoa (Pomodoro + Nhiệm vụ tự học + Focus Mode) */}
+      {!study.focusPolicy.suspend3DRendering && (
+        <StudyPanel
+          open={study.studyPanelOpen}
+          zoneLabel={currentZoneLabel}
+          session={study.session}
+          evaluation={study.evaluation}
+          displayRemainingMmSs={study.displayRemainingMmSs}
+          activePreset={study.activePreset}
+          focusPrefs={study.focusPrefs}
+          focusPolicy={study.focusPolicy}
+          onClose={() => study.setStudyPanelOpen(false)}
+          onStartSession={() => study.startSession()}
+          onEndSession={study.endSession}
+          onUpdateSubject={study.updateSubject}
+          onSetLinkedHskLesson={study.setLinkedHskLesson}
+          onAddTask={study.addTask}
+          onToggleTask={study.toggleTask}
+          onRemoveTask={study.removeTask}
+          onStartFocus={study.startFocus}
+          onPauseTimer={study.pauseTimer}
+          onResumeTimer={study.resumeTimer}
+          onSkipPhase={study.skipPhase}
+          onResetTimer={study.resetTimer}
+          onSelectPreset={study.selectPreset}
+          onSetFocusLevel={study.setFocusLevel}
+          onSetAutoHideHudOnFocus={study.setAutoHideHudOnFocus}
+        />
+      )}
 
       {/* Cửa sổ 3D Nhân vật & Trang phục HUST mở từ HUD trong sân trường */}
       {outfitOpen && entered && (

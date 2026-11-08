@@ -17,6 +17,8 @@ import { bikeInput, playerInput, type TimeOfDay } from '../../../lib/playerState
 import type { HandbookTab } from '../../learning/hsk/EntryScreen';
 import type { LearningPanelType } from '../../learning/hsk/LearningOverlayModal';
 import { MultiplayerStatusChip } from '../../social/multiplayer/MultiplayerStatusBar';
+import type { FocusRuntimePolicy } from '../../study/focus-mode/focus-mode';
+import type { PomodoroPhase } from '../../../shared/contracts/study';
 import { getHook } from '../interaction/bridge';
 
 export interface CampusHudProps {
@@ -40,6 +42,12 @@ export interface CampusHudProps {
   traveling: boolean;
   helpOpen: boolean;
   toast: string | null;
+  pomodoroPhase?: PomodoroPhase;
+  pomodoroRunning?: boolean;
+  pomodoroRemainingMmSs?: string;
+  focusPolicy?: FocusRuntimePolicy;
+  onOpenStudyPanel?: () => void;
+  onExitFocusMode?: () => void;
   onDismissNoVoice: () => void;
   onSetPanel: (panel: LearningPanelType) => void;
   onSetReReviewIds: (ids: string[] | null) => void;
@@ -79,6 +87,12 @@ export function CampusHud({
   traveling,
   helpOpen,
   toast,
+  pomodoroPhase = 'idle',
+  pomodoroRunning = false,
+  pomodoroRemainingMmSs,
+  focusPolicy,
+  onOpenStudyPanel,
+  onExitFocusMode,
   onDismissNoVoice,
   onSetPanel,
   onSetReReviewIds,
@@ -96,6 +110,11 @@ export function CampusHud({
   onSetHelpOpen,
   onShowToast,
 }: CampusHudProps) {
+  const hideNav = focusPolicy?.hideNavigationHud ?? false;
+  const hideMove = focusPolicy?.hideMovementControls ?? false;
+  const isMinimalHud = focusPolicy?.effectiveLevel === 'minimal-hud';
+  const hasActivePomodoro = pomodoroPhase !== 'idle' && Boolean(pomodoroRemainingMmSs);
+
   return (
     <div className="pointer-events-none absolute inset-0">
       {/* Góc trên-trái: tên khu + điểm. */}
@@ -114,8 +133,20 @@ export function CampusHud({
         {/* Đợt 5 multiplayer — phòng + số người THẬT trong phòng; mất
             kết nối thì ghi rõ đang chơi một mình, không báo số giả. */}
         <MultiplayerStatusChip snapshot={mpSnap} />
+        {/* Chip trạng thái Minimal HUD và nút thoát rõ ràng */}
+        {isMinimalHud && onExitFocusMode && (
+          <button
+            id="exit-focus-mode"
+            data-testid="exit-focus-mode"
+            type="button"
+            onClick={onExitFocusMode}
+            className="pointer-events-auto w-fit rounded-full bg-amber-600/95 px-3.5 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-amber-700"
+          >
+            🎯 Đang bật Minimal HUD · Thoát Focus Mode
+          </button>
+        )}
         {/* Đợt 3 giai đoạn 4 — tốc độ xe khi đang lái (tối đa 14 m/s). */}
-        {riding && (
+        {riding && !hideMove && (
           <div className="w-fit rounded-full bg-[#1c5c3a]/90 px-4 py-1.5 text-sm font-bold text-white backdrop-blur-sm">
             🛵 {bikeSpeed.toFixed(1)} m/s · tối đa 14
           </div>
@@ -154,27 +185,48 @@ export function CampusHud({
 
       {/* Góc trên-phải: minimap + nút ngày/đêm, sổ tay, âm thanh, tốc độ, đổi bài. */}
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
-        {!inClassroom && !inLibraryLobby && <Minimap onFastTravel={onFastTravel} />}
+        {!inClassroom && !inLibraryLobby && !hideNav && <Minimap onFastTravel={onFastTravel} />}
         <div className="pointer-events-auto flex flex-wrap justify-end gap-2">
-          <button
-            id="toggle-time"
-            type="button"
-            onClick={onCycleTimeOfDay}
-            aria-label="Chuyển đổi thời gian Ngày / Hoàng hôn / Đêm"
-            className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
-          >
-            {timeOfDay === 'day' ? '☀️ Ngày' : timeOfDay === 'sunset' ? '🌇 Hoàng hôn' : '🌙 Đêm'}
-          </button>
-          <button
-            id="toggle-outfit"
-            data-testid="hud-outfit-btn"
-            type="button"
-            onClick={onToggleOutfit}
-            aria-label="Nhân vật và trang phục"
-            className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
-          >
-            👕 Nhân vật &amp; trang phục
-          </button>
+          {onOpenStudyPanel && (
+            <button
+              id="open-study-panel"
+              data-testid="open-study-panel"
+              type="button"
+              onClick={onOpenStudyPanel}
+              className={`rounded-full px-4 py-2 text-sm font-bold text-white shadow-lg backdrop-blur-sm transition ${
+                hasActivePomodoro
+                  ? 'bg-[#A54432] hover:bg-[#8A3828]'
+                  : 'bg-[#1c5c3a]/90 hover:bg-[#16492e]'
+              }`}
+            >
+              {hasActivePomodoro
+                ? `🍅 Tự học · ${pomodoroRemainingMmSs}${pomodoroRunning ? '' : ' (Tạm dừng)'}`
+                : '🍅 Tự học'}
+            </button>
+          )}
+          {!hideNav && (
+            <button
+              id="toggle-time"
+              type="button"
+              onClick={onCycleTimeOfDay}
+              aria-label="Chuyển đổi thời gian Ngày / Hoàng hôn / Đêm"
+              className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
+            >
+              {timeOfDay === 'day' ? '☀️ Ngày' : timeOfDay === 'sunset' ? '🌇 Hoàng hôn' : '🌙 Đêm'}
+            </button>
+          )}
+          {!hideNav && (
+            <button
+              id="toggle-outfit"
+              data-testid="hud-outfit-btn"
+              type="button"
+              onClick={onToggleOutfit}
+              aria-label="Nhân vật và trang phục"
+              className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
+            >
+              👕 Nhân vật &amp; trang phục
+            </button>
+          )}
           <button
             id="change-lesson"
             type="button"
@@ -248,7 +300,7 @@ export function CampusHud({
       <div className="absolute bottom-4 right-3 flex flex-col items-end gap-2">
         {/* Đợt 3 giai đoạn 5 — dịch chuyển nhanh: nút mở panel + danh sách
             6 điểm đến (mở ngay từ đầu). Panel hiện phía trên nút. */}
-        {fastTravelOpen && (
+        {!hideNav && fastTravelOpen && (
           <div
             data-testid="fast-travel-panel"
             className="pointer-events-auto w-[248px] rounded-2xl bg-white p-2 shadow-2xl"
@@ -272,18 +324,20 @@ export function CampusHud({
             ))}
           </div>
         )}
-        <button
-          id="fast-travel"
-          type="button"
-          disabled={traveling}
-          onClick={() => onSetFastTravelOpen((o) => !o)}
-          className="pointer-events-auto rounded-full bg-[#1c5c3a] px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition hover:bg-[#16492e] disabled:opacity-60"
-        >
-          🚀 Đi nhanh
-        </button>
+        {!hideNav && (
+          <button
+            id="fast-travel"
+            type="button"
+            disabled={traveling}
+            onClick={() => onSetFastTravelOpen((o) => !o)}
+            className="pointer-events-auto rounded-full bg-[#1c5c3a] px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition hover:bg-[#16492e] disabled:opacity-60"
+          >
+            🚀 Đi nhanh
+          </button>
+        )}
         {/* Đợt 3 giai đoạn 4 — xe máy: chỉ ngoài sân (không gọi xe trong
             phòng học); "Gọi xe" ẩn khi đang lái vì đã ngồi trên xe rồi. */}
-        {!inClassroom && !inLibraryLobby && !riding && (
+        {!hideMove && !inClassroom && !inLibraryLobby && !riding && (
           <button
             id="call-bike"
             type="button"
@@ -298,7 +352,7 @@ export function CampusHud({
             🛵 Gọi xe
           </button>
         )}
-        {!inClassroom && !inLibraryLobby && (
+        {!hideMove && !inClassroom && !inLibraryLobby && (
           <button
             id="recall-bike"
             type="button"
@@ -365,7 +419,7 @@ export function CampusHud({
           + lái trái/phải 64 px, giữ để chạy; đặt góc dưới-phải, trên cụm
           nút (bottom 13rem) để không đè nút "?" (bottom 10rem, mobile)
           và không chạm joystick góc dưới-trái. Khi không lái thì ẩn. */}
-      {riding && (
+      {riding && !hideMove && (
         <div className="pointer-events-auto absolute bottom-[13rem] right-3 hidden flex-col items-center gap-2 [@media(pointer:coarse)]:flex">
           <div className="flex gap-2">
             <button
@@ -463,45 +517,48 @@ export function CampusHud({
       )}
 
       {/* Góc dưới-trái: joystick (chỉ hiện trên thiết bị cảm ứng). */}
-      <div className="absolute bottom-4 left-3">
-        <Joystick />
-      </div>
+      {!hideMove && (
+        <div className="absolute bottom-4 left-3">
+          <Joystick />
+        </div>
+      )}
 
       {/* Bảng hướng dẫn thao tác. */}
-      {helpOpen ? (
-        <div className="pointer-events-auto absolute bottom-20 left-3 max-w-[260px] rounded-xl bg-black/50 p-3 text-xs leading-relaxed text-white backdrop-blur-sm sm:bottom-4 sm:left-1/2 sm:-translate-x-1/2 sm:text-sm">
-          <div className="mb-1 flex items-center justify-between gap-3">
-            <span className="font-semibold">Cách di chuyển</span>
-            <button
-              type="button"
-              aria-label="Đóng hướng dẫn"
-              onClick={() => onSetHelpOpen(false)}
-              className="rounded-full px-2 py-0.5 text-white/80 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            >
-              ✕
-            </button>
+      {!hideMove &&
+        (helpOpen ? (
+          <div className="pointer-events-auto absolute bottom-20 left-3 max-w-[260px] rounded-xl bg-black/50 p-3 text-xs leading-relaxed text-white backdrop-blur-sm sm:bottom-4 sm:left-1/2 sm:-translate-x-1/2 sm:text-sm">
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <span className="font-semibold">Cách di chuyển</span>
+              <button
+                type="button"
+                aria-label="Đóng hướng dẫn"
+                onClick={() => onSetHelpOpen(false)}
+                className="rounded-full px-2 py-0.5 text-white/80 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              >
+                ✕
+              </button>
+            </div>
+            <ul className="list-none space-y-0.5">
+              <li>WASD / mũi tên — di chuyển</li>
+              <li>Kéo chuột — xoay camera</li>
+              <li>Lăn chuột — zoom</li>
+              <li>E — tương tác</li>
+              <li>Shift — chạy</li>
+              <li>🛵 Gọi xe — nút “Gọi xe” góc dưới-phải</li>
+              <li>Đang lái: W ga · S phanh · A/D lái · E xuống xe (khi dừng)</li>
+              <li>🚀 Đi nhanh — nút “Đi nhanh” góc dưới-phải / trên bản đồ</li>
+            </ul>
           </div>
-          <ul className="list-none space-y-0.5">
-            <li>WASD / mũi tên — di chuyển</li>
-            <li>Kéo chuột — xoay camera</li>
-            <li>Lăn chuột — zoom</li>
-            <li>E — tương tác</li>
-            <li>Shift — chạy</li>
-            <li>🛵 Gọi xe — nút “Gọi xe” góc dưới-phải</li>
-            <li>Đang lái: W ga · S phanh · A/D lái · E xuống xe (khi dừng)</li>
-            <li>🚀 Đi nhanh — nút “Đi nhanh” góc dưới-phải / trên bản đồ</li>
-          </ul>
-        </div>
-      ) : (
-        <button
-          type="button"
-          aria-label="Mở hướng dẫn"
-          onClick={() => onSetHelpOpen(true)}
-          className="pointer-events-auto absolute bottom-[10rem] right-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-base text-white backdrop-blur-sm transition hover:bg-black/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-white sm:bottom-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2"
-        >
-          ?
-        </button>
-      )}
+        ) : (
+          <button
+            type="button"
+            aria-label="Mở hướng dẫn"
+            onClick={() => onSetHelpOpen(true)}
+            className="pointer-events-auto absolute bottom-[10rem] right-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-base text-white backdrop-blur-sm transition hover:bg-black/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-white sm:bottom-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2"
+          >
+            ?
+          </button>
+        ))}
 
       {/* Toast. */}
       {toast && (
