@@ -721,17 +721,63 @@ export function TienLake() {
 
       <LotusField />
 
-      {/* Liễu ven hồ (đợt 3: không cành rủ): thân + nhánh + 7 cụm tán lệch. */}
+      {/* Liễu ven hồ: thân + nhánh + 7 cụm tán lệch + bồn gạch đỏ bo tròn quanh gốc cây (ho-tien-01.jpg). */}
       {LAKE_WILLOWS.map((wl, i) => (
-        <LakeWillow
-          key={`willow-${i}`}
-          x={wl.x}
-          z={wl.z}
-          spec={willowSpecs[i]}
-          barkPbr={lakeTextures.barkPbr}
-          foliagePbr={lakeTextures.foliagePbr}
-          shadowTex={lakeTextures.shadowTex}
-        />
+        <group key={`willow-${i}`}>
+          <LakeWillow
+            x={wl.x}
+            z={wl.z}
+            spec={willowSpecs[i]}
+            barkPbr={lakeTextures.barkPbr}
+            foliagePbr={lakeTextures.foliagePbr}
+            shadowTex={lakeTextures.shadowTex}
+          />
+          <mesh position={[wl.x, 0.14, wl.z]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.78, 0.84, 0.28, 18]} />
+            <meshStandardMaterial color="#B65B43" roughness={0.88} />
+          </mesh>
+          <mesh position={[wl.x, 0.29, wl.z]} receiveShadow>
+            <cylinderGeometry args={[0.66, 0.66, 0.03, 18]} />
+            <meshStandardMaterial color="#4A6B3B" roughness={0.95} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Hàng cột đèn sân vườn 5 chao cầu trắng dọc lối dạo gạch ven Hồ Tiền (ho-tien-01.jpg) */}
+      {[
+        { x: -27.4, z: 5 },
+        { x: -27.4, z: 24 },
+        { x: -27.4, z: 42 },
+        { x: -27.4, z: 58 },
+        { x: -27.4, z: 78 },
+        { x: 22.1, z: 6 },
+        { x: 22.1, z: 28 },
+        { x: 22.1, z: 52 },
+        { x: 22.1, z: 76 },
+      ].map((lp, idx) => (
+        <group key={`lake-garden-lamp-${idx}`} position={[lp.x, 0, lp.z]}>
+          <mesh position={[0, 1.6, 0]} castShadow>
+            <cylinderGeometry args={[0.05, 0.08, 3.2, 10]} />
+            <meshStandardMaterial color={BENCH_IRON} roughness={0.55} metalness={0.4} />
+          </mesh>
+          {[
+            [0, 3.36, 0],
+            [0.24, 3.2, 0],
+            [-0.24, 3.2, 0],
+            [0, 3.2, 0.24],
+            [0, 3.2, -0.24],
+          ].map(([dx, dy, dz], bIdx) => (
+            <mesh key={`lake-lamp-globe-${idx}-${bIdx}`} position={[dx, dy, dz]}>
+              <sphereGeometry args={[0.13, 12, 10]} />
+              <meshStandardMaterial
+                color="#F8FAFC"
+                emissive="#FFF2CC"
+                emissiveIntensity={0.45}
+                roughness={0.3}
+              />
+            </mesh>
+          ))}
+        </group>
       ))}
 
       {/* Ghế gỗ dọc bờ, quay mặt ra hồ. */}

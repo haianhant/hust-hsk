@@ -92,32 +92,69 @@ export function drawLetterBK(ctx: CanvasRenderingContext2D, w: number, h: number
 
 export function drawC1Label(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#7A5C2E'; // nâu-đồng
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '900 190px Arial, sans-serif';
+  ctx.font = '900 192px Arial, sans-serif';
+  // Đổ bóng khối 3D nâu sẫm + mặt chữ vàng cam ấm (#D96B27) chuẩn ảnh c1-can-luoi-hoa-gio-05.jpg
+  ctx.fillStyle = 'rgba(78, 38, 12, 0.72)';
+  ctx.fillText('C1', w / 2 + 6, h / 2 + 14);
+  ctx.fillStyle = '#D96B27';
   ctx.fillText('C1', w / 2, h / 2 + 8);
 }
 
 export function drawHustSign(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // Biển HUST đỏ/kem bên phải tháp hoa gió C1 (reference-visual §2).
-  ctx.fillStyle = '#F2E8D5';
+  // Biểu trưng ĐHBK Hà Nội gắn bên phải tháp hoa gió C1 (chuẩn ảnh c1-can-luoi-hoa-gio-05.jpg):
+  // Nền kem ngà viền nâu đồng, lá cờ đỏ sao vàng uốn lượn phía trên, chữ ĐẠI HỌC BÁCH KHOA
+  // đặt trên trang sách mở trắng + bánh răng vàng + compa ở phía dưới.
+  ctx.fillStyle = '#F3EAD8';
   ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#E8202A';
-  ctx.fillRect(0, 0, w * 0.42, h * 0.42);
+  ctx.strokeStyle = '#7A5C38';
+  ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, w - 10, h - 10);
+
+  // Phần trên: Lá cờ đỏ sao vàng chiếm nửa trên biểu trưng
+  ctx.fillStyle = '#D41E24';
+  ctx.beginPath();
+  ctx.moveTo(w * 0.08, h * 0.05);
+  ctx.lineTo(w * 0.64, h * 0.05);
+  ctx.quadraticCurveTo(w * 0.56, h * 0.25, w * 0.66, h * 0.44);
+  ctx.lineTo(w * 0.08, h * 0.44);
+  ctx.closePath();
+  ctx.fill();
+
   ctx.fillStyle = '#F5C518';
-  star(ctx, w * 0.21, h * 0.21, 52);
-  ctx.fillStyle = '#5A4632';
+  star(ctx, w * 0.34, h * 0.24, 54);
+
+  // Chữ "ĐẠI HỌC" & "BÁCH KHOA" màu đỏ thẫm nổi bật giữa biểu trưng
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '700 64px Arial, sans-serif';
-  ctx.fillText('ĐẠI HỌC', w * 0.68, h * 0.2);
-  ctx.fillStyle = '#E8202A';
-  fitFont(ctx, 'BÁCH KHOA', 900, 96, w * 0.94);
-  ctx.fillText('BÁCH KHOA', w / 2, h * 0.58);
-  ctx.fillStyle = '#5A4632';
-  ctx.font = '700 44px Arial, sans-serif';
-  ctx.fillText('HUST', w / 2, h * 0.82);
+  ctx.fillStyle = '#8C2318';
+  ctx.font = '800 46px Arial, sans-serif';
+  ctx.fillText('ĐẠI HỌC', w * 0.58, h * 0.50);
+  ctx.fillStyle = '#C81E24';
+  fitFont(ctx, 'BÁCH KHOA', 900, 76, w * 0.88);
+  ctx.fillText('BÁCH KHOA', w * 0.5, h * 0.62);
+
+  // Trang sách mở trắng + bánh răng vàng ở phần dưới biểu trưng
+  ctx.fillStyle = '#FFFFFF';
+  ctx.strokeStyle = '#6E5030';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.14, h * 0.70);
+  ctx.quadraticCurveTo(w * 0.32, h * 0.67, w * 0.5, h * 0.72);
+  ctx.quadraticCurveTo(w * 0.68, h * 0.67, w * 0.86, h * 0.70);
+  ctx.lineTo(w * 0.86, h * 0.84);
+  ctx.quadraticCurveTo(w * 0.68, h * 0.81, w * 0.5, h * 0.86);
+  ctx.quadraticCurveTo(w * 0.32, h * 0.81, w * 0.14, h * 0.84);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Nửa bánh răng vàng phía dưới sách mở
+  ctx.fillStyle = '#D99B26';
+  ctx.beginPath();
+  ctx.arc(w * 0.5, h * 0.86, w * 0.16, 0, Math.PI, false);
+  ctx.fill();
 }
 
 export function drawRockInscription(ctx: CanvasRenderingContext2D, w: number, h: number) {

@@ -257,6 +257,23 @@ export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
     [],
   );
 
+  // Đèn tròn âm trần (soffit downlights) gắn ở mặt bụng dưới các khoang vòm Parabol (khớp cong-parabol-03.jpg)
+  const soffitLights = useMemo(() => {
+    const list: Array<{ y: number; z: number; rotX: number }> = [];
+    for (const s of [-1, 1]) {
+      for (const u of MEDAL_U) {
+        const su = s * u;
+        const c = curveAt(su);
+        // Mặt bụng trong vòm nằm tại offset 0 (đường cong gốc c.y, u), nhô nhẹ 0.025m theo pháp tuyến trong
+        const y = c.y - c.ny * 0.025;
+        const z = PARABOL_GATE.center.z + su - c.nx * 0.025;
+        const rotX = Math.atan2(c.nx, -c.ny);
+        list.push({ y, z, rotX });
+      }
+    }
+    return list;
+  }, []);
+
   return (
     <group>
       {/* Dải băng chính + gờ dọc mép + gờ chia khoang với vân bê tông PBR. */}
@@ -335,6 +352,41 @@ export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         </group>
       ))}
 
+      {/* Đèn tròn âm trần ở mặt dưới (bụng) các khoang vòm Parabol (khớp cong-parabol-03.jpg) */}
+      {soffitLights.map((sl, i) => (
+        <mesh
+          key={`soffit-light-${i}`}
+          position={[PARABOL_GATE.center.x, sl.y, sl.z]}
+          rotation={[sl.rotX, 0, 0]}
+        >
+          <cylinderGeometry args={[0.11, 0.11, 0.04, 16]} />
+          <meshStandardMaterial
+            color="#FFFFFF"
+            emissive={isNight ? '#FFE599' : '#FFFFFF'}
+            emissiveIntensity={isNight ? 1.4 : 0.25}
+            roughness={0.3}
+          />
+        </mesh>
+      ))}
+
+      {/* 2 đầu máy cổng xếp tự động (inox + bảng LED đỏ) đặt sát chân trong của vòm Parabol (cong-parabol-01.jpg) */}
+      {[6.25, 13.75].map((gz, i) => (
+        <group key={`parabol-gate-motor-${i}`} position={[-88, 0, gz]}>
+          <mesh position={[0, 0.58, 0]} castShadow>
+            <boxGeometry args={[0.52, 1.16, 0.42]} />
+            <meshStandardMaterial color="#CBD5E1" roughness={0.35} metalness={0.65} />
+          </mesh>
+          <mesh position={[0, 0.92, 0]}>
+            <boxGeometry args={[0.54, 0.22, 0.34]} />
+            <meshStandardMaterial
+              color="#1E293B"
+              emissive="#EF4444"
+              emissiveIntensity={isNight ? 0.95 : 0.45}
+            />
+          </mesh>
+        </group>
+      ))}
+
       {/* Đèn pha hắt sáng chân vòm Parabol khi Hoàng hôn & Ban đêm */}
       {isNight && (
         <>
@@ -357,9 +409,7 @@ export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         </>
       )}
 
-      {/* Nhà gác trắng phía bắc cổng: hộp 4 × 3 × 3, mái bằng, cửa sổ đông
-          + cửa ra mặt nam (hướng đường vào cổng). Vị trí đúng
-          PARABOL_GATE.guardHouse: x -90..-86, z -0,5..2,5. */}
+      {/* Nhà gác trắng phía bắc cổng: hộp 4 × 3 × 3, mái bằng đua sang lối phụ Bắc (cong-parabol-01.jpg, cong-parabol-02.jpg) */}
       <group position={[-88, 0, 1]}>
         <mesh position={[0, 1.5, 0]} castShadow receiveShadow>
           <boxGeometry args={[4, 3, 3]} />
@@ -371,9 +421,15 @@ export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
             roughness={0.88}
           />
         </mesh>
-        <mesh position={[0, 3.1, 0]}>
-          <boxGeometry args={[4.4, 0.2, 3.4]} />
-          <meshStandardMaterial color={C1_ROOF} roughness={0.9} />
+        <mesh position={[0, 3.15, 1.1]} castShadow>
+          <boxGeometry args={[4.8, 0.24, 5.4]} />
+          <meshStandardMaterial
+            color={GATE_WHITE}
+            map={concretePbr.map}
+            bumpMap={concretePbr.bumpMap}
+            bumpScale={0.01}
+            roughness={0.86}
+          />
         </mesh>
         <mesh position={[2.02, 1.6, 0]}>
           <boxGeometry args={[0.06, 1.1, 1.4]} />

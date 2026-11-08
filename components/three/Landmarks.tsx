@@ -98,65 +98,154 @@ function SimpleBench({
   );
 }
 
-// --- Logo "I LOVE BK" đúng hình: I trắng + tim đỏ + BK trắng, bệ đen ---------
+// --- Logo "I ❤ BK" 2 tầng khối 3D chuẩn ảnh thật (c1-san-truoc-i-love-bk-03.jpg):
+//     Tầng dưới: chữ "B" và "K" khối 3D trắng đứng trên bệ đá đen.
+//     Tầng trên: chữ "I" có chân (serif) khối 3D trắng đè lên chữ B + trái tim đỏ 3D nghiêng nhẹ đè lên chữ K.
 function ILoveBK({ isNight = false }: { isNight?: boolean }) {
   const heartGeo = useMemo(() => {
     const s = new THREE.Shape();
-    s.moveTo(0, 0.35);
-    s.bezierCurveTo(0, 0.62, -0.55, 0.62, -0.55, 0.15);
-    s.bezierCurveTo(-0.55, -0.25, 0, -0.55, 0, -0.78);
-    s.bezierCurveTo(0, -0.55, 0.55, -0.25, 0.55, 0.15);
-    s.bezierCurveTo(0.55, 0.62, 0, 0.62, 0, 0.35);
-    const g = new THREE.ExtrudeGeometry(s, { depth: 0.45, bevelEnabled: false });
-    g.translate(0, 0, -0.225);
+    s.moveTo(0, 0.28);
+    s.bezierCurveTo(0, 0.56, -0.52, 0.56, -0.52, 0.14);
+    s.bezierCurveTo(-0.52, -0.22, 0, -0.48, 0, -0.68);
+    s.bezierCurveTo(0, -0.48, 0.52, -0.22, 0.52, 0.14);
+    s.bezierCurveTo(0.52, 0.56, 0, 0.56, 0, 0.28);
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth: 0.36,
+      bevelEnabled: true,
+      bevelThickness: 0.03,
+      bevelSize: 0.025,
+      bevelSegments: 3,
+    });
+    g.translate(0, 0, -0.18);
     return g;
   }, []);
+
+  // Chữ B khối 3D có 2 lỗ khuyết chuẩn
+  const letterBGeo = useMemo(() => {
+    const bShape = new THREE.Shape();
+    bShape.moveTo(-0.48, 0);
+    bShape.lineTo(0.18, 0);
+    bShape.quadraticCurveTo(0.52, 0, 0.52, 0.31);
+    bShape.quadraticCurveTo(0.52, 0.55, 0.28, 0.6);
+    bShape.quadraticCurveTo(0.48, 0.66, 0.48, 0.9);
+    bShape.quadraticCurveTo(0.48, 1.2, 0.14, 1.2);
+    bShape.lineTo(-0.48, 1.2);
+    bShape.closePath();
+
+    const lowerHole = new THREE.Path();
+    lowerHole.moveTo(-0.2, 0.22);
+    lowerHole.lineTo(0.12, 0.22);
+    lowerHole.quadraticCurveTo(0.24, 0.22, 0.24, 0.35);
+    lowerHole.quadraticCurveTo(0.24, 0.48, 0.12, 0.48);
+    lowerHole.lineTo(-0.2, 0.48);
+    lowerHole.closePath();
+
+    const upperHole = new THREE.Path();
+    upperHole.moveTo(-0.2, 0.7);
+    upperHole.lineTo(0.1, 0.7);
+    upperHole.quadraticCurveTo(0.21, 0.7, 0.21, 0.83);
+    upperHole.quadraticCurveTo(0.21, 0.96, 0.1, 0.96);
+    upperHole.lineTo(-0.2, 0.96);
+    upperHole.closePath();
+
+    bShape.holes.push(lowerHole, upperHole);
+    const g = new THREE.ExtrudeGeometry(bShape, { depth: 0.36, bevelEnabled: false });
+    g.translate(0, 0, -0.18);
+    return g;
+  }, []);
+
+  // Chữ K khối 3D
+  const letterKGeo = useMemo(() => {
+    const kShape = new THREE.Shape();
+    kShape.moveTo(-0.48, 0);
+    kShape.lineTo(-0.18, 0);
+    kShape.lineTo(-0.18, 0.48);
+    kShape.lineTo(0.22, 0);
+    kShape.lineTo(0.56, 0);
+    kShape.lineTo(0.05, 0.62);
+    kShape.lineTo(0.54, 1.2);
+    kShape.lineTo(0.2, 1.2);
+    kShape.lineTo(-0.18, 0.72);
+    kShape.lineTo(-0.18, 1.2);
+    kShape.lineTo(-0.48, 1.2);
+    kShape.closePath();
+    const g = new THREE.ExtrudeGeometry(kShape, { depth: 0.36, bevelEnabled: false });
+    g.translate(0, 0, -0.18);
+    return g;
+  }, []);
+
   const granitePbr = useMemo(() => makeGraniteStoneTexture(3, 1), []);
   useEffect(() => () => {
     heartGeo.dispose();
+    letterBGeo.dispose();
+    letterKGeo.dispose();
     granitePbr.map.dispose();
     granitePbr.bumpMap.dispose();
-  }, [heartGeo, granitePbr]);
+  }, [heartGeo, letterBGeo, letterKGeo, granitePbr]);
+
+  const whiteLetterMatProps = {
+    color: '#F8FAFC',
+    emissive: isNight ? '#E2E8F0' : '#000000',
+    emissiveIntensity: isNight ? 0.35 : 0,
+    roughness: 0.38,
+    metalness: 0.08,
+  };
 
   return (
     <group position={[I_LOVE_BK.center.x, 0, I_LOVE_BK.center.z]}>
-      {/* Bệ đá granite đen bóng thấp. */}
-      <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
-        <boxGeometry args={[5.6, 0.5, 1.2]} />
+      {/* Bệ đá granite đen bóng gọn 2.7m × 0.42m × 0.8m (khớp c1-san-truoc-i-love-bk-03.jpg) */}
+      <mesh position={[0, 0.21, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.7, 0.42, 0.8]} />
         <meshStandardMaterial
           color={PLINTH_BLACK}
           map={granitePbr.map}
           bumpMap={granitePbr.bumpMap}
           bumpScale={0.01}
-          roughness={0.55}
-          metalness={0.12}
+          roughness={0.5}
+          metalness={0.15}
         />
       </mesh>
-      <LabelPlane
-        textureKey="letter-i"
-        canvasW={256}
-        canvasH={256}
-        draw={drawLetterI}
-        size={[0.8, 1.9]}
-        position={[-2.2, 1.5, 0.62]}
-      />
-      <mesh geometry={heartGeo} position={[-0.9, 1.55, 0.3]} scale={[1.35, 1.35, 1]} castShadow>
+
+      {/* TẦNG DƯỚI (y = 0.42..1.62): Khối chữ 3D "B" và "K" màu trắng */}
+      <mesh geometry={letterBGeo} position={[-0.64, 0.42, 0]} castShadow receiveShadow>
+        <meshStandardMaterial {...whiteLetterMatProps} />
+      </mesh>
+      <mesh geometry={letterKGeo} position={[0.64, 0.42, 0]} castShadow receiveShadow>
+        <meshStandardMaterial {...whiteLetterMatProps} />
+      </mesh>
+
+      {/* TẦNG TRÊN BÊN TRÁI (y = 1.62..2.78): Chữ "I" có chân (serif) khối 3D trắng đè lên chữ B */}
+      <group position={[-0.64, 1.62, 0]}>
+        <mesh position={[0, 0.11, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.78, 0.22, 0.36]} />
+          <meshStandardMaterial {...whiteLetterMatProps} />
+        </mesh>
+        <mesh position={[0, 0.58, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.3, 0.74, 0.36]} />
+          <meshStandardMaterial {...whiteLetterMatProps} />
+        </mesh>
+        <mesh position={[0, 1.05, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.78, 0.22, 0.36]} />
+          <meshStandardMaterial {...whiteLetterMatProps} />
+        </mesh>
+      </group>
+
+      {/* TẦNG TRÊN BÊN PHẢI (y = 2.25): Trái tim 3D màu đỏ tươi đặt hơi nghiêng trên chữ K */}
+      <mesh
+        geometry={heartGeo}
+        position={[0.62, 2.24, 0.02]}
+        rotation-z={-0.18}
+        scale={[1.08, 1.08, 1]}
+        castShadow
+      >
         <meshStandardMaterial
           color={HUST_RED}
           emissive={isNight ? '#FF2A36' : '#000000'}
-          emissiveIntensity={isNight ? 0.52 : 0}
-          roughness={0.45}
-          metalness={0.08}
+          emissiveIntensity={isNight ? 0.58 : 0}
+          roughness={0.35}
+          metalness={0.1}
         />
       </mesh>
-      <LabelPlane
-        textureKey="letter-bk"
-        canvasW={512}
-        canvasH={256}
-        draw={drawLetterBK}
-        size={[1.9, 1.9]}
-        position={[1.05, 1.5, 0.62]}
-      />
     </group>
   );
 }

@@ -449,22 +449,58 @@ function drawStar2D(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: nu
 }
 
 function drawHustEmblem(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  ctx.fillStyle = '#E8202A'; // dải đỏ dọc
+  // Biểu trưng dọc ĐHBK Hà Nội trên mảng tường đặc bên phải tháp hoa gió (c1-can-luoi-hoa-gio-05.jpg):
+  // Nền kem ngà có viền gờ nổi, nửa trên là lá cờ đỏ sao vàng uốn lượn,
+  // giữa là chữ "ĐẠI HỌC BÁCH KHOA" trên trang sách mở trắng, dưới là bánh răng vàng & compa.
+  ctx.fillStyle = '#F3EAD8';
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = '#F5C518'; // viền vàng mảnh
-  ctx.lineWidth = 6;
-  ctx.strokeRect(14, 14, w - 28, h - 28);
-  ctx.fillStyle = '#F5C518'; // sao vàng ở trên
-  drawStar2D(ctx, w / 2, h * 0.17, 64);
-  ctx.fillRect(w * 0.2, h * 0.3, w * 0.6, 5); // gạch vàng phân cách
-  // Chữ "BÁCH KHOA" vàng, xếp 2 dòng cho vừa dải hẹp (không kéo giãn).
+  ctx.strokeStyle = '#8C6D46';
+  ctx.lineWidth = 10;
+  ctx.strokeRect(8, 8, w - 16, h - 16);
+
+  // Lá cờ đỏ sao vàng chiếm nửa trên bên trái
+  ctx.fillStyle = '#D91E26';
+  ctx.beginPath();
+  ctx.moveTo(w * 0.08, h * 0.04);
+  ctx.lineTo(w * 0.68, h * 0.04);
+  ctx.quadraticCurveTo(w * 0.58, h * 0.25, w * 0.70, h * 0.46);
+  ctx.lineTo(w * 0.08, h * 0.46);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#F5C518';
+  drawStar2D(ctx, w * 0.36, h * 0.24, 58);
+
+  // Chữ ĐẠI HỌC BÁCH KHOA màu đỏ sẫm
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '900 118px Arial, sans-serif';
-  ctx.fillText('BÁCH', w / 2, h * 0.44);
-  ctx.fillText('KHOA', w / 2, h * 0.58);
-  ctx.font = '700 54px Arial, sans-serif';
-  ctx.fillText('HUST', w / 2, h * 0.74);
+  ctx.fillStyle = '#7A1C18';
+  ctx.font = '800 38px Arial, sans-serif';
+  ctx.fillText('ĐẠI HỌC', w * 0.56, h * 0.53);
+  ctx.fillStyle = '#C81E24';
+  ctx.font = '900 58px Arial, sans-serif';
+  ctx.fillText('BÁCH KHOA', w * 0.5, h * 0.61);
+
+  // Trang sách mở trắng + bánh răng vàng bên dưới
+  ctx.fillStyle = '#FFFFFF';
+  ctx.strokeStyle = '#6E5030';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.12, h * 0.68);
+  ctx.quadraticCurveTo(w * 0.31, h * 0.65, w * 0.5, h * 0.70);
+  ctx.quadraticCurveTo(w * 0.69, h * 0.65, w * 0.88, h * 0.68);
+  ctx.lineTo(w * 0.88, h * 0.82);
+  ctx.quadraticCurveTo(w * 0.69, h * 0.79, w * 0.5, h * 0.84);
+  ctx.quadraticCurveTo(w * 0.31, h * 0.79, w * 0.12, h * 0.82);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Bánh răng vàng phía dưới sách
+  ctx.fillStyle = '#E09F24';
+  ctx.beginPath();
+  ctx.arc(w * 0.5, h * 0.84, w * 0.22, 0, Math.PI, false);
+  ctx.fill();
 }
 
 function drawVnFlag(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -814,7 +850,24 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         isNight={isNight}
       />
 
-      {/* Biểu trưng dọc đỏ/vàng trên dải tường đặc + chữ "C1" nâu-đồng */}
+      {/* Cột cờ inox + Lá cờ đỏ sao vàng tung bay trên đỉnh tháp hoa gió giữa C1 (c1-mat-tien-01.jpg) */}
+      <group position={[CX, 14.8, SOUTH_Z + 0.8]}>
+        <mesh position={[0, 1.8, 0]} castShadow>
+          <cylinderGeometry args={[0.045, 0.06, 3.6, 10]} />
+          <meshStandardMaterial color="#CBD5E1" roughness={0.4} metalness={0.6} />
+        </mesh>
+        <LabelPlane
+          textureKey="c1-rooftop-vn-flag"
+          canvasW={384}
+          canvasH={256}
+          draw={drawVnFlag}
+          size={[1.65, 1.1]}
+          position={[0.85, 3.0, 0]}
+          transparent={false}
+        />
+      </group>
+
+      {/* Biểu trưng dọc đỏ/vàng trên dải tường đặc + chữ "C1" vàng cam ấm */}
       <LabelPlane
         textureKey="hust-emblem-v"
         canvasW={420}

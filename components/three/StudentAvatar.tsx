@@ -178,6 +178,55 @@ function useHustCrimsonLogoTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+/** Phù hiệu tròn trắng-đỏ ĐHBK Hà Nội gắn trên bắp tay trái (ao-khoac-gio-do-chi-tiet-01.jpg, polo-do-nam-nu-01.jpg) */
+function useHustSleeveBadgeTexture(): THREE.CanvasTexture {
+  const texture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, 128, 128);
+      // Nền tròn trắng viền đỏ Bách khoa
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.arc(64, 64, 58, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#B5121B';
+      ctx.lineWidth = 8;
+      ctx.stroke();
+      // Vòng chấm chữ đỏ quanh viền trong
+      ctx.strokeStyle = '#B5121B';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.arc(64, 64, 44, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Biểu trưng đỏ + sao vàng ở tâm
+      ctx.fillStyle = '#B5121B';
+      ctx.beginPath();
+      ctx.arc(64, 64, 28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#FACC15';
+      ctx.font = '900 22px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('BK', 64, 65);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    return tex;
+  }, []);
+  useEffect(() => () => texture.dispose(), [texture]);
+  return texFromHook(texture);
+}
+
+function texFromHook(t: THREE.CanvasTexture): THREE.CanvasTexture {
+  return t;
+}
+
 /** Texture Thẻ sinh viên Bách Khoa đeo trước ngực (HUST Student ID Card). */
 function useStudentIdTexture(): THREE.CanvasTexture {
   const texture = useMemo(() => {
@@ -258,6 +307,7 @@ function ArmSide({
   upperYokeColor,
   sleeveColor,
   fabricTex,
+  sleeveBadgeTex,
   wristwatch,
   shoulderRef,
   elbowRef,
@@ -271,6 +321,7 @@ function ArmSide({
   upperYokeColor?: string;
   sleeveColor?: string;
   fabricTex: THREE.CanvasTexture;
+  sleeveBadgeTex?: THREE.CanvasTexture;
   wristwatch?: boolean;
   shoulderRef?: RefObject<THREE.Group>;
   elbowRef?: RefObject<THREE.Group>;
@@ -297,6 +348,18 @@ function ArmSide({
         <meshStandardMaterial color={topSleeveTone} map={fabricTex} roughness={0.82} />
       </mesh>
 
+      {/* Phù hiệu tròn trắng-đỏ ĐHBK Hà Nội gắn ở mặt ngoài bắp tay trái (side === 1)
+          theo đúng ảnh thật ao-khoac-gio-do-chi-tiet-01.jpg & polo-do-nam-nu-01.jpg */}
+      {side === 1 && sleeveBadgeTex && (isWindbreaker || short || isBomber) && (
+        <mesh
+          position={[0.058 * armScale, -0.088, 0]}
+          rotation={[0, Math.PI / 2, 0]}
+        >
+          <circleGeometry args={[0.024, 18]} />
+          <meshStandardMaterial map={sleeveBadgeTex} roughness={0.6} />
+        </mesh>
+      )}
+
       {short ? (
         <group>
           {/* Tay áo ngắn polo + bo tay trắng */}
@@ -321,12 +384,18 @@ function ArmSide({
             <cylinderGeometry args={[0.059, 0.052, 0.26, 16]} />
             <meshStandardMaterial color={topSleeveTone} map={fabricTex} roughness={0.8} />
           </mesh>
-          {/* Đường viền chuyển màu trên bắp tay của Áo khoác gió HUST */}
+          {/* Đường viền chuyển màu + sọc trắng dọc ống tay Áo khoác gió HUST (ao-khoac-gio-do-chi-tiet-01.jpg) */}
           {isWindbreaker && (
-            <mesh position={[0, -0.18, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[armScale, armScale, 1]}>
-              <torusGeometry args={[0.053, 0.005, 8, 16]} />
-              <meshStandardMaterial color="#1E293B" roughness={0.75} />
-            </mesh>
+            <>
+              <mesh position={[0, -0.18, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[armScale, armScale, 1]}>
+                <torusGeometry args={[0.053, 0.005, 8, 16]} />
+                <meshStandardMaterial color="#1E293B" roughness={0.75} />
+              </mesh>
+              <mesh position={[side * 0.054 * armScale, -0.13, 0]}>
+                <boxGeometry args={[0.006, 0.23, 0.012]} />
+                <meshStandardMaterial color={WHITE} roughness={0.75} />
+              </mesh>
+            </>
           )}
         </group>
       )}
@@ -425,6 +494,11 @@ function LegSide({
         <cylinderGeometry args={[0.1, 0.084, 0.39, 16]} />
         <meshStandardMaterial color={pants} map={fabricTex} roughness={0.86} />
       </mesh>
+      {/* Sọc trắng chạy dọc mép ngoài đùi quần thể thao xanh than (ao-khoac-gio-do-nhom-01.jpg, polo-do-nam-nu-01.jpg) */}
+      <mesh position={[side * 0.091 * legScale, -0.19, 0]} rotation={[0, 0, -side * 0.04]}>
+        <boxGeometry args={[0.008, 0.36, 0.018]} />
+        <meshStandardMaterial color={WHITE} roughness={0.78} />
+      </mesh>
 
       {/* KHỚP CẦU GỐI (Knee Ball-Joint Cap) tại tâm xoay gối (0, -0.38, 0) */}
       <mesh position={[0, -0.38, 0]} scale={[legScale, legScale, legScale]}>
@@ -437,6 +511,11 @@ function LegSide({
         <mesh position={[0, -0.165, 0]} scale={[legScale, 1, legScale]} castShadow>
           <cylinderGeometry args={[0.082, 0.064, 0.34, 16]} />
           <meshStandardMaterial color={pants} map={fabricTex} roughness={0.86} />
+        </mesh>
+        {/* Sọc trắng chạy dọc mép ngoài ống quần dưới */}
+        <mesh position={[side * 0.073 * legScale, -0.165, 0]} rotation={[0, 0, -side * 0.05]}>
+          <boxGeometry args={[0.008, 0.31, 0.016]} />
+          <meshStandardMaterial color={WHITE} roughness={0.78} />
         </mesh>
         {/* Gấu quần gấp lai ôm cổ chân */}
         <mesh position={[0, -0.318, 0]} scale={[legScale, 1, legScale]} castShadow>
@@ -1365,6 +1444,7 @@ export function HumanFigure(props: FigureProps) {
   } = props;
   const hustTex = useHustTexture();
   const hustCrimsonTex = useHustCrimsonLogoTexture();
+  const sleeveBadgeTex = useHustSleeveBadgeTexture();
   const idTex = useStudentIdTexture();
   const fabricTex = useMemo(() => makeFabricTexture(5, 5), []);
   const { shadow: shadowTex } = useMemo(() => getSharedAvatarTextures(), []);
@@ -1436,6 +1516,7 @@ export function HumanFigure(props: FigureProps) {
           upperYokeColor={upperYokeColor}
           sleeveColor={sleeveColor}
           fabricTex={fabricTex}
+          sleeveBadgeTex={sleeveBadgeTex}
           wristwatch={wristwatch}
           shoulderRef={joints?.armL}
           elbowRef={joints?.elbowL}
@@ -1450,6 +1531,7 @@ export function HumanFigure(props: FigureProps) {
           upperYokeColor={upperYokeColor}
           sleeveColor={sleeveColor}
           fabricTex={fabricTex}
+          sleeveBadgeTex={sleeveBadgeTex}
           wristwatch={wristwatch}
           shoulderRef={joints?.armR}
           elbowRef={joints?.elbowR}

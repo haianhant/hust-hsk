@@ -76,43 +76,27 @@ export const C1 = {
   steps: { minX: -64, maxX: -52, minZ: -49.5, maxZ: -43.8 },
 } as const;
 
-/** Logo "I LOVE BK" đúng hình: I trắng + tim đỏ + BK trắng, khối 3D đứng trên
- *  bệ đen thấp, cao ~2–2,5 m, giữa quảng trường trên trục lối vào, ngay chân
- *  bậc tam cấp (reference-visual §2). */
+/** Logo "I LOVE BK" đúng hình: I trắng + tim đỏ (tầng trên) + BK trắng (tầng dưới),
+ *  khối 3D đứng trên bệ đen thấp giữa trục đường dạo sân trước C1 (tham-khao/c1/). */
 export const I_LOVE_BK = {
-  center: { x: -58, z: -42.5 },
-  plinth: { minX: -60.8, maxX: -55.2, minZ: -43.1, maxZ: -41.9 },
+  center: { x: -58, z: -39.5 },
+  plinth: { minX: -59.35, maxX: -56.65, minZ: -39.9, maxZ: -39.1 },
 } as const;
 
 export const LIBRARY = {
-  center: { x: 38, z: 36.5 }, // ĐỢT 4 (11/11/2026, làm lại theo studywithhuster.cyou — xem docs/ref-library-rebuild-report.md §1): tâm KHỐI THÁP dời 4,5 m về nam so với (38, 32) cũ. Lô đất (plaza) không đổi; khối tháp phải lùi vào nam để có đủ sân mở phía bắc bậc sảnh (sân z 10..19) — giữ tâm ở z = 32 thì sân mở chỉ còn ~2 m, không đủ đặt chữ HUST + lối đi + bồn cỏ đối xứng. Tâm khu vực (ZONES) giữ (38, 32) r 20 nên vẫn bao trọn công trình.
-  // ĐÍNH CHÍNH 06/11 (docs/library-orientation.md): phía tây tòa nhà hướng ra Hồ Tiền,
-  // nhưng mặt đồng hồ KHÔNG ở mặt tây.
-  // ĐỢT 3 GIAI ĐOẠN 2 (06/11, docs/round3-phase2-report.md): user xác nhận thư viện
-  // đang quay ngược trước–sau nên xoay TOÀN BỘ công trình đúng 180° quanh trục Y
-  // quanh tâm (38, 32): (x, z) → (76 − x, 64 − z). Mặt đồng hồ + sảnh chính nay
-  // hướng về phía BẮC của scene (−Z), ra sân trước cửa mới phía bắc; sân nam cũ
-  // (đảo cỏ, lộc vừng) thành sân sau. KHÔNG khẳng định phương vị la bàn thật.
-  // ĐỢT 4 (11/11/2026): dựng lại HOÀN TOÀN theo tư liệu studywithhuster.cyou —
-  // bỏ group xoay 180° cũ, vẽ thẳng bằng tọa độ thế giới (mặt chính vẫn hướng
-  // bắc −Z, không đổi hướng). Khối tháp tấm đứng 3 nhịp: khối giữa nhô trước +
-  // cao hơn, 2 cánh lùi sau + thấp hơn nửa tầng, dải kính tối dọc giữa khối giữa
-  // và cánh phải. Khối đế chỉ ôm khối giữa.
-  size: { x: 21, z: 13 }, // khối tháp tấm đứng: mặt tiền rộng 21 m, sâu 13 m (tỉ lệ 1,6 — lô đất chỉ cho tối đa ~22 m rộng nên không đạt 2,5–3 như tư liệu; xem báo cáo §1)
+  center: { x: 38, z: 36.5 },
+  size: { x: 26, z: 13.5 }, // Mở rộng mặt tiền tháp 3 nhịp lên 26 m (cộng mái đua hai cánh đạt ~27.6 m) theo 5 ảnh tham-khao/thu-vien/
   floors: 10, // xác nhận: HUST, ~37.000 m²
   floorHeight: 3.2,
   /** đồng hồ ở mặt BẮC của scene (−Z), NGAY TRÊN mái hiên lối vào mới (mái y 6,0) —
-   *  dưới mái đế (y 10,7). Bán kính 1,3 m (đường kính 2,6 m ≈ 0,8 tầng — dung hòa:
-   *  "khoảng 1 tầng" (3,2 m) và "1/8–1/10 mặt trước đế" (đế rộng 11 m → 1,1–1,4 m)
-   *  không thể cùng đúng — đế rộng 21–26 m mới thỏa cả hai, lô đất không cho;
-   *  xem báo cáo §1. */
+   *  dưới mái đế (y 10,7). Bán kính 1,3 m. */
   clock: { x: 38, y: 7.3, z: 23.9, radius: 1.3 },
-  plaza: { minX: 23, maxX: 50, minZ: 10, maxZ: 56 }, // sân gạch đỏ-nâu; đợt 4 nới minZ 14 → 10 làm sân trước (lối đi + bồn cỏ đối xứng cần thêm 4 m phía bắc; vùng z 10..14 là cỏ trống — không cây/collider nào khác ngoài đường x = 24 đã có; xem báo cáo §1)
-  /** Tiền cảnh phía bắc (đợt 4, theo tư liệu): lối đi đỏ + sân xám + chữ HUST. */
+  plaza: { minX: 23, maxX: 52.5, minZ: 10, maxZ: 56 }, // Mở rộng sân gạch đỏ-nâu ôm trọn 2 cánh mới của Thư viện
+  /** Tiền cảnh phía bắc (theo tham-khao/thu-vien/): lối đi đỏ + sân xám + chữ HUST. */
   forecourt: {
-    walk: { minX: 24, maxX: 33, minZ: 12, maxZ: 16 }, // lối đi chính màu nâu đỏ, từ mép đường tới sân xám
-    grayYard: { minX: 33, maxX: 46, minZ: 12, maxZ: 16 }, // sân lát xám ngay trước sảnh
-    hust: { x: 38, z: 14 }, // chữ HUST đỏ khối 3D trên bệ đen, trên trục giữa
+    walk: { minX: 24, maxX: 33, minZ: 12, maxZ: 16 },
+    grayYard: { minX: 31, maxX: 47, minZ: 12, maxZ: 16 },
+    hust: { x: 38, z: 14 },
   },
 } as const;
 
@@ -208,29 +192,29 @@ export const C2_BUILDING = {
 } as const;
 
 // 2. Cụm nhà C6 – C7 – C8: xếp 3 dãy ngang từ Bắc xuống Nam ở phía Đông dãy C3–C4–C5–C10,
-// sát phía Tây đường Trần Đại Nghĩa (C6: Viện Cơ khí động lực, C7: KH&CN Nhiệt lạnh, C8).
+// sát phía Tây đường Trần Đại Nghĩa (C6: Viện Cơ khí động lực, C7: Tổ hợp 9 tầng chữ E theo tham-khao/c7/, C8).
 export const C6_BUILDING = {
-  center: { x: 46, z: -62 },
+  center: { x: 46, z: -64 },
   size: { x: 22, z: 7.5 },
   floors: 5,
   floorHeight: 3.2,
-  box: { minX: 35, maxX: 57, minZ: -65.75, maxZ: -58.25 },
+  box: { minX: 35, maxX: 57, minZ: -67.75, maxZ: -60.25 },
 } as const;
 
 export const C7_BUILDING = {
   center: { x: 46, z: -46 },
-  size: { x: 24, z: 9 },
-  floors: 7,
-  floorHeight: 3.2,
-  box: { minX: 34, maxX: 58, minZ: -50.5, maxZ: -41.5 },
+  size: { x: 28, z: 15.5 },
+  floors: 9,
+  floorHeight: 3.1,
+  box: { minX: 32, maxX: 60, minZ: -53.75, maxZ: -38.25 },
 } as const;
 
 export const C8_BUILDING = {
-  center: { x: 46, z: -30 },
+  center: { x: 46, z: -28 },
   size: { x: 22, z: 7.5 },
   floors: 5,
   floorHeight: 3.2,
-  box: { minX: 35, maxX: 57, minZ: -33.75, maxZ: -26.25 },
+  box: { minX: 35, maxX: 57, minZ: -31.75, maxZ: -24.25 },
 } as const;
 
 // 3. Khối nhà phía Bắc Hồ Tiền (Trung tâm Hợp tác Việt – Đức / Thủy Tạ bờ Bắc Hồ Tiền).
@@ -242,14 +226,14 @@ export const VDZ_CENTER = {
   box: { minX: -7.5, maxX: 3.5, minZ: -11.5, maxZ: -8.1 },
 } as const;
 
-// 4. Nhà B1 (Viện Công nghệ Thông tin & Truyền thông — SoICT): tòa nhà hình chữ V
-// nằm phía Đông đường Trần Đại Nghĩa, ngay phía Nam khu KTX.
+// 4. Nhà B1 (Trường Công nghệ Thông tin & Truyền thông — SoICT): tòa nhà góc cong giật cấp 7–8 tầng
+// nằm phía Đông đường Trần Đại Nghĩa, ngay phía Nam khu KTX (theo tham-khao/b1-soict/).
 export const SOICT_B1 = {
   center: { x: 112, z: 14 },
-  size: { x: 18, z: 12 },
-  floors: 5,
-  floorHeight: 3.3,
-  box: { minX: 103, maxX: 121, minZ: 8, maxZ: 20 },
+  size: { x: 22, z: 14 },
+  floors: 8,
+  floorHeight: 3.2,
+  box: { minX: 101, maxX: 123, minZ: 7, maxZ: 21 },
 } as const;
 
 // 5. Cụm A17, H1, H3, Nhà T ở phía Đông-Nam Nhà B1 (theo đúng khuon-vien-truong.png).
@@ -481,26 +465,26 @@ export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
   {
     code: 'D3',
     subtitle: 'VIỆN TOÁN ỨNG DỤNG & TIN HỌC',
-    x: 62,
+    x: 64,
     z: 18,
     w: 14,
     d: 7,
     h: 10.5,
     face: 's',
     tone: 3,
-    box: { minX: 55, maxX: 69, minZ: 14.5, maxZ: 21.5 },
+    box: { minX: 57, maxX: 71, minZ: 14.5, maxZ: 21.5 },
   },
   {
     code: 'D5',
     subtitle: 'GIẢNG ĐƯỜNG D5',
-    x: 62,
+    x: 64,
     z: 32,
     w: 14,
     d: 7,
     h: 10.5,
     face: 'n',
     tone: 0,
-    box: { minX: 55, maxX: 69, minZ: 28.5, maxZ: 35.5 },
+    box: { minX: 57, maxX: 71, minZ: 28.5, maxZ: 35.5 },
   },
   {
     code: 'D3-5',
@@ -624,8 +608,8 @@ export const BUILDING_COLLIDERS: { name: string; box: AABB }[] = [
   { name: 'Bậc tam cấp C1', box: C1.steps },
   { name: 'Bệ chữ I LOVE BK', box: I_LOVE_BK.plinth },
   { name: 'Khối đá trắng', box: WHITE_ROCK.box },
-  { name: 'Thư viện Tạ Quang Bửu (tháp)', box: { minX: 27.5, maxX: 48.5, minZ: 29.5, maxZ: 43.5 } }, // đợt 4: khối tháp tấm đứng x 27,5..48,5, z 30..43 (nới 0,5 m z theo quy ước cũ)
-  { name: 'Thư viện Tạ Quang Bửu (khối đế)', box: { minX: 32.5, maxX: 43.5, minZ: 23.5, maxZ: 30.5 } }, // đợt 4: khối đế x 32,5..43,5, z 24..30; mái hiên (z 18..24,5) + bậc (z 17..19) ngoài collider như cũ để avatar đứng được dưới mái trước cửa; avatar áp sát từ phía bắc dừng ở z ≈ 23,1, cách cửa kính (z 26,5) ~3,4 m
+  { name: 'Thư viện Tạ Quang Bửu (tháp)', box: { minX: 25.5, maxX: 50.5, minZ: 29.5, maxZ: 43.5 } }, // Mở rộng tháp 3 nhịp x 25,5..50,5 (25 m, mái đua tới 24,7..51,3) theo tham-khao/thu-vien/
+  { name: 'Thư viện Tạ Quang Bửu (khối đế)', box: { minX: 31.0, maxX: 45.0, minZ: 23.5, maxZ: 30.5 } }, // Khối đế rộng 14 m (x 31..45), z 24..30; mái hiên 6 cột tròn (z 18..24,5) + bậc (z 17..19) ngoài collider để avatar đứng được dưới mái trước cửa; avatar áp sát từ phía bắc dừng ở z ≈ 23,1, cách cửa kính (z 26,5) ~3,4 m
   { name: 'Bệ chữ HUST', box: HUST_SIGN.plinth }, // đợt 4: bệ đen chữ HUST trước sảnh; đi vòng qua 2 bên (lối rộng ~2 m phía tây, ~5 m phía đông)
   { name: 'C9', box: { minX: -52, maxX: -32, minZ: -8, maxZ: 4 } },
   { name: 'Cầu thang C9', box: C9.stairs.box },
@@ -799,10 +783,10 @@ export const CAMPUS_MAP_BUILDINGS: {
   { code: 'D6', label: 'Nhà D6', box: { minX: -55, maxX: -37, minZ: 34.25, maxZ: 41.75 }, kind: 'lecture' },
   { code: 'D8', label: 'Nhà D8', box: { minX: -55, maxX: -37, minZ: 50.25, maxZ: 57.75 }, kind: 'lecture' },
   { code: 'VDZ', label: 'Nhà Bắc Hồ Tiền (VDZ)', box: VDZ_CENTER.box, kind: 'main' },
-  { code: 'Thư Viện', label: 'Thư viện Tạ Quang Bửu', box: { minX: 27.5, maxX: 48.5, minZ: 23.5, maxZ: 43.5 }, kind: 'main' },
+  { code: 'Thư Viện', label: 'Thư viện Tạ Quang Bửu', box: { minX: 25.5, maxX: 50.5, minZ: 23.5, maxZ: 43.5 }, kind: 'main' },
   { code: 'D9', label: 'Nhà D9', box: { minX: 29, maxX: 47, minZ: 59.25, maxZ: 66.75 }, kind: 'lecture' },
-  { code: 'D3', label: 'Nhà D3 (Toán - Tin)', box: { minX: 55, maxX: 69, minZ: 14.5, maxZ: 21.5 }, kind: 'lecture' },
-  { code: 'D5', label: 'Nhà D5', box: { minX: 55, maxX: 69, minZ: 28.5, maxZ: 35.5 }, kind: 'lecture' },
+  { code: 'D3', label: 'Nhà D3 (Toán - Tin)', box: { minX: 57, maxX: 71, minZ: 14.5, maxZ: 21.5 }, kind: 'lecture' },
+  { code: 'D5', label: 'Nhà D5', box: { minX: 57, maxX: 71, minZ: 28.5, maxZ: 35.5 }, kind: 'lecture' },
   { code: 'D3-5', label: 'Nhà D3-5', box: { minX: 71.75, maxX: 78.25, minZ: 14.5, maxZ: 35.5 }, kind: 'lecture' },
   { code: 'D7', label: 'Nhà D7', box: { minX: 53, maxX: 67, minZ: 44, maxZ: 56 }, kind: 'lecture' },
   // Phân khu Đông Đường Trần Đại Nghĩa (KTX B3–B13, B1, A17, H1, H3, Nhà T, Khu Thể thao & SVĐ)
