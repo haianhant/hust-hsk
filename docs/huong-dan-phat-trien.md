@@ -59,6 +59,9 @@ Ràng buộc cứng:
 
 - Mặt thư viện có đồng hồ **KHÔNG quay ra hồ**. Hướng thư viện hiện tại đã đúng
   sau lần xoay 180° trước đó — giữ nguyên, không xoay thêm.
+- Mặt tiền tòa thư viện: tham khảo đúng mặt tiền trên https://studywithhuster.cyou/
+  (trang này dựng mặt tiền thư viện rất chuẩn). Chỉ lấy mặt tiền; không gian mặt
+  trong và xung quanh không cần tham khảo.
 - C1 gắn sân trước + đường vào sảnh; sảnh không mở vào cỏ hay công trình khác.
 - Thư viện giữ quan hệ đúng với Hồ Tiền và sân tiếp cận.
 - Cổng Parabol nằm phía giáp đường Giải Phóng theo bản đồ, không đặt làm cổng
