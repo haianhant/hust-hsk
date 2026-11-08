@@ -1,15 +1,22 @@
-# Đặc tả Kỹ thuật: Pomodoro Timer, Study Session, Focus Mode & Study Rooms (`PR6` & `PR7`)
+# Đặc tả Kỹ thuật: Pomodoro Timer, Study Session, Focus Mode & Library Study Seating (`PR6` – `PR8`)
 
 ## 1. Thông tin Định danh Module & Trạng thái Thực thi
 
 - **Module IDs:**
   - `feature.study.pomodoro` — Đồng hồ Pomodoro dựa trên mốc thời gian thực (`wall-clock epoch`) cùng giao diện điều khiển React.
-  - `feature.study.session` — Phiên tự học cá nhân, danh sách việc cần làm (`StudyTaskItem`), lịch sử phiên học (`CompletedFocusBlock`) và liên kết tham khảo bài học HSK 3–4 (`linkedHskLessonId`).
+  - `feature.study.session` — Phiên tự học cá nhân, danh sách việc cần làm (`StudyTaskItem`), lịch sử phiên học (`CompletedFocusBlock`), gắn ghế ngồi học cục bộ (`bindSessionSeat` / `reconcilePersistedSessionSeat`) và liên kết tham khảo bài học HSK 3–4 (`linkedHskLessonId`).
   - `feature.study.focus-mode` — Chế độ tập trung (`off`, `minimal-hud`, `zen-2d` tạm dừng hoàn toàn WebGL 3D).
-  - `feature.social.study-rooms` — Hợp đồng dữ liệu phòng tự học chung & bộ quản lý chỗ ngồi (`SeatOccupancy`) có tính quyết định từ server (`authoritative`).
-  - `feature.social.presence` — Hợp đồng trạng thái hiện diện học tập (`PlayerStudyPresence`).
+  - `interior.library-lobby` & `feature.campus.interaction` — Nội thất 2 bàn đọc + 4 ghế ngồi học 3D tại Sảnh tầng 1 Thư viện Tạ Quang Bửu (`LibraryStudyArea.tsx`) và máy trạng thái ngồi học cục bộ (`seat-interaction.ts`).
+  - `feature.social.study-rooms` — Hợp đồng dữ liệu phòng tự học chung & bộ quản lý chỗ ngồi (`SeatOccupancy`) có tính quyết định từ server (`authoritative`, chuẩn bị cho `PR9`).
+  - `feature.social.presence` — Hợp đồng trạng thái hiện diện học tập (`PlayerStudyPresence`, chuẩn bị cho `PR9`).
 - **Source Paths:**
   - Hợp đồng chia sẻ (Frontend + Cloudflare Worker): [`shared/contracts/study.ts`](../../shared/contracts/study.ts)
+  - Nội thất 3D Bàn đọc & Máy trạng thái Ngồi học cục bộ (`PR8`):
+    - [`features/campus/buildings/library/LibraryStudyArea.tsx`](../../features/campus/buildings/library/LibraryStudyArea.tsx)
+    - [`features/campus/buildings/library/StudyTable.tsx`](../../features/campus/buildings/library/StudyTable.tsx)
+    - [`features/campus/buildings/library/StudyChair.tsx`](../../features/campus/buildings/library/StudyChair.tsx)
+    - [`features/campus/buildings/library/StudySeatMarkers.tsx`](../../features/campus/buildings/library/StudySeatMarkers.tsx)
+    - [`features/campus/interaction/seat-interaction.ts`](../../features/campus/interaction/seat-interaction.ts)
   - Đồng hồ Pomodoro thuần & React Hook/UI:
     - [`features/study/pomodoro/timer.ts`](../../features/study/pomodoro/timer.ts)
     - [`features/study/pomodoro/usePomodoro.ts`](../../features/study/pomodoro/usePomodoro.ts)
@@ -24,14 +31,16 @@
   - Bảng Tự học & Thống kê Phiên học:
     - [`features/study/ui/StudyPanel.tsx`](../../features/study/ui/StudyPanel.tsx)
     - [`features/study/ui/StudySessionSummary.tsx`](../../features/study/ui/StudySessionSummary.tsx)
-  - Quản lý ghế ngồi & Trạng thái hiện diện (chuẩn bị cho `PR8`):
+  - Quản lý ghế ngồi & Trạng thái hiện diện (chuẩn bị cho `PR9`):
     - [`features/social/rooms/seat-manager.ts`](../../features/social/rooms/seat-manager.ts)
     - [`features/social/presence/presence.ts`](../../features/social/presence/presence.ts)
   - Kiểm thử Đơn vị & Smoke Test Trình duyệt:
     - [`test/study-social-contracts.test.cjs`](../../test/study-social-contracts.test.cjs)
+    - [`test/ui-gameplay.test.cjs`](../../test/ui-gameplay.test.cjs)
     - [`test/study-mvp-smoke.cjs`](../../test/study-mvp-smoke.cjs)
+    - [`test/library-seating-smoke.cjs`](../../test/library-seating-smoke.cjs)
 
-### Phân loại Trạng thái Triển khai (`PR6` vs `PR7` vs `PR8+`)
+### Phân loại Trạng thái Triển khai (`PR6` vs `PR7` vs `PR8` vs `PR9`)
 
 | Hạng mục | Trạng thái | Kiểm thử Đã Chạy |
 |---|---|---|
@@ -39,7 +48,8 @@
 | **Giao diện Tự học (`StudyPanel`), Đồng hồ Pomodoro (`25/5` & `50/10`), Danh sách việc cần làm (`StudyTaskList`), Thống kê (`StudySessionSummary`) & 29 mã bài HSK chuẩn (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` (`12/12` PASS) + Playwright `node test/study-mvp-smoke.cjs` (`9/9` bước PASS) |
 | **Lưu trữ Authoritative đơn nguồn (`bkhn_study_session_v1`), Cô lập tick hiển thị khỏi `HomePage`/`localStorage` & Chống đếm/thông báo trùng phiên Focus qua F5 / ẩn tab / React Strict Mode (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` (`12/12` PASS) + Playwright `node test/study-mvp-smoke.cjs` |
 | **Focus Mode (`off` Normal 3D, `minimal-hud`, `zen-2d` tắt WebGL & bảo toàn tọa độ nhân vật khi quay lại 3D) (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` (`12/12` PASS) + Playwright `node test/study-mvp-smoke.cjs` |
-| **Đặt chỗ ngồi thời gian thực qua WebSocket (`study:claim-seat`), phát quảng bá `study:presence` từ Cloudflare Worker và hoạt cảnh ngồi ghế 3D (`PR8+`)** | **Lên kế hoạch cho `PR8+`** (Đã có state machine & unit test tại `seat-manager.ts`, chưa nối vào luồng WebSocket/UI) | Unit test logic tại `test/study-social-contracts.test.cjs` |
+| **Bàn ghế tự học 3D tại Sảnh tầng 1 Thư viện (`LibraryStudyArea`), tương tác ngồi/đứng cục bộ (`E — Ngồi học` / `E — Đứng dậy`), tư thế ngồi học 3D (`computeSeatedPoseTargets`) & gắn kết ghế vào `StudySessionState` (`PR8`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:ui` (`7/7` PASS) + `npm run test:avatar` (`3/3` PASS) + Playwright `node test/library-seating-smoke.cjs` (`14/14` bước PASS) |
+| **Đặt chỗ ngồi đa người chơi thời gian thực qua WebSocket (`study:claim-seat`, `study:release-seat`), phát quảng bá `study:presence` từ Cloudflare Worker và hiển thị người chơi khác đang ngồi học (`PR9`)** | **Lên kế hoạch cho `PR9`** (Đã có state machine & unit test tại `seat-manager.ts`, chưa nối vào luồng WebSocket/Worker) | Unit test logic tại `test/study-social-contracts.test.cjs` |
 
 ---
 

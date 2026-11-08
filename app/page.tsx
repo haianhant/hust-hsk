@@ -56,6 +56,7 @@ import {
   findNearestInteractable,
   getHook,
   LibraryLobbyModal,
+  releaseActiveSeatSafely,
   SPEECH_RATES,
   TOAST_MS,
   type LibraryLobbyTopic,
@@ -72,6 +73,7 @@ import {
 } from '../features/learning/hsk';
 import { useMultiplayerBridge } from '../features/social/multiplayer';
 import { FocusModeView, StudyPanel, useStudySession } from '../features/study';
+import { getSeatDefinition, type StudyRoomZoneId } from '../shared/contracts/study';
 
 // CampusScene chỉ mount sau khi bấm "Vào trường" — tránh autoplay/WebGL
 // trước khi người dùng tương tác.
@@ -94,6 +96,9 @@ export default function HomePage() {
   const [reviewSession, setReviewSession] = useState<ReviewSessionState | null>(null);
   const [inClassroom, setInClassroom] = useState(false);
   const [inLibraryLobby, setInLibraryLobby] = useState(false);
+  const [seatedSeatId, setSeatedSeatId] = useState<string | null>(null);
+  const [seatedSeatLabel, setSeatedSeatLabel] = useState<string | null>(null);
+  const [nearestSeatId, setNearestSeatId] = useState<string | null>(null);
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('day');
   const [outfitOpen, setOutfitOpen] = useState(false);
   const [characterProfile, setCharacterProfile] = useState<CharacterProfile>(DEFAULT_CHARACTER_PROFILE);
@@ -185,6 +190,82 @@ export default function HomePage() {
   }, []);
 
   const study = useStudySession({ onNotify: showToast });
+  const bindSeatRef = useRef(study.bindSeat);
+  bindSeatRef.current = study.bindSeat;
+
+  // PR8 — Đồng bộ trạng thái ngồi ghế thư viện từ Player sang React state & Study Session
+  useEffect(() => {
+    const onSeatChange = (e: Event) => {
+      const d = (
+        e as CustomEvent<{
+          seated: boolean;
+          seatId: string | null;
+          seatLabel: string | null;
+          studyRoomId: StudyRoomZoneId | null;
+        }>
+      ).detail;
+      if (!d) return;
+      setSeatedSeatId(d.seated ? d.seatId : null);
+      setSeatedSeatLabel(d.seated ? d.seatLabel : null);
+      bindSeatRef.current(
+        d.seated
+          ? (d.studyRoomId ?? 'library-lobby')
+          : playerState.inLibraryLobby
+            ? 'library-lobby'
+            : null,
+        d.seated ? d.seatId : null,
+      );
+    };
+    window.addEventListener('bkhn:seat-change', onSeatChange);
+    return () => window.removeEventListener('bkhn:seat-change', onSeatChange);
+  }, []);
+
+  const handleSitAtSeat = useCallback(
+    (seatId: string) => {
+      const r = getHook()?.sitAtSeat?.(seatId);
+      if (r?.ok) {
+        const seat = getSeatDefinition(seatId);
+        showToast(
+          `🪑 Đang ngồi học tại ${seat?.label ?? seatId}. Bấm "🍅 Tự học" để bắt đầu Pomodoro!`,
+        );
+        return;
+      }
+      if (r?.reason === 'too-far') {
+        showToast('Hãy bước lại gần ghế hơn để ngồi học.');
+      } else if (r?.reason === 'already-seated-other') {
+        showToast('Bạn đang ngồi ở ghế khác — hãy bấm Đứng dậy trước khi đổi ghế.');
+      } else if (r?.reason === 'riding-bike') {
+        showToast('Không thể ngồi ghế học khi đang lái xe.');
+      } else if (r?.reason === 'already-seated-same') {
+        study.setStudyPanelOpen(true);
+      } else {
+        showToast(r?.message ?? 'Chưa thể ngồi vào ghế này.');
+      }
+    },
+    [showToast, study],
+  );
+
+  const handleStandUp = useCallback(() => {
+    const r = releaseActiveSeatSafely({
+      driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
+      fallbackSeatId: seatedSeatId ?? study.session.seatId,
+    });
+    if (r.released) {
+      setSeatedSeatId(null);
+      setSeatedSeatLabel(null);
+      showToast('🚶 Đã đứng dậy khỏi bàn học.');
+    }
+  }, [seatedSeatId, showToast, study.focusPolicy.suspend3DRendering, study.session.seatId]);
+
+  const handleEndStudySession = useCallback(() => {
+    releaseActiveSeatSafely({
+      driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
+      fallbackSeatId: seatedSeatId ?? study.session.seatId,
+    });
+    setSeatedSeatId(null);
+    setSeatedSeatLabel(null);
+    study.endSession();
+  }, [seatedSeatId, study]);
 
   // --- Nạp + lưu tiến độ (localStorage, không tài khoản) ----------------------
   useEffect(() => {
@@ -373,6 +454,8 @@ export default function HomePage() {
         pos: playerState.pos,
         inClassroom,
         inLibraryLobby,
+        seated: playerState.seated,
+        seatId: playerState.seatId,
         bikeRiding: bikeState.riding,
         bikeSpeed: bikeState.speed,
         bikePos: bikeState.pos,
@@ -383,6 +466,9 @@ export default function HomePage() {
       });
       interactableRef.current = found?.id ?? null;
       setInteractLabel(found?.label ?? null);
+      setNearestSeatId(
+        found?.id?.startsWith('seat:') ? found.id.slice('seat:'.length) : null,
+      );
     }, 200);
     return () => clearInterval(id);
   }, [entered, inClassroom, inLibraryLobby, questActive, questDoneBefore, anyQuestDone, step?.id, showToast]);
@@ -458,6 +544,11 @@ export default function HomePage() {
   const handleObjectClick = useCallback(
     (id: string) => {
       if (panelRef.current === 'handbook') return;
+      if (id.startsWith('seat:')) {
+        const seatId = id.slice('seat:'.length);
+        handleSitAtSeat(seatId);
+        return;
+      }
       const pos = playerState.pos;
       const near = (x: number, z: number, r: number) => Math.hypot(pos.x - x, pos.z - z) <= r;
       if (id === 'statue') {
@@ -495,7 +586,7 @@ export default function HomePage() {
         window.dispatchEvent(new CustomEvent('bkhn:quest-object', { detail: { id } }));
       }
     },
-    [handleObjectAction, showToast, speakText, step?.kind],
+    [handleObjectAction, handleSitAtSeat, showToast, speakText, step?.kind],
   );
 
   // --- Vào / ra phòng học & Sảnh Thư viện (fade) -----------------------------------
@@ -669,6 +760,14 @@ export default function HomePage() {
       enterLibraryLobbyFade();
       return;
     }
+    if (id === 'seat-stand-up') {
+      handleStandUp();
+      return;
+    }
+    if (id.startsWith('seat:')) {
+      handleSitAtSeat(id.slice('seat:'.length));
+      return;
+    }
     if (id === 'lobby-statue') {
       setLobbyModal('statue');
       speakText('谢光宝教授图书馆');
@@ -691,7 +790,21 @@ export default function HomePage() {
     if (id === 'notebook' || id === 'homework') {
       handleObjectAction(id);
     }
-  }, [questActive, questDoneBefore, anyQuestDone, step?.id, startQuest, enterClassroomFade, enterLibraryLobbyFade, advance, handleObjectAction, showToast, speakText]);
+  }, [
+    questActive,
+    questDoneBefore,
+    anyQuestDone,
+    step?.id,
+    startQuest,
+    enterClassroomFade,
+    enterLibraryLobbyFade,
+    advance,
+    handleObjectAction,
+    handleSitAtSeat,
+    handleStandUp,
+    showToast,
+    speakText,
+  ]);
 
   useEffect(() => {
     if (!entered) return;
@@ -725,6 +838,11 @@ export default function HomePage() {
     (resumeQuest: boolean) => {
       const p = progressRef.current;
       const qs = p?.questState;
+      playerState.seated = false;
+      playerState.seatId = null;
+      setSeatedSeatId(null);
+      setSeatedSeatLabel(null);
+      bindSeatRef.current(null, null);
       if (resumeQuest && qs && !qs.done && qs.stepIndex >= 2) {
         playerState.inClassroom = true;
         playerState.inLibraryLobby = false;
@@ -921,8 +1039,13 @@ export default function HomePage() {
           onReconcileAt={study.reconcileAt}
           onExitZen2D={study.exitFocusMode}
           onOpenHandbook={() => openHandbook('lesson')}
-          onStartSession={() => study.startSession()}
-          onEndSession={study.endSession}
+          onStartSession={() =>
+            study.startSession({
+              studyRoomId: seatedSeatId ? 'library-lobby' : null,
+              seatId: seatedSeatId,
+            })
+          }
+          onEndSession={handleEndStudySession}
           onUpdateSubject={study.updateSubject}
           onAddTask={study.addTask}
           onToggleTask={study.toggleTask}
@@ -941,6 +1064,8 @@ export default function HomePage() {
             <CampusScene
               inClassroom={inClassroom}
               inLibraryLobby={inLibraryLobby}
+              activeSeatId={seatedSeatId}
+              nearestSeatId={nearestSeatId}
               timeOfDay={timeOfDay}
               notebookOpen={notebookOpen}
               homework={homework}
@@ -960,6 +1085,9 @@ export default function HomePage() {
           <CampusHud
             inClassroom={inClassroom}
             inLibraryLobby={inLibraryLobby}
+            seated={!!seatedSeatId}
+            activeSeatId={seatedSeatId}
+            activeSeatLabel={seatedSeatLabel}
             zone={zone}
             progress={progress}
             mpSnap={mpSnap}
@@ -981,6 +1109,7 @@ export default function HomePage() {
             pomodoro={study.session.pomodoro}
             focusPolicy={study.focusPolicy}
             onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
+            onStandUp={handleStandUp}
             onReconcileStudyAt={study.reconcileAt}
             onExitFocusMode={study.exitFocusMode}
             onDismissNoVoice={() => {
@@ -1011,13 +1140,21 @@ export default function HomePage() {
         <StudyPanel
           open={study.studyPanelOpen}
           zoneLabel={currentZoneLabel}
+          activeSeatId={seatedSeatId}
+          activeSeatLabel={seatedSeatLabel}
           session={study.session}
           focusPrefs={study.focusPrefs}
           focusPolicy={study.focusPolicy}
           onClose={() => study.setStudyPanelOpen(false)}
+          onStandUp={handleStandUp}
           onReconcileAt={study.reconcileAt}
-          onStartSession={() => study.startSession()}
-          onEndSession={study.endSession}
+          onStartSession={() =>
+            study.startSession({
+              studyRoomId: seatedSeatId ? 'library-lobby' : null,
+              seatId: seatedSeatId,
+            })
+          }
+          onEndSession={handleEndStudySession}
           onUpdateSubject={study.updateSubject}
           onSetLinkedHskLesson={study.setLinkedHskLesson}
           onAddTask={study.addTask}

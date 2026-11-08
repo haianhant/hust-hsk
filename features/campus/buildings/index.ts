@@ -25,3 +25,13 @@ export {
   drawC2Sign,
   drawDaiCoVietGateSign,
 } from './C2AndNorthGate';
+export {
+  LibraryStudyArea,
+  StudyChair,
+  StudySeatMarkers,
+  StudyTable,
+  type LibraryStudyAreaProps,
+  type StudyChairProps,
+  type StudySeatMarkersProps,
+  type StudyTableModelProps,
+} from './library';

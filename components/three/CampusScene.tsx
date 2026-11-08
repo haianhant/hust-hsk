@@ -26,6 +26,8 @@ import type { TimeOfDay } from '../../lib/playerState';
 export interface CampusSceneProps {
   inClassroom?: boolean;
   inLibraryLobby?: boolean;
+  activeSeatId?: string | null;
+  nearestSeatId?: string | null;
   timeOfDay?: TimeOfDay;
   notebookOpen?: boolean;
   homework?: HomeworkState;
@@ -360,6 +362,8 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
 export default function CampusScene({
   inClassroom = false,
   inLibraryLobby = false,
+  activeSeatId = null,
+  nearestSeatId = null,
   timeOfDay = 'day',
   notebookOpen = false,
   homework = 'desk',
@@ -368,6 +372,12 @@ export default function CampusScene({
   const atm = ATMOSPHERE[timeOfDay] ?? ATMOSPHERE.day;
   const isIndoor = inClassroom || inLibraryLobby;
   const activeAtm = isIndoor ? ATMOSPHERE.day : atm;
+
+  useEffect(() => {
+    return () => {
+      delete (window as unknown as { __bkhn?: unknown }).__bkhn;
+    };
+  }, []);
 
   return (
     <Canvas
@@ -421,7 +431,11 @@ export default function CampusScene({
           onObjectClick={onObjectClick ?? (() => undefined)}
         />
       ) : inLibraryLobby ? (
-        <LibraryLobby onObjectClick={onObjectClick} />
+        <LibraryLobby
+          activeSeatId={activeSeatId}
+          nearestSeatId={nearestSeatId}
+          onObjectClick={onObjectClick}
+        />
       ) : (
         <>
           <SkyAtmosphereAndNightLights timeOfDay={timeOfDay} />

@@ -18,7 +18,11 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { sanitizeSubjectTag } from '../../../shared/contracts/study';
+import { playerState } from '../../../lib/playerState';
+import {
+  sanitizeSubjectTag,
+  type StudyRoomZoneId,
+} from '../../../shared/contracts/study';
 import {
   DEFAULT_FOCUS_PREFERENCES,
   computeFocusRuntimePolicy,
@@ -40,11 +44,13 @@ import {
 } from '../pomodoro/timer';
 import {
   addStudyTask,
+  bindSessionSeat,
   collectUnnotifiedFocusBlocks,
   createInitialStudySession,
   endStudySession,
   linkHskLessonToSession,
   loadStudySession,
+  reconcilePersistedSessionSeat,
   removeStudyTask,
   saveStudySession,
   startStudySession,
@@ -64,8 +70,14 @@ export interface UseStudySessionResult {
   studyPanelOpen: boolean;
   setStudyPanelOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   reconcileAt: (nowMs?: number) => void;
-  startSession: (params?: { subjectTag?: string | null; linkedHskLessonId?: string | null }) => void;
+  startSession: (params?: {
+    subjectTag?: string | null;
+    linkedHskLessonId?: string | null;
+    studyRoomId?: StudyRoomZoneId | null;
+    seatId?: string | null;
+  }) => void;
   endSession: () => void;
+  bindSeat: (studyRoomId: StudyRoomZoneId | null, seatId: string | null) => void;
   updateSubject: (subjectTag: string) => void;
   setLinkedHskLesson: (lessonId: string | null) => void;
   addTask: (title: string) => void;
@@ -99,7 +111,11 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
   useEffect(() => {
     try {
       const nowMs = Date.now();
-      const loadedSession = loadStudySession(window.localStorage, nowMs);
+      const rawLoadedSession = loadStudySession(window.localStorage, nowMs);
+      const loadedSession = reconcilePersistedSessionSeat(rawLoadedSession, {
+        inLibraryLobby: playerState.inLibraryLobby,
+        activeSeatId: playerState.seated ? playerState.seatId : null,
+      });
       const loadedFocus = loadFocusPreferences(window.localStorage);
       // Seed notified set with blocks already present at mount so reload doesn't re-toast old history
       notifiedBlockIdsRef.current = new Set(loadedSession.history.map((b) => b.id));
@@ -208,13 +224,20 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
   );
 
   const startSession = useCallback(
-    (params?: { subjectTag?: string | null; linkedHskLessonId?: string | null }) => {
+    (params?: {
+      subjectTag?: string | null;
+      linkedHskLessonId?: string | null;
+      studyRoomId?: StudyRoomZoneId | null;
+      seatId?: string | null;
+    }) => {
       const nowMs = Date.now();
       setSession((prev) =>
         startStudySession(prev, {
           nowMs,
           subjectTag: params?.subjectTag,
           linkedHskLessonId: params?.linkedHskLessonId,
+          studyRoomId: params?.studyRoomId,
+          seatId: params?.seatId,
         }),
       );
     },
@@ -225,6 +248,13 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
     setSession((prev) => endStudySession(prev));
     setFocusPrefs((prev) => (prev.level === 'zen-2d' ? { ...prev, level: 'off' } : prev));
   }, []);
+
+  const bindSeat = useCallback(
+    (studyRoomId: StudyRoomZoneId | null, seatId: string | null) => {
+      setSession((prev) => bindSessionSeat(prev, studyRoomId, seatId));
+    },
+    [],
+  );
 
   const updateSubject = useCallback((subjectTag: string) => {
     setSession((prev) => ({
@@ -350,6 +380,7 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
     reconcileAt,
     startSession,
     endSession,
+    bindSeat,
     updateSubject,
     setLinkedHskLesson,
     addTask,
