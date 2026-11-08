@@ -213,3 +213,12 @@ test('PR5 bridge.ts — findNearestInteractable enforces 5-tier interaction prio
     { id: 'homework', label: 'E — Nhận bài tập' },
   );
 });
+
+test('PR5 tailwind.config.js — scans features/** and shared/** so HUD positioning classes are never purged', () => {
+  const tailwindConfig = require('../tailwind.config.js');
+  assert.ok(Array.isArray(tailwindConfig.content));
+  assert.ok(tailwindConfig.content.includes('./app/**/*.{ts,tsx}'));
+  assert.ok(tailwindConfig.content.includes('./components/**/*.{ts,tsx}'));
+  assert.ok(tailwindConfig.content.includes('./features/**/*.{ts,tsx}'));
+  assert.ok(tailwindConfig.content.includes('./shared/**/*.{ts,tsx}'));
+});
