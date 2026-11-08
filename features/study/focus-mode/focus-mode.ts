@@ -48,6 +48,31 @@ export const DEFAULT_FOCUS_PREFERENCES: FocusModePreferences = {
   muteMovementNotifications: true,
 };
 
+export const FOCUS_MODE_STORAGE_KEY = 'bkhn_focus_mode_v1';
+
+export interface FocusStorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+export function saveFocusPreferences(
+  storage: FocusStorageLike,
+  prefs: FocusModePreferences,
+): void {
+  storage.setItem(FOCUS_MODE_STORAGE_KEY, JSON.stringify(sanitizeFocusPreferences(prefs)));
+}
+
+export function loadFocusPreferences(storage: FocusStorageLike): FocusModePreferences {
+  const raw = storage.getItem(FOCUS_MODE_STORAGE_KEY);
+  if (!raw) return { ...DEFAULT_FOCUS_PREFERENCES };
+  try {
+    const parsed = JSON.parse(raw) as Partial<FocusModePreferences>;
+    return sanitizeFocusPreferences(parsed);
+  } catch {
+    return { ...DEFAULT_FOCUS_PREFERENCES };
+  }
+}
+
 export function sanitizeFocusPreferences(
   raw?: Partial<FocusModePreferences> | null,
 ): FocusModePreferences {

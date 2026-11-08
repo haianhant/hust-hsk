@@ -10,21 +10,54 @@
 //    Study Session only stores optional non-intrusive references (`linkedHskLessonId`).
 // ---------------------------------------------------------------------------
 
+import { HSK3_LESSONS } from '../../../content/hsk3-index';
+import { HSK4_LESSONS } from '../../../content/hsk4-index';
 import {
   isValidStudyRoomZone,
   sanitizeSubjectTag,
   type StudyRoomZoneId,
 } from '../../../shared/contracts/study';
 import {
+  POMODORO_STORAGE_KEY,
   createPomodoroState,
-  deserializePomodoroState,
-  serializePomodoroState,
+  evaluatePomodoroAt,
+  parseStoredPomodoroSnapshot,
+  type PomodoroEvaluation,
   type PomodoroState,
 } from '../pomodoro/timer';
 
 export const STUDY_SESSION_STORAGE_KEY = 'bkhn_study_session_v1';
 export const MAX_STUDY_TASKS = 25;
 export const MAX_FOCUS_HISTORY = 50;
+
+export interface HskLessonOption {
+  id: string;
+  label: string;
+}
+
+export const CANONICAL_HSK_LESSON_OPTIONS: readonly HskLessonOption[] = [
+  ...HSK3_LESSONS.map((l) => ({
+    id: l.id,
+    label: `HSK 3 · Bài ${l.number} — ${l.topic}`,
+  })),
+  ...HSK4_LESSONS.map((l) => ({
+    id: l.id,
+    label: `HSK 4 · Bài ${l.number} — ${l.topic}`,
+  })),
+];
+
+const HSK_LESSON_LABEL_BY_ID = new Map<string, string>(
+  CANONICAL_HSK_LESSON_OPTIONS.map((opt) => [opt.id, opt.label]),
+);
+
+export function isValidCanonicalHskLessonId(value: unknown): value is string {
+  return typeof value === 'string' && HSK_LESSON_LABEL_BY_ID.has(value);
+}
+
+export function formatHskLessonLabel(lessonId: string | null | undefined): string | null {
+  if (!lessonId) return null;
+  return HSK_LESSON_LABEL_BY_ID.get(lessonId) ?? lessonId;
+}
 
 export interface StudyTaskItem {
   id: string;
@@ -206,8 +239,14 @@ export function recordFocusBlockCompletion(
     durationMs: number;
   },
 ): StudySessionState {
+  // Idempotent guard: each completed focus block boundary (endedAtMs) is
+  // recorded at most once, even across page reload, tab wake-up, or repeated
+  // evaluation ticks.
+  if (session.history.some((h) => h.endedAtMs === block.endedAtMs)) {
+    return session;
+  }
   const entry: CompletedFocusBlock = {
-    id: `focus-${block.endedAtMs}-${session.history.length + 1}`,
+    id: `focus-${block.endedAtMs}`,
     startedAtMs: block.startedAtMs,
     endedAtMs: block.endedAtMs,
     durationMs: Math.max(0, block.durationMs),
@@ -218,6 +257,66 @@ export function recordFocusBlockCompletion(
   };
   const history = [...session.history, entry].slice(-MAX_FOCUS_HISTORY);
   return { ...session, history };
+}
+
+export interface StudySessionEvaluation {
+  session: StudySessionState;
+  evaluation: PomodoroEvaluation;
+  newlyCompletedBlocks: number;
+}
+
+/**
+ * Evaluates the embedded wall-clock Pomodoro timer at `nowMs` and idempotently
+ * records any newly completed focus blocks into `session.history`.
+ */
+export function syncStudySessionAt(
+  session: StudySessionState,
+  nowMs: number = Date.now(),
+  options: { autoAdvance?: boolean } = { autoAdvance: true },
+): StudySessionEvaluation {
+  const evaluation = evaluatePomodoroAt(session.pomodoro, nowMs, options);
+  let nextSession: StudySessionState =
+    evaluation.state === session.pomodoro
+      ? session
+      : {
+          ...session,
+          pomodoro: evaluation.state,
+        };
+
+  let newlyCompletedBlocks = 0;
+  for (const win of evaluation.completedFocusWindows) {
+    const prevHistory = nextSession.history;
+    nextSession = recordFocusBlockCompletion(nextSession, win);
+    if (nextSession.history !== prevHistory) {
+      newlyCompletedBlocks += 1;
+    }
+  }
+
+  return {
+    session: nextSession,
+    evaluation,
+    newlyCompletedBlocks,
+  };
+}
+
+/**
+ * Pure deduplication helper for focus completion notifications. Returns only
+ * blocks whose `id` is not yet in `notifiedIds`, mutating `notifiedIds` so
+ * each completed block triggers at most one notification even under React
+ * Strict Mode double-invocations.
+ */
+export function collectUnnotifiedFocusBlocks(
+  history: readonly CompletedFocusBlock[],
+  notifiedIds: Set<string>,
+): CompletedFocusBlock[] {
+  const newlyNotified: CompletedFocusBlock[] = [];
+  for (const block of history) {
+    if (!notifiedIds.has(block.id)) {
+      notifiedIds.add(block.id);
+      newlyNotified.push(block);
+    }
+  }
+  return newlyNotified;
 }
 
 export function saveStudySession(
@@ -232,16 +331,23 @@ export function loadStudySession(
   nowMs: number = Date.now(),
 ): StudySessionState {
   const raw = storage.getItem(STUDY_SESSION_STORAGE_KEY);
-  if (!raw) return createInitialStudySession();
+  if (!raw) {
+    const legacyPomodoroRaw = storage.getItem(POMODORO_STORAGE_KEY);
+    if (!legacyPomodoroRaw) return createInitialStudySession();
+    const legacyPomodoro = parseStoredPomodoroSnapshot(legacyPomodoroRaw, nowMs);
+    const migrated: StudySessionState = {
+      ...createInitialStudySession(),
+      active: legacyPomodoro.phase !== 'idle',
+      sessionStartedAtMs: legacyPomodoro.phaseStartedAtMs ?? (legacyPomodoro.phase !== 'idle' ? nowMs : null),
+      pomodoro: legacyPomodoro,
+    };
+    return syncStudySessionAt(migrated, nowMs, { autoAdvance: true }).session;
+  }
   try {
     const parsed = JSON.parse(raw) as Partial<StudySessionState>;
     if (!parsed || typeof parsed !== 'object') return createInitialStudySession();
 
-    const pomodoroEval = deserializePomodoroState(
-      parsed.pomodoro ? serializePomodoroState(parsed.pomodoro as PomodoroState) : null,
-      nowMs,
-      { autoAdvance: true },
-    );
+    const rawPomodoro = parseStoredPomodoroSnapshot(parsed.pomodoro, nowMs);
 
     const tasks: StudyTaskItem[] = Array.isArray(parsed.tasks)
       ? parsed.tasks
@@ -267,23 +373,24 @@ export function loadStudySession(
           .slice(-MAX_FOCUS_HISTORY)
       : [];
 
-    return {
+    const restored: StudySessionState = {
       version: 1,
-      active: Boolean(parsed.active),
+      active: Boolean(parsed.active) || rawPomodoro.phase !== 'idle',
       sessionStartedAtMs:
         typeof parsed.sessionStartedAtMs === 'number' &&
         Number.isFinite(parsed.sessionStartedAtMs)
           ? parsed.sessionStartedAtMs
-          : null,
+          : rawPomodoro.phaseStartedAtMs,
       subjectTag: sanitizeSubjectTag(parsed.subjectTag) ?? 'Tự học HSK',
       linkedHskLessonId:
         typeof parsed.linkedHskLessonId === 'string' ? parsed.linkedHskLessonId : null,
       studyRoomId: isValidStudyRoomZone(parsed.studyRoomId) ? parsed.studyRoomId : null,
       seatId: typeof parsed.seatId === 'string' ? parsed.seatId : null,
-      pomodoro: pomodoroEval.state,
+      pomodoro: rawPomodoro,
       tasks,
       history,
     };
+    return syncStudySessionAt(restored, nowMs, { autoAdvance: true }).session;
   } catch {
     return createInitialStudySession();
   }

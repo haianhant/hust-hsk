@@ -226,8 +226,8 @@ export default function Player() {
   // hướng nhìn bảng); null thì dùng mặc định (yaw π/2 hướng tây từ cổng Trần Đại Nghĩa vào trường).
   const yawRef = useRef(playerState.cameraYaw ?? Math.PI / 2); // hướng nhìn ban đầu: -X (tây, từ cổng Trần Đại Nghĩa vào trong trường)
   const pitchRef = useRef(playerState.cameraPitch ?? 0.18); // nhìn hơi chúc xuống — đủ thấy ngọn các công trình cao
-  const distRef = useRef(7);
-  const facingRef = useRef(-Math.PI / 2);
+  const distRef = useRef(playerState.inClassroom || playerState.inLibraryLobby ? 3 : 7);
+  const facingRef = useRef(playerState.facing ?? -Math.PI / 2);
   const walkPhaseRef = useRef(0);
   const moveBlendRef = useRef(0); // 0 = idle, 1 = đi/chạy hết cỡ (nội suy mềm)
   const prevHitRef = useRef<string | null>(null);
@@ -464,7 +464,7 @@ export default function Player() {
   fastTravelRef.current = fastTravel;
   // window.__bkhn = { getPos, teleport(x, z, yaw?), topView() } — dùng để chụp
   // ảnh từ trên cao và đặt avatar đúng đầu mỗi chặng kiểm tra trong Playwright.
-  const viewModeRef = useRef<'follow' | 'top'>('follow');
+  const viewModeRef = useRef<'follow' | 'top'>(playerState.viewMode ?? 'follow');
   useEffect(() => {
     const hook = {
       getPos: () => ({ ...posRef.current }),

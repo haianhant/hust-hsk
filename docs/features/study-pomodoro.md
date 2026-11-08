@@ -1,54 +1,77 @@
-# Đặc tả Kỹ thuật: Pomodoro Timer, Study Session, Focus Mode & Study Rooms (`PR6`)
+# Đặc tả Kỹ thuật: Pomodoro Timer, Study Session, Focus Mode & Study Rooms (`PR6` & `PR7`)
 
-## 1. Thông tin Định danh Module
+## 1. Thông tin Định danh Module & Trạng thái Thực thi
 
 - **Module IDs:**
-  - `feature.study.pomodoro` — Đồng hồ Pomodoro dựa trên mốc thời gian thực (`wall-clock epoch`).
-  - `feature.study.session` — Phiên tự học cá nhân, danh sách việc cần làm (`StudyTaskItem`), lịch sử phiên học và liên kết tùy chọn với bài học HSK 3–4.
-  - `feature.study.focus-mode` — Chế độ tập trung (`off`, `minimal-hud`, `zen-2d` tắt hoàn toàn WebGL 3D).
-  - `feature.social.study-rooms` — Phòng tự học chung & quản lý chỗ ngồi (`SeatOccupancy`) có tính quyết định từ server (`authoritative`).
-  - `feature.social.presence` — Trạng thái hiện diện học tập (`PlayerStudyPresence`) phát quảng bá trong phòng.
+  - `feature.study.pomodoro` — Đồng hồ Pomodoro dựa trên mốc thời gian thực (`wall-clock epoch`) cùng giao diện điều khiển React.
+  - `feature.study.session` — Phiên tự học cá nhân, danh sách việc cần làm (`StudyTaskItem`), lịch sử phiên học (`CompletedFocusBlock`) và liên kết tham khảo bài học HSK 3–4 (`linkedHskLessonId`).
+  - `feature.study.focus-mode` — Chế độ tập trung (`off`, `minimal-hud`, `zen-2d` tạm dừng hoàn toàn WebGL 3D).
+  - `feature.social.study-rooms` — Hợp đồng dữ liệu phòng tự học chung & bộ quản lý chỗ ngồi (`SeatOccupancy`) có tính quyết định từ server (`authoritative`).
+  - `feature.social.presence` — Hợp đồng trạng thái hiện diện học tập (`PlayerStudyPresence`).
 - **Source Paths:**
-  - Hợp đồng chia sẻ (Frontend + Cloudflare Worker): [`shared/contracts/study.ts`](file:///home/bao/Hust3D/hust-hsk/shared/contracts/study.ts)
-  - Đồng hồ Pomodoro thuần: [`features/study/pomodoro/timer.ts`](file:///home/bao/Hust3D/hust-hsk/features/study/pomodoro/timer.ts)
-  - Phiên tự học cá nhân: [`features/study/study-session/session.ts`](file:///home/bao/Hust3D/hust-hsk/features/study/study-session/session.ts)
-  - Chính sách Focus Mode: [`features/study/focus-mode/focus-mode.ts`](file:///home/bao/Hust3D/hust-hsk/features/study/focus-mode/focus-mode.ts)
-  - Quản lý ghế ngồi Study Room: [`features/social/rooms/seat-manager.ts`](file:///home/bao/Hust3D/hust-hsk/features/social/rooms/seat-manager.ts)
-  - Trạng thái hiện diện: [`features/social/presence/presence.ts`](file:///home/bao/Hust3D/hust-hsk/features/social/presence/presence.ts)
-  - Kiểm thử đơn vị: [`test/study-social-contracts.test.cjs`](file:///home/bao/Hust3D/hust-hsk/test/study-social-contracts.test.cjs)
-- **Current Implementation Status:** **Implemented (`PR6` — Contracts, Pure State Machines & Architecture Verified)**
+  - Hợp đồng chia sẻ (Frontend + Cloudflare Worker): [`shared/contracts/study.ts`](../../shared/contracts/study.ts)
+  - Đồng hồ Pomodoro thuần & React Hook/UI:
+    - [`features/study/pomodoro/timer.ts`](../../features/study/pomodoro/timer.ts)
+    - [`features/study/pomodoro/usePomodoro.ts`](../../features/study/pomodoro/usePomodoro.ts)
+    - [`features/study/pomodoro/PomodoroTimer.tsx`](../../features/study/pomodoro/PomodoroTimer.tsx)
+  - Phiên tự học cá nhân & Danh sách việc cần làm:
+    - [`features/study/study-session/session.ts`](../../features/study/study-session/session.ts)
+    - [`features/study/study-session/useStudySession.ts`](../../features/study/study-session/useStudySession.ts)
+    - [`features/study/study-session/StudyTaskList.tsx`](../../features/study/study-session/StudyTaskList.tsx)
+  - Chính sách Focus Mode & Giao diện Zen 2D:
+    - [`features/study/focus-mode/focus-mode.ts`](../../features/study/focus-mode/focus-mode.ts)
+    - [`features/study/focus-mode/FocusModeView.tsx`](../../features/study/focus-mode/FocusModeView.tsx)
+  - Bảng Tự học & Thống kê Phiên học:
+    - [`features/study/ui/StudyPanel.tsx`](../../features/study/ui/StudyPanel.tsx)
+    - [`features/study/ui/StudySessionSummary.tsx`](../../features/study/ui/StudySessionSummary.tsx)
+  - Quản lý ghế ngồi & Trạng thái hiện diện (chuẩn bị cho `PR8`):
+    - [`features/social/rooms/seat-manager.ts`](../../features/social/rooms/seat-manager.ts)
+    - [`features/social/presence/presence.ts`](../../features/social/presence/presence.ts)
+  - Kiểm thử Đơn vị & Smoke Test Trình duyệt:
+    - [`test/study-social-contracts.test.cjs`](../../test/study-social-contracts.test.cjs)
+    - [`test/study-mvp-smoke.cjs`](../../test/study-mvp-smoke.cjs)
+
+### Phân loại Trạng thái Triển khai (`PR6` vs `PR7` vs `PR8+`)
+
+| Hạng mục | Trạng thái | Kiểm thử Đã Chạy |
+|---|---|---|
+| **Hợp đồng `shared/contracts/study.ts` & State Machine thuần (`PR6`)** | **Đã triển khai & kiểm thử** | `npm run test:study` (`12/12` unit/integration tests PASS) |
+| **Giao diện Tự học (`StudyPanel`), Đồng hồ Pomodoro (`25/5` & `50/10`), Danh sách việc cần làm (`StudyTaskList`), Thống kê (`StudySessionSummary`) & 29 mã bài HSK chuẩn (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` (`12/12` PASS) + Playwright `node test/study-mvp-smoke.cjs` (`9/9` bước PASS) |
+| **Lưu trữ Authoritative đơn nguồn (`bkhn_study_session_v1`), Cô lập tick hiển thị khỏi `HomePage`/`localStorage` & Chống đếm/thông báo trùng phiên Focus qua F5 / ẩn tab / React Strict Mode (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` (`12/12` PASS) + Playwright `node test/study-mvp-smoke.cjs` |
+| **Focus Mode (`off` Normal 3D, `minimal-hud`, `zen-2d` tắt WebGL & bảo toàn tọa độ nhân vật khi quay lại 3D) (`PR7`)** | **Đã triển khai & kiểm thử trình duyệt** | `npm run test:study` (`12/12` PASS) + Playwright `node test/study-mvp-smoke.cjs` |
+| **Đặt chỗ ngồi thời gian thực qua WebSocket (`study:claim-seat`), phát quảng bá `study:presence` từ Cloudflare Worker và hoạt cảnh ngồi ghế 3D (`PR8+`)** | **Lên kế hoạch cho `PR8+`** (Đã có state machine & unit test tại `seat-manager.ts`, chưa nối vào luồng WebSocket/UI) | Unit test logic tại `test/study-social-contracts.test.cjs` |
 
 ---
 
-## 2. Phân tách Ranh giới Trạng thái: Cá nhân (`Session State`) vs. Chia sẻ (`Room State`)
+## 2. Kiến trúc Lưu trữ Đơn nguồn (Single Authoritative Persistence) & Ranh giới Trạng thái
 
 ```mermaid
 flowchart TB
   subgraph Client["Trạng thái Cá nhân (Client + localStorage)"]
     HSK["HSK 3–4 Progress Store<br/>(bkhn_hsk3_progress_v1)"]
-    SS["StudySessionState<br/>(bkhn_study_session_v1)"]
-    PM["PomodoroState<br/>(bkhn_pomodoro_state_v1)"]
-    FM["FocusModePreferences<br/>(off | minimal-hud | zen-2d)"]
-    SS --> PM
-    SS -. "linkedHskLessonId (tùy chọn)" .-> HSK
+    SS["StudySessionState + Embedded PomodoroState<br/>(Authoritative Key: bkhn_study_session_v1)"]
+    FM["FocusModePreferences<br/>(Key: bkhn_focus_mode_v1)"]
+    SS -. "linkedHskLessonId (chỉ tham chiếu, không tự sửa điểm HSK)" .-> HSK
   end
 
-  subgraph Shared["Trạng thái Chia sẻ Authoritative (Cloudflare DO / SeatRegistry)"]
+  subgraph Shared["Trạng thái Chia sẻ Authoritative (Kế hoạch PR8+)"]
     SR["SeatRegistry<br/>(bySeatId / seatByOccupant)"]
     PR["PlayerStudyPresence<br/>(exploring | studying | break | idle)"]
   end
 
   SS -- "derivePlayerPresence()" --> PR
-  SS -- "study:claim-seat / study:release-seat" --> SR
+  SS -- "study:claim-seat / study:release-seat (PR8+)" --> SR
 ```
 
-| Thuộc tính | Nơi Lưu trữ Authoritative | Có Gửi Qua WebSocket? | Ghi chú |
-|---|---|---|---|
-| Điểm HSK, SRS, Sổ lỗi, Chuỗi ngày | `localStorage` (`bkhn_hsk3_progress_v1`) | **Không** | Thuộc module độc lập `feature.learning.hsk` (`lib/learn/store.ts`). |
-| Danh sách mục tiêu cá nhân (`tasks`), lịch sử `CompletedFocusBlock` | `localStorage` (`bkhn_study_session_v1`) | **Không** | Riêng tư trên thiết bị của người học. |
-| Mốc thời gian Pomodoro cá nhân (`phaseStartedAtMs`, `phaseEndsAtMs`) | `localStorage` (`bkhn_pomodoro_state_v1`) | Chỉ gửi nhãn `pomodoroPhase` | Phục hồi chính xác sau khi F5 hoặc ẩn tab. |
-| Chiếm giữ chỗ ngồi (`SeatOccupancy`: `seatId`, `occupantId`) | Server / Durable Object (`SeatRegistry`) | **Có** (`study:seat-claimed`, `study:seat-released`) | Mỗi sinh viên chỉ giữ tối đa 1 ghế tại một thời điểm; tự giải phóng khi ngắt kết nối. |
-| Trạng thái hiện diện (`PlayerStudyPresence`) | Server / Durable Object | **Có** (`study:presence`) | Chỉ chứa `status`, `studyRoomId`, `seatId`, `pomodoroPhase`, `subjectTag` (tối đa 36 ký tự). |
+### Quyết định Lưu trữ Authoritative (`PR7`)
+1. **Một khóa `localStorage` duy nhất cho Phiên học & Đồng hồ Pomodoro (`bkhn_study_session_v1`):**
+   - Toàn bộ trạng thái `StudySessionState` (bao gồm `pomodoro: PomodoroState`, `tasks: StudyTaskItem[]`, `history: CompletedFocusBlock[]`, `subjectTag`, `linkedHskLessonId`) được đọc/ghi tập trung qua `loadStudySession` và `saveStudySession` tại [`features/study/study-session/session.ts`](../../features/study/study-session/session.ts).
+   - Không ghi song song vào hai khóa đồng hồ độc lập để loại bỏ hoàn toàn nguy cơ lệch pha giữa `POMODORO_STORAGE_KEY` và `STUDY_SESSION_STORAGE_KEY`. Nếu phát hiện dữ liệu cũ ở `POMODORO_STORAGE_KEY` khi chưa có `STUDY_SESSION_STORAGE_KEY`, `loadStudySession` tự động di trú một lần sang `bkhn_study_session_v1`.
+2. **Đảm bảo mỗi phiên Focus hoàn thành chỉ được ghi nhận đúng 1 lần (`Idempotent Completion Recording`):**
+   - Hàm `syncStudySessionAt(session, nowMs)` đối chiếu mốc thời gian thực `nowMs` qua `evaluatePomodoroAt` và ghi nhận từng cửa sổ `CompletedFocusWindow` vào `session.history` qua `recordFocusBlockCompletion`.
+   - `recordFocusBlockCompletion` kiểm tra trùng lặp theo mốc kết thúc `endedAtMs` (`id: focus-${endedAtMs}`), đảm bảo dù người dùng F5 tải lại trang, chuyển tab nền, hay React chạy lại effect trong StrictMode thì mỗi phiên Focus hoàn tất chỉ được tính **đúng 1 lần**.
+3. **Cô lập tuyệt đối với Tiến độ HSK (`bkhn_hsk3_progress_v1`):**
+   - Hoàn thành phiên Pomodoro không tự động thay đổi điểm số, chuỗi ngày học (streak), trạng thái nhiệm vụ hay lịch ôn SRS của phân hệ HSK.
 
 ---
 
@@ -67,18 +90,20 @@ stateDiagram-v2
   long_break --> idle : resetPomodoro()
 ```
 
-### Bất biến Kỹ thuật (Invariants)
-1. **Không phụ thuộc `setInterval` hay `useFrame`:**
-   - Thời gian còn lại luôn được tính bằng công thức `Math.max(0, state.phaseEndsAtMs - nowMs)` (khi `running === true`) hoặc `state.pausedRemainingMs` (khi `running === false`).
-   - Khi trình duyệt làm chậm timer ở background tab hoặc người dùng F5 tải lại trang sau nhiều phút, [`evaluatePomodoroAt`](file:///home/bao/Hust3D/hust-hsk/features/study/pomodoro/timer.ts#L172-L273) và [`deserializePomodoroState`](file:///home/bao/Hust3D/hust-hsk/features/study/pomodoro/timer.ts#L285-L353) tự động tính bù chính xác số chu kỳ đã qua và cộng đủ `completedFocusBlocks` cũng như `totalFocusedMs`.
-2. **Chạy độc lập với 3D Rendering (`Focus Mode: zen-2d`):**
-   - Khi người học chọn `level: 'zen-2d'`, [`computeFocusRuntimePolicy`](file:///home/bao/Hust3D/hust-hsk/features/study/focus-mode/focus-mode.ts#L78-L114) trả về `suspend3DRendering: true` và `allowLearningAndPomodoro: true`, cho phép tắt hoàn toàn Canvas 3D để tiết kiệm pin trong khi đồng hồ Pomodoro và Sổ tay HSK vẫn hoạt động bình thường.
+### Các Nhịp Pomodoro Hỗ trợ (`PR7`)
+- **Mặc định (`25-5`):** 25 phút Tập trung (`focus`) / 5 phút Nghỉ ngắn (`short-break`) / 15 phút Nghỉ dài (`long-break` sau mỗi 4 phiên Focus).
+- **Tùy chọn (`50-10`):** 50 phút Tập trung (`focus`) / 10 phút Nghỉ ngắn (`short-break`) / 15 phút Nghỉ dài (`long-break` sau mỗi 4 phiên Focus).
+- **Thao tác hỗ trợ:** Bắt đầu (`Start`), Tạm dừng (`Pause`), Tiếp tục (`Resume`), Chuyển pha (`Skip phase`), Đặt lại (`Reset`).
 
 ---
 
-## 4. Danh mục Khu vực Tự học & Chỗ ngồi Chuẩn (`STUDY_ROOMS` & `STUDY_SEATS`)
+## 4. Ba Cấp độ Focus Mode (`feature.study.focus-mode`)
 
-1. **`library-lobby`** — *Sảnh Tầng 1 Thư viện Tạ Quang Bửu* (`quietLevel: 'whisper'`, 4 ghế mẫu `tqb-1f-t1-s1..t2-s2`).
-2. **`library-reading-3f`** — *Phòng đọc Tự học Tầng 3 Thư viện Tạ Quang Bửu* (`quietLevel: 'silent'`, 4 ghế mẫu `tqb-3f-t1-s1..t2-s2`).
-3. **`c1-classroom-101`** — *Phòng học C1-101 Tòa nhà C1* (`quietLevel: 'collaborative'`, 4 ghế mẫu `c1-101-d1-s1..d2-s2`).
-4. **`tien-lake-pavilion`** — *Bàn đá ven Hồ Tiền (C9 – Cầu thang đỏ)* (`quietLevel: 'collaborative'`, 2 ghế mẫu `lake-bench-w1`, `lake-bench-n1`).
+1. **`off` (Normal 3D):**
+   - Giữ nguyên khung cảnh 3D Bách khoa và toàn bộ nút điều khiển trên `CampusHud`.
+2. **`minimal-hud` (Minimal HUD):**
+   - Giữ khung cảnh 3D nhưng ẩn Bản đồ nhỏ (`Minimap`), nút Đi nhanh, Gọi xe, Đổi giờ/trang phục và bảng hướng dẫn để giảm xao nhãng khi đang trong pha `focus`.
+   - Luôn hiển thị nút **`🎯 Đang bật Minimal HUD · Thoát Focus Mode`** và nút **`🍅 Tự học · MM:SS`** để người học kiểm soát phiên hoặc quay về HUD đầy đủ bất kỳ lúc nào.
+3. **`zen-2d` (Zen 2D — Tạm dừng 3D WebGL):**
+   - Tạm dừng hoàn toàn `<CampusScene />` (`suspend3DRendering: true`) và hiển thị giao diện bàn học 2D nhẹ (`FocusModeView.tsx`).
+   - Giữ nguyên kết nối Multiplayer (`useMultiplayerBridge` vẫn hoạt động ở `app/page.tsx`) và bảo toàn nguyên vẹn tọa độ `playerState.pos`, góc nhìn `cameraYaw`/`cameraPitch`, hướng mặt `facing` khi bấm **`🏞️ Quay lại khuôn viên 3D`**.

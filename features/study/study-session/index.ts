@@ -2,6 +2,9 @@ export {
   STUDY_SESSION_STORAGE_KEY,
   MAX_STUDY_TASKS,
   MAX_FOCUS_HISTORY,
+  CANONICAL_HSK_LESSON_OPTIONS,
+  isValidCanonicalHskLessonId,
+  formatHskLessonLabel,
   createInitialStudySession,
   startStudySession,
   endStudySession,
@@ -11,10 +14,20 @@ export {
   toggleStudyTask,
   removeStudyTask,
   recordFocusBlockCompletion,
+  syncStudySessionAt,
+  collectUnnotifiedFocusBlocks,
   saveStudySession,
   loadStudySession,
+  type HskLessonOption,
   type StudyTaskItem,
   type CompletedFocusBlock,
   type StudySessionState,
+  type StudySessionEvaluation,
   type StorageLike,
 } from './session';
+export {
+  useStudySession,
+  type UseStudySessionOptions,
+  type UseStudySessionResult,
+} from './useStudySession';
+export { StudyTaskList, type StudyTaskListProps } from './StudyTaskList';
