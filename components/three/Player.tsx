@@ -774,7 +774,8 @@ export default function Player() {
   useFrame((state, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05);
 
-    // Về vị trí an toàn khi HUD tăng playerInput.resetToken.
+    // Về vị trí an toàn (luôn đưa nhân vật về Cổng Trần Đại Nghĩa ngoài sân trường)
+    // khi HUD tăng playerInput.resetToken.
     if (playerInput.resetToken !== lastResetRef.current) {
       lastResetRef.current = playerInput.resetToken;
       // Đang lái thì xuống xe tại chỗ (xe ở yên vị trí cũ, gọi lại được).
@@ -785,23 +786,22 @@ export default function Player() {
         bikeLeanRef.current = 0;
         syncBikeState();
       }
-      posRef.current = playerState.inClassroom
-        ? { ...CLASSROOM.spawn }
-        : playerState.inLibraryLobby
-          ? { ...LIBRARY_LOBBY.spawn }
-          : { ...SPAWN };
-      playerState.pos = { ...posRef.current };
-      if (playerState.inClassroom || playerState.inLibraryLobby) {
-        facingRef.current = Math.PI;
-        playerState.facing = Math.PI;
-        yawRef.current = 0;
-        pitchRef.current = playerState.inLibraryLobby ? 0.2 : 0.25;
-      } else {
-        facingRef.current = -Math.PI / 2;
-        playerState.facing = -Math.PI / 2;
-        yawRef.current = Math.PI / 2;
-        pitchRef.current = 0.18;
+      if (playerState.inClassroom) {
+        playerState.inClassroom = false;
+        window.dispatchEvent(new CustomEvent('bkhn:classroom', { detail: { inClassroom: false } }));
       }
+      if (playerState.inLibraryLobby) {
+        playerState.inLibraryLobby = false;
+        window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: false } }));
+      }
+      posRef.current = { ...SPAWN };
+      playerState.pos = { ...SPAWN };
+      facingRef.current = -Math.PI / 2;
+      playerState.facing = -Math.PI / 2;
+      yawRef.current = Math.PI / 2;
+      pitchRef.current = 0.18;
+      distRef.current = 7;
+      viewModeRef.current = 'follow';
       prevHitRef.current = null;
     }
 

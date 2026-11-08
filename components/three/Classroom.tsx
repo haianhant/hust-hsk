@@ -157,6 +157,18 @@ export default function Classroom({ notebookOpen, homework, onObjectClick }: Cla
         <boxGeometry args={[9, 0.1, 6]} />
         <meshStandardMaterial color={FLOOR} roughness={0.85} />
       </mesh>
+      {/* Trần phòng học 9,2 × 6,2 m + dải đèn tuýp âm trần chiếu sáng lớp học (không castShadow để giữ sáng đều). */}
+      <mesh position={[0, 3.06, 0]}>
+        <boxGeometry args={[9.2, 0.12, 6.2]} />
+        <meshStandardMaterial color="#FAF8F2" roughness={0.88} />
+      </mesh>
+      {[-2.4, 0, 2.4].map((lx) => (
+        <mesh key={`classroom-ceil-light-${lx}`} position={[lx, 2.99, 0]}>
+          <boxGeometry args={[0.36, 0.02, 3.8]} />
+          <meshStandardMaterial color="#FFFDF7" emissive="#FFE8B0" emissiveIntensity={0.9} />
+        </mesh>
+      ))}
+      <pointLight position={[0, 2.85, 0]} color="#FFF9E6" intensity={0.65} distance={14} />
       {/* Vân sàn (dải gỗ sẫm, chống phẳng lì). */}
       {[-2.5, -1.5, -0.5, 0.5, 1.5, 2.5].map((z) => (
         <mesh key={z} position={[0, 0.002, z]}>

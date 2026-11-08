@@ -704,12 +704,12 @@ export default function HomePage() {
     exitClassroomFade();
   }, [exitClassroomFade]);
 
-  // --- Vào trường (khôi phục vị trí an toàn theo questState) --------------------------
+  // --- Vào trường (khôi phục vị trí phòng học chỉ khi bấm Tiếp tục học) ------------
   const enterCampus = useCallback(
     (resumeQuest: boolean) => {
       const p = progressRef.current;
       const qs = p?.questState;
-      if (qs && !qs.done && qs.stepIndex >= 2) {
+      if (resumeQuest && qs && !qs.done && qs.stepIndex >= 2) {
         playerState.inClassroom = true;
         playerState.inLibraryLobby = false;
         playerState.pos = { ...CLASSROOM.spawn };
