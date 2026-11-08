@@ -103,6 +103,21 @@ export const BUILDING_COLLIDERS: NamedCollider[] = [
   { name: 'KTX B3', box: DORM_COMPLEX.b3Box },
   { name: 'KTX B10', box: DORM_COMPLEX.b10Box },
   { name: 'KTX B4', box: DORM_COMPLEX.b4Box },
+  // Tường rào bao quanh khuôn viên & dọc đường Trần Đại Nghĩa (chừa thông thoáng các cổng)
+  { name: 'Tường rào Trần Đại Nghĩa (bắc 1)', box: { minX: 91.85, maxX: 92.35, minZ: -75.2, maxZ: -31.5 } },
+  { name: 'Tường rào Trần Đại Nghĩa (bắc 2)', box: { minX: 91.85, maxX: 92.35, minZ: -25.0, maxZ: -17.2 } },
+  { name: 'Tường rào Trần Đại Nghĩa (nam 1)', box: { minX: 91.85, maxX: 92.35, minZ: 0.5, maxZ: 9.5 } },
+  { name: 'Tường rào Trần Đại Nghĩa (nam 2)', box: { minX: 91.85, maxX: 92.35, minZ: 18.5, maxZ: 42.0 } },
+  { name: 'Tường rào Đại Cồ Việt (tây)', box: { minX: -95.2, maxX: -70.5, minZ: -75.45, maxZ: -74.95 } },
+  { name: 'Tường rào Đại Cồ Việt (giữa)', box: { minX: -45.5, maxX: 92.1, minZ: -75.45, maxZ: -74.95 } },
+  { name: 'Tường rào Đại Cồ Việt (đông 1)', box: { minX: 98.0, maxX: 120.2, minZ: -75.45, maxZ: -74.95 } },
+  { name: 'Tường rào Đại Cồ Việt (đông 2)', box: { minX: 131.8, maxX: 166.0, minZ: -75.45, maxZ: -74.95 } },
+  { name: 'Tường rào Giải Phóng (bắc)', box: { minX: -95.45, maxX: -94.95, minZ: -75.2, maxZ: -12.0 } },
+  { name: 'Tường rào Parabol (bắc)', box: { minX: -88.25, maxX: -87.75, minZ: -12.0, maxZ: 3.2 } },
+  { name: 'Tường rào Parabol (nam)', box: { minX: -88.25, maxX: -87.75, minZ: 16.8, maxZ: 20.2 } },
+  { name: 'Tường rào Giải Phóng (nam)', box: { minX: -95.45, maxX: -94.95, minZ: 26.5, maxZ: 106.5 } },
+  { name: 'Tường rào Lê Thanh Nghị (nam)', box: { minX: -95.2, maxX: 166.0, minZ: 106.25, maxZ: 106.75 } },
+  { name: 'Tường rào biên Đông', box: { minX: 165.75, maxX: 166.25, minZ: -75.2, maxZ: 106.5 } },
 ];
 
 /** Collider phòng học (tường/bảng/bàn) — cùng dạng AABB như campus. */
