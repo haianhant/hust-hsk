@@ -6,6 +6,15 @@
 // ---------------------------------------------------------------------------
 
 import { BOUNDS, clampScalar, type AABB } from '../constants/world';
+import type {
+  StudyClientToServerMessage,
+  StudyServerToClientMessage,
+} from './study';
+
+export type {
+  StudyClientToServerMessage,
+  StudyServerToClientMessage,
+} from './study';
 
 export type RemoteState = 'idle' | 'walking' | 'running' | 'riding';
 export type PlayerState = RemoteState;
@@ -142,7 +151,8 @@ export type ClientToServerMessage =
   | ClientMoveMessage
   | ClientStateMessage
   | ClientAppearanceMessage
-  | ClientPingMessage;
+  | ClientPingMessage
+  | StudyClientToServerMessage;
 
 export interface ServerWelcomeMessage {
   type: 'welcome';
@@ -212,7 +222,8 @@ export type ServerToClientMessage =
   | ServerCountMessage
   | ServerFullMessage
   | ServerErrorMessage
-  | ServerPongMessage;
+  | ServerPongMessage
+  | StudyServerToClientMessage;
 
 // --- Pure Validation & Sanitization Helpers --------------------------------
 

@@ -15,15 +15,25 @@ class riêng (`HskRoom`), không dùng chung Worker chùa.
 
 | Hướng | Type | Payload |
 |---|---|---|
-| C→S | `join` | `{ sessionId, name, mssv }` — MSSV phải đúng 8 chữ số |
+| C→S | `join` | `{ sessionId, name, mssv, ...appearance }` — MSSV phải đúng 8 chữ số |
 | C→S | `move` | `{ x, z, facing, state }` — state: idle/walking/running/riding |
 | C→S | `state` | `{ state }` |
+| C→S | `appearance` | `{ name?, ...appearance }` |
+| C→S | `study:claim-seat` | `{ seatId, requestId?, subjectTag? }` — Giữ chỗ 1 trong 4 ghế `library-lobby` |
+| C→S | `study:release-seat` | `{ seatId?, requestId? }` — Trả ghế đang ngồi |
+| C→S | `study:presence` | `{ presence: { status, zoneId, seatId, subjectTag, pomodoroPhase, updatedAtMs } }` |
 | C→S | `ping` | — |
 | S→C | `welcome` | `{ id, roomId, players, count }` — snapshot lúc vào |
+| S→C | `study:room-snapshot` | `{ roomId, seats, presences, revision }` — snapshot ghế & trạng thái tự học |
 | S→C | `join` | `{ player }` |
 | S→C | `leave` | `{ id }` |
 | S→C | `move` | `{ id, x, z, facing, state, t }` |
 | S→C | `state` | `{ id, state }` |
+| S→C | `appearance` | `{ id, name?, ...appearance }` |
+| S→C | `study:seat-claimed` | `{ seat, previousSeatId?, revision, requestId? }` |
+| S→C | `study:seat-released` | `{ seatId, occupantId, reason?, revision, requestId? }` |
+| S→C | `study:seat-rejected` | `{ seatId, reason, occupiedBy?, revision, requestId? }` |
+| S→C | `study:presence` | `{ playerId, presence, revision }` |
 | S→C | `count` | `{ count }` |
 | S→C | `full` | `{ message }` — phòng đã đầy |
 | S→C | `error` | `{ message }` — vd MSSV sai định dạng |

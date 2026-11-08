@@ -18,13 +18,13 @@ Khi mở rộng **Bách khoa Hán ngữ 3D (`hust-hsk`)** thành không gian t�
 ## 2. Quyết định Kiến trúc (Decision)
 
 1. **Tính thời gian Pomodoro hoàn toàn bằng Mốc Thời gian Thực (`Wall-Clock Epoch Timestamps`):**
-   - Trong [`features/study/pomodoro/timer.ts`](file:///home/bao/Hust3D/hust-hsk/features/study/pomodoro/timer.ts), trạng thái đồng hồ lưu `phaseStartedAtMs` và `phaseEndsAtMs` (hoặc `pausedRemainingMs` khi tạm dừng).
-   - Tuyệt đối không dùng biến đếm lùi cộng dồn theo mỗi tick của `setInterval` hay `useFrame`. Hàm thuần [`evaluatePomodoroAt(state, nowMs)`](file:///home/bao/Hust3D/hust-hsk/features/study/pomodoro/timer.ts#L172-L273) tính toán thời gian còn lại trực tiếp từ `nowMs` và tự động chuyển pha nhiều bước nếu tab bị đóng/ẩn trong thời gian dài.
+   - Trong [`features/study/pomodoro/timer.ts`](../../features/study/pomodoro/timer.ts), trạng thái đồng hồ lưu `phaseStartedAtMs` và `phaseEndsAtMs` (hoặc `pausedRemainingMs` khi tạm dừng).
+   - Tuyệt đối không dùng biến đếm lùi cộng dồn theo mỗi tick của `setInterval` hay `useFrame`. Hàm thuần [`evaluatePomodoroAt(state, nowMs)`](../../features/study/pomodoro/timer.ts#L172-L273) tính toán thời gian còn lại trực tiếp từ `nowMs` và tự động chuyển pha nhiều bước nếu tab bị đóng/ẩn trong thời gian dài.
 2. **Tách biệt Chế độ Tập trung Khỏi WebGL (`FocusRuntimePolicy`):**
-   - Trong [`features/study/focus-mode/focus-mode.ts`](file:///home/bao/Hust3D/hust-hsk/features/study/focus-mode/focus-mode.ts), mức `'zen-2d'` đặt `suspend3DRendering = true` nhưng luôn giữ `allowLearningAndPomodoro = true`, đảm bảo tính năng tự học và ôn tập HSK không phụ thuộc vào vòng lặp WebGL.
+   - Trong [`features/study/focus-mode/focus-mode.ts`](../../features/study/focus-mode/focus-mode.ts), mức `'zen-2d'` đặt `suspend3DRendering = true` nhưng luôn giữ `allowLearningAndPomodoro = true`, đảm bảo tính năng tự học và ôn tập HSK không phụ thuộc vào vòng lặp WebGL.
 3. **Ranh giới Cứng giữa `Session State` (Cá nhân) và `Room State` (Chia sẻ Authoritative):**
    - Tiến độ HSK (`bkhn_hsk3_progress_v1`) và phiên tự học cá nhân (`bkhn_study_session_v1`) nằm hoàn toàn ở phía client.
-   - Quyền chiếm giữ ghế (`SeatOccupancy` trong [`features/social/rooms/seat-manager.ts`](file:///home/bao/Hust3D/hust-hsk/features/social/rooms/seat-manager.ts)) do server kiểm soát: mỗi người chơi chỉ giữ tối đa 1 ghế; khi đổi ghế thì ghế cũ được giải phóng nguyên tử (`atomic switch`); khi mất kết nối hoặc khi khôi phục từ `SocketAttachment` sau DO Hibernation (`restoreSeatRegistryFromAttachments`), trạng thái ghế luôn nhất quán.
+   - Quyền chiếm giữ ghế (`SeatOccupancy` trong [`features/social/rooms/seat-manager.ts`](../../features/social/rooms/seat-manager.ts)) do server kiểm soát: mỗi người chơi chỉ giữ tối đa 1 ghế; khi đổi ghế thì ghế cũ được giải phóng nguyên tử (`atomic switch`); khi mất kết nối hoặc khi khôi phục từ `SocketAttachment` sau DO Hibernation (`restoreSeatRegistryFromAttachments`), trạng thái ghế luôn nhất quán.
 
 ---
 

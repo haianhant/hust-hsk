@@ -8,5 +8,10 @@
     "strict": true,
     "target": "ES2022"
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "../shared/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "../shared/**/*.ts",
+    "../features/social/rooms/seat-manager.ts"
+  ]
 }

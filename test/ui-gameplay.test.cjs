@@ -529,3 +529,48 @@ test('PR8 Review Fix (13) releaseActiveSeatSafely handles both mounted Player an
     null,
   );
 });
+
+test('PR9 (14) findNearestInteractable distinguishes available, pending, and occupied-by-other library seats', () => {
+  const approach1 = { x: -2.4, z: 0.54 }; // near tqb-1f-t1-s1
+  const base = {
+    pos: approach1,
+    inClassroom: false,
+    inLibraryLobby: true,
+    seated: false,
+    seatId: null,
+    bikeRiding: false,
+    bikeSpeed: 0,
+    bikePos: { x: 999, z: 999 },
+    questActive: false,
+    questDoneBefore: false,
+    anyQuestDone: false,
+  };
+
+  assert.deepEqual(findNearestInteractable(base), {
+    id: 'seat:tqb-1f-t1-s1',
+    label: 'E — Ngồi học',
+  });
+
+  assert.deepEqual(
+    findNearestInteractable({
+      ...base,
+      pendingSeatId: 'tqb-1f-t1-s1',
+    }),
+    {
+      id: 'seat:tqb-1f-t1-s1',
+      label: '⏳ Đang giữ chỗ...',
+    },
+  );
+
+  assert.deepEqual(
+    findNearestInteractable({
+      ...base,
+      occupiedByOtherSeatIds: new Set(['tqb-1f-t1-s1']),
+    }),
+    {
+      id: 'seat:tqb-1f-t1-s1',
+      label: '🔒 Ghế đang có người ngồi — hãy chọn ghế khác',
+    },
+  );
+});
+

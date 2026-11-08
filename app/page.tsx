@@ -53,12 +53,14 @@ import type { QuestAnswer } from '../components/learn/QuestPanel';
 import CharacterCreatorModal from '../components/ui/CharacterCreatorModal';
 import type { HomeworkState } from '../components/three/Classroom';
 import {
+  createInitialSeatingState,
   findNearestInteractable,
   getHook,
   LibraryLobbyModal,
   releaseActiveSeatSafely,
   SPEECH_RATES,
   TOAST_MS,
+  validateSeatSelection,
   type LibraryLobbyTopic,
 } from '../features/campus/interaction';
 import { CampusHud } from '../features/campus/ui';
@@ -72,8 +74,16 @@ import {
   type ReviewSessionState,
 } from '../features/learning/hsk';
 import { useMultiplayerBridge } from '../features/social/multiplayer';
+import {
+  derivePlayerPresence,
+  isSamePublicPresence,
+} from '../features/social/presence/presence';
 import { FocusModeView, StudyPanel, useStudySession } from '../features/study';
-import { getSeatDefinition, type StudyRoomZoneId } from '../shared/contracts/study';
+import {
+  getSeatDefinition,
+  type PlayerStudyPresence,
+  type StudyRoomZoneId,
+} from '../shared/contracts/study';
 
 // CampusScene chỉ mount sau khi bấm "Vào trường" — tránh autoplay/WebGL
 // trước khi người dùng tương tác.
@@ -193,7 +203,7 @@ export default function HomePage() {
   const bindSeatRef = useRef(study.bindSeat);
   bindSeatRef.current = study.bindSeat;
 
-  // PR8 — Đồng bộ trạng thái ngồi ghế thư viện từ Player sang React state & Study Session
+  // PR8/PR9 — Đồng bộ trạng thái ngồi ghế thư viện từ Player sang React state, Study Session & Server
   useEffect(() => {
     const onSeatChange = (e: Event) => {
       const d = (
@@ -215,6 +225,12 @@ export default function HomePage() {
             : null,
         d.seated ? d.seatId : null,
       );
+      if (!d.seated) {
+        const snap = multiplayer.snapshot;
+        if (snap.mySeatId || snap.seatClaimState !== 'idle') {
+          multiplayer.requestSeatRelease(snap.mySeatId);
+        }
+      }
     };
     window.addEventListener('bkhn:seat-change', onSeatChange);
     return () => window.removeEventListener('bkhn:seat-change', onSeatChange);
@@ -222,22 +238,106 @@ export default function HomePage() {
 
   const handleSitAtSeat = useCallback(
     (seatId: string) => {
-      const r = getHook()?.sitAtSeat?.(seatId);
-      if (r?.ok) {
-        const seat = getSeatDefinition(seatId);
+      const snap = multiplayer.snapshot;
+      const remoteOcc = snap.seatMap[seatId];
+
+      // 1. Nếu ghế đang có sinh viên khác giữ chỗ trong phòng multiplayer hiện tại -> từ chối ngay
+      if (snap.status === 'online' && remoteOcc && remoteOcc.occupantId !== snap.selfId) {
         showToast(
-          `🪑 Đang ngồi học tại ${seat?.label ?? seatId}. Bấm "🍅 Tự học" để bắt đầu Pomodoro!`,
+          `🪑 Ghế này đang có ${remoteOcc.occupantName || 'sinh viên khác'} ngồi học. Hãy chọn ghế trống khác nhé!`,
         );
         return;
       }
-      if (r?.reason === 'too-far') {
-        showToast('Hãy bước lại gần ghế hơn để ngồi học.');
-      } else if (r?.reason === 'already-seated-other') {
-        showToast('Bạn đang ngồi ở ghế khác — hãy bấm Đứng dậy trước khi đổi ghế.');
-      } else if (r?.reason === 'riding-bike') {
-        showToast('Không thể ngồi ghế học khi đang lái xe.');
-      } else if (r?.reason === 'already-seated-same') {
-        study.setStudyPanelOpen(true);
+
+      // 2. Kiểm tra điều kiện cục bộ (khoảng cách <= 1.65m, đang trong sảnh, không lái xe, v.v.)
+      const currentSeating =
+        playerState.seated && playerState.seatId
+          ? {
+              ...createInitialSeatingState(),
+              status: 'seated' as const,
+              seatId: playerState.seatId,
+            }
+          : createInitialSeatingState();
+
+      const localCheck = validateSeatSelection({
+        seatId,
+        playerPos: playerState.pos,
+        inLibraryLobby: playerState.inLibraryLobby,
+        inClassroom: playerState.inClassroom,
+        bikeRiding: bikeState.riding,
+        uiLocked: playerState.uiLocked,
+        currentSeating,
+      });
+
+      if (!localCheck.ok) {
+        if (localCheck.reason === 'too-far') {
+          showToast('Hãy bước lại gần ghế hơn để ngồi học.');
+        } else if (localCheck.reason === 'already-seated-other') {
+          showToast('Bạn đang ngồi ở ghế khác — hãy bấm Đứng dậy trước khi đổi ghế.');
+        } else if (localCheck.reason === 'riding-bike') {
+          showToast('Không thể ngồi ghế học khi đang lái xe.');
+        } else if (localCheck.reason === 'already-seated-same') {
+          study.setStudyPanelOpen(true);
+        } else {
+          showToast(localCheck.message ?? 'Chưa thể ngồi vào ghế này.');
+        }
+        return;
+      }
+
+      // 3. Nếu đang kết nối Multiplayer (và server hỗ trợ giao thức phòng tự học PR9) -> yêu cầu HskRoom Durable Object cấp quyền giữ ghế (Server-Authoritative)
+      if (snap.status === 'online' && snap.selfId && snap.studyRevision > 0) {
+        if (snap.seatClaimState === 'requesting' && snap.pendingSeatRequest?.seatId === seatId) {
+          return;
+        }
+        void multiplayer
+          .requestSeatClaim(seatId, {
+            subjectTag: study.session.subjectTag,
+            pomodoroPhase: study.session.pomodoro.phase,
+          })
+          .then((outcome) => {
+            if (!outcome.ok) {
+              if (outcome.reason === 'already-occupied') {
+                showToast(
+                  `🪑 Ghế này vừa có ${outcome.occupiedByName || 'bạn khác'} ngồi trước rồi. Hãy chọn ghế trống khác nhé!`,
+                );
+              } else if (outcome.reason === 'timeout') {
+                showToast('⏳ Hết thời gian giữ chỗ — vui lòng thử lại.');
+              } else if (outcome.reason === 'offline') {
+                const rOffline = getHook()?.sitAtSeat?.(seatId);
+                if (rOffline?.ok) {
+                  showToast(
+                    `🪑 Đang ngồi học tại ${localCheck.seat.label}. Bấm "🍅 Tự học" để bắt đầu Pomodoro! (Chế độ ngoại tuyến)`,
+                  );
+                }
+              } else {
+                showToast('Chưa thể giữ chỗ ngồi này — vui lòng thử lại.');
+              }
+              return;
+            }
+
+            // Sau khi server xác nhận, kiểm tra lại người chơi còn đứng gần ghế trong sảnh không
+            const r = getHook()?.sitAtSeat?.(seatId);
+            if (r?.ok) {
+              showToast(
+                `🪑 Đang ngồi học tại ${localCheck.seat.label}. Bấm "🍅 Tự học" để bắt đầu Pomodoro!`,
+              );
+            } else {
+              // Người chơi đã bước đi xa hoặc rời sảnh trong lúc gói tin đang bay -> trả lại ghế ngay
+              multiplayer.requestSeatRelease(seatId);
+              if (r?.reason === 'too-far') {
+                showToast('Hãy bước lại gần ghế hơn để ngồi học.');
+              }
+            }
+          });
+        return;
+      }
+
+      // 4. Chế độ ngoại tuyến (Offline fallback): vẫn cho phép ngồi học cục bộ và thông báo rõ
+      const r = getHook()?.sitAtSeat?.(seatId);
+      if (r?.ok) {
+        showToast(
+          `🪑 Đang ngồi học tại ${localCheck.seat.label}. Bấm "🍅 Tự học" để bắt đầu Pomodoro! (Chế độ ngoại tuyến)`,
+        );
       } else {
         showToast(r?.message ?? 'Chưa thể ngồi vào ghế này.');
       }
@@ -246,10 +346,14 @@ export default function HomePage() {
   );
 
   const handleStandUp = useCallback(() => {
+    const activeId = seatedSeatId ?? study.session.seatId ?? multiplayer.snapshot.mySeatId;
     const r = releaseActiveSeatSafely({
       driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
-      fallbackSeatId: seatedSeatId ?? study.session.seatId,
+      fallbackSeatId: activeId,
     });
+    if (activeId || multiplayer.snapshot.mySeatId) {
+      multiplayer.requestSeatRelease(activeId);
+    }
     if (r.released) {
       setSeatedSeatId(null);
       setSeatedSeatLabel(null);
@@ -258,14 +362,86 @@ export default function HomePage() {
   }, [seatedSeatId, showToast, study.focusPolicy.suspend3DRendering, study.session.seatId]);
 
   const handleEndStudySession = useCallback(() => {
+    const activeId = seatedSeatId ?? study.session.seatId ?? multiplayer.snapshot.mySeatId;
     releaseActiveSeatSafely({
       driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
-      fallbackSeatId: seatedSeatId ?? study.session.seatId,
+      fallbackSeatId: activeId,
     });
+    if (activeId || multiplayer.snapshot.mySeatId) {
+      multiplayer.requestSeatRelease(activeId);
+    }
     setSeatedSeatId(null);
     setSeatedSeatLabel(null);
     study.endSession();
   }, [seatedSeatId, study]);
+
+  // PR9 — Đồng bộ lại quyền giữ ghế khi kết nối lại (study:room-snapshot)
+  useEffect(() => {
+    const onStudySnapshot = () => {
+      const localSeatId = playerState.seated ? playerState.seatId : null;
+      if (!localSeatId || !playerState.inLibraryLobby) return;
+      const snap = multiplayer.snapshot;
+      if (snap.status !== 'online' || !snap.selfId) return;
+      const occ = snap.seatMap[localSeatId];
+      if (occ && occ.occupantId !== snap.selfId) {
+        releaseActiveSeatSafely({
+          driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
+          fallbackSeatId: localSeatId,
+        });
+        setSeatedSeatId(null);
+        setSeatedSeatLabel(null);
+        showToast(
+          `🪑 Ghế ${getSeatDefinition(localSeatId)?.label ?? localSeatId} đã có ${occ.occupantName} ngồi khi kết nối lại — bạn đã đứng dậy.`,
+        );
+      } else if (!occ) {
+        void multiplayer.requestSeatClaim(localSeatId, {
+          subjectTag: study.session.subjectTag,
+          pomodoroPhase: study.session.pomodoro.phase,
+        });
+      }
+    };
+    window.addEventListener('bkhn:mp-study-snapshot', onStudySnapshot);
+    return () => window.removeEventListener('bkhn:mp-study-snapshot', onStudySnapshot);
+  }, [
+    showToast,
+    study.focusPolicy.suspend3DRendering,
+    study.session.pomodoro.phase,
+    study.session.subjectTag,
+  ]);
+
+  // PR9 — Phát sóng trạng thái tự học công khai (Presence) khi có chuyển đổi trạng thái thực sự
+  const currentPresence = useMemo(
+    () =>
+      derivePlayerPresence({
+        session: study.session,
+        inClassroom,
+        inLibraryLobby,
+        activeSeatId: seatedSeatId,
+        nowMs: 0,
+      }),
+    [
+      study.session,
+      inClassroom,
+      inLibraryLobby,
+      seatedSeatId,
+    ],
+  );
+  const lastSentPresenceRef = useRef<PlayerStudyPresence | null>(null);
+
+  useEffect(() => {
+    if (!entered || mpSnap.status !== 'online' || !mpSnap.selfId) {
+      lastSentPresenceRef.current = null;
+      return;
+    }
+    if (isSamePublicPresence(lastSentPresenceRef.current, currentPresence)) {
+      return;
+    }
+    lastSentPresenceRef.current = currentPresence;
+    multiplayer.sendStudyPresence({
+      ...currentPresence,
+      updatedAtMs: Date.now(),
+    });
+  }, [entered, mpSnap.status, mpSnap.selfId, currentPresence]);
 
   // --- Nạp + lưu tiến độ (localStorage, không tài khoản) ----------------------
   useEffect(() => {
@@ -450,12 +626,25 @@ export default function HomePage() {
         lastBikeNoticeRef.current = bikeState.notice.id;
         showToast(bikeState.notice.text);
       }
+      const snapNow = multiplayer.snapshot;
+      const occupiedOtherSet = new Set<string>();
+      for (const occ of snapNow.seats) {
+        if (
+          occ.studyRoomId === 'library-lobby' &&
+          (!snapNow.selfId || occ.occupantId !== snapNow.selfId) &&
+          occ.seatId !== playerState.seatId
+        ) {
+          occupiedOtherSet.add(occ.seatId);
+        }
+      }
       const found = findNearestInteractable({
         pos: playerState.pos,
         inClassroom,
         inLibraryLobby,
         seated: playerState.seated,
         seatId: playerState.seatId,
+        occupiedByOtherSeatIds: occupiedOtherSet,
+        pendingSeatId: snapNow.pendingSeatRequest?.seatId ?? null,
         bikeRiding: bikeState.riding,
         bikeSpeed: bikeState.speed,
         bikePos: bikeState.pos,
@@ -1142,6 +1331,7 @@ export default function HomePage() {
           zoneLabel={currentZoneLabel}
           activeSeatId={seatedSeatId}
           activeSeatLabel={seatedSeatLabel}
+          mpSnap={mpSnap}
           session={study.session}
           focusPrefs={study.focusPrefs}
           focusPolicy={study.focusPolicy}

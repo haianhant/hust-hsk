@@ -250,3 +250,263 @@ test('(5) HskRoom Durable Object: join, hibernation wakeup restoration, reconnec
   assert.equal(wsA2.sent.some((m) => m.type === 'leave' && m.id === 'sess-b'), true);
   assert.equal(wsA2.sent.some((m) => m.type === 'count' && m.count === 1), true);
 });
+
+test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atomic switch, presence spoofing override, hibernation & room isolation', async () => {
+  const ctx1 = createMockDoState();
+  const roomHsk1 = new workerRoom.HskRoom(ctx1);
+
+  const wsA = createMockSocket();
+  const wsB = createMockSocket();
+  ctx1.acceptWebSocket(wsA);
+  ctx1.acceptWebSocket(wsB);
+
+  // 1. Client A joins and receives welcome + study:room-snapshot
+  await roomHsk1.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'sess-a',
+      name: 'Nguyễn Văn A',
+      mssv: '20226001',
+      gender: 'male',
+      outfit: 'windbreaker-hust',
+    }),
+  );
+  const snapA0 = wsA.sent.find((m) => m.type === 'study:room-snapshot');
+  assert.ok(snapA0, 'Client A must receive initial study:room-snapshot on join');
+  assert.deepEqual(snapA0.seats, []);
+
+  // Client B joins hsk-1
+  await roomHsk1.webSocketMessage(
+    wsB,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'sess-b',
+      name: 'Trần Thị B',
+      mssv: '20226002',
+      gender: 'female',
+      outfit: 'polo-red',
+    }),
+  );
+
+  // 2. Client A claims tqb-1f-t1-s1; both A and B receive study:seat-claimed (without occupantMssv)
+  wsA.sent.length = 0;
+  wsB.sent.length = 0;
+  await roomHsk1.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'study:claim-seat',
+      seatId: 'tqb-1f-t1-s1',
+      subjectTag: 'Giải tích 1',
+      pomodoroPhase: 'focus',
+      requestId: 'req-a-1',
+    }),
+  );
+  const claimedOnA = wsA.sent.find((m) => m.type === 'study:seat-claimed');
+  const claimedOnB = wsB.sent.find((m) => m.type === 'study:seat-claimed');
+  assert.ok(claimedOnA && claimedOnB, 'Both A and B must receive study:seat-claimed');
+  assert.equal(claimedOnA.requestId, 'req-a-1');
+  assert.equal(claimedOnB.occupancy.seatId, 'tqb-1f-t1-s1');
+  assert.equal(claimedOnB.occupancy.occupantId, 'sess-a');
+  assert.equal(claimedOnB.occupancy.occupantName, 'Nguyễn Văn A');
+  assert.equal('occupantMssv' in claimedOnB.occupancy, false);
+
+  // 3. Client B attempts to claim tqb-1f-t1-s1 -> receives study:seat-rejected ('already-occupied')
+  wsB.sent.length = 0;
+  await roomHsk1.webSocketMessage(
+    wsB,
+    JSON.stringify({
+      type: 'study:claim-seat',
+      seatId: 'tqb-1f-t1-s1',
+      requestId: 'req-b-conflict',
+    }),
+  );
+  const rejectedB = wsB.sent.find((m) => m.type === 'study:seat-rejected');
+  assert.ok(rejectedB, 'Client B must receive study:seat-rejected');
+  assert.equal(rejectedB.reason, 'already-occupied');
+  assert.equal(rejectedB.occupiedBy, 'sess-a');
+  assert.equal(rejectedB.occupiedByName, 'Nguyễn Văn A');
+  assert.equal(rejectedB.requestId, 'req-b-conflict');
+
+  // 4. Client A switches to tqb-1f-t1-s2; tqb-1f-t1-s1 becomes available; Client B claims tqb-1f-t1-s1
+  wsA.sent.length = 0;
+  wsB.sent.length = 0;
+  await roomHsk1.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'study:claim-seat',
+      seatId: 'tqb-1f-t1-s2',
+      subjectTag: 'Giải tích 1',
+      requestId: 'req-a-switch',
+    }),
+  );
+  const releasedPrevOnB = wsB.sent.find(
+    (m) => m.type === 'study:seat-released' && m.seatId === 'tqb-1f-t1-s1',
+  );
+  const claimedSwitchOnB = wsB.sent.find(
+    (m) => m.type === 'study:seat-claimed' && m.occupancy.seatId === 'tqb-1f-t1-s2',
+  );
+  assert.ok(releasedPrevOnB, 'Switching seats must broadcast study:seat-released for old seat');
+  assert.equal(releasedPrevOnB.reason, 'switched-seat');
+  assert.ok(claimedSwitchOnB, 'Switching seats must broadcast study:seat-claimed for new seat');
+  assert.equal(claimedSwitchOnB.releasedSeatId, 'tqb-1f-t1-s1');
+
+  wsB.sent.length = 0;
+  await roomHsk1.webSocketMessage(
+    wsB,
+    JSON.stringify({
+      type: 'study:claim-seat',
+      seatId: 'tqb-1f-t1-s1',
+      subjectTag: 'HSK 4',
+      requestId: 'req-b-ok',
+    }),
+  );
+  const claimedBOk = wsB.sent.find(
+    (m) => m.type === 'study:seat-claimed' && m.occupancy.seatId === 'tqb-1f-t1-s1',
+  );
+  assert.ok(claimedBOk, 'Client B must now succeed in claiming tqb-1f-t1-s1');
+  assert.equal(claimedBOk.occupancy.occupantId, 'sess-b');
+
+  // 5. Client A sends study:presence ('studying', 'focus', subjectTag); Client B receives study:presence
+  wsB.sent.length = 0;
+  await roomHsk1.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'study:presence',
+      presence: {
+        status: 'studying',
+        studyRoomId: 'library-lobby',
+        seatId: 'tqb-1f-t1-s2',
+        pomodoroPhase: 'focus',
+        subjectTag: 'Đại số tuyến tính',
+      },
+    }),
+  );
+  const presFromA = wsB.sent.find((m) => m.type === 'study:presence' && m.playerId === 'sess-a');
+  assert.ok(presFromA, 'Client B must receive study:presence broadcast from Client A');
+  assert.equal(presFromA.presence.status, 'studying');
+  assert.equal(presFromA.presence.seatId, 'tqb-1f-t1-s2');
+  assert.equal(presFromA.presence.subjectTag, 'Đại số tuyến tính');
+
+  // 6. Client B spoofs study:presence with seatId 'tqb-1f-t2-s1' while owning 'tqb-1f-t1-s1'
+  wsA.sent.length = 0;
+  await roomHsk1.webSocketMessage(
+    wsB,
+    JSON.stringify({
+      type: 'study:presence',
+      presence: {
+        status: 'studying',
+        studyRoomId: 'library-lobby',
+        seatId: 'tqb-1f-t2-s1', // spoofed seatId!
+        pomodoroPhase: 'focus',
+        subjectTag: 'HSK 4',
+      },
+    }),
+  );
+  const presFromB = wsA.sent.find((m) => m.type === 'study:presence' && m.playerId === 'sess-b');
+  assert.ok(presFromB);
+  assert.equal(
+    presFromB.presence.seatId,
+    'tqb-1f-t1-s1',
+    'Server must override spoofed presence seatId with authoritative owned seat',
+  );
+
+  // 8 & 9. Simulated DO hibernation while A & B are seated, plus A reconnecting with same sessionId
+  const hibernatedRoom = new workerRoom.HskRoom(ctx1);
+  const wsA2 = createMockSocket();
+  ctx1.acceptWebSocket(wsA2);
+  await hibernatedRoom.webSocketMessage(
+    wsA2,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'sess-a',
+      name: 'Nguyễn Văn A',
+      mssv: '20226001',
+      gender: 'male',
+      outfit: 'windbreaker-hust',
+    }),
+  );
+  await hibernatedRoom.webSocketClose(wsA);
+  const snapAfterHibernation = wsA2.sent.find((m) => m.type === 'study:room-snapshot');
+  assert.ok(snapAfterHibernation, 'Reconnected A after DO hibernation receives study:room-snapshot');
+  assert.equal(snapAfterHibernation.seats.length, 2, 'Both seats must survive DO hibernation & reconnect');
+  const seatAInSnap = snapAfterHibernation.seats.find((s) => s.occupantId === 'sess-a');
+  const seatBInSnap = snapAfterHibernation.seats.find((s) => s.occupantId === 'sess-b');
+  assert.equal(seatAInSnap.seatId, 'tqb-1f-t1-s2');
+  assert.equal(seatBInSnap.seatId, 'tqb-1f-t1-s1');
+
+  // 10. Two simultaneous claims for tqb-1f-t2-s1 result in 1 claimed and 1 rejected
+  wsA2.sent.length = 0;
+  wsB.sent.length = 0;
+  await Promise.all([
+    hibernatedRoom.webSocketMessage(
+      wsA2,
+      JSON.stringify({
+        type: 'study:claim-seat',
+        seatId: 'tqb-1f-t2-s1',
+        requestId: 'race-a',
+      }),
+    ),
+    hibernatedRoom.webSocketMessage(
+      wsB,
+      JSON.stringify({
+        type: 'study:claim-seat',
+        seatId: 'tqb-1f-t2-s1',
+        requestId: 'race-b',
+      }),
+    ),
+  ]);
+  const allMessages = [...wsA2.sent, ...wsB.sent];
+  const raceClaims = allMessages.filter(
+    (m) =>
+      m.type === 'study:seat-claimed' &&
+      m.occupancy?.seatId === 'tqb-1f-t2-s1' &&
+      (m.requestId === 'race-a' || m.requestId === 'race-b'),
+  );
+  const raceRejects = allMessages.filter(
+    (m) =>
+      m.type === 'study:seat-rejected' &&
+      m.seatId === 'tqb-1f-t2-s1' &&
+      (m.requestId === 'race-a' || m.requestId === 'race-b'),
+  );
+  assert.equal(raceClaims.length, 2, 'Exactly 1 winner broadcast to both sockets (2 messages)');
+  assert.equal(raceRejects.length, 1, 'Exactly 1 loser receives study:seat-rejected');
+
+  // 7. Client A disconnects -> Client B receives study:seat-released and leave
+  wsB.sent.length = 0;
+  wsA2.close(1000, 'Client left');
+  await hibernatedRoom.webSocketClose(wsA2);
+  const releaseOnDisconnect = wsB.sent.find(
+    (m) => m.type === 'study:seat-released' && m.occupantId === 'sess-a',
+  );
+  assert.ok(releaseOnDisconnect, 'Disconnect must broadcast study:seat-released for occupant seat');
+  assert.equal(releaseOnDisconnect.reason, 'disconnect');
+
+  // 11. Room isolation: Client C in separate HskRoom instance (hsk-2) can claim tqb-1f-t1-s1
+  const ctx2 = createMockDoState();
+  const roomHsk2 = new workerRoom.HskRoom(ctx2);
+  const wsC = createMockSocket();
+  ctx2.acceptWebSocket(wsC);
+  await roomHsk2.webSocketMessage(
+    wsC,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'sess-c',
+      name: 'Lê Văn C',
+      mssv: '20226003',
+    }),
+  );
+  wsC.sent.length = 0;
+  await roomHsk2.webSocketMessage(
+    wsC,
+    JSON.stringify({
+      type: 'study:claim-seat',
+      seatId: 'tqb-1f-t1-s1',
+      requestId: 'req-c-hsk2',
+    }),
+  );
+  const claimedInHsk2 = wsC.sent.find((m) => m.type === 'study:seat-claimed');
+  assert.ok(claimedInHsk2, 'Client C in hsk-2 must be able to claim tqb-1f-t1-s1 independently');
+  assert.equal(claimedInHsk2.occupancy.occupantId, 'sess-c');
+});
+

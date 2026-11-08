@@ -186,7 +186,29 @@ export function CampusHud({
         {/* Đợt 5 multiplayer — phòng + số người THẬT trong phòng; mất
             kết nối thì ghi rõ đang chơi một mình, không báo số giả. */}
         <MultiplayerStatusChip snapshot={mpSnap} />
-        {/* PR8 — Trạng thái đang ngồi học tại bàn thư viện kèm nút Mở bảng Tự học / Đứng dậy */}
+        {/* PR9 — Tóm tắt bàn đọc Sảnh Thư viện Tạ Quang Bửu */}
+        {inLibraryLobby && (
+          <div
+            data-testid="hud-library-seat-summary"
+            className="w-fit rounded-full bg-slate-900/80 px-3.5 py-1.5 text-xs font-bold text-slate-100 shadow-lg ring-1 ring-white/15 backdrop-blur-sm"
+          >
+            {mpSnap.status === 'online' ? (
+              <span>
+                🪑 Bàn đọc Thư viện ({mpSnap.roomId ?? 'online'}): Còn trống{' '}
+                {Math.max(
+                  0,
+                  4 - mpSnap.seats.filter((s) => s.studyRoomId === 'library-lobby').length,
+                )}
+                /4 ghế
+              </span>
+            ) : (
+              <span className="text-amber-200">
+                🪑 Bàn đọc Thư viện · Chế độ ngoại tuyến (chỉ hiển thị cục bộ)
+              </span>
+            )}
+          </div>
+        )}
+        {/* PR8/PR9 — Trạng thái đang ngồi học tại bàn thư viện kèm nút Mở bảng Tự học / Đứng dậy */}
         {seated && activeSeatId && (
           <div
             data-testid="hud-seated-status"
@@ -195,6 +217,7 @@ export function CampusHud({
             <span>
               🍅 Đang ngồi học tại{' '}
               <strong className="text-amber-300">{activeSeatLabel ?? activeSeatId}</strong>
+              {mpSnap.status !== 'online' ? ' (Ngoại tuyến)' : ''}
             </span>
             {onOpenStudyPanel && (
               <button

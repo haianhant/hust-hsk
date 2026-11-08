@@ -19,10 +19,15 @@ const assert = require('node:assert/strict');
 const {
   STUDY_ROOMS,
   STUDY_SEATS,
+  PR9_SUPPORTED_STUDY_ROOM_ZONES,
   DEFAULT_POMODORO_CONFIG,
   isValidStudyRoomZone,
+  isSupportedStudyRoomZone,
   isValidSeatId,
+  isSupportedLibrarySeatId,
   getSeatsForStudyRoom,
+  sanitizeRequestId,
+  sanitizeSeatOccupancy,
   sanitizePomodoroConfig,
   sanitizeStudyPresence,
 } = require('../shared/contracts/study.ts');
@@ -79,14 +84,18 @@ const {
 const {
   createSeatRegistry,
   claimSeat,
+  releaseSeat,
   releaseSeatByOccupant,
   getOccupantSeat,
+  updateOccupantMetaInSeatRegistry,
+  reconcileServerPresenceWithSeat,
   getStudyRoomAvailabilitySummary,
   restoreSeatRegistryFromAttachments,
 } = require('../features/social/rooms/seat-manager.ts');
 
 const {
   derivePlayerPresence,
+  isSamePublicPresence,
   formatPresenceBadge,
 } = require('../features/social/presence/presence.ts');
 
@@ -313,7 +322,7 @@ test('PR6 (5) Authoritative Seat Occupancy & DO Hibernation Recovery', () => {
       occupantId: 'student-b',
       occupantName: 'Trần Minh',
       occupantMssv: '20226011',
-      seatId: 'tqb-3f-t1-s1',
+      seatId: 'tqb-1f-t1-s1',
       occupiedAtMs: 5000,
       subjectTag: 'Giải tích 1',
     },
@@ -321,11 +330,11 @@ test('PR6 (5) Authoritative Seat Occupancy & DO Hibernation Recovery', () => {
       occupantId: 'student-c',
       occupantName: 'Lê Lan',
       occupantMssv: '20226012',
-      seatId: 'tqb-3f-t1-s1', // duplicate claim later in time -> ignored deterministically
+      seatId: 'tqb-1f-t1-s1', // duplicate claim later in time -> ignored deterministically
       occupiedAtMs: 6000,
     },
   ]);
-  assert.equal(getOccupantSeat(restored, 'student-b').seatId, 'tqb-3f-t1-s1');
+  assert.equal(getOccupantSeat(restored, 'student-b').seatId, 'tqb-1f-t1-s1');
   assert.equal(getOccupantSeat(restored, 'student-c'), null);
 });
 
@@ -620,5 +629,295 @@ test('PR7 Review Fix (12) Canonical HSK Lesson IDs & Friendly Labels', () => {
   const label = formatHskLessonLabel('hsk4-shang-l5');
   assert.ok(label && label.startsWith('HSK 4 · Bài 5 — '));
 });
+
+test('PR9 (1-10) Server-Authoritative Seat Manager — claims, zone restriction, auth, conflicts, switch, release & hibernation recovery', () => {
+  assert.deepEqual(PR9_SUPPORTED_STUDY_ROOM_ZONES, ['library-lobby']);
+  assert.equal(isSupportedStudyRoomZone('library-lobby'), true);
+  assert.equal(isSupportedStudyRoomZone('library-reading-3f'), false);
+  assert.equal(isSupportedLibrarySeatId('tqb-1f-t1-s1'), true);
+  assert.equal(isSupportedLibrarySeatId('tqb-3f-t1-s1'), false);
+
+  const registry = createSeatRegistry();
+
+  // 1. Claiming a free library lobby seat succeeds
+  const claimA = claimSeat(registry, {
+    seatId: 'tqb-1f-t1-s1',
+    occupantId: 'student-a',
+    occupantName: 'Nguyễn Văn A',
+    occupantMssv: '20226001',
+    color: '#1F3A5F',
+    gender: 'male',
+    outfit: 'windbreaker-hust',
+    hairStyle: 'short',
+    glasses: true,
+    backpack: true,
+    subjectTag: 'Giải tích 1',
+    nowMs: 1000,
+  });
+  assert.equal(claimA.ok, true);
+  assert.equal(claimA.occupancy.seatId, 'tqb-1f-t1-s1');
+  assert.equal(claimA.occupancy.occupantId, 'student-a');
+  assert.equal(claimA.occupancy.occupantName, 'Nguyễn Văn A');
+  assert.equal(claimA.occupancy.outfit, 'windbreaker-hust');
+  assert.equal(claimA.releasedPreviousSeatId, null);
+  // 16. Public seat occupancy omits occupantMssv
+  assert.equal('occupantMssv' in claimA.occupancy, false);
+
+  // 2. Claiming an occupied library lobby seat returns already-occupied with occupant info
+  const claimBConflict = claimSeat(registry, {
+    seatId: 'tqb-1f-t1-s1',
+    occupantId: 'student-b',
+    occupantName: 'Trần Thị B',
+    nowMs: 1200,
+  });
+  assert.equal(claimBConflict.ok, false);
+  assert.equal(claimBConflict.reason, 'already-occupied');
+  assert.equal(claimBConflict.occupiedBy, 'student-a');
+  assert.equal(claimBConflict.occupiedByName, 'Nguyễn Văn A');
+
+  // 3. Claiming an unknown seat ID returns invalid-seat
+  const claimInvalid = claimSeat(registry, {
+    seatId: 'non-existent-seat',
+    occupantId: 'student-b',
+    occupantName: 'Trần Thị B',
+  });
+  assert.equal(claimInvalid.ok, false);
+  assert.equal(claimInvalid.reason, 'invalid-seat');
+
+  // 4. Claiming a non-lobby zone seat returns unsupported-zone during PR9
+  const claimUnsupportedZone = claimSeat(registry, {
+    seatId: 'tqb-3f-t1-s1',
+    occupantId: 'student-b',
+    occupantName: 'Trần Thị B',
+  });
+  assert.equal(claimUnsupportedZone.ok, false);
+  assert.equal(claimUnsupportedZone.reason, 'unsupported-zone');
+
+  // 5. Claiming without valid player identity returns not-authenticated
+  const claimNoAuth = claimSeat(registry, {
+    seatId: 'tqb-1f-t1-s2',
+    occupantId: '   ',
+    occupantName: 'Khách',
+  });
+  assert.equal(claimNoAuth.ok, false);
+  assert.equal(claimNoAuth.reason, 'not-authenticated');
+
+  // 6. Claiming a second seat by the same occupant atomically releases the first seat
+  const switchA = claimSeat(registry, {
+    seatId: 'tqb-1f-t2-s1',
+    occupantId: 'student-a',
+    occupantName: 'Nguyễn Văn A',
+    subjectTag: 'Đại số tuyến tính',
+    nowMs: 1500,
+  });
+  assert.equal(switchA.ok, true);
+  assert.equal(switchA.releasedPreviousSeatId, 'tqb-1f-t1-s1');
+  assert.equal(getOccupantSeat(registry, 'student-a').seatId, 'tqb-1f-t2-s1');
+
+  // Now Student B can claim tqb-1f-t1-s1
+  const claimBOk = claimSeat(registry, {
+    seatId: 'tqb-1f-t1-s1',
+    occupantId: 'student-b',
+    occupantName: 'Trần Thị B',
+    nowMs: 1600,
+  });
+  assert.equal(claimBOk.ok, true);
+
+  // 8. Releasing a seat owned by another player fails without mutating that seat
+  const releaseWrongOwner = releaseSeat(registry, 'tqb-1f-t2-s1', 'student-b');
+  assert.equal(releaseWrongOwner.ok, false);
+  assert.equal(getOccupantSeat(registry, 'student-a').seatId, 'tqb-1f-t2-s1');
+
+  // 7. Releasing a seat owned by the caller succeeds
+  const releaseB = releaseSeat(registry, 'tqb-1f-t1-s1', 'student-b');
+  assert.equal(releaseB.ok, true);
+  assert.equal(releaseB.released.seatId, 'tqb-1f-t1-s1');
+  assert.equal(getOccupantSeat(registry, 'student-b'), null);
+
+  // 9. Releasing all seats by occupant on disconnect clears only that occupant's seat
+  claimSeat(registry, {
+    seatId: 'tqb-1f-t1-s2',
+    occupantId: 'student-b',
+    occupantName: 'Trần Thị B',
+    nowMs: 1800,
+  });
+  const disconnectA = releaseSeatByOccupant(registry, 'student-a');
+  assert.equal(disconnectA.seatId, 'tqb-1f-t2-s1');
+  assert.equal(getOccupantSeat(registry, 'student-a'), null);
+  assert.equal(getOccupantSeat(registry, 'student-b').seatId, 'tqb-1f-t1-s2');
+
+  // 10. Restoring seat registry from socket attachments preserves earliest claim and ignores duplicate/unsupported claims deterministically
+  const restored = restoreSeatRegistryFromAttachments([
+    {
+      occupantId: 'student-late',
+      occupantName: 'Muộn',
+      seatId: 'tqb-1f-t1-s1',
+      occupiedAtMs: 9000,
+    },
+    {
+      occupantId: 'student-early',
+      occupantName: 'Sớm',
+      seatId: 'tqb-1f-t1-s1',
+      occupiedAtMs: 4000,
+      subjectTag: 'HSK 4',
+    },
+    {
+      occupantId: 'student-unsupported',
+      occupantName: 'Tầng 3',
+      seatId: 'tqb-3f-t1-s1', // unsupported zone in PR9 -> ignored
+      occupiedAtMs: 1000,
+    },
+  ]);
+  assert.equal(getOccupantSeat(restored, 'student-early').seatId, 'tqb-1f-t1-s1');
+  assert.equal(getOccupantSeat(restored, 'student-late'), null);
+  assert.equal(getOccupantSeat(restored, 'student-unsupported'), null);
+});
+
+test('PR9 (11-16) Live Presence Derivation, Server Seat Reconciliation, Sanitization & Privacy Boundaries', () => {
+  const t0 = 1_700_000_000_000;
+  let session = startStudySession(createInitialStudySession(), {
+    nowMs: t0,
+    subjectTag: 'HSK 4 · Bài 12',
+    studyRoomId: 'library-lobby',
+    seatId: 'tqb-1f-t1-s1',
+  });
+  session = addStudyTask(session, 'Private task — must never leak', t0 + 10);
+
+  // 11. Presence derivation produces 'studying' during active focus while seated
+  const focusSession = {
+    ...session,
+    pomodoro: startPomodoro(session.pomodoro, t0, 'focus'),
+  };
+  const presStudying = derivePlayerPresence({
+    session: focusSession,
+    inClassroom: false,
+    inLibraryLobby: true,
+    activeSeatId: 'tqb-1f-t1-s1',
+    nowMs: t0 + 1000,
+  });
+  assert.equal(presStudying.status, 'studying');
+  assert.equal(presStudying.seatId, 'tqb-1f-t1-s1');
+  assert.equal(presStudying.studyRoomId, 'library-lobby');
+  assert.equal(presStudying.pomodoroPhase, 'focus');
+
+  // 12. Presence derivation produces 'break' during short/long break while seated
+  const breakSession = {
+    ...session,
+    pomodoro: startPomodoro(session.pomodoro, t0, 'short-break'),
+  };
+  const presBreak = derivePlayerPresence({
+    session: breakSession,
+    inClassroom: false,
+    inLibraryLobby: true,
+    activeSeatId: 'tqb-1f-t1-s1',
+    nowMs: t0 + 2000,
+  });
+  assert.equal(presBreak.status, 'break');
+  assert.equal(presBreak.seatId, 'tqb-1f-t1-s1');
+  assert.equal(formatPresenceBadge(presBreak), '☕ Giải lao · HSK 4 · Bài 12');
+
+  // 13. Presence derivation produces 'idle' when seated with paused/idle timer
+  const pausedSession = {
+    ...focusSession,
+    pomodoro: pausePomodoro(focusSession.pomodoro, t0 + 3000),
+  };
+  const presIdleSeated = derivePlayerPresence({
+    session: pausedSession,
+    inClassroom: false,
+    inLibraryLobby: true,
+    activeSeatId: 'tqb-1f-t1-s1',
+    nowMs: t0 + 3000,
+  });
+  assert.equal(presIdleSeated.status, 'idle');
+  assert.equal(presIdleSeated.seatId, 'tqb-1f-t1-s1');
+
+  // 14. Presence derivation produces 'exploring' when standing / outside study flow
+  const presExploring = derivePlayerPresence({
+    session: createInitialStudySession(),
+    inClassroom: false,
+    inLibraryLobby: false,
+    activeSeatId: null,
+    nowMs: t0 + 4000,
+  });
+  assert.equal(presExploring.status, 'exploring');
+  assert.equal(presExploring.seatId, null);
+  assert.equal(presExploring.studyRoomId, null);
+
+  // Deduplication helper ignores updatedAtMs and detects real state changes
+  assert.equal(
+    isSamePublicPresence(presStudying, { ...presStudying, updatedAtMs: t0 + 99999 }),
+    true,
+  );
+  assert.equal(isSamePublicPresence(presStudying, presBreak), false);
+
+  // Server presence reconciliation overrides spoofed seatId with actual SeatRegistry ownership
+  const registry = createSeatRegistry();
+  claimSeat(registry, {
+    seatId: 'tqb-1f-t2-s2',
+    occupantId: 'student-a',
+    occupantName: 'Nguyễn Văn A',
+    nowMs: t0,
+  });
+  const reconciledOwned = reconcileServerPresenceWithSeat(
+    {
+      status: 'studying',
+      seatId: 'tqb-1f-t1-s1', // spoofed seatId!
+      studyRoomId: 'c1-classroom-101',
+      pomodoroPhase: 'focus',
+      subjectTag: 'Vật lý đại cương',
+    },
+    getOccupantSeat(registry, 'student-a'),
+    t0,
+  );
+  assert.equal(reconciledOwned.seatId, 'tqb-1f-t2-s2');
+  assert.equal(reconciledOwned.studyRoomId, 'library-lobby');
+
+  const reconciledUnseated = reconcileServerPresenceWithSeat(
+    {
+      status: 'studying',
+      seatId: 'tqb-1f-t2-s2', // spoofed seatId while standing!
+      studyRoomId: 'library-lobby',
+      pomodoroPhase: 'focus',
+    },
+    getOccupantSeat(registry, 'student-b'),
+    t0,
+  );
+  assert.equal(reconciledUnseated.seatId, null);
+
+  // 15 & 16. Sanitization strips oversized subjectTag, invalid enums, and private fields
+  const longSubject = 'A'.repeat(120);
+  const sanitizedPres = sanitizeStudyPresence({
+    status: 'invalid-status',
+    studyRoomId: 'invalid-room',
+    seatId: 'invalid-seat',
+    pomodoroPhase: 'invalid-phase',
+    subjectTag: longSubject,
+    tasks: [{ id: 'secret' }],
+    occupantMssv: '20226001',
+  });
+  assert.equal(sanitizedPres.status, 'exploring');
+  assert.equal(sanitizedPres.studyRoomId, null);
+  assert.equal(sanitizedPres.seatId, null);
+  assert.equal(sanitizedPres.pomodoroPhase, 'idle');
+  assert.equal(sanitizedPres.subjectTag.length, 36);
+  assert.equal('tasks' in sanitizedPres, false);
+  assert.equal('occupantMssv' in sanitizedPres, false);
+
+  const sanitizedOcc = sanitizeSeatOccupancy({
+    seatId: 'tqb-1f-t1-s1',
+    studyRoomId: 'library-lobby',
+    occupantId: 'student-a',
+    occupantName: 'Nguyễn Văn A',
+    occupantMssv: '20226001',
+    occupiedAtMs: t0,
+    subjectTag: longSubject,
+  });
+  assert.ok(sanitizedOcc);
+  assert.equal(sanitizedOcc.subjectTag.length, 36);
+  assert.equal('occupantMssv' in sanitizedOcc, false);
+  assert.equal(sanitizeRequestId('req-123_ABC'), 'req-123_ABC');
+  assert.equal(sanitizeRequestId('invalid space!'), undefined);
+});
+
 
 

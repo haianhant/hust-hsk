@@ -3,10 +3,21 @@
 // ---------------------------------------------------------------------------
 // features/study/ui/StudyPanel.tsx — Main Study Experience modal/drawer opened
 // from the HUST 3D Campus HUD (`feature.study.session`, `feature.study.pomodoro`,
-// `feature.study.focus-mode`).
+// `feature.study.focus-mode`, `feature.social.rooms`).
 // ---------------------------------------------------------------------------
 
-import type { FocusModeLevel, FocusModePreferences, FocusRuntimePolicy } from '../focus-mode/focus-mode';
+import type { MultiplayerSnapshot } from '../../../lib/multiplayer';
+import {
+  getSeatDefinition,
+  getSeatsForStudyRoom,
+  type PlayerStudyPresence,
+  type SeatOccupancy,
+} from '../../../shared/contracts/study';
+import type {
+  FocusModeLevel,
+  FocusModePreferences,
+  FocusRuntimePolicy,
+} from '../focus-mode/focus-mode';
 import { PomodoroTimer } from '../pomodoro/PomodoroTimer';
 import type { PomodoroPresetId } from '../pomodoro/timer';
 import { StudyTaskList } from '../study-session/StudyTaskList';
@@ -21,6 +32,7 @@ export interface StudyPanelProps {
   zoneLabel: string;
   activeSeatId?: string | null;
   activeSeatLabel?: string | null;
+  mpSnap?: MultiplayerSnapshot;
   session: StudySessionState;
   focusPrefs: FocusModePreferences;
   focusPolicy: FocusRuntimePolicy;
@@ -44,11 +56,36 @@ export interface StudyPanelProps {
   onSetAutoHideHudOnFocus: (enabled: boolean) => void;
 }
 
+function formatOccupantStatusBadge(
+  occ: SeatOccupancy,
+  pres: PlayerStudyPresence | undefined,
+): { label: string; className: string } {
+  const status = pres?.status ?? 'idle';
+  const subject = pres?.subjectTag ?? occ.subjectTag ?? null;
+  if (status === 'studying') {
+    return {
+      label: subject ? `🍅 Đang tự học · ${subject}` : '🍅 Đang tự học · Tập trung',
+      className: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    };
+  }
+  if (status === 'break') {
+    return {
+      label: subject ? `☕ Giải lao · ${subject}` : '☕ Đang giải lao',
+      className: 'bg-amber-50 text-amber-800 border-amber-200',
+    };
+  }
+  return {
+    label: subject ? `🪑 Đang ngồi · ${subject}` : '🪑 Đang ngồi học',
+    className: 'bg-sky-50 text-sky-800 border-sky-200',
+  };
+}
+
 export function StudyPanel({
   open,
   zoneLabel,
   activeSeatId = null,
   activeSeatLabel = null,
+  mpSnap,
   session,
   focusPrefs,
   focusPolicy,
@@ -72,6 +109,27 @@ export function StudyPanel({
   onSetAutoHideHudOnFocus,
 }: StudyPanelProps) {
   if (!open) return null;
+
+  const isOnline = mpSnap?.status === 'online';
+  const lobbySeats = getSeatsForStudyRoom('library-lobby');
+  const lobbyOccupancies: SeatOccupancy[] = isOnline
+    ? (mpSnap?.seats ?? []).filter((s) => s.studyRoomId === 'library-lobby')
+    : activeSeatId
+      ? [
+          {
+            seatId: activeSeatId,
+            studyRoomId: 'library-lobby',
+            occupantId: 'local-self',
+            occupantName: 'Bạn (Ngoại tuyến)',
+            occupiedAtMs: session.sessionStartedAtMs ?? 0,
+            ...(session.subjectTag ? { subjectTag: session.subjectTag } : {}),
+          },
+        ]
+      : [];
+
+  const occupiedCount = lobbyOccupancies.length;
+  const totalSeats = lobbySeats.length;
+  const availableCount = Math.max(0, totalSeats - occupiedCount);
 
   return (
     <div
@@ -111,6 +169,7 @@ export function StudyPanel({
                   className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-300/25 px-2.5 py-0.5 text-[11px] font-bold text-amber-100 ring-1 ring-amber-200/40"
                 >
                   🪑 Đang ngồi tại: {activeSeatLabel ?? activeSeatId}
+                  {!isOnline ? ' · Ngoại tuyến' : ''}
                 </span>
               )}
             </p>
@@ -140,6 +199,99 @@ export function StudyPanel({
 
         {/* Body */}
         <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
+          {/* PR9 — Phòng Tự học Trực tuyến & Tình trạng ghế Thư viện Tạ Quang Bửu */}
+          <section
+            data-testid="study-room-presence-section"
+            aria-label="Phòng tự học trực tuyến"
+            className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-[#1c2b1f]">
+                  🏛️ Sảnh Thư viện Tạ Quang Bửu · Phòng tự học
+                </h3>
+                <span
+                  data-testid="study-room-id-badge"
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                    isOnline
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-900'
+                  }`}
+                >
+                  {isOnline
+                    ? `Phòng ${mpSnap?.roomId ?? 'online'} · ${mpSnap?.count ?? 1} SV trong phòng`
+                    : 'Chế độ ngoại tuyến (chỉ hiển thị cục bộ)'}
+                </span>
+              </div>
+
+              <span
+                data-testid="study-room-availability"
+                className="rounded-full bg-stone-100 px-3 py-1 text-xs font-bold text-stone-700"
+              >
+                🪑 Còn trống {availableCount}/{totalSeats} ghế · Đang ngồi {occupiedCount}/{totalSeats}
+              </span>
+            </div>
+
+            {lobbyOccupancies.length > 0 ? (
+              <ul
+                data-testid="study-room-occupants-list"
+                className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2"
+              >
+                {lobbyOccupancies.map((occ) => {
+                  const seatDef = getSeatDefinition(occ.seatId);
+                  const isMe =
+                    (isOnline && mpSnap?.selfId && occ.occupantId === mpSnap.selfId) ||
+                    occ.occupantId === 'local-self';
+                  const pres = isOnline
+                    ? mpSnap?.presences?.[occ.occupantId]
+                    : {
+                        status:
+                          session.pomodoro.phase === 'focus' && session.pomodoro.running
+                            ? ('studying' as const)
+                            : session.pomodoro.phase === 'short-break' ||
+                                session.pomodoro.phase === 'long-break'
+                              ? ('break' as const)
+                              : ('idle' as const),
+                        studyRoomId: 'library-lobby' as const,
+                        seatId: occ.seatId,
+                        pomodoroPhase: session.pomodoro.phase,
+                        subjectTag: session.subjectTag,
+                        updatedAtMs: 0,
+                      };
+                  const badge = formatOccupantStatusBadge(occ, pres);
+                  return (
+                    <li
+                      key={occ.seatId}
+                      data-testid={`study-room-occupant-${occ.seatId}`}
+                      className="flex flex-col justify-between gap-1 rounded-xl border border-stone-200 bg-stone-50/80 px-3 py-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-extrabold text-[#1c2b1f]">
+                          {occ.occupantName}
+                          {isMe ? ' (Bạn)' : ''}
+                        </span>
+                        <span className="font-semibold text-stone-500">
+                          {seatDef?.label ?? occ.seatId}
+                        </span>
+                      </div>
+                      <div>
+                        <span
+                          className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${badge.className}`}
+                        >
+                          {badge.label}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-stone-500">
+                Hiện cả 4 ghế đọc sách tại Sảnh tầng 1 đều đang trống — hãy lại gần bàn học và bấm phím E hoặc chọn ghế để ngồi học.
+              </p>
+            )}
+          </section>
+
           {/* Thiết lập Chủ đề / Mục tiêu phiên học */}
           <section
             aria-label="Thông tin phiên học"
