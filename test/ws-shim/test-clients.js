@@ -10,7 +10,7 @@
  *  7. Reconnect cùng sessionId thay thế socket cũ, không nhân bản người chơi
  *  8. Ping/pong & rời phòng (leave + giảm count)
  */
-const WebSocket = require('ws');
+const WebSocket = require('./mini-ws');
 
 const PORT = Number(process.argv[2] || 8788);
 const BASE_HTTP = `http://127.0.0.1:${PORT}`;

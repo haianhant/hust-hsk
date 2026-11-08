@@ -9,7 +9,7 @@
 require('../register-ts.cjs');
 
 const http = require('http');
-const { WebSocketServer } = require('ws');
+const { WebSocketServer } = require('./mini-ws');
 const { BOUNDS, SPAWN } = require('../../shared/constants/world.ts');
 const {
   MAX_MSG_PER_SEC,
