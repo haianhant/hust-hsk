@@ -17,6 +17,7 @@ import {
   type StudyRoomZoneId,
   type StudySeatDefinition,
 } from '../../../shared/contracts/study';
+import { playerInput, playerState } from '../../../lib/playerState';
 import type { StudySessionState } from '../../study/study-session/session';
 import {
   AVATAR,
@@ -407,5 +408,133 @@ export function reconcilePersistedSessionSeat(
     ...session,
     studyRoomId: targetRoomId,
     seatId: validLobbySeat,
+  };
+}
+
+export interface ReleaseSeatDriver {
+  standUp?: () => {
+    ok: boolean;
+    reason?: string;
+    releasedSeatId?: string | null;
+    pos?: Vec2;
+  };
+}
+
+export interface ReleaseActiveSeatOptions {
+  driver?: ReleaseSeatDriver | null;
+  fallbackSeatId?: string | null;
+}
+
+export interface ReleaseActiveSeatResult {
+  released: boolean;
+  releasedSeatId: string | null;
+  standUpPos: Vec2 | null;
+  viaMountedPlayer: boolean;
+}
+
+/**
+ * Safe, centralized seat-release transition that works both when the 3D `Player`
+ * component is mounted (`driver.standUp` available) and when `CampusScene`/`Player`
+ * are unmounted during Zen 2D (`driver` is undefined).
+ *
+ * - Never mutates `Player`'s internal refs externally when `Player` is mounted.
+ * - When `Player` is unmounted (Zen 2D), transitions `playerState` to a collision-safe
+ *   standing position via `computeSafeStandUpPosition` and emits `bkhn:seat-change`
+ *   so React seating state, `StudySessionState`, and `playerState` stay in sync
+ *   and remounting 3D renders a standing avatar outside furniture colliders.
+ */
+export function releaseActiveSeatSafely(
+  options: ReleaseActiveSeatOptions = {},
+): ReleaseActiveSeatResult {
+  const { driver, fallbackSeatId = null } = options;
+
+  // 1. Mounted 3D Player path: delegate directly to Player's internal standUp().
+  if (driver && typeof driver.standUp === 'function') {
+    const res = driver.standUp();
+    if (res?.ok) {
+      return {
+        released: true,
+        releasedSeatId: res.releasedSeatId ?? null,
+        standUpPos: res.pos ? { ...res.pos } : { ...playerState.pos },
+        viaMountedPlayer: true,
+      };
+    }
+
+    const staleSeatId = playerState.seatId ?? fallbackSeatId;
+    if (playerState.seated || staleSeatId) {
+      playerState.seated = false;
+      playerState.seatId = null;
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('bkhn:seat-change', {
+            detail: {
+              seated: false,
+              seatId: null,
+              seatLabel: null,
+              studyRoomId: playerState.inLibraryLobby ? 'library-lobby' : null,
+            },
+          }),
+        );
+      }
+    }
+
+    return {
+      released: false,
+      releasedSeatId: null,
+      standUpPos: null,
+      viaMountedPlayer: true,
+    };
+  }
+
+  // 2. Unmounted Player path (e.g. Zen 2D mode has suspended 3D rendering):
+  const activeSeatId = playerState.seatId ?? fallbackSeatId ?? null;
+  const wasSeated = Boolean(playerState.seated || activeSeatId);
+  if (!wasSeated) {
+    return {
+      released: false,
+      releasedSeatId: null,
+      standUpPos: null,
+      viaMountedPlayer: false,
+    };
+  }
+
+  const seatDef = activeSeatId ? getSeatDefinition(activeSeatId) : undefined;
+  let standUpPos: Vec2 = { ...playerState.pos };
+
+  if (playerState.inLibraryLobby) {
+    standUpPos = seatDef
+      ? computeSafeStandUpPosition(seatDef, playerState.pos)
+      : resolveLibraryLobbyCollisions({ ...playerState.pos }, AVATAR.radius).pos;
+    playerState.pos = { ...standUpPos };
+    if (seatDef) {
+      playerState.facing = seatDef.facing;
+    }
+  }
+
+  playerState.seated = false;
+  playerState.seatId = null;
+  playerState.moving = false;
+  playerInput.move.x = 0;
+  playerInput.move.y = 0;
+  playerInput.run = false;
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('bkhn:seat-change', {
+        detail: {
+          seated: false,
+          seatId: null,
+          seatLabel: null,
+          studyRoomId: playerState.inLibraryLobby ? 'library-lobby' : null,
+        },
+      }),
+    );
+  }
+
+  return {
+    released: true,
+    releasedSeatId: activeSeatId,
+    standUpPos: { ...standUpPos },
+    viaMountedPlayer: false,
   };
 }

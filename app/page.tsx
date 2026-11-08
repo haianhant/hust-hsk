@@ -56,6 +56,7 @@ import {
   findNearestInteractable,
   getHook,
   LibraryLobbyModal,
+  releaseActiveSeatSafely,
   SPEECH_RATES,
   TOAST_MS,
   type LibraryLobbyTopic,
@@ -207,7 +208,11 @@ export default function HomePage() {
       setSeatedSeatId(d.seated ? d.seatId : null);
       setSeatedSeatLabel(d.seated ? d.seatLabel : null);
       bindSeatRef.current(
-        d.seated ? (d.studyRoomId ?? 'library-lobby') : null,
+        d.seated
+          ? (d.studyRoomId ?? 'library-lobby')
+          : playerState.inLibraryLobby
+            ? 'library-lobby'
+            : null,
         d.seated ? d.seatId : null,
       );
     };
@@ -241,18 +246,26 @@ export default function HomePage() {
   );
 
   const handleStandUp = useCallback(() => {
-    const r = getHook()?.standUp?.();
-    if (r?.ok) {
+    const r = releaseActiveSeatSafely({
+      driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
+      fallbackSeatId: seatedSeatId ?? study.session.seatId,
+    });
+    if (r.released) {
+      setSeatedSeatId(null);
+      setSeatedSeatLabel(null);
       showToast('🚶 Đã đứng dậy khỏi bàn học.');
     }
-  }, [showToast]);
+  }, [seatedSeatId, showToast, study.focusPolicy.suspend3DRendering, study.session.seatId]);
 
   const handleEndStudySession = useCallback(() => {
-    if (playerState.seated) {
-      getHook()?.standUp?.();
-    }
+    releaseActiveSeatSafely({
+      driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
+      fallbackSeatId: seatedSeatId ?? study.session.seatId,
+    });
+    setSeatedSeatId(null);
+    setSeatedSeatLabel(null);
     study.endSession();
-  }, [study]);
+  }, [seatedSeatId, study]);
 
   // --- Nạp + lưu tiến độ (localStorage, không tài khoản) ----------------------
   useEffect(() => {

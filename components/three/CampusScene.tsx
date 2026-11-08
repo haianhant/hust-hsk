@@ -373,6 +373,12 @@ export default function CampusScene({
   const isIndoor = inClassroom || inLibraryLobby;
   const activeAtm = isIndoor ? ATMOSPHERE.day : atm;
 
+  useEffect(() => {
+    return () => {
+      delete (window as unknown as { __bkhn?: unknown }).__bkhn;
+    };
+  }, []);
+
   return (
     <Canvas
       shadows

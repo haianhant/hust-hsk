@@ -72,6 +72,12 @@ export function StudyChair({
         }
       }}
     >
+      {/* Hộp bắt tia (raycast hitbox) bao quanh thân ghế để bấm chuột / chạm cảm ứng trên cả PC & mobile không bị lọt khe giữa đệm và tựa lưng */}
+      <mesh position={[0, 0.44, 0.04]}>
+        <boxGeometry args={[0.48, 0.82, 0.46]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+
       {/* Khung mặt ghế gỗ (cao 0.42m, tâm dịch +0.05m về phía bàn để khớp đùi nhân vật) */}
       <mesh position={[0, 0.42, 0.05]} castShadow receiveShadow>
         <boxGeometry args={[0.43, 0.028, 0.41]} />

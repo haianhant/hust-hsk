@@ -5,10 +5,10 @@
 - **Module IDs:** `building.library`, `landmark.hust-sign`
 - **Purpose:** Tái hiện công trình biểu tượng lớn nhất của Đại học Bách khoa Hà Nội — Thư viện Điện tử Tạ Quang Bửu 10 tầng cùng quảng trường tiền cảnh phía Bắc và cụm chữ `HUST` 3D đỏ.
 - **Source Paths:**
-  - Hình học & Vật liệu 3D: [`components/three/LibraryBuilding.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/LibraryBuilding.tsx), `HustSign` trong [`components/three/Landmarks.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/Landmarks.tsx)
-  - Tọa độ & Hộp va chạm: [`LIBRARY`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L76-L91), [`HUST_SIGN`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L94-L97), và `BUILDING_COLLIDERS` trong [`lib/campus.ts`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L599-L601)
+  - Hình học & Vật liệu 3D: [`components/three/LibraryBuilding.tsx`](../../../components/three/LibraryBuilding.tsx), `HustSign` trong [`components/three/Landmarks.tsx`](../../../components/three/Landmarks.tsx)
+  - Tọa độ & Hộp va chạm: [`LIBRARY`](../../../lib/campus.ts#L76-L91), [`HUST_SIGN`](../../../lib/campus.ts#L94-L97), và `BUILDING_COLLIDERS` trong [`lib/campus.ts`](../../../lib/campus.ts#L599-L601)
 - **Reference Assets:**
-  - 5 ảnh chụp thực tế tại [`tham-khao/thu-vien/`](file:///home/bao/Hust3D/hust-hsk/tham-khao/thu-vien/README.md) (`thu-vien-cao-nhin-cheo-01.jpg`, `thu-vien-mat-tien-01.jpg`, `thu-vien-mat-tien-san-truoc-01.jpg`, `thu-vien-nhin-xa-01.jpg`, `thu-vien-mat-tien-chu-hust-01.jpg`).
+  - 5 ảnh chụp thực tế tại [`tham-khao/thu-vien/`](../../../tham-khao/thu-vien/README.md) (`thu-vien-cao-nhin-cheo-01.jpg`, `thu-vien-mat-tien-01.jpg`, `thu-vien-mat-tien-san-truoc-01.jpg`, `thu-vien-nhin-xa-01.jpg`, `thu-vien-mat-tien-chu-hust-01.jpg`).
 - **Current Implementation Status:** **Production** (Đã mở rộng đúng tỉ lệ 3 nhịp ở Đợt 7).
 - **Invariants (Ràng buộc Bất biến):**
   1. **Hướng Mặt tiền Chính (`-Z` / Phía Bắc Scene):**
@@ -33,16 +33,16 @@
 - **Module ID:** `interior.library-lobby`
 - **Purpose:** Không gian nội thất Sảnh tầng 1 Thư viện phục vụ tham quan truyền thống, tra cứu từ vựng học thuật và **ngồi tự học tương tác 3D tại bàn đọc (`PR8 Local Interactive Seating`)**.
 - **Source Paths:**
-  - Hình học 3D Sảnh: [`components/three/LibraryLobby.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/LibraryLobby.tsx)
+  - Hình học 3D Sảnh: [`components/three/LibraryLobby.tsx`](../../../components/three/LibraryLobby.tsx)
   - Nội thất Bàn đọc & Ghế ngồi học 3D (`PR8`):
-    - [`features/campus/buildings/library/LibraryStudyArea.tsx`](file:///home/bao/Hust3D/hust-hsk/features/campus/buildings/library/LibraryStudyArea.tsx)
-    - [`features/campus/buildings/library/StudyTable.tsx`](file:///home/bao/Hust3D/hust-hsk/features/campus/buildings/library/StudyTable.tsx)
-    - [`features/campus/buildings/library/StudyChair.tsx`](file:///home/bao/Hust3D/hust-hsk/features/campus/buildings/library/StudyChair.tsx)
-    - [`features/campus/buildings/library/StudySeatMarkers.tsx`](file:///home/bao/Hust3D/hust-hsk/features/campus/buildings/library/StudySeatMarkers.tsx)
-  - Danh mục ghế chuẩn (`STUDY_SEATS`): [`shared/contracts/study.ts`](file:///home/bao/Hust3D/hust-hsk/shared/contracts/study.ts)
-  - Tọa độ, Bàn đọc & Va chạm cục bộ: [`LIBRARY_DOOR`](file:///home/bao/Hust3D/hust-hsk/features/campus/world-data/buildings.ts), [`LIBRARY_LOBBY`](file:///home/bao/Hust3D/hust-hsk/features/campus/world-data/buildings.ts), [`LIBRARY_LOBBY_COLLIDERS`](file:///home/bao/Hust3D/hust-hsk/features/campus/world-data/colliders.ts), [`resolveLibraryLobbyCollisions`](file:///home/bao/Hust3D/hust-hsk/features/campus/world-data/spatial-utils.ts)
-  - Máy trạng thái ngồi học cục bộ: [`features/campus/interaction/seat-interaction.ts`](file:///home/bao/Hust3D/hust-hsk/features/campus/interaction/seat-interaction.ts)
-- **Reference Assets:** Tư liệu ảnh thật Sảnh tầng 1 Thư viện Tạ Quang Bửu ([`docs/reference-visual.md`](file:///home/bao/Hust3D/hust-hsk/docs/reference-visual.md) §3).
+    - [`features/campus/buildings/library/LibraryStudyArea.tsx`](../../../features/campus/buildings/library/LibraryStudyArea.tsx)
+    - [`features/campus/buildings/library/StudyTable.tsx`](../../../features/campus/buildings/library/StudyTable.tsx)
+    - [`features/campus/buildings/library/StudyChair.tsx`](../../../features/campus/buildings/library/StudyChair.tsx)
+    - [`features/campus/buildings/library/StudySeatMarkers.tsx`](../../../features/campus/buildings/library/StudySeatMarkers.tsx)
+  - Danh mục ghế chuẩn (`STUDY_SEATS`): [`shared/contracts/study.ts`](../../../shared/contracts/study.ts)
+  - Tọa độ, Bàn đọc & Va chạm cục bộ: [`LIBRARY_DOOR`](../../../features/campus/world-data/buildings.ts), [`LIBRARY_LOBBY`](../../../features/campus/world-data/buildings.ts), [`LIBRARY_LOBBY_COLLIDERS`](../../../features/campus/world-data/colliders.ts), [`resolveLibraryLobbyCollisions`](../../../features/campus/world-data/spatial-utils.ts)
+  - Máy trạng thái ngồi học cục bộ & giải phóng ghế an toàn: [`features/campus/interaction/seat-interaction.ts`](../../../features/campus/interaction/seat-interaction.ts)
+- **Reference Assets:** Tư liệu ảnh thật Sảnh tầng 1 Thư viện Tạ Quang Bửu ([`docs/reference-visual.md`](../../reference-visual.md) §3).
 - **Current Implementation Status:** **Production** (Đã bổ sung 2 bàn đọc + 4 ghế tự học tương tác cục bộ ở `PR8`).
 - **Invariants:**
   - Điểm kích hoạt cửa vào `LIBRARY_DOOR` đặt tại `(38, 22.8)` với `triggerRadius = 3.6m` (bao phủ vùng đứng ngay ngoài collider khối đế `z = 23.1m`).

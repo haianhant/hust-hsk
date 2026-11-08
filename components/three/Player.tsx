@@ -285,10 +285,83 @@ export default function Player() {
     }
   };
 
+  const syncCameraTransform = () => {
+    if (viewModeRef.current === 'top') {
+      camera.position.set(0, 160, 5.01);
+      camera.lookAt(0, 0, 5);
+      camera.updateMatrixWorld();
+      return;
+    }
+    const seatedNow = seatingStateRef.current.status === 'seated';
+    const target = new THREE.Vector3(
+      posRef.current.x,
+      ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2,
+      posRef.current.z,
+    );
+    const placeCamera = (d: number): THREE.Vector3 => {
+      const cp = Math.cos(pitchRef.current);
+      const sp = Math.sin(pitchRef.current);
+      return new THREE.Vector3(
+        target.x + Math.sin(yawRef.current) * cp * d,
+        target.y + sp * d,
+        target.z + Math.cos(yawRef.current) * cp * d,
+      );
+    };
+    let d = distRef.current;
+    if (ridingRef.current) d = Math.max(d, 7.5);
+    if (playerState.inClassroom) d = Math.min(d, 4.5);
+    if (playerState.inLibraryLobby) d = Math.min(d, 5.2);
+    let camPos = placeCamera(d);
+    if (playerState.inClassroom) {
+      camPos.x = clamp(camPos.x, -4.3, 4.3);
+      camPos.z = clamp(camPos.z, -2.8, 2.8);
+      camPos.y = Math.min(camPos.y, 2.85);
+    } else if (playerState.inLibraryLobby) {
+      camPos.x = clamp(camPos.x, -5.6, 5.6);
+      camPos.z = clamp(camPos.z, -3.9, 3.9);
+      camPos.y = Math.min(camPos.y, 3.85);
+    }
+    let guard = 0;
+    while (
+      guard < 24 &&
+      d > 2.2 &&
+      !playerState.inClassroom &&
+      !playerState.inLibraryLobby &&
+      pointInBuilding(camPos.x, camPos.z)
+    ) {
+      d *= 0.85;
+      camPos = placeCamera(d);
+      guard += 1;
+    }
+    camPos.y = Math.max(CAM_MIN_Y, camPos.y);
+    camera.position.copy(camPos);
+    camera.lookAt(target);
+    camera.updateMatrixWorld();
+  };
+
   useEffect(() => {
     if (seatingStateRef.current.status === 'seated') {
       applyPoseImmediately(true);
+      if (groupRef.current && seatingStateRef.current.anchorPos) {
+        groupRef.current.position.set(
+          seatingStateRef.current.anchorPos.x,
+          SEATED_GROUP_Y_OFFSET,
+          seatingStateRef.current.anchorPos.z,
+        );
+        if (typeof seatingStateRef.current.facing === 'number') {
+          groupRef.current.rotation.y = seatingStateRef.current.facing;
+        }
+      }
+    } else {
+      playerState.pos = { ...posRef.current };
+      applyPoseImmediately(false);
+      if (groupRef.current) {
+        groupRef.current.position.set(posRef.current.x, 0, posRef.current.z);
+        groupRef.current.rotation.y = facingRef.current;
+      }
     }
+    syncCameraTransform();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const forceClearSeat = () => {
@@ -316,7 +389,13 @@ export default function Player() {
 
   // Vị trí logic (mặt đất) — nguồn thật duy nhất; group.position chỉ để hiển thị.
   const posRef = useRef<Vec2>(
-    initialSeatDef ? { x: initialSeatDef.x, z: initialSeatDef.z } : { ...playerState.pos },
+    initialSeatDef
+      ? { x: initialSeatDef.x, z: initialSeatDef.z }
+      : playerState.inLibraryLobby
+        ? resolveLibraryLobbyCollisions({ ...playerState.pos }, AVATAR.radius).pos
+        : playerState.inClassroom
+          ? resolveClassroomCollisions({ ...playerState.pos }, AVATAR.radius).pos
+          : { ...playerState.pos },
   );
   // F5b — khởi tạo yaw/pitch từ góc đã lưu (reload trong phòng khôi phục
   // hướng nhìn bảng); null thì dùng mặc định (yaw π/2 hướng tây từ cổng Trần Đại Nghĩa vào trường).
@@ -524,6 +603,7 @@ export default function Player() {
     }
     applyPoseImmediately(true);
     syncSeatingToPlayerState(res.state);
+    syncCameraTransform();
     return { ok: true, seatId: res.seat.seatId, label: res.seat.label };
   };
 
@@ -555,6 +635,7 @@ export default function Player() {
     }
     applyPoseImmediately(false);
     syncSeatingToPlayerState(res.state);
+    syncCameraTransform();
     return {
       ok: true,
       releasedSeatId: res.releasedSeatId,
@@ -667,6 +748,10 @@ export default function Player() {
         if (typeof yaw === 'number') yawRef.current = yaw;
         if (typeof pitch === 'number') pitchRef.current = pitch;
         viewModeRef.current = 'follow';
+        if (groupRef.current) {
+          groupRef.current.position.set(resolved.x, 0, resolved.z);
+        }
+        syncCameraTransform();
       },
       topView: () => {
         viewModeRef.current = 'top';
@@ -859,10 +944,26 @@ export default function Player() {
         pos: { ...posRef.current },
         facing: facingRef.current,
       }),
+      projectSeatToScreen: (seatId: string) => {
+        const seat = getSeatDefinition(seatId);
+        if (!seat) return null;
+        syncCameraTransform();
+        camera.updateProjectionMatrix();
+        const worldPt = new THREE.Vector3(seat.x, 0.44, seat.z);
+        const ndc = worldPt.clone().project(camera);
+        const rect = gl.domElement.getBoundingClientRect();
+        return {
+          x: Math.round(rect.left + (ndc.x * 0.5 + 0.5) * rect.width),
+          y: Math.round(rect.top + (-ndc.y * 0.5 + 0.5) * rect.height),
+          inFront: ndc.z >= -1 && ndc.z <= 1,
+        };
+      },
     };
     (window as unknown as { __bkhn?: unknown }).__bkhn = hook;
     return () => {
-      delete (window as unknown as { __bkhn?: unknown }).__bkhn;
+      if ((window as unknown as { __bkhn?: unknown }).__bkhn === hook) {
+        delete (window as unknown as { __bkhn?: unknown }).__bkhn;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -121,6 +121,7 @@ export function FocusModeView({
               {!session.active ? (
                 <button
                   type="button"
+                  data-testid="zen-start-session"
                   onClick={onStartSession}
                   className="rounded-xl bg-[#1c5c3a] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#16492e]"
                 >
@@ -129,6 +130,7 @@ export function FocusModeView({
               ) : (
                 <button
                   type="button"
+                  data-testid="zen-end-session"
                   onClick={onEndSession}
                   className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100"
                 >

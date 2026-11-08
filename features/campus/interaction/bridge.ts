@@ -58,6 +58,9 @@ export type BkhnHook = {
     pos: { x: number; z: number };
     facing: number;
   };
+  projectSeatToScreen?: (
+    seatId: string,
+  ) => { x: number; y: number; inFront: boolean } | null;
 };
 
 export function getHook(): BkhnHook | undefined {

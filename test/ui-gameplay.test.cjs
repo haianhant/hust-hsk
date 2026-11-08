@@ -43,7 +43,9 @@ const {
   transitionToStanding,
   reconcileSeatingWithEnvironment,
   reconcilePersistedSessionSeat,
+  releaseActiveSeatSafely,
 } = require('../features/campus/interaction/seat-interaction.ts');
+const { playerState } = require('../lib/playerState.ts');
 const {
   createInitialStudySession,
   startStudySession,
@@ -482,4 +484,48 @@ test('PR8 (9-12) Study Session seat binding, stand-up release, leaving lobby & s
   // Ending session also clears seatId
   const ended = endStudySession(sessionWithStaleSeat);
   assert.equal(ended.seatId, null);
+});
+
+test('PR8 Review Fix (13) releaseActiveSeatSafely handles both mounted Player and unmounted Zen 2D seat release', () => {
+  // Case A: Mounted Player (driver.standUp available) — delegates to driver without mutating externally
+  let driverStandUpCalls = 0;
+  const mountedRes = releaseActiveSeatSafely({
+    driver: {
+      standUp: () => {
+        driverStandUpCalls += 1;
+        return {
+          ok: true,
+          releasedSeatId: 'tqb-1f-t1-s1',
+          pos: { x: -2.4, z: 0.54 },
+        };
+      },
+    },
+    fallbackSeatId: 'tqb-1f-t1-s1',
+  });
+  assert.equal(driverStandUpCalls, 1);
+  assert.equal(mountedRes.released, true);
+  assert.equal(mountedRes.viaMountedPlayer, true);
+  assert.equal(mountedRes.releasedSeatId, 'tqb-1f-t1-s1');
+  assert.deepEqual(mountedRes.standUpPos, { x: -2.4, z: 0.54 });
+
+  // Case B: Unmounted Player in Zen 2D (driver is undefined)
+  playerState.inLibraryLobby = true;
+  playerState.seated = true;
+  playerState.seatId = 'tqb-1f-t1-s1';
+  playerState.pos = { x: -2.4, z: 1.2 };
+
+  const unmountedRes = releaseActiveSeatSafely({
+    driver: undefined,
+    fallbackSeatId: 'tqb-1f-t1-s1',
+  });
+  assert.equal(unmountedRes.released, true);
+  assert.equal(unmountedRes.viaMountedPlayer, false);
+  assert.equal(unmountedRes.releasedSeatId, 'tqb-1f-t1-s1');
+  assert.equal(playerState.seated, false);
+  assert.equal(playerState.seatId, null);
+  assert.deepEqual(playerState.pos, { x: -2.4, z: 0.54 });
+  assert.equal(
+    resolveLibraryLobbyCollisions(playerState.pos, AVATAR.radius).hit,
+    null,
+  );
 });
