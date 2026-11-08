@@ -8,15 +8,16 @@ description: >-
 
 # HUST 3D Graphics Enhancer Skill
 
-Hướng dẫn chuẩn hóa quy trình nâng cấp chất lượng đồ họa 3D cho dự án **Bách khoa Hán ngữ 3D (`hust-hsk`)** bằng Three.js và `@react-three/fiber` mà không phụ thuộc vào file ảnh/model bên ngoài.
+Hướng dẫn chuẩn hóa quy trình nâng cấp chất lượng đồ họa 3D cho dự án **Bách khoa Hán ngữ 3D (`hust-hsk`)** bằng Three.js và `@react-three/fiber`, kết hợp giữa **Procedural PBR (`CanvasTexture`)** và **bộ tư liệu ảnh thực tế `tham-khao/`**.
 
 ## Quy trình nâng cấp đồ họa 4 bước
 
-### Bước 1: Thay vật liệu màu phẳng bằng Procedural PBR `CanvasTexture`
-Khi làm việc với mặt đường, sân quảng trường, tường bê tông, gạch đất nung hoặc bờ đá:
-1. Tạo hàm sinh `THREE.CanvasTexture` với bộ sinh số giả ngẫu nhiên có seed cố định (`mulberry32` hoặc LCG) để kết quả render luôn đồng nhất qua mọi lần chạy test.
-2. Gán đồng thời `map` (màu sắc + độ lệch sắc độ hạt), `bumpMap` (độ nhám nổi vi mô với `bumpScale: 0.005–0.025`), và điều chỉnh `roughness` / `metalness` phù hợp với chất liệu thật tại ĐHBK Hà Nội.
-3. Xem mẫu code chi tiết cho từng vật liệu (bê tông cổng Parabol, gạch đỏ sân Thư viện, đá lát sân C1, nhựa đường, mặt nước Hồ Tiền) tại:
+### Bước 1: Vật liệu Procedural PBR `CanvasTexture` & Đối chiếu Ảnh thật `tham-khao/`
+Khi làm việc với mặt đường, sân quảng trường, tường bê tông, gạch đất nung, bờ đá hoặc các chi tiết biểu trưng:
+1. Mở xem các ảnh chụp thực tế tương ứng trong thư mục `tham-khao/` (`thu-vien/`, `c1/`, `c7/`, `c9/`, `ho-tien/`, `cong-parabol/`, `b1-soict/`, `ktx/`, `dong-phuc/`) để lấy đúng sắc độ, tỉ lệ gờ phào và chất liệu bề mặt.
+2. Tạo hàm sinh `THREE.CanvasTexture` với bộ sinh số giả ngẫu nhiên có seed cố định (`mulberry32` hoặc LCG) cho các bề mặt lặp lại; đồng thời cho phép dùng texture/ảnh nén nhẹ cho các phù điêu, huy hiệu, logo hoặc tranh trưng bày cần độ chân thực cao.
+3. Gán đồng thời `map` (màu sắc + độ lệch sắc độ hạt), `bumpMap` (độ nhám nổi vi mô với `bumpScale: 0.005–0.025`), và điều chỉnh `roughness` / `metalness` phù hợp với chất liệu thật tại ĐHBK Hà Nội.
+4. Xem mẫu code chi tiết cho từng vật liệu (bê tông cổng Parabol, gạch đỏ sân Thư viện, đá lát sân C1, nhựa đường, mặt nước Hồ Tiền) tại:
    - [procedural-pbr-recipes.md](./references/procedural-pbr-recipes.md)
 
 ### Bước 2: Tăng chiều sâu kiến trúc (Architectural Micro-Detailing)

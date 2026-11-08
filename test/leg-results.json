@@ -38,15 +38,15 @@
       "name": "Quảng trường C1 → Thư viện",
       "pass": true,
       "reason": "đến đích trong 1,5 m",
-      "steps": 2300,
-      "seconds": 38.3,
-      "distanceM": 132.4,
+      "steps": 1972,
+      "seconds": 32.9,
+      "distanceM": 130.4,
       "endPos": {
         "x": 23.96,
-        "z": 26.51
+        "z": 26.52
       },
       "hits": {
-        "Bồn cỏ C1Building (đông)": 385
+        "Bồn cỏ C1Building (đông)": 27
       }
     },
     {
