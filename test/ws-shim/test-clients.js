@@ -174,11 +174,11 @@ function connectClient(room = 'hsk-1') {
     // 6. Move & authoritative BOUNDS clamping test
     await new Promise((r) => setTimeout(r, 120));
     const movePromise = wsB.waitFor((m) => m.type === 'move' && m.id === 'sess-a');
-    wsA.send(JSON.stringify({ type: 'move', x: 89.2, z: -5.5, facing: -1.25, state: 'walking' }));
+    wsA.send(JSON.stringify({ type: 'move', x: 94.8, z: -5.5, facing: -1.25, state: 'walking' }));
     const move1 = await movePromise;
     assert(
       'Move broadcast works and preserves facing',
-      Math.abs(move1.x - 89.2) < 0.01 && Math.abs(move1.facing - -1.25) < 0.01,
+      Math.abs(move1.x - 94.8) < 0.01 && Math.abs(move1.facing - -1.25) < 0.01,
       JSON.stringify(move1),
     );
 
@@ -189,7 +189,7 @@ function connectClient(room = 'hsk-1') {
     const moveClamp = await moveClampPromise;
     assert(
       'Move beyond maxX (168) is speed-capped and stays <= 168',
-      moveClamp.x <= 168 && moveClamp.x > 89.2 && moveClamp.state === 'riding',
+      moveClamp.x <= 168 && moveClamp.x > 94.8 && moveClamp.state === 'riding',
       JSON.stringify(moveClamp),
     );
 

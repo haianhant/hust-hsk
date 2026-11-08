@@ -13,7 +13,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { C1, LIBRARY, LOVE_ROAD_TREES, ROADS, TDN_SQUARE, type Vec2 } from '../../lib/campus';
+import { C1, LIBRARY, LOVE_ROAD_TREES, ROADS, type Vec2 } from '../../lib/campus';
 import {
   createSeededRandom,
   makeAsphaltTexture,
@@ -28,8 +28,6 @@ const ROAD_COLOR = '#9d9d99';
 const CURB_COLOR = '#D6D3C9'; // bó vỉa bê tông dọc hai mép đường
 const C1_PLAZA_COLOR = '#DAD6CE'; // quảng trường C1, đá rửa xám sáng
 const LIB_PLAZA_COLOR = '#B86B52'; // sân thư viện, gạch đỏ-nâu đất nung (nhân với map)
-const TDN_PLAZA_COLOR = '#BFE3D8'; // quảng trường Trần Đại Nghĩa, xanh ngọc nhạt
-const CIRCUIT_COLOR = '#F5F5F5'; // vạch trắng kiểu mạch điện trên sân TDN
 
 const GRASS_Y = 0;
 const PLAZA_Y = 0.015;
@@ -44,21 +42,6 @@ type Rect = { minX: number; maxX: number; minZ: number; maxZ: number };
 const PLAZAS: Array<{ rect: Rect; color: string; kind: 'c1' | 'lib' | 'tdn' }> = [
   { rect: C1.plaza, color: C1_PLAZA_COLOR, kind: 'c1' },
   { rect: LIBRARY.plaza, color: LIB_PLAZA_COLOR, kind: 'lib' },
-  { rect: TDN_SQUARE, color: TDN_PLAZA_COLOR, kind: 'tdn' },
-];
-
-const TDN_CIRCUIT_SEGS: Array<[Vec2, Vec2]> = [
-  [{ x: 74, z: -14 }, { x: 84, z: -14 }],
-  [{ x: 84, z: -14 }, { x: 84, z: -4 }],
-  [{ x: 84, z: -4 }, { x: 90, z: -4 }],
-  [{ x: 76, z: -8 }, { x: 76, z: -2 }],
-  [{ x: 76, z: -2 }, { x: 82, z: -2 }],
-  [{ x: 74, z: -12 }, { x: 74, z: -4 }],
-  [{ x: 80, z: -16 }, { x: 80, z: -10 }],
-];
-const TDN_CIRCUIT_NODES: Vec2[] = [
-  { x: 74, z: -14 }, { x: 84, z: -14 }, { x: 84, z: -4 },
-  { x: 76, z: -2 }, { x: 80, z: -10 },
 ];
 
 const C1_JOINT_COLOR = '#B2ADA0';
@@ -529,36 +512,6 @@ export default function Ground() {
             <meshStandardMaterial color={GRASS_BED_COLOR} roughness={0.95} metalness={0} />
           </mesh>
         </group>
-      ))}
-
-      {/* Vạch trắng kiểu mạch điện trên sân Trần Đại Nghĩa, y = 0,025. */}
-      {TDN_CIRCUIT_SEGS.map(([a, b], i) => {
-        const dx = b.x - a.x;
-        const dz = b.z - a.z;
-        const len = Math.hypot(dx, dz);
-        return (
-          <group
-            key={`circuit-${i}`}
-            position={[(a.x + b.x) / 2, 0.025, (a.z + b.z) / 2]}
-            rotation-y={Math.atan2(-dz, dx)}
-          >
-            <mesh rotation-x={-Math.PI / 2} receiveShadow>
-              <planeGeometry args={[len, 0.35]} />
-              <meshStandardMaterial color={CIRCUIT_COLOR} roughness={0.85} metalness={0} />
-            </mesh>
-          </group>
-        );
-      })}
-      {TDN_CIRCUIT_NODES.map((n, i) => (
-        <mesh
-          key={`circuit-node-${i}`}
-          rotation-x={-Math.PI / 2}
-          position={[n.x, 0.025, n.z]}
-          receiveShadow
-        >
-          <circleGeometry args={[0.55, 24]} />
-          <meshStandardMaterial color={CIRCUIT_COLOR} roughness={0.85} metalness={0} />
-        </mesh>
       ))}
 
       {/* Đường đi dọc ROADS: mặt nhựa đường PBR + bó vỉa bê tông 2 bên mép đường. */}

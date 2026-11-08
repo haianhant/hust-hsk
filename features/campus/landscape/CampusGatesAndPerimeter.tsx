@@ -99,34 +99,7 @@ export function ParabolBusStop() {
 }
 
 export function TranDaiNghiaCandlePillars() {
-  const pillars: Array<[number, number]> = [
-    [75, -16.5],
-    [81, -16.5],
-    [87, -16.5],
-    [75, 4.5],
-    [81, 4.5],
-    [87, 4.5],
-  ];
-  return (
-    <group>
-      {pillars.map(([px, pz], idx) => (
-        <group key={`tdn-candle-${idx}`} position={[px, 0, pz]}>
-          <mesh position={[0, 0.25, 0]} castShadow>
-            <boxGeometry args={[0.42, 0.5, 0.42]} />
-            <meshStandardMaterial color="#2C3036" roughness={0.6} metalness={0.4} />
-          </mesh>
-          <mesh position={[0, 1.45, 0]} castShadow>
-            <cylinderGeometry args={[0.11, 0.14, 1.9, 12]} />
-            <meshStandardMaterial color="#EAE6DF" roughness={0.5} />
-          </mesh>
-          <mesh position={[0, 2.55, 0]}>
-            <coneGeometry args={[0.14, 0.42, 12]} />
-            <meshStandardMaterial color="#FFF3C4" emissive="#FFB84D" emissiveIntensity={0.85} />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  );
+  return null;
 }
 
 export function CampusPerimeterFence() {

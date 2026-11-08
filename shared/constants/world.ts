@@ -30,9 +30,9 @@ export const BOUNDS: Readonly<AABB> = {
   maxZ: 108,
 } as const;
 
-/** Default player spawn point inside Cổng Trần Đại Nghĩa, facing West (-X) into the campus. */
+/** Default player spawn point at Cổng Trần Đại Nghĩa, facing West (-X) into the campus. */
 export const SPAWN = {
-  x: 90,
+  x: 95.5,
   z: -6,
   facing: -Math.PI / 2,
 } as const;

@@ -8,7 +8,6 @@ import {
   FAST_TRAVEL_DESTINATIONS,
   LAKE,
   ROADS,
-  TDN_SQUARE,
 } from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
 
@@ -70,15 +69,6 @@ function renderCampusMap(
     project.y(LAKE.center.z - LAKE.halfL),
     LAKE.halfW * 2 * project.s,
     LAKE.halfL * 2 * project.s,
-  );
-
-  // Quảng trường Trần Đại Nghĩa
-  ctx.fillStyle = 'rgba(155, 203, 192, 0.55)';
-  ctx.fillRect(
-    project.x(TDN_SQUARE.minX),
-    project.y(TDN_SQUARE.minZ),
-    (TDN_SQUARE.maxX - TDN_SQUARE.minX) * project.s,
-    (TDN_SQUARE.maxZ - TDN_SQUARE.minZ) * project.s,
   );
 
   // Đường (polyline) + các trục đường phố chính theo khuon-vien-truong.png
