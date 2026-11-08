@@ -62,7 +62,25 @@ export const fastTravelState = {
 
 export type TimeOfDay = 'day' | 'sunset' | 'night';
 
-export type AvatarOutfitId = 'polo-red' | 'hoodie-hust' | 'shirt-white' | 'sport-pe';
+export type AvatarGender = 'male' | 'female';
+
+export type AvatarOutfitId =
+  | 'windbreaker-hust'
+  | 'bomber-red-grey'
+  | 'bomber-navy-white'
+  | 'bomber-red-navy'
+  | 'polo-red'
+  | 'hoodie-hust'
+  | 'shirt-white'
+  | 'sport-pe';
+
+export type AvatarHairStyle =
+  | 'short'
+  | 'swept'
+  | 'layered'
+  | 'ponytail'
+  | 'bob'
+  | 'bun';
 
 export const playerState = {
   pos: { ...SPAWN } as Vec2,
@@ -86,8 +104,12 @@ export const playerState = {
   inLibraryLobby: false,
   /** Giai đoạn 2 — chế độ thời gian ngày / hoàng hôn / đêm. */
   timeOfDay: 'day' as TimeOfDay,
-  /** Wave 2 — Tùy chỉnh trang phục sinh viên Bách khoa trên HUD. */
-  avatarOutfit: 'polo-red' as AvatarOutfitId,
+  /** Việc 2 — Hệ thống nhân vật & đồng phục sinh viên Bách khoa. */
+  avatarName: 'Sinh viên',
+  avatarGender: 'male' as AvatarGender,
+  avatarHairStyle: 'short' as AvatarHairStyle,
+  avatarOutfit: 'windbreaker-hust' as AvatarOutfitId,
+  avatarBackpack: true,
   avatarGlasses: false,
   avatarLanyard: true,
   /**

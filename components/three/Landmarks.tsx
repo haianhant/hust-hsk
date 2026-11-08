@@ -13,6 +13,9 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
+  C1_FOUNTAIN,
+  C2_BUILDING,
+  DAI_CO_VIET_GATE,
   I_LOVE_BK,
   LOVE_ROAD_BENCHES,
   LOVE_ROAD_TREES,
@@ -336,6 +339,27 @@ function TranDaiNghiaSquare() {
         <boxGeometry args={[1.2, 1, 8.2]} />
         <meshStandardMaterial color={GATE_WHITE} roughness={0.9} />
       </mesh>
+      <LabelPlane
+        textureKey="tdn-gate-arch-sign"
+        canvasW={1024}
+        canvasH={192}
+        draw={(ctx, w, h) => {
+          ctx.fillStyle = '#A81C24';
+          ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#FFD166';
+          ctx.lineWidth = 7;
+          ctx.strokeRect(8, 8, w - 16, h - 16);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '900 30px Arial, sans-serif';
+          ctx.fillText('ĐẠI HỌC BÁCH KHOA HÀ NỘI · CỔNG TRẦN ĐẠI NGHĨA (B8)', w / 2, h / 2);
+        }}
+        size={[7.4, 0.82]}
+        position={[x - 0.63, 5.5, z]}
+        rotation={[0, -Math.PI / 2, 0]}
+        transparent={false}
+      />
 
       {/* Biển đồng vàng nghiêng, mặt hướng về phía tây (hướng người đi tới).
           Tấm biển mỏng theo trục X, ngửa ra sau (đỉnh nghiêng về phía đông). */}
@@ -436,9 +460,9 @@ function C1Fountain() {
     sprayRef.current.rotation.y = t * 0.6;
   });
 
-  // Đặt ở (-78, -36.5), phía bắc Khối đá trắng (-78, -31), hoàn toàn ngoài đường đi và chặng leg2
+  // Đặt ở C1_FOUNTAIN.center (-78, -36.5), phía bắc Khối đá trắng (-78, -31), hoàn toàn ngoài đường đi và chặng leg2
   return (
-    <group position={[-78, 0, -36.5]}>
+    <group position={[C1_FOUNTAIN.center.x, 0, C1_FOUNTAIN.center.z]}>
       {/* Thành bể đá hình chữ nhật vát góc 4.8 × 2.6 m */}
       <mesh position={[0, 0.18, 0]} castShadow receiveShadow>
         <boxGeometry args={[4.8, 0.36, 2.6]} />
@@ -512,9 +536,9 @@ function C2Building({ isNight = false }: { isNight?: boolean }) {
     [concretePbr],
   );
 
-  // Đặt ở (-86, 0, -22), trục dài theo hướng Bắc–Nam (size 7.5 × 15 m), mặt chính hướng Đông (+X) ra vườn hoa C1
+  // Đặt ở C2_BUILDING.center (-86, 0, -22), trục dài theo hướng Bắc–Nam (size 7.5 × 15 m), mặt chính hướng Đông (+X) ra vườn hoa C1
   return (
-    <group position={[-86, 0, -22]} rotation-y={Math.PI / 2}>
+    <group position={[C2_BUILDING.center.x, 0, C2_BUILDING.center.z]} rotation-y={Math.PI / 2}>
       {/* Khối nhà C2 15 × 7.5 m (sau khi xoay 90°: dọc Bắc–Nam 15 m, ngang Đông–Tây 7.5 m), cao 7.8 m */}
       <mesh position={[0, 3.9, 0]} castShadow receiveShadow>
         <boxGeometry args={[15, 7.8, 7.5]} />
@@ -608,7 +632,7 @@ function drawDaiCoVietGateSign(ctx: CanvasRenderingContext2D, w: number, h: numb
 
 function DaiCoVietGate() {
   return (
-    <group position={[-58, 0, -73.5]}>
+    <group position={[DAI_CO_VIET_GATE.center.x, 0, DAI_CO_VIET_GATE.center.z]}>
       {/* Hai trụ cổng chính ốp đá trang nghiêm */}
       {[-5.2, 5.2].map((gx) => (
         <group key={`dcv-pillar-${gx}`} position={[gx, 0, 0]}>

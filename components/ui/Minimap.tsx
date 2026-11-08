@@ -132,6 +132,9 @@ function renderCampusMap(
     } else if (b.kind === 'dorm') {
       ctx.fillStyle = 'rgba(245, 158, 11, 0.68)';
       ctx.strokeStyle = 'rgba(253, 224, 71, 0.95)';
+    } else if (b.kind === 'gate') {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.82)';
+      ctx.strokeStyle = 'rgba(254, 202, 202, 0.98)';
     } else {
       ctx.fillStyle = 'rgba(217, 119, 6, 0.55)';
       ctx.strokeStyle = 'rgba(253, 186, 116, 0.9)';
@@ -331,7 +334,7 @@ export default function Minimap({ onFastTravel }: { onFastTravel?: (destId: stri
                   🗺️ SƠ ĐỒ TỔNG THỂ ĐẠI HỌC BÁCH KHOA HÀ NỘI · 河内百科大学全景图
                 </h2>
                 <p className="text-xs text-white/70">
-                  C1 · C2 · C3–C10 · D3–D9 · Thư viện TQB · Hồ Tiền · VDZ · Nhà thi đấu · KTX B6–B10
+                  C1 · C2 · C9 · C3–C10 · D2–D9 · Thư viện TQB · Hồ Tiền · B1 SoICT · Nhà thi đấu · KTX B3–B13 · Cổng B8
                 </p>
               </div>
               <button

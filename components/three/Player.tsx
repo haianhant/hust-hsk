@@ -37,8 +37,9 @@
 // (§8: đã đủ xa để nhìn đường + bối cảnh, không đổi khi chưa có bằng chứng).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import {
   AVATAR,
@@ -68,9 +69,50 @@ import {
   playerInput,
   playerState,
   updatePlayerState,
+  type AvatarGender,
+  type AvatarHairStyle,
   type AvatarOutfitId,
 } from '../../lib/playerState';
-import StudentAvatar, { type FigureJoints } from './StudentAvatar';
+import StudentAvatar, { computeNaturalGaitTargets, type FigureJoints } from './StudentAvatar';
+
+function usePlayerNameplateTexture(name: string): THREE.CanvasTexture {
+  const display = (name || 'Sinh viên').trim() || 'Sinh viên';
+  const tex = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 80;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, 512, 80);
+      // Pill nền tối mờ sang trọng + viền vàng mảnh
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+      ctx.beginPath();
+      ctx.roundRect(12, 10, 488, 60, 30);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.72)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      let fontSize = 32;
+      ctx.font = `700 ${fontSize}px system-ui, -apple-system, Arial, sans-serif`;
+      const textW = ctx.measureText(display).width;
+      if (textW > 440) {
+        fontSize = Math.max(18, Math.floor((fontSize * 440) / textW));
+        ctx.font = `700 ${fontSize}px system-ui, -apple-system, Arial, sans-serif`;
+      }
+      ctx.fillText(display, 256, 42);
+    }
+    const t = new THREE.CanvasTexture(canvas);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    return t;
+  }, [display]);
+  useEffect(() => () => tex.dispose(), [tex]);
+  return tex;
+}
 
 const CAM_MIN_DIST = 4;
 const CAM_MAX_DIST = 10;
@@ -116,6 +158,7 @@ export default function Player() {
   const camera = useThree((s) => s.camera);
 
   const groupRef = useRef<THREE.Group>(null!);
+  const nameplateGroupRef = useRef<THREE.Group>(null!);
   // Khớp nhân vật (StudentAvatar lái hình học, Player lái góc quay):
   const bodyRef = useRef<THREE.Group>(null!);
   const legLRef = useRef<THREE.Group>(null!);
@@ -142,24 +185,34 @@ export default function Player() {
     footR: footRRef,
   };
 
-  // Balô: tháo/lắp được qua hook __bkhn.setBackpack (kiểm tra model/áo).
-  const [backpackOn, setBackpackOn] = useState(true);
-  const backpackRef = useRef(true);
+  // Balô: tháo/lắp được qua hook __bkhn.setBackpack (kiểm tra model/áo) hoặc từ Character Creator.
+  const [backpackOn, setBackpackOn] = useState<boolean>(playerState.avatarBackpack);
+  const backpackRef = useRef<boolean>(playerState.avatarBackpack);
   const setBackpack = (v: boolean) => {
     backpackRef.current = !!v;
+    playerState.avatarBackpack = !!v;
     setBackpackOn(!!v);
   };
 
-  // Wave 2 — Tùy chỉnh trang phục, kính cận & dây đeo thẻ SV từ HUD
+  // Việc 2 — Tùy chỉnh nhân vật, giới tính, kiểu tóc, trang phục, kính & dây đeo thẻ SV
+  const [avatarName, setAvatarName] = useState<string>(playerState.avatarName || 'Sinh viên');
+  const [gender, setGender] = useState<AvatarGender>(playerState.avatarGender);
+  const [hairStyle, setHairStyle] = useState<AvatarHairStyle>(playerState.avatarHairStyle);
   const [outfit, setOutfit] = useState<AvatarOutfitId>(playerState.avatarOutfit);
   const [glassesOn, setGlassesOn] = useState<boolean>(playerState.avatarGlasses);
   const [lanyardOn, setLanyardOn] = useState<boolean>(playerState.avatarLanyard);
+  const nameplateTex = usePlayerNameplateTexture(avatarName);
 
   useEffect(() => {
     const onOutfitChange = () => {
+      setAvatarName(playerState.avatarName || 'Sinh viên');
+      setGender(playerState.avatarGender);
+      setHairStyle(playerState.avatarHairStyle);
       setOutfit(playerState.avatarOutfit);
       setGlassesOn(playerState.avatarGlasses);
       setLanyardOn(playerState.avatarLanyard);
+      backpackRef.current = !!playerState.avatarBackpack;
+      setBackpackOn(!!playerState.avatarBackpack);
     };
     window.addEventListener('bkhn:outfit', onOutfitChange);
     return () => window.removeEventListener('bkhn:outfit', onOutfitChange);
@@ -515,7 +568,7 @@ export default function Player() {
         const tmp = new THREE.Box3();
         g.traverse((obj) => {
           const mesh = obj as THREE.Mesh;
-          if (!mesh.isMesh || !mesh.geometry) return;
+          if (!mesh.isMesh || !mesh.geometry || mesh.userData?.ignoreMeasure) return;
           const geo = mesh.geometry as THREE.BufferGeometry;
           if (!geo.boundingBox) geo.computeBoundingBox();
           if (!geo.boundingBox) return;
@@ -763,6 +816,7 @@ export default function Player() {
     // dừng hẳn, collider người không va chạm ngược với chính xe của mình
     // (chỉ va chạm xe với môi trường qua resolveBikeCollisions).
     let moving = false;
+    let effectivelyMoving = false;
     let speed: number = AVATAR.walkSpeed;
     let swing = WALK_SWING;
     if (ridingRef.current) {
@@ -876,9 +930,11 @@ export default function Player() {
         dirX /= len;
         dirZ /= len;
       }
+      const prevX = posRef.current.x;
+      const prevZ = posRef.current.z;
       const next: Vec2 = {
-        x: posRef.current.x + dirX * speed * delta,
-        z: posRef.current.z + dirZ * speed * delta,
+        x: prevX + dirX * speed * delta,
+        z: prevZ + dirZ * speed * delta,
       };
       const { pos, hit } = playerState.inClassroom
         ? resolveClassroomCollisions(next, AVATAR.radius)
@@ -898,48 +954,44 @@ export default function Player() {
       while (diff < -Math.PI) diff += Math.PI * 2;
       facingRef.current += diff * Math.min(1, delta * 10);
 
-      // Phase tăng theo đúng bước dài hình học → quãng đường/bước = bước dài,
-      // không trượt chân: stepLen = 2 × LEG_LEN × sin(swing); mỗi chu kỳ
-      // phase 2π = 2 bước → phaseRate = speed × π / stepLen.
+      // Tính quãng đường dịch chuyển thực tế sau va chạm: nếu bị tường/vật cản
+      // chặn đứng (actualSpeed <= 0.15 * speed), ngắt chu kỳ bước để không bước tại chỗ!
+      const actualDist = Math.hypot(pos.x - prevX, pos.z - prevZ);
+      const actualSpeed = delta > 1e-5 ? actualDist / delta : 0;
+      effectivelyMoving = actualSpeed > 0.15 * speed;
+
       const stepLen = 2 * LEG_LEN * Math.sin(swing);
-      walkPhaseRef.current += (delta * speed * Math.PI) / stepLen;
+      if (effectivelyMoving) {
+        walkPhaseRef.current += (actualDist * Math.PI) / stepLen;
+      }
     }
     } // hết nhánh đi bộ (nhánh lái xe ở trên)
 
-    // --- Animation nhân vật (đợt sửa lần 2) ---------------------------------
-    // Blend mềm đi ↔ đứng (dừng chuyển mềm sang idle, không khựng).
-    const blendTarget = moving ? 1 : 0;
-    moveBlendRef.current += (blendTarget - moveBlendRef.current) * Math.min(1, delta * 6);
+    // --- Animation nhân vật (Việc 2 — đồng bộ vận tốc thực & khử lạch bạch) --
+    // Blend mềm đi ↔ đứng (nếu bị vật cản chặn không nhích được thì hạ blend về 0).
+    const blendTarget = effectivelyMoving ? 1 : 0;
+    moveBlendRef.current += (blendTarget - moveBlendRef.current) * Math.min(1, delta * 7);
     const blend = moveBlendRef.current;
     const phase = walkPhaseRef.current;
     const t = state.clock.elapsedTime;
     const ease = Math.min(1, delta * 12);
 
-    // Chân: đung đưa đối xứng chéo; gối gập nhất khi chân vung về TRƯỚC
-    // qua dưới thân (−cos phase > 0, cực đại ở phase π), duỗi thẳng khi
-    // chạm đất; cổ chân bù góc để bàn chân gần phẳng lúc tiếp đất
-    // (foot = −(leg + knee)×0,9 — dấu + theo gối mới, gối DƯƠNG).
-    const legSwing = Math.sin(phase) * swing * blend;
-    let legLTarget = legSwing;
-    let legRTarget = -legSwing;
-    let kneeLTarget = 0.05 + 0.85 * Math.max(0, -Math.cos(phase)) * blend;
-    let kneeRTarget = 0.05 + 0.85 * Math.max(0, Math.cos(phase)) * blend;
-    let footLTarget = clamp(-(legLTarget + kneeLTarget) * 0.9, -0.5, 0.5) * blend;
-    let footRTarget = clamp(-(legRTarget + kneeRTarget) * 0.9, -0.5, 0.5) * blend;
-    // Tay: đung đưa ngược pha chân cùng bên; khuỷu gập sẵn (rotation.x ÂM,
-    // cẳng tay về trước), cong thêm khi tay vung về trước.
-    // Idle (blend = 0): tay trái hơi trước, tay phải hơi sau, khuỷu khác nhau.
-    const armSwing = legSwing * 0.75;
-    let armLTarget = -armSwing + (1 - blend) * 0.09;
-    let armRTarget = armSwing + (1 - blend) * -0.05;
-    let elbowLTarget = -(0.3 + 0.18 * blend * Math.max(0, Math.sin(phase)));
-    let elbowRTarget = -(0.42 + 0.18 * blend * Math.max(0, Math.sin(phase + Math.PI)));
-    // Thân trên: nghiêng nhẹ về trước khi đi, lắc ngang theo bước, thở +
-    // chuyển trọng lượng khi đứng (không giữ hai tay cứng song song).
-    let bodyLeanTarget = 0.05 * blend + (playerInput.run ? 0.05 * blend : 0);
-    let bodyRollTarget =
-      Math.sin(phase) * 0.025 * blend + Math.sin(t * 0.9) * 0.012 * (1 - blend);
-    let bodyBobTarget = Math.abs(Math.cos(phase)) * 0.02 * blend + Math.sin(t * 1.4) * 0.004;
+    const gait = computeNaturalGaitTargets(phase, swing, blend, t, playerInput.run);
+    let {
+      legLTarget,
+      legRTarget,
+      kneeLTarget,
+      kneeRTarget,
+      footLTarget,
+      footRTarget,
+      armLTarget,
+      armRTarget,
+      elbowLTarget,
+      elbowRTarget,
+      bodyLeanTarget,
+      bodyRollTarget,
+      bodyBobTarget,
+    } = gait;
     // --- Tư thế ngồi xe (đợt 3 giai đoạn 4) — ghi đè toàn bộ tư thế đi bộ.
     // Dấu khớp theo quy ước đợt 3 giai đoạn 1 (mặt trước +Z): rotation.x
     // ÂM xoay chi treo về TRƯỚC, DƯƠNG xoay về SAU. Ngồi xe: đùi đưa về
@@ -987,6 +1039,13 @@ export default function Player() {
 
     groupRef.current.position.set(posRef.current.x, 0, posRef.current.z);
     groupRef.current.rotation.y = facingRef.current;
+    if (nameplateGroupRef.current) {
+      nameplateGroupRef.current.position.set(
+        posRef.current.x,
+        ridingRef.current ? 2.05 : 1.95,
+        posRef.current.z,
+      );
+    }
 
     updatePlayerState(posRef.current, moving);
     // F5b — đồng bộ góc camera ra playerState để page lưu vào tiến độ.
@@ -1060,15 +1119,36 @@ export default function Player() {
 
   // Avatar chi tiết (components/three/StudentAvatar.tsx): cao đúng 1,7 m,
   // chân chạm đất (đế giày y = 0), khớp hông y = 0,8, khớp vai y = 1,29.
+  // Bảng tên Billboard nằm ở nhóm riêng ngoài groupRef để:
+  //   1) Không bị xoay ngược chữ theo facingRef.current
+  //   2) Không rung lắc theo nhịp nhún chân bodyRef.current.position.y
+  //   3) Không làm thay đổi kết quả đo bounding box của measureAvatar()
   return (
-    <group ref={groupRef} position={[SPAWN.x, 0, SPAWN.z]}>
-      <StudentAvatar
-        joints={joints}
-        showBackpack={backpackOn}
-        outfit={outfit}
-        glasses={glassesOn}
-        lanyard={lanyardOn}
-      />
-    </group>
+    <>
+      <group ref={groupRef} position={[SPAWN.x, 0, SPAWN.z]}>
+        <StudentAvatar
+          joints={joints}
+          showBackpack={backpackOn}
+          gender={gender}
+          hairStyle={hairStyle}
+          outfit={outfit}
+          glasses={glassesOn}
+          lanyard={lanyardOn}
+        />
+      </group>
+      <group ref={nameplateGroupRef} position={[SPAWN.x, 1.95, SPAWN.z]}>
+        <Billboard position={[0, 0, 0]}>
+          <mesh userData={{ ignoreMeasure: true }}>
+            <planeGeometry args={[1.28, 0.2]} />
+            <meshBasicMaterial
+              map={nameplateTex}
+              transparent
+              depthTest={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </Billboard>
+      </group>
+    </>
   );
 }

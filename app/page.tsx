@@ -45,7 +45,16 @@ import {
   todayKey,
 } from '../lib/learn/store';
 import { hasChineseVoice, speak, stopSpeaking } from '../lib/learn/speech';
-import { getSessionId, loadIdentity, saveIdentity, validateIdentity, type Identity } from '../lib/identity';
+import {
+  DEFAULT_CHARACTER_PROFILE,
+  getSessionId,
+  loadCharacterProfile,
+  loadIdentity,
+  saveCharacterProfile,
+  syncCharacterToPlayerState,
+  type CharacterProfile,
+  type Identity,
+} from '../lib/identity';
 import { multiplayer, type MultiplayerSnapshot, type RemoteState } from '../lib/multiplayer';
 import { getEarnedGlobalBadgeIds, GLOBAL_BADGES } from '../lib/learn/badges';
 import { getNextSuggestion } from '../lib/learn/suggest';
@@ -54,6 +63,7 @@ import Handbook from '../components/learn/Handbook';
 import ResultPanel from '../components/learn/ResultPanel';
 import ReviewSession from '../components/learn/ReviewSession';
 import QuestObjective from '../components/learn/QuestObjective';
+import CharacterCreatorModal from '../components/ui/CharacterCreatorModal';
 import type { HomeworkState } from '../components/three/Classroom';
 
 // CampusScene chỉ mount sau khi bấm "Vào trường" — tránh autoplay/WebGL
@@ -424,9 +434,7 @@ export default function HomePage() {
   const [inLibraryLobby, setInLibraryLobby] = useState(false);
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('day');
   const [outfitOpen, setOutfitOpen] = useState(false);
-  const [avatarOutfit, setAvatarOutfit] = useState<AvatarOutfitId>('polo-red');
-  const [avatarGlasses, setAvatarGlasses] = useState<boolean>(true);
-  const [avatarLanyard, setAvatarLanyard] = useState<boolean>(true);
+  const [characterProfile, setCharacterProfile] = useState<CharacterProfile>(DEFAULT_CHARACTER_PROFILE);
   const [lobbyModal, setLobbyModal] = useState<'statue' | 'vocab-board' | 'info-desk' | null>(null);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [homework, setHomework] = useState<HomeworkState>('desk');
@@ -437,27 +445,26 @@ export default function HomePage() {
   const [riding, setRiding] = useState(false);
   const [bikeSpeed, setBikeSpeed] = useState(0);
   const lastBikeNoticeRef = useRef(0);
-  // Đợt 5 multiplayer — tên + MSSV nhập ở màn hình vào (lưu localStorage,
-  // chỉ nhập một lần); snapshot phòng để HUD hiện số người thật.
+  // Đợt 5 multiplayer + Việc 2 nhân vật — đọc hồ sơ nhân vật & identity đã lưu
+  // SAU khi mount (client-only) để tránh lỗi hydration React #425/#418.
   const [savedIdentity, setSavedIdentity] = useState<Identity | null>(null);
   const [identityName, setIdentityName] = useState<string>('');
   const [identityMssv, setIdentityMssv] = useState<string>('');
-  const [identityError, setIdentityError] = useState<string | null>(null);
-  const [editingIdentity, setEditingIdentity] = useState<boolean>(true);
   const [mpSnap, setMpSnap] = useState<MultiplayerSnapshot>(() => multiplayer.snapshot);
 
-  // Đợt 5 — đọc identity đã lưu SAU khi mount (client-only). Đọc
-  // localStorage trong useState initializer làm lần render đầu ở client
-  // khác bản prerender ở server (form vs dòng đã lưu) → lỗi hydration
-  // React #425/#418. Trước khi effect chạy, màn vào hiện form trống
-  // (giống hệt bản server), rồi đổi sang dòng đã lưu nếu có.
   useEffect(() => {
     const saved = loadIdentity();
+    const savedChar = loadCharacterProfile() ?? {
+      ...DEFAULT_CHARACTER_PROFILE,
+      name: saved?.name ?? DEFAULT_CHARACTER_PROFILE.name,
+      mssv: saved?.mssv ?? DEFAULT_CHARACTER_PROFILE.mssv,
+    };
+    setCharacterProfile(savedChar);
+    syncCharacterToPlayerState(savedChar);
     if (saved) {
       setSavedIdentity(saved);
       setIdentityName(saved.name);
       setIdentityMssv(saved.mssv);
-      setEditingIdentity(false);
     }
   }, []);
   const [noVoice, setNoVoice] = useState(false);
@@ -630,13 +637,13 @@ export default function HomePage() {
   // (Bỏ effect cũ "hiển thị mặc định trên desktop, thu gọn trên mobile":
   // mặc định giờ đã thu gọn ở mọi cỡ màn hình — xem useState helpOpen.)
 
-  // Khi panel học, menu chọn bài hoặc bảng thông tin sảnh thư viện mở: khóa di chuyển.
+  // Khi panel học, menu chọn bài, bảng thông tin sảnh thư viện hoặc modal nhân vật mở: khóa di chuyển.
   useEffect(() => {
-    playerState.uiLocked = panel !== null || lessonsOpen || lobbyModal !== null;
+    playerState.uiLocked = panel !== null || lessonsOpen || lobbyModal !== null || outfitOpen;
     return () => {
       playerState.uiLocked = false;
     };
-  }, [panel, lessonsOpen, lobbyModal]);
+  }, [panel, lessonsOpen, lobbyModal, outfitOpen]);
 
   // Đồng bộ mode phòng học & sảnh thư viện từ hook Player.
   useEffect(() => {
@@ -981,16 +988,15 @@ export default function HomePage() {
     });
   }, [showToast]);
 
-  const applyAvatarStyle = useCallback(
-    (nextOutfit: AvatarOutfitId, nextGlasses: boolean, nextLanyard: boolean, label?: string) => {
-      setAvatarOutfit(nextOutfit);
-      setAvatarGlasses(nextGlasses);
-      setAvatarLanyard(nextLanyard);
-      playerState.avatarOutfit = nextOutfit;
-      playerState.avatarGlasses = nextGlasses;
-      playerState.avatarLanyard = nextLanyard;
-      window.dispatchEvent(new CustomEvent('bkhn:outfit'));
-      if (label) showToast(`Trang phục: ${label}`);
+  const handleSaveCharacterInGame = useCallback(
+    (nextProfile: CharacterProfile) => {
+      saveCharacterProfile(nextProfile);
+      setCharacterProfile(nextProfile);
+      setSavedIdentity({ name: nextProfile.name, mssv: nextProfile.mssv });
+      setIdentityName(nextProfile.name);
+      setIdentityMssv(nextProfile.mssv);
+      setOutfitOpen(false);
+      showToast(`Đã lưu nhân vật: ${nextProfile.name} (${nextProfile.mssv})`);
     },
     [showToast],
   );
@@ -1195,27 +1201,25 @@ export default function HomePage() {
     [],
   );
 
-  // Đợt 5 multiplayer — vào trường: bắt buộc có tên + MSSV hợp lệ mới
-  // vào được. Lưu identity (chỉ nhập một lần) rồi nối WebSocket với tên
-  // + MSSV đó; nếu Worker không tới được thì vẫn vào trường chơi một
-  // mình (multiplayer tự báo offline, HUD ghi rõ).
+  // Đợt 5 multiplayer + Việc 2 nhân vật — lưu hồ sơ nhân vật + identity
+  // rồi kết nối multiplayer và vào sân trường.
   const tryEnter = useCallback(
-    (resumeQuest: boolean) => {
-      const err = validateIdentity(identityName, identityMssv);
-      if (err) {
-        setIdentityError(err);
-        setEditingIdentity(true);
-        return;
-      }
-      const identity: Identity = { name: identityName.trim(), mssv: identityMssv.trim() };
-      saveIdentity(identity);
+    (resumeQuest: boolean, submittedProfile?: CharacterProfile) => {
+      const finalProfile: CharacterProfile = submittedProfile ?? {
+        ...characterProfile,
+        name: identityName.trim() || characterProfile.name || 'Sinh viên',
+        mssv: identityMssv.trim() || characterProfile.mssv || '20226010',
+      };
+      saveCharacterProfile(finalProfile);
+      setCharacterProfile(finalProfile);
+      const identity: Identity = { name: finalProfile.name, mssv: finalProfile.mssv };
       setSavedIdentity(identity);
-      setIdentityError(null);
-      setEditingIdentity(false);
+      setIdentityName(finalProfile.name);
+      setIdentityMssv(finalProfile.mssv);
       multiplayer.connect(getSessionId(), identity.name, identity.mssv);
       enterCampus(resumeQuest);
     },
-    [identityName, identityMssv, enterCampus],
+    [characterProfile, identityName, identityMssv, enterCampus],
   );
 
   const toggleSound = useCallback(() => {
@@ -1335,105 +1339,22 @@ export default function HomePage() {
 
   const objectiveText = questActive && step ? OBJECTIVES[step.id] ?? currentQuest.title : null;
 
-  // --- Màn mở đầu -----------------------------------------------------------------------
+  // --- Màn mở đầu (Trình tạo Nhân vật 3D trước khi vào trường) ---------------
   if (!entered) {
-    const hasSave = !!progress && (progress.points > 0 || !!progress.questState || Object.keys(progress.completedQuests ?? {}).length > 0);
+    const hasSave =
+      !!progress &&
+      (progress.points > 0 || !!progress.questState || Object.keys(progress.completedQuests ?? {}).length > 0);
     return (
-      <main className="flex h-dvh w-full flex-col items-center justify-center gap-6 bg-[#eef2e6] px-6 text-center">
-        <h1 className="text-4xl font-bold leading-tight text-[#1c2b1f] sm:text-5xl">Bách khoa Hán ngữ 3D</h1>
-        <p className="max-w-xl text-lg text-[#1c2b1f]/80">
-          Đến Bách khoa. Sống một ngày sinh viên. Mang tiếng Trung vào từng câu chuyện.
-        </p>
-        <p className="max-w-xl text-sm leading-relaxed text-[#1c2b1f]/60">
-          Dự án học tập độc lập, tái hiện Bách khoa Hà Nội; không phải website chính thức của Đại học. Campus được cô
-          đọng, không phải digital twin chính xác.
-        </p>
-        {/* Đợt 5 multiplayer — tên + MSSV: hỏi một lần, lưu trên máy này.
-            Đã lưu thì chỉ hiện gọn + nút Đổi; chưa có thì hiện form nhập. */}
-        {savedIdentity && !editingIdentity ? (
-          <div className="flex flex-col items-center gap-1 rounded-2xl border border-[#1c5c3a]/20 bg-white/70 px-5 py-3">
-            <p className="text-base font-semibold text-[#1c2b1f]">
-              👤 {savedIdentity.name} ({savedIdentity.mssv})
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setIdentityName(savedIdentity.name);
-                setIdentityMssv(savedIdentity.mssv);
-                setEditingIdentity(true);
-              }}
-              className="text-sm font-semibold text-[#1c5c3a] underline hover:text-[#16492e]"
-            >
-              Đổi tên/MSSV
-            </button>
-          </div>
-        ) : (
-          <div className="w-full max-w-md rounded-2xl border border-[#1c5c3a]/20 bg-white/70 px-5 py-4 text-left">
-            <p className="text-base font-bold text-[#1c2b1f]">👤 Bạn là ai trong trường?</p>
-            <p className="mt-1 text-sm text-[#1c2b1f]/60">
-              Tên + MSSV hiện trên bảng tên của bạn — bạn khác trong trường sẽ thấy. Chỉ nhập một lần, lưu trên máy
-              này.
-            </p>
-            <label className="mt-3 block text-sm font-semibold text-[#1c2b1f]">
-              Tên của bạn
-              <input
-                id="identity-name"
-                type="text"
-                value={identityName}
-                maxLength={30}
-                placeholder="vd Hải Anh"
-                onChange={(e) => setIdentityName(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-[#1c5c3a]/30 px-3 py-2 text-base font-normal outline-none focus:border-[#1c5c3a]"
-              />
-            </label>
-            <label className="mt-2 block text-sm font-semibold text-[#1c2b1f]">
-              MSSV (8 chữ số)
-              <input
-                id="identity-mssv"
-                type="text"
-                inputMode="numeric"
-                value={identityMssv}
-                maxLength={8}
-                placeholder="vd 20226010"
-                onChange={(e) => setIdentityMssv(e.target.value.replace(/[^0-9]/g, '').slice(0, 8))}
-                className="mt-1 w-full rounded-xl border border-[#1c5c3a]/30 px-3 py-2 text-base font-normal outline-none focus:border-[#1c5c3a]"
-              />
-            </label>
-            {identityError && (
-              <p role="alert" className="mt-2 text-sm font-semibold text-[#A54432]">
-                {identityError}
-              </p>
-            )}
-          </div>
-        )}
-        <div className="flex flex-col items-center gap-3 sm:flex-row">
-          <button
-            id="enter-campus"
-            type="button"
-            onClick={() => tryEnter(false)}
-            className="rounded-full bg-[#1c5c3a] px-8 py-3 text-lg font-semibold text-white shadow-lg transition hover:bg-[#16492e] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1c5c3a] focus-visible:ring-offset-2"
-          >
-            Vào trường
-          </button>
-          {hasSave && (
-            <button
-              id="continue-learning"
-              type="button"
-              onClick={() => tryEnter(true)}
-              className="rounded-full bg-[#A54432] px-8 py-3 text-lg font-semibold text-white shadow-lg transition hover:bg-[#8A3828] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A54432] focus-visible:ring-offset-2"
-            >
-              Tiếp tục học
-            </button>
-          )}
-          <button
-            id="choose-lesson"
-            type="button"
-            onClick={() => setLessonsOpen(true)}
-            className="rounded-full border-2 border-[#1c5c3a] px-8 py-3 text-lg font-semibold text-[#1c5c3a] transition hover:bg-[#1c5c3a]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1c5c3a] focus-visible:ring-offset-2"
-          >
-            Chọn bài
-          </button>
-        </div>
+      <main className="flex min-h-dvh w-full flex-col items-center justify-center gap-4 overflow-y-auto bg-[#eef2e6] px-4 py-6 text-center">
+        <CharacterCreatorModal
+          mode="entry"
+          initialProfile={characterProfile}
+          initialNameInput={savedIdentity ? identityName : ''}
+          initialMssvInput={savedIdentity ? identityMssv : ''}
+          hasSave={hasSave}
+          onConfirm={(nextProfile, resumeQuest) => tryEnter(!!resumeQuest, nextProfile)}
+          onChooseLesson={() => setLessonsOpen(true)}
+        />
         {lessonsOpen && (
           <LessonPickerCard
             activeQuestId={questActive ? questState?.questId ?? null : null}
@@ -1595,12 +1516,13 @@ export default function HomePage() {
             </button>
             <button
               id="toggle-outfit"
+              data-testid="hud-outfit-btn"
               type="button"
               onClick={() => setOutfitOpen((o) => !o)}
-              aria-label="Tùy chỉnh trang phục nhân vật"
+              aria-label="Nhân vật và trang phục"
               className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
             >
-              👕 Trang phục
+              👕 Nhân vật &amp; trang phục
             </button>
             <button
               id="change-lesson"
@@ -1637,70 +1559,6 @@ export default function HomePage() {
               {speechRate.toFixed(1)}×
             </button>
           </div>
-          {outfitOpen && (
-            <div
-              data-testid="outfit-panel"
-              className="pointer-events-auto w-[270px] rounded-2xl border border-white/20 bg-[#142018]/90 p-3 text-white shadow-2xl backdrop-blur-md"
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-300">
-                  👕 Trang phục Sinh viên BK
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setOutfitOpen(false)}
-                  className="rounded-full px-1.5 py-0.5 text-xs text-white/70 hover:bg-white/10 hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="grid grid-cols-1 gap-1.5">
-                {[
-                  { id: 'polo-red' as AvatarOutfitId, label: '🔴 Áo Polo đỏ Bách Khoa' },
-                  { id: 'hoodie-hust' as AvatarOutfitId, label: '🧥 Áo khoác gió HUST' },
-                  { id: 'shirt-white' as AvatarOutfitId, label: '👔 Sơ mi trắng sinh viên' },
-                  { id: 'sport-pe' as AvatarOutfitId, label: '🏃 Đồng phục Thể chất BK' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    data-testid={`outfit-${item.id}`}
-                    onClick={() => applyAvatarStyle(item.id, avatarGlasses, avatarLanyard, item.label)}
-                    className={`flex items-center justify-between rounded-xl px-3 py-1.5 text-left text-xs font-semibold transition ${
-                      avatarOutfit === item.id
-                        ? 'bg-[#A54432] text-white shadow'
-                        : 'bg-white/10 text-white/85 hover:bg-white/20'
-                    }`}
-                  >
-                    <span>{item.label}</span>
-                    {avatarOutfit === item.id && <span>✓</span>}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-white/15 pt-2 text-xs">
-                <button
-                  type="button"
-                  data-testid="toggle-glasses"
-                  onClick={() => applyAvatarStyle(avatarOutfit, !avatarGlasses, avatarLanyard)}
-                  className={`flex-1 rounded-lg px-2 py-1.5 font-semibold transition ${
-                    avatarGlasses ? 'bg-emerald-700/80 text-white' : 'bg-white/10 text-white/60'
-                  }`}
-                >
-                  👓 Kính: {avatarGlasses ? 'Bật' : 'Tắt'}
-                </button>
-                <button
-                  type="button"
-                  data-testid="toggle-lanyard"
-                  onClick={() => applyAvatarStyle(avatarOutfit, avatarGlasses, !avatarLanyard)}
-                  className={`flex-1 rounded-lg px-2 py-1.5 font-semibold transition ${
-                    avatarLanyard ? 'bg-emerald-700/80 text-white' : 'bg-white/10 text-white/60'
-                  }`}
-                >
-                  🪪 Thẻ SV: {avatarLanyard ? 'Bật' : 'Tắt'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Chip mục tiêu hiện tại. F5a — trong phòng học thì dời sang góc
@@ -2004,6 +1862,16 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      {/* Cửa sổ 3D Nhân vật & Trang phục HUST mở từ HUD trong sân trường */}
+      {outfitOpen && entered && (
+        <CharacterCreatorModal
+          mode="modal"
+          initialProfile={characterProfile}
+          onConfirm={handleSaveCharacterInGame}
+          onClose={() => setOutfitOpen(false)}
+        />
+      )}
 
       {/* Menu chọn bài trong game (nút 📚 Đổi bài): cùng danh sách bài như màn
           mở đầu + nút về màn hình chính. Khóa di chuyển khi mở (uiLocked). */}

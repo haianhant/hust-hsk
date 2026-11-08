@@ -16,7 +16,11 @@ import { useEffect, useMemo, useReducer, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
-import { HumanFigure, type FigureJoints } from './StudentAvatar';
+import {
+  HumanFigure,
+  computeNaturalGaitTargets,
+  type FigureJoints,
+} from './StudentAvatar';
 import { multiplayer, type RemotePlayer, type RemoteState } from '../../lib/multiplayer';
 
 function useFigureJoints(): FigureJoints {
@@ -164,7 +168,7 @@ function RemotePlayerView({ player }: { player: RemotePlayer }) {
     remoteRenderPos.set(player.id, { x: cur.current.x, z: cur.current.z, facing: cur.current.facing });
 
     const j = joints;
-    const set = (ref: React.RefObject<THREE.Group>, axis: 'x', v: number) => {
+    const set = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'z', v: number) => {
       if (ref.current) ref.current.rotation[axis] = v;
     };
     if (target.state === 'riding') {
@@ -174,25 +178,33 @@ function RemotePlayerView({ player }: { player: RemotePlayer }) {
       set(j.legR, 'x', -1.35);
       set(j.kneeL, 'x', 1.15);
       set(j.kneeR, 'x', 1.25);
+      set(j.footL, 'x', 0.15);
+      set(j.footR, 'x', 0.15);
       set(j.armL, 'x', -0.95);
       set(j.armR, 'x', -0.95);
       set(j.elbowL, 'x', -0.55);
       set(j.elbowR, 'x', -0.55);
       set(j.body, 'x', 0.08);
+      set(j.body, 'z', 0);
     } else if (target.state === 'walking' || target.state === 'running') {
-      const speed = target.state === 'running' ? 11 : 8;
-      const amp = target.state === 'running' ? 0.75 : 0.55;
+      const isRun = target.state === 'running';
+      const speed = isRun ? 10.5 : 7.5;
+      const swing = isRun ? 0.62 : 0.5;
       phase.current += dt * speed;
-      const s = Math.sin(phase.current);
-      set(j.legL, 'x', s * amp);
-      set(j.legR, 'x', -s * amp);
-      set(j.kneeL, 'x', Math.max(0, -s) * amp * 0.9);
-      set(j.kneeR, 'x', Math.max(0, s) * amp * 0.9);
-      set(j.armL, 'x', -s * amp * 0.7);
-      set(j.armR, 'x', s * amp * 0.7);
-      set(j.elbowL, 'x', -0.3);
-      set(j.elbowR, 'x', -0.3);
-      set(j.body, 'x', 0.06);
+      const t = performance.now() / 1000;
+      const gait = computeNaturalGaitTargets(phase.current, swing, 1, t, isRun);
+      set(j.legL, 'x', gait.legLTarget);
+      set(j.legR, 'x', gait.legRTarget);
+      set(j.kneeL, 'x', gait.kneeLTarget);
+      set(j.kneeR, 'x', gait.kneeRTarget);
+      set(j.footL, 'x', gait.footLTarget);
+      set(j.footR, 'x', gait.footRTarget);
+      set(j.armL, 'x', gait.armLTarget);
+      set(j.armR, 'x', gait.armRTarget);
+      set(j.elbowL, 'x', gait.elbowLTarget);
+      set(j.elbowR, 'x', gait.elbowRTarget);
+      set(j.body, 'x', gait.bodyLeanTarget);
+      set(j.body, 'z', gait.bodyRollTarget);
     } else {
       // Đứng yên: thở nhẹ, tay hơi gập (như NPC).
       const t = performance.now() / 1000;
@@ -200,13 +212,16 @@ function RemotePlayerView({ player }: { player: RemotePlayer }) {
       set(j.legR, 'x', 0);
       set(j.kneeL, 'x', 0.05);
       set(j.kneeR, 'x', 0.05);
-      set(j.armL, 'x', 0.09);
-      set(j.armR, 'x', -0.05);
-      set(j.elbowL, 'x', -0.3);
-      set(j.elbowR, 'x', -0.42);
+      set(j.footL, 'x', 0);
+      set(j.footR, 'x', 0);
+      set(j.armL, 'x', 0.08);
+      set(j.armR, 'x', -0.04);
+      set(j.elbowL, 'x', -0.28);
+      set(j.elbowR, 'x', -0.36);
       if (j.body.current) {
         j.body.current.scale.y = 1 + Math.sin(t * 1.4) * 0.008;
         j.body.current.rotation.x = 0;
+        j.body.current.rotation.z = Math.sin(t * 0.9) * 0.008;
       }
     }
   });
