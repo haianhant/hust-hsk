@@ -73,7 +73,20 @@ import {
   type AvatarHairStyle,
   type AvatarOutfitId,
 } from '../../lib/playerState';
-import StudentAvatar, { computeNaturalGaitTargets, type FigureJoints } from './StudentAvatar';
+import {
+  computeSafeStandUpPosition,
+  createInitialSeatingState,
+  transitionToSeated,
+  transitionToStanding,
+  type LocalSeatingState,
+} from '../../features/campus/interaction';
+import { getSeatDefinition } from '../../shared/contracts/study';
+import StudentAvatar, {
+  SEATED_GROUP_Y_OFFSET,
+  computeNaturalGaitTargets,
+  computeSeatedPoseTargets,
+  type FigureJoints,
+} from './StudentAvatar';
 
 function usePlayerNameplateTexture(name: string): THREE.CanvasTexture {
   const display = (name || 'Sinh viên').trim() || 'Sinh viên';
@@ -204,6 +217,87 @@ export default function Player() {
   const [lanyardOn, setLanyardOn] = useState<boolean>(playerState.avatarLanyard);
   const nameplateTex = usePlayerNameplateTexture(avatarName);
 
+  // PR8 — Khởi tạo trạng thái ngồi học cục bộ (khôi phục nguyên trạng khi chuyển từ Zen 2D về 3D).
+  const initialSeatDef =
+    playerState.inLibraryLobby && playerState.seated && playerState.seatId
+      ? getSeatDefinition(playerState.seatId)
+      : undefined;
+  const seatingStateRef = useRef<LocalSeatingState>(
+    initialSeatDef
+      ? {
+          status: 'seated',
+          studyRoomId: initialSeatDef.studyRoomId,
+          seatId: initialSeatDef.seatId,
+          seatLabel: initialSeatDef.label,
+          tableId: initialSeatDef.tableId,
+          anchorPos: { x: initialSeatDef.x, z: initialSeatDef.z },
+          facing: initialSeatDef.facing,
+          standUpPos: computeSafeStandUpPosition(initialSeatDef, playerState.pos),
+          transitionLock: false,
+        }
+      : createInitialSeatingState(),
+  );
+  const [isSeated, setIsSeated] = useState<boolean>(
+    seatingStateRef.current.status === 'seated',
+  );
+
+  const syncSeatingToPlayerState = (nextState: LocalSeatingState) => {
+    seatingStateRef.current = nextState;
+    const seatedNow = nextState.status === 'seated' && !!nextState.seatId;
+    playerState.seated = seatedNow;
+    playerState.seatId = nextState.seatId;
+    setIsSeated(seatedNow);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('bkhn:seat-change', {
+          detail: {
+            seated: seatedNow,
+            seatId: nextState.seatId,
+            seatLabel: nextState.seatLabel,
+            studyRoomId: nextState.studyRoomId,
+          },
+        }),
+      );
+    }
+  };
+
+  const applyPoseImmediately = (seatedNow: boolean) => {
+    const targets = seatedNow
+      ? computeSeatedPoseTargets(0)
+      : computeNaturalGaitTargets(0, WALK_SWING, 0, 0, false);
+    if (legLRef.current) legLRef.current.rotation.x = targets.legLTarget;
+    if (legRRef.current) legRRef.current.rotation.x = targets.legRTarget;
+    if (kneeLRef.current) kneeLRef.current.rotation.x = targets.kneeLTarget;
+    if (kneeRRef.current) kneeRRef.current.rotation.x = targets.kneeRTarget;
+    if (footLRef.current) footLRef.current.rotation.x = targets.footLTarget;
+    if (footRRef.current) footRRef.current.rotation.x = targets.footRTarget;
+    if (armLRef.current) armLRef.current.rotation.x = targets.armLTarget;
+    if (armRRef.current) armRRef.current.rotation.x = targets.armRTarget;
+    if (elbowLRef.current) elbowLRef.current.rotation.x = targets.elbowLTarget;
+    if (elbowRRef.current) elbowRRef.current.rotation.x = targets.elbowRTarget;
+    if (bodyRef.current) {
+      bodyRef.current.position.y = targets.bodyBobTarget;
+      bodyRef.current.rotation.z = targets.bodyRollTarget;
+      bodyRef.current.rotation.x = targets.bodyLeanTarget;
+    }
+    if (groupRef.current) {
+      groupRef.current.position.y = seatedNow ? SEATED_GROUP_Y_OFFSET : 0;
+    }
+  };
+
+  useEffect(() => {
+    if (seatingStateRef.current.status === 'seated') {
+      applyPoseImmediately(true);
+    }
+  }, []);
+
+  const forceClearSeat = () => {
+    if (seatingStateRef.current.status === 'seated' || playerState.seated || playerState.seatId) {
+      applyPoseImmediately(false);
+      syncSeatingToPlayerState(createInitialSeatingState());
+    }
+  };
+
   useEffect(() => {
     const onOutfitChange = () => {
       setAvatarName(playerState.avatarName || 'Sinh viên');
@@ -221,13 +315,17 @@ export default function Player() {
   }, []);
 
   // Vị trí logic (mặt đất) — nguồn thật duy nhất; group.position chỉ để hiển thị.
-  const posRef = useRef<Vec2>({ ...playerState.pos });
+  const posRef = useRef<Vec2>(
+    initialSeatDef ? { x: initialSeatDef.x, z: initialSeatDef.z } : { ...playerState.pos },
+  );
   // F5b — khởi tạo yaw/pitch từ góc đã lưu (reload trong phòng khôi phục
   // hướng nhìn bảng); null thì dùng mặc định (yaw π/2 hướng tây từ cổng Trần Đại Nghĩa vào trường).
   const yawRef = useRef(playerState.cameraYaw ?? Math.PI / 2); // hướng nhìn ban đầu: -X (tây, từ cổng Trần Đại Nghĩa vào trong trường)
   const pitchRef = useRef(playerState.cameraPitch ?? 0.18); // nhìn hơi chúc xuống — đủ thấy ngọn các công trình cao
   const distRef = useRef(playerState.inClassroom || playerState.inLibraryLobby ? 3 : 7);
-  const facingRef = useRef(playerState.facing ?? -Math.PI / 2);
+  const facingRef = useRef(
+    initialSeatDef ? initialSeatDef.facing : (playerState.facing ?? -Math.PI / 2),
+  );
   const walkPhaseRef = useRef(0);
   const moveBlendRef = useRef(0); // 0 = idle, 1 = đi/chạy hết cỡ (nội suy mềm)
   const prevHitRef = useRef<string | null>(null);
@@ -386,6 +484,86 @@ export default function Player() {
   };
   const bikeActionsRef = useRef({ mountBike, dismountBike, callBike, recallBike, setBikePose });
   bikeActionsRef.current = { mountBike, dismountBike, callBike, recallBike, setBikePose };
+
+  // --- Hành động ngồi học tại bàn thư viện (PR8 Local Interactive Seating) ---
+  const sitAtSeat = (
+    seatId: string,
+  ): {
+    ok: boolean;
+    reason?: string;
+    message?: string;
+    seatId?: string;
+    label?: string;
+  } => {
+    const res = transitionToSeated(seatingStateRef.current, {
+      seatId,
+      playerPos: posRef.current,
+      inLibraryLobby: playerState.inLibraryLobby,
+      inClassroom: playerState.inClassroom,
+      bikeRiding: ridingRef.current,
+      uiLocked: playerState.uiLocked,
+    });
+    if (!res.ok || !res.seat) {
+      return { ok: false, reason: res.reason, message: res.message };
+    }
+    keysRef.current.clear();
+    playerInput.move.x = 0;
+    playerInput.move.y = 0;
+    playerInput.run = false;
+    moveBlendRef.current = 0;
+    posRef.current = { x: res.seat.x, z: res.seat.z };
+    facingRef.current = res.seat.facing;
+    playerState.pos = { ...posRef.current };
+    playerState.facing = res.seat.facing;
+    playerState.moving = false;
+    distRef.current = Math.min(distRef.current, 3.2);
+    pitchRef.current = Math.max(pitchRef.current, 0.24);
+    if (groupRef.current) {
+      groupRef.current.position.set(res.seat.x, SEATED_GROUP_Y_OFFSET, res.seat.z);
+      groupRef.current.rotation.y = res.seat.facing;
+    }
+    applyPoseImmediately(true);
+    syncSeatingToPlayerState(res.state);
+    return { ok: true, seatId: res.seat.seatId, label: res.seat.label };
+  };
+
+  const standUp = (): {
+    ok: boolean;
+    reason?: string;
+    releasedSeatId?: string | null;
+    pos?: { x: number; z: number };
+  } => {
+    const res = transitionToStanding(seatingStateRef.current);
+    if (!res.ok || !res.standUpPos) {
+      return { ok: false, reason: res.reason };
+    }
+    keysRef.current.clear();
+    playerInput.move.x = 0;
+    playerInput.move.y = 0;
+    playerInput.run = false;
+    moveBlendRef.current = 0;
+    posRef.current = { ...res.standUpPos };
+    if (typeof res.facing === 'number') {
+      facingRef.current = res.facing;
+    }
+    playerState.pos = { ...res.standUpPos };
+    playerState.facing = facingRef.current;
+    playerState.moving = false;
+    if (groupRef.current) {
+      groupRef.current.position.set(res.standUpPos.x, 0, res.standUpPos.z);
+      groupRef.current.rotation.y = facingRef.current;
+    }
+    applyPoseImmediately(false);
+    syncSeatingToPlayerState(res.state);
+    return {
+      ok: true,
+      releasedSeatId: res.releasedSeatId,
+      pos: { ...res.standUpPos },
+    };
+  };
+
+  const seatActionsRef = useRef({ sitAtSeat, standUp, forceClearSeat });
+  seatActionsRef.current = { sitAtSeat, standUp, forceClearSeat };
   // --- Dịch chuyển nhanh (đợt 3 giai đoạn 5) ---------------------------------
   // Chỉ thay VỊ TRÍ + hướng nhìn: không chạm quest/progress/điểm (không
   // gọi bất kỳ hàm store nào). Khóa chống bấm chồng: fastTravelState.traveling
@@ -435,7 +613,8 @@ export default function Player() {
       bikeHeadingRef.current = Math.atan2(dest.x - spot.x, dest.z - spot.z);
       syncBikeState();
     }
-    // Đang trong phòng học hoặc sảnh thư viện → ra khỏi phòng trước (page đồng bộ qua sự kiện).
+    // Đang ngồi học hoặc đang trong phòng học / sảnh thư viện → tự đứng dậy và ra khỏi phòng trước.
+    seatActionsRef.current.forceClearSeat();
     if (playerState.inClassroom) {
       playerState.inClassroom = false;
       window.dispatchEvent(new CustomEvent('bkhn:classroom', { detail: { inClassroom: false } }));
@@ -472,6 +651,7 @@ export default function Player() {
       getYaw: () => yawRef.current,
       getPitch: () => pitchRef.current,
       teleport: (x: number, z: number, yaw?: number, pitch?: number) => {
+        seatActionsRef.current.forceClearSeat();
         // Đẩy ra khỏi collider (hồ/tòa nhà) để một điểm teleport lỗi không đặt
         // avatar vào trong nước/tường — gameplay thật không bao giờ vào được
         // đó vì va chạm đã chặn lúc di chuyển.
@@ -540,6 +720,8 @@ export default function Player() {
           moving: playerInput.move.x !== 0 || playerInput.move.y !== 0,
           run: playerInput.run,
           riding: ridingRef.current,
+          seated: seatingStateRef.current.status === 'seated',
+          seatId: seatingStateRef.current.seatId,
           bikeSpeed: bikeSpeedRef.current,
           bikeHeading: bikeHeadingRef.current,
           bikePos: { ...bikePosRef.current },
@@ -590,6 +772,7 @@ export default function Player() {
       // tương ứng. Fade do page.tsx xử lý; page đồng bộ qua sự kiện
       // 'bkhn:classroom' { inClassroom }.
       enterClassroom: () => {
+        seatActionsRef.current.forceClearSeat();
         // Xe không vào phòng học: nếu đang lái thì để xe ngoài sân, người
         // vào phòng ở trạng thái đi bộ (xe vẫn gọi lại được sau khi ra).
         if (ridingRef.current) {
@@ -630,6 +813,7 @@ export default function Player() {
       },
       isInClassroom: () => playerState.inClassroom,
       enterLibraryLobby: () => {
+        seatActionsRef.current.forceClearSeat();
         if (ridingRef.current) {
           ridingRef.current = false;
           bikeSpeedRef.current = 0;
@@ -650,6 +834,7 @@ export default function Player() {
         window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: true } }));
       },
       exitLibraryLobby: () => {
+        seatActionsRef.current.forceClearSeat();
         playerState.inLibraryLobby = false;
         // Ra khỏi sảnh về trước mái hiên Thư viện (x = 38, z = 20.5), nhìn về bắc (yaw = 0) ra chữ HUST & sân trước
         posRef.current = { x: LIBRARY_DOOR.pos.x, z: 20.5 };
@@ -663,6 +848,17 @@ export default function Player() {
         window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: false } }));
       },
       isInLibraryLobby: () => playerState.inLibraryLobby,
+      sitAtSeat: (seatId: string) => seatActionsRef.current.sitAtSeat(seatId),
+      standUp: () => seatActionsRef.current.standUp(),
+      getSeatState: () => ({
+        seated: seatingStateRef.current.status === 'seated',
+        status: seatingStateRef.current.status,
+        seatId: seatingStateRef.current.seatId,
+        seatLabel: seatingStateRef.current.seatLabel,
+        studyRoomId: seatingStateRef.current.studyRoomId,
+        pos: { ...posRef.current },
+        facing: facingRef.current,
+      }),
     };
     (window as unknown as { __bkhn?: unknown }).__bkhn = hook;
     return () => {
@@ -778,6 +974,7 @@ export default function Player() {
     // khi HUD tăng playerInput.resetToken.
     if (playerInput.resetToken !== lastResetRef.current) {
       lastResetRef.current = playerInput.resetToken;
+      seatActionsRef.current.forceClearSeat();
       // Đang lái thì xuống xe tại chỗ (xe ở yên vị trí cũ, gọi lại được).
       if (ridingRef.current) {
         ridingRef.current = false;
@@ -911,6 +1108,17 @@ export default function Player() {
       facingRef.current = bikeHeadingRef.current;
       posRef.current = { ...bikePosRef.current };
       syncBikeState();
+    } else if (seatingStateRef.current.status === 'seated') {
+      // --- PR8: Đang ngồi học tại ghế thư viện — khóa di chuyển WASD/joystick, giữ neo ghế ---
+      moving = false;
+      effectivelyMoving = false;
+      if (seatingStateRef.current.anchorPos) {
+        posRef.current.x = seatingStateRef.current.anchorPos.x;
+        posRef.current.z = seatingStateRef.current.anchorPos.z;
+      }
+      if (typeof seatingStateRef.current.facing === 'number') {
+        facingRef.current = seatingStateRef.current.facing;
+      }
     } else {
     // --- Di chuyển theo hướng camera (yaw) ----------------------------------
     // Bước 5: uiLocked (panel học mở) → move = 0, cả phím lẫn joystick.
@@ -1021,8 +1229,24 @@ export default function Player() {
       bodyLeanTarget = 0.12;
       bodyRollTarget = bikeLeanRef.current * 0.3;
       bodyBobTarget = 0;
+    } else if (seatingStateRef.current.status === 'seated') {
+      const seatedPose = computeSeatedPoseTargets(t);
+      legLTarget = seatedPose.legLTarget;
+      legRTarget = seatedPose.legRTarget;
+      kneeLTarget = seatedPose.kneeLTarget;
+      kneeRTarget = seatedPose.kneeRTarget;
+      footLTarget = seatedPose.footLTarget;
+      footRTarget = seatedPose.footRTarget;
+      armLTarget = seatedPose.armLTarget;
+      armRTarget = seatedPose.armRTarget;
+      elbowLTarget = seatedPose.elbowLTarget;
+      elbowRTarget = seatedPose.elbowRTarget;
+      bodyLeanTarget = seatedPose.bodyLeanTarget;
+      bodyRollTarget = seatedPose.bodyRollTarget;
+      bodyBobTarget = seatedPose.bodyBobTarget;
     }
 
+    const seatedNow = seatingStateRef.current.status === 'seated';
     const lerp = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'z', target: number) => {
       if (ref.current) {
         ref.current.rotation[axis] += (target - ref.current.rotation[axis]) * ease;
@@ -1044,12 +1268,16 @@ export default function Player() {
       bodyRef.current.position.y += (bodyBobTarget - bodyRef.current.position.y) * ease;
     }
 
-    groupRef.current.position.set(posRef.current.x, 0, posRef.current.z);
+    groupRef.current.position.set(
+      posRef.current.x,
+      seatedNow ? SEATED_GROUP_Y_OFFSET : 0,
+      posRef.current.z,
+    );
     groupRef.current.rotation.y = facingRef.current;
     if (nameplateGroupRef.current) {
       nameplateGroupRef.current.position.set(
         posRef.current.x,
-        ridingRef.current ? 2.05 : 1.95,
+        ridingRef.current ? 2.05 : seatedNow ? 1.62 : 1.95,
         posRef.current.z,
       );
     }
@@ -1064,6 +1292,8 @@ export default function Player() {
     // (page.tsx) gửi lên server; chỉ dùng cho hiển thị người chơi khác.
     playerState.facing = facingRef.current;
     playerState.riding = ridingRef.current;
+    playerState.seated = seatedNow;
+    playerState.seatId = seatingStateRef.current.seatId;
 
     // --- Camera thứ ba: nhìn vào điểm cao ~1,2 m trên avatar -----------------
     // TEST HOOK: chế độ top — camera trên cao nhìn thẳng xuống campus (chụp ảnh
@@ -1075,7 +1305,7 @@ export default function Player() {
     }
     const target = new THREE.Vector3(
       posRef.current.x,
-      ridingRef.current ? 1.4 : 1.2,
+      ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2,
       posRef.current.z,
     );
     const placeCamera = (d: number): THREE.Vector3 => {
@@ -1135,7 +1365,8 @@ export default function Player() {
       <group ref={groupRef} position={[SPAWN.x, 0, SPAWN.z]}>
         <StudentAvatar
           joints={joints}
-          showBackpack={backpackOn}
+          showBackpack={backpackOn && !isSeated}
+          seated={isSeated}
           gender={gender}
           hairStyle={hairStyle}
           outfit={outfit}

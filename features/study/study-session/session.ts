@@ -162,10 +162,42 @@ export function bindSessionSeat(
   studyRoomId: StudyRoomZoneId | null,
   seatId: string | null,
 ): StudySessionState {
+  if (session.studyRoomId === studyRoomId && session.seatId === seatId) {
+    return session;
+  }
   return {
     ...session,
     studyRoomId,
     seatId,
+  };
+}
+
+/**
+ * PR8 — Khi tải lại trang (reload), nếu người chơi không thực sự đang ngồi tại
+ * ghế trong Sảnh Thư viện thì xóa `seatId` cũ khỏi phiên học để tránh trạng thái
+ * ghế mồ côi, đồng thời giữ nguyên toàn bộ Pomodoro, danh sách việc và lịch sử Focus.
+ */
+export function reconcilePersistedSessionSeat(
+  session: StudySessionState,
+  context: { inLibraryLobby: boolean; activeSeatId: string | null },
+): StudySessionState {
+  const validSeatId =
+    context.inLibraryLobby && context.activeSeatId ? context.activeSeatId : null;
+  const nextRoomId =
+    validSeatId !== null
+      ? 'library-lobby'
+      : context.inLibraryLobby
+        ? session.studyRoomId
+        : session.studyRoomId === 'library-lobby'
+          ? null
+          : session.studyRoomId;
+  if (session.seatId === validSeatId && session.studyRoomId === nextRoomId) {
+    return session;
+  }
+  return {
+    ...session,
+    studyRoomId: nextRoomId,
+    seatId: validSeatId,
   };
 }
 

@@ -28,22 +28,37 @@
 
 ---
 
-## 2. Module `interior.library-lobby` — Sảnh Tầng 1 Thư viện Tạ Quang Bửu
+## 2. Module `interior.library-lobby` — Sảnh Tầng 1 Thư viện Tạ Quang Bửu & Khu Bàn đọc Tự học (`PR8`)
 
 - **Module ID:** `interior.library-lobby`
-- **Purpose:** Không gian nội thất Sảnh tầng 1 Thư viện phục vụ tham quan truyền thống và tra cứu từ vựng học thuật.
+- **Purpose:** Không gian nội thất Sảnh tầng 1 Thư viện phục vụ tham quan truyền thống, tra cứu từ vựng học thuật và **ngồi tự học tương tác 3D tại bàn đọc (`PR8 Local Interactive Seating`)**.
 - **Source Paths:**
-  - Hình học 3D: [`components/three/LibraryLobby.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/LibraryLobby.tsx)
-  - Tọa độ & Va chạm cục bộ: [`LIBRARY_DOOR`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L915-L919), [`LIBRARY_LOBBY`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L921-L927), [`resolveLibraryLobbyCollisions`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L939-L972)
+  - Hình học 3D Sảnh: [`components/three/LibraryLobby.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/LibraryLobby.tsx)
+  - Nội thất Bàn đọc & Ghế ngồi học 3D (`PR8`):
+    - [`features/campus/buildings/library/LibraryStudyArea.tsx`](file:///home/bao/Hust3D/hust-hsk/features/campus/buildings/library/LibraryStudyArea.tsx)
+    - [`features/campus/buildings/library/StudyTable.tsx`](file:///home/bao/Hust3D/hust-hsk/features/campus/buildings/library/StudyTable.tsx)
+    - [`features/campus/buildings/library/StudyChair.tsx`](file:///home/bao/Hust3D/hust-hsk/features/campus/buildings/library/StudyChair.tsx)
+    - [`features/campus/buildings/library/StudySeatMarkers.tsx`](file:///home/bao/Hust3D/hust-hsk/features/campus/buildings/library/StudySeatMarkers.tsx)
+  - Danh mục ghế chuẩn (`STUDY_SEATS`): [`shared/contracts/study.ts`](file:///home/bao/Hust3D/hust-hsk/shared/contracts/study.ts)
+  - Tọa độ, Bàn đọc & Va chạm cục bộ: [`LIBRARY_DOOR`](file:///home/bao/Hust3D/hust-hsk/features/campus/world-data/buildings.ts), [`LIBRARY_LOBBY`](file:///home/bao/Hust3D/hust-hsk/features/campus/world-data/buildings.ts), [`LIBRARY_LOBBY_COLLIDERS`](file:///home/bao/Hust3D/hust-hsk/features/campus/world-data/colliders.ts), [`resolveLibraryLobbyCollisions`](file:///home/bao/Hust3D/hust-hsk/features/campus/world-data/spatial-utils.ts)
+  - Máy trạng thái ngồi học cục bộ: [`features/campus/interaction/seat-interaction.ts`](file:///home/bao/Hust3D/hust-hsk/features/campus/interaction/seat-interaction.ts)
 - **Reference Assets:** Tư liệu ảnh thật Sảnh tầng 1 Thư viện Tạ Quang Bửu ([`docs/reference-visual.md`](file:///home/bao/Hust3D/hust-hsk/docs/reference-visual.md) §3).
-- **Current Implementation Status:** **Production**.
+- **Current Implementation Status:** **Production** (Đã bổ sung 2 bàn đọc + 4 ghế tự học tương tác cục bộ ở `PR8`).
 - **Invariants:**
   - Điểm kích hoạt cửa vào `LIBRARY_DOOR` đặt tại `(38, 22.8)` với `triggerRadius = 3.6m` (bao phủ vùng đứng ngay ngoài collider khối đế `z = 23.1m`).
   - Không gian cục bộ `bounds: { minX: -5.4, maxX: 5.4, minZ: -3.8, maxZ: 3.8 }` gồm:
     - Tượng bán thân đồng **GS. Tạ Quang Bửu (1910–1986)** trên bệ gỗ tại `(0, -2.1)` kèm 4 trụ inox dây nhung đỏ.
     - Bức tường hậu cảnh gỗ nâu khắc các dải số nhị phân `0 / 1` phát sáng màu vàng hổ phách ấm.
-    - Sàn đá hoa văn rẻ quạt và thông tầng lửng.
+    - Quầy thông tin `(-3.6, -0.6)` và Bảng từ vựng Hán ngữ `(3.6, -0.6)`.
+    - **2 Bàn đọc gỗ sồi hiện đại (`1.36m × 0.76m × 0.75m`) & 4 Ghế ngồi học (`STUDY_SEATS`):**
+      - `tqb-1f-t1` (**Bàn đọc Tây 1**) tại `(-2.15, 1.75)` với 2 ghế:
+        - `tqb-1f-t1-s1` (`Bàn đọc Tây 1 · Ghế A`): `x = -2.4, z = 1.2, facing = 0` (quay mặt hướng Nam `+Z` vào bàn; điểm đứng dậy an toàn `(-2.4, 0.54)`).
+        - `tqb-1f-t1-s2` (`Bàn đọc Tây 1 · Ghế B`): `x = -1.9, z = 2.3, facing = Math.PI` (quay mặt hướng Bắc `-Z` vào bàn; điểm đứng dậy an toàn `(-1.9, 2.96)`).
+      - `tqb-1f-t2` (**Bàn đọc Đông 2**) tại `(2.15, 1.75)` với 2 ghế:
+        - `tqb-1f-t2-s1` (`Bàn đọc Đông 2 · Ghế A`): `x = 1.9, z = 1.2, facing = 0` (quay mặt hướng Nam `+Z` vào bàn; điểm đứng dậy an toàn `(1.9, 0.54)`).
+        - `tqb-1f-t2-s2` (`Bàn đọc Đông 2 · Ghế B`): `x = 2.4, z = 2.3, facing = Math.PI` (quay mặt hướng Bắc `-Z` vào bàn; điểm đứng dậy an toàn `(2.4, 2.96)`).
+      - Giữ nguyên lối đi chính giữa rộng `2.94m` (`x ∈ [-1.47, 1.47]`) từ cửa vào `spawn (0, 2.4)` nhìn thẳng tới Tượng GS. Tạ Quang Bửu `(0, -2.1)`.
 - **Acceptance Criteria:**
-  - Người chơi đứng trước cửa Thư viện nhấn `E` vào được Sảnh tầng 1, tương tác được với Tượng GS. Tạ Quang Bửu, Quầy thông tin, Bảng từ vựng và đi ra lại sân trước Thư viện.
+  - Người chơi đứng trước cửa Thư viện nhấn `E` vào được Sảnh tầng 1, tương tác được với 4 ghế học (`E — Ngồi học` hoặc click/chạm trong bán kính `1.65m`), gắn `seatId` vào `StudySessionState`, mở `StudyPanel` chạy Pomodoro khi đang ngồi, đứng dậy về vị trí an toàn không va chạm (`E — Đứng dậy` hoặc nút `"🚶 Đứng dậy"`), cũng như tương tác với Tượng GS. Tạ Quang Bửu, Quầy thông tin, Bảng từ vựng và đi ra lại sân trước Thư viện.
 - **Known Limitations:**
-  - Hiện chỉ dựng không gian Sảnh tầng 1 và tầng lửng nhìn lên, chưa mở lối đi lên các phòng đọc tầng 2–10.
+  - `PR8` chỉ triển khai tương tác ngồi ghế **cục bộ (local interactive seating)** tại Sảnh tầng 1 Thư viện. Đồng bộ đặt chỗ đa người chơi có tính quyết định từ server (`study:claim-seat`, `study:release-seat`) thuộc phạm vi `PR9`.

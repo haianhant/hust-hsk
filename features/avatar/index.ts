@@ -25,4 +25,8 @@ export { ArmSide, Hand, LegSide } from './rig/Limbs';
 export { Torso } from './rig/Torso';
 export { Head } from './rig/Head';
 export { default as StudentAvatar, HumanFigure } from './rig/HumanFigure';
-export { computeNaturalGaitTargets } from './animation/gait';
+export {
+  SEATED_GROUP_Y_OFFSET,
+  computeNaturalGaitTargets,
+  computeSeatedPoseTargets,
+} from './animation/gait';

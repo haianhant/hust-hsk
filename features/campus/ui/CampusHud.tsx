@@ -72,6 +72,9 @@ function StudyHudButton({
 export interface CampusHudProps {
   inClassroom: boolean;
   inLibraryLobby: boolean;
+  seated?: boolean;
+  activeSeatId?: string | null;
+  activeSeatLabel?: string | null;
   zone: string;
   progress: Progress | null;
   mpSnap: MultiplayerSnapshot;
@@ -93,6 +96,7 @@ export interface CampusHudProps {
   pomodoro?: PomodoroState;
   focusPolicy?: FocusRuntimePolicy;
   onOpenStudyPanel?: () => void;
+  onStandUp?: () => void;
   onReconcileStudyAt?: (nowMs: number) => void;
   onExitFocusMode?: () => void;
   onDismissNoVoice: () => void;
@@ -116,6 +120,9 @@ export interface CampusHudProps {
 export function CampusHud({
   inClassroom,
   inLibraryLobby,
+  seated = false,
+  activeSeatId = null,
+  activeSeatLabel = null,
   zone,
   progress,
   mpSnap,
@@ -137,6 +144,7 @@ export function CampusHud({
   pomodoro,
   focusPolicy,
   onOpenStudyPanel,
+  onStandUp,
   onReconcileStudyAt,
   onExitFocusMode,
   onDismissNoVoice,
@@ -178,6 +186,38 @@ export function CampusHud({
         {/* Đợt 5 multiplayer — phòng + số người THẬT trong phòng; mất
             kết nối thì ghi rõ đang chơi một mình, không báo số giả. */}
         <MultiplayerStatusChip snapshot={mpSnap} />
+        {/* PR8 — Trạng thái đang ngồi học tại bàn thư viện kèm nút Mở bảng Tự học / Đứng dậy */}
+        {seated && activeSeatId && (
+          <div
+            data-testid="hud-seated-status"
+            className="pointer-events-auto flex w-fit max-w-[92vw] flex-wrap items-center gap-2 rounded-2xl border border-amber-300/40 bg-black/75 px-3.5 py-2 text-xs font-bold text-white shadow-xl backdrop-blur-sm"
+          >
+            <span>
+              🍅 Đang ngồi học tại{' '}
+              <strong className="text-amber-300">{activeSeatLabel ?? activeSeatId}</strong>
+            </span>
+            {onOpenStudyPanel && (
+              <button
+                type="button"
+                data-testid="hud-seated-open-study"
+                onClick={onOpenStudyPanel}
+                className="rounded-xl bg-[#1c5c3a] px-2.5 py-1 text-xs font-bold text-white transition hover:bg-[#16492e]"
+              >
+                🍅 Bảng Tự học
+              </button>
+            )}
+            {onStandUp && (
+              <button
+                type="button"
+                data-testid="hud-stand-up-button"
+                onClick={onStandUp}
+                className="rounded-xl bg-[#A54432] px-2.5 py-1 text-xs font-bold text-white transition hover:bg-[#8A3828]"
+              >
+                🚶 Đứng dậy
+              </button>
+            )}
+          </div>
+        )}
         {/* Chip trạng thái Minimal HUD và nút thoát rõ ràng */}
         {isMinimalHud && onExitFocusMode && (
           <button
@@ -313,22 +353,36 @@ export function CampusHud({
       </div>
 
       {/* Gợi ý tương tác "E — ..." (chỉ khi trong tầm): TO, GIỮA màn hình
-          (trên nhân vật một chút để không che người) để người mới nhìn là
-          thấy ngay — trước đây chỉ là viên thuốc nhỏ ở mép dưới, dễ bỏ qua. */}
+          khi đang đứng; khi đang ngồi tại bàn học thì thu gọn xuống mép dưới
+          để không che khuất nhân vật đang ngồi học tại bàn. */}
       {interactLabel && panel === null && !lessonsOpen && (
-        <div className="pointer-events-none absolute left-1/2 top-[36%] z-20 w-[min(92vw,560px)] -translate-x-1/2 -translate-y-1/2 text-center">
-          <div className="animate-pulse rounded-3xl bg-black/75 px-6 py-5 shadow-2xl backdrop-blur-sm sm:px-8">
-            <span className="mr-4 inline-block rounded-2xl bg-white px-5 py-2 align-middle text-4xl font-black text-black shadow">
-              E
-            </span>
-            <span className="align-middle text-2xl font-bold leading-tight text-white sm:text-3xl">
-              {interactLabel.replace(/^E — /, '')}
-            </span>
+        seated ? (
+          <div
+            data-testid="seated-interact-hint"
+            className="pointer-events-none absolute bottom-5 left-1/2 z-20 -translate-x-1/2 text-center"
+          >
+            <div className="rounded-full bg-black/75 px-4 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-sm sm:text-sm">
+              <span className="mr-2 inline-block rounded-md bg-white px-2 py-0.5 font-black text-black">
+                E
+              </span>
+              <span>{interactLabel.replace(/^E — /, '')}</span>
+            </div>
           </div>
-          <p className="mt-3 text-sm font-semibold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-            Bấm phím E — hoặc nút ✋ Tương tác ở góc dưới phải
-          </p>
-        </div>
+        ) : (
+          <div className="pointer-events-none absolute left-1/2 top-[36%] z-20 w-[min(92vw,560px)] -translate-x-1/2 -translate-y-1/2 text-center">
+            <div className="animate-pulse rounded-3xl bg-black/75 px-6 py-5 shadow-2xl backdrop-blur-sm sm:px-8">
+              <span className="mr-4 inline-block rounded-2xl bg-white px-5 py-2 align-middle text-4xl font-black text-black shadow">
+                E
+              </span>
+              <span className="align-middle text-2xl font-bold leading-tight text-white sm:text-3xl">
+                {interactLabel.replace(/^E — /, '')}
+              </span>
+            </div>
+            <p className="mt-3 text-sm font-semibold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+              Bấm phím E — hoặc nút ✋ Tương tác ở góc dưới phải
+            </p>
+          </div>
+        )
       )}
 
       {/* Góc dưới-phải: về vị trí an toàn + nút Tương tác (mobile). */}
@@ -430,13 +484,24 @@ export function CampusHud({
             🚪 Ra khỏi phòng
           </button>
         )}
+        {seated && onStandUp && (
+          <button
+            id="stand-up-button"
+            data-testid="hud-bottom-stand-up"
+            type="button"
+            onClick={onStandUp}
+            className="pointer-events-auto rounded-full bg-amber-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg transition hover:bg-amber-700"
+          >
+            🚶 Đứng dậy
+          </button>
+        )}
         <button
           id="interact-button"
           type="button"
           onClick={onInteract}
           className="pointer-events-auto rounded-full bg-[#A54432] px-5 py-2.5 text-sm font-bold text-white shadow-lg transition hover:bg-[#8A3828]"
         >
-          ✋ Tương tác
+          {seated ? '🚶 Đứng dậy (E)' : '✋ Tương tác'}
         </button>
         <button
           id="safe-position"
@@ -551,8 +616,8 @@ export function CampusHud({
         </div>
       )}
 
-      {/* Góc dưới-trái: joystick (chỉ hiện trên thiết bị cảm ứng). */}
-      {!hideMove && (
+      {/* Góc dưới-trái: joystick (chỉ hiện trên thiết bị cảm ứng và khi không ngồi học). */}
+      {!hideMove && !seated && (
         <div className="absolute bottom-4 left-3">
           <Joystick />
         </div>

@@ -117,6 +117,9 @@ export const playerState = {
    */
   facing: -Math.PI / 2,
   riding: false,
+  /** PR8 — trạng thái đang ngồi học cục bộ tại ghế thư viện (true khi đang ngồi, seatId là ID ghế chuẩn từ STUDY_SEATS). */
+  seated: false,
+  seatId: null as string | null,
 };
 
 export function updatePlayerState(pos: Vec2, moving: boolean): void {

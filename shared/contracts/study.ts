@@ -112,25 +112,25 @@ export interface SeatOccupancy {
  * Classroom C1, and TienLake benches.
  */
 export const STUDY_SEATS: readonly StudySeatDefinition[] = [
-  // Library Lobby 1F reading tables
+  // Library Lobby 1F reading tables (verified against LIBRARY_LOBBY bounds, columns & fixtures)
   {
     seatId: 'tqb-1f-t1-s1',
     studyRoomId: 'library-lobby',
     tableId: 'tqb-1f-t1',
-    label: 'Bàn đọc Đông 1 · Ghế A',
-    x: 4.2,
+    label: 'Bàn đọc Tây 1 · Ghế A',
+    x: -2.4,
     y: 0,
-    z: 1.5,
+    z: 1.2,
     facing: 0,
   },
   {
     seatId: 'tqb-1f-t1-s2',
     studyRoomId: 'library-lobby',
     tableId: 'tqb-1f-t1',
-    label: 'Bàn đọc Đông 1 · Ghế B',
-    x: 5.4,
+    label: 'Bàn đọc Tây 1 · Ghế B',
+    x: -1.9,
     y: 0,
-    z: 1.5,
+    z: 2.3,
     facing: Math.PI,
   },
   {
@@ -138,9 +138,9 @@ export const STUDY_SEATS: readonly StudySeatDefinition[] = [
     studyRoomId: 'library-lobby',
     tableId: 'tqb-1f-t2',
     label: 'Bàn đọc Đông 2 · Ghế A',
-    x: 4.2,
+    x: 1.9,
     y: 0,
-    z: -1.8,
+    z: 1.2,
     facing: 0,
   },
   {
@@ -148,9 +148,9 @@ export const STUDY_SEATS: readonly StudySeatDefinition[] = [
     studyRoomId: 'library-lobby',
     tableId: 'tqb-1f-t2',
     label: 'Bàn đọc Đông 2 · Ghế B',
-    x: 5.4,
+    x: 2.4,
     y: 0,
-    z: -1.8,
+    z: 2.3,
     facing: Math.PI,
   },
   // Library 3F Silent Reading Room

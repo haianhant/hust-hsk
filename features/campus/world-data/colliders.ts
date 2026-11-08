@@ -141,6 +141,13 @@ export const LIBRARY_LOBBY_COLLIDERS: NamedCollider[] = [
   { name: 'Tượng GS. Tạ Quang Bửu', box: { minX: -1.35, maxX: 1.35, minZ: -3.1, maxZ: -1.1 } },
   { name: 'Quầy thông tin thư viện', box: { minX: -4.5, maxX: -2.7, minZ: -1.4, maxZ: 0.2 } },
   { name: 'Bảng từ vựng thư viện', box: { minX: 2.9, maxX: 4.4, minZ: -1.2, maxZ: 0.0 } },
+  // Hai bàn đọc tự học và 4 ghế ngồi tại Sảnh tầng 1 Thư viện (PR8)
+  { name: 'Bàn đọc Tây 1', box: { minX: -2.83, maxX: -1.47, minZ: 1.37, maxZ: 2.13 } },
+  { name: 'Bàn đọc Đông 2', box: { minX: 1.47, maxX: 2.83, minZ: 1.37, maxZ: 2.13 } },
+  { name: 'Ghế học tqb-1f-t1-s1', box: { minX: -2.62, maxX: -2.18, minZ: 1.02, maxZ: 1.36 } },
+  { name: 'Ghế học tqb-1f-t1-s2', box: { minX: -2.12, maxX: -1.68, minZ: 2.14, maxZ: 2.48 } },
+  { name: 'Ghế học tqb-1f-t2-s1', box: { minX: 1.68, maxX: 2.12, minZ: 1.02, maxZ: 1.36 } },
+  { name: 'Ghế học tqb-1f-t2-s2', box: { minX: 2.18, maxX: 2.62, minZ: 2.14, maxZ: 2.48 } },
 ];
 
 // --- Helper xe máy (đợt 3 giai đoạn 4) ---------------------------------------

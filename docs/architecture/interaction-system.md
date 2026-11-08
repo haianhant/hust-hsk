@@ -37,14 +37,20 @@ Mỗi `200ms` (và ngay khi nhận sự kiện `CustomEvent('bkhn:interact')` t�
 - Tương tác với **Cô giáo** `(2.2, -2.0)`, **Bảng đen** `(0, -2.6)`, **Vở ghi chép & Bài tập trên Bàn 1** `(-2.2, 0.6)` và **Cửa ra sân trường** `(0, 2.6)`.
 
 ### Trong Sảnh tầng 1 Thư viện (`inLibraryLobby === true`)
-- Tương tác với **Tượng GS. Tạ Quang Bửu** `(0, -2.1)`, **Bảng từ vựng học thuật** `(3.6, -0.6)`, **Quầy thủ thư** `(-3.6, -0.6)` và **Cửa ra sân trước Thư viện** `(0, 3.5)`.
+1. **Ngồi học / Đứng dậy tại 4 ghế bàn đọc (`seat:<seatId>` / `seat-stand-up`, bán kính `SEAT_INTERACT_RADIUS = 1.65m`):**
+   - Khi đang đứng trong bán kính `1.65m` quanh một trong 4 ghế thuộc `STUDY_SEATS` (`tqb-1f-t1-s1`, `tqb-1f-t1-s2`, `tqb-1f-t2-s1`, `tqb-1f-t2-s2`), hệ thống hiển thị gợi ý **`"E — Ngồi học"`** và làm sáng đệm ghế + vòng chỉ báo sàn.
+   - Người chơi có thể bấm phím `E`, nút **`✋ Tương tác`**, hoặc click/chạm trực tiếp vào ghế 3D để ngồi. Nếu click vào ghế từ khoảng cách `> 1.65m`, hệ thống từ chối dịch chuyển tức thời (`reason: 'too-far'`) và nhắc tiến lại gần ghế hơn.
+   - Khi đang ngồi (`playerState.seated === true`), nhân vật chuyển sang tư thế ngồi học (`computeSeatedPoseTargets`, `SEATED_GROUP_Y_OFFSET = -0.35m`, tự ẩn balo để không xuyên tựa lưng), khóa di chuyển `WASD`/`Joystick`, giữ điều khiển xoay/zoom camera, gắn `studyRoomId: 'library-lobby'` và `seatId` vào `StudySessionState`, đồng thời hiển thị gợi ý **`"E — Đứng dậy"`** cùng nút **`🚶 Đứng dậy`** trên cả `CampusHud` và `StudyPanel`.
+   - Khi đứng dậy, hàm `computeSafeStandUpPosition` đưa nhân vật về đúng vị trí đứng an toàn ngay sau lưng ghế (đã kiểm chứng `resolveLibraryLobbyCollisions(pos, 0.4).hit === null`). Khi rời sảnh Thư viện, dịch chuyển nhanh hoặc kết thúc phiên học, trạng thái ngồi tự động được giải phóng sạch sẽ.
+2. **Vật thể truyền thống & học thuật trong sảnh:**
+   - Tương tác với **Tượng GS. Tạ Quang Bửu** `(0, -2.1)` (`r <= 2.6m`), **Bảng từ vựng học thuật** `(3.6, -0.6)` (`r <= 2.4m`), **Quầy thủ thư** `(-3.6, -0.6)` (`r <= 2.4m`) và nút **Ra khỏi sảnh Thư viện**.
 
 ---
 
 ## 3. Hệ thống Dịch chuyển Nhanh (`Fast Travel`) & Xe máy
 
 1. **Sáu Điểm Dịch chuyển Nhanh ([`FAST_TRAVEL_DESTINATIONS`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L1095-L1102)):**
-   - Mở sẵn từ đầu gồm: `c1` `(-58, -43.5)`, `library` `(38, 12.5)`, `lake` `(24, 40)`, `parabol` `(-88, 10)`, `c9` `(-29, -2)` và `spawn` `(-76, 10)`.
+   - Mở sẵn từ đầu gồm: `c1` `(-58, -43.5)`, `library` `(38, 12.5)`, `lake` `(24, 40)`, `parabol` `(-88, 10)`, `c9` `(-29, -2)` và `spawn` `(96, -6)`.
    - Mọi điểm đáp đều đã được xác minh nằm ngoài toàn bộ hộp va chạm (`resolveCollisions(pos, 0.4).hit === null`) và tự động xoay cả góc nhìn Camera (`yaw`) lẫn hướng mặt nhân vật (`facing`) thẳng vào công trình mục tiêu.
    - Biến cờ `fastTravelState.traveling` ngăn chặn hiện tượng bấm chồng nhiều lần trong lúc đang chuyển cảnh.
 2. **Gọi Xe máy Cá nhân (`callBike`):**
@@ -57,5 +63,6 @@ Mỗi `200ms` (và ngay khi nhận sự kiện `CustomEvent('bkhn:interact')` t�
 Để phục vụ kiểm thử tự động không phụ thuộc thao tác chuột phức tạp, [`Player.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/Player.tsx) và [`app/page.tsx`](file:///home/bao/Hust3D/hust-hsk/app/page.tsx) đăng ký đối tượng `window.__bkhn` hỗ trợ các phương thức điều khiển chương trình:
 - `getPos()`, `getYaw()`, `getPitch()`, `teleport(x, z, yaw?, pitch?)`
 - `enterClassroom()`, `exitClassroom()`, `enterLibraryLobby()`, `exitLibraryLobby()`, `isInLibraryLobby()`
+- `sitAtSeat(seatId)`, `standUp()`, `getSeatState()`, `getPose()`
 - `getBike()`, `mountBike()`, `dismountBike()`, `callBike()`, `setBikePose(x, z, heading)`
 - `fastTravel(destId)`, `getFastTravel()`

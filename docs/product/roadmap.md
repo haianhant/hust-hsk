@@ -14,7 +14,7 @@
 
 ---
 
-## 2. Lộ trình Kiến trúc Modular Monolith & Sản phẩm Tự học (`PR1` – `PR8+`)
+## 2. Lộ trình Kiến trúc Modular Monolith & Sản phẩm Tự học (`PR1` – `PR9`)
 
 ```mermaid
 flowchart LR
@@ -24,10 +24,11 @@ flowchart LR
   PR4 --> PR5["PR5: App UI & Gameplay Separation"]
   PR5 --> PR6["PR6: Study & Social Contracts"]
   PR6 --> PR7["PR7: Study Experience MVP"]
-  PR7 --> PR8["PR8+: Shared Study Rooms & Seats"]
+  PR7 --> PR8["PR8: Interactive 3D Library Seating"]
+  PR8 --> PR9["PR9: Authoritative Multiplayer Seating"]
 ```
 
-### A. Đã Triển khai & Kiểm thử (`PR1` – `PR7`)
+### A. Đã Triển khai & Kiểm thử (`PR1` – `PR8`)
 
 1. **`PR1 — Foundation, Safety & Shared Contracts` (Đã hoàn thành):**
    - Hợp nhất biên thế giới `BOUNDS` và hằng số không gian tại [`shared/constants/world.ts`](../../shared/constants/world.ts).
@@ -57,11 +58,15 @@ flowchart LR
    - Tích hợp 3 chế độ Focus Mode (`Normal 3D`, `Minimal HUD`, `Zen 2D` qua [`FocusModeView.tsx`](../../features/study/focus-mode/FocusModeView.tsx)), bảo toàn vị trí nhân vật và kết nối Multiplayer khi chuyển qua lại giữa `Zen 2D` và `3D Campus`.
    - Kiểm chứng bằng unit test [`test/study-social-contracts.test.cjs`](../../test/study-social-contracts.test.cjs) (`12/12` PASS) và smoke test trình duyệt [`test/study-mvp-smoke.cjs`](../../test/study-mvp-smoke.cjs) (`9/9` bước PASS).
 
+8. **`PR8 — Interactive 3D Library Seating & Study Experience` (Đã hoàn thành & Kiểm thử trình duyệt):**
+   - Dựng khu bàn đọc tự học 3D tại Sảnh tầng 1 Thư viện Tạ Quang Bửu ([`features/campus/buildings/library/`](../../features/campus/buildings/library/index.ts): `LibraryStudyArea.tsx`, `StudyTable.tsx`, `StudyChair.tsx`, `StudySeatMarkers.tsx`) với 2 bàn đọc gỗ sồi + 4 ghế ngồi học (`tqb-1f-t1-s1..s2`, `tqb-1f-t2-s1..s2`) khớp chuẩn với `STUDY_SEATS` và `LIBRARY_LOBBY_COLLIDERS`.
+   - Xây dựng máy trạng thái ngồi học cục bộ ([`features/campus/interaction/seat-interaction.ts`](../../features/campus/interaction/seat-interaction.ts)), kiểm tra khoảng cách tiếp cận (`SEAT_INTERACT_RADIUS = 1.65m`), tư thế ngồi học 3D (`computeSeatedPoseTargets`, `SEATED_GROUP_Y_OFFSET = -0.35m`), điểm đứng dậy an toàn không va chạm (`computeSafeStandUpPosition`), và tự động gắn `studyRoomId: 'library-lobby'` + `seatId` vào `StudySessionState`.
+   - Kiểm chứng bằng unit test [`test/ui-gameplay.test.cjs`](../../test/ui-gameplay.test.cjs) (`7/7` PASS) và smoke test trình duyệt [`test/library-seating-smoke.cjs`](../../test/library-seating-smoke.cjs) (`14/14` bước PASS).
+
 ---
 
-### B. Kế hoạch Cho Các Giai đoạn Tiếp theo (`PR8+`)
+### B. Kế hoạch Cho Giai đoạn Tiếp theo (`PR9`)
 
-- **`PR8 — Authoritative Study Rooms, Seat Occupancy & Live Study Presence` (Chưa triển khai trong `PR7`):**
+- **`PR9 — Authoritative Multiplayer Seat Occupancy & Shared Study Presence` (Chưa triển khai trong `PR8`):**
   - Tích hợp `seat-manager.ts` và các bản tin `study:claim-seat`, `study:release-seat`, `study:presence`, `study:room-snapshot` vào Cloudflare Worker (`worker/src/room.ts`) và client `lib/multiplayer.ts`.
-  - Cho phép sinh viên bấm chọn ghế trống tại Sảnh Thư viện Tạ Quang Bửu (`LibraryLobby`), Phòng học C1 (`Classroom`) và ghế đá ven Hồ Tiền, hiển thị nhãn trạng thái học tập (`🍅 Đang tự học · ...`) trên đỉnh đầu nhân vật.
-  - Bổ sung tư thế ngồi học (`sitting animation`) cho `StudentAvatar` tại đúng tọa độ ghế đã chọn.
+  - Đồng bộ trạng thái chiếm chỗ ghế thời gian thực giữa nhiều người chơi trong cùng phòng, hiển thị nhân vật người chơi khác ngồi tại ghế và huy hiệu trạng thái học tập (`🍅 Đang tự học · ...`) trên đỉnh đầu nhân vật, đồng thời mở rộng bàn ghế tương tác sang Phòng học C1 và Hồ Tiền.

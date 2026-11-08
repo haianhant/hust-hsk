@@ -19,10 +19,13 @@ import { StudySessionSummary } from './StudySessionSummary';
 export interface StudyPanelProps {
   open: boolean;
   zoneLabel: string;
+  activeSeatId?: string | null;
+  activeSeatLabel?: string | null;
   session: StudySessionState;
   focusPrefs: FocusModePreferences;
   focusPolicy: FocusRuntimePolicy;
   onClose: () => void;
+  onStandUp?: () => void;
   onReconcileAt?: (nowMs: number) => void;
   onStartSession: () => void;
   onEndSession: () => void;
@@ -44,10 +47,13 @@ export interface StudyPanelProps {
 export function StudyPanel({
   open,
   zoneLabel,
+  activeSeatId = null,
+  activeSeatLabel = null,
   session,
   focusPrefs,
   focusPolicy,
   onClose,
+  onStandUp,
   onReconcileAt,
   onStartSession,
   onEndSession,
@@ -99,17 +105,37 @@ export function StudyPanel({
             </div>
             <p className="mt-0.5 text-xs text-white/85">
               Vị trí hiện tại: <strong className="font-semibold">{zoneLabel}</strong>
+              {activeSeatId && (
+                <span
+                  data-testid="study-panel-seat-badge"
+                  className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-300/25 px-2.5 py-0.5 text-[11px] font-bold text-amber-100 ring-1 ring-amber-200/40"
+                >
+                  🪑 Đang ngồi tại: {activeSeatLabel ?? activeSeatId}
+                </span>
+              )}
             </p>
           </div>
-          <button
-            type="button"
-            data-testid="close-study-panel"
-            onClick={onClose}
-            aria-label="Đóng bảng Tự học"
-            className="rounded-full bg-white/15 px-3 py-1.5 text-sm font-bold text-white transition hover:bg-white/25"
-          >
-            ✕ Đóng
-          </button>
+          <div className="flex items-center gap-2">
+            {activeSeatId && onStandUp && (
+              <button
+                type="button"
+                data-testid="study-panel-stand-up"
+                onClick={onStandUp}
+                className="rounded-full bg-amber-500/90 px-3 py-1.5 text-xs font-bold text-white shadow transition hover:bg-amber-600"
+              >
+                🚶 Đứng dậy
+              </button>
+            )}
+            <button
+              type="button"
+              data-testid="close-study-panel"
+              onClick={onClose}
+              aria-label="Đóng bảng Tự học"
+              className="rounded-full bg-white/15 px-3 py-1.5 text-sm font-bold text-white transition hover:bg-white/25"
+            >
+              ✕ Đóng
+            </button>
+          </div>
         </div>
 
         {/* Body */}

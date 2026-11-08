@@ -554,4 +554,27 @@ export const LIBRARY_LOBBY = {
   statue: { x: 0, z: -2.1 },
   vocabBoard: { x: 3.6, z: -0.6 },
   infoDesk: { x: -3.6, z: -0.6 },
+  /** Hai bàn đọc tự học ở hai cánh Tây/Đông phía nam sảnh (PR8), chừa lối chính giữa rộng 2,94 m từ cửa vào tới tượng GS. Tạ Quang Bửu. */
+  studyTables: [
+    {
+      tableId: 'tqb-1f-t1',
+      label: 'Bàn đọc Tây 1',
+      x: -2.15,
+      z: 1.75,
+      width: 1.36,
+      depth: 0.76,
+      height: 0.75,
+      box: { minX: -2.83, maxX: -1.47, minZ: 1.37, maxZ: 2.13 },
+    },
+    {
+      tableId: 'tqb-1f-t2',
+      label: 'Bàn đọc Đông 2',
+      x: 2.15,
+      z: 1.75,
+      width: 1.36,
+      depth: 0.76,
+      height: 0.75,
+      box: { minX: 1.47, maxX: 2.83, minZ: 1.37, maxZ: 2.13 },
+    },
+  ],
 } as const;

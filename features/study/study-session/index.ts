@@ -9,6 +9,7 @@ export {
   startStudySession,
   endStudySession,
   bindSessionSeat,
+  reconcilePersistedSessionSeat,
   linkHskLessonToSession,
   addStudyTask,
   toggleStudyTask,

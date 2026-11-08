@@ -7,6 +7,7 @@
 import { useEffect, useMemo } from 'react';
 import { makeFabricTexture } from '../../../components/three/materials';
 import { Backpack } from '../appearance/Accessories';
+import { SEATED_GROUP_Y_OFFSET } from '../animation/gait';
 import {
   OUTFIT_PRESETS,
   PACK_BLACK,
@@ -48,6 +49,7 @@ export function HumanFigure(props: FigureProps) {
     backpackColors,
     joints,
     showBackpack = true,
+    seated = false,
   } = props;
   const hustTex = useHustTexture();
   const hustCrimsonTex = useHustCrimsonLogoTexture();
@@ -64,6 +66,7 @@ export function HumanFigure(props: FigureProps) {
   const armScale = isFemale ? 0.92 : 1.0;
   const packColors = backpackColors ?? { pack: PACK_BLACK, packLight: '#2A2E33', packZip: PACK_ZIP };
   const effectiveSkirtColor = isFemale ? (skirtColor ?? (skirt ? pants : undefined)) : undefined;
+  const shadowY = seated ? 0.036 - SEATED_GROUP_Y_OFFSET : 0.036;
 
   return (
     <group>
@@ -71,7 +74,7 @@ export function HumanFigure(props: FigureProps) {
       <mesh
         userData={{ ignoreMeasure: true }}
         rotation-x={-Math.PI / 2}
-        position={[0, 0.036, 0]}
+        position={[0, shadowY, 0]}
       >
         <planeGeometry args={[0.68, 0.68]} />
         <meshBasicMaterial map={shadowTex} transparent opacity={0.42} depthWrite={false} />
@@ -158,6 +161,7 @@ export function HumanFigure(props: FigureProps) {
 export default function StudentAvatar({
   joints,
   showBackpack = true,
+  seated = false,
   gender = 'male',
   hairStyle = 'short',
   outfit = 'windbreaker-hust',
@@ -187,6 +191,7 @@ export default function StudentAvatar({
       backpackColors={{ pack: PACK_BLACK, packLight: '#2A2E33', packZip: PACK_ZIP }}
       joints={joints}
       showBackpack={showBackpack}
+      seated={seated}
     />
   );
 }
