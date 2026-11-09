@@ -5,133 +5,16 @@
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useState } from 'react';
+import {
+  LIBRARY_PRESET_DESTINATIONS,
+  type LibraryFloor,
+  type LibrarySpawnPoint,
+} from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
 
-export type LibraryFloorNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10;
-
-export interface LibraryPresetDestination {
-  id: string;
-  shortLabel: string;
-  fullLabel: string;
-  floor: LibraryFloorNumber;
-  x: number;
-  z: number;
-  yaw: number;
-  pitch?: number;
-}
-
-export const LIBRARY_PRESET_DESTINATIONS: LibraryPresetDestination[] = [
-  {
-    id: 'f1-atrium',
-    shortLabel: 'T1 · Đại sảnh',
-    fullLabel: 'Tầng 1 · Đại sảnh Ngôi sao 16 cánh',
-    floor: 1,
-    x: 0,
-    z: 2.4,
-    yaw: 0,
-    pitch: 0.2,
-  },
-  {
-    id: 'f1-borrow',
-    shortLabel: 'T1 · Phòng mượn',
-    fullLabel: 'Tầng 1 · Phòng Mượn Sách',
-    floor: 1,
-    x: -22.2,
-    z: 1.8,
-    yaw: Math.PI / 2,
-    pitch: 0.18,
-  },
-  {
-    id: 'f2-balcony',
-    shortLabel: 'T2 · Tự học',
-    fullLabel: 'Tầng 2 · Hành lang thông tầng',
-    floor: 2,
-    x: 15.6,
-    z: 0,
-    yaw: Math.PI / 2,
-    pitch: 0.22,
-  },
-  {
-    id: 'f3-balcony',
-    shortLabel: 'T3 · Hành lang',
-    fullLabel: 'Tầng 3 · Hành lang đọc sách',
-    floor: 3,
-    x: -15.6,
-    z: 0,
-    yaw: -Math.PI / 2,
-    pitch: 0.22,
-  },
-  {
-    id: 'f4-r401',
-    shortLabel: 'P.401 · Đọc tự do',
-    fullLabel: 'Tầng 4 · Phòng đọc 401 (144 chỗ + 17 PC)',
-    floor: 4,
-    x: -10.8,
-    z: -18.5,
-    yaw: 0,
-    pitch: 0.2,
-  },
-  {
-    id: 'f4-r411',
-    shortLabel: 'P.411 · Chuyên ngành',
-    fullLabel: 'Tầng 4 · Phòng đọc chuyên ngành 411',
-    floor: 4,
-    x: 0,
-    z: 16.2,
-    yaw: Math.PI,
-    pitch: 0.2,
-  },
-  {
-    id: 'f4-r419',
-    shortLabel: 'P.419 · Đọc mở',
-    fullLabel: 'Tầng 4 · Phòng đọc mở 419',
-    floor: 4,
-    x: 27.5,
-    z: 0,
-    yaw: -Math.PI / 2,
-    pitch: 0.2,
-  },
-  {
-    id: 'f5-r501',
-    shortLabel: 'P.501 · Học nhóm',
-    fullLabel: 'Tầng 5 · Phòng học nhóm 501',
-    floor: 5,
-    x: -10.8,
-    z: -18.5,
-    yaw: 0,
-    pitch: 0.2,
-  },
-  {
-    id: 'f6-lounge',
-    shortLabel: 'T6 · Sáng tạo 🎹',
-    fullLabel: 'Tầng 6 · Không gian Sáng tạo & Đại dương cầm',
-    floor: 6,
-    x: -4.2,
-    z: 5.5,
-    yaw: 0.55,
-    pitch: 0.22,
-  },
-  {
-    id: 'f7-mezz',
-    shortLabel: 'T7 · Tầng lửng',
-    fullLabel: 'Tầng 7 · Tầng lửng INNOVATE · CONNECT · CREATE',
-    floor: 7,
-    x: 0,
-    z: 13.2,
-    yaw: 0,
-    pitch: 0.25,
-  },
-  {
-    id: 'f10-rooftop',
-    shortLabel: 'T10 · Sân thượng 🔭',
-    fullLabel: 'Tầng 10 · Sân thượng Pergola & Đài ngắm sao',
-    floor: 10,
-    x: 11.5,
-    z: 0.4,
-    yaw: -Math.PI / 2,
-    pitch: 0.16,
-  },
-];
+export type LibraryFloorNumber = LibraryFloor;
+export type LibraryPresetDestination = LibrarySpawnPoint;
+export { LIBRARY_PRESET_DESTINATIONS };
 
 const PIANO_OCTAVE_NOTES = [
   { midi: 60, label: 'C4', solfege: 'Đô' },

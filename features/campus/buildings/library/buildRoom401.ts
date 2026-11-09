@@ -8,6 +8,11 @@
 
 import * as THREE from 'three';
 import { lin, mulberry32 } from './procedural-helpers';
+import {
+  ROOM_401_DIMS,
+  createLibraryLocation,
+  resolveLibraryMovement,
+} from '../../world-data/library-spatial';
 
 export interface Room401Controller {
   hit: (x: number, z: number) => boolean;
@@ -18,33 +23,33 @@ export function buildRoom401(
   rootGroup: THREE.Group,
   roomLabel = 'PHÒNG ĐỌC 401',
 ): Room401Controller {
-  const S = 0.6;
-  const RW = 48 * S;
-  const RD = 36 * S;
-  const RH = 6.2 * S;
-  const HW = RW / 2;
-  const HD = RD / 2;
-  const WT = 0.35 * S;
-  const DOOR_X = -10.8;
-  const DOOR_W = 2.64;
-
-  const TX = [-9.6, -5.04, 5.04, 9.6];
-  const TZ = [-4.56, 0.96, 6.48];
-  const TW = 2.88;
-  const TD = 2.64;
-  const TH = 0.78;
-  const STACK_X = lin(6, -12, -2.4);
-  const STACK_Z = -12.3;
-  const STACK_W = 0.66;
-  const STACK_D = 6.6;
-  const STACK_H = 2.28;
-  const COMP_W = 14.52;
-  const COMP_R = 11.4;
-  const COMP_CD = 0.66;
-  const DESK_X = -10.8;
-  const DESK_Z = 8.4;
-  const DESK_W = 3.12;
-  const DESK_D = 1.68;
+  const {
+    RW,
+    RD,
+    RH,
+    HW,
+    HD,
+    WT,
+    DOOR_X,
+    DOOR_W,
+    TX,
+    TZ_LOCAL: TZ,
+    TW,
+    TD,
+    TH,
+    STACK_X,
+    STACK_Z_LOCAL: STACK_Z,
+    STACK_W,
+    STACK_D,
+    STACK_H,
+    COMP_W,
+    COMP_R,
+    COMP_CD,
+    DESK_X,
+    DESK_Z_LOCAL: DESK_Z,
+    DESK_W,
+    DESK_D,
+  } = ROOM_401_DIMS;
 
   const mats: Record<string, THREE.MeshStandardMaterial> = {};
   const M = (c: number, r = 0.7, m = 0, ex?: THREE.MeshStandardMaterialParameters) => {
@@ -677,26 +682,9 @@ export function buildRoom401(
   makeWCDoor(HW - WT / 2 - 0.01, 8.1, 0xc83e5b);
 
   const hit = (x: number, z: number): boolean => {
-    const m = 0.22;
-    if (x < -HW + WT + m || x > HW - WT - m || z < -HD + WT + m) return true;
-    if (z > HD - WT - m && Math.abs(x - DOOR_X) > DOOR_W / 2 - m) return true;
-    for (const tx of TX) {
-      for (const tz of TZ) {
-        if (Math.abs(x - tx) < TW / 2 + 0.33 && Math.abs(z - tz) < TD / 2 + 0.15) return true;
-      }
-    }
-    for (const sx of STACK_X) {
-      if (Math.abs(x - sx) < STACK_W / 2 + 0.21 && Math.abs(z - STACK_Z) < STACK_D / 2 + 0.18) return true;
-    }
-    if (x > cBackX0 - 0.18 && x < cBackX1 + 0.18 && z < cBackZ + COMP_CD / 2 + 0.3) return true;
-    if (x > cRightX - COMP_CD / 2 - 0.3 && z > cRightZ0 - 0.18 && z < cRightZ1 + 0.18) return true;
-    if (Math.abs(x - DESK_X) < DESK_W / 2 + 0.18 && Math.abs(z - DESK_Z) < DESK_D / 2 + 0.18) return true;
-    for (const ix of [-5.04, 5.04]) {
-      for (const iz of [-2.4, 3.6]) {
-        if (Math.abs(x - ix) < 0.39 && Math.abs(z - iz) < 0.39) return true;
-      }
-    }
-    return false;
+    const loc = createLibraryLocation(4, x, z + ROOM_401_DIMS.R4Z);
+    const res = resolveLibraryMovement(loc, loc);
+    return res.blocked || !res.grounded;
   };
 
   const update = (dt: number, px: number, pz: number, active: boolean) => {

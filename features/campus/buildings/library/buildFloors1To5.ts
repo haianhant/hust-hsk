@@ -8,6 +8,222 @@
 import * as THREE from 'three';
 import { buildRoom401, type Room401Controller } from './buildRoom401';
 import { canvasTex, lin, mulberry32 } from './procedural-helpers';
+import {
+  createLibraryLocation,
+  evaluateCurvedStairAt,
+  getBlockAFurniturePlacements,
+  queryLibraryGround,
+  resolveLibraryMovement,
+  sanitizeLibraryFloor,
+  type LibraryFloor,
+  type LibraryFurniturePlacement,
+  type LibraryFurniturePropKind,
+} from '../../world-data/library-spatial';
+
+export interface CompositePropBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+  maxRadiusXZ: number;
+}
+
+/**
+ * Builds the exact Three.js composite geometry parts (`BufferGeometry` + local
+ * `Matrix4`) for `chairR`, `table4` (table + 4 chairs), `round4` (round table +
+ * 4 chairs), `armchair`, `sofa` (sofa + coffee table), and `shelf`.
+ * Used by regression tests to verify that collision footprints match actual
+ * composite Three.js mesh bounds 1:1.
+ */
+export function buildFurnitureCompositeGeometries(): Record<
+  LibraryFurniturePropKind | 'chairR',
+  Array<{ g: THREE.BufferGeometry; l: THREE.Matrix4 }>
+> {
+  const composeMat = (
+    x = 0,
+    y = 0,
+    z = 0,
+    rx = 0,
+    ry = 0,
+    rz = 0,
+    sx = 1,
+    sy = 1,
+    sz = 1,
+  ) =>
+    new THREE.Matrix4().compose(
+      new THREE.Vector3(x, y, z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)),
+      new THREE.Vector3(sx, sy, sz),
+    );
+  const unitBox = new THREE.BoxGeometry(1, 1, 1);
+  const cylCache: Record<string, THREE.BufferGeometry> = {};
+  const defs: Record<string, Array<{ g: THREE.BufferGeometry; l: THREE.Matrix4 }>> = {};
+  let cParts: Array<{ g: THREE.BufferGeometry; l: THREE.Matrix4 }> | null = null;
+
+  const defineProp = (name: string, fn: () => void) => {
+    cParts = defs[name] = [];
+    fn();
+    cParts = null;
+  };
+  const pBox = (w: number, h: number, d: number, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
+    cParts!.push({ g: unitBox, l: composeMat(x, y, z, rx, ry, rz, w, h, d) });
+  };
+  const pCyl = (rt: number, rb: number, h: number, s: number, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
+    const useUnit = Math.abs(rt - rb) < 1e-6;
+    const g = useUnit
+      ? (cylCache[`uc_${s}`] ??= new THREE.CylinderGeometry(1, 1, 1, s))
+      : (cylCache[`c_${rt}_${rb}_${h}_${s}`] ??= new THREE.CylinderGeometry(rt, rb, h, s));
+    const l = useUnit ? composeMat(x, y, z, rx, ry, rz, rt, h, rt) : composeMat(x, y, z, rx, ry, rz);
+    cParts!.push({ g, l });
+  };
+
+  defineProp('chairR', () => {
+    pBox(0.46, 0.05, 0.44, 0, 0.45, 0);
+    pBox(0.44, 0.42, 0.05, 0, 0.68, -0.2, 0.08);
+    for (const [lx, lz] of [
+      [-0.19, -0.18],
+      [0.19, -0.18],
+      [-0.19, 0.18],
+      [0.19, 0.18],
+    ]) {
+      pCyl(0.018, 0.018, 0.44, 6, lx, 0.22, lz);
+    }
+  });
+  defineProp('table4', () => {
+    pBox(1.5, 0.05, 0.85, 0, 0.74, 0);
+    pBox(1.46, 0.03, 0.81, 0, 0.71, 0);
+    for (const [lx, lz] of [
+      [-0.68, -0.36],
+      [0.68, -0.36],
+      [-0.68, 0.36],
+      [0.68, 0.36],
+    ]) {
+      pCyl(0.025, 0.025, 0.72, 6, lx, 0.36, lz);
+    }
+    for (const [cx, cz, ry] of [
+      [-0.42, -0.56, 0],
+      [0.42, -0.56, 0],
+      [-0.42, 0.56, Math.PI],
+      [0.42, 0.56, Math.PI],
+    ]) {
+      const xf = composeMat(cx, 0, cz, 0, ry, 0);
+      for (const p of defs.chairR) cParts!.push({ g: p.g, l: xf.clone().multiply(p.l) });
+    }
+  });
+  defineProp('round4', () => {
+    pCyl(0.62, 0.62, 0.05, 18, 0, 0.74, 0);
+    pCyl(0.06, 0.06, 0.7, 10, 0, 0.36, 0);
+    pCyl(0.34, 0.36, 0.03, 14, 0, 0.02, 0);
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2 + Math.PI / 4;
+      const xf = composeMat(Math.cos(a) * 0.82, 0, Math.sin(a) * 0.82, 0, -a - Math.PI / 2, 0);
+      for (const p of defs.chairR) cParts!.push({ g: p.g, l: xf.clone().multiply(p.l) });
+    }
+  });
+  defineProp('armchair', () => {
+    pBox(0.76, 0.36, 0.72, 0, 0.22, 0);
+    pBox(0.76, 0.44, 0.16, 0, 0.56, -0.28);
+    pBox(0.13, 0.34, 0.72, -0.32, 0.42, 0);
+    pBox(0.13, 0.34, 0.72, 0.32, 0.42, 0);
+    pBox(0.5, 0.08, 0.54, 0, 0.42, 0.04);
+  });
+  defineProp('sofa', () => {
+    pBox(1.85, 0.36, 0.78, 0, 0.22, 0);
+    pBox(1.85, 0.46, 0.16, 0, 0.58, -0.31);
+    pBox(0.14, 0.36, 0.78, -0.86, 0.42, 0);
+    pBox(0.14, 0.36, 0.78, 0.86, 0.42, 0);
+    pBox(1.56, 0.08, 0.58, 0, 0.42, 0.04);
+    pBox(0.95, 0.04, 0.52, 0, 0.42, 0.92);
+    pCyl(0.03, 0.03, 0.4, 8, -0.38, 0.2, 0.92);
+    pCyl(0.03, 0.03, 0.4, 8, 0.38, 0.2, 0.92);
+  });
+  defineProp('shelf', () => {
+    const w = 2.4;
+    const h = 2.15;
+    const d = 0.42;
+    pBox(w, h, 0.04, 0, h / 2, -d / 2);
+    pBox(0.05, h, d, -w / 2, h / 2, 0);
+    pBox(0.05, h, d, w / 2, h / 2, 0);
+    pBox(0.04, h, d - 0.02, 0, h / 2, 0);
+  });
+
+  return defs as Record<
+    LibraryFurniturePropKind | 'chairR',
+    Array<{ g: THREE.BufferGeometry; l: THREE.Matrix4 }>
+  >;
+}
+
+/**
+ * Computes exact local-space bounding box and radial extent from the composite
+ * Three.js vertex geometry of each Block A furniture prop (`table4`, `round4`,
+ * `sofa`, `armchair`, `shelf`).
+ */
+export function computeCompositePropBounds(
+  prop: LibraryFurniturePropKind,
+): CompositePropBounds {
+  const defs = buildFurnitureCompositeGeometries();
+  const box = new THREE.Box3();
+  let maxR = 0;
+  const v = new THREE.Vector3();
+  for (const { g, l } of defs[prop]) {
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(l);
+      box.expandByPoint(v);
+      const r = Math.hypot(v.x, v.z);
+      if (r > maxR) maxR = r;
+    }
+  }
+  return {
+    minX: Number(box.min.x.toFixed(4)),
+    maxX: Number(box.max.x.toFixed(4)),
+    minY: Number(box.min.y.toFixed(4)),
+    maxY: Number(box.max.y.toFixed(4)),
+    minZ: Number(box.min.z.toFixed(4)),
+    maxZ: Number(box.max.z.toFixed(4)),
+    maxRadiusXZ: Number(maxR.toFixed(4)),
+  };
+}
+
+/**
+ * Computes the exact world-space `THREE.Box3` of a placed composite furniture
+ * prop (`table4`, `round4`, `sofa`, `armchair`, `shelf`) at `(x, y, z, ry)`.
+ */
+export function computePlacedPropWorldBounds(
+  placement: LibraryFurniturePlacement,
+): CompositePropBounds {
+  const defs = buildFurnitureCompositeGeometries();
+  const placeMat = new THREE.Matrix4().compose(
+    new THREE.Vector3(placement.x, placement.y, placement.z),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, placement.ry, 0)),
+    new THREE.Vector3(1, 1, 1),
+  );
+  const box = new THREE.Box3();
+  let maxR = 0;
+  const v = new THREE.Vector3();
+  const worldMat = new THREE.Matrix4();
+  for (const { g, l } of defs[placement.prop]) {
+    worldMat.multiplyMatrices(placeMat, l);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(worldMat);
+      box.expandByPoint(v);
+      const r = Math.hypot(v.x - placement.x, v.z - placement.z);
+      if (r > maxR) maxR = r;
+    }
+  }
+  return {
+    minX: Number(box.min.x.toFixed(4)),
+    maxX: Number(box.max.x.toFixed(4)),
+    minY: Number(box.min.y.toFixed(4)),
+    maxY: Number(box.max.y.toFixed(4)),
+    minZ: Number(box.min.z.toFixed(4)),
+    maxZ: Number(box.max.z.toFixed(4)),
+    maxRadiusXZ: Number(maxR.toFixed(4)),
+  };
+}
 
 export interface ElevatorCarState {
   z: number;
@@ -32,7 +248,7 @@ export interface Floors1To5Controller {
   nearShaft: (x: number, z: number) => number;
   stairAt: (x: number, z: number) => { y: number } | null;
   surface: (x: number, z: number, curY: number) => { ok: boolean; y: number };
-  update: (dt: number, px: number, py: number, pz: number) => void;
+  update: (dt: number, px: number, py: number, pz: number, activeFloor?: number) => void;
 }
 
 const BOOK_PAL = [
@@ -1015,11 +1231,9 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     for (const dz of [-1, 0, 1]) place('plant', s * 10.6, 0.22, dz);
   }
 
-  for (const s of [-1, 1]) {
-    place('sofa', s * 14.2, 0, -5.8, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-    place('armchair', s * 14.2, 0, -3.9, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-    place('sofa', s * 14.2, 0, 5.8, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-    place('armchair', s * 14.2, 0, 3.9, s > 0 ? -Math.PI / 2 : Math.PI / 2);
+  // Sofa, ghế bành sảnh Tầng 1 và 6 kệ giáo trình Phòng Mượn Sách P.102 từ nguồn chuẩn dùng chung (shared furniture placements)
+  for (const fp of getBlockAFurniturePlacements(1)) {
+    place(fp.prop, fp.x, fp.y, fp.z, fp.ry);
   }
   for (const [x, z] of [
     [-17.5, -11.2],
@@ -1124,78 +1338,32 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
         box(1.2, 0.04, 0.32, M_LGT, lx, h - 0.02, lz);
       }
     }
-    const cd = dw - 0.5;
+    const cd = dw - 1.8;
     const cX = x1 - 0.55;
-    box(0.78, 1.04, cd, M_WOOD_M, cX, 0.52, zc);
-    box(0.92, 0.07, cd + 0.12, M_TRIM, cX, 1.07, zc);
-    box(0.84, 0.14, cd + 0.04, M_HUST, cX + 0.04, 0.88, zc);
-    box(0.04, 0.65, cd - 0.4, M_GLS, cX + 0.34, 1.43, zc);
-    for (const dz of [-1.4, 0, 1.4]) {
-      box(0.06, 0.72, 0.06, M_CHR, cX + 0.34, 1.44, zc + dz);
+    const cZ = zc + 0.65;
+    box(0.78, 1.04, cd, M_WOOD_M, cX, 0.52, cZ);
+    box(0.92, 0.07, cd + 0.12, M_TRIM, cX, 1.07, cZ);
+    box(0.84, 0.14, cd + 0.04, M_HUST, cX + 0.04, 0.88, cZ);
+    box(0.04, 0.65, cd - 0.4, M_GLS, cX + 0.34, 1.43, cZ);
+    for (const dz of [-1.0, 0, 1.0]) {
+      box(0.06, 0.72, 0.06, M_CHR, cX + 0.34, 1.44, cZ + dz);
       if (dz !== 0) {
-        box(0.05, 0.32, 0.46, M_DRK, cX - 0.08, 1.26, zc + dz);
-        box(0.055, 0.27, 0.41, M_SCR, cX - 0.05, 1.26, zc + dz);
-        place('chairR', cX - 0.85, 0, zc + dz, Math.PI / 2);
+        box(0.05, 0.32, 0.46, M_DRK, cX - 0.08, 1.26, cZ + dz);
+        box(0.055, 0.27, 0.41, M_SCR, cX - 0.05, 1.26, cZ + dz);
+        place('chairR', cX - 0.85, 0, cZ + dz, Math.PI / 2);
       }
     }
     for (let i = 0; i < 3; i++) {
-      box(0.28, 0.18, 0.22, mat(BOOK_PAL[i * 3], 0.5), cX + 0.1, 1.18, zc - 0.35 + i * 0.35);
+      box(0.28, 0.18, 0.22, mat(BOOK_PAL[i * 3], 0.5), cX + 0.1, 1.18, cZ - 0.35 + i * 0.35);
     }
-    for (const sz of [z0 + 1.55, z0 + 3.1, z1 - 3.1, z1 - 1.55]) {
-      place('shelf', x0 + 2.05, 0, sz, 0);
-    }
-    place('shelf', x0 + 0.55, 0, zc - 1.5, Math.PI / 2);
-    place('shelf', x0 + 0.55, 0, zc + 1.5, Math.PI / 2);
   }
 
-  // Nội thất hành lang thông tầng Tầng 2–5
+  // Nội thất hành lang thông tầng Tầng 2–5 (từ getBlockAFurniturePlacements dùng chung với collision resolver)
   for (let f = 1; f < NF; f++) {
     const y = f * FH;
-    const isStairF = f === 1;
-    const inGap = (s: number) => isStairF && ((s > S2R0 - 0.025 && s < S2R1 + 0.025) || (s > S2L0 - 0.025 && s < S2L1 + 0.025));
-
-    if (f === 1 || f === 2) {
-      const N = 16;
-      for (let i = 0; i < N; i++) {
-        const s = (i + 0.5) / N;
-        if (inGap(s)) continue;
-        const [px, pz] = stadAt(s, FR + 1.65);
-        place('table4', px, y, pz, ryOf(px, pz));
-      }
-      for (let i = 0; i < 12; i++) {
-        const s = (i + 0.5) / 12;
-        if (inGap(s)) continue;
-        const [px, pz] = stadAt(s, FR + 3.45);
-        if (Math.abs(px) > XW - 2.3 || Math.abs(pz) > ZF - 2.1) continue;
-        place('round4', px, y, pz, (i * 0.7) % Math.PI);
-      }
-      for (const s of [-1, 1]) {
-        for (const z of [-9.2, -3.2, 3.2, 9.2]) {
-          place('sofa', s * 17, y, z, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-          place('armchair', s * 17, y, z + 1.6, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-        }
-      }
-      for (const x of [-13.5, -9, -4.5, 4.5, 9, 13.5]) {
-        place('shelf', x, y, ZB + 0.55, 0);
-        place('shelf', x, y, ZF - 0.55, Math.PI);
-      }
-    } else {
-      for (const x of [-9.5, -4.8, 0, 4.8, 9.5]) {
-        place('table4', x, y, -9.6, 0);
-        place('table4', x, y, 9.6, Math.PI);
-      }
-      for (const z of [-4.5, 0, 4.5]) {
-        place('round4', -16.2, y, z, 0.3);
-        place('round4', 15.8, y, z, 0.8);
-      }
-      for (const [x, z, ry] of [
-        [-14.5, -11.8, 0],
-        [14.5, -11.8, 0],
-        [-14.5, 11.8, Math.PI],
-        [14.5, 11.8, Math.PI],
-      ] as Array<[number, number, number]>) {
-        place('sofa', x, y, z, ry);
-      }
+    const floorNum = (f + 1) as 2 | 3 | 4 | 5;
+    for (const fp of getBlockAFurniturePlacements(floorNum)) {
+      place(fp.prop, fp.x, fp.y, fp.z, fp.ry);
     }
     for (const [x, z] of [
       [-17.8, -11.5],
@@ -1358,7 +1526,7 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       }
       fans4.push(h);
     };
-    const shellRoom = (x0: number, x1: number, z0: number, z1: number, y0: number, h: number, skip: 'x0' | 'x1' | 'z0') => {
+    const shellRoom = (x0: number, x1: number, z0: number, z1: number, y0: number, h: number, skip: 'x0' | 'x1' | 'z0' | 'z1') => {
       const w = x1 - x0;
       const d = z1 - z0;
       const cx = (x0 + x1) / 2;
@@ -1366,7 +1534,7 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       mk(new THREE.PlaneGeometry(w, d), M_FLR_W, cx, y0 + 0.012, cz, -Math.PI / 2, 0, 0, f45Group);
       mk(new THREE.PlaneGeometry(w, d), M_CEIL, cx, y0 + h, cz, Math.PI / 2, 0, 0, f45Group);
       if (skip !== 'z0') box(w, h, 0.25, M_WALL, cx, y0 + h / 2, z0, 0, 0, 0, f45Group);
-      box(w, h, 0.25, M_WALL, cx, y0 + h / 2, z1, 0, 0, 0, f45Group);
+      if (skip !== 'z1') box(w, h, 0.25, M_WALL, cx, y0 + h / 2, z1, 0, 0, 0, f45Group);
       if (skip !== 'x0') box(0.25, h, d, M_WALL, x0, y0 + h / 2, cz, 0, 0, 0, f45Group);
       if (skip !== 'x1') box(0.25, h, d, M_WALL, x1, y0 + h / 2, cz, 0, 0, 0, f45Group);
       for (const lx of lin(3, x0 + 2.6, x1 - 2.6)) {
@@ -1442,6 +1610,7 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       place('gate', 0.7, y0, z0 + 1.1);
     };
     const fill418 = (y0: number) => {
+      shellRoom(5.0, 18.0, -31.5, ZB, y0, 3.9, 'z1');
       for (const tx of [8.2, 13.8]) {
         for (const tz of [-17.5, -22, -26.5]) place('r4LongTbl', tx, y0, tz, 0);
       }
@@ -1497,90 +1666,34 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   };
 
   const stairAt = (x: number, z: number) => {
-    for (const st of STR) {
-      const dx = x - st.side * L;
-      const r = Math.hypot(dx, z);
-      if (r < ST_R0 - 0.15 || r > ST_R1 + 0.15) continue;
-      let a = Math.atan2(z, dx);
-      if (st.side < 0 && a < 0) a += Math.PI * 2;
-      const lo = Math.min(st.a0, st.a1) - 0.06;
-      const hi = Math.max(st.a0, st.a1) + 0.06;
-      if (a >= lo && a <= hi) {
-        const t = Math.max(0, Math.min(1, (a - st.a0) / (st.a1 - st.a0)));
-        return { y: t * FH };
-      }
-    }
-    return null;
+    const hit = evaluateCurvedStairAt(x, z);
+    return hit ? { y: hit.elevation } : null;
   };
 
   const surface = (x: number, z: number, curY: number): { ok: boolean; y: number } => {
-    for (const [cx, cz] of COLS) {
-      if (Math.hypot(x - cx, z - cz) < 0.62) return { ok: false, y: curY };
-    }
     const ci = insideCab(x, z);
     if (ci >= 0) {
       const c = elevators[ci];
       if (Math.abs(curY - c.y) < 0.9) return { ok: true, y: c.y };
     }
-    if (x > XW - 0.35 && Math.abs(z) < 4.5 && z > -4.2) {
-      for (const c of elevators) {
-        const f = Math.round(curY / FH) + 1;
-        if (Math.abs(z - c.z) < 0.72 && c.floor === f && Math.abs(c.y - (f - 1) * FH) < 0.08 && c.open > 0.65) {
-          if (x < ECX + ECW / 2 - 0.2) return { ok: true, y: c.y };
-        }
-      }
-    }
-    const st = stairAt(x, z);
-    if (st && curY <= FH + 0.6 && Math.abs(curY - st.y) < 1.25) return { ok: true, y: st.y };
-
-    const flr = Math.max(0, Math.min(NF - 1, Math.round(curY / FH)));
-    const fy = flr * FH;
-    if (flr === 0 && x < -XW + 0.35) {
-      if (x > BRM.x0 + 0.35 && z > BRM.z0 + 0.35 && z < BRM.z1 - 0.35) {
-        if (x > -XW - 0.35 && Math.abs(z - BRM.zc) > BRM.dw / 2 - 0.25) return { ok: false, y: curY };
-        if (Math.abs(x - (BRM.x1 - 0.55)) < 0.62 && Math.abs(z - BRM.zc) < (BRM.dw - 0.4) / 2) return { ok: false, y: curY };
-        return { ok: true, y: 0 };
-      }
+    const flrNum = Math.max(1, Math.min(NF, Math.round(curY / FH) + 1)) as LibraryFloor;
+    const loc = createLibraryLocation(flrNum, x, z, curY);
+    const moved = resolveLibraryMovement(loc, loc);
+    if (moved.blocked || !moved.grounded) {
       return { ok: false, y: curY };
     }
-    if (flr === 3 || flr === 4) {
-      const rCtrl = flr === 3 ? ensureR401() : ensureR501();
-      if (z < ZB + 0.35) {
-        if (z > ZB - 0.4 && (Math.abs(x - R4DX) < R4DW / 2 - 0.22 || Math.abs(x - 11.5) < 1.0)) return { ok: true, y: fy };
-        if (!rCtrl.hit(x, z - R4Z)) return { ok: true, y: fy };
-        return { ok: false, y: curY };
-      }
-      if (x > XW - 0.35) {
-        if (x < XW + 0.4 && (Math.abs(z + 9) < 1.0 || Math.abs(z - 9) < 1.0)) return { ok: true, y: fy };
-        if (x > XW + 0.3 && x < 35.1 && Math.abs(z) < 12.6) return { ok: true, y: fy };
-        return { ok: false, y: curY };
-      }
-      if (x < -XW + 0.35) {
-        if (x > -XW - 0.4 && (Math.abs(z - 4.5) < 1.1 || Math.abs(z + 6.5) < 1.0)) return { ok: true, y: fy };
-        if (x < -XW - 0.3 && x > -35.1 && Math.abs(z) < 12.6) return { ok: true, y: fy };
-        return { ok: false, y: curY };
-      }
-      if (z > ZF - 0.35) {
-        if (z < ZF + 0.4 && Math.abs(x) < 1.35) return { ok: true, y: fy };
-        if (z > ZF + 0.3 && z < 27.1 && Math.abs(x) < 15.6) return { ok: true, y: fy };
-        return { ok: false, y: curY };
-      }
-    }
-    if (Math.abs(x) > XW - 0.4 || z < ZB + 0.4 || z > ZF - 0.4) return { ok: false, y: curY };
-    if (flr > 0 && inside(x, z, FR + 0.22)) {
-      if (flr === 1) {
-        const s = sOf(x, z);
-        if ((s > S2R0 && s < S2R1) || (s > S2L0 && s < S2L1)) {
-          if (st) return { ok: true, y: st.y };
-        }
-      }
-      return { ok: false, y: curY };
-    }
-    return { ok: true, y: fy };
+    const ground = queryLibraryGround(moved.position);
+    return {
+      ok: ground.supported && ground.elevation !== null,
+      y: ground.elevation ?? curY,
+    };
   };
 
-  const update = (dt: number, px: number, py: number, pz: number) => {
-    const pFlr = Math.max(1, Math.min(NF, Math.round(py / FH) + 1));
+  const update = (dt: number, px: number, py: number, pz: number, activeFloor?: number) => {
+    const pFlr =
+      typeof activeFloor === 'number'
+        ? sanitizeLibraryFloor(activeFloor, 1)
+        : Math.max(1, Math.min(NF, Math.round(py / FH) + 1));
     const onF45 = pFlr === 4 || pFlr === 5;
     if (onF45) ensureFloors4To5();
     if (f45Group.visible !== onF45) f45Group.visible = onF45;

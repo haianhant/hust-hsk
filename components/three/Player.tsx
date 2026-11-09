@@ -62,6 +62,14 @@ import {
   resolveClassroomCollisions,
   resolveCollisions,
   resolveLibraryLobbyCollisions,
+  createLibraryLocation,
+  findNearestLibraryDoorway,
+  getBlockForFloor,
+  queryLibraryGround,
+  resolveLibraryFloorTransition,
+  resolveLibraryMovement,
+  type LibraryFloor,
+  type LibrarySpatialDiagnostics,
   type Vec2,
 } from '../../lib/campus';
 import { activeWalkingStudentPositions } from './AmbientLife';
@@ -81,6 +89,7 @@ import {
 import {
   computeSafeStandUpPosition,
   createInitialSeatingState,
+  findNearestLibrarySeat,
   transitionToSeated,
   transitionToStanding,
   type LocalSeatingState,
@@ -584,6 +593,7 @@ export default function Player() {
       seatId,
       playerPos: posRef.current,
       inLibraryLobby: playerState.inLibraryLobby,
+      libraryFloor: playerState.libraryFloor,
       inClassroom: playerState.inClassroom,
       bikeRiding: ridingRef.current,
       uiLocked: playerState.uiLocked,
@@ -636,7 +646,11 @@ export default function Player() {
     playerState.facing = facingRef.current;
     playerState.moving = false;
     if (groupRef.current) {
-      groupRef.current.position.set(res.standUpPos.x, 0, res.standUpPos.z);
+      groupRef.current.position.set(
+        res.standUpPos.x,
+        playerState.inLibraryLobby ? playerState.libraryY : 0,
+        res.standUpPos.z,
+      );
       groupRef.current.rotation.y = facingRef.current;
     }
     applyPoseImmediately(false);
@@ -961,51 +975,102 @@ export default function Player() {
         yaw?: number,
         pitch?: number,
       ) => {
-        if (!playerState.inLibraryLobby) return { ok: false, reason: 'not-in-library' };
+        if (!playerState.inLibraryLobby) {
+          return { ok: false, status: 'failed' as const, reason: 'not-in-library' };
+        }
+        const trans = resolveLibraryFloorTransition(
+          floor,
+          x,
+          z,
+          yaw,
+          pitch,
+          AVATAR.radius,
+          AVATAR.height,
+        );
+        if (!trans.ok || trans.status === 'failed') {
+          return {
+            ok: false,
+            status: 'failed' as const,
+            reason: trans.reason ?? 'invalid-floor',
+          };
+        }
         seatActionsRef.current.forceClearSeat();
         keysRef.current.clear();
         playerInput.move.x = 0;
         playerInput.move.y = 0;
         playerInput.run = false;
         moveBlendRef.current = 0;
-        playerState.libraryFloor = floor;
-        const defaultSpawns: Record<number, { x: number; z: number; yaw: number }> = {
-          1: { x: 0, z: 2.4, yaw: 0 },
-          2: { x: 16.5, z: 0, yaw: Math.PI / 2 },
-          3: { x: 16.5, z: 0, yaw: Math.PI / 2 },
-          4: { x: -10.8, z: -18.5, yaw: 0 },
-          5: { x: -10.8, z: -18.5, yaw: 0 },
-          6: { x: -4.2, z: 5.5, yaw: -0.45 },
-          7: { x: 0, z: 13.2, yaw: 0 },
-          10: { x: 8.5, z: -0.6, yaw: -Math.PI / 2 },
-        };
-        const sp = defaultSpawns[floor] ?? defaultSpawns[1];
-        const nx = typeof x === 'number' ? x : sp.x;
-        const nz = typeof z === 'number' ? z : sp.z;
-        const resolved = resolveLibraryLobbyCollisions({ x: nx, z: nz }, AVATAR.radius, floor).pos;
-        posRef.current = resolved;
-        playerState.pos = { ...resolved };
-        const elev = computeLibraryElevation(resolved.x, resolved.z, floor, (floor - 1) * 4.5);
-        playerState.libraryY = elev.y;
-        const targetYaw = typeof yaw === 'number' ? yaw : sp.yaw;
-        yawRef.current = targetYaw;
-        playerState.cameraYaw = targetYaw;
-        facingRef.current = targetYaw + Math.PI;
+        const resolvedFloor = trans.location.floor;
+        playerState.libraryFloor = resolvedFloor;
+        playerState.libraryY = trans.location.y;
+        posRef.current = { x: trans.location.x, z: trans.location.z };
+        playerState.pos = { ...posRef.current };
+        yawRef.current = trans.yaw;
+        playerState.cameraYaw = trans.yaw;
+        facingRef.current = trans.yaw + Math.PI;
         playerState.facing = facingRef.current;
         if (typeof pitch === 'number') {
-          pitchRef.current = pitch;
-          playerState.cameraPitch = pitch;
+          pitchRef.current = trans.pitch;
+          playerState.cameraPitch = trans.pitch;
         }
         if (groupRef.current) {
-          groupRef.current.position.set(resolved.x, elev.y, resolved.z);
+          groupRef.current.position.set(trans.location.x, trans.location.y, trans.location.z);
           groupRef.current.rotation.y = facingRef.current;
         }
+        const nearDoor = findNearestLibraryDoorway(resolvedFloor, trans.location.x, trans.location.z);
+        playerState.librarySpatialDiag = {
+          block: trans.location.block,
+          floor: resolvedFloor,
+          surfaceId: trans.surfaceId,
+          grounded: trans.grounded,
+          lastCollisionId: trans.collisionIds[0] ?? null,
+          nearestDoorId: nearDoor ? nearDoor.id : null,
+        };
         syncCameraTransform();
-        window.dispatchEvent(new CustomEvent('bkhn:library-floor', { detail: { floor } }));
-        if (floor >= 1 && floor <= 5) {
-          window.dispatchEvent(new CustomEvent('bkhn:elevator-call', { detail: { floor } }));
+        window.dispatchEvent(new CustomEvent('bkhn:library-floor', { detail: { floor: resolvedFloor } }));
+        if (resolvedFloor >= 1 && resolvedFloor <= 5) {
+          window.dispatchEvent(new CustomEvent('bkhn:elevator-call', { detail: { floor: resolvedFloor } }));
         }
-        return { ok: true, floor, pos: { ...resolved }, y: elev.y };
+        return {
+          ok: true,
+          status: trans.status,
+          floor: resolvedFloor,
+          block: trans.location.block,
+          pos: { x: trans.location.x, z: trans.location.z },
+          y: trans.location.y,
+          clampedToSpawn: trans.clampedToSpawn,
+        };
+      },
+      getLibrarySpatialDiagnostics: (): LibrarySpatialDiagnostics => {
+        const floor = playerState.libraryFloor;
+        const block = getBlockForFloor(floor);
+        const px = posRef.current.x;
+        const py = playerState.libraryY;
+        const pz = posRef.current.z;
+        const loc = createLibraryLocation(floor, px, pz, py);
+        const ground = queryLibraryGround(loc);
+        const nearDoor = findNearestLibraryDoorway(floor, px, pz);
+        const nearSeat = findNearestLibrarySeat({ x: px, z: pz }, 100, 1);
+        return {
+          block,
+          floor,
+          pos: { x: px, y: py, z: pz },
+          grounded: ground.supported,
+          surfaceId: playerState.librarySpatialDiag.surfaceId ?? ground.surfaceId,
+          lastCollisionId: playerState.librarySpatialDiag.lastCollisionId,
+          collisionIds: playerState.librarySpatialDiag.lastCollisionId
+            ? [playerState.librarySpatialDiag.lastCollisionId]
+            : [],
+          nearestDoorId: nearDoor ? nearDoor.id : null,
+          nearestSeatId: nearSeat ? nearSeat.seat.seatId : null,
+          nearestSeatFloor: 1,
+          activeSeatId: seatingStateRef.current.seatId,
+          debugCollisionOverlay: playerState.libraryCollisionDebug,
+        };
+      },
+      setLibraryCollisionDebug: (enabled: boolean) => {
+        playerState.libraryCollisionDebug = Boolean(enabled);
+        return playerState.libraryCollisionDebug;
       },
       sitAtSeat: (seatId: string) => seatActionsRef.current.sitAtSeat(seatId),
       standUp: () => seatActionsRef.current.standUp(),
@@ -1033,10 +1098,13 @@ export default function Player() {
         };
       },
     };
-    (window as unknown as { __bkhn?: unknown }).__bkhn = hook;
+    (window as unknown as { __bkhn?: unknown; __bkhnLibrarySpatialDebug?: () => LibrarySpatialDiagnostics }).__bkhn = hook;
+    (window as unknown as { __bkhnLibrarySpatialDebug?: () => LibrarySpatialDiagnostics }).__bkhnLibrarySpatialDebug =
+      hook.getLibrarySpatialDiagnostics;
     return () => {
       if ((window as unknown as { __bkhn?: unknown }).__bkhn === hook) {
         delete (window as unknown as { __bkhn?: unknown }).__bkhn;
+        delete (window as unknown as { __bkhnLibrarySpatialDebug?: unknown }).__bkhnLibrarySpatialDebug;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1327,34 +1395,70 @@ export default function Player() {
       const subDt = walkDelta / walkSubSteps;
       let curPos: Vec2 = { x: prevX, z: prevZ };
       let hit: string | null = null;
-      for (let s = 0; s < walkSubSteps; s++) {
-        const next: Vec2 = {
-          x: curPos.x + dirX * speed * subDt,
-          z: curPos.z + dirZ * speed * subDt,
+      if (playerState.inLibraryLobby) {
+        const curLoc = createLibraryLocation(
+          playerState.libraryFloor,
+          prevX,
+          prevZ,
+          playerState.libraryY,
+        );
+        const desiredLoc = createLibraryLocation(
+          playerState.libraryFloor,
+          prevX + dirX * speed * walkDelta,
+          prevZ + dirZ * speed * walkDelta,
+          playerState.libraryY,
+        );
+        const moveRes = resolveLibraryMovement(curLoc, desiredLoc, AVATAR.radius, AVATAR.height);
+        curPos = { x: moveRes.position.x, z: moveRes.position.z };
+        hit = moveRes.hit;
+        playerState.libraryY = moveRes.position.y;
+        const nearDoor = findNearestLibraryDoorway(
+          moveRes.recommendedFloor,
+          moveRes.position.x,
+          moveRes.position.z,
+        );
+        playerState.librarySpatialDiag = {
+          block: moveRes.position.block,
+          floor: moveRes.recommendedFloor,
+          surfaceId: moveRes.surfaceId,
+          grounded: moveRes.grounded,
+          lastCollisionId: moveRes.collisionIds[0] ?? null,
+          nearestDoorId: nearDoor ? nearDoor.id : null,
         };
-        const res = playerState.inClassroom
-          ? resolveClassroomCollisions(next, AVATAR.radius)
-          : playerState.inLibraryLobby
-            ? resolveLibraryLobbyCollisions(next, AVATAR.radius, playerState.libraryFloor)
+        if (moveRes.recommendedFloor !== playerState.libraryFloor) {
+          playerState.libraryFloor = moveRes.recommendedFloor;
+          window.dispatchEvent(
+            new CustomEvent('bkhn:library-floor', { detail: { floor: moveRes.recommendedFloor } }),
+          );
+        }
+      } else {
+        for (let s = 0; s < walkSubSteps; s++) {
+          const next: Vec2 = {
+            x: curPos.x + dirX * speed * subDt,
+            z: curPos.z + dirZ * speed * subDt,
+          };
+          const res = playerState.inClassroom
+            ? resolveClassroomCollisions(next, AVATAR.radius)
             : resolveCollisions(next, AVATAR.radius);
-        curPos = res.pos;
-        if (res.hit) hit = res.hit;
-        // Chặn đi xuyên qua sinh viên đang đi bộ (AmbientLife) và người chơi khác (RemotePlayers) ngoài sân trường
-        if (!playerState.inClassroom && !playerState.inLibraryLobby) {
-          for (const wp of activeWalkingStudentPositions) {
-            const pushed = pushOutOfCircle(curPos.x, curPos.z, wp, 0.38, AVATAR.radius);
-            if (pushed) {
-              curPos = pushed;
-              if (!hit) hit = 'Sinh viên (NPC)';
+          curPos = res.pos;
+          if (res.hit) hit = res.hit;
+          // Chặn đi xuyên qua sinh viên đang đi bộ (AmbientLife) và người chơi khác (RemotePlayers) ngoài sân trường
+          if (!playerState.inClassroom && !playerState.inLibraryLobby) {
+            for (const wp of activeWalkingStudentPositions) {
+              const pushed = pushOutOfCircle(curPos.x, curPos.z, wp, 0.38, AVATAR.radius);
+              if (pushed) {
+                curPos = pushed;
+                if (!hit) hit = 'Sinh viên (NPC)';
+              }
             }
+            remoteRenderPos.forEach((rp) => {
+              const pushed = pushOutOfCircle(curPos.x, curPos.z, rp, 0.4, AVATAR.radius);
+              if (pushed) {
+                curPos = pushed;
+                if (!hit) hit = 'Sinh viên (MP)';
+              }
+            });
           }
-          remoteRenderPos.forEach((rp) => {
-            const pushed = pushOutOfCircle(curPos.x, curPos.z, rp, 0.4, AVATAR.radius);
-            if (pushed) {
-              curPos = pushed;
-              if (!hit) hit = 'Sinh viên (MP)';
-            }
-          });
         }
       }
       const pos = curPos;

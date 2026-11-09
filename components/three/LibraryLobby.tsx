@@ -27,7 +27,11 @@ import {
   type Floor10RooftopController,
   type Floors6To7Controller,
 } from '../../features/campus/buildings/library';
-import { LIBRARY_LOBBY } from '../../lib/campus';
+import {
+  LIBRARY_LOBBY,
+  getCollidersForFloor,
+  type LibraryFloor,
+} from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
 import { LabelPlane } from './TextPlate';
 
@@ -248,6 +252,8 @@ export default function LibraryLobby({
   const floor1AnchorsRef = useRef<THREE.Group>(null);
   const floor6InteractiveRef = useRef<THREE.Group>(null);
   const floor10InteractiveRef = useRef<THREE.Group>(null);
+  const debugOverlayRef = useRef<THREE.Group>(null);
+  const debugFloorRenderedRef = useRef<LibraryFloor | null>(null);
 
   useEffect(() => {
     const onPianoNote = (ev: Event) => {
@@ -277,12 +283,16 @@ export default function LibraryLobby({
       disposeObject3D(multiFloor.groupA);
       disposeObject3D(multiFloor.groupB);
       disposeObject3D(multiFloor.groupD);
+      if (debugOverlayRef.current) {
+        disposeObject3D(debugOverlayRef.current);
+      }
     };
   }, [binaryWall, multiFloor]);
 
   useFrame((state, rawDelta) => {
     const dt = Math.min(rawDelta, 0.05);
     const flr = playerState.libraryFloor;
+    const showFloor1 = flr === 1;
     const showBlockA = flr >= 1 && flr <= 5;
     const showBlockB = flr === 6 || flr === 7;
     const showBlockD = flr === 10;
@@ -290,18 +300,48 @@ export default function LibraryLobby({
     if (multiFloor.groupA.visible !== showBlockA) multiFloor.groupA.visible = showBlockA;
     if (multiFloor.groupB.visible !== showBlockB) multiFloor.groupB.visible = showBlockB;
     if (multiFloor.groupD.visible !== showBlockD) multiFloor.groupD.visible = showBlockD;
-    if (floor1AnchorsRef.current && floor1AnchorsRef.current.visible !== showBlockA) {
-      floor1AnchorsRef.current.visible = showBlockA;
+    if (floor1AnchorsRef.current && floor1AnchorsRef.current.visible !== showFloor1) {
+      floor1AnchorsRef.current.visible = showFloor1;
     }
-    if (floor6InteractiveRef.current && floor6InteractiveRef.current.visible !== showBlockB) {
-      floor6InteractiveRef.current.visible = showBlockB;
+    if (floor6InteractiveRef.current && floor6InteractiveRef.current.visible !== (flr === 6)) {
+      floor6InteractiveRef.current.visible = flr === 6;
     }
     if (floor10InteractiveRef.current && floor10InteractiveRef.current.visible !== showBlockD) {
       floor10InteractiveRef.current.visible = showBlockD;
     }
 
+    if (debugOverlayRef.current) {
+      const wantDebug = Boolean(playerState.libraryCollisionDebug);
+      if (debugOverlayRef.current.visible !== wantDebug) {
+        debugOverlayRef.current.visible = wantDebug;
+      }
+      if (wantDebug && debugFloorRenderedRef.current !== flr) {
+        debugFloorRenderedRef.current = flr;
+        disposeObject3D(debugOverlayRef.current);
+        debugOverlayRef.current.clear();
+        const wireMat = new THREE.MeshBasicMaterial({
+          color: 0x22d3ee,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.55,
+        });
+        for (const col of getCollidersForFloor(flr)) {
+          const w = col.bounds.maxX - col.bounds.minX;
+          const h = Math.min(2.2, col.bounds.maxY - col.bounds.minY);
+          const d = col.bounds.maxZ - col.bounds.minZ;
+          const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wireMat);
+          m.position.set(
+            (col.bounds.minX + col.bounds.maxX) / 2,
+            col.bounds.minY + h / 2,
+            (col.bounds.minZ + col.bounds.maxZ) / 2,
+          );
+          debugOverlayRef.current.add(m);
+        }
+      }
+    }
+
     if (showBlockA) {
-      multiFloor.ctrlA.update(dt, playerState.pos.x, playerState.libraryY, playerState.pos.z);
+      multiFloor.ctrlA.update(dt, playerState.pos.x, playerState.libraryY, playerState.pos.z, flr);
     } else if (showBlockB) {
       multiFloor.ensureBlockB().update(dt);
     } else if (showBlockD) {
@@ -594,6 +634,9 @@ export default function LibraryLobby({
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
       </group>
+
+      {/* Lớp hiển thị lưới va chạm phát triển (tắt mặc định trong production) */}
+      <group ref={debugOverlayRef} visible={false} name="library-collision-debug" />
     </group>
   );
 }

@@ -9,6 +9,11 @@
 
 import * as THREE from 'three';
 import { canvasTex, mulberry32 } from './procedural-helpers';
+import {
+  createLibraryLocation,
+  queryLibraryGround,
+  resolveLibraryMovement,
+} from '../../world-data/library-spatial';
 
 export interface Floor10RooftopController {
   telescopePos: { x: number; y: number; z: number };
@@ -333,15 +338,14 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
   }
 
   const groundY = (x: number, z: number) => {
-    if (Math.hypot(x - SD.x, z - SD.z) < SD.r) return SD.y;
-    return 0;
+    const support = queryLibraryGround(createLibraryLocation(10, x, z, 0));
+    return support.supported && support.elevation !== null ? support.elevation : 0;
   };
 
   const blockedAt = (x: number, z: number) => {
-    if (x < X0 + 0.45 || x > X1 - 0.45 || z < Z0 + 0.45 || z > Z1 - 0.45) return true;
-    if (x > KS.x0 - 0.35 && x < KS.x1 + 0.35 && z > KS.z0 - 0.35 && z < KS.z1 + 0.35) return true;
-    if (Math.hypot(x - (SD.x + 0.6), z - (SD.z + 0.2)) < 0.75) return true;
-    return false;
+    const loc = createLibraryLocation(10, x, z, 0);
+    const res = resolveLibraryMovement(loc, loc);
+    return res.blocked || !res.grounded;
   };
 
   const update = (dt: number, elapsed: number) => {

@@ -7,6 +7,12 @@
 
 import * as THREE from 'three';
 import { canvasTex, mulberry32 } from './procedural-helpers';
+import {
+  BLOCK_B_DIMS,
+  createLibraryLocation,
+  queryLibraryGround,
+  resolveLibraryMovement,
+} from '../../world-data/library-spatial';
 
 export interface PianoKey3D {
   midi: number;
@@ -553,18 +559,18 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
   };
 
   const groundY = (x: number, z: number, level: 6 | 7) => {
-    if (level === 7) return MZ;
-    return inside(x, z, PR) ? PY : 0;
+    const support = queryLibraryGround(createLibraryLocation(level, x, z, level === 7 ? BLOCK_B_DIMS.MZ : 0));
+    return support.supported && support.elevation !== null
+      ? support.elevation
+      : level === 7
+        ? BLOCK_B_DIMS.MZ
+        : 0;
   };
 
   const blockedAt = (x: number, z: number, level: 6 | 7) => {
-    if (!inside(x, z, WR - 0.45)) return true;
-    if (level === 7 && inside(x, z, FR + 0.35)) return true;
-    if (level === 6) {
-      if (Math.hypot(x - DESK.x, z - DESK.z) < 2.45) return true;
-      if (Math.hypot(x - PIANO.x, z - PIANO.z) < 1.35) return true;
-    }
-    return false;
+    const loc = createLibraryLocation(level, x, z, level === 7 ? BLOCK_B_DIMS.MZ : 0);
+    const res = resolveLibraryMovement(loc, loc);
+    return res.blocked || !res.grounded;
   };
 
   const update = (dt: number) => {

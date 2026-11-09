@@ -16,6 +16,7 @@ import {
   type NamedCollider,
 } from './colliders';
 import { ROADS } from './roads';
+import { resolveCanonicalLibraryPointCollision } from './library-spatial';
 
 /** Điểm có nằm trong lòng Hồ Tiền (hình chữ nhật) không. `margin` thu hẹp hồ
  *  lại — dùng bán kính avatar khi kiểm tra va chạm. */
@@ -161,65 +162,7 @@ export function resolveLibraryLobbyCollisions(
   radius: number,
   floor = 1,
 ): { pos: Vec2; hit: string | null } {
-  if (floor === 1) {
-    return resolveAabbCollisions(p, radius, LIBRARY_LOBBY.bounds, LIBRARY_LOBBY_COLLIDERS);
-  }
-  if (floor === 10) {
-    const rooftopBounds = { minX: -21.9, maxX: 21.9, minZ: -8.1, maxZ: 8.1 };
-    const rooftopColliders = [
-      { name: 'Nhà kỹ thuật thang máy T10', box: { minX: -5.4, maxX: 5.4, minZ: -8.4, maxZ: -3.2 } },
-      { name: 'Kính thiên văn T10', box: { minX: 14.8, maxX: 16.0, minZ: 0.0, maxZ: 1.2 } },
-    ];
-    return resolveAabbCollisions(p, radius, rooftopBounds, rooftopColliders);
-  }
-  if (floor === 6 || floor === 7) {
-    const f67Bounds = { minX: -23.4, maxX: 23.4, minZ: -15.9, maxZ: 15.9 };
-    const f67Colliders =
-      floor === 6
-        ? [
-            { name: 'Quầy triển lãm tròn T6', box: { minX: -2.2, maxX: 2.2, minZ: -13.4, maxZ: -9.0 } },
-            { name: 'Đại dương cầm Grand Piano T6', box: { minX: -7.6, maxX: -5.6, minZ: 2.6, maxZ: 4.6 } },
-          ]
-        : [];
-    const res = resolveAabbCollisions(p, radius, f67Bounds, f67Colliders);
-    // Trên tầng 7 (tầng lửng), chặn người chơi đi lọt vào giếng trời thông tầng ở giữa (FR = 11.0)
-    if (floor === 7) {
-      const cx = Math.max(-7.5, Math.min(7.5, res.pos.x));
-      const dx = res.pos.x - cx;
-      const d = Math.hypot(dx, res.pos.z);
-      const minR = 11.1 + radius;
-      if (d < minR) {
-        const len = d || 1;
-        res.pos = {
-          x: cx + (dx / len) * minR,
-          z: (res.pos.z / len) * minR,
-        };
-        res.hit = 'Lan can thông tầng T7';
-      }
-    }
-    return res;
-  }
-  // Tầng 2, 3, 4, 5: chặn giếng trời thông tầng hình sân vận động ở giữa (L = 6.5, FR = 7.5)
-  const fBounds =
-    floor === 4 || floor === 5
-      ? LIBRARY_LOBBY.bounds
-      : { minX: -19.0, maxX: 19.0, minZ: -12.5, maxZ: 12.5 };
-  const res = resolveAabbCollisions(p, radius, fBounds, []);
-  const cx = Math.max(-6.5, Math.min(6.5, res.pos.x));
-  const dx = res.pos.x - cx;
-  const d = Math.hypot(dx, res.pos.z);
-  const minR = 7.55 + radius;
-  // Chừa 2 lối mở cầu thang xoắn ở hai đầu Đông/Tây của Tầng 2 (|z| < 2.6, |x| > 13.5)
-  const onStairLanding = floor === 2 && Math.abs(res.pos.z) < 2.8 && Math.abs(res.pos.x) > 13.2;
-  if (d < minR && !onStairLanding) {
-    const len = d || 1;
-    res.pos = {
-      x: cx + (dx / len) * minR,
-      z: (res.pos.z / len) * minR,
-    };
-    res.hit = `Lan can thông tầng T${floor}`;
-  }
-  return res;
+  return resolveCanonicalLibraryPointCollision(p, radius, floor);
 }
 
 /** Va chạm cho XE MÁY: resolveCollisions (nhà/hồ/bờ kè/biên/thân cây/NPC).
