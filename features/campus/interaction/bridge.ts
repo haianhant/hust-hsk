@@ -81,6 +81,8 @@ export interface InteractableDetectionInput {
   stepId?: string;
   seated?: boolean;
   seatId?: string | null;
+  occupiedByOtherSeatIds?: ReadonlySet<string>;
+  pendingSeatId?: string | null;
 }
 
 export interface DetectedInteractable {
@@ -111,6 +113,8 @@ export function findNearestInteractable(
     anyQuestDone,
     stepId,
     seated = false,
+    occupiedByOtherSeatIds,
+    pendingSeatId = null,
   } = input;
   const dist = (x: number, z: number) => Math.hypot(pos.x - x, pos.z - z);
 
@@ -120,8 +124,21 @@ export function findNearestInteractable(
     }
     const nearestSeat = findNearestLibrarySeat(pos, SEAT_INTERACT_RADIUS);
     if (nearestSeat) {
+      const sid = nearestSeat.seat.seatId;
+      if (pendingSeatId === sid) {
+        return {
+          id: `seat:${sid}`,
+          label: '⏳ Đang giữ chỗ...',
+        };
+      }
+      if (occupiedByOtherSeatIds?.has(sid)) {
+        return {
+          id: `seat:${sid}`,
+          label: '🔒 Ghế đang có người ngồi — hãy chọn ghế khác',
+        };
+      }
       return {
-        id: `seat:${nearestSeat.seat.seatId}`,
+        id: `seat:${sid}`,
         label: 'E — Ngồi học',
       };
     }

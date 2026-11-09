@@ -5,10 +5,10 @@
 - **Module ID:** `avatar.rig`
 - **Purpose:** Cung cấp mô hình nhân vật sinh viên 3D tỉ lệ chuẩn (`~1.707m`), liền mạch ở mọi góc nhìn cho người chơi chính (`Player.tsx`), người chơi trực tuyến (`RemotePlayers.tsx`), NPC cốt truyện (`Npc.tsx`) và quần thể sinh viên sân trường (`AmbientLife.tsx`).
 - **Source Paths:**
-  - Hình học & Khung xương: `Figure` và `FigureJoints` trong [`components/three/StudentAvatar.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/StudentAvatar.tsx)
-  - Giao diện Tùy biến 3D: [`components/ui/CharacterCreatorModal.tsx`](file:///home/bao/Hust3D/hust-hsk/components/ui/CharacterCreatorModal.tsx)
+  - Hình học & Khung xương: `Figure` và `FigureJoints` trong [`components/three/StudentAvatar.tsx`](../../../components/three/StudentAvatar.tsx)
+  - Giao diện Tùy biến 3D: [`components/ui/CharacterCreatorModal.tsx`](../../../components/ui/CharacterCreatorModal.tsx)
 - **Reference Assets:**
-  - [`docs/huong-dan-phat-trien.md`](file:///home/bao/Hust3D/hust-hsk/docs/huong-dan-phat-trien.md) §2 và bộ ảnh [`tham-khao/dong-phuc/`](file:///home/bao/Hust3D/hust-hsk/tham-khao/dong-phuc/README.md).
+  - [`docs/huong-dan-phat-trien.md`](../../huong-dan-phat-trien.md) §2 và bộ ảnh [`tham-khao/dong-phuc/`](../../../tham-khao/dong-phuc/README.md).
 - **Current Implementation Status:** **Production**.
 - **Invariants (Ràng buộc Bất biến):**
   1. **Cấu trúc Phân cấp Khớp (`FigureJoints`):**
@@ -30,7 +30,7 @@
 - **Module ID:** `avatar.animation`
 - **Purpose:** Điều khiển chuyển động chân thực theo thời gian thực cho các trạng thái đứng nghỉ (`idle`), đi bộ (`walk`), chạy (`run`), ngồi lái xe máy (`riding`) và ngồi ghế đá đọc sách (`SittingStudent`).
 - **Source Paths:**
-  - Hàm cập nhật khớp: `applyWalkPose`, `applyRidePose` và vòng lặp `useFrame` trong [`components/three/StudentAvatar.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/StudentAvatar.tsx), [`components/three/Player.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/Player.tsx), [`components/three/RemotePlayers.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/RemotePlayers.tsx)
+  - Hàm cập nhật khớp: `applyWalkPose`, `applyRidePose` và vòng lặp `useFrame` trong [`components/three/StudentAvatar.tsx`](../../../components/three/StudentAvatar.tsx), [`components/three/Player.tsx`](../../../components/three/Player.tsx), [`components/three/RemotePlayers.tsx`](../../../components/three/RemotePlayers.tsx)
 - **Current Implementation Status:** **Production**.
 - **Invariants:**
   - **Đồng bộ pha bước chân:** Chân trái (`legL`) và tay phải (`armR`) cùng pha tiến/lùi; chân phải (`legR`) và tay trái (`armL`) ngược pha; khớp gối (`kneeL`/`kneeR`) chỉ gập về phía sau trong nửa chu kỳ nhấc chân (`Math.max(0, ...)`), tuyệt đối không bẻ ngược gối về phía trước.
@@ -44,7 +44,7 @@
 - **Module ID:** `avatar.nameplate`
 - **Purpose:** Hiển thị tên sinh viên (tiếng Việt có dấu, mặc định `"Sinh viên"`) và mã số sinh viên `"Tên (MSSV)"` rõ nét phía trên đầu nhân vật.
 - **Source Paths:**
-  - [`components/three/Player.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/Player.tsx), [`components/three/RemotePlayers.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/RemotePlayers.tsx), [`components/three/Npc.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/Npc.tsx)
+  - [`components/three/Player.tsx`](../../../components/three/Player.tsx), [`components/three/RemotePlayers.tsx`](../../../components/three/RemotePlayers.tsx), [`components/three/Npc.tsx`](../../../components/three/Npc.tsx)
 - **Current Implementation Status:** **Production**.
 - **Invariants:**
   - Sử dụng `<Billboard>` đặt **bên ngoài** group chịu phép xoay `facing` của nhân vật để bảng tên luôn hướng thẳng về phía camera, không bao giờ bị đọc ngược và không bị rung giật theo nhịp nhún bước chân (`body.position.y`).

@@ -44,6 +44,8 @@ const {
   reconcileSeatingWithEnvironment,
   reconcilePersistedSessionSeat,
   releaseActiveSeatSafely,
+  evaluateReconnectSeatAction,
+  evaluateReclaimOutcome,
 } = require('../features/campus/interaction/seat-interaction.ts');
 const { playerState } = require('../lib/playerState.ts');
 const {
@@ -529,3 +531,271 @@ test('PR8 Review Fix (13) releaseActiveSeatSafely handles both mounted Player an
     null,
   );
 });
+
+test('PR9 (14) findNearestInteractable distinguishes available, pending, and occupied-by-other library seats', () => {
+  const approach1 = { x: -2.4, z: 0.54 }; // near tqb-1f-t1-s1
+  const base = {
+    pos: approach1,
+    inClassroom: false,
+    inLibraryLobby: true,
+    seated: false,
+    seatId: null,
+    bikeRiding: false,
+    bikeSpeed: 0,
+    bikePos: { x: 999, z: 999 },
+    questActive: false,
+    questDoneBefore: false,
+    anyQuestDone: false,
+  };
+
+  assert.deepEqual(findNearestInteractable(base), {
+    id: 'seat:tqb-1f-t1-s1',
+    label: 'E — Ngồi học',
+  });
+
+  assert.deepEqual(
+    findNearestInteractable({
+      ...base,
+      pendingSeatId: 'tqb-1f-t1-s1',
+    }),
+    {
+      id: 'seat:tqb-1f-t1-s1',
+      label: '⏳ Đang giữ chỗ...',
+    },
+  );
+
+  assert.deepEqual(
+    findNearestInteractable({
+      ...base,
+      occupiedByOtherSeatIds: new Set(['tqb-1f-t1-s1']),
+    }),
+    {
+      id: 'seat:tqb-1f-t1-s1',
+      label: '🔒 Ghế đang có người ngồi — hãy chọn ghế khác',
+    },
+  );
+});
+
+test('PR9 Review Fix 5 — Reclaim Failure After Reconnect stands avatar up safely and clears local + StudySession seat', () => {
+  // 1. Client A is seated locally at tqb-1f-t1-s1 inside LibraryLobby with an active StudySession
+  playerState.inLibraryLobby = true;
+  playerState.inClassroom = false;
+  playerState.seated = true;
+  playerState.seatId = 'tqb-1f-t1-s1';
+  playerState.pos = { x: -2.4, z: 1.2 };
+
+  let session = startStudySession(createInitialStudySession(), {
+    nowMs: 1_700_000_000_000,
+    subjectTag: 'Giải tích 1',
+    studyRoomId: 'library-lobby',
+    seatId: 'tqb-1f-t1-s1',
+  });
+
+  // Case A: Snapshot confirms selfId still owns tqb-1f-t1-s1 -> preserve-confirmed
+  const snapConfirmed = evaluateReconnectSeatAction({
+    inLibraryLobby: true,
+    localSeated: true,
+    localSeatId: 'tqb-1f-t1-s1',
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {
+      'tqb-1f-t1-s1': {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: 1000,
+      },
+    },
+  });
+  assert.deepEqual(snapConfirmed, {
+    action: 'preserve-confirmed',
+    seatId: 'tqb-1f-t1-s1',
+  });
+
+  // Case B: Snapshot shows tqb-1f-t1-s1 is already owned by Student B -> stand-up-occupied immediately
+  const snapOccupied = evaluateReconnectSeatAction({
+    inLibraryLobby: true,
+    localSeated: true,
+    localSeatId: 'tqb-1f-t1-s1',
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {
+      'tqb-1f-t1-s1': {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-b',
+        occupantName: 'Trần Thị B',
+        occupiedAtMs: 1200,
+      },
+    },
+  });
+  assert.deepEqual(snapOccupied, {
+    action: 'stand-up-occupied',
+    seatId: 'tqb-1f-t1-s1',
+    occupiedByName: 'Trần Thị B',
+  });
+
+  // Case C: Snapshot shows tqb-1f-t1-s1 is free -> reclaim-available
+  const snapAvailable = evaluateReconnectSeatAction({
+    inLibraryLobby: true,
+    localSeated: true,
+    localSeatId: 'tqb-1f-t1-s1',
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {},
+  });
+  assert.deepEqual(snapAvailable, {
+    action: 'reclaim-available',
+    seatId: 'tqb-1f-t1-s1',
+  });
+
+  // Client A attempts to reclaim tqb-1f-t1-s1, but Student B claims it first -> requestSeatClaim resolves ok: false ('already-occupied')
+  const reclaimRejectedDecision = evaluateReclaimOutcome({
+    targetSeatId: 'tqb-1f-t1-s1',
+    outcome: {
+      ok: false,
+      seatId: 'tqb-1f-t1-s1',
+      reason: 'already-occupied',
+      occupiedBy: 'student-b',
+      occupiedByName: 'Trần Thị B',
+      requestId: 'req-reclaim-1',
+    },
+    currentlyInLibraryLobby: playerState.inLibraryLobby,
+    currentlySeated: playerState.seated,
+    currentLocalSeatId: playerState.seatId,
+  });
+  assert.equal(reclaimRejectedDecision.action, 'stand-up-failed');
+  assert.equal(reclaimRejectedDecision.seatId, 'tqb-1f-t1-s1');
+  assert.equal(reclaimRejectedDecision.reason, 'already-occupied');
+  assert.equal(reclaimRejectedDecision.occupiedByName, 'Trần Thị B');
+
+  // Reconcile local state on stand-up-failed: stand up safely + unbind StudySession seat
+  const releaseRes = releaseActiveSeatSafely({
+    driver: undefined,
+    fallbackSeatId: reclaimRejectedDecision.seatId,
+  });
+  session = bindSessionSeat(session, 'library-lobby', null);
+
+  assert.equal(releaseRes.released, true);
+  assert.equal(playerState.seated, false, 'Player must no longer be seated locally');
+  assert.equal(playerState.seatId, null, 'playerState.seatId must be cleared');
+  assert.deepEqual(playerState.pos, { x: -2.4, z: 0.54 }, 'Avatar must stand at collision-safe spot');
+  assert.equal(resolveLibraryLobbyCollisions(playerState.pos, AVATAR.radius).hit, null);
+  assert.equal(session.seatId, null, 'StudySession seatId must be cleared');
+
+  // Case D: Reclaim times out -> also triggers stand-up-failed
+  const reclaimTimeoutDecision = evaluateReclaimOutcome({
+    targetSeatId: 'tqb-1f-t1-s1',
+    outcome: {
+      ok: false,
+      seatId: 'tqb-1f-t1-s1',
+      reason: 'timeout',
+      requestId: 'req-reclaim-timeout',
+    },
+    currentlyInLibraryLobby: true,
+    currentlySeated: true,
+    currentLocalSeatId: 'tqb-1f-t1-s1',
+  });
+  assert.equal(reclaimTimeoutDecision.action, 'stand-up-failed');
+  assert.equal(reclaimTimeoutDecision.reason, 'timeout');
+
+  // Case E: Reclaim succeeds AFTER player already stood up or left lobby -> release-server-seat
+  const reclaimLateSuccessAfterStand = evaluateReclaimOutcome({
+    targetSeatId: 'tqb-1f-t1-s1',
+    outcome: {
+      ok: true,
+      requestId: 'req-reclaim-ok',
+      occupancy: {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: 2000,
+      },
+    },
+    currentlyInLibraryLobby: true,
+    currentlySeated: false,
+    currentLocalSeatId: null,
+  });
+  assert.deepEqual(reclaimLateSuccessAfterStand, {
+    action: 'release-server-seat',
+    seatId: 'tqb-1f-t1-s1',
+  });
+
+  // Case F: Local player has already stood up (or exited LibraryLobby) while server snapshot still holds a seat for selfId -> release-stale-server-seat
+  const staleSeatWhileStanding = evaluateReconnectSeatAction({
+    inLibraryLobby: true,
+    localSeated: false,
+    localSeatId: null,
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {
+      'tqb-1f-t1-s1': {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: 1000,
+      },
+    },
+  });
+  assert.deepEqual(staleSeatWhileStanding, {
+    action: 'release-stale-server-seat',
+    seatId: 'tqb-1f-t1-s1',
+  });
+
+  const staleSeatOutsideLobby = evaluateReconnectSeatAction({
+    inLibraryLobby: false,
+    localSeated: false,
+    localSeatId: null,
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {
+      'tqb-1f-t2-s2': {
+        seatId: 'tqb-1f-t2-s2',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: 1000,
+      },
+    },
+  });
+  assert.deepEqual(staleSeatOutsideLobby, {
+    action: 'release-stale-server-seat',
+    seatId: 'tqb-1f-t2-s2',
+  });
+
+  // Case G: Local player switched to tqb-1f-t1-s2 while offline, server still holds tqb-1f-t1-s1, and tqb-1f-t1-s2 is occupied by B
+  const crossSeatOccupied = evaluateReconnectSeatAction({
+    inLibraryLobby: true,
+    localSeated: true,
+    localSeatId: 'tqb-1f-t1-s2',
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {
+      'tqb-1f-t1-s1': {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: 1000,
+      },
+      'tqb-1f-t1-s2': {
+        seatId: 'tqb-1f-t1-s2',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-b',
+        occupantName: 'Trần Thị B',
+        occupiedAtMs: 1100,
+      },
+    },
+  });
+  assert.deepEqual(crossSeatOccupied, {
+    action: 'stand-up-occupied',
+    seatId: 'tqb-1f-t1-s2',
+    occupiedByName: 'Trần Thị B',
+    releaseServerSeatId: 'tqb-1f-t1-s1',
+  });
+});
+
+

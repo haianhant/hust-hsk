@@ -28,7 +28,7 @@ flowchart LR
   PR8 --> PR9["PR9: Authoritative Multiplayer Seating"]
 ```
 
-### A. Đã Triển khai & Kiểm thử (`PR1` – `PR8`)
+### A. Đã Triển khai & Kiểm thử (`PR1` – `PR9`)
 
 1. **`PR1 — Foundation, Safety & Shared Contracts` (Đã hoàn thành):**
    - Hợp nhất biên thế giới `BOUNDS` và hằng số không gian tại [`shared/constants/world.ts`](../../shared/constants/world.ts).
@@ -56,17 +56,20 @@ flowchart LR
    - Tích hợp nút **`🍅 Tự học`** vào [`features/campus/ui/CampusHud.tsx`](../../features/campus/ui/CampusHud.tsx) và bảng điều khiển [`features/study/ui/StudyPanel.tsx`](../../features/study/ui/StudyPanel.tsx).
    - Hỗ trợ đồng hồ Pomodoro wall-clock (`25/5` và `50/10`, Start, Pause, Resume, Skip phase, Reset), danh sách việc cần làm ([`StudyTaskList.tsx`](../../features/study/study-session/StudyTaskList.tsx)), thống kê phiên học ([`StudySessionSummary.tsx`](../../features/study/ui/StudySessionSummary.tsx)) và lưu trữ đơn nguồn tại `bkhn_study_session_v1`.
    - Tích hợp 3 chế độ Focus Mode (`Normal 3D`, `Minimal HUD`, `Zen 2D` qua [`FocusModeView.tsx`](../../features/study/focus-mode/FocusModeView.tsx)), bảo toàn vị trí nhân vật và kết nối Multiplayer khi chuyển qua lại giữa `Zen 2D` và `3D Campus`.
-   - Kiểm chứng bằng unit test [`test/study-social-contracts.test.cjs`](../../test/study-social-contracts.test.cjs) (`12/12` PASS) và smoke test trình duyệt [`test/study-mvp-smoke.cjs`](../../test/study-mvp-smoke.cjs) (`9/9` bước PASS).
+   - Kiểm chứng bằng unit test [`test/study-social-contracts.test.cjs`](../../test/study-social-contracts.test.cjs) và smoke test trình duyệt [`test/study-mvp-smoke.cjs`](../../test/study-mvp-smoke.cjs).
 
 8. **`PR8 — Interactive 3D Library Seating & Study Experience` (Đã hoàn thành & Kiểm thử trình duyệt):**
    - Dựng khu bàn đọc tự học 3D tại Sảnh tầng 1 Thư viện Tạ Quang Bửu ([`features/campus/buildings/library/`](../../features/campus/buildings/library/index.ts): `LibraryStudyArea.tsx`, `StudyTable.tsx`, `StudyChair.tsx`, `StudySeatMarkers.tsx`) với 2 bàn đọc gỗ sồi + 4 ghế ngồi học (`tqb-1f-t1-s1..s2`, `tqb-1f-t2-s1..s2`) khớp chuẩn với `STUDY_SEATS` và `LIBRARY_LOBBY_COLLIDERS`.
    - Xây dựng máy trạng thái ngồi học cục bộ ([`features/campus/interaction/seat-interaction.ts`](../../features/campus/interaction/seat-interaction.ts)), kiểm tra khoảng cách tiếp cận (`SEAT_INTERACT_RADIUS = 1.65m`), tư thế ngồi học 3D (`computeSeatedPoseTargets`, `SEATED_GROUP_Y_OFFSET = -0.35m`), điểm đứng dậy an toàn không va chạm (`computeSafeStandUpPosition`), và tự động gắn `studyRoomId: 'library-lobby'` + `seatId` vào `StudySessionState`.
-   - Kiểm chứng bằng unit test [`test/ui-gameplay.test.cjs`](../../test/ui-gameplay.test.cjs) (`7/7` PASS) và smoke test trình duyệt [`test/library-seating-smoke.cjs`](../../test/library-seating-smoke.cjs) (`14/14` bước PASS).
+   - Kiểm chứng bằng unit test [`test/ui-gameplay.test.cjs`](../../test/ui-gameplay.test.cjs) và smoke test trình duyệt [`test/library-seating-smoke.cjs`](../../test/library-seating-smoke.cjs).
+
+9. **`PR9 — Server-Authoritative Seat Occupancy & Live Study Presence` (Đã hoàn thành & Kiểm thử 2 trình duyệt):**
+   - Tích hợp sổ ghế có thẩm quyền server (`seatRegistry`), trạng thái tự học công khai (`presences`) và các bản tin `study:claim-seat`, `study:release-seat`, `study:presence`, `study:room-snapshot`, `study:seat-claimed`, `study:seat-released`, `study:seat-rejected` vào [`worker/src/room.ts`](../../worker/src/room.ts) và [`lib/multiplayer.ts`](../../lib/multiplayer.ts), bảo toàn đầy đủ qua WebSocket Hibernation.
+   - Hiển thị sinh viên khác đang ngồi học trong Sảnh tầng 1 Thư viện qua [`features/social/rooms/RemoteStudySeats.tsx`](../../features/social/rooms/RemoteStudySeats.tsx) kèm huy hiệu `<Billboard>` trạng thái Pomodoro (`🍅 Đang tự học` / `☕ Giải lao`) và danh sách phòng tự học trực tuyến trên [`StudyPanel.tsx`](../../features/study/ui/StudyPanel.tsx), đảm bảo không rò rỉ MSSV hay công việc cá nhân.
+   - Kiểm chứng bằng [`test/mp-protocol.cjs`](../../test/mp-protocol.cjs) (`22/22` kịch bản PASS) và smoke test 2 trình duyệt [`test/pr9-multiplayer-study-smoke.cjs`](../../test/pr9-multiplayer-study-smoke.cjs) (`12/12` bước PASS).
 
 ---
 
-### B. Kế hoạch Cho Giai đoạn Tiếp theo (`PR9`)
+### B. Định hướng Mở rộng Tiếp theo (Sau `PR9`)
 
-- **`PR9 — Authoritative Multiplayer Seat Occupancy & Shared Study Presence` (Chưa triển khai trong `PR8`):**
-  - Tích hợp `seat-manager.ts` và các bản tin `study:claim-seat`, `study:release-seat`, `study:presence`, `study:room-snapshot` vào Cloudflare Worker (`worker/src/room.ts`) và client `lib/multiplayer.ts`.
-  - Đồng bộ trạng thái chiếm chỗ ghế thời gian thực giữa nhiều người chơi trong cùng phòng, hiển thị nhân vật người chơi khác ngồi tại ghế và huy hiệu trạng thái học tập (`🍅 Đang tự học · ...`) trên đỉnh đầu nhân vật, đồng thời mở rộng bàn ghế tương tác sang Phòng học C1 và Hồ Tiền.
+- Mở rộng không gian bàn ghế tự học tương tác 3D sang Phòng đọc tầng 3 Thư viện (`library-reading-3f`), Phòng học Tòa C1 (`c1-classroom-101`) và Nhà thủy tạ Hồ Tiền (`tien-lake-pavilion`).

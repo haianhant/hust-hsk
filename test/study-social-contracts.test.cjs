@@ -19,10 +19,15 @@ const assert = require('node:assert/strict');
 const {
   STUDY_ROOMS,
   STUDY_SEATS,
+  PR9_SUPPORTED_STUDY_ROOM_ZONES,
   DEFAULT_POMODORO_CONFIG,
   isValidStudyRoomZone,
+  isSupportedStudyRoomZone,
   isValidSeatId,
+  isSupportedLibrarySeatId,
   getSeatsForStudyRoom,
+  sanitizeRequestId,
+  sanitizeSeatOccupancy,
   sanitizePomodoroConfig,
   sanitizeStudyPresence,
 } = require('../shared/contracts/study.ts');
@@ -79,14 +84,18 @@ const {
 const {
   createSeatRegistry,
   claimSeat,
+  releaseSeat,
   releaseSeatByOccupant,
   getOccupantSeat,
+  updateOccupantMetaInSeatRegistry,
+  reconcileServerPresenceWithSeat,
   getStudyRoomAvailabilitySummary,
   restoreSeatRegistryFromAttachments,
 } = require('../features/social/rooms/seat-manager.ts');
 
 const {
   derivePlayerPresence,
+  isSamePublicPresence,
   formatPresenceBadge,
 } = require('../features/social/presence/presence.ts');
 
@@ -313,7 +322,7 @@ test('PR6 (5) Authoritative Seat Occupancy & DO Hibernation Recovery', () => {
       occupantId: 'student-b',
       occupantName: 'Trần Minh',
       occupantMssv: '20226011',
-      seatId: 'tqb-3f-t1-s1',
+      seatId: 'tqb-1f-t1-s1',
       occupiedAtMs: 5000,
       subjectTag: 'Giải tích 1',
     },
@@ -321,11 +330,11 @@ test('PR6 (5) Authoritative Seat Occupancy & DO Hibernation Recovery', () => {
       occupantId: 'student-c',
       occupantName: 'Lê Lan',
       occupantMssv: '20226012',
-      seatId: 'tqb-3f-t1-s1', // duplicate claim later in time -> ignored deterministically
+      seatId: 'tqb-1f-t1-s1', // duplicate claim later in time -> ignored deterministically
       occupiedAtMs: 6000,
     },
   ]);
-  assert.equal(getOccupantSeat(restored, 'student-b').seatId, 'tqb-3f-t1-s1');
+  assert.equal(getOccupantSeat(restored, 'student-b').seatId, 'tqb-1f-t1-s1');
   assert.equal(getOccupantSeat(restored, 'student-c'), null);
 });
 
@@ -620,5 +629,1033 @@ test('PR7 Review Fix (12) Canonical HSK Lesson IDs & Friendly Labels', () => {
   const label = formatHskLessonLabel('hsk4-shang-l5');
   assert.ok(label && label.startsWith('HSK 4 · Bài 5 — '));
 });
+
+test('PR9 (1-10) Server-Authoritative Seat Manager — claims, zone restriction, auth, conflicts, switch, release & hibernation recovery', () => {
+  assert.deepEqual(PR9_SUPPORTED_STUDY_ROOM_ZONES, ['library-lobby']);
+  assert.equal(isSupportedStudyRoomZone('library-lobby'), true);
+  assert.equal(isSupportedStudyRoomZone('library-reading-3f'), false);
+  assert.equal(isSupportedLibrarySeatId('tqb-1f-t1-s1'), true);
+  assert.equal(isSupportedLibrarySeatId('tqb-3f-t1-s1'), false);
+
+  const registry = createSeatRegistry();
+
+  // 1. Claiming a free library lobby seat succeeds
+  const claimA = claimSeat(registry, {
+    seatId: 'tqb-1f-t1-s1',
+    occupantId: 'student-a',
+    occupantName: 'Nguyễn Văn A',
+    occupantMssv: '20226001',
+    color: '#1F3A5F',
+    gender: 'male',
+    outfit: 'windbreaker-hust',
+    hairStyle: 'short',
+    glasses: true,
+    backpack: true,
+    subjectTag: 'Giải tích 1',
+    nowMs: 1000,
+  });
+  assert.equal(claimA.ok, true);
+  assert.equal(claimA.occupancy.seatId, 'tqb-1f-t1-s1');
+  assert.equal(claimA.occupancy.occupantId, 'student-a');
+  assert.equal(claimA.occupancy.occupantName, 'Nguyễn Văn A');
+  assert.equal(claimA.occupancy.outfit, 'windbreaker-hust');
+  assert.equal(claimA.releasedPreviousSeatId, null);
+  // 16. Public seat occupancy omits occupantMssv
+  assert.equal('occupantMssv' in claimA.occupancy, false);
+
+  // 2. Claiming an occupied library lobby seat returns already-occupied with occupant info
+  const claimBConflict = claimSeat(registry, {
+    seatId: 'tqb-1f-t1-s1',
+    occupantId: 'student-b',
+    occupantName: 'Trần Thị B',
+    nowMs: 1200,
+  });
+  assert.equal(claimBConflict.ok, false);
+  assert.equal(claimBConflict.reason, 'already-occupied');
+  assert.equal(claimBConflict.occupiedBy, 'student-a');
+  assert.equal(claimBConflict.occupiedByName, 'Nguyễn Văn A');
+
+  // 3. Claiming an unknown seat ID returns invalid-seat
+  const claimInvalid = claimSeat(registry, {
+    seatId: 'non-existent-seat',
+    occupantId: 'student-b',
+    occupantName: 'Trần Thị B',
+  });
+  assert.equal(claimInvalid.ok, false);
+  assert.equal(claimInvalid.reason, 'invalid-seat');
+
+  // 4. Claiming a non-lobby zone seat returns unsupported-zone during PR9
+  const claimUnsupportedZone = claimSeat(registry, {
+    seatId: 'tqb-3f-t1-s1',
+    occupantId: 'student-b',
+    occupantName: 'Trần Thị B',
+  });
+  assert.equal(claimUnsupportedZone.ok, false);
+  assert.equal(claimUnsupportedZone.reason, 'unsupported-zone');
+
+  // 5. Claiming without valid player identity returns not-authenticated
+  const claimNoAuth = claimSeat(registry, {
+    seatId: 'tqb-1f-t1-s2',
+    occupantId: '   ',
+    occupantName: 'Khách',
+  });
+  assert.equal(claimNoAuth.ok, false);
+  assert.equal(claimNoAuth.reason, 'not-authenticated');
+
+  // 6. Claiming a second seat by the same occupant atomically releases the first seat
+  const switchA = claimSeat(registry, {
+    seatId: 'tqb-1f-t2-s1',
+    occupantId: 'student-a',
+    occupantName: 'Nguyễn Văn A',
+    subjectTag: 'Đại số tuyến tính',
+    nowMs: 1500,
+  });
+  assert.equal(switchA.ok, true);
+  assert.equal(switchA.releasedPreviousSeatId, 'tqb-1f-t1-s1');
+  assert.equal(getOccupantSeat(registry, 'student-a').seatId, 'tqb-1f-t2-s1');
+
+  // Now Student B can claim tqb-1f-t1-s1
+  const claimBOk = claimSeat(registry, {
+    seatId: 'tqb-1f-t1-s1',
+    occupantId: 'student-b',
+    occupantName: 'Trần Thị B',
+    nowMs: 1600,
+  });
+  assert.equal(claimBOk.ok, true);
+
+  // 8. Releasing a seat owned by another player fails without mutating that seat
+  const releaseWrongOwner = releaseSeat(registry, 'tqb-1f-t2-s1', 'student-b');
+  assert.equal(releaseWrongOwner.ok, false);
+  assert.equal(getOccupantSeat(registry, 'student-a').seatId, 'tqb-1f-t2-s1');
+
+  // 7. Releasing a seat owned by the caller succeeds
+  const releaseB = releaseSeat(registry, 'tqb-1f-t1-s1', 'student-b');
+  assert.equal(releaseB.ok, true);
+  assert.equal(releaseB.released.seatId, 'tqb-1f-t1-s1');
+  assert.equal(getOccupantSeat(registry, 'student-b'), null);
+
+  // 9. Releasing all seats by occupant on disconnect clears only that occupant's seat
+  claimSeat(registry, {
+    seatId: 'tqb-1f-t1-s2',
+    occupantId: 'student-b',
+    occupantName: 'Trần Thị B',
+    nowMs: 1800,
+  });
+  const disconnectA = releaseSeatByOccupant(registry, 'student-a');
+  assert.equal(disconnectA.seatId, 'tqb-1f-t2-s1');
+  assert.equal(getOccupantSeat(registry, 'student-a'), null);
+  assert.equal(getOccupantSeat(registry, 'student-b').seatId, 'tqb-1f-t1-s2');
+
+  // 10. Restoring seat registry from socket attachments preserves earliest claim and ignores duplicate/unsupported claims deterministically
+  const restored = restoreSeatRegistryFromAttachments([
+    {
+      occupantId: 'student-late',
+      occupantName: 'Muộn',
+      seatId: 'tqb-1f-t1-s1',
+      occupiedAtMs: 9000,
+    },
+    {
+      occupantId: 'student-early',
+      occupantName: 'Sớm',
+      seatId: 'tqb-1f-t1-s1',
+      occupiedAtMs: 4000,
+      subjectTag: 'HSK 4',
+    },
+    {
+      occupantId: 'student-unsupported',
+      occupantName: 'Tầng 3',
+      seatId: 'tqb-3f-t1-s1', // unsupported zone in PR9 -> ignored
+      occupiedAtMs: 1000,
+    },
+  ]);
+  assert.equal(getOccupantSeat(restored, 'student-early').seatId, 'tqb-1f-t1-s1');
+  assert.equal(getOccupantSeat(restored, 'student-late'), null);
+  assert.equal(getOccupantSeat(restored, 'student-unsupported'), null);
+});
+
+test('PR9 (11-16) Live Presence Derivation, Server Seat Reconciliation, Sanitization & Privacy Boundaries', () => {
+  const t0 = 1_700_000_000_000;
+  let session = startStudySession(createInitialStudySession(), {
+    nowMs: t0,
+    subjectTag: 'HSK 4 · Bài 12',
+    studyRoomId: 'library-lobby',
+    seatId: 'tqb-1f-t1-s1',
+  });
+  session = addStudyTask(session, 'Private task — must never leak', t0 + 10);
+
+  // 11. Presence derivation produces 'studying' during active focus while seated
+  const focusSession = {
+    ...session,
+    pomodoro: startPomodoro(session.pomodoro, t0, 'focus'),
+  };
+  const presStudying = derivePlayerPresence({
+    session: focusSession,
+    inClassroom: false,
+    inLibraryLobby: true,
+    activeSeatId: 'tqb-1f-t1-s1',
+    nowMs: t0 + 1000,
+  });
+  assert.equal(presStudying.status, 'studying');
+  assert.equal(presStudying.seatId, 'tqb-1f-t1-s1');
+  assert.equal(presStudying.studyRoomId, 'library-lobby');
+  assert.equal(presStudying.pomodoroPhase, 'focus');
+
+  // 12. Presence derivation produces 'break' during short/long break while seated
+  const breakSession = {
+    ...session,
+    pomodoro: startPomodoro(session.pomodoro, t0, 'short-break'),
+  };
+  const presBreak = derivePlayerPresence({
+    session: breakSession,
+    inClassroom: false,
+    inLibraryLobby: true,
+    activeSeatId: 'tqb-1f-t1-s1',
+    nowMs: t0 + 2000,
+  });
+  assert.equal(presBreak.status, 'break');
+  assert.equal(presBreak.seatId, 'tqb-1f-t1-s1');
+  assert.equal(formatPresenceBadge(presBreak), '☕ Giải lao · HSK 4 · Bài 12');
+
+  // 13. Presence derivation produces 'idle' when seated with paused/idle timer
+  const pausedSession = {
+    ...focusSession,
+    pomodoro: pausePomodoro(focusSession.pomodoro, t0 + 3000),
+  };
+  const presIdleSeated = derivePlayerPresence({
+    session: pausedSession,
+    inClassroom: false,
+    inLibraryLobby: true,
+    activeSeatId: 'tqb-1f-t1-s1',
+    nowMs: t0 + 3000,
+  });
+  assert.equal(presIdleSeated.status, 'idle');
+  assert.equal(presIdleSeated.seatId, 'tqb-1f-t1-s1');
+
+  // 14. Presence derivation produces 'exploring' when standing / outside study flow
+  const presExploring = derivePlayerPresence({
+    session: createInitialStudySession(),
+    inClassroom: false,
+    inLibraryLobby: false,
+    activeSeatId: null,
+    nowMs: t0 + 4000,
+  });
+  assert.equal(presExploring.status, 'exploring');
+  assert.equal(presExploring.seatId, null);
+  assert.equal(presExploring.studyRoomId, null);
+
+  // Deduplication helper ignores updatedAtMs and detects real state changes
+  assert.equal(
+    isSamePublicPresence(presStudying, { ...presStudying, updatedAtMs: t0 + 99999 }),
+    true,
+  );
+  assert.equal(isSamePublicPresence(presStudying, presBreak), false);
+
+  // Server presence reconciliation overrides spoofed seatId with actual SeatRegistry ownership
+  const registry = createSeatRegistry();
+  claimSeat(registry, {
+    seatId: 'tqb-1f-t2-s2',
+    occupantId: 'student-a',
+    occupantName: 'Nguyễn Văn A',
+    nowMs: t0,
+  });
+  const reconciledOwned = reconcileServerPresenceWithSeat(
+    {
+      status: 'studying',
+      seatId: 'tqb-1f-t1-s1', // spoofed seatId!
+      studyRoomId: 'c1-classroom-101',
+      pomodoroPhase: 'focus',
+      subjectTag: 'Vật lý đại cương',
+    },
+    getOccupantSeat(registry, 'student-a'),
+    t0,
+  );
+  assert.equal(reconciledOwned.seatId, 'tqb-1f-t2-s2');
+  assert.equal(reconciledOwned.studyRoomId, 'library-lobby');
+
+  const reconciledUnseated = reconcileServerPresenceWithSeat(
+    {
+      status: 'studying',
+      seatId: 'tqb-1f-t2-s2', // spoofed seatId while standing!
+      studyRoomId: 'library-lobby',
+      pomodoroPhase: 'focus',
+    },
+    getOccupantSeat(registry, 'student-b'),
+    t0,
+  );
+  assert.equal(reconciledUnseated.seatId, null);
+
+  // 15 & 16. Sanitization strips oversized subjectTag, invalid enums, and private fields
+  const longSubject = 'A'.repeat(120);
+  const sanitizedPres = sanitizeStudyPresence({
+    status: 'invalid-status',
+    studyRoomId: 'invalid-room',
+    seatId: 'invalid-seat',
+    pomodoroPhase: 'invalid-phase',
+    subjectTag: longSubject,
+    tasks: [{ id: 'secret' }],
+    occupantMssv: '20226001',
+  });
+  assert.equal(sanitizedPres.status, 'exploring');
+  assert.equal(sanitizedPres.studyRoomId, null);
+  assert.equal(sanitizedPres.seatId, null);
+  assert.equal(sanitizedPres.pomodoroPhase, 'idle');
+  assert.equal(sanitizedPres.subjectTag.length, 36);
+  assert.equal('tasks' in sanitizedPres, false);
+  assert.equal('occupantMssv' in sanitizedPres, false);
+
+  const sanitizedOcc = sanitizeSeatOccupancy({
+    seatId: 'tqb-1f-t1-s1',
+    studyRoomId: 'library-lobby',
+    occupantId: 'student-a',
+    occupantName: 'Nguyễn Văn A',
+    occupantMssv: '20226001',
+    occupiedAtMs: t0,
+    subjectTag: longSubject,
+  });
+  assert.ok(sanitizedOcc);
+  assert.equal(sanitizedOcc.subjectTag.length, 36);
+  assert.equal('occupantMssv' in sanitizedOcc, false);
+  assert.equal(sanitizeRequestId('req-123_ABC'), 'req-123_ABC');
+  assert.equal(sanitizeRequestId('invalid space!'), undefined);
+});
+
+const {
+  TRUSTED_PROD_WS_URL,
+  validateWsEndpointUrl,
+  resolveWsUrl,
+  MultiplayerClient,
+} = require('../lib/multiplayer.ts');
+
+test('PR9 Review Fix 1 — Untrusted WebSocket Endpoint Override Prevention & URL Validation', () => {
+  // 1. Production ignores mpWs query override and uses configured trusted WS endpoint
+  const prodWithMpWs = resolveWsUrl({
+    configuredUrl: TRUSTED_PROD_WS_URL,
+    nodeEnv: 'production',
+    pageHostname: 'hust-hsk.pages.dev',
+    pageSearch: '?room=hsk-2&mpWs=wss%3A%2F%2Fattacker.example%2Fws',
+    testOverrideUrl: 'ws://127.0.0.1:8799/ws', // ignored on non-loopback prod page
+  });
+  assert.equal(prodWithMpWs.ok, true);
+  assert.equal(prodWithMpWs.source, 'configured');
+  assert.equal(
+    prodWithMpWs.url,
+    'wss://hust-hsk-rooms.hunganhz179.workers.dev/ws?room=hsk-2',
+  );
+
+  // 2. Production uses configured WebSocket endpoint cleanly
+  const prodClean = resolveWsUrl({
+    configuredUrl: TRUSTED_PROD_WS_URL,
+    nodeEnv: 'production',
+    pageHostname: 'hust-hsk.pages.dev',
+    pageSearch: '',
+  });
+  assert.equal(prodClean.ok, true);
+  assert.equal(prodClean.url, TRUSTED_PROD_WS_URL);
+
+  // 3. Local development / localhost test override works ONLY for trusted local URLs
+  const localLoopbackOverride = resolveWsUrl({
+    configuredUrl: TRUSTED_PROD_WS_URL,
+    nodeEnv: 'production',
+    pageHostname: '127.0.0.1',
+    pageSearch: '?room=hsk-1&mpWs=wss%3A%2F%2Fevil.example%2Fws',
+    testOverrideUrl: 'ws://127.0.0.1:8799/ws',
+  });
+  assert.equal(localLoopbackOverride.ok, true);
+  assert.equal(localLoopbackOverride.source, 'test-override');
+  assert.equal(localLoopbackOverride.url, 'ws://127.0.0.1:8799/ws?room=hsk-1');
+
+  // Non-loopback testOverrideUrl on localhost is rejected
+  const localEvilOverride = resolveWsUrl({
+    configuredUrl: TRUSTED_PROD_WS_URL,
+    nodeEnv: 'development',
+    pageHostname: '127.0.0.1',
+    pageSearch: '?room=hsk-1',
+    testOverrideUrl: 'wss://evil.example/ws',
+  });
+  assert.equal(localEvilOverride.ok, false);
+
+  // 4. Malformed URLs, invalid protocols, plaintext non-loopback, and credentials are rejected safely
+  assert.equal(validateWsEndpointUrl('').ok, false);
+  assert.equal(validateWsEndpointUrl('not a valid url').ok, false);
+  assert.equal(validateWsEndpointUrl('https://hust-hsk-rooms.hunganhz179.workers.dev/ws').ok, false);
+  assert.equal(validateWsEndpointUrl('javascript:alert(1)').ok, false);
+  assert.equal(
+    validateWsEndpointUrl('ws://hust-hsk-rooms.hunganhz179.workers.dev/ws').ok,
+    false,
+    'Plaintext ws:// on non-loopback host must be rejected',
+  );
+  assert.equal(
+    validateWsEndpointUrl('wss://user:pass@hust-hsk-rooms.hunganhz179.workers.dev/ws').ok,
+    false,
+    'Embedded credentials in WS URL must be rejected',
+  );
+  assert.equal(
+    validateWsEndpointUrl('wss://attacker.example/ws').ok,
+    false,
+    'Untrusted external host must be rejected',
+  );
+
+  // 5. Client never sends join/sessionId/mssv when URL validation fails
+  let socketCreated = false;
+  const blockedClient = new MultiplayerClient({
+    resolveUrlFn: () => ({ ok: false, url: null, reason: 'Blocked untrusted endpoint' }),
+    webSocketFactory: () => {
+      socketCreated = true;
+      throw new Error('Should not create WebSocket');
+    },
+  });
+  blockedClient.connect('sess-secret', 'Nguyễn Hải Anh', '20226001');
+  assert.equal(socketCreated, false, 'Must not instantiate WebSocket when URL is rejected');
+  assert.equal(blockedClient.getSnapshot().status, 'offline');
+});
+
+function createTestMultiplayerHarness() {
+  let nowMs = 1_700_000_000_000;
+  let nextTimerId = 1;
+  const timers = new Map();
+  const sockets = [];
+
+  const setTimeoutFn = (fn, ms) => {
+    const id = nextTimerId++;
+    timers.set(id, { fn, runAt: nowMs + ms });
+    return id;
+  };
+  const clearTimeoutFn = (id) => {
+    timers.delete(id);
+  };
+  const advanceTime = (deltaMs) => {
+    nowMs += deltaMs;
+    while (true) {
+      let dueId = null;
+      let dueTimer = null;
+      for (const [id, t] of timers.entries()) {
+        if (t.runAt <= nowMs && (!dueTimer || t.runAt < dueTimer.runAt)) {
+          dueId = id;
+          dueTimer = t;
+        }
+      }
+      if (dueId === null) break;
+      timers.delete(dueId);
+      dueTimer.fn();
+    }
+  };
+
+  const webSocketFactory = (url) => {
+    const sent = [];
+    const sock = {
+      url,
+      readyState: 0, // CONNECTING
+      sent,
+      onopen: null,
+      onmessage: null,
+      onerror: null,
+      onclose: null,
+      send(raw) {
+        sent.push(JSON.parse(String(raw)));
+      },
+      close() {
+        this.readyState = 3; // CLOSED
+        if (typeof this.onclose === 'function') {
+          this.onclose({ code: 1000 });
+        }
+      },
+      serverOpen(selfId = 'student-a', roomId = 'hsk-1') {
+        this.readyState = 1; // OPEN
+        if (typeof this.onopen === 'function') this.onopen({});
+        this.serverSend({
+          type: 'welcome',
+          id: selfId,
+          roomId,
+          count: 1,
+          players: [{ id: selfId, name: 'Nguyễn Văn A', x: 0, z: 0, facing: 0, state: 'idle' }],
+        });
+        this.serverSend({
+          type: 'study:room-snapshot',
+          roomId,
+          revision: 1,
+          seats: [],
+          presences: {},
+        });
+      },
+      serverSend(msg) {
+        if (typeof this.onmessage === 'function') {
+          this.onmessage({ data: JSON.stringify(msg) });
+        }
+      },
+    };
+    sockets.push(sock);
+    return sock;
+  };
+
+  const client = new MultiplayerClient({
+    webSocketFactory,
+    setTimeoutFn,
+    clearTimeoutFn,
+    nowFn: () => nowMs,
+    claimTimeoutMs: 4000,
+    resolveUrlFn: () => ({
+      ok: true,
+      url: 'ws://127.0.0.1:8799/ws?room=hsk-1',
+      source: 'test-override',
+    }),
+  });
+
+  return {
+    client,
+    sockets,
+    advanceTime,
+    getNow: () => nowMs,
+  };
+}
+
+test('PR9 Review Fix 2 — Deterministic Seat Claim Lifecycle, Timeout/Cancellation & Late ACK Orphan Release', async () => {
+  // 1. Claim ACK arrives before timeout -> confirmed
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('student-a', 'Nguyễn Văn A', '20226001');
+    const ws = h.sockets[0];
+    ws.serverOpen('student-a');
+
+    const claimPromise = h.client.requestSeatClaim('tqb-1f-t1-s1', {
+      subjectTag: 'Giải tích 1',
+      pomodoroPhase: 'focus',
+    });
+    assert.equal(h.client.getSnapshot().seatClaimState, 'requesting');
+    const reqMsg = ws.sent.find((m) => m.type === 'study:claim-seat');
+    assert.ok(reqMsg);
+
+    ws.serverSend({
+      type: 'study:seat-claimed',
+      revision: 2,
+      requestId: reqMsg.requestId,
+      occupancy: {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow(),
+        subjectTag: 'Giải tích 1',
+      },
+    });
+
+    const outcome = await claimPromise;
+    assert.equal(outcome.ok, true);
+    assert.equal(h.client.getSnapshot().mySeatId, 'tqb-1f-t1-s1');
+    assert.equal(h.client.getSnapshot().seatClaimState, 'confirmed');
+  }
+
+  // 2. Claim is rejected -> rejected, mySeatId remains null
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('student-a', 'Nguyễn Văn A', '20226001');
+    const ws = h.sockets[0];
+    ws.serverOpen('student-a');
+
+    const claimPromise = h.client.requestSeatClaim('tqb-1f-t1-s1');
+    const reqMsg = ws.sent.find((m) => m.type === 'study:claim-seat');
+    ws.serverSend({
+      type: 'study:seat-rejected',
+      revision: 2,
+      seatId: 'tqb-1f-t1-s1',
+      reason: 'already-occupied',
+      occupiedBy: 'student-b',
+      occupiedByName: 'Trần Thị B',
+      requestId: reqMsg.requestId,
+    });
+
+    const outcome = await claimPromise;
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.reason, 'already-occupied');
+    assert.equal(h.client.getSnapshot().mySeatId, null);
+    assert.equal(h.client.getSnapshot().seatClaimState, 'rejected');
+  }
+
+  // 3. Claim times out, then delayed ACK arrives -> client does NOT accept seat locally AND sends study:release-seat
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('student-a', 'Nguyễn Văn A', '20226001');
+    const ws = h.sockets[0];
+    ws.serverOpen('student-a');
+
+    const claimPromise = h.client.requestSeatClaim('tqb-1f-t1-s1');
+    const reqMsg = ws.sent.find((m) => m.type === 'study:claim-seat');
+
+    // Advance past 4000ms timeout
+    h.advanceTime(4100);
+    const outcome = await claimPromise;
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.reason, 'timeout');
+    assert.equal(h.client.getSnapshot().mySeatId, null);
+    assert.equal(h.client.getSnapshot().seatClaimState, 'timed-out');
+
+    // Now delayed study:seat-claimed arrives from server
+    ws.sent.length = 0;
+    ws.serverSend({
+      type: 'study:seat-claimed',
+      revision: 2,
+      requestId: reqMsg.requestId,
+      occupancy: {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow(),
+      },
+    });
+
+    // Client must NOT transition to confirmed or set mySeatId; it must send study:release-seat
+    assert.equal(h.client.getSnapshot().mySeatId, null);
+    assert.notEqual(h.client.getSnapshot().seatClaimState, 'confirmed');
+    const releaseMsg = ws.sent.find(
+      (m) => m.type === 'study:release-seat' && m.seatId === 'tqb-1f-t1-s1',
+    );
+    assert.ok(releaseMsg, 'Client must immediately send study:release-seat for timed-out late ACK');
+
+    // Server broadcasts study:seat-released -> seat is free for another player
+    ws.serverSend({
+      type: 'study:seat-released',
+      revision: 3,
+      seatId: 'tqb-1f-t1-s1',
+      occupantId: 'student-a',
+      reason: 'stand-up',
+    });
+    assert.equal(h.client.getSnapshot().seatClaimState, 'idle');
+    assert.equal(h.client.getSnapshot().seatMap['tqb-1f-t1-s1'], undefined);
+
+    // 7. Released seat can now be claimed by another player
+    ws.serverSend({
+      type: 'study:seat-claimed',
+      revision: 4,
+      occupancy: {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-b',
+        occupantName: 'Trần Thị B',
+        occupiedAtMs: h.getNow(),
+      },
+    });
+    assert.equal(h.client.getSnapshot().seatMap['tqb-1f-t1-s1'].occupantId, 'student-b');
+  }
+
+  // 4. Claim is cancelled (player stands up / cancels), then delayed ACK arrives -> auto-released
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('student-a', 'Nguyễn Văn A', '20226001');
+    const ws = h.sockets[0];
+    ws.serverOpen('student-a');
+
+    const claimPromise = h.client.requestSeatClaim('tqb-1f-t1-s2');
+    const reqMsg = ws.sent.find((m) => m.type === 'study:claim-seat');
+
+    h.client.cancelPendingSeatClaim('Player walked away');
+    const outcome = await claimPromise;
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.reason, 'cancelled');
+    assert.equal(h.client.getSnapshot().seatClaimState, 'cancelled');
+
+    ws.sent.length = 0;
+    ws.serverSend({
+      type: 'study:seat-claimed',
+      revision: 2,
+      requestId: reqMsg.requestId,
+      occupancy: {
+        seatId: 'tqb-1f-t1-s2',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow(),
+      },
+    });
+    assert.equal(h.client.getSnapshot().mySeatId, null);
+    assert.ok(
+      ws.sent.some((m) => m.type === 'study:release-seat' && m.seatId === 'tqb-1f-t1-s2'),
+      'Cancelled claim whose ACK arrives late must send study:release-seat',
+    );
+  }
+
+  // 5 & 6. WebSocket disconnects during a claim, and stale ACK after reconnect is rejected
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('student-a', 'Nguyễn Văn A', '20226001');
+    const ws1 = h.sockets[0];
+    ws1.serverOpen('student-a');
+
+    const claimPromise = h.client.requestSeatClaim('tqb-1f-t2-s1');
+    const staleReqMsg = ws1.sent.find((m) => m.type === 'study:claim-seat');
+
+    // Socket closes mid-claim
+    ws1.close();
+    const outcome = await claimPromise;
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.reason, 'offline');
+    assert.equal(h.client.getSnapshot().mySeatId, null);
+
+    // Reconnect timer opens ws2
+    h.advanceTime(1500);
+    assert.equal(h.sockets.length, 2);
+    const ws2 = h.sockets[1];
+    ws2.serverOpen('student-a');
+
+    // Stale ACK from older connection arrives on ws2 -> must not be accepted locally and must trigger release
+    ws2.sent.length = 0;
+    ws2.serverSend({
+      type: 'study:seat-claimed',
+      revision: 2,
+      requestId: staleReqMsg.requestId,
+      occupancy: {
+        seatId: 'tqb-1f-t2-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow(),
+      },
+    });
+    assert.equal(h.client.getSnapshot().mySeatId, null);
+    assert.ok(
+      ws2.sent.some((m) => m.type === 'study:release-seat' && m.seatId === 'tqb-1f-t2-s1'),
+      'Stale ACK after reconnect must be released on server',
+    );
+  }
+});
+
+test('PR9 Review Fix 3 — Concurrent / Superseded Seat Claim Requests & Out-of-Order Server ACKs', async () => {
+  // 1. Claim A then Claim B -> Server accepts A, Server accepts B -> Client ends seated on B
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('student-a', 'Nguyễn Văn A', '20226001');
+    const ws = h.sockets[0];
+    ws.serverOpen('student-a');
+
+    const promiseA = h.client.requestSeatClaim('tqb-1f-t1-s1');
+    const promiseB = h.client.requestSeatClaim('tqb-1f-t1-s2');
+
+    // Promise A must settle immediately as cancelled when superseded by B
+    const outA = await promiseA;
+    assert.equal(outA.ok, false);
+    assert.equal(outA.reason, 'cancelled');
+    assert.equal(outA.seatId, 'tqb-1f-t1-s1');
+
+    const claimMsgs = ws.sent.filter((m) => m.type === 'study:claim-seat');
+    assert.equal(claimMsgs.length, 2);
+    const [reqA, reqB] = claimMsgs;
+
+    // Server accepts A first (while B is still pending)
+    ws.serverSend({
+      type: 'study:seat-claimed',
+      revision: 2,
+      requestId: reqA.requestId,
+      occupancy: {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow(),
+      },
+    });
+    // Promise B must STILL be pending (not resolved with A!)
+    assert.equal(h.client.getSnapshot().seatClaimState, 'requesting');
+    assert.equal(h.client.getSnapshot().mySeatId, null);
+
+    // Server accepts B (atomically switching from A to B)
+    ws.serverSend({
+      type: 'study:seat-released',
+      revision: 3,
+      seatId: 'tqb-1f-t1-s1',
+      occupantId: 'student-a',
+      reason: 'switched-seat',
+    });
+    ws.serverSend({
+      type: 'study:seat-claimed',
+      revision: 3,
+      requestId: reqB.requestId,
+      releasedSeatId: 'tqb-1f-t1-s1',
+      occupancy: {
+        seatId: 'tqb-1f-t1-s2',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow(),
+      },
+    });
+
+    const outB = await promiseB;
+    assert.equal(outB.ok, true);
+    assert.equal(outB.occupancy.seatId, 'tqb-1f-t1-s2');
+    assert.equal(h.client.getSnapshot().mySeatId, 'tqb-1f-t1-s2');
+    assert.equal(h.client.getSnapshot().seatClaimState, 'confirmed');
+  }
+
+  // 2. Claim A then Claim B -> Server accepts A, Server rejects B -> Client releases A (zero ghost seat!)
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('student-a', 'Nguyễn Văn A', '20226001');
+    const ws = h.sockets[0];
+    ws.serverOpen('student-a');
+
+    const promiseA = h.client.requestSeatClaim('tqb-1f-t1-s1');
+    const promiseB = h.client.requestSeatClaim('tqb-1f-t1-s2');
+
+    const outA = await promiseA;
+    assert.equal(outA.ok, false);
+    assert.equal(outA.reason, 'cancelled');
+
+    const [reqA, reqB] = ws.sent.filter((m) => m.type === 'study:claim-seat');
+
+    // Server accepts A
+    ws.serverSend({
+      type: 'study:seat-claimed',
+      revision: 2,
+      requestId: reqA.requestId,
+      occupancy: {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow(),
+      },
+    });
+
+    // Server rejects B (already occupied by someone else)
+    ws.sent.length = 0;
+    ws.serverSend({
+      type: 'study:seat-rejected',
+      revision: 2,
+      seatId: 'tqb-1f-t1-s2',
+      reason: 'already-occupied',
+      occupiedBy: 'student-b',
+      occupiedByName: 'Trần Thị B',
+      requestId: reqB.requestId,
+    });
+
+    const outB = await promiseB;
+    assert.equal(outB.ok, false);
+    assert.equal(outB.seatId, 'tqb-1f-t1-s2');
+    assert.equal(outB.reason, 'already-occupied');
+    assert.equal(h.client.getSnapshot().mySeatId, null);
+
+    // Client must automatically send study:release-seat for orphaned seat A ('tqb-1f-t1-s1')
+    assert.ok(
+      ws.sent.some((m) => m.type === 'study:release-seat' && m.seatId === 'tqb-1f-t1-s1'),
+      'Client must release superseded seat A when seat B is rejected',
+    );
+  }
+
+  // 3. Reversed ACK order: Claim A then Claim B -> Server accepts B first, then delayed/out-of-order A arrives
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('student-a', 'Nguyễn Văn A', '20226001');
+    const ws = h.sockets[0];
+    ws.serverOpen('student-a');
+
+    const promiseA = h.client.requestSeatClaim('tqb-1f-t1-s1');
+    const promiseB = h.client.requestSeatClaim('tqb-1f-t1-s2');
+    await promiseA;
+    const [reqA, reqB] = ws.sent.filter((m) => m.type === 'study:claim-seat');
+
+    // Server ACK for B (revision 3) arrives first
+    ws.serverSend({
+      type: 'study:seat-claimed',
+      revision: 3,
+      requestId: reqB.requestId,
+      occupancy: {
+        seatId: 'tqb-1f-t1-s2',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow(),
+      },
+    });
+    const outB = await promiseB;
+    assert.equal(outB.ok, true);
+    assert.equal(h.client.getSnapshot().mySeatId, 'tqb-1f-t1-s2');
+
+    // Out-of-order older ACK for A (revision 2 < 3) arrives late -> ignored completely, mySeatId remains B
+    ws.sent.length = 0;
+    ws.serverSend({
+      type: 'study:seat-claimed',
+      revision: 2,
+      requestId: reqA.requestId,
+      occupancy: {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow(),
+      },
+    });
+    assert.equal(h.client.getSnapshot().mySeatId, 'tqb-1f-t1-s2');
+    assert.equal(ws.sent.length, 0);
+  }
+
+  // 4. Duplicate in-flight claim for the same seat or rejectIfPending returns 'pending-request'
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('student-a', 'Nguyễn Văn A', '20226001');
+    const ws = h.sockets[0];
+    ws.serverOpen('student-a');
+
+    const firstClaim = h.client.requestSeatClaim('tqb-1f-t1-s1');
+    const duplicateSameSeat = await h.client.requestSeatClaim('tqb-1f-t1-s1');
+    assert.equal(duplicateSameSeat.ok, false);
+    assert.equal(duplicateSameSeat.reason, 'pending-request');
+
+    const rejectedWhileBusy = await h.client.requestSeatClaim('tqb-1f-t1-s2', {
+      rejectIfPending: true,
+    });
+    assert.equal(rejectedWhileBusy.ok, false);
+    assert.equal(rejectedWhileBusy.reason, 'pending-request');
+
+    // First claim is still active and resolves normally when ACK arrives
+    const reqMsg = ws.sent.find((m) => m.type === 'study:claim-seat');
+    ws.serverSend({
+      type: 'study:seat-claimed',
+      revision: 2,
+      requestId: reqMsg.requestId,
+      occupancy: {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow(),
+      },
+    });
+    const firstOut = await firstClaim;
+    assert.equal(firstOut.ok, true);
+  }
+});
+
+test('(28) Reconnect reconciliation when local player is already standing while server still holds seat + separated public ID vs CSPRNG reconnectToken & safe legacy migration', async () => {
+  const { derivePublicPlayerId } = require('../shared/contracts/multiplayer.ts');
+  const {
+    RECONNECT_TOKEN_KEY,
+    SESSION_KEY,
+    getReconnectToken,
+    getSessionId,
+    isValidReconnectToken,
+  } = require('../lib/identity.ts');
+
+  // 1. Verify safe migration from a previously broadcast legacy bkhn-session-id + F5 persistence
+  const storeMap = new Map([[SESSION_KEY, 's-legacy-broadcast-id-001']]);
+  const mockStorage = {
+    getItem: (k) => (storeMap.has(k) ? storeMap.get(k) : null),
+    setItem: (k, v) => storeMap.set(k, String(v)),
+  };
+
+  const token = getReconnectToken(mockStorage);
+  const publicId = getSessionId(mockStorage);
+  assert.equal(isValidReconnectToken(token), true, 'reconnectToken must be generated via CSPRNG');
+  assert.notEqual(token, 's-legacy-broadcast-id-001', 'Must never reuse legacy session ID as reconnectToken');
+  assert.equal(publicId, derivePublicPlayerId(token));
+  assert.notEqual(publicId, token);
+  assert.notEqual(publicId, 's-legacy-broadcast-id-001');
+  assert.notEqual(publicId, derivePublicPlayerId('s-legacy-broadcast-id-001'));
+  assert.equal(mockStorage.getItem(RECONNECT_TOKEN_KEY), token);
+  assert.equal(mockStorage.getItem(SESSION_KEY), publicId);
+
+  // F5 persistence: subsequent calls return the exact same CSPRNG token and derived publicId
+  assert.equal(getReconnectToken(mockStorage), token);
+  assert.equal(getSessionId(mockStorage), publicId);
+
+  // 2. Verify MultiplayerClient sends both public sessionId and secret reconnectToken on join
+  const h = createTestMultiplayerHarness();
+  h.client.connect(publicId, 'Nguyễn Văn A', '20226001', {}, token);
+  const ws = h.sockets[0];
+  ws.serverOpen(publicId);
+  const joinMsg = ws.sent.find((m) => m.type === 'join');
+  assert.ok(joinMsg, 'Client must send join message on socket open');
+  assert.equal(joinMsg.sessionId, publicId);
+  assert.equal(joinMsg.reconnectToken, token);
+
+  // 3. Player claims tqb-1f-t1-s1 while online -> confirmed
+  const claimP = h.client.requestSeatClaim('tqb-1f-t1-s1');
+  const claimReq = ws.sent.find((m) => m.type === 'study:claim-seat');
+  ws.serverSend({
+    type: 'study:seat-claimed',
+    revision: 2,
+    requestId: claimReq.requestId,
+    occupancy: {
+      seatId: 'tqb-1f-t1-s1',
+      studyRoomId: 'library-lobby',
+      occupantId: publicId,
+      occupantName: 'Nguyễn Văn A',
+      occupiedAtMs: h.getNow(),
+    },
+  });
+  const claimOut = await claimP;
+  assert.equal(claimOut.ok, true);
+  assert.equal(h.client.getSnapshot().mySeatId, 'tqb-1f-t1-s1');
+  assert.equal(h.client.getLocalSeatedSeatId(), 'tqb-1f-t1-s1');
+
+  // 4. Connection drops (offline), and while offline the player stands up locally
+  ws.close();
+  assert.equal(h.client.getSnapshot().status, 'offline');
+  h.client.setLocalSeatedSeatId(null);
+  h.client.requestSeatRelease('tqb-1f-t1-s1');
+  assert.equal(h.client.getLocalSeatedSeatId(), null);
+
+  // 5. Reconnect fires, and the server snapshot STILL holds 'tqb-1f-t1-s1' for `publicId`
+  h.advanceTime(1500);
+  const ws2 = h.sockets[1];
+  assert.ok(ws2, 'Reconnect must open a second socket');
+  ws2.readyState = 1;
+  ws2.onopen({});
+  ws2.serverSend({
+    type: 'welcome',
+    id: publicId,
+    roomId: 'hsk-1',
+    count: 1,
+    players: [{ id: publicId, name: 'Nguyễn Văn A', x: 0, z: 0, facing: 0, state: 'idle' }],
+  });
+  ws2.sent.length = 0;
+
+  ws2.serverSend({
+    type: 'study:room-snapshot',
+    roomId: 'hsk-1',
+    revision: 3,
+    seats: [
+      {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: publicId,
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow() - 5000,
+      },
+    ],
+    presences: {
+      [publicId]: {
+        status: 'studying',
+        studyRoomId: 'library-lobby',
+        seatId: 'tqb-1f-t1-s1',
+        pomodoroPhase: 'focus',
+        subjectTag: 'Giải tích 1',
+        updatedAtMs: h.getNow() - 5000,
+      },
+    },
+  });
+
+  // Because local player is already standing (`localDesiredSeatId === null`),
+  // MultiplayerClient must NOT adopt `tqb-1f-t1-s1` as `mySeatId` and must immediately
+  // send `study:release-seat` to the server to release the stale seat!
+  assert.equal(
+    h.client.getSnapshot().mySeatId,
+    null,
+    'Standing local client must not adopt stale server seat on reconnect snapshot',
+  );
+  assert.equal(
+    Boolean(h.client.getSnapshot().seatMap['tqb-1f-t1-s1']),
+    false,
+    'Stale server seat for selfId must be removed from local seatMap immediately',
+  );
+  const autoReleaseMsg = ws2.sent.find(
+    (m) => m.type === 'study:release-seat' && m.seatId === 'tqb-1f-t1-s1',
+  );
+  assert.ok(
+    autoReleaseMsg,
+    'Client must automatically send study:release-seat when server snapshot still holds a seat while local is standing',
+  );
+});
+
+
+
 
 

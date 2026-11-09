@@ -2,14 +2,14 @@
 
 ## 1. Tổng quan & Hợp đồng Dữ liệu
 
-Toàn bộ 10 mẫu đồng phục sinh viên Đại học Bách khoa Hà Nội được định danh bằng kiểu [`AvatarOutfitId`](file:///home/bao/Hust3D/hust-hsk/shared/contracts/multiplayer.ts#L16-L26) tại `shared/contracts/multiplayer.ts` và ánh xạ sang cấu hình hiển thị 3D qua hàm [`getOutfitVisualSpec`](file:///home/bao/Hust3D/hust-hsk/components/three/StudentAvatar.tsx) trong [`components/three/StudentAvatar.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/StudentAvatar.tsx).
+Toàn bộ 10 mẫu đồng phục sinh viên Đại học Bách khoa Hà Nội được định danh bằng kiểu [`AvatarOutfitId`](../../../shared/contracts/multiplayer.ts#L16-L26) tại `shared/contracts/multiplayer.ts` và ánh xạ sang cấu hình hiển thị 3D qua hàm [`getOutfitVisualSpec`](../../../components/three/StudentAvatar.tsx) trong [`components/three/StudentAvatar.tsx`](../../../components/three/StudentAvatar.tsx).
 
 - **Source Paths:**
-  - Hợp đồng ID & kiểm tra hợp lệ: [`shared/contracts/multiplayer.ts`](file:///home/bao/Hust3D/hust-hsk/shared/contracts/multiplayer.ts)
-  - Lưu trữ hồ sơ & danh mục UI: [`lib/identity.ts`](file:///home/bao/Hust3D/hust-hsk/lib/identity.ts), [`components/ui/CharacterCreatorModal.tsx`](file:///home/bao/Hust3D/hust-hsk/components/ui/CharacterCreatorModal.tsx)
-  - Dựng hình 3D & vật liệu: [`components/three/StudentAvatar.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/StudentAvatar.tsx)
+  - Hợp đồng ID & kiểm tra hợp lệ: [`shared/contracts/multiplayer.ts`](../../../shared/contracts/multiplayer.ts)
+  - Lưu trữ hồ sơ & danh mục UI: [`lib/identity.ts`](../../../lib/identity.ts), [`components/ui/CharacterCreatorModal.tsx`](../../../components/ui/CharacterCreatorModal.tsx)
+  - Dựng hình 3D & vật liệu: [`components/three/StudentAvatar.tsx`](../../../components/three/StudentAvatar.tsx)
 - **Reference Assets:**
-  - Bộ ảnh & danh mục 10 mẫu đồng phục tại [`tham-khao/dong-phuc/`](file:///home/bao/Hust3D/hust-hsk/tham-khao/dong-phuc/README.md) (`ao-khoac-gio-do-chi-tiet-01.jpg`, `polo-do-nam-01.jpg`, `polo-do-nam-nu-01.jpg` cùng 7 mô tả mẫu từ bộ sưu tập đồng phục ĐHBK Hà Nội).
+  - Bộ ảnh & danh mục 10 mẫu đồng phục tại [`tham-khao/dong-phuc/`](../../../tham-khao/dong-phuc/README.md) (`ao-khoac-gio-do-chi-tiet-01.jpg`, `polo-do-nam-01.jpg`, `polo-do-nam-nu-01.jpg` cùng 7 mô tả mẫu từ bộ sưu tập đồng phục ĐHBK Hà Nội).
 - **Current Implementation Status:** **Production** (Đã hoàn thiện đủ 10 bộ và đồng bộ qua Multiplayer ở Đợt 7 & Đợt 8).
 
 ---

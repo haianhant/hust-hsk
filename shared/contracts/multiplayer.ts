@@ -6,6 +6,15 @@
 // ---------------------------------------------------------------------------
 
 import { BOUNDS, clampScalar, type AABB } from '../constants/world';
+import type {
+  StudyClientToServerMessage,
+  StudyServerToClientMessage,
+} from './study';
+
+export type {
+  StudyClientToServerMessage,
+  StudyServerToClientMessage,
+} from './study';
 
 export type RemoteState = 'idle' | 'walking' | 'running' | 'riding';
 export type PlayerState = RemoteState;
@@ -110,6 +119,8 @@ export type Player = RemotePlayer;
 export interface ClientJoinMessage extends RemoteAppearance {
   type: 'join';
   sessionId: string;
+  /** Secret credential used exclusively to authenticate session reconnects; never broadcast to peers. */
+  reconnectToken?: string;
   name: string;
   mssv: string;
 }
@@ -142,7 +153,8 @@ export type ClientToServerMessage =
   | ClientMoveMessage
   | ClientStateMessage
   | ClientAppearanceMessage
-  | ClientPingMessage;
+  | ClientPingMessage
+  | StudyClientToServerMessage;
 
 export interface ServerWelcomeMessage {
   type: 'welcome';
@@ -212,7 +224,8 @@ export type ServerToClientMessage =
   | ServerCountMessage
   | ServerFullMessage
   | ServerErrorMessage
-  | ServerPongMessage;
+  | ServerPongMessage
+  | StudyServerToClientMessage;
 
 // --- Pure Validation & Sanitization Helpers --------------------------------
 
@@ -226,6 +239,47 @@ export function hashString(s: string): number {
 
 export function pickShirtColor(sessionId: string): string {
   return SHIRT_COLORS[hashString(sessionId) % SHIRT_COLORS.length];
+}
+
+export function sanitizeReconnectToken(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const clean = raw
+    .replace(/[\u0000-\u001f\u007f\s]/g, '')
+    .trim()
+    .slice(0, 64);
+  return clean.length >= 1 ? clean : null;
+}
+
+/**
+ * Derives a deterministic, non-reversible public player ID (`p-<h1>-<h2>`)
+ * from a secret reconnect credential.
+ *
+ * Security invariant:
+ * - Public broadcasts (`welcome`, `join`, `move`, `state`, `appearance`,
+ *   `leave`, `study:room-snapshot`, `study:seat-claimed`, `study:seat-released`,
+ *   `study:presence`) ONLY expose this derived public ID (`id` / `occupantId` /
+ *   `playerId`), never the raw reconnect credential.
+ * - Knowing a player's public ID does not allow another client to derive
+ *   their reconnect credential or hijack their session on a new WebSocket.
+ */
+export function derivePublicPlayerId(reconnectCredential: string): string {
+  const clean = sanitizeReconnectToken(reconnectCredential) ?? 'anon';
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b9;
+  const s1 = `hust-hsk-pub-id-v1:${clean}`;
+  const s2 = `${clean}:hust-hsk-peer-key-v1`;
+  for (let i = 0; i < s1.length; i++) {
+    h1 ^= s1.charCodeAt(i);
+    h1 = Math.imul(h1, 0x01000193) >>> 0;
+  }
+  for (let i = 0; i < s2.length; i++) {
+    h2 ^= s2.charCodeAt(i);
+    h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
+    h2 ^= h2 >>> 13;
+  }
+  h1 = (h1 ^ (h1 >>> 16)) >>> 0;
+  h2 = (h2 ^ (h2 >>> 16)) >>> 0;
+  return `p-${h1.toString(36)}-${h2.toString(36)}`;
 }
 
 export function sanitizeName(raw: unknown): string {

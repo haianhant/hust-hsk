@@ -38,10 +38,14 @@ Mỗi `200ms` (và ngay khi nhận sự kiện `CustomEvent('bkhn:interact')` t�
 
 ### Trong Sảnh tầng 1 Thư viện (`inLibraryLobby === true`)
 1. **Ngồi học / Đứng dậy tại 4 ghế bàn đọc (`seat:<seatId>` / `seat-stand-up`, bán kính `SEAT_INTERACT_RADIUS = 1.65m`):**
-   - Khi đang đứng trong bán kính `1.65m` quanh một trong 4 ghế thuộc `STUDY_SEATS` (`tqb-1f-t1-s1`, `tqb-1f-t1-s2`, `tqb-1f-t2-s1`, `tqb-1f-t2-s2`), hệ thống hiển thị gợi ý **`"E — Ngồi học"`** và làm sáng đệm ghế + vòng chỉ báo sàn.
+   - Khi đang đứng trong bán kính `1.65m` quanh một trong 4 ghế thuộc `STUDY_SEATS` (`tqb-1f-t1-s1`, `tqb-1f-t1-s2`, `tqb-1f-t2-s1`, `tqb-1f-t2-s2`):
+     - Nếu ghế đang trống (`available`): hiển thị gợi ý **`"E — Ngồi học"`** và làm sáng đệm ghế + vòng chỉ báo sàn.
+     - Nếu ghế đang gửi yêu cầu giữ chỗ lên server (`pending`): hiển thị **`"⏳ Đang giữ chỗ..."`**.
+     - Nếu ghế đang có sinh viên khác trong cùng phòng ngồi (`occupied-other`): hiển thị **`"🔒 Ghế đang có người ngồi — hãy chọn ghế khác"`** và từ chối chiếm chỗ kèm thông báo tiếng Việt thân thiện.
    - Người chơi có thể bấm phím `E`, nút **`✋ Tương tác`**, hoặc click/chạm trực tiếp vào ghế 3D để ngồi. Nếu click vào ghế từ khoảng cách `> 1.65m`, hệ thống từ chối dịch chuyển tức thời (`reason: 'too-far'`) và nhắc tiến lại gần ghế hơn.
+   - Khi đang trực tuyến (`mpStatus.state === 'online'`), thao tác ngồi gửi `study:claim-seat` tới `HskRoom` Durable Object và chỉ khóa nhân vật vào ghế sau khi nhận `study:seat-claimed`. Khi ngoại tuyến, nhân vật ngồi học cục bộ ngay lập tức với nhãn **`"Chế độ ngoại tuyến (chỉ hiển thị cục bộ)"`** (chi tiết tại [`docs/architecture/study-rooms.md`](./study-rooms.md)).
    - Khi đang ngồi (`playerState.seated === true`), nhân vật chuyển sang tư thế ngồi học (`computeSeatedPoseTargets`, `SEATED_GROUP_Y_OFFSET = -0.35m`, tự ẩn balo để không xuyên tựa lưng), khóa di chuyển `WASD`/`Joystick`, giữ điều khiển xoay/zoom camera, gắn `studyRoomId: 'library-lobby'` và `seatId` vào `StudySessionState`, đồng thời hiển thị gợi ý **`"E — Đứng dậy"`** cùng nút **`🚶 Đứng dậy`** trên cả `CampusHud` và `StudyPanel`.
-   - Khi đứng dậy, hàm `computeSafeStandUpPosition` đưa nhân vật về đúng vị trí đứng an toàn ngay sau lưng ghế (đã kiểm chứng `resolveLibraryLobbyCollisions(pos, 0.4).hit === null`). Khi rời sảnh Thư viện, dịch chuyển nhanh hoặc kết thúc phiên học, trạng thái ngồi tự động được giải phóng sạch sẽ.
+   - Khi đứng dậy, rời sảnh Thư viện, dịch chuyển nhanh, kết thúc phiên học (kể cả từ `Zen 2D`) hoặc đóng trình duyệt, trạng thái ngồi tự động được giải phóng cả cục bộ lẫn trên server (`study:release-seat`) và hàm `computeSafeStandUpPosition` đưa nhân vật về đúng vị trí đứng an toàn ngay sau lưng ghế (`resolveLibraryLobbyCollisions(pos, 0.4).hit === null`).
 2. **Vật thể truyền thống & học thuật trong sảnh:**
    - Tương tác với **Tượng GS. Tạ Quang Bửu** `(0, -2.1)` (`r <= 2.6m`), **Bảng từ vựng học thuật** `(3.6, -0.6)` (`r <= 2.4m`), **Quầy thủ thư** `(-3.6, -0.6)` (`r <= 2.4m`) và nút **Ra khỏi sảnh Thư viện**.
 

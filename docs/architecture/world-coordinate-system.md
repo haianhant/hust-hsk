@@ -12,13 +12,13 @@ Toàn bộ không gian 3D của **Bách khoa Hán ngữ 3D** sử dụng hệ t�
   - `+Z` = Phía **Nam** (về phía đường Tạ Quang Bửu / Lê Thanh Nghị, bao gồm Hồ Tiền `z = -4..84` và SVĐ Bách Khoa tới `z = 108`).
 - **Trục `Y` (Cao độ):**
   - `Y = 0.00m` là cao độ mặt cỏ cơ sở toàn trường.
-  - Chuẩn tỉ lệ con người ([`AVATAR`](file:///home/bao/Hust3D/hust-hsk/shared/constants/world.ts#L37-L44)): chiều cao `1.7m`, mắt nhìn ở `y = 1.6m`, bán kính va chạm hình trụ `radius = 0.4m`.
+  - Chuẩn tỉ lệ con người ([`AVATAR`](../../shared/constants/world.ts#L37-L44)): chiều cao `1.7m`, mắt nhìn ở `y = 1.6m`, bán kính va chạm hình trụ `radius = 0.4m`.
 
 ---
 
 ## 2. Biên Thế giới (`BOUNDS`) & Điểm Xuất phát (`SPAWN`)
 
-Được định nghĩa tập trung tại [`shared/constants/world.ts`](file:///home/bao/Hust3D/hust-hsk/shared/constants/world.ts) và dùng chung cho cả Frontend lẫn Cloudflare Worker:
+Được định nghĩa tập trung tại [`shared/constants/world.ts`](../../shared/constants/world.ts) và dùng chung cho cả Frontend lẫn Cloudflare Worker:
 
 | Hằng số | Giá trị | Ý nghĩa |
 |---|---|---|
@@ -38,7 +38,7 @@ Toàn bộ không gian 3D của **Bách khoa Hán ngữ 3D** sử dụng hệ t�
 
 ## 3. Phân lớp Cao độ Mặt đất Chống Nhấp nháy (Anti-Z-Fighting Hierarchy)
 
-Để triệt tiêu hiện tượng nhấp nháy chiều sâu (Z-fighting) giữa các bề mặt ngang trên mặt đất ([`Ground.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/Ground.tsx)), các lớp địa hình phải tuân thủ độ lệch tối thiểu `>= 0.005m – 0.01m`:
+Để triệt tiêu hiện tượng nhấp nháy chiều sâu (Z-fighting) giữa các bề mặt ngang trên mặt đất ([`Ground.tsx`](../../components/three/Ground.tsx)), các lớp địa hình phải tuân thủ độ lệch tối thiểu `>= 0.005m – 0.01m`:
 
 | Lớp Bề mặt | Cao độ `Y` (m) | Ghi chú Kỹ thuật |
 |---|---|---|
@@ -54,13 +54,13 @@ Toàn bộ không gian 3D của **Bách khoa Hán ngữ 3D** sử dụng hệ t�
 
 ## 4. Hệ thống Va chạm 2D (`Collision Resolution`)
 
-1. **Va chạm Người đi bộ ([`resolveCollisions`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L675-L721)):**
+1. **Va chạm Người đi bộ ([`resolveCollisions`](../../lib/campus.ts#L675-L721)):**
    - Kiểm tra hình tròn bán kính `AVATAR.radius = 0.4m` với:
      - Biên `BOUNDS`.
      - Danh sách hộp chữ nhật trục tọa độ `BUILDING_COLLIDERS` (bao gồm các tòa nhà, bậc tam cấp C1, bệ chữ `I ❤ BK` / `HUST`, bờ kè đá Hồ Tiền, ghế đá và bồn cỏ cao).
      - Lòng Hồ Tiền chữ nhật qua hàm `pointInLake(p, radius)` (`center: (-2, 40)`, `halfW: 22.5m`, `halfL: 44m`).
    - Người đi bộ **không** bị chặn bởi tán cây hay thân cây để tránh kẹt khi đi dạo dưới hàng cây.
-2. **Va chạm Xe máy ([`resolveBikeCollisions`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L992-L1014)):**
+2. **Va chạm Xe máy ([`resolveBikeCollisions`](../../lib/campus.ts#L992-L1014)):**
    - Bao gồm toàn bộ `resolveCollisions(p, BIKE_RADIUS = 0.7m)` cộng thêm kiểm tra va chạm hình tròn với danh sách thân cây `TREE_TRUNKS` (`r = 0.3m`) và vòng tròn bảo vệ quanh NPC Minh `NPC_CIRCLES` (`r = 0.5m`).
 
 ---

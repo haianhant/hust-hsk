@@ -102,7 +102,13 @@ function connectClient(room = 'hsk-1') {
       }),
     );
     const welcomeA = await wsA.waitFor((m) => m.type === 'welcome');
-    const selfA = welcomeA.players.find((p) => p.id === 'sess-a');
+    const pubA = welcomeA.id;
+    assert(
+      'Client A welcome id is derived public player ID (p-...) distinct from reconnect credential',
+      typeof pubA === 'string' && pubA.startsWith('p-') && pubA !== 'sess-a',
+      `pubA=${pubA}`,
+    );
+    const selfA = welcomeA.players.find((p) => p.id === pubA);
     assert(
       'Client A welcome includes synced appearance',
       selfA &&
@@ -117,7 +123,7 @@ function connectClient(room = 'hsk-1') {
 
     // 4. Client B joins and sees Client A's appearance; Client A receives join for B
     const wsB = await connectClient('hsk-1');
-    const joinBPromise = wsA.waitFor((m) => m.type === 'join' && m.player?.id === 'sess-b');
+    const joinBPromise = wsA.waitFor((m) => m.type === 'join' && m.player?.name === 'Minh Bách Khoa');
     wsB.send(
       JSON.stringify({
         type: 'join',
@@ -133,7 +139,8 @@ function connectClient(room = 'hsk-1') {
       }),
     );
     const welcomeB = await wsB.waitFor((m) => m.type === 'welcome');
-    const bSeesA = welcomeB.players.find((p) => p.id === 'sess-a');
+    const pubB = welcomeB.id;
+    const bSeesA = welcomeB.players.find((p) => p.id === pubA);
     assert(
       'Client B sees Client A appearance in welcome snapshot',
       bSeesA && bSeesA.gender === 'female' && bSeesA.outfit === 'tshirt-navy' && bSeesA.skirt === true,
@@ -142,12 +149,14 @@ function connectClient(room = 'hsk-1') {
     const joinB = await joinBPromise;
     assert(
       'Client A receives join broadcast with Client B outfit bomber-red-navy',
-      joinB.player.outfit === 'bomber-red-navy' && joinB.player.hairStyle === 'layered',
+      joinB.player.id === pubB &&
+        joinB.player.outfit === 'bomber-red-navy' &&
+        joinB.player.hairStyle === 'layered',
       JSON.stringify(joinB.player),
     );
 
     // 5. Live appearance change from Client A -> broadcast to Client B
-    const appBroadcastPromise = wsB.waitFor((m) => m.type === 'appearance' && m.player?.id === 'sess-a');
+    const appBroadcastPromise = wsB.waitFor((m) => m.type === 'appearance' && m.player?.id === pubA);
     wsA.send(
       JSON.stringify({
         type: 'appearance',
@@ -173,7 +182,7 @@ function connectClient(room = 'hsk-1') {
 
     // 6. Move & authoritative BOUNDS clamping test
     await new Promise((r) => setTimeout(r, 120));
-    const movePromise = wsB.waitFor((m) => m.type === 'move' && m.id === 'sess-a');
+    const movePromise = wsB.waitFor((m) => m.type === 'move' && m.id === pubA);
     wsA.send(JSON.stringify({ type: 'move', x: 94.8, z: -5.5, facing: -1.25, state: 'walking' }));
     const move1 = await movePromise;
     assert(
@@ -184,7 +193,7 @@ function connectClient(room = 'hsk-1') {
 
     // Ride East past maxX (168) -> clamped and capped by riding speed
     await new Promise((r) => setTimeout(r, 120));
-    const moveClampPromise = wsB.waitFor((m) => m.type === 'move' && m.id === 'sess-a');
+    const moveClampPromise = wsB.waitFor((m) => m.type === 'move' && m.id === pubA);
     wsA.send(JSON.stringify({ type: 'move', x: 200, z: -5.5, facing: Math.PI / 2, state: 'riding' }));
     const moveClamp = await moveClampPromise;
     assert(
@@ -208,18 +217,283 @@ function connectClient(room = 'hsk-1') {
     const welcomeA2 = await wsA2.waitFor((m) => m.type === 'welcome');
     assert('Reconnect same sessionId keeps room count = 2', welcomeA2.count === 2, `count=${welcomeA2.count}`);
 
+    // 7b. Attacker attempting to hijack Client A using public player ID `pubA` or mismatched reconnectToken is rejected
+    const wsHijack = await connectClient('hsk-1');
+    wsHijack.send(
+      JSON.stringify({
+        type: 'join',
+        sessionId: pubA,
+        name: 'Attacker Hijack',
+        mssv: '20226999',
+      }),
+    );
+    const hijackErr = await wsHijack.waitFor((m) => m.type === 'error');
+    assert(
+      'Public player ID cannot be used as reconnect credential to hijack session',
+      hijackErr && hijackErr.type === 'error',
+      JSON.stringify(hijackErr),
+    );
+    wsHijack.send(
+      JSON.stringify({
+        type: 'join',
+        sessionId: pubA,
+        reconnectToken: 's-legacy-session-id-guess',
+        name: 'Attacker Legacy Guess',
+        mssv: '20226999',
+      }),
+    );
+    const hijackLegacyErr = await wsHijack.waitFor((m) => m.type === 'error');
+    assert(
+      'Forged/legacy reconnectToken with victim public player ID is rejected',
+      hijackLegacyErr && hijackLegacyErr.type === 'error',
+      JSON.stringify(hijackLegacyErr),
+    );
+    wsHijack.close();
+
     // 8. Ping -> Pong
     wsA2.send(JSON.stringify({ type: 'ping' }));
     const pong = await wsA2.waitFor((m) => m.type === 'pong');
     assert('Ping returns pong', pong && pong.type === 'pong');
 
-    // 9. Leave broadcast when B disconnects
-    const leavePromise = wsA2.waitFor((m) => m.type === 'leave' && m.id === 'sess-b');
+    // 9. PR9 Study Room Snapshot received on join
+    const snapA2 = await wsA2.waitFor((m) => m.type === 'study:room-snapshot');
+    assert(
+      'PR9: Client A receives study:room-snapshot on join',
+      snapA2 && Array.isArray(snapA2.seats) && snapA2.seats.length === 0,
+      JSON.stringify(snapA2),
+    );
+
+    // 10. PR9 Authoritative Seat Claim: A claims tqb-1f-t1-s1 -> B receives study:seat-claimed
+    const bSeeClaimAPromise = wsB.waitFor(
+      (m) => m.type === 'study:seat-claimed' && m.occupancy?.seatId === 'tqb-1f-t1-s1',
+    );
+    wsA2.send(
+      JSON.stringify({
+        type: 'study:claim-seat',
+        seatId: 'tqb-1f-t1-s1',
+        subjectTag: 'Giải tích 1',
+        pomodoroPhase: 'focus',
+        requestId: 'ws-req-a1',
+      }),
+    );
+    const bSeeClaimA = await bSeeClaimAPromise;
+    assert(
+      'PR9: Client B receives study:seat-claimed for tqb-1f-t1-s1 (omits occupantMssv)',
+      bSeeClaimA.occupancy.occupantId === pubA &&
+        bSeeClaimA.occupancy.occupantName === 'Hải Anh HUST' &&
+        !('occupantMssv' in bSeeClaimA.occupancy),
+      JSON.stringify(bSeeClaimA),
+    );
+
+    // 11. PR9 Seat Conflict Rejection: B tries to claim tqb-1f-t1-s1 -> rejected
+    wsB.send(
+      JSON.stringify({
+        type: 'study:claim-seat',
+        seatId: 'tqb-1f-t1-s1',
+        requestId: 'ws-req-b-conflict',
+      }),
+    );
+    const bRejected = await wsB.waitFor(
+      (m) => m.type === 'study:seat-rejected' && m.requestId === 'ws-req-b-conflict',
+    );
+    assert(
+      'PR9: Client B receives study:seat-rejected (already-occupied) when claiming A seat',
+      bRejected.reason === 'already-occupied' && bRejected.occupiedBy === pubA,
+      JSON.stringify(bRejected),
+    );
+
+    // 12. PR9 Atomic Seat Switch: A switches to tqb-1f-t1-s2 -> B can claim tqb-1f-t1-s1
+    const bSeeReleasePrevPromise = wsB.waitFor(
+      (m) => m.type === 'study:seat-released' && m.seatId === 'tqb-1f-t1-s1',
+    );
+    const bSeeClaimSwitchPromise = wsB.waitFor(
+      (m) => m.type === 'study:seat-claimed' && m.occupancy?.seatId === 'tqb-1f-t1-s2',
+    );
+    wsA2.send(
+      JSON.stringify({
+        type: 'study:claim-seat',
+        seatId: 'tqb-1f-t1-s2',
+        subjectTag: 'Giải tích 1',
+        requestId: 'ws-req-a-switch',
+      }),
+    );
+    const [bSeeReleasePrev, bSeeClaimSwitch] = await Promise.all([
+      bSeeReleasePrevPromise,
+      bSeeClaimSwitchPromise,
+    ]);
+    assert(
+      'PR9: Atomic seat switch releases old seat and claims new seat',
+      bSeeReleasePrev.reason === 'switched-seat' &&
+        bSeeClaimSwitch.occupancy.seatId === 'tqb-1f-t1-s2',
+    );
+
+    wsB.send(
+      JSON.stringify({
+        type: 'study:claim-seat',
+        seatId: 'tqb-1f-t1-s1',
+        subjectTag: 'HSK 4',
+        requestId: 'ws-req-b-ok',
+      }),
+    );
+    const bClaimOk = await wsB.waitFor(
+      (m) => m.type === 'study:seat-claimed' && m.requestId === 'ws-req-b-ok',
+    );
+    assert(
+      'PR9: Client B claims freed seat tqb-1f-t1-s1',
+      bClaimOk.occupancy.occupantId === pubB,
+      JSON.stringify(bClaimOk),
+    );
+
+    // 13. PR9 Presence Broadcast & Spoofing Override
+    const bSeePresAPromise = wsB.waitFor(
+      (m) =>
+        m.type === 'study:presence' &&
+        m.playerId === pubA &&
+        m.presence?.subjectTag === 'Vật lý đại cương',
+    );
+    wsA2.send(
+      JSON.stringify({
+        type: 'study:presence',
+        presence: {
+          status: 'studying',
+          studyRoomId: 'library-lobby',
+          seatId: 'tqb-1f-t1-s2',
+          pomodoroPhase: 'focus',
+          subjectTag: 'Vật lý đại cương',
+        },
+      }),
+    );
+    const bSeePresA = await bSeePresAPromise;
+    assert(
+      'PR9: Client B receives live study:presence from Client A',
+      bSeePresA.presence.status === 'studying' && bSeePresA.presence.seatId === 'tqb-1f-t1-s2',
+    );
+
+    const aSeePresBPromise = wsA2.waitFor(
+      (m) =>
+        m.type === 'study:presence' &&
+        m.playerId === pubB &&
+        m.presence?.subjectTag === 'Spoof Test',
+    );
+    wsB.send(
+      JSON.stringify({
+        type: 'study:presence',
+        presence: {
+          status: 'studying',
+          studyRoomId: 'library-lobby',
+          seatId: 'tqb-1f-t2-s2', // spoofed seatId!
+          pomodoroPhase: 'focus',
+          subjectTag: 'Spoof Test',
+        },
+      }),
+    );
+    const aSeePresB = await aSeePresBPromise;
+    assert(
+      'PR9: Server overrides spoofed seatId in study:presence with authoritative owned seat',
+      aSeePresB.presence.seatId === 'tqb-1f-t1-s1',
+      JSON.stringify(aSeePresB),
+    );
+
+    // 14. PR9 DO Hibernation Recovery over HTTP /__hibernate
+    const hibRes = await fetch(`${BASE_HTTP}/__hibernate?room=hsk-1`, { method: 'POST' }).then((r) =>
+      r.json(),
+    );
+    assert('PR9: Simulated DO hibernation endpoint succeeds', hibRes && hibRes.ok === true);
+
+    const wsD = await connectClient('hsk-1');
+    wsD.send(
+      JSON.stringify({
+        type: 'join',
+        sessionId: 'sess-d',
+        name: 'Phạm Văn D',
+        mssv: '20226014',
+      }),
+    );
+    const snapD = await wsD.waitFor((m) => m.type === 'study:room-snapshot');
+    assert(
+      'PR9: New joiner after DO hibernation receives restored seats & presences in study:room-snapshot',
+      snapD &&
+        Array.isArray(snapD.seats) &&
+        snapD.seats.length === 2 &&
+        snapD.presences[pubA]?.subjectTag === 'Vật lý đại cương',
+      JSON.stringify(snapD),
+    );
+    wsD.close();
+
+    // 15. PR9 Room Isolation: Client C in hsk-2 can claim tqb-1f-t1-s1 while B holds it in hsk-1
+    const wsC = await connectClient('hsk-2');
+    wsC.send(
+      JSON.stringify({
+        type: 'join',
+        sessionId: 'sess-c',
+        name: 'Lê Thị C',
+        mssv: '20226015',
+      }),
+    );
+    const welcomeC = await wsC.waitFor((m) => m.type === 'welcome');
+    const pubC = welcomeC.id;
+    wsC.send(
+      JSON.stringify({
+        type: 'study:claim-seat',
+        seatId: 'tqb-1f-t1-s1',
+        requestId: 'ws-req-c-hsk2',
+      }),
+    );
+    const cClaimOk = await wsC.waitFor(
+      (m) => m.type === 'study:seat-claimed' && m.requestId === 'ws-req-c-hsk2',
+    );
+    assert(
+      'PR9: Room isolation allows Client C in hsk-2 to claim tqb-1f-t1-s1',
+      cClaimOk.occupancy.occupantId === pubC,
+      JSON.stringify(cClaimOk),
+    );
+    wsC.close();
+
+    // 16. Leave & Seat Release broadcast when B disconnects
+    const releaseOnLeavePromise = wsA2.waitFor(
+      (m) =>
+        m.type === 'study:seat-released' &&
+        m.seatId === 'tqb-1f-t1-s1' &&
+        m.occupantId === pubB,
+    );
+    const leavePromise = wsA2.waitFor((m) => m.type === 'leave' && m.id === pubB);
     wsB.close();
-    const leaveMsg = await leavePromise;
-    assert('Disconnect broadcasts leave', leaveMsg && leaveMsg.id === 'sess-b');
+    const [releaseOnLeave, leaveMsg] = await Promise.all([releaseOnLeavePromise, leavePromise]);
+    assert(
+      'PR9: Disconnect broadcasts study:seat-released (reason=disconnect) and leave',
+      releaseOnLeave.occupantId === pubB &&
+        releaseOnLeave.reason === 'disconnect' &&
+        leaveMsg &&
+        leaveMsg.id === pubB,
+    );
+
+    // 17. PR9 Review Fix 4: Prevent multiple sessionIds on the same WebSocket
+    wsA2.send(
+      JSON.stringify({
+        type: 'join',
+        sessionId: 'sess-spoofed-second-id',
+        name: 'Spoofed Second Session',
+        mssv: '20226099',
+      }),
+    );
+    const switchErr = await wsA2.waitFor((m) => m.type === 'error');
+    assert(
+      'PR9 Fix 4: Server rejects joining a second sessionId on an already bound socket',
+      switchErr &&
+        switchErr.type === 'error' &&
+        String(switchErr.message).includes('different sessionId'),
+      JSON.stringify(switchErr),
+    );
 
     wsA2.close();
+    await new Promise((r) => setTimeout(r, 150));
+    const roomsAfterAllClose = await fetch(`${BASE_HTTP}/api/rooms`).then((r) => r.json());
+    const hsk1Room = (roomsAfterAllClose.rooms || []).find((r) => r.id === 'hsk-1');
+    assert(
+      'PR9 Fix 4: Room hsk-1 count returns to 0 with no orphaned sessions after socket closes',
+      hsk1Room && hsk1Room.count === 0,
+      JSON.stringify(hsk1Room),
+    );
     console.log(`test-clients summary: ${passed} passed, ${failed} failed`);
     process.exit(failed === 0 ? 0 : 1);
   } catch (err) {

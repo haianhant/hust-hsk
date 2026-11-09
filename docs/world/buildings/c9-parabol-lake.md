@@ -5,10 +5,10 @@
 - **Module ID:** `building.parabol-gate`
 - **Purpose:** Cổng chính biểu tượng lịch sử của Đại học Bách khoa Hà Nội tại biên phía Tây (giáp đường Giải Phóng), nơi người chơi xuất phát (`SPAWN = (-76, 10)`) và gặp NPC Minh.
 - **Source Paths:**
-  - Hình học 3D: [`components/three/ParabolGate.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/ParabolGate.tsx)
-  - Tọa độ & Collider: [`PARABOL_GATE`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L35-L51) trong `lib/campus.ts`
+  - Hình học 3D: [`components/three/ParabolGate.tsx`](../../../components/three/ParabolGate.tsx)
+  - Tọa độ & Collider: [`PARABOL_GATE`](../../../lib/campus.ts#L35-L51) trong `lib/campus.ts`
 - **Reference Assets:**
-  - 4 ảnh chụp thực tế tại [`tham-khao/cong-parabol/`](file:///home/bao/Hust3D/hust-hsk/tham-khao/cong-parabol/README.md) (`cong-parabol-01.jpg` .. `cong-parabol-04.jpg`).
+  - 4 ảnh chụp thực tế tại [`tham-khao/cong-parabol/`](../../../tham-khao/cong-parabol/README.md) (`cong-parabol-01.jpg` .. `cong-parabol-04.jpg`).
 - **Current Implementation Status:** **Production**.
 - **Invariants (Ràng buộc Bất biến):**
   1. **Mốc thời gian:** Đặt tại vị trí lịch sử **trước đợt di dời tháng 11/2026** (`center: (-88, 10)`), khoảng thông thủy giữa hai chân `clearWidth = 8m` (`z: 6..14m`), đỉnh vòm cao `12.5m`.
@@ -27,10 +27,10 @@
 - **Module ID:** `building.c9`
 - **Purpose:** Tái hiện khối nhà C9 màu trắng/kem với cầu thang thoát hiểm ngoài trời gấp khúc zic-zac sơn lan can đỏ — góc check-in nổi tiếng của sinh viên Bách khoa.
 - **Source Paths:**
-  - Hình học 3D: [`components/three/C9Building.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/C9Building.tsx)
-  - Tọa độ & Collider: [`C9`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L118-L138) trong `lib/campus.ts`
+  - Hình học 3D: [`components/three/C9Building.tsx`](../../../components/three/C9Building.tsx)
+  - Tọa độ & Collider: [`C9`](../../../lib/campus.ts#L118-L138) trong `lib/campus.ts`
 - **Reference Assets:**
-  - [`tham-khao/c9/c9-cau-thang-do-01.jpg`](file:///home/bao/Hust3D/hust-hsk/tham-khao/c9/README.md) và [`docs/satellite-and-c9.md`](file:///home/bao/Hust3D/hust-hsk/docs/satellite-and-c9.md).
+  - [`tham-khao/c9/c9-cau-thang-do-01.jpg`](../../../tham-khao/c9/README.md) và [`docs/satellite-and-c9.md`](../../satellite-and-c9.md).
 - **Current Implementation Status:** **Production** (Đã nâng cấp khung cửa sổ 3D và cửa gỗ tầng trệt ở Đợt 7).
 - **Invariants:**
   1. **Vị trí & Khối nhà:** Tâm tại `(-42, -2)`, kích thước `20m × 12m` (`box: { minX: -52, maxX: -32, minZ: -8, maxZ: 4 }`), cao `4 tầng × 3.4m`.
@@ -50,10 +50,10 @@
 - **Module ID:** `landscape.tien-lake`
 - **Purpose:** Tái hiện Hồ Tiền trung tâm phía Nam khuôn viên, tạo trục cảnh quan nối giữa Khu C, Khu D và Thư viện Tạ Quang Bửu.
 - **Source Paths:**
-  - Hình học 3D: [`components/three/TienLake.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/TienLake.tsx), `LakeWillow` trong [`components/three/Trees.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/Trees.tsx), `SittingStudent` trong [`components/three/AmbientLife.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/AmbientLife.tsx)
-  - Tọa độ & Va chạm: [`LAKE`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L102-L107), [`LAKE_BANK`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L111-L116), [`LAKE_BENCHES`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L574-L577), [`LAKE_WILLOWS`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L584-L589), [`pointInLake`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L667-L672)
+  - Hình học 3D: [`components/three/TienLake.tsx`](../../../components/three/TienLake.tsx), `LakeWillow` trong [`components/three/Trees.tsx`](../../../components/three/Trees.tsx), `SittingStudent` trong [`components/three/AmbientLife.tsx`](../../../components/three/AmbientLife.tsx)
+  - Tọa độ & Va chạm: [`LAKE`](../../../lib/campus.ts#L102-L107), [`LAKE_BANK`](../../../lib/campus.ts#L111-L116), [`LAKE_BENCHES`](../../../lib/campus.ts#L574-L577), [`LAKE_WILLOWS`](../../../lib/campus.ts#L584-L589), [`pointInLake`](../../../lib/campus.ts#L667-L672)
 - **Reference Assets:**
-  - 2 ảnh chụp thực tế tại [`tham-khao/ho-tien/`](file:///home/bao/Hust3D/hust-hsk/tham-khao/ho-tien/README.md) (`ho-tien-01.jpg`, `ho-tien-02.jpg`).
+  - 2 ảnh chụp thực tế tại [`tham-khao/ho-tien/`](../../../tham-khao/ho-tien/README.md) (`ho-tien-01.jpg`, `ho-tien-02.jpg`).
 - **Current Implementation Status:** **Production**.
 - **Invariants:**
   1. **Hình thái Chữ nhật Bắc–Nam:** Tâm tại `(-2, 40)`, rộng `45m` (`halfW = 22.5m`, `x: -24.5..20.5`), dài `88m` (`halfL = 44m`, `z: -4..84`), diện tích `~3.960 m²` (tỉ lệ `~2:1` theo ảnh vệ tinh, tuyệt đối không dựng hình elip).
