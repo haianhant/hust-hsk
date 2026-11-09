@@ -11,6 +11,7 @@
 
 import {
   getSeatDefinition,
+  isSupportedLibrarySeatId,
   sanitizeStudyPresence,
   type PlayerPresenceStatus,
   type PlayerStudyPresence,
@@ -18,32 +19,43 @@ import {
   type StudyRoomZoneId,
 } from '../../../shared/contracts/study';
 import type { StudySessionState } from '../../study/study-session/session';
+import { reconcileServerPresenceWithSeat } from '../rooms/seat-manager';
+
+export { reconcileServerPresenceWithSeat };
 
 export interface DerivePresenceInput {
   session: StudySessionState;
   inClassroom: boolean;
   inLibraryLobby: boolean;
+  activeSeatId?: string | null;
   nowMs?: number;
 }
 
 export function derivePlayerPresence(input: DerivePresenceInput): PlayerStudyPresence {
-  const { session, inClassroom, inLibraryLobby, nowMs = Date.now() } = input;
+  const { session, inClassroom, inLibraryLobby, activeSeatId, nowMs = Date.now() } = input;
+  const effectiveSeatId =
+    activeSeatId !== undefined ? activeSeatId : session.seatId;
+  const seatDef =
+    effectiveSeatId && isSupportedLibrarySeatId(effectiveSeatId)
+      ? getSeatDefinition(effectiveSeatId)
+      : undefined;
+  const isSeated = Boolean(seatDef);
   const pomodoroPhase: PomodoroPhase = session.pomodoro.phase;
 
   let status: PlayerPresenceStatus = 'exploring';
-  if (session.active) {
+  if (session.active || isSeated) {
     if (pomodoroPhase === 'focus' && session.pomodoro.running) {
       status = 'studying';
-    } else if (pomodoroPhase === 'short-break' || pomodoroPhase === 'long-break') {
+    } else if (
+      session.active &&
+      (pomodoroPhase === 'short-break' || pomodoroPhase === 'long-break')
+    ) {
       status = 'break';
-    } else if (session.seatId) {
-      status = 'studying';
     } else {
       status = 'idle';
     }
   }
 
-  const seatDef = session.seatId ? getSeatDefinition(session.seatId) : undefined;
   const inferredRoomId: StudyRoomZoneId | null = seatDef
     ? seatDef.studyRoomId
     : session.studyRoomId
@@ -59,11 +71,25 @@ export function derivePlayerPresence(input: DerivePresenceInput): PlayerStudyPre
       status,
       studyRoomId: inferredRoomId,
       seatId: seatDef ? seatDef.seatId : null,
-      pomodoroPhase,
-      subjectTag: session.subjectTag,
+      pomodoroPhase: session.active ? pomodoroPhase : 'idle',
+      subjectTag: session.active || isSeated ? session.subjectTag : null,
       updatedAtMs: nowMs,
     },
     nowMs,
+  );
+}
+
+export function isSamePublicPresence(
+  a: PlayerStudyPresence | null | undefined,
+  b: PlayerStudyPresence | null | undefined,
+): boolean {
+  if (!a || !b) return false;
+  return (
+    a.status === b.status &&
+    a.studyRoomId === b.studyRoomId &&
+    a.seatId === b.seatId &&
+    a.pomodoroPhase === b.pomodoroPhase &&
+    (a.subjectTag ?? null) === (b.subjectTag ?? null)
   );
 }
 

@@ -18,12 +18,13 @@ import {
   VALID_GENDERS,
   VALID_HAIR_STYLES,
   VALID_OUTFIT_IDS,
+  derivePublicPlayerId,
   isAvatarGender,
   isAvatarHairStyle,
   isAvatarOutfitId,
 } from '../shared/contracts/multiplayer';
 
-export { MSSV_RE };
+export { MSSV_RE, derivePublicPlayerId };
 
 export interface Identity {
   name: string;
@@ -45,6 +46,7 @@ export interface CharacterProfile {
 export const IDENTITY_KEY = 'bkhn-identity-v1';
 export const CHARACTER_KEY = 'bkhn-character-v1';
 export const SESSION_KEY = 'bkhn-session-id';
+export const RECONNECT_TOKEN_KEY = 'bkhn-reconnect-token-v1';
 
 export const DEFAULT_CHARACTER_PROFILE: CharacterProfile = {
   name: 'Sinh viên',
@@ -194,16 +196,124 @@ export function clearIdentity(): void {
   }
 }
 
-/** Session id ổn định theo trình duyệt — để server nhận ra khi kết nối lại. */
-export function getSessionId(): string {
-  try {
-    let id = localStorage.getItem(SESSION_KEY);
-    if (!id) {
-      id = `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      localStorage.setItem(SESSION_KEY, id);
-    }
-    return id;
-  } catch {
-    return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+export interface StorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
+}
+
+/**
+ * Định dạng chuẩn của `reconnectToken` sinh bằng CSPRNG:
+ * tiền tố `rt-` nối với 32..64 ký tự hex chữ thường (>= 128 bit entropy, mặc định 192 bit = 48 hex).
+ */
+export const VALID_RECONNECT_TOKEN_RE = /^rt-[0-9a-f]{32,64}$/;
+
+export function isValidReconnectToken(value: unknown): value is string {
+  return typeof value === 'string' && VALID_RECONNECT_TOKEN_RE.test(value);
+}
+
+/**
+ * Sinh `reconnectToken` bí mật mới bằng CSPRNG (`crypto.getRandomValues`, 24 bytes = 192-bit entropy).
+ * Tuyệt đối không dùng `Math.random()` hoặc tái sử dụng `bkhn-session-id` cũ.
+ */
+export function generateSecureReconnectToken(): string {
+  const bytes = new Uint8Array(24);
+  if (
+    typeof globalThis !== 'undefined' &&
+    globalThis.crypto &&
+    typeof globalThis.crypto.getRandomValues === 'function'
+  ) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    throw new Error('CSPRNG (crypto.getRandomValues) is required to generate reconnectToken');
   }
+  let hex = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    hex += bytes[i].toString(16).padStart(2, '0');
+  }
+  return `rt-${hex}`;
+}
+
+let fallbackMemoryReconnectToken: string | null = null;
+
+function resolveStorage(explicit?: StorageLike | null): StorageLike | null {
+  if (explicit) return explicit;
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage) {
+      return localStorage;
+    }
+  } catch {
+    // localStorage blocked or unavailable
+  }
+  return null;
+}
+
+/**
+ * Secret credential dùng riêng để xác thực kết nối lại (reconnect) với HskRoom.
+ *
+ * Bảo mật & Migration an toàn:
+ * - Giá trị `bkhn-session-id` cũ (legacy) từng được broadcast công khai cho các client
+ *   khác trong phòng trước PR9, nên TUYỆT ĐỐI KHÔNG bao giờ được tái sử dụng làm
+ *   `reconnectToken` bí mật.
+ * - Khi chưa có `bkhn-reconnect-token-v1` hợp lệ (hoặc khi phát hiện legacy `bkhn-session-id`),
+ *   hàm luôn sinh secret mới bằng CSPRNG (`generateSecureReconnectToken()`), lưu vào
+ *   `bkhn-reconnect-token-v1`, dẫn xuất `publicId = derivePublicPlayerId(token)` và ghi đè
+ *   `bkhn-session-id` bằng `publicId` mới.
+ * - Khi F5 tải lại trang và đã có `bkhn-reconnect-token-v1` hợp lệ, giữ nguyên secret
+ *   để kết nối lại (reconnect) chính xác vào phiên hiện tại.
+ */
+export function getReconnectToken(storage?: StorageLike | null): string {
+  const store = resolveStorage(storage);
+  if (store) {
+    try {
+      const existingToken = store.getItem(RECONNECT_TOKEN_KEY);
+      const existingSessionId = store.getItem(SESSION_KEY);
+
+      if (
+        isValidReconnectToken(existingToken) &&
+        existingToken !== existingSessionId
+      ) {
+        const expectedPublicId = derivePublicPlayerId(existingToken);
+        if (existingSessionId !== expectedPublicId) {
+          store.setItem(SESSION_KEY, expectedPublicId);
+        }
+        return existingToken;
+      }
+
+      // Chưa có reconnectToken hợp lệ hoặc đang ở trạng thái legacy -> luôn sinh CSPRNG secret mới
+      const freshToken = generateSecureReconnectToken();
+      const freshPublicId = derivePublicPlayerId(freshToken);
+      store.setItem(RECONNECT_TOKEN_KEY, freshToken);
+      store.setItem(SESSION_KEY, freshPublicId);
+      return freshToken;
+    } catch {
+      // Fallback sang bộ nhớ tạm nếu storage ném ngoại lệ (ví dụ Safari Private Mode quota)
+    }
+  }
+
+  if (!isValidReconnectToken(fallbackMemoryReconnectToken)) {
+    fallbackMemoryReconnectToken = generateSecureReconnectToken();
+  }
+  return fallbackMemoryReconnectToken;
+}
+
+/**
+ * Mã định danh công khai của người chơi (`p-...`) dẫn xuất một chiều từ
+ * `reconnectToken` — an toàn để hiển thị công khai trong phòng học mà không
+ * thể dùng ngược lại để chiếm quyền phiên kết nối.
+ */
+export function getSessionId(storage?: StorageLike | null): string {
+  const store = resolveStorage(storage);
+  const token = getReconnectToken(store);
+  const publicId = derivePublicPlayerId(token);
+  if (store) {
+    try {
+      if (store.getItem(SESSION_KEY) !== publicId) {
+        store.setItem(SESSION_KEY, publicId);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return publicId;
 }

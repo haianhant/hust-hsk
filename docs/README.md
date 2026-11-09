@@ -17,6 +17,7 @@ Bộ tài liệu này được thiết kế làm **nguồn sự thật kỹ thu�
 - [Kiến trúc Frontend & 3D WebGL (`docs/architecture/frontend.md`)](./architecture/frontend.md) — Cấu trúc Next.js, React Three Fiber, tách biệt trạng thái frame (`playerState`) và trạng thái React UI, quản lý bộ nhớ WebGL.
 - [Hệ trục Tọa độ & Thế giới 3D (`docs/architecture/world-coordinate-system.md`)](./architecture/world-coordinate-system.md) — Quy ước trục tọa độ, `BOUNDS`, phân lớp cao độ chống Z-fighting, hộp va chạm AABB và không gian nội thất.
 - [Kiến trúc Multiplayer Realtime (`docs/architecture/multiplayer.md`)](./architecture/multiplayer.md) — Giao thức WebSocket, hợp đồng `shared/contracts/multiplayer.ts`, Cloudflare Durable Object `HskRoom` và cơ chế phục hồi sau Hibernation.
+- [Kiến trúc Phòng Tự học & Chiếm chỗ Ghế Có Thẩm quyền Server (`docs/architecture/study-rooms.md`)](./architecture/study-rooms.md) — Quyền giữ chỗ ghế theo từng phòng `hsk-1`..`hsk-5`, 4 ghế `library-lobby`, giao thức `study:*`, hiển thị 3D `RemoteStudySeats` và bảo mật quyền riêng tư (`PR9`).
 - [Hệ thống Tương tác & Điều khiển (`docs/architecture/interaction-system.md`)](./architecture/interaction-system.md) — Cơ chế tương tác vùng lân cận (`triggerRadius`), chuyển cảnh nội thất, lái xe máy, dịch chuyển nhanh và hook kiểm thử `window.__bkhn`.
 
 ### Đặc tả Thế giới 3D & Module IDs (`docs/world/`)

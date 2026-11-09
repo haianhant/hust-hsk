@@ -1,6 +1,6 @@
 # Lộ trình Phát triển & Tái cấu trúc (`Roadmap`)
 
-## 1. Các Giai đoạn Đã Hoàn thành (Đợt 1 – Đợt 8)
+## 1. Các Giai đoạn Nền tảng Đã Hoàn thành (Đợt 1 – Đợt 8)
 
 | Giai đoạn | Hạng mục Chính | Trạng thái |
 |---|---|---|
@@ -10,13 +10,11 @@
 | **Bước 8** | Lịch ôn SRS 7 ngày, phiên ôn tập nhanh Flashcard, Sổ lỗi theo bài, 6 Huy hiệu toàn cục, chuỗi ngày học liên tiếp (Streak) và Xuất/Nhập JSON. | Hoàn thành |
 | **Đợt 3–4** | Hệ thống xe máy cá nhân (`Motorbike`), Dịch chuyển nhanh 6 điểm (`Fast Travel`), xoay chuẩn hướng Bắc mặt đồng hồ Thư viện và dựng tiền cảnh chữ `HUST`. | Hoàn thành |
 | **Đợt 5** | Multiplayer thời gian thực qua Cloudflare Worker + Durable Object (`hust-hsk-rooms`, 5 phòng × 15 người). | Hoàn thành |
-| **Đợt 6–8** | Mở rộng toàn khuôn viên theo bản đồ thật (`C2`, `C3–C10`, `C6–C8`, `D2–D9`, `B1 SoICT`, `KTX B3–B13`, `SVĐ`), dựng Sảnh tầng 1 Thư viện (`LibraryLobby`), chu kỳ Ngày/Hoàng hôn/Đêm, và hệ thống nhân vật Nam/Nữ với 10 bộ đồng phục HUST đồng bộ qua Multiplayer. | Hoàn thành |
+| **Đợt 6–8** | Mở rộng toàn khuôn viên theo bản đồ thật (`C2`, `C3–C10`, `C6–C8`, `D2–D9`, `B1 SoICT`, `KTX B3–B13`, `SVĐ`, Cổng Trần Đại Nghĩa & tường rào khuôn viên), dựng Sảnh tầng 1 Thư viện (`LibraryLobby`), chu kỳ Ngày/Hoàng hôn/Đêm, và hệ thống nhân vật Nam/Nữ với 10 bộ đồng phục HUST đồng bộ qua Multiplayer. | Hoàn thành |
 
 ---
 
-## 2. Lộ trình Tái cấu trúc Modular Monolith (`PR1` – `PR6`)
-
-Nhằm chuyển đổi codebase từ cấu trúc tập trung ban đầu sang kiến trúc **Modular Monolith** dễ bảo trì và sẵn sàng mở rộng thành **HUST Virtual Study Campus**, lộ trình kỹ thuật được chia thành 6 PR tuần tự:
+## 2. Lộ trình Kiến trúc Modular Monolith & Sản phẩm Tự học (`PR1` – `PR9`)
 
 ```mermaid
 flowchart LR
@@ -25,29 +23,53 @@ flowchart LR
   PR3 --> PR4["PR4: 3D Components Modularization"]
   PR4 --> PR5["PR5: App UI & Gameplay Separation"]
   PR5 --> PR6["PR6: Study & Social Contracts"]
+  PR6 --> PR7["PR7: Study Experience MVP"]
+  PR7 --> PR8["PR8: Interactive 3D Library Seating"]
+  PR8 --> PR9["PR9: Authoritative Multiplayer Seating"]
 ```
 
-### Chi tiết từng PR
+### A. Đã Triển khai & Kiểm thử (`PR1` – `PR9`)
 
 1. **`PR1 — Foundation, Safety & Shared Contracts` (Đã hoàn thành):**
-   - Hợp nhất biên thế giới `BOUNDS = { minX: -96, maxX: 168, minZ: -76, maxZ: 108 }` và hằng số không gian tại [`shared/constants/world.ts`](file:///home/bao/Hust3D/hust-hsk/shared/constants/world.ts).
-   - Hợp nhất kiểu dữ liệu, bộ lọc hợp lệ và giao thức WebSocket tại [`shared/contracts/multiplayer.ts`](file:///home/bao/Hust3D/hust-hsk/shared/contracts/multiplayer.ts).
-   - Khắc phục lỗi mất phiên khi Cloudflare Durable Object thức dậy sau Hibernation trong [`worker/src/room.ts`](file:///home/bao/Hust3D/hust-hsk/worker/src/room.ts).
-   - Thiết lập CI workflow (`.github/workflows/ci.yml`) và bộ unit test [`test/shared-contracts.test.cjs`](file:///home/bao/Hust3D/hust-hsk/test/shared-contracts.test.cjs).
+   - Hợp nhất biên thế giới `BOUNDS` và hằng số không gian tại [`shared/constants/world.ts`](../../shared/constants/world.ts).
+   - Hợp nhất kiểu dữ liệu, bộ lọc hợp lệ và giao thức WebSocket tại [`shared/contracts/multiplayer.ts`](../../shared/contracts/multiplayer.ts).
+   - Khắc phục lỗi mất phiên khi Cloudflare Durable Object thức dậy sau Hibernation trong [`worker/src/room.ts`](../../worker/src/room.ts).
+   - Thiết lập CI workflow (`.github/workflows/ci.yml`) và bộ unit test [`test/shared-contracts.test.cjs`](../../test/shared-contracts.test.cjs).
 
 2. **`PR2 — Documentation Architecture` (Đã hoàn thành):**
    - Thiết lập kiến trúc tài liệu chuẩn hóa dưới `docs/` (`product/`, `architecture/`, `world/`, `features/`, `adr/`, `testing/`, `status/`).
    - Định danh Module IDs (`building.*`, `landmark.*`, `interior.*`, `avatar.*`, `feature.*`) kèm bất biến (invariants) và tiêu chí nghiệm thu.
-   - Đồng bộ hóa `GEMINI.md`, `AGENTS.md`, và `tham-khao/README.md`.
 
 3. **`PR3 — Campus World Data Refactoring` (Đã hoàn thành):**
-   - Tách [`lib/campus.ts`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts) thành các module dữ liệu thế giới tại `features/campus/world-data/` (`buildings`, `colliders`, `roads`, `zones`, `navigation`, `bounds`, `spatial-utils`) và giữ facade tương thích ngược tại `lib/campus.ts`.
+   - Tách [`lib/campus.ts`](../../lib/campus.ts) thành các module dữ liệu thế giới tại `features/campus/world-data/` (`buildings`, `colliders`, `roads`, `zones`, `navigation`, `bounds`, `spatial-utils`) và giữ facade tương thích ngược tại `lib/campus.ts`.
 
 4. **`PR4 — 3D Components Modularization` (Đã hoàn thành):**
-   - Tách các file 3D lớn ([`components/three/CampusExpansion.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/CampusExpansion.tsx), [`components/three/Landmarks.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/Landmarks.tsx), [`components/three/StudentAvatar.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/StudentAvatar.tsx)) theo từng công trình, landmark, rig, trang phục và chuyển động mà không làm thay đổi hình học hay hiệu năng.
+   - Tách các file 3D lớn ([`components/three/CampusExpansion.tsx`](../../components/three/CampusExpansion.tsx), [`components/three/Landmarks.tsx`](../../components/three/Landmarks.tsx), [`components/three/StudentAvatar.tsx`](../../components/three/StudentAvatar.tsx)) theo từng công trình, landmark, rig, trang phục và chuyển động mà không làm thay đổi hình học hay hiệu năng.
 
 5. **`PR5 — Application UI & Gameplay Separation` (Đã hoàn thành):**
-   - Thu gọn [`app/page.tsx`](file:///home/bao/Hust3D/hust-hsk/app/page.tsx) bằng cách tách các miền: `features/learning/hsk/` (`EntryScreen`, `LessonPickerCard`, `LearningOverlayModal`, `objectives`), `features/campus/ui/CampusHud.tsx`, `features/campus/interaction/` (`bridge`, `LibraryLobbyModal`), và `features/social/multiplayer/MultiplayerStatusBar.tsx`.
+   - Thu gọn [`app/page.tsx`](../../app/page.tsx) bằng cách tách các miền: `features/learning/hsk/`, `features/campus/ui/CampusHud.tsx`, `features/campus/interaction/`, và `features/social/multiplayer/MultiplayerStatusBar.tsx`.
 
 6. **`PR6 — Study & Social Architecture Preparation` (Đã hoàn thành):**
-   - Thiết kế hợp đồng dữ liệu [`shared/contracts/study.ts`](file:///home/bao/Hust3D/hust-hsk/shared/contracts/study.ts), state machine thuần và tài liệu kỹ thuật cho `Study Room`, `Seat Occupancy` ([`features/social/rooms/seat-manager.ts`](file:///home/bao/Hust3D/hust-hsk/features/social/rooms/seat-manager.ts)), `Study Session` ([`features/study/study-session/session.ts`](file:///home/bao/Hust3D/hust-hsk/features/study/study-session/session.ts)), `Pomodoro Timer` dựa trên mốc thời gian thực ([`features/study/pomodoro/timer.ts`](file:///home/bao/Hust3D/hust-hsk/features/study/pomodoro/timer.ts)), `Focus Mode` ([`features/study/focus-mode/focus-mode.ts`](file:///home/bao/Hust3D/hust-hsk/features/study/focus-mode/focus-mode.ts)) và `Player Presence` ([`features/social/presence/presence.ts`](file:///home/bao/Hust3D/hust-hsk/features/social/presence/presence.ts)).
+   - Thiết kế hợp đồng dữ liệu [`shared/contracts/study.ts`](../../shared/contracts/study.ts), state machine thuần và tài liệu kỹ thuật cho `Study Room`, `Seat Occupancy` ([`features/social/rooms/seat-manager.ts`](../../features/social/rooms/seat-manager.ts)), `Study Session` ([`features/study/study-session/session.ts`](../../features/study/study-session/session.ts)), `Pomodoro Timer` ([`features/study/pomodoro/timer.ts`](../../features/study/pomodoro/timer.ts)), `Focus Mode` ([`features/study/focus-mode/focus-mode.ts`](../../features/study/focus-mode/focus-mode.ts)) và `Player Presence` ([`features/social/presence/presence.ts`](../../features/social/presence/presence.ts)).
+
+7. **`PR7 — HUST-HSK Study Experience MVP` (Đã hoàn thành & Kiểm thử trình duyệt):**
+   - Tích hợp nút **`🍅 Tự học`** vào [`features/campus/ui/CampusHud.tsx`](../../features/campus/ui/CampusHud.tsx) và bảng điều khiển [`features/study/ui/StudyPanel.tsx`](../../features/study/ui/StudyPanel.tsx).
+   - Hỗ trợ đồng hồ Pomodoro wall-clock (`25/5` và `50/10`, Start, Pause, Resume, Skip phase, Reset), danh sách việc cần làm ([`StudyTaskList.tsx`](../../features/study/study-session/StudyTaskList.tsx)), thống kê phiên học ([`StudySessionSummary.tsx`](../../features/study/ui/StudySessionSummary.tsx)) và lưu trữ đơn nguồn tại `bkhn_study_session_v1`.
+   - Tích hợp 3 chế độ Focus Mode (`Normal 3D`, `Minimal HUD`, `Zen 2D` qua [`FocusModeView.tsx`](../../features/study/focus-mode/FocusModeView.tsx)), bảo toàn vị trí nhân vật và kết nối Multiplayer khi chuyển qua lại giữa `Zen 2D` và `3D Campus`.
+   - Kiểm chứng bằng unit test [`test/study-social-contracts.test.cjs`](../../test/study-social-contracts.test.cjs) và smoke test trình duyệt [`test/study-mvp-smoke.cjs`](../../test/study-mvp-smoke.cjs).
+
+8. **`PR8 — Interactive 3D Library Seating & Study Experience` (Đã hoàn thành & Kiểm thử trình duyệt):**
+   - Dựng khu bàn đọc tự học 3D tại Sảnh tầng 1 Thư viện Tạ Quang Bửu ([`features/campus/buildings/library/`](../../features/campus/buildings/library/index.ts): `LibraryStudyArea.tsx`, `StudyTable.tsx`, `StudyChair.tsx`, `StudySeatMarkers.tsx`) với 2 bàn đọc gỗ sồi + 4 ghế ngồi học (`tqb-1f-t1-s1..s2`, `tqb-1f-t2-s1..s2`) khớp chuẩn với `STUDY_SEATS` và `LIBRARY_LOBBY_COLLIDERS`.
+   - Xây dựng máy trạng thái ngồi học cục bộ ([`features/campus/interaction/seat-interaction.ts`](../../features/campus/interaction/seat-interaction.ts)), kiểm tra khoảng cách tiếp cận (`SEAT_INTERACT_RADIUS = 1.65m`), tư thế ngồi học 3D (`computeSeatedPoseTargets`, `SEATED_GROUP_Y_OFFSET = -0.35m`), điểm đứng dậy an toàn không va chạm (`computeSafeStandUpPosition`), và tự động gắn `studyRoomId: 'library-lobby'` + `seatId` vào `StudySessionState`.
+   - Kiểm chứng bằng unit test [`test/ui-gameplay.test.cjs`](../../test/ui-gameplay.test.cjs) và smoke test trình duyệt [`test/library-seating-smoke.cjs`](../../test/library-seating-smoke.cjs).
+
+9. **`PR9 — Server-Authoritative Seat Occupancy & Live Study Presence` (Đã hoàn thành & Kiểm thử 2 trình duyệt):**
+   - Tích hợp sổ ghế có thẩm quyền server (`seatRegistry`), trạng thái tự học công khai (`presences`) và các bản tin `study:claim-seat`, `study:release-seat`, `study:presence`, `study:room-snapshot`, `study:seat-claimed`, `study:seat-released`, `study:seat-rejected` vào [`worker/src/room.ts`](../../worker/src/room.ts) và [`lib/multiplayer.ts`](../../lib/multiplayer.ts), bảo toàn đầy đủ qua WebSocket Hibernation.
+   - Hiển thị sinh viên khác đang ngồi học trong Sảnh tầng 1 Thư viện qua [`features/social/rooms/RemoteStudySeats.tsx`](../../features/social/rooms/RemoteStudySeats.tsx) kèm huy hiệu `<Billboard>` trạng thái Pomodoro (`🍅 Đang tự học` / `☕ Giải lao`) và danh sách phòng tự học trực tuyến trên [`StudyPanel.tsx`](../../features/study/ui/StudyPanel.tsx), đảm bảo không rò rỉ MSSV hay công việc cá nhân.
+   - Kiểm chứng bằng [`test/mp-protocol.cjs`](../../test/mp-protocol.cjs) (`22/22` kịch bản PASS) và smoke test 2 trình duyệt [`test/pr9-multiplayer-study-smoke.cjs`](../../test/pr9-multiplayer-study-smoke.cjs) (`12/12` bước PASS).
+
+---
+
+### B. Định hướng Mở rộng Tiếp theo (Sau `PR9`)
+
+- Mở rộng không gian bàn ghế tự học tương tác 3D sang Phòng đọc tầng 3 Thư viện (`library-reading-3f`), Phòng học Tòa C1 (`c1-classroom-101`) và Nhà thủy tạ Hồ Tiền (`tien-lake-pavilion`).

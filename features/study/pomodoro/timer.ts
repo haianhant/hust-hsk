@@ -20,6 +20,47 @@ import {
 
 export const POMODORO_STORAGE_KEY = 'bkhn_pomodoro_state_v1';
 
+export type PomodoroPresetId = '25-5' | '50-10';
+
+export const POMODORO_PRESET_25_5: PomodoroConfig = {
+  ...DEFAULT_POMODORO_CONFIG,
+  focusDurationMs: 25 * 60 * 1000,
+  shortBreakDurationMs: 5 * 60 * 1000,
+};
+
+export const POMODORO_PRESET_50_10: PomodoroConfig = {
+  ...DEFAULT_POMODORO_CONFIG,
+  focusDurationMs: 50 * 60 * 1000,
+  shortBreakDurationMs: 10 * 60 * 1000,
+};
+
+export const POMODORO_PRESETS: Record<PomodoroPresetId, PomodoroConfig> = {
+  '25-5': POMODORO_PRESET_25_5,
+  '50-10': POMODORO_PRESET_50_10,
+};
+
+export function getPomodoroPresetId(config: PomodoroConfig): PomodoroPresetId | 'custom' {
+  if (
+    config.focusDurationMs === POMODORO_PRESET_25_5.focusDurationMs &&
+    config.shortBreakDurationMs === POMODORO_PRESET_25_5.shortBreakDurationMs
+  ) {
+    return '25-5';
+  }
+  if (
+    config.focusDurationMs === POMODORO_PRESET_50_10.focusDurationMs &&
+    config.shortBreakDurationMs === POMODORO_PRESET_50_10.shortBreakDurationMs
+  ) {
+    return '50-10';
+  }
+  return 'custom';
+}
+
+export interface CompletedFocusWindow {
+  startedAtMs: number;
+  endedAtMs: number;
+  durationMs: number;
+}
+
 export interface PomodoroState {
   version: 1;
   phase: PomodoroPhase;
@@ -44,6 +85,7 @@ export interface PomodoroEvaluation {
   elapsedInPhaseMs: number;
   progressRatio: number;
   focusBlocksCompletedDelta: number;
+  completedFocusWindows: CompletedFocusWindow[];
   transitioned: boolean;
 }
 
@@ -153,6 +195,28 @@ export function resetPomodoro(state: PomodoroState): PomodoroState {
   };
 }
 
+export function applyPomodoroConfig(
+  state: PomodoroState,
+  customConfig: Partial<PomodoroConfig>,
+): PomodoroState {
+  const nextConfig = sanitizePomodoroConfig({ ...state.config, ...customConfig });
+  if (state.phase === 'idle') {
+    return {
+      ...state,
+      config: nextConfig,
+    };
+  }
+  return {
+    ...state,
+    config: nextConfig,
+    phase: 'idle',
+    running: false,
+    phaseStartedAtMs: null,
+    phaseEndsAtMs: null,
+    pausedRemainingMs: null,
+  };
+}
+
 export function skipPomodoroPhase(
   state: PomodoroState,
   nowMs: number,
@@ -209,6 +273,7 @@ export function evaluatePomodoroAt(
       elapsedInPhaseMs: 0,
       progressRatio: 0,
       focusBlocksCompletedDelta: 0,
+      completedFocusWindows: [],
       transitioned: false,
     };
   }
@@ -226,12 +291,14 @@ export function evaluatePomodoroAt(
       elapsedInPhaseMs,
       progressRatio,
       focusBlocksCompletedDelta: 0,
+      completedFocusWindows: [],
       transitioned: false,
     };
   }
 
-  let cur = { ...state };
+  let cur: PomodoroState = state;
   let focusDelta = 0;
+  const completedFocusWindows: CompletedFocusWindow[] = [];
   let transitioned = false;
   let transitions = 0;
 
@@ -252,6 +319,11 @@ export function evaluatePomodoroAt(
       nextCompletedBlocks += 1;
       nextTotalFocusedMs += finishedDurationMs;
       focusDelta += 1;
+      completedFocusWindows.push({
+        startedAtMs: finishedEndMs - finishedDurationMs,
+        endedAtMs: finishedEndMs,
+        durationMs: finishedDurationMs,
+      });
     }
 
     const nextPhase = getNextPomodoroPhase(
@@ -304,6 +376,7 @@ export function evaluatePomodoroAt(
     elapsedInPhaseMs,
     progressRatio,
     focusBlocksCompletedDelta: focusDelta,
+    completedFocusWindows,
     transitioned,
   };
 }
@@ -315,22 +388,30 @@ export function formatRemainingMmSs(remainingMs: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+export function formatTotalFocusedDuration(totalFocusedMs: number): string {
+  const totalMinutes = Math.max(0, Math.floor(totalFocusedMs / 60000));
+  if (totalMinutes < 60) {
+    return `${totalMinutes} phút`;
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes > 0 ? `${hours} giờ ${minutes} phút` : `${hours} giờ`;
+}
+
 export function serializePomodoroState(state: PomodoroState): string {
   return JSON.stringify(state);
 }
 
-export function deserializePomodoroState(
-  rawJson: string | null | undefined,
+export function parseStoredPomodoroSnapshot(
+  raw: unknown,
   nowMs: number = Date.now(),
-  options: { autoAdvance?: boolean } = { autoAdvance: true },
-): PomodoroEvaluation {
-  if (!rawJson || typeof rawJson !== 'string') {
-    return evaluatePomodoroAt(createPomodoroState(), nowMs, options);
-  }
+): PomodoroState {
+  if (!raw) return createPomodoroState();
   try {
-    const parsed = JSON.parse(rawJson) as Partial<PomodoroState>;
+    const parsed: Partial<PomodoroState> =
+      typeof raw === 'string' ? (JSON.parse(raw) as Partial<PomodoroState>) : (raw as Partial<PomodoroState>);
     if (!parsed || typeof parsed !== 'object') {
-      return evaluatePomodoroAt(createPomodoroState(), nowMs, options);
+      return createPomodoroState();
     }
     const config = sanitizePomodoroConfig(parsed.config);
     const phase: PomodoroPhase = isValidPomodoroPhase(parsed.phase) ? parsed.phase : 'idle';
@@ -368,7 +449,7 @@ export function deserializePomodoroState(
           : phaseDurationMs
         : null;
 
-    const restored: PomodoroState = {
+    return {
       version: 1,
       phase,
       running,
@@ -379,8 +460,19 @@ export function deserializePomodoroState(
       completedFocusBlocks,
       totalFocusedMs,
     };
-    return evaluatePomodoroAt(restored, nowMs, options);
   } catch {
+    return createPomodoroState();
+  }
+}
+
+export function deserializePomodoroState(
+  rawJson: string | null | undefined,
+  nowMs: number = Date.now(),
+  options: { autoAdvance?: boolean } = { autoAdvance: true },
+): PomodoroEvaluation {
+  if (!rawJson || typeof rawJson !== 'string') {
     return evaluatePomodoroAt(createPomodoroState(), nowMs, options);
   }
+  const restored = parseStoredPomodoroSnapshot(rawJson, nowMs);
+  return evaluatePomodoroAt(restored, nowMs, options);
 }

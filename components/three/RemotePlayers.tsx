@@ -292,14 +292,18 @@ export default function RemotePlayers() {
 
   useEffect(() => {
     const unsub = multiplayer.subscribe((snap) => {
-      const next = snap.players;
+      const seatedIds = new Set(snap.seats.map((s) => s.occupantId));
+      const next = snap.players.filter((p) => !seatedIds.has(p.id));
       const nextSig = next.map(playerSignature).join('|');
       const same = sigRef.current === nextSig;
       playersRef.current = next;
       sigRef.current = nextSig;
       if (!same) force();
     });
-    playersRef.current = multiplayer.snapshot.players;
+    const initSeatedIds = new Set(multiplayer.snapshot.seats.map((s) => s.occupantId));
+    playersRef.current = multiplayer.snapshot.players.filter(
+      (p) => !initSeatedIds.has(p.id),
+    );
     sigRef.current = playersRef.current.map(playerSignature).join('|');
     // Vẽ ngay những người ĐÃ ở trong phòng khi scene mount: welcome có
     // thể tới trước khi CampusScene tải xong (chunk dynamic + SwiftShader

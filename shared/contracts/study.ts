@@ -9,6 +9,13 @@
 // ---------------------------------------------------------------------------
 
 import { clampScalar } from '../constants/world';
+import {
+  extractValidAppearance,
+  sanitizeName,
+  type AvatarGender,
+  type AvatarHairStyle,
+  type AvatarOutfitId,
+} from './multiplayer';
 
 // ---------------------------------------------------------------------------
 // 1. Study Room Zones & Catalog (`feature.social.study-rooms`)
@@ -77,6 +84,20 @@ export function isValidStudyRoomZone(value: unknown): value is StudyRoomZoneId {
   return typeof value === 'string' && STUDY_ROOM_ZONE_SET.has(value);
 }
 
+/**
+ * PR9 physical scope: Networked seat occupancy is supported ONLY in the
+ * implemented 3D first-floor Library Lobby (`library-lobby`).
+ */
+export const PR9_SUPPORTED_STUDY_ROOM_ZONES: readonly StudyRoomZoneId[] = [
+  'library-lobby',
+] as const;
+
+const PR9_SUPPORTED_ZONE_SET = new Set<string>(PR9_SUPPORTED_STUDY_ROOM_ZONES);
+
+export function isSupportedStudyRoomZone(value: unknown): value is 'library-lobby' {
+  return typeof value === 'string' && PR9_SUPPORTED_ZONE_SET.has(value);
+}
+
 export function getStudyRoomDefinition(zoneId: StudyRoomZoneId): StudyRoomDefinition | undefined {
   return STUDY_ROOMS.find((r) => r.id === zoneId);
 }
@@ -96,14 +117,29 @@ export interface StudySeatDefinition {
   facing: number;
 }
 
+/**
+ * Authoritative public seat occupancy record broadcast within a multiplayer
+ * room instance.
+ *
+ * PRIVACY INVARIANT (PR9): Never includes `occupantMssv`, personal tasks,
+ * HSK progress, or full Pomodoro history. Includes only non-sensitive public
+ * display name and optional avatar appearance so remote seated students can
+ * be rendered accurately in 3D.
+ */
 export interface SeatOccupancy {
   seatId: string;
   studyRoomId: StudyRoomZoneId;
   occupantId: string;
   occupantName: string;
-  occupantMssv: string;
   occupiedAtMs: number;
   subjectTag?: string;
+  color?: string;
+  gender?: AvatarGender;
+  outfit?: AvatarOutfitId;
+  hairStyle?: AvatarHairStyle;
+  skirt?: boolean;
+  glasses?: boolean;
+  backpack?: boolean;
 }
 
 /**
@@ -112,25 +148,25 @@ export interface SeatOccupancy {
  * Classroom C1, and TienLake benches.
  */
 export const STUDY_SEATS: readonly StudySeatDefinition[] = [
-  // Library Lobby 1F reading tables
+  // Library Lobby 1F reading tables (verified against LIBRARY_LOBBY bounds, columns & fixtures)
   {
     seatId: 'tqb-1f-t1-s1',
     studyRoomId: 'library-lobby',
     tableId: 'tqb-1f-t1',
-    label: 'Bàn đọc Đông 1 · Ghế A',
-    x: 4.2,
+    label: 'Bàn đọc Tây 1 · Ghế A',
+    x: -2.4,
     y: 0,
-    z: 1.5,
+    z: 1.2,
     facing: 0,
   },
   {
     seatId: 'tqb-1f-t1-s2',
     studyRoomId: 'library-lobby',
     tableId: 'tqb-1f-t1',
-    label: 'Bàn đọc Đông 1 · Ghế B',
-    x: 5.4,
+    label: 'Bàn đọc Tây 1 · Ghế B',
+    x: -1.9,
     y: 0,
-    z: 1.5,
+    z: 2.3,
     facing: Math.PI,
   },
   {
@@ -138,9 +174,9 @@ export const STUDY_SEATS: readonly StudySeatDefinition[] = [
     studyRoomId: 'library-lobby',
     tableId: 'tqb-1f-t2',
     label: 'Bàn đọc Đông 2 · Ghế A',
-    x: 4.2,
+    x: 1.9,
     y: 0,
-    z: -1.8,
+    z: 1.2,
     facing: 0,
   },
   {
@@ -148,9 +184,9 @@ export const STUDY_SEATS: readonly StudySeatDefinition[] = [
     studyRoomId: 'library-lobby',
     tableId: 'tqb-1f-t2',
     label: 'Bàn đọc Đông 2 · Ghế B',
-    x: 5.4,
+    x: 2.4,
     y: 0,
-    z: -1.8,
+    z: 2.3,
     facing: Math.PI,
   },
   // Library 3F Silent Reading Room
@@ -272,6 +308,16 @@ export function getSeatsForStudyRoom(studyRoomId: StudyRoomZoneId): StudySeatDef
 
 export function isValidSeatId(seatId: unknown): seatId is string {
   return typeof seatId === 'string' && SEAT_BY_ID.has(seatId);
+}
+
+/**
+ * Checks whether a seatId is both in the canonical catalog AND inside a
+ * PR9-supported 3D study room zone (`library-lobby`).
+ */
+export function isSupportedLibrarySeatId(seatId: unknown): seatId is string {
+  if (!isValidSeatId(seatId)) return false;
+  const def = SEAT_BY_ID.get(seatId);
+  return !!def && isSupportedStudyRoomZone(def.studyRoomId);
 }
 
 // ---------------------------------------------------------------------------
@@ -415,23 +461,77 @@ export function sanitizeStudyPresence(
 // 5. Wire Protocol Extensions for Study Rooms & Seat Occupancy
 // ---------------------------------------------------------------------------
 
+export const MAX_STUDY_WS_PAYLOAD_BYTES = 2048;
+
+export function sanitizeRequestId(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const cleaned = raw.trim().slice(0, 64);
+  if (!cleaned || !/^[A-Za-z0-9._:-]+$/.test(cleaned)) return undefined;
+  return cleaned;
+}
+
+export function sanitizeSeatOccupancy(raw: unknown): SeatOccupancy | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  if (!isSupportedLibrarySeatId(obj.seatId)) return null;
+  const seatDef = getSeatDefinition(obj.seatId);
+  if (!seatDef) return null;
+  if (typeof obj.occupantId !== 'string' || !obj.occupantId.trim()) return null;
+  const occupantId = obj.occupantId.trim().slice(0, 64);
+  const occupantName = sanitizeName(obj.occupantName);
+  const occupiedAtMs = Number.isFinite(obj.occupiedAtMs)
+    ? (obj.occupiedAtMs as number)
+    : Date.now();
+  const subjectTag = sanitizeSubjectTag(obj.subjectTag) ?? undefined;
+  const appearance = extractValidAppearance(obj);
+  const color =
+    typeof obj.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(obj.color)
+      ? obj.color
+      : undefined;
+
+  return {
+    seatId: seatDef.seatId,
+    studyRoomId: seatDef.studyRoomId,
+    occupantId,
+    occupantName,
+    occupiedAtMs,
+    ...(subjectTag !== undefined ? { subjectTag } : {}),
+    ...(color !== undefined ? { color } : {}),
+    ...appearance,
+  };
+}
+
+export type SeatClaimRejectionReason =
+  | 'invalid-seat'
+  | 'unsupported-zone'
+  | 'already-occupied'
+  | 'not-authenticated'
+  | 'rate-limited'
+  | 'invalid-payload';
+
 export interface ClientClaimSeatMessage {
   type: 'study:claim-seat';
   seatId: string;
   subjectTag?: string | null;
   pomodoroPhase?: PomodoroPhase;
+  requestId?: string;
 }
 
 export interface ClientReleaseSeatMessage {
   type: 'study:release-seat';
+  seatId?: string | null;
+  requestId?: string;
 }
 
 export interface ClientPresenceMessage {
   type: 'study:presence';
-  status: PlayerPresenceStatus;
+  presence?: Partial<PlayerStudyPresence>;
+  status?: PlayerPresenceStatus;
   studyRoomId?: StudyRoomZoneId | null;
+  seatId?: string | null;
   pomodoroPhase?: PomodoroPhase;
   subjectTag?: string | null;
+  requestId?: string;
 }
 
 export type StudyClientToServerMessage =
@@ -442,31 +542,48 @@ export type StudyClientToServerMessage =
 export interface ServerSeatClaimedMessage {
   type: 'study:seat-claimed';
   occupancy: SeatOccupancy;
+  releasedSeatId?: string | null;
+  requestId?: string;
+  revision?: number;
+  serverNowMs?: number;
 }
 
 export interface ServerSeatReleasedMessage {
   type: 'study:seat-released';
   seatId: string;
   occupantId: string;
+  reason?: 'manual' | 'switched-seat' | 'disconnect';
+  requestId?: string;
+  revision?: number;
+  serverNowMs?: number;
 }
 
 export interface ServerSeatRejectedMessage {
   type: 'study:seat-rejected';
   seatId: string;
-  reason: 'invalid-seat' | 'already-occupied' | 'not-authenticated';
+  reason: SeatClaimRejectionReason;
   occupiedBy?: string;
+  occupiedByName?: string;
+  requestId?: string;
+  revision?: number;
+  serverNowMs?: number;
 }
 
 export interface ServerPresenceBroadcastMessage {
   type: 'study:presence';
   playerId: string;
   presence: PlayerStudyPresence;
+  revision?: number;
+  serverNowMs?: number;
 }
 
 export interface ServerStudyRoomSnapshotMessage {
   type: 'study:room-snapshot';
+  roomId?: string;
   seats: SeatOccupancy[];
   presences: Record<string, PlayerStudyPresence>;
+  revision?: number;
+  serverNowMs?: number;
 }
 
 export type StudyServerToClientMessage =

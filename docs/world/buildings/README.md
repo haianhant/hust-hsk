@@ -1,6 +1,6 @@
 # Danh mục Công trình & Phân khu Khuôn viên (`Campus Buildings Catalog`)
 
-Tài liệu này liệt kê toàn bộ các công trình, cổng trường, hồ nước và phân khu của Đại học Bách khoa Hà Nội được khai báo tại [`lib/campus.ts`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts) và dựng hình trong `components/three/*`, đối chiếu với sơ đồ tổng mặt bằng [`docs/khuon-vien-truong.png`](file:///home/bao/Hust3D/hust-hsk/docs/khuon-vien-truong.png) và bộ ảnh thực tế tại `tham-khao/`.
+Tài liệu này liệt kê toàn bộ các công trình, cổng trường, hồ nước và phân khu của Đại học Bách khoa Hà Nội được khai báo tại [`lib/campus.ts`](../../../lib/campus.ts) và dựng hình trong `components/three/*`, đối chiếu với sơ đồ tổng mặt bằng [`docs/khuon-vien-truong.png`](../../khuon-vien-truong.png) và bộ ảnh thực tế tại `tham-khao/`.
 
 ---
 
@@ -27,7 +27,7 @@ Tài liệu này liệt kê toàn bộ các công trình, cổng trường, hồ
 
 ## 2. Phân khu Giảng đường Khu C & Khu D (`LECTURE_BUILDINGS`)
 
-Ngoài các công trình biểu tượng ở trên, [`lib/campus.ts`](file:///home/bao/Hust3D/hust-hsk/lib/campus.ts#L325-L510) và [`components/three/CampusExpansion.tsx`](file:///home/bao/Hust3D/hust-hsk/components/three/CampusExpansion.tsx) tái hiện đầy đủ mạng lưới giảng đường theo đúng bố cục thực tế:
+Ngoài các công trình biểu tượng ở trên, [`lib/campus.ts`](../../../lib/campus.ts#L325-L510) và [`components/three/CampusExpansion.tsx`](../../../components/three/CampusExpansion.tsx) tái hiện đầy đủ mạng lưới giảng đường theo đúng bố cục thực tế:
 
 - **Khu C (Phía Bắc trục đường chính):**
   - `C2` (`(-86, -22)`) — Văn phòng Đoàn Thanh niên & Đảng ủy (phía Tây vườn hoa C1, phía Bắc C9).

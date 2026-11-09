@@ -99,8 +99,29 @@ describe('PR4 — Avatar Appearance Presets & Uniform Contracts', () => {
     assert.equal(typeof studentAvatarFacade.default, 'function');
     assert.equal(typeof studentAvatarFacade.HumanFigure, 'function');
     assert.equal(typeof studentAvatarFacade.computeNaturalGaitTargets, 'function');
+    assert.equal(typeof studentAvatarFacade.computeSeatedPoseTargets, 'function');
+    assert.equal(studentAvatarFacade.SEATED_GROUP_Y_OFFSET, -0.35);
     assert.equal(studentAvatarFacade.OUTFIT_PRESETS, presetsMod.OUTFIT_PRESETS);
     assert.equal(studentAvatarFacade.AVATAR_COLORS, presetsMod.AVATAR_COLORS);
+
+    // PR8 seated pose targets & LibraryStudyArea exports
+    const seatedPose = gaitMod.computeSeatedPoseTargets(1.2);
+    assert.equal(seatedPose.legLTarget, -1.48);
+    assert.equal(seatedPose.legRTarget, -1.48);
+    assert.equal(seatedPose.kneeLTarget, 1.45);
+    assert.equal(seatedPose.kneeRTarget, 1.45);
+    assert.ok(seatedPose.elbowLTarget < -0.8);
+    assert.ok(seatedPose.elbowRTarget < -0.8);
+    assert.ok(seatedPose.bodyLeanTarget > 0.05);
+
+    for (const fnName of [
+      'LibraryStudyArea',
+      'StudyTable',
+      'StudyChair',
+      'StudySeatMarkers',
+    ]) {
+      assert.equal(typeof buildingsBarrel[fnName], 'function', `buildingsBarrel.${fnName}`);
+    }
 
     // CampusExpansion facade + feature/campus/buildings + feature/campus/landscape
     assert.equal(typeof campusExpansionFacade.default, 'function');

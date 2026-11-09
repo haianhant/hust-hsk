@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { CLASSROOM, CLASSROOM_DOOR, LIBRARY_DOOR, LIBRARY_LOBBY } from '../world-data';
+import { findNearestLibrarySeat, SEAT_INTERACT_RADIUS } from './seat-interaction';
 
 export const TOAST_MS = 2500;
 export const SPEECH_RATES = [0.6, 0.8, 1.0] as const;
@@ -37,6 +38,29 @@ export type BkhnHook = {
   setBikePose?: (x: number, z: number, heading: number) => void;
   fastTravel?: (destId: string) => { ok: boolean; reason?: string };
   getFastTravel?: () => { traveling: boolean; count: number; lastDestId: string | null };
+  sitAtSeat?: (seatId: string) => {
+    ok: boolean;
+    reason?: string;
+    message?: string;
+    seatId?: string;
+    label?: string;
+  };
+  standUp?: () => {
+    ok: boolean;
+    reason?: string;
+    releasedSeatId?: string | null;
+    pos?: { x: number; z: number };
+  };
+  getSeatState?: () => {
+    seated: boolean;
+    seatId: string | null;
+    seatLabel: string | null;
+    pos: { x: number; z: number };
+    facing: number;
+  };
+  projectSeatToScreen?: (
+    seatId: string,
+  ) => { x: number; y: number; inFront: boolean } | null;
 };
 
 export function getHook(): BkhnHook | undefined {
@@ -55,6 +79,10 @@ export interface InteractableDetectionInput {
   questDoneBefore: boolean;
   anyQuestDone: boolean;
   stepId?: string;
+  seated?: boolean;
+  seatId?: string | null;
+  occupiedByOtherSeatIds?: ReadonlySet<string>;
+  pendingSeatId?: string | null;
 }
 
 export interface DetectedInteractable {
@@ -64,7 +92,7 @@ export interface DetectedInteractable {
 
 /**
  * Thứ tự ưu tiên prompt E — chỉ HIỆN ĐÚNG 1 prompt:
- *   1. Trong sảnh Thư viện (`lobby-statue`, `lobby-vocab-board`, `lobby-info-desk`)
+ *   1. Trong sảnh Thư viện (`seat-stand-up`, `seat:<seatId>`, `lobby-statue`, `lobby-vocab-board`, `lobby-info-desk`)
  *   2. Đang lái xe ngoài sân → `bike-dismount`
  *   3. Đứng gần xe (≤ 2,2 m) ngoài sân → `bike-mount`
  *   4. Tương tác ngoài sân (`npc-minh`, `classroom-door`, `library-door`)
@@ -84,10 +112,36 @@ export function findNearestInteractable(
     questDoneBefore,
     anyQuestDone,
     stepId,
+    seated = false,
+    occupiedByOtherSeatIds,
+    pendingSeatId = null,
   } = input;
   const dist = (x: number, z: number) => Math.hypot(pos.x - x, pos.z - z);
 
   if (inLibraryLobby) {
+    if (seated) {
+      return { id: 'seat-stand-up', label: 'E — Đứng dậy' };
+    }
+    const nearestSeat = findNearestLibrarySeat(pos, SEAT_INTERACT_RADIUS);
+    if (nearestSeat) {
+      const sid = nearestSeat.seat.seatId;
+      if (pendingSeatId === sid) {
+        return {
+          id: `seat:${sid}`,
+          label: '⏳ Đang giữ chỗ...',
+        };
+      }
+      if (occupiedByOtherSeatIds?.has(sid)) {
+        return {
+          id: `seat:${sid}`,
+          label: '🔒 Ghế đang có người ngồi — hãy chọn ghế khác',
+        };
+      }
+      return {
+        id: `seat:${sid}`,
+        label: 'E — Ngồi học',
+      };
+    }
     if (dist(LIBRARY_LOBBY.statue.x, LIBRARY_LOBBY.statue.z) <= 2.6) {
       return { id: 'lobby-statue', label: 'E — Tìm hiểu Tượng GS. Tạ Quang Bửu' };
     }

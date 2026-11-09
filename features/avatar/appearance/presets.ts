@@ -98,11 +98,14 @@ export interface FigureProps {
   backpackColors?: { pack: string; packLight: string; packZip: string };
   joints?: FigureJoints;
   showBackpack?: boolean;
+  /** Cờ đánh dấu nhân vật đang ngồi học (bù cao độ đĩa bóng tiếp xúc với sàn) */
+  seated?: boolean;
 }
 
 export interface StudentAvatarProps {
   joints: FigureJoints;
   showBackpack?: boolean;
+  seated?: boolean;
   gender?: AvatarGender;
   hairStyle?: AvatarHairStyle;
   outfit?: AvatarOutfitId;

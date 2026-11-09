@@ -6,7 +6,12 @@
 'use strict';
 
 const fs = require('fs');
+const nodeCrypto = require('crypto');
 const ts = require('typescript');
+
+if (typeof globalThis.crypto === 'undefined' && nodeCrypto.webcrypto) {
+  globalThis.crypto = nodeCrypto.webcrypto;
+}
 
 function compileTypeScript(module, filename) {
   const source = fs.readFileSync(filename, 'utf8');

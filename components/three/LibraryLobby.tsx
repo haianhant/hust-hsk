@@ -12,10 +12,13 @@
 
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
+import { LibraryStudyArea } from '../../features/campus/buildings/library';
 import { LIBRARY_LOBBY } from '../../lib/campus';
 import { LabelPlane } from './TextPlate';
 
 export interface LibraryLobbyProps {
+  activeSeatId?: string | null;
+  nearestSeatId?: string | null;
   onObjectClick?: (id: string) => void;
 }
 
@@ -270,7 +273,11 @@ function drawInfoDeskSign(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillText('咨询与借书处 · QUẦY THÔNG TIN', w / 2, h * 0.5);
 }
 
-export default function LibraryLobby({ onObjectClick }: LibraryLobbyProps) {
+export default function LibraryLobby({
+  activeSeatId = null,
+  nearestSeatId = null,
+  onObjectClick,
+}: LibraryLobbyProps) {
   const floorTex = useMemo(() => makeSunburstFloorTexture(), []);
   const binaryWall = useMemo(() => makeBinaryWallTextures(), []);
 
@@ -659,6 +666,16 @@ export default function LibraryLobby({ onObjectClick }: LibraryLobbyProps) {
           transparent={false}
         />
       </group>
+
+      {/* =====================================================================
+          KHU VỰC BÀN GHẾ NGỒI HỌC TƯƠNG TÁC (PR8 Local Interactive Seating)
+          2 bàn đọc + 4 ghế ngồi học (tqb-1f-t1-s1..s2, tqb-1f-t2-s1..s2)
+          ===================================================================== */}
+      <LibraryStudyArea
+        activeSeatId={activeSeatId}
+        nearestSeatId={nearestSeatId}
+        onSelectSeat={(seatId) => onObjectClick?.(`seat:${seatId}`)}
+      />
     </group>
   );
 }
