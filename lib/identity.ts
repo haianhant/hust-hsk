@@ -47,6 +47,7 @@ export const IDENTITY_KEY = 'bkhn-identity-v1';
 export const CHARACTER_KEY = 'bkhn-character-v1';
 export const SESSION_KEY = 'bkhn-session-id';
 export const RECONNECT_TOKEN_KEY = 'bkhn-reconnect-token-v1';
+export const TAB_RECONNECT_TOKEN_KEY = 'bkhn-tab-reconnect-token-v1';
 
 export const DEFAULT_CHARACTER_PROFILE: CharacterProfile = {
   name: 'Sinh viên',
@@ -263,6 +264,18 @@ function resolveStorage(explicit?: StorageLike | null): StorageLike | null {
  *   để kết nối lại (reconnect) chính xác vào phiên hiện tại.
  */
 export function getReconnectToken(storage?: StorageLike | null): string {
+  if (!storage) {
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage) {
+        const tabToken = sessionStorage.getItem(TAB_RECONNECT_TOKEN_KEY);
+        if (isValidReconnectToken(tabToken)) {
+          return tabToken;
+        }
+      }
+    } catch {
+      // sessionStorage unavailable
+    }
+  }
   const store = resolveStorage(storage);
   if (store) {
     try {
@@ -298,11 +311,46 @@ export function getReconnectToken(storage?: StorageLike | null): string {
 }
 
 /**
+ * Khi người dùng mở tab thứ 2 trong cùng trình duyệt (dùng chung localStorage),
+ * tab cũ bị đóng kết nối với mã 1000 ("Replaced by reconnect"). Hàm này cấp phát
+ * một `reconnectToken` riêng cho tab hiện tại trong `sessionStorage` để 2 tab
+ * có 2 `sessionId` độc lập và nhìn thấy nhau ngay lập tức.
+ */
+export function rotateTabSessionCredentials(): {
+  reconnectToken: string;
+  sessionId: string;
+} {
+  const freshToken = generateSecureReconnectToken();
+  const freshPublicId = derivePublicPlayerId(freshToken);
+  fallbackMemoryReconnectToken = freshToken;
+  try {
+    if (typeof sessionStorage !== 'undefined' && sessionStorage) {
+      sessionStorage.setItem(TAB_RECONNECT_TOKEN_KEY, freshToken);
+    }
+  } catch {
+    // ignore
+  }
+  return { reconnectToken: freshToken, sessionId: freshPublicId };
+}
+
+/**
  * Mã định danh công khai của người chơi (`p-...`) dẫn xuất một chiều từ
  * `reconnectToken` — an toàn để hiển thị công khai trong phòng học mà không
  * thể dùng ngược lại để chiếm quyền phiên kết nối.
  */
 export function getSessionId(storage?: StorageLike | null): string {
+  if (!storage) {
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage) {
+        const tabToken = sessionStorage.getItem(TAB_RECONNECT_TOKEN_KEY);
+        if (isValidReconnectToken(tabToken)) {
+          return derivePublicPlayerId(tabToken);
+        }
+      }
+    } catch {
+      // sessionStorage unavailable
+    }
+  }
   const store = resolveStorage(storage);
   const token = getReconnectToken(store);
   const publicId = derivePublicPlayerId(token);

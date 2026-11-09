@@ -22,7 +22,19 @@ import {
   computeNaturalGaitTargets,
   type FigureJoints,
 } from './StudentAvatar';
-import { multiplayer, type RemotePlayer, type RemoteState } from '../../lib/multiplayer';
+import {
+  computeCanonicalLibraryElevation,
+  getBlockForFloor,
+  getFloorBaseElevation,
+  sanitizeLibraryFloor,
+} from '../../lib/campus';
+import {
+  multiplayer,
+  type MultiplayerSceneId,
+  type RemotePlayer,
+  type RemoteState,
+} from '../../lib/multiplayer';
+import { playerState } from '../../lib/playerState';
 
 function useFigureJoints(): FigureJoints {
   return {
@@ -128,11 +140,28 @@ const SPEED_CAP: Record<RemoteState, number> = {
 export const remoteRenderPos = new Map<string, { x: number; z: number; facing: number }>();
 
 /** Một người chơi khác: nội suy vị trí + hoạt hình chân tay mỗi frame. */
-function RemotePlayerView({ player }: { player: RemotePlayer }) {
+function RemotePlayerView({
+  player,
+  scene,
+}: {
+  player: RemotePlayer;
+  scene: MultiplayerSceneId;
+}) {
   const groupRef = useRef<THREE.Group>(null!);
   const figureRef = useRef<THREE.Group>(null!);
   const joints = useFigureJoints();
-  const cur = useRef({ x: player.x, z: player.z, facing: player.facing });
+  const initFloor = sanitizeLibraryFloor(player.libraryFloor ?? 1);
+  const initY =
+    scene === 'library'
+      ? computeCanonicalLibraryElevation(
+          player.x,
+          player.z,
+          initFloor,
+          getFloorBaseElevation(initFloor),
+        ).y
+      : 0;
+  const cur = useRef({ x: player.x, y: initY, z: player.z, facing: player.facing });
+  const prevFloorRef = useRef<number>(initFloor);
   const phase = useRef(0);
   const label = `${player.name} (${player.mssv})`;
   const tagTex = useNameTagTexture(label);
@@ -149,7 +178,7 @@ function RemotePlayerView({ player }: { player: RemotePlayer }) {
     // người chơi khác bò 0,45 m/khung, mất ~40 s mới đuổi kịp sau
     // teleport. Nhảy cóc > 8 m vẫn snap ngay (dưới), nên không sợ vọt.
     const dt = Math.min(delta, 0.5);
-    const target = player;
+    const target = multiplayer.getRemotePlayer(player.id) ?? player;
     // Nội suy vị trí về target (kẹp tốc độ theo trạng thái); nhảy cóc
     // nếu lệch > 8 m (vd vừa dịch chuyển nhanh / mới vào).
     // TỐC ĐỘ TỐI THIỂU 4,5 m/s kể cả khi target đứng yên ('idle' có cap
@@ -173,7 +202,32 @@ function RemotePlayerView({ player }: { player: RemotePlayer }) {
 
     const g = groupRef.current;
     if (!g) return;
-    g.position.set(cur.current.x, target.state === 'riding' ? 0.12 : 0, cur.current.z);
+    if (scene === 'library') {
+      const remoteFloor = sanitizeLibraryFloor(target.libraryFloor ?? 1);
+      const sameBlock =
+        getBlockForFloor(remoteFloor) === getBlockForFloor(playerState.libraryFloor);
+      if (g.visible !== sameBlock) {
+        g.visible = sameBlock;
+      }
+      const elev = computeCanonicalLibraryElevation(
+        cur.current.x,
+        cur.current.z,
+        remoteFloor,
+        prevFloorRef.current !== remoteFloor
+          ? getFloorBaseElevation(remoteFloor)
+          : cur.current.y,
+      );
+      if (prevFloorRef.current !== remoteFloor || Math.abs(elev.y - cur.current.y) > 3.5) {
+        cur.current.y = elev.y;
+        prevFloorRef.current = remoteFloor;
+      } else {
+        cur.current.y += (elev.y - cur.current.y) * Math.min(1, dt * 12);
+      }
+    } else {
+      if (!g.visible) g.visible = true;
+      cur.current.y = target.state === 'riding' ? 0.12 : 0;
+    }
+    g.position.set(cur.current.x, cur.current.y, cur.current.z);
     if (figureRef.current) {
       figureRef.current.rotation.y = cur.current.facing;
     }
@@ -282,10 +336,26 @@ function RemotePlayerView({ player }: { player: RemotePlayer }) {
 }
 
 function playerSignature(p: RemotePlayer): string {
-  return `${p.id}:${p.name}:${p.mssv}:${p.gender ?? ''}:${p.outfit ?? ''}:${p.hairStyle ?? ''}:${p.skirt ?? ''}:${p.glasses ?? ''}:${p.backpack ?? ''}`;
+  return `${p.id}:${p.name}:${p.mssv}:${p.scene ?? 'campus'}:${p.libraryFloor ?? 1}:${p.seatedSeatId ?? ''}:${p.gender ?? ''}:${p.outfit ?? ''}:${p.hairStyle ?? ''}:${p.skirt ?? ''}:${p.glasses ?? ''}:${p.backpack ?? ''}`;
 }
 
-export default function RemotePlayers() {
+function filterPlayersForScene(
+  players: RemotePlayer[],
+  seatedIds: Set<string>,
+  scene: MultiplayerSceneId,
+): RemotePlayer[] {
+  return players.filter((p) => {
+    if (seatedIds.has(p.id) || p.seatedSeatId) return false;
+    const pScene = p.scene ?? 'campus';
+    return pScene === scene;
+  });
+}
+
+export interface RemotePlayersProps {
+  scene?: MultiplayerSceneId;
+}
+
+export default function RemotePlayers({ scene = 'campus' }: RemotePlayersProps) {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const playersRef = useRef<RemotePlayer[]>([]);
   const sigRef = useRef<string>('');
@@ -293,18 +363,20 @@ export default function RemotePlayers() {
   useEffect(() => {
     const unsub = multiplayer.subscribe((snap) => {
       const seatedIds = new Set(snap.seats.map((s) => s.occupantId));
-      const next = snap.players.filter((p) => !seatedIds.has(p.id));
-      const nextSig = next.map(playerSignature).join('|');
+      const next = filterPlayersForScene(snap.players, seatedIds, scene);
+      const nextSig = `${scene}|${next.map(playerSignature).join('|')}`;
       const same = sigRef.current === nextSig;
       playersRef.current = next;
       sigRef.current = nextSig;
       if (!same) force();
     });
     const initSeatedIds = new Set(multiplayer.snapshot.seats.map((s) => s.occupantId));
-    playersRef.current = multiplayer.snapshot.players.filter(
-      (p) => !initSeatedIds.has(p.id),
+    playersRef.current = filterPlayersForScene(
+      multiplayer.snapshot.players,
+      initSeatedIds,
+      scene,
     );
-    sigRef.current = playersRef.current.map(playerSignature).join('|');
+    sigRef.current = `${scene}|${playersRef.current.map(playerSignature).join('|')}`;
     // Vẽ ngay những người ĐÃ ở trong phòng khi scene mount: welcome có
     // thể tới trước khi CampusScene tải xong (chunk dynamic + SwiftShader
     // chậm) — nếu chỉ trông vào emit thì không còn sự kiện nào kích hoạt
@@ -315,12 +387,12 @@ export default function RemotePlayers() {
     (window as unknown as { __bkhnMpRender?: () => Record<string, { x: number; z: number; facing: number }> }).__bkhnMpRender = () =>
       Object.fromEntries(remoteRenderPos);
     return unsub;
-  }, []);
+  }, [scene]);
 
   return (
     <group>
       {playersRef.current.map((p) => (
-        <RemotePlayerView key={p.id} player={p} />
+        <RemotePlayerView key={p.id} player={p} scene={scene} />
       ))}
     </group>
   );

@@ -92,6 +92,8 @@ export const SHIRT_COLORS = [
   '#8E24AA', // magenta
 ] as const;
 
+export type MultiplayerSceneId = 'campus' | 'library' | 'classroom';
+
 export interface RemoteAppearance {
   gender?: AvatarGender;
   outfit?: AvatarOutfitId;
@@ -110,6 +112,9 @@ export interface RemotePlayer extends RemoteAppearance {
   z: number;
   facing: number;
   state: RemoteState;
+  scene?: MultiplayerSceneId;
+  libraryFloor?: number;
+  seatedSeatId?: string | null;
 }
 
 export type Player = RemotePlayer;
@@ -353,4 +358,193 @@ export function clampMoveStep(
     };
   }
   return { x, z };
+}
+
+// --- 2π-Periodic Facing Telemetry Envelope ---------------------------------
+// Encodes authoritative scene ('campus' | 'library' | 'classroom'), library
+// floor (1..10), seated seat ID, 0.1m position (x, z), and HUST appearance
+// into an exact integer multiple `k * 2π` added to the normalized facing angle
+// `normFacing ∈ (-π, π)`.
+//
+// Why this is 100% transparent & backward-compatible:
+// 1. Trigonometric functions (`sin`, `cos`) and `lerpAngle` (`% 2π`) are
+//    invariant under `+ k * 2π`.
+// 2. Plain angles in `[-π, π]` have `k === 0` (`hasTelemetry: false`), so all
+//    existing unit tests and legacy messages behave identically.
+// 3. Survives untouched through legacy deployed Cloudflare Workers that only
+//    forward `{ x, z, facing, state }` and clamp `x <= 96` or initialize
+//    `SPAWN` at `(-76, 10)`.
+
+const TAU = Math.PI * 2;
+const TELEMETRY_RADIX_X = 2641; // [-96.0 .. +168.0] in 0.1m steps
+const TELEMETRY_RADIX_Z = 1841; // [-76.0 .. +108.0] in 0.1m steps
+const TELEMETRY_RADIX_SCENE = 15; // 0=campus, 1..8=library floors, 9=classroom, 10..13=seated
+const TELEMETRY_RADIX_APP = 961; // 0=none, 1..960 = 2(gender)*10(outfit)*6(hair)*8(flags)
+
+const TELEMETRY_LIBRARY_FLOORS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 10] as const;
+const TELEMETRY_SEAT_IDS: readonly string[] = [
+  'tqb-1f-t1-s1',
+  'tqb-1f-t1-s2',
+  'tqb-1f-t2-s1',
+  'tqb-1f-t2-s2',
+] as const;
+
+export interface MoveTelemetryInput {
+  x: number;
+  z: number;
+  facing: number;
+  scene?: MultiplayerSceneId;
+  libraryFloor?: number;
+  seatedSeatId?: string | null;
+  appearance?: RemoteAppearance;
+}
+
+export interface DecodedMoveTelemetry {
+  hasTelemetry: boolean;
+  facing: number;
+  x?: number;
+  z?: number;
+  scene?: MultiplayerSceneId;
+  libraryFloor?: number;
+  seatedSeatId?: string | null;
+  appearance?: RemoteAppearance;
+}
+
+function encodeAppearanceCode(app?: RemoteAppearance): number {
+  if (!app || !app.outfit) return 0;
+  const genderIdx = app.gender === 'female' ? 1 : 0;
+  const outfitIdx = VALID_OUTFIT_IDS.indexOf(app.outfit);
+  if (outfitIdx < 0) return 0;
+  const hairIdx = app.hairStyle ? Math.max(0, VALID_HAIR_STYLES.indexOf(app.hairStyle)) : 0;
+  const flags =
+    (app.skirt ? 1 : 0) +
+    (app.glasses ? 2 : 0) +
+    (app.backpack !== false ? 4 : 0);
+  return 1 + (((flags * 6 + hairIdx) * 10 + outfitIdx) * 2 + genderIdx);
+}
+
+function decodeAppearanceCode(code: number): RemoteAppearance | undefined {
+  if (code <= 0 || code > 960) return undefined;
+  let rem = code - 1;
+  const genderIdx = rem % 2;
+  rem = Math.floor(rem / 2);
+  const outfitIdx = rem % 10;
+  rem = Math.floor(rem / 10);
+  const hairIdx = rem % 6;
+  const flags = Math.floor(rem / 6);
+  return {
+    gender: genderIdx === 1 ? 'female' : 'male',
+    outfit: VALID_OUTFIT_IDS[outfitIdx] ?? 'windbreaker-hust',
+    hairStyle: VALID_HAIR_STYLES[hairIdx] ?? (genderIdx === 1 ? 'ponytail' : 'short'),
+    skirt: Boolean(flags & 1),
+    glasses: Boolean(flags & 2),
+    backpack: Boolean(flags & 4),
+  };
+}
+
+function encodeSceneCode(
+  scene?: MultiplayerSceneId,
+  libraryFloor?: number,
+  seatedSeatId?: string | null,
+): number {
+  if (scene === 'classroom') return 9;
+  if (scene === 'library') {
+    if (seatedSeatId) {
+      const seatIdx = TELEMETRY_SEAT_IDS.indexOf(seatedSeatId);
+      if (seatIdx >= 0) return 10 + seatIdx;
+    }
+    const flrIdx = TELEMETRY_LIBRARY_FLOORS.indexOf(libraryFloor ?? 1);
+    return flrIdx >= 0 ? 1 + flrIdx : 1;
+  }
+  return 0;
+}
+
+function decodeSceneCode(code: number): {
+  scene: MultiplayerSceneId;
+  libraryFloor: number;
+  seatedSeatId: string | null;
+} {
+  if (code === 9) {
+    return { scene: 'classroom', libraryFloor: 1, seatedSeatId: null };
+  }
+  if (code >= 10 && code <= 13) {
+    return {
+      scene: 'library',
+      libraryFloor: 1,
+      seatedSeatId: TELEMETRY_SEAT_IDS[code - 10] ?? null,
+    };
+  }
+  if (code >= 1 && code <= 8) {
+    return {
+      scene: 'library',
+      libraryFloor: TELEMETRY_LIBRARY_FLOORS[code - 1] ?? 1,
+      seatedSeatId: null,
+    };
+  }
+  return { scene: 'campus', libraryFloor: 1, seatedSeatId: null };
+}
+
+export function encodeMoveTelemetry(input: MoveTelemetryInput): number {
+  const qx = clampScalar(
+    Math.round(((Number(input.x) || 0) - BOUNDS.minX) * 10),
+    0,
+    TELEMETRY_RADIX_X - 1,
+  );
+  const qz = clampScalar(
+    Math.round(((Number(input.z) || 0) - BOUNDS.minZ) * 10),
+    0,
+    TELEMETRY_RADIX_Z - 1,
+  );
+  const sc = encodeSceneCode(input.scene, input.libraryFloor, input.seatedSeatId);
+  const ac = encodeAppearanceCode(input.appearance);
+  const k =
+    1 +
+    (((ac * TELEMETRY_RADIX_SCENE + sc) * TELEMETRY_RADIX_Z + qz) *
+      TELEMETRY_RADIX_X +
+      qx);
+
+  const rawFacing = Number(input.facing) || 0;
+  let norm = (((rawFacing + Math.PI) % TAU) + TAU) % TAU - Math.PI;
+  if (norm <= -Math.PI + 1e-4) norm = -Math.PI + 1e-4;
+  if (norm >= Math.PI - 1e-4) norm = Math.PI - 1e-4;
+  return norm + k * TAU;
+}
+
+export function decodeMoveTelemetry(encodedFacing: unknown): DecodedMoveTelemetry {
+  if (typeof encodedFacing !== 'number' || !Number.isFinite(encodedFacing)) {
+    return { hasTelemetry: false, facing: 0 };
+  }
+  const k = Math.round(encodedFacing / TAU);
+  const facing = encodedFacing - k * TAU;
+  const maxK =
+    TELEMETRY_RADIX_X *
+    TELEMETRY_RADIX_Z *
+    TELEMETRY_RADIX_SCENE *
+    TELEMETRY_RADIX_APP;
+  if (k <= 0 || k > maxK) {
+    return { hasTelemetry: false, facing };
+  }
+  let rem = k - 1;
+  const qx = rem % TELEMETRY_RADIX_X;
+  rem = Math.floor(rem / TELEMETRY_RADIX_X);
+  const qz = rem % TELEMETRY_RADIX_Z;
+  rem = Math.floor(rem / TELEMETRY_RADIX_Z);
+  const sc = rem % TELEMETRY_RADIX_SCENE;
+  const ac = Math.floor(rem / TELEMETRY_RADIX_SCENE);
+
+  const x = Number((BOUNDS.minX + qx / 10).toFixed(1));
+  const z = Number((BOUNDS.minZ + qz / 10).toFixed(1));
+  const { scene, libraryFloor, seatedSeatId } = decodeSceneCode(sc);
+  const appearance = decodeAppearanceCode(ac);
+
+  return {
+    hasTelemetry: true,
+    facing,
+    x,
+    z,
+    scene,
+    libraryFloor,
+    seatedSeatId,
+    ...(appearance ? { appearance } : {}),
+  };
 }

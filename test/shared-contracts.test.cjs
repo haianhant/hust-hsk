@@ -845,4 +845,252 @@ test('(8) Public player identity is separated from secret reconnect credential, 
   assert.equal(snapReconn.seats[0].occupantId, victimPublicId);
 });
 
+test('(9) Move telemetry envelope, multi-floor library & classroom visibility sync, legacy Worker compatibility & multi-tab collision rotation', () => {
+  const { MultiplayerClient } = require('../lib/multiplayer.ts');
+
+  // 1. Round-trip encodeMoveTelemetry / decodeMoveTelemetry across scenes, floors, seats, and appearance
+  const encoded = mpContracts.encodeMoveTelemetry({
+    x: 136.4,
+    z: 40.2,
+    facing: -1.25,
+    scene: 'library',
+    libraryFloor: 6,
+    seatedSeatId: null,
+    appearance: {
+      gender: 'female',
+      outfit: 'sweater-cream',
+      hairStyle: 'ponytail',
+      skirt: true,
+      glasses: true,
+      backpack: false,
+    },
+  });
+  const decoded = mpContracts.decodeMoveTelemetry(encoded);
+  assert.equal(decoded.hasTelemetry, true);
+  assert.equal(decoded.x, 136.4);
+  assert.equal(decoded.z, 40.2);
+  assert.ok(Math.abs(decoded.facing - -1.25) < 1e-3);
+  assert.equal(decoded.scene, 'library');
+  assert.equal(decoded.libraryFloor, 6);
+  assert.equal(decoded.seatedSeatId, null);
+  assert.deepEqual(decoded.appearance, {
+    gender: 'female',
+    outfit: 'sweater-cream',
+    hairStyle: 'ponytail',
+    skirt: true,
+    glasses: true,
+    backpack: false,
+  });
+
+  // Plain angles in [-pi, pi] must have hasTelemetry: false
+  const plain = mpContracts.decodeMoveTelemetry(-Math.PI / 2);
+  assert.equal(plain.hasTelemetry, false);
+  assert.ok(Math.abs(plain.facing - -Math.PI / 2) < 1e-9);
+
+  // 2. Simulate legacy live Worker (spawns at -76,10, clamps x <= 96, strips appearance, no study:room-snapshot)
+  const sockets = [];
+  const legacySessions = new Map();
+  function createLegacyClientSocket() {
+    const sock = {
+      readyState: 1,
+      onopen: null,
+      onmessage: null,
+      onclose: null,
+      onerror: null,
+      id: null,
+      send(raw) {
+        const msg = JSON.parse(raw);
+        if (msg.type === 'join') {
+          this.id = msg.sessionId;
+          const s = legacySessions.get(msg.sessionId) ?? {
+            id: msg.sessionId,
+            name: msg.name,
+            mssv: msg.mssv,
+            color: '#1F3A5F',
+            x: -76,
+            z: 10,
+            facing: -Math.PI / 2,
+            state: 'idle',
+          };
+          legacySessions.set(msg.sessionId, s);
+          this.onmessage?.({
+            data: JSON.stringify({
+              type: 'welcome',
+              id: msg.sessionId,
+              roomId: 'hsk-1',
+              players: Array.from(legacySessions.values()),
+              count: legacySessions.size,
+            }),
+          });
+          for (const other of sockets) {
+            if (other !== this && other.readyState === 1) {
+              other.onmessage?.({
+                data: JSON.stringify({ type: 'join', player: { ...s } }),
+              });
+            }
+          }
+        } else if (msg.type === 'move' && this.id) {
+          const s = legacySessions.get(this.id);
+          if (!s) return;
+          // Legacy Worker clamps x to [-96, 96] and speed-limits x/z, but passes facing through
+          s.x = Math.max(-96, Math.min(96, s.x + Math.sign(msg.x - s.x) * 1.2));
+          s.z = Math.max(-76, Math.min(86, s.z + Math.sign(msg.z - s.z) * 1.2));
+          s.facing = Number(msg.facing) || 0;
+          s.state = msg.state;
+          for (const other of sockets) {
+            if (other !== this && other.readyState === 1) {
+              other.onmessage?.({
+                data: JSON.stringify({
+                  type: 'move',
+                  id: this.id,
+                  x: s.x,
+                  z: s.z,
+                  facing: s.facing,
+                  state: s.state,
+                }),
+              });
+            }
+          }
+        }
+      },
+      close() {
+        this.readyState = 3;
+      },
+    };
+    sockets.push(sock);
+    return sock;
+  }
+
+  let sockA = null;
+  let sockB = null;
+  const clientA = new MultiplayerClient({
+    webSocketFactory: () => {
+      sockA = createLegacyClientSocket();
+      return sockA;
+    },
+    resolveUrlFn: () => ({ ok: true, url: 'ws://127.0.0.1:8788/ws', source: 'test-override' }),
+  });
+  const clientB = new MultiplayerClient({
+    webSocketFactory: () => {
+      sockB = createLegacyClientSocket();
+      return sockB;
+    },
+    resolveUrlFn: () => ({ ok: true, url: 'ws://127.0.0.1:8788/ws', source: 'test-override' }),
+  });
+
+  // Prime clientA and clientB local move context at SPAWN (95.5, -6) before welcome
+  clientA.sendMove(95.5, -6, -Math.PI / 2, 'idle', {
+    scene: 'campus',
+    libraryFloor: 1,
+    seatedSeatId: null,
+    appearance: {
+      gender: 'male',
+      outfit: 'windbreaker-hust',
+      hairStyle: 'short',
+      skirt: false,
+      glasses: false,
+      backpack: true,
+    },
+  });
+  clientA.connect(
+    'p-alice',
+    'Alice',
+    '20226001',
+    {
+      gender: 'male',
+      outfit: 'windbreaker-hust',
+      hairStyle: 'short',
+    },
+    'rt-alice-secret-token-0001',
+  );
+  sockA.onopen();
+
+  clientB.sendMove(95.5, -6, 0.5, 'idle', {
+    scene: 'campus',
+    libraryFloor: 1,
+    seatedSeatId: null,
+    appearance: {
+      gender: 'female',
+      outfit: 'polo-red',
+      hairStyle: 'ponytail',
+      skirt: true,
+      glasses: true,
+      backpack: true,
+    },
+  });
+  clientB.connect(
+    'p-bob',
+    'Bob',
+    '20226002',
+    {
+      gender: 'female',
+      outfit: 'polo-red',
+      hairStyle: 'ponytail',
+      skirt: true,
+    },
+    'rt-bob-secret-token-0002',
+  );
+  sockB.onopen();
+
+  // Both clients must immediately see each other at (95.5, -6) (NOT -76, 10!) with full appearance
+  const aSeesB = clientA.getRemotePlayer('p-bob');
+  const bSeesA = clientB.getRemotePlayer('p-alice');
+  assert.ok(aSeesB && bSeesA, 'Both clients must see each other in players map');
+  assert.equal(aSeesB.x, 95.5);
+  assert.equal(aSeesB.z, -6);
+  assert.equal(aSeesB.outfit, 'polo-red');
+  assert.equal(aSeesB.gender, 'female');
+  assert.equal(bSeesA.x, 95.5);
+  assert.equal(bSeesA.z, -6);
+  assert.equal(bSeesA.outfit, 'windbreaker-hust');
+
+  // Client A enters Library Floor 4 (-10.8, -18.5)
+  clientA.sendMove(-10.8, -18.5, 0.25, 'walking', {
+    scene: 'library',
+    libraryFloor: 4,
+    seatedSeatId: null,
+    appearance: {
+      gender: 'male',
+      outfit: 'windbreaker-hust',
+      hairStyle: 'short',
+    },
+  });
+  assert.equal(bSeesA.scene, 'library');
+  assert.equal(bSeesA.libraryFloor, 4);
+  assert.equal(bSeesA.x, -10.8);
+  assert.equal(bSeesA.z, -18.5);
+
+  // Client A sits at study seat tqb-1f-t1-s1 on Floor 1
+  clientA.sendMove(-6.2, -4.15, 0, 'idle', {
+    scene: 'library',
+    libraryFloor: 1,
+    seatedSeatId: 'tqb-1f-t1-s1',
+    appearance: {
+      gender: 'male',
+      outfit: 'windbreaker-hust',
+      hairStyle: 'short',
+    },
+  });
+  assert.equal(bSeesA.seatedSeatId, 'tqb-1f-t1-s1');
+  assert.equal(
+    clientB.snapshot.seatMap['tqb-1f-t1-s1']?.occupantId,
+    'p-alice',
+    'Legacy Worker fallback must populate seatMap when remote player sits at study chair',
+  );
+
+  // Multi-tab collision rotation: when socket closes with code 1000 ("Replaced by reconnect"),
+  // client rotates its sessionId so two tabs in the same browser do not ping-pong.
+  const oldSessionId = clientA.sessionId;
+  sockA.onclose({ code: 1000, reason: 'Replaced by reconnect' });
+  assert.notEqual(
+    clientA.sessionId,
+    oldSessionId,
+    'Multi-tab collision must rotate sessionId to a fresh per-tab credential',
+  );
+
+  clientA.disconnect();
+  clientB.disconnect();
+});
+
+
 

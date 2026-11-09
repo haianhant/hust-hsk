@@ -452,10 +452,11 @@ export default function CampusScene({
           <MinhNpc />
           {/* Xe máy cá nhân (đợt 3 giai đoạn 4) — chỉ ngoài sân, không vào phòng học. */}
           <Motorbike />
-          {/* Người chơi khác (đợt 5 multiplayer) — chỉ ngoài sân. */}
-          <RemotePlayers />
         </>
       )}
+      <RemotePlayers
+        scene={inClassroom ? 'classroom' : inLibraryLobby ? 'library' : 'campus'}
+      />
       <Player />
     </Canvas>
   );
