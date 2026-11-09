@@ -975,13 +975,9 @@ export default function Player() {
         yaw?: number,
         pitch?: number,
       ) => {
-        if (!playerState.inLibraryLobby) return { ok: false, reason: 'not-in-library' };
-        seatActionsRef.current.forceClearSeat();
-        keysRef.current.clear();
-        playerInput.move.x = 0;
-        playerInput.move.y = 0;
-        playerInput.run = false;
-        moveBlendRef.current = 0;
+        if (!playerState.inLibraryLobby) {
+          return { ok: false, status: 'failed' as const, reason: 'not-in-library' };
+        }
         const trans = resolveLibraryFloorTransition(
           floor,
           x,
@@ -991,6 +987,19 @@ export default function Player() {
           AVATAR.radius,
           AVATAR.height,
         );
+        if (!trans.ok || trans.status === 'failed') {
+          return {
+            ok: false,
+            status: 'failed' as const,
+            reason: trans.reason ?? 'invalid-floor',
+          };
+        }
+        seatActionsRef.current.forceClearSeat();
+        keysRef.current.clear();
+        playerInput.move.x = 0;
+        playerInput.move.y = 0;
+        playerInput.run = false;
+        moveBlendRef.current = 0;
         const resolvedFloor = trans.location.floor;
         playerState.libraryFloor = resolvedFloor;
         playerState.libraryY = trans.location.y;
@@ -1009,13 +1018,12 @@ export default function Player() {
           groupRef.current.rotation.y = facingRef.current;
         }
         const nearDoor = findNearestLibraryDoorway(resolvedFloor, trans.location.x, trans.location.z);
-        const ground = queryLibraryGround(trans.location);
         playerState.librarySpatialDiag = {
           block: trans.location.block,
           floor: resolvedFloor,
-          surfaceId: ground.surfaceId,
-          grounded: ground.supported,
-          lastCollisionId: null,
+          surfaceId: trans.surfaceId,
+          grounded: trans.grounded,
+          lastCollisionId: trans.collisionIds[0] ?? null,
           nearestDoorId: nearDoor ? nearDoor.id : null,
         };
         syncCameraTransform();
@@ -1025,10 +1033,12 @@ export default function Player() {
         }
         return {
           ok: true,
+          status: trans.status,
           floor: resolvedFloor,
           block: trans.location.block,
           pos: { x: trans.location.x, z: trans.location.z },
           y: trans.location.y,
+          clampedToSpawn: trans.clampedToSpawn,
         };
       },
       getLibrarySpatialDiagnostics: (): LibrarySpatialDiagnostics => {

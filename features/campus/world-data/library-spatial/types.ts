@@ -142,9 +142,28 @@ export interface CurvedStairFlight {
   topY: number;
 }
 
+export type LibraryFurniturePropKind =
+  | 'table4'
+  | 'round4'
+  | 'sofa'
+  | 'armchair'
+  | 'shelf';
+
+export interface LibraryFurniturePlacement {
+  id: string;
+  name: string;
+  floor: 1 | 2 | 3 | 4 | 5;
+  prop: LibraryFurniturePropKind;
+  x: number;
+  y: number;
+  z: number;
+  ry: number;
+}
+
 export interface LibrarySpawnPoint {
   id: string;
   label: string;
+  fullLabel: string;
   shortLabel: string;
   description: string;
   block: LibraryBlock;

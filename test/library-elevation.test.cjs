@@ -137,9 +137,91 @@ test('PR10A Elevation (3) Block B (Floors 6–7) and Block D (Floor 10) use isol
       AVATAR.radius,
       AVATAR.height,
     );
+    assert.equal(trans.ok, true);
+    assert.equal(trans.status, 'success');
+    assert.equal(trans.usedFallbackSpawn, false);
     assert.equal(trans.location.floor, floor);
     assert.equal(trans.location.block, getBlockForFloor(floor));
     if (floor === 7) assert.equal(trans.location.y, 5.25);
     if (floor === 10) assert.ok(trans.location.y === 0 || trans.location.y === 0.18);
   }
+});
+
+test('PR10A Elevation (4) Floor transition safety — status success/corrected/failed & invalid floors never teleport to Floor 1', () => {
+  const prevOnFloor4 = createLibraryLocation(4, -5.0, -20.0, 13.5);
+
+  // 1. Invalid floor numbers (0, 8, 9, 99, -1, NaN, null, undefined) return status: "failed" and preserve previousLocation
+  for (const invalidFloor of [0, 8, 9, 99, -1, 2.5, NaN, null, undefined, 'invalid']) {
+    const res = resolveLibraryFloorTransition(
+      invalidFloor,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      AVATAR.radius,
+      AVATAR.height,
+      prevOnFloor4,
+    );
+    assert.equal(res.ok, false, `Invalid floor ${String(invalidFloor)} must fail`);
+    assert.equal(res.status, 'failed');
+    assert.equal(res.reason, 'invalid-floor');
+    assert.equal(res.usedFallbackSpawn, false);
+    assert.deepEqual(
+      res.location,
+      prevOnFloor4,
+      `Invalid floor ${String(invalidFloor)} must preserve previous location on Floor 4 instead of teleporting to Floor 1`,
+    );
+  }
+
+  // 2. Custom coordinates inside an obstacle or atrium void fall back to safe spawn with status: "corrected"
+  const intoStatueOnF1 = resolveLibraryFloorTransition(
+    1,
+    0,
+    -2.1, // Inside TQB Statue collider
+    undefined,
+    undefined,
+    AVATAR.radius,
+    AVATAR.height,
+    prevOnFloor4,
+  );
+  assert.equal(intoStatueOnF1.ok, true);
+  assert.equal(intoStatueOnF1.status, 'corrected');
+  assert.equal(intoStatueOnF1.usedFallbackSpawn, true);
+  assert.equal(intoStatueOnF1.location.floor, 1);
+
+  const intoAtriumVoidOnF3 = resolveLibraryFloorTransition(
+    3,
+    0,
+    0, // Inside Floor 3 stadium atrium void
+    undefined,
+    undefined,
+    AVATAR.radius,
+    AVATAR.height,
+    prevOnFloor4,
+  );
+  assert.equal(intoAtriumVoidOnF3.ok, true);
+  assert.equal(intoAtriumVoidOnF3.status, 'corrected');
+  assert.equal(intoAtriumVoidOnF3.usedFallbackSpawn, true);
+  assert.equal(intoAtriumVoidOnF3.location.floor, 3);
+  assert.equal(intoAtriumVoidOnF3.location.x, 0);
+  assert.equal(intoAtriumVoidOnF3.location.z, -10.8);
+
+  // 3. Valid custom coordinates on a walkable, unblocked surface return status: "success"
+  const validRoom401 = resolveLibraryFloorTransition(
+    4,
+    0,
+    -20.0,
+    undefined,
+    Math.PI,
+    AVATAR.radius,
+    AVATAR.height,
+    prevOnFloor4,
+  );
+  assert.equal(validRoom401.ok, true);
+  assert.equal(validRoom401.status, 'success');
+  assert.equal(validRoom401.usedFallbackSpawn, false);
+  assert.equal(validRoom401.location.floor, 4);
+  assert.equal(validRoom401.location.x, 0);
+  assert.equal(validRoom401.location.z, -20.0);
+  assert.equal(validRoom401.location.y, 13.5);
 });

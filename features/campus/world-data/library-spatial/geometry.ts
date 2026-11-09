@@ -6,11 +6,14 @@
 // ---------------------------------------------------------------------------
 
 import { STUDY_SEATS } from '../../../../shared/contracts/study';
+import { LIBRARY_LOBBY } from '../buildings';
 import { getBlockForFloor, getFloorBaseElevation } from './floors';
 import type {
   CurvedStairFlight,
   DoorwayOpening,
   LibraryFloor,
+  LibraryFurniturePlacement,
+  LibraryFurniturePropKind,
   LibraryInteractionAnchor,
   SpatialCollider,
   WalkableSurface,
@@ -46,8 +49,22 @@ export const BOOK_LENDING_ROOM_DIMS = {
   counterZ1: 4.25,
   shelfX: -23.95,
   shelfZs: [-0.65, 0.9, 2.7, 4.25] as const,
-  shelfW: 1.8,
-  shelfD: 0.48,
+  westShelfX: -25.45,
+  westShelfZs: [0.3, 3.3] as const,
+  shelfW: 2.4,
+  shelfD: 0.42,
+} as const;
+
+/**
+ * Local-space bounding dimensions of each shared InstancedMesh furniture prop
+ * in `buildFloors1To5.ts`, matching the procedural mesh geometry 1:1.
+ */
+export const PROP_DIMENSIONS = {
+  table4: { minLX: -0.75, maxLX: 0.75, minLZ: -0.68, maxLZ: 0.68, height: 0.88 },
+  round4: { radius: 0.92, height: 0.88 },
+  sofa: { minLX: -0.93, maxLX: 0.93, minLZ: -0.39, maxLZ: 1.18, height: 0.88 },
+  armchair: { minLX: -0.38, maxLX: 0.38, minLZ: -0.36, maxLZ: 0.36, height: 0.84 },
+  shelf: { minLX: -1.20, maxLX: 1.20, minLZ: -0.21, maxLZ: 0.21, height: 2.15 },
 } as const;
 
 export const ROOM_401_DIMS = {
@@ -746,6 +763,341 @@ function buildWallSegmentsWithDoors(
   });
 }
 
+/**
+ * Computes world-space axis-aligned bounding box `{ minX, maxX, minZ, maxZ }`
+ * for a local box `[minLX, maxLX] × [minLZ, maxLZ]` rotated by `ry` around Y
+ * and translated to `(x, z)`.
+ */
+export function computeRotatedBoxBounds(
+  x: number,
+  z: number,
+  ry: number,
+  minLX: number,
+  maxLX: number,
+  minLZ: number,
+  maxLZ: number,
+): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  const c = Math.cos(ry);
+  const s = Math.sin(ry);
+  const corners: Array<[number, number]> = [
+    [minLX, minLZ],
+    [maxLX, minLZ],
+    [maxLX, maxLZ],
+    [minLX, maxLZ],
+  ];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const [lx, lz] of corners) {
+    const wx = x + lx * c + lz * s;
+    const wz = z - lx * s + lz * c;
+    if (wx < minX) minX = wx;
+    if (wx > maxX) maxX = wx;
+    if (wz < minZ) minZ = wz;
+    if (wz > maxZ) maxZ = wz;
+  }
+  return {
+    minX: Number(minX.toFixed(4)),
+    maxX: Number(maxX.toFixed(4)),
+    minZ: Number(minZ.toFixed(4)),
+    maxZ: Number(maxZ.toFixed(4)),
+  };
+}
+
+function stadiumFacingRotationY(x: number, z: number): number {
+  const cx = Math.max(-BLOCK_A_DIMS.L, Math.min(BLOCK_A_DIMS.L, x));
+  const dx = x - cx;
+  return Math.atan2(-dx, -z);
+}
+
+function buildBlockAFurniturePlacementsForFloor(floor: 1 | 2 | 3 | 4 | 5): LibraryFurniturePlacement[] {
+  const { XW, ZB, ZF, L, FR } = BLOCK_A_DIMS;
+  const y = getFloorBaseElevation(floor);
+  const items: LibraryFurniturePlacement[] = [];
+
+  if (floor === 1) {
+    // 1. Book-Lending Room (P.102) 6 bookshelves: 4 East-facing + 2 against West wall
+    const brm = BOOK_LENDING_ROOM_DIMS;
+    let shelfIdx = 1;
+    for (const sz of brm.shelfZs) {
+      items.push({
+        id: `f1-brm-shelf-${shelfIdx++}`,
+        name: 'Kệ giáo trình P.102',
+        floor: 1,
+        prop: 'shelf',
+        x: brm.shelfX,
+        y,
+        z: sz,
+        ry: 0,
+      });
+    }
+    for (const wsz of brm.westShelfZs) {
+      items.push({
+        id: `f1-brm-shelf-${shelfIdx++}`,
+        name: 'Kệ giáo trình tường Tây P.102',
+        floor: 1,
+        prop: 'shelf',
+        x: brm.westShelfX,
+        y,
+        z: wsz,
+        ry: Math.PI / 2,
+      });
+    }
+
+    // 2. Main Lobby West & East lounge sofas and armchairs
+    for (const s of [-1, 1] as const) {
+      const sideKey = s < 0 ? 'west' : 'east';
+      const sideLabel = s < 0 ? 'Tây' : 'Đông';
+      const ry = s > 0 ? -Math.PI / 2 : Math.PI / 2;
+      items.push(
+        {
+          id: `lobby-sofa-${sideKey}-1`,
+          name: `Sofa Sảnh ${sideLabel} 1`,
+          floor: 1,
+          prop: 'sofa',
+          x: s * 14.2,
+          y,
+          z: -5.8,
+          ry,
+        },
+        {
+          id: `lobby-armchair-${sideKey}-1`,
+          name: `Ghế bành Sảnh ${sideLabel} 1`,
+          floor: 1,
+          prop: 'armchair',
+          x: s * 14.2,
+          y,
+          z: -3.9,
+          ry,
+        },
+        {
+          id: `lobby-sofa-${sideKey}-2`,
+          name: `Sofa Sảnh ${sideLabel} 2`,
+          floor: 1,
+          prop: 'sofa',
+          x: s * 14.2,
+          y,
+          z: 5.8,
+          ry,
+        },
+        {
+          id: `lobby-armchair-${sideKey}-2`,
+          name: `Ghế bành Sảnh ${sideLabel} 2`,
+          floor: 1,
+          prop: 'armchair',
+          x: s * 14.2,
+          y,
+          z: 3.9,
+          ry,
+        },
+      );
+    }
+    return items;
+  }
+
+  if (floor === 2 || floor === 3) {
+    // Keep curved stair landings on Floor 2 completely unobstructed
+    const isStairF = floor === 2;
+    const inGap = (s: number) =>
+      isStairF && ((s > 0.22 && s < 0.38) || (s > 0.72 && s < 0.88));
+
+    // Inner ring of 4-seat study tables (r = FR + 1.65 = 9.15m)
+    const N = 16;
+    let tIdx = 1;
+    for (let i = 0; i < N; i++) {
+      const s = (i + 0.5) / N;
+      if (inGap(s)) continue;
+      const p = stadiumPointAt(s, L, FR + 1.65);
+      items.push({
+        id: `f${floor}-balcony-table4-${tIdx++}`,
+        name: `Bàn tự học hành lang T${floor}`,
+        floor,
+        prop: 'table4',
+        x: Number(p.x.toFixed(4)),
+        y,
+        z: Number(p.z.toFixed(4)),
+        ry: Number(stadiumFacingRotationY(p.x, p.z).toFixed(4)),
+      });
+    }
+
+    // Outer ring of round 4-seat tables (r = FR + 3.45 = 10.95m)
+    let rIdx = 1;
+    for (let i = 0; i < 12; i++) {
+      const s = (i + 0.5) / 12;
+      if (inGap(s)) continue;
+      const p = stadiumPointAt(s, L, FR + 3.45);
+      if (Math.abs(p.x) > XW - 2.3 || Math.abs(p.z) > ZF - 2.1) continue;
+      items.push({
+        id: `f${floor}-balcony-round4-${rIdx++}`,
+        name: `Bàn tròn thảo luận T${floor}`,
+        floor,
+        prop: 'round4',
+        x: Number(p.x.toFixed(4)),
+        y,
+        z: Number(p.z.toFixed(4)),
+        ry: Number(((i * 0.7) % Math.PI).toFixed(4)),
+      });
+    }
+
+    // West & East perimeter lounge sofas and armchairs (x = ±17)
+    let sIdx = 1;
+    let aIdx = 1;
+    for (const s of [-1, 1] as const) {
+      const ry = s > 0 ? -Math.PI / 2 : Math.PI / 2;
+      for (const z of [-9.2, -3.2, 3.2, 9.2]) {
+        items.push(
+          {
+            id: `f${floor}-balcony-sofa-${sIdx++}`,
+            name: `Sofa hành lang T${floor}`,
+            floor,
+            prop: 'sofa',
+            x: s * 17,
+            y,
+            z,
+            ry,
+          },
+          {
+            id: `f${floor}-balcony-armchair-${aIdx++}`,
+            name: `Ghế bành hành lang T${floor}`,
+            floor,
+            prop: 'armchair',
+            x: s * 17,
+            y,
+            z: Number((z + 1.6).toFixed(4)),
+            ry,
+          },
+        );
+      }
+    }
+
+    // North & South perimeter tall bookshelves (z = ZB + 0.55 = -12.45 and z = ZF - 0.55 = +12.45)
+    let shIdx = 1;
+    for (const x of [-13.5, -9, -4.5, 4.5, 9, 13.5]) {
+      items.push(
+        {
+          id: `f${floor}-north-shelf-${shIdx}`,
+          name: `Kệ sách hành lang Bắc T${floor}`,
+          floor,
+          prop: 'shelf',
+          x,
+          y,
+          z: ZB + 0.55,
+          ry: 0,
+        },
+        {
+          id: `f${floor}-south-shelf-${shIdx}`,
+          name: `Kệ sách hành lang Nam T${floor}`,
+          floor,
+          prop: 'shelf',
+          x,
+          y,
+          z: ZF - 0.55,
+          ry: Math.PI,
+        },
+      );
+      shIdx++;
+    }
+    return items;
+  }
+
+  // Floors 4 and 5 central corridor furniture
+  let tIdx = 1;
+  for (const x of [-9.5, -4.8, 0, 4.8, 9.5]) {
+    items.push(
+      {
+        id: `f${floor}-corr-table4-${tIdx++}`,
+        name: `Bàn tự học hành lang T${floor}`,
+        floor,
+        prop: 'table4',
+        x,
+        y,
+        z: -9.6,
+        ry: 0,
+      },
+      {
+        id: `f${floor}-corr-table4-${tIdx++}`,
+        name: `Bàn tự học hành lang T${floor}`,
+        floor,
+        prop: 'table4',
+        x,
+        y,
+        z: 9.6,
+        ry: Math.PI,
+      },
+    );
+  }
+  let rIdx = 1;
+  for (const z of [-4.5, 0, 4.5]) {
+    items.push(
+      {
+        id: `f${floor}-corr-round4-${rIdx++}`,
+        name: `Bàn tròn hành lang T${floor}`,
+        floor,
+        prop: 'round4',
+        x: -16.2,
+        y,
+        z,
+        ry: 0.3,
+      },
+      {
+        id: `f${floor}-corr-round4-${rIdx++}`,
+        name: `Bàn tròn hành lang T${floor}`,
+        floor,
+        prop: 'round4',
+        x: 15.8,
+        y,
+        z,
+        ry: 0.8,
+      },
+    );
+  }
+  const corrSofas: ReadonlyArray<[number, number, number]> = [
+    [-14.5, -11.8, 0],
+    [14.5, -11.8, 0],
+    [-14.5, 11.8, Math.PI],
+    [14.5, 11.8, Math.PI],
+  ];
+  for (let i = 0; i < corrSofas.length; i++) {
+    const [x, z, ry] = corrSofas[i];
+    items.push({
+      id: `f${floor}-corr-sofa-${i + 1}`,
+      name: `Sofa hành lang T${floor}`,
+      floor,
+      prop: 'sofa',
+      x,
+      y,
+      z,
+      ry,
+    });
+  }
+  return items;
+}
+
+export const BLOCK_A_FURNITURE_BY_FLOOR: Record<1 | 2 | 3 | 4 | 5, readonly LibraryFurniturePlacement[]> = {
+  1: buildBlockAFurniturePlacementsForFloor(1),
+  2: buildBlockAFurniturePlacementsForFloor(2),
+  3: buildBlockAFurniturePlacementsForFloor(3),
+  4: buildBlockAFurniturePlacementsForFloor(4),
+  5: buildBlockAFurniturePlacementsForFloor(5),
+};
+
+export function getBlockAFurniturePlacements(
+  floor: 1 | 2 | 3 | 4 | 5,
+): readonly LibraryFurniturePlacement[] {
+  return BLOCK_A_FURNITURE_BY_FLOOR[floor];
+}
+
+export function colliderFromFurniturePlacement(p: LibraryFurniturePlacement): SpatialCollider {
+  if (p.prop === 'round4') {
+    const d = PROP_DIMENSIONS.round4;
+    return makeCylinderCollider(p.id, p.name, p.floor, 'furniture', p.x, p.z, d.radius, d.height, p.y);
+  }
+  const d = PROP_DIMENSIONS[p.prop];
+  const box = computeRotatedBoxBounds(p.x, p.z, p.ry, d.minLX, d.maxLX, d.minLZ, d.maxLZ);
+  return makeBoxCollider(p.id, p.name, p.floor, 'furniture', box.minX, box.maxX, box.minZ, box.maxZ, d.height, p.y);
+}
+
 function buildFloor1Colliders(): SpatialCollider[] {
   const { XW, ZB, ZF } = BLOCK_A_DIMS;
   const WT = 0.22;
@@ -769,7 +1121,7 @@ function buildFloor1Colliders(): SpatialCollider[] {
     ),
   );
 
-  // 2. Book-Lending Room (P.102) outer walls, service counter & 6 bookshelves
+  // 2. Book-Lending Room (P.102) outer walls & service counter
   const brm = BOOK_LENDING_ROOM_DIMS;
   cols.push(
     makeBoxCollider('f1-brm-wall-west', 'Tường Tây P.102', 1, 'wall', brm.x0 - WT, brm.x0 + WT, brm.z0, brm.z1),
@@ -787,47 +1139,49 @@ function buildFloor1Colliders(): SpatialCollider[] {
       1.1,
     ),
   );
-  let shelfIdx = 1;
-  for (const sz of brm.shelfZs) {
-    cols.push(
-      makeBoxCollider(
-        `f1-brm-shelf-${shelfIdx++}`,
-        'Kệ giáo trình P.102',
-        1,
-        'furniture',
-        brm.shelfX - brm.shelfW / 2,
-        brm.shelfX + brm.shelfW / 2,
-        sz - brm.shelfD / 2,
-        sz + brm.shelfD / 2,
-        2.2,
-      ),
-    );
+
+  // 3. Shared Floor-1 furniture props (all 6 P.102 bookshelves + 4 lobby sofas + 4 lobby armchairs)
+  for (const fp of getBlockAFurniturePlacements(1)) {
+    cols.push(colliderFromFurniturePlacement(fp));
   }
 
-  // 3. 8 Atrium Columns
+  // 4. 8 Atrium Columns
   for (const c of ATRIUM_COLUMNS) {
     cols.push(makeCylinderCollider(`f1-${c.id}`, 'Cột thông tầng Sảnh T1', 1, 'column', c.x, c.z, c.radius));
   }
 
-  // 4. Interactive Anchors & Lobby Furniture (Statue, Info Desk, Vocab Board, South Reception, Planters, Sofas)
+  // 5. Interactive Anchors & Lobby Fixed Fixtures (Statue, Info Desk, Vocab Board, South Reception, Planters, OPAC, Display Cases, Vending)
   cols.push(
     makeBoxCollider('lobby-statue', 'Tượng GS. Tạ Quang Bửu', 1, 'furniture', -1.35, 1.35, -3.1, -1.1, 2.4),
     makeBoxCollider('lobby-info-desk', 'Quầy thông tin & mượn sách', 1, 'furniture', -4.5, -2.7, -1.4, 0.2, 1.2),
     makeBoxCollider('lobby-vocab-board', 'Bảng từ vựng Thư viện', 1, 'furniture', 2.9, 4.4, -1.2, 0.0, 2.0),
     makeBoxCollider('lobby-south-reception', 'Quầy lễ tân chính Tầng 1', 1, 'furniture', -2.6, 2.6, 8.6, 10.2, 1.15),
-    makeBoxCollider('lobby-planter-west', 'Bồn cây ghế gỗ Tây', 1, 'furniture', -11.45, -9.75, -1.65, 1.65, 1.2),
-    makeBoxCollider('lobby-planter-east', 'Bồn cây ghế gỗ Đông', 1, 'furniture', 9.75, 11.45, -1.65, 1.65, 1.2),
-    makeBoxCollider('lobby-sofa-west-1', 'Sofa Sảnh Tây 1', 1, 'furniture', -15.3, -13.1, 2.35, 3.25, 0.9),
-    makeBoxCollider('lobby-sofa-west-2', 'Sofa Sảnh Tây 2', 1, 'furniture', -15.3, -13.1, 4.15, 5.05, 0.9),
-    makeBoxCollider('lobby-sofa-east-1', 'Sofa Sảnh Đông 1', 1, 'furniture', 13.1, 15.3, 2.35, 3.25, 0.9),
-    makeBoxCollider('lobby-sofa-east-2', 'Sofa Sảnh Đông 2', 1, 'furniture', 13.1, 15.3, 4.15, 5.05, 0.9),
+    makeBoxCollider('lobby-planter-west', 'Bồn cây ghế gỗ Tây', 1, 'furniture', -11.55, -9.65, -1.65, 1.65, 1.2),
+    makeBoxCollider('lobby-planter-east', 'Bồn cây ghế gỗ Đông', 1, 'furniture', 9.65, 11.55, -1.65, 1.65, 1.2),
+    makeBoxCollider('lobby-opac-north', 'Bàn tra cứu OPAC Bắc', 1, 'furniture', -17.85, -16.75, -8.8, -6.2, 1.2),
+    makeBoxCollider('lobby-opac-south', 'Bàn tra cứu OPAC Nam', 1, 'furniture', -17.85, -16.75, 6.2, 8.8, 1.2),
+    makeBoxCollider('lobby-display-case-1', 'Tủ trưng bày Sảnh Bắc 1', 1, 'furniture', -15.7, -13.5, -12.35, -11.45, 1.45),
+    makeBoxCollider('lobby-display-case-2', 'Tủ trưng bày Sảnh Bắc 2', 1, 'furniture', -11.7, -9.5, -12.35, -11.45, 1.45),
+    makeBoxCollider('lobby-magazine-rack', 'Kệ báo & tạp chí Tầng 1', 1, 'furniture', -7.7, -5.9, -12.13, -11.67, 1.55),
+    makeBoxCollider('lobby-vending-machine', 'Máy bán nước tự động Tầng 1', 1, 'furniture', 13.72, 14.88, -12.33, -11.47, 1.95),
   );
 
-  // 5. PR8 Study Tables & 4 Study Chairs
-  cols.push(
-    makeBoxCollider('study-table-tqb-1f-t1', 'Bàn học nhóm 1', 1, 'furniture', -3.72, -1.88, 1.38, 2.32, 0.78),
-    makeBoxCollider('study-table-tqb-1f-t2', 'Bàn học nhóm 2', 1, 'furniture', 1.88, 3.72, 1.38, 2.32, 0.78),
-  );
+  // 6. PR8 Study Tables (derived directly from LIBRARY_LOBBY.studyTables[].box) & 4 Study Chairs
+  for (const table of LIBRARY_LOBBY.studyTables) {
+    cols.push(
+      makeBoxCollider(
+        `study-table-${table.tableId}`,
+        table.label,
+        1,
+        'furniture',
+        table.box.minX,
+        table.box.maxX,
+        table.box.minZ,
+        table.box.maxZ,
+        table.height,
+      ),
+    );
+  }
   for (const seat of STUDY_SEATS) {
     if (seat.studyRoomId === 'library-lobby') {
       cols.push(
@@ -836,10 +1190,10 @@ function buildFloor1Colliders(): SpatialCollider[] {
           `Ghế học ${seat.label}`,
           1,
           'furniture',
-          seat.x - 0.25,
-          seat.x + 0.25,
-          seat.z - 0.25,
-          seat.z + 0.25,
+          Number((seat.x - 0.215).toFixed(4)),
+          Number((seat.x + 0.215).toFixed(4)),
+          Number((seat.z - 0.16).toFixed(4)),
+          Number((seat.z + 0.16).toFixed(4)),
           0.85,
         ),
       );
@@ -864,38 +1218,9 @@ function buildFloor2Or3Colliders(floor: 2 | 3): SpatialCollider[] {
     cols.push(makeCylinderCollider(`f${floor}-${c.id}`, `Cột thông tầng T${floor}`, floor, 'column', c.x, c.z, c.radius));
   }
 
-  // Balcony study tables & perimeter bookshelves
-  for (const sx of [-15.8, 15.8]) {
-    for (const sz of [-2.8, 2.8]) {
-      cols.push(
-        makeBoxCollider(
-          `f${floor}-balcony-table-${sx < 0 ? 'w' : 'e'}-${sz < 0 ? 'n' : 's'}`,
-          `Bàn tự học hành lang T${floor}`,
-          floor,
-          'furniture',
-          sx - 1.1,
-          sx + 1.1,
-          sz - 0.55,
-          sz + 0.55,
-          0.78,
-        ),
-      );
-    }
-  }
-  for (const bxX of [-14.0, -7.0, 0.0, 7.0, 14.0]) {
-    cols.push(
-      makeBoxCollider(
-        `f${floor}-north-shelf-${bxX}`,
-        `Kệ sách hành lang Bắc T${floor}`,
-        floor,
-        'furniture',
-        bxX - 1.2,
-        bxX + 1.2,
-        ZB + 0.1,
-        ZB + 0.82,
-        2.15,
-      ),
-    );
+  // Shared balcony furniture placements (table4, round4, sofa, armchair, shelf)
+  for (const fp of getBlockAFurniturePlacements(floor)) {
+    cols.push(colliderFromFurniturePlacement(fp));
   }
 
   return cols;
@@ -920,9 +1245,17 @@ function buildFloor4Or5Colliders(floor: 4 | 5): SpatialCollider[] {
     ...buildWallSegmentsWithDoors(`f${floor}-corr-east`, `Tường Hành lang Đông T${floor}`, floor, 'z', XW, ZB, ZF, WT, doors),
   );
 
-  // 2. 8 Atrium Columns in corridor
+  // 2. 8 Atrium Columns & shared corridor furniture in corridor
   for (const c of ATRIUM_COLUMNS) {
     cols.push(makeCylinderCollider(`f${floor}-${c.id}`, `Cột thông tầng T${floor}`, floor, 'column', c.x, c.z, c.radius));
+  }
+  for (const fp of getBlockAFurniturePlacements(floor)) {
+    cols.push(colliderFromFurniturePlacement(fp));
+  }
+  if (floor === 4) {
+    cols.push(
+      makeBoxCollider('f4-corr-coffee-machine', 'Máy pha cà phê tự động T4', 4, 'furniture', 5.72, 6.68, -12.49, -11.71, 1.85),
+    );
   }
 
   // 3. Room 401 / 501 Shell & Interior Colliders (converted from local R4Z = -23.8)

@@ -11,6 +11,7 @@ import { canvasTex, lin, mulberry32 } from './procedural-helpers';
 import {
   createLibraryLocation,
   evaluateCurvedStairAt,
+  getBlockAFurniturePlacements,
   queryLibraryGround,
   resolveLibraryMovement,
   sanitizeLibraryFloor,
@@ -1023,11 +1024,9 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     for (const dz of [-1, 0, 1]) place('plant', s * 10.6, 0.22, dz);
   }
 
-  for (const s of [-1, 1]) {
-    place('sofa', s * 14.2, 0, -5.8, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-    place('armchair', s * 14.2, 0, -3.9, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-    place('sofa', s * 14.2, 0, 5.8, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-    place('armchair', s * 14.2, 0, 3.9, s > 0 ? -Math.PI / 2 : Math.PI / 2);
+  // Sofa, ghế bành sảnh Tầng 1 và 6 kệ giáo trình Phòng Mượn Sách P.102 từ nguồn chuẩn dùng chung (shared furniture placements)
+  for (const fp of getBlockAFurniturePlacements(1)) {
+    place(fp.prop, fp.x, fp.y, fp.z, fp.ry);
   }
   for (const [x, z] of [
     [-17.5, -11.2],
@@ -1150,61 +1149,14 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     for (let i = 0; i < 3; i++) {
       box(0.28, 0.18, 0.22, mat(BOOK_PAL[i * 3], 0.5), cX + 0.1, 1.18, cZ - 0.35 + i * 0.35);
     }
-    for (const sz of [z0 + 1.55, z0 + 3.1, z1 - 3.1, z1 - 1.55]) {
-      place('shelf', x0 + 2.05, 0, sz, 0);
-    }
-    place('shelf', x0 + 0.55, 0, zc - 1.5, Math.PI / 2);
-    place('shelf', x0 + 0.55, 0, zc + 1.5, Math.PI / 2);
   }
 
-  // Nội thất hành lang thông tầng Tầng 2–5
+  // Nội thất hành lang thông tầng Tầng 2–5 (từ getBlockAFurniturePlacements dùng chung với collision resolver)
   for (let f = 1; f < NF; f++) {
     const y = f * FH;
-    const isStairF = f === 1;
-    const inGap = (s: number) => isStairF && ((s > S2R0 - 0.025 && s < S2R1 + 0.025) || (s > S2L0 - 0.025 && s < S2L1 + 0.025));
-
-    if (f === 1 || f === 2) {
-      const N = 16;
-      for (let i = 0; i < N; i++) {
-        const s = (i + 0.5) / N;
-        if (inGap(s)) continue;
-        const [px, pz] = stadAt(s, FR + 1.65);
-        place('table4', px, y, pz, ryOf(px, pz));
-      }
-      for (let i = 0; i < 12; i++) {
-        const s = (i + 0.5) / 12;
-        if (inGap(s)) continue;
-        const [px, pz] = stadAt(s, FR + 3.45);
-        if (Math.abs(px) > XW - 2.3 || Math.abs(pz) > ZF - 2.1) continue;
-        place('round4', px, y, pz, (i * 0.7) % Math.PI);
-      }
-      for (const s of [-1, 1]) {
-        for (const z of [-9.2, -3.2, 3.2, 9.2]) {
-          place('sofa', s * 17, y, z, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-          place('armchair', s * 17, y, z + 1.6, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-        }
-      }
-      for (const x of [-13.5, -9, -4.5, 4.5, 9, 13.5]) {
-        place('shelf', x, y, ZB + 0.55, 0);
-        place('shelf', x, y, ZF - 0.55, Math.PI);
-      }
-    } else {
-      for (const x of [-9.5, -4.8, 0, 4.8, 9.5]) {
-        place('table4', x, y, -9.6, 0);
-        place('table4', x, y, 9.6, Math.PI);
-      }
-      for (const z of [-4.5, 0, 4.5]) {
-        place('round4', -16.2, y, z, 0.3);
-        place('round4', 15.8, y, z, 0.8);
-      }
-      for (const [x, z, ry] of [
-        [-14.5, -11.8, 0],
-        [14.5, -11.8, 0],
-        [-14.5, 11.8, Math.PI],
-        [14.5, 11.8, Math.PI],
-      ] as Array<[number, number, number]>) {
-        place('sofa', x, y, z, ry);
-      }
+    const floorNum = (f + 1) as 2 | 3 | 4 | 5;
+    for (const fp of getBlockAFurniturePlacements(floorNum)) {
+      place(fp.prop, fp.x, fp.y, fp.z, fp.ry);
     }
     for (const [x, z] of [
       [-17.8, -11.5],

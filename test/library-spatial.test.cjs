@@ -10,15 +10,22 @@ const path = require('node:path');
 require('./register-ts.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
+const { STUDY_SEATS } = require(path.join(ROOT, 'shared/contracts/study.ts'));
 const {
   AVATAR,
   BLOCK_B_DIMS,
   BLOCK_D_DIMS,
   LIBRARY_FLOORS,
   LIBRARY_FLOOR_SPAWNS,
+  LIBRARY_LOBBY,
   LIBRARY_NAV_PRESETS,
+  LIBRARY_PRESET_DESTINATIONS,
+  PROP_DIMENSIONS,
   ROOM_401_DIMS,
+  colliderFromFurniturePlacement,
+  computeRotatedBoxBounds,
   createLibraryLocation,
+  getBlockAFurniturePlacements,
   getBlockForFloor,
   getCollidersForFloor,
   getWalkableSurfacesForFloor,
@@ -101,8 +108,21 @@ test('PR10A Spatial (2) Floor 1 — outer boundaries, Book-Lending Room doorway 
   const colHit = resolveLibraryLobbyCollisions({ x: -13.85, z: 0 }, AVATAR.radius, 1);
   assert.equal(colHit.hit, 'Cột thông tầng Sảnh T1');
 
-  const tableHit = resolveLibraryLobbyCollisions({ x: -2.8, z: 1.85 }, AVATAR.radius, 1);
-  assert.equal(tableHit.hit, 'Bàn học nhóm 1');
+  const tableHit1 = resolveLibraryLobbyCollisions({ x: -2.15, z: 1.75 }, AVATAR.radius, 1);
+  assert.equal(tableHit1.hit, 'Bàn đọc Tây 1');
+  const tableHit2 = resolveLibraryLobbyCollisions({ x: 2.15, z: 1.75 }, AVATAR.radius, 1);
+  assert.equal(tableHit2.hit, 'Bàn đọc Đông 2');
+
+  // All 6 P.102 bookshelves (4 East-facing at x=-23.95 + 2 West-wall rotated at x=-25.45) block movement
+  const f1Shelves = getBlockAFurniturePlacements(1).filter((p) => p.prop === 'shelf');
+  assert.equal(f1Shelves.length, 6, 'P.102 must have 6 canonical bookshelf placements');
+  for (const shelf of f1Shelves) {
+    const shelfHit = resolveLibraryLobbyCollisions({ x: shelf.x, z: shelf.z }, AVATAR.radius, 1);
+    assert.ok(
+      shelfHit.hit && shelfHit.hit.includes('P.102'),
+      `Shelf ${shelf.id} at (${shelf.x}, ${shelf.z}) must block movement, got ${shelfHit.hit}`,
+    );
+  }
 
   // 4. Diagonal wall sliding along East wall (x = 19.5) preserves Z progress without NaN
   const slideStart = createLibraryLocation(1, 18.8, 0.0, 0);
@@ -113,15 +133,35 @@ test('PR10A Spatial (2) Floor 1 — outer boundaries, Book-Lending Room doorway 
   assert.ok(slideRes.position.z > 1.5, 'Diagonal movement against East wall must slide along Z');
 });
 
-test('PR10A Spatial (3) Floors 2–3 — walkable balcony, stadium atrium void protection, stair landing openings & columns', () => {
+test('PR10A Spatial (3) Floors 2–3 — walkable balcony, stadium atrium void protection, stair landing openings, columns & shared furniture colliders', () => {
   for (const floor of [2, 3]) {
     const baseY = (floor - 1) * 4.5;
-    // Walkable east balcony
-    const balStart = createLibraryLocation(floor, 16.5, -2.0, baseY);
-    const balEnd = createLibraryLocation(floor, 16.5, -1.0, baseY);
+    // Walkable east balcony aisle
+    const balStart = createLibraryLocation(floor, 15.8, -1.5, baseY);
+    const balEnd = createLibraryLocation(floor, 15.8, -0.5, baseY);
     const balRes = resolveLibraryMovement(balStart, balEnd, AVATAR.radius, AVATAR.height);
     assert.equal(balRes.blocked, false);
     assert.equal(balRes.grounded, true);
+
+    // Every furniture category on Floors 2–3 (table4, round4, sofa, armchair, shelf) blocks movement through its center
+    const placements = getBlockAFurniturePlacements(floor);
+    for (const kind of ['table4', 'round4', 'sofa', 'armchair', 'shelf']) {
+      const itemsOfKind = placements.filter((p) => p.prop === kind);
+      assert.ok(itemsOfKind.length >= 4, `Floor ${floor} must have at least 4 placements of ${kind}`);
+      for (const item of itemsOfKind) {
+        const hit = resolveLibraryMovement(
+          createLibraryLocation(floor, item.x, item.z, baseY),
+          createLibraryLocation(floor, item.x, item.z, baseY),
+          AVATAR.radius,
+          AVATAR.height,
+        );
+        assert.equal(
+          hit.blocked,
+          true,
+          `Floor ${floor} furniture ${item.id} (${item.prop}) at (${item.x}, ${item.z}) must block movement`,
+        );
+      }
+    }
 
     // Stadium void between columns (x = 3.2, z = -9.0 -> z = -5.0) is blocked and pushed out to railing perimeter
     const voidAttempt = resolveLibraryMovement(
@@ -256,4 +296,74 @@ test('PR10A Spatial (5) Floors 6–7 & Floor 10 — Block B stadium hall/mezzani
   const f10Outer = resolveLibraryLobbyCollisions({ x: 25.0, z: 0 }, AVATAR.radius, 10);
   assert.ok(f10Outer.hit !== null);
   assert.ok(f10Outer.pos.x < 22.4);
+});
+
+test('PR10A Spatial (6) Regression — Mesh & collider bounding boxes match 1:1 and navigation presets are unified', () => {
+  // 1. PR8 Floor-1 study table colliders match LIBRARY_LOBBY.studyTables[].box 1:1
+  const f1Colliders = getCollidersForFloor(1);
+  for (const table of LIBRARY_LOBBY.studyTables) {
+    const col = f1Colliders.find((c) => c.id === `study-table-${table.tableId}`);
+    assert.ok(col, `Missing collider for PR8 table ${table.tableId}`);
+    assert.equal(col.name, table.label);
+    assert.equal(col.bounds.minX, table.box.minX);
+    assert.equal(col.bounds.maxX, table.box.maxX);
+    assert.equal(col.bounds.minZ, table.box.minZ);
+    assert.equal(col.bounds.maxZ, table.box.maxZ);
+    assert.equal(col.bounds.maxY, table.height);
+
+    // Ensure table collider does not overlap any PR8 chair collider on that table
+    for (const seat of STUDY_SEATS.filter((s) => s.tableId === table.tableId)) {
+      const chairCol = f1Colliders.find((c) => c.id === `study-chair-${seat.seatId}`);
+      assert.ok(chairCol, `Missing chair collider for ${seat.seatId}`);
+      const overlapsZ =
+        chairCol.bounds.minZ < col.bounds.maxZ && chairCol.bounds.maxZ > col.bounds.minZ;
+      assert.equal(
+        overlapsZ,
+        false,
+        `Chair collider ${chairCol.id} must not overlap table collider ${col.id} in Z`,
+      );
+    }
+  }
+
+  // 2. Shared Block A furniture placements (Floors 1–5) match collider bounding boxes 1:1
+  for (const floor of [1, 2, 3, 4, 5]) {
+    const placements = getBlockAFurniturePlacements(floor);
+    const colliders = getCollidersForFloor(floor);
+    assert.ok(placements.length > 0, `Floor ${floor} must have shared furniture placements`);
+
+    for (const fp of placements) {
+      const col = colliders.find((c) => c.id === fp.id);
+      assert.ok(col, `Missing collider for shared furniture placement ${fp.id} on floor ${floor}`);
+      const expected = colliderFromFurniturePlacement(fp);
+      assert.deepEqual(col.bounds, expected.bounds, `Bounds mismatch for ${fp.id} on floor ${floor}`);
+
+      if (fp.prop === 'round4') {
+        assert.ok(col.cylinder, `Round table ${fp.id} must have cylinder collider metadata`);
+        assert.equal(col.cylinder.radius, PROP_DIMENSIONS.round4.radius);
+      } else {
+        const d = PROP_DIMENSIONS[fp.prop];
+        const rotBox = computeRotatedBoxBounds(fp.x, fp.z, fp.ry, d.minLX, d.maxLX, d.minLZ, d.maxLZ);
+        assert.equal(col.bounds.minX, rotBox.minX);
+        assert.equal(col.bounds.maxX, rotBox.maxX);
+        assert.equal(col.bounds.minZ, rotBox.minZ);
+        assert.equal(col.bounds.maxZ, rotBox.maxZ);
+      }
+    }
+  }
+
+  // 3. Navigation presets in LibraryFloorNav.tsx use the exact canonical LIBRARY_NAV_PRESETS
+  const navModule = require(path.join(ROOT, 'components/ui/LibraryFloorNav.tsx'));
+  assert.equal(
+    navModule.LIBRARY_PRESET_DESTINATIONS,
+    LIBRARY_PRESET_DESTINATIONS,
+    'LibraryFloorNav.tsx must re-export canonical LIBRARY_PRESET_DESTINATIONS',
+  );
+  assert.equal(
+    LIBRARY_PRESET_DESTINATIONS,
+    LIBRARY_NAV_PRESETS,
+    'LIBRARY_PRESET_DESTINATIONS and LIBRARY_NAV_PRESETS must reference the same canonical array',
+  );
+  for (const preset of LIBRARY_PRESET_DESTINATIONS) {
+    assert.ok(preset.fullLabel && preset.fullLabel.length > 0, `Preset ${preset.id} must include fullLabel`);
+  }
 });
