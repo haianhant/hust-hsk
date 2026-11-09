@@ -610,7 +610,8 @@ export const LIBRARY_DOOR = {
 } as const;
 
 export const LIBRARY_LOBBY = {
-  bounds: { minX: -5.4, maxX: 5.4, minZ: -3.8, maxZ: 3.8 },
+  /** Biên tổng thể cho đại sảnh thông tầng 5 tầng + Phòng mượn sách + 11 phòng đọc Tầng 4–5 + Tầng 6–7 + Sân thượng Tầng 10 (studywithhuster.cyou). */
+  bounds: { minX: -35.2, maxX: 35.2, minZ: -38.0, maxZ: 27.2 },
   spawn: { x: 0, z: 2.4 },
   statue: { x: 0, z: -2.1 },
   vocabBoard: { x: 3.6, z: -0.6 },

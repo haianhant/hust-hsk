@@ -69,6 +69,7 @@ import { remoteRenderPos } from './RemotePlayers';
 import {
   bikeInput,
   bikeState,
+  computeLibraryElevation,
   fastTravelState,
   playerInput,
   playerState,
@@ -297,9 +298,10 @@ export default function Player() {
       return;
     }
     const seatedNow = seatingStateRef.current.status === 'seated';
+    const libY = playerState.inLibraryLobby && !seatedNow ? playerState.libraryY : 0;
     const target = new THREE.Vector3(
       posRef.current.x,
-      ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2,
+      (ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2) + libY,
       posRef.current.z,
     );
     const placeCamera = (d: number): THREE.Vector3 => {
@@ -314,16 +316,16 @@ export default function Player() {
     let d = distRef.current;
     if (ridingRef.current) d = Math.max(d, 7.5);
     if (playerState.inClassroom) d = Math.min(d, 4.5);
-    if (playerState.inLibraryLobby) d = Math.min(d, 5.2);
+    if (playerState.inLibraryLobby) d = Math.min(d, 6.2);
     let camPos = placeCamera(d);
     if (playerState.inClassroom) {
       camPos.x = clamp(camPos.x, -4.3, 4.3);
       camPos.z = clamp(camPos.z, -2.8, 2.8);
       camPos.y = Math.min(camPos.y, 2.85);
     } else if (playerState.inLibraryLobby) {
-      camPos.x = clamp(camPos.x, -5.6, 5.6);
-      camPos.z = clamp(camPos.z, -3.9, 3.9);
-      camPos.y = Math.min(camPos.y, 3.85);
+      camPos.x = clamp(camPos.x, -34.8, 34.8);
+      camPos.z = clamp(camPos.z, -37.6, 26.8);
+      camPos.y = clamp(camPos.y, libY + 0.35, libY + 8.5);
     }
     let guard = 0;
     while (
@@ -743,7 +745,7 @@ export default function Player() {
         const resolved = playerState.inClassroom
           ? resolveClassroomCollisions({ x, z }, AVATAR.radius).pos
           : playerState.inLibraryLobby
-            ? resolveLibraryLobbyCollisions({ x, z }, AVATAR.radius).pos
+            ? resolveLibraryLobbyCollisions({ x, z }, AVATAR.radius, playerState.libraryFloor).pos
             : resolveCollisions({ x, z }, AVATAR.radius).pos;
         posRef.current = resolved;
         // Đợt 5 — ghi playerState ngay để cầu nối multiplayer gửi vị trí
@@ -752,10 +754,15 @@ export default function Player() {
         if (typeof yaw === 'number') yawRef.current = yaw;
         if (typeof pitch === 'number') pitchRef.current = pitch;
         viewModeRef.current = 'follow';
-        const groundY =
-          !playerState.inClassroom && !playerState.inLibraryLobby
-            ? getCampusGroundElevation(resolved.x, resolved.z)
-            : 0;
+        let groundY = 0;
+        if (playerState.inLibraryLobby) {
+          const elev = computeLibraryElevation(resolved.x, resolved.z, playerState.libraryFloor, playerState.libraryY);
+          playerState.libraryY = elev.y;
+          playerState.libraryFloor = elev.floor;
+          groundY = elev.y;
+        } else if (!playerState.inClassroom) {
+          groundY = getCampusGroundElevation(resolved.x, resolved.z);
+        }
         if (groupRef.current) {
           groupRef.current.position.set(resolved.x, groundY, resolved.z);
         }
@@ -916,6 +923,8 @@ export default function Player() {
         }
         playerState.inClassroom = false;
         playerState.inLibraryLobby = true;
+        playerState.libraryFloor = 1;
+        playerState.libraryY = 0;
         posRef.current = { ...LIBRARY_LOBBY.spawn };
         facingRef.current = Math.PI;
         yawRef.current = 0; // nhìn thẳng về bắc (-Z), hướng tượng GS. Tạ Quang Bửu & tường nhị phân 0/1
@@ -925,10 +934,13 @@ export default function Player() {
         distRef.current = 3.8;
         viewModeRef.current = 'follow';
         window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: true } }));
+        window.dispatchEvent(new CustomEvent('bkhn:library-floor', { detail: { floor: 1 } }));
       },
       exitLibraryLobby: () => {
         seatActionsRef.current.forceClearSeat();
         playerState.inLibraryLobby = false;
+        playerState.libraryFloor = 1;
+        playerState.libraryY = 0;
         // Ra khỏi sảnh về trước mái hiên Thư viện (x = 38, z = 20.5), nhìn về bắc (yaw = 0) ra chữ HUST & sân trước
         posRef.current = { x: LIBRARY_DOOR.pos.x, z: 20.5 };
         facingRef.current = Math.PI;
@@ -941,6 +953,60 @@ export default function Player() {
         window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: false } }));
       },
       isInLibraryLobby: () => playerState.inLibraryLobby,
+      getLibraryFloor: () => ({ floor: playerState.libraryFloor, y: playerState.libraryY }),
+      setLibraryFloor: (
+        floor: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10,
+        x?: number,
+        z?: number,
+        yaw?: number,
+        pitch?: number,
+      ) => {
+        if (!playerState.inLibraryLobby) return { ok: false, reason: 'not-in-library' };
+        seatActionsRef.current.forceClearSeat();
+        keysRef.current.clear();
+        playerInput.move.x = 0;
+        playerInput.move.y = 0;
+        playerInput.run = false;
+        moveBlendRef.current = 0;
+        playerState.libraryFloor = floor;
+        const defaultSpawns: Record<number, { x: number; z: number; yaw: number }> = {
+          1: { x: 0, z: 2.4, yaw: 0 },
+          2: { x: 16.5, z: 0, yaw: Math.PI / 2 },
+          3: { x: 16.5, z: 0, yaw: Math.PI / 2 },
+          4: { x: -10.8, z: -18.5, yaw: 0 },
+          5: { x: -10.8, z: -18.5, yaw: 0 },
+          6: { x: -4.2, z: 5.5, yaw: -0.45 },
+          7: { x: 0, z: 13.2, yaw: 0 },
+          10: { x: 8.5, z: -0.6, yaw: -Math.PI / 2 },
+        };
+        const sp = defaultSpawns[floor] ?? defaultSpawns[1];
+        const nx = typeof x === 'number' ? x : sp.x;
+        const nz = typeof z === 'number' ? z : sp.z;
+        const resolved = resolveLibraryLobbyCollisions({ x: nx, z: nz }, AVATAR.radius, floor).pos;
+        posRef.current = resolved;
+        playerState.pos = { ...resolved };
+        const elev = computeLibraryElevation(resolved.x, resolved.z, floor, (floor - 1) * 4.5);
+        playerState.libraryY = elev.y;
+        const targetYaw = typeof yaw === 'number' ? yaw : sp.yaw;
+        yawRef.current = targetYaw;
+        playerState.cameraYaw = targetYaw;
+        facingRef.current = targetYaw + Math.PI;
+        playerState.facing = facingRef.current;
+        if (typeof pitch === 'number') {
+          pitchRef.current = pitch;
+          playerState.cameraPitch = pitch;
+        }
+        if (groupRef.current) {
+          groupRef.current.position.set(resolved.x, elev.y, resolved.z);
+          groupRef.current.rotation.y = facingRef.current;
+        }
+        syncCameraTransform();
+        window.dispatchEvent(new CustomEvent('bkhn:library-floor', { detail: { floor } }));
+        if (floor >= 1 && floor <= 5) {
+          window.dispatchEvent(new CustomEvent('bkhn:elevator-call', { detail: { floor } }));
+        }
+        return { ok: true, floor, pos: { ...resolved }, y: elev.y };
+      },
       sitAtSeat: (seatId: string) => seatActionsRef.current.sitAtSeat(seatId),
       standUp: () => seatActionsRef.current.standUp(),
       getSeatState: () => ({
@@ -1256,34 +1322,42 @@ export default function Player() {
       }
       const prevX = posRef.current.x;
       const prevZ = posRef.current.z;
-      const next: Vec2 = {
-        x: prevX + dirX * speed * delta,
-        z: prevZ + dirZ * speed * delta,
-      };
-      let { pos, hit } = playerState.inClassroom
-        ? resolveClassroomCollisions(next, AVATAR.radius)
-        : playerState.inLibraryLobby
-          ? resolveLibraryLobbyCollisions(next, AVATAR.radius)
-          : resolveCollisions(next, AVATAR.radius);
-      // Chặn đi xuyên qua sinh viên đang đi bộ (AmbientLife) và người chơi khác (RemotePlayers) ngoài sân trường
-      if (!playerState.inClassroom && !playerState.inLibraryLobby) {
-        let cur = pos;
-        for (const wp of activeWalkingStudentPositions) {
-          const pushed = pushOutOfCircle(cur.x, cur.z, wp, 0.38, AVATAR.radius);
-          if (pushed) {
-            cur = pushed;
-            if (!hit) hit = 'Sinh viên (NPC)';
+      const walkDelta = Math.min(rawDelta, 0.16);
+      const walkSubSteps = Math.max(1, Math.ceil(walkDelta / 0.05));
+      const subDt = walkDelta / walkSubSteps;
+      let curPos: Vec2 = { x: prevX, z: prevZ };
+      let hit: string | null = null;
+      for (let s = 0; s < walkSubSteps; s++) {
+        const next: Vec2 = {
+          x: curPos.x + dirX * speed * subDt,
+          z: curPos.z + dirZ * speed * subDt,
+        };
+        const res = playerState.inClassroom
+          ? resolveClassroomCollisions(next, AVATAR.radius)
+          : playerState.inLibraryLobby
+            ? resolveLibraryLobbyCollisions(next, AVATAR.radius, playerState.libraryFloor)
+            : resolveCollisions(next, AVATAR.radius);
+        curPos = res.pos;
+        if (res.hit) hit = res.hit;
+        // Chặn đi xuyên qua sinh viên đang đi bộ (AmbientLife) và người chơi khác (RemotePlayers) ngoài sân trường
+        if (!playerState.inClassroom && !playerState.inLibraryLobby) {
+          for (const wp of activeWalkingStudentPositions) {
+            const pushed = pushOutOfCircle(curPos.x, curPos.z, wp, 0.38, AVATAR.radius);
+            if (pushed) {
+              curPos = pushed;
+              if (!hit) hit = 'Sinh viên (NPC)';
+            }
           }
+          remoteRenderPos.forEach((rp) => {
+            const pushed = pushOutOfCircle(curPos.x, curPos.z, rp, 0.4, AVATAR.radius);
+            if (pushed) {
+              curPos = pushed;
+              if (!hit) hit = 'Sinh viên (MP)';
+            }
+          });
         }
-        remoteRenderPos.forEach((rp) => {
-          const pushed = pushOutOfCircle(cur.x, cur.z, rp, 0.4, AVATAR.radius);
-          if (pushed) {
-            cur = pushed;
-            if (!hit) hit = 'Sinh viên (MP)';
-          }
-        });
-        pos = cur;
       }
+      const pos = curPos;
       posRef.current = pos;
       // Đếm va chạm: chỉ đếm một lần khi vừa chạm vật mới (không đếm mỗi frame
       // khi đang trượt dọc tường).
@@ -1295,12 +1369,12 @@ export default function Player() {
       let diff = targetFacing - facingRef.current;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      facingRef.current += diff * Math.min(1, delta * 10);
+      facingRef.current += diff * Math.min(1, walkDelta * 10);
 
       // Tính quãng đường dịch chuyển thực tế sau va chạm: nếu bị tường/vật cản
       // chặn đứng (actualSpeed <= 0.15 * speed), ngắt chu kỳ bước để không bước tại chỗ!
       const actualDist = Math.hypot(pos.x - prevX, pos.z - prevZ);
-      const actualSpeed = delta > 1e-5 ? actualDist / delta : 0;
+      const actualSpeed = walkDelta > 1e-5 ? actualDist / walkDelta : 0;
       effectivelyMoving = actualSpeed > 0.15 * speed;
 
       const stepLen = 2 * LEG_LEN * Math.sin(swing);
@@ -1396,10 +1470,23 @@ export default function Player() {
       bodyRef.current.position.y += (bodyBobTarget - bodyRef.current.position.y) * ease;
     }
 
-    const groundY =
-      !playerState.inClassroom && !playerState.inLibraryLobby && !ridingRef.current && !seatedNow
-        ? getCampusGroundElevation(posRef.current.x, posRef.current.z)
-        : 0;
+    let groundY = 0;
+    if (playerState.inLibraryLobby && !seatedNow) {
+      const elev = computeLibraryElevation(
+        posRef.current.x,
+        posRef.current.z,
+        playerState.libraryFloor,
+        playerState.libraryY,
+      );
+      playerState.libraryY = elev.y;
+      if (elev.floor !== playerState.libraryFloor) {
+        playerState.libraryFloor = elev.floor;
+        window.dispatchEvent(new CustomEvent('bkhn:library-floor', { detail: { floor: elev.floor } }));
+      }
+      groundY = elev.y;
+    } else if (!playerState.inClassroom && !playerState.inLibraryLobby && !ridingRef.current && !seatedNow) {
+      groundY = getCampusGroundElevation(posRef.current.x, posRef.current.z);
+    }
 
     groupRef.current.position.set(
       posRef.current.x,
@@ -1450,25 +1537,19 @@ export default function Player() {
         target.z + Math.cos(yawRef.current) * cp * d,
       );
     };
-    // Kéo gần lại khi camera lọt vào AABB tòa nhà (kiểm tra 2D theo
-    // BUILDING_COLLIDERS; bảo thủ vì camera luôn thấp hơn mái các nhà).
-    // Trong phòng học (nhỏ, 9×6 m): giới hạn khoảng cách 4,5 m, không kéo
-    // theo collider campus — thay vào đó KẸP vị trí camera trong lòng phòng
-    // (không cho lọt ra ngoài tường rồi nhìn xuyên khe cửa vào).
     let d = distRef.current;
-    // Đang lái: camera bám sau xe, xa + cao hơn để thấy đường trước.
     if (ridingRef.current) d = Math.max(d, 7.5);
     if (playerState.inClassroom) d = Math.min(d, 4.5);
-    if (playerState.inLibraryLobby) d = Math.min(d, 5.2);
+    if (playerState.inLibraryLobby) d = Math.min(d, 6.2);
     let camPos = placeCamera(d);
     if (playerState.inClassroom) {
       camPos.x = clamp(camPos.x, -4.3, 4.3);
       camPos.z = clamp(camPos.z, -2.8, 2.8);
       camPos.y = Math.min(camPos.y, 2.85);
     } else if (playerState.inLibraryLobby) {
-      camPos.x = clamp(camPos.x, -5.6, 5.6);
-      camPos.z = clamp(camPos.z, -3.9, 3.9);
-      camPos.y = Math.min(camPos.y, 3.85);
+      camPos.x = clamp(camPos.x, -34.8, 34.8);
+      camPos.z = clamp(camPos.z, -37.6, 26.8);
+      camPos.y = clamp(camPos.y, groundY + 0.35, groundY + 8.5);
     }
     let guard = 0;
     while (

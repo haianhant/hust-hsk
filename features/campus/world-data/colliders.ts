@@ -180,12 +180,17 @@ export const CLASSROOM_COLLIDERS: NamedCollider[] = [
   { name: 'Bàn học 3', box: { minX: 1.6, maxX: 2.8, minZ: 0.3, maxZ: 0.9 } },
 ];
 
-/** Collider sảnh tầng 1 Thư viện Tạ Quang Bửu. */
+/** Collider sảnh tầng 1 Thư viện Tạ Quang Bửu (Đại sảnh thông tầng Stadium Atrium 39m × 26m + Phòng Mượn Sách). */
 export const LIBRARY_LOBBY_COLLIDERS: NamedCollider[] = [
-  { name: 'Tường bắc sảnh thư viện', box: { minX: -6.0, maxX: 6.0, minZ: -4.3, maxZ: -3.95 } },
-  { name: 'Tường nam sảnh thư viện', box: { minX: -6.0, maxX: 6.0, minZ: 3.95, maxZ: 4.3 } },
-  { name: 'Tường tây sảnh thư viện', box: { minX: -6.0, maxX: -5.55, minZ: -4.2, maxZ: 4.2 } },
-  { name: 'Tường đông sảnh thư viện', box: { minX: 5.55, maxX: 6.0, minZ: -4.2, maxZ: 4.2 } },
+  { name: 'Tường bắc sảnh thư viện', box: { minX: -20.0, maxX: 20.0, minZ: -13.3, maxZ: -12.75 } },
+  { name: 'Tường nam sảnh thư viện', box: { minX: -20.0, maxX: 20.0, minZ: 12.75, maxZ: 13.3 } },
+  { name: 'Tường tây bắc sảnh thư viện', box: { minX: -19.8, maxX: -19.3, minZ: -13.2, maxZ: -0.9 } },
+  { name: 'Tường tây nam sảnh thư viện', box: { minX: -19.8, maxX: -19.3, minZ: 4.5, maxZ: 13.2 } },
+  { name: 'Tường tây Phòng mượn sách', box: { minX: -26.2, maxX: -25.75, minZ: -2.4, maxZ: 6.0 } },
+  { name: 'Tường bắc Phòng mượn sách', box: { minX: -26.2, maxX: -19.3, minZ: -2.4, maxZ: -2.0 } },
+  { name: 'Tường nam Phòng mượn sách', box: { minX: -26.2, maxX: -19.3, minZ: 5.6, maxZ: 6.0 } },
+  { name: 'Tường đông sảnh thư viện', box: { minX: 19.3, maxX: 19.8, minZ: -13.2, maxZ: 13.2 } },
+  { name: 'Quầy lễ tân cửa nam', box: { minX: -2.6, maxX: 2.6, minZ: 8.6, maxZ: 10.2 } },
   { name: 'Tượng GS. Tạ Quang Bửu', box: { minX: -1.35, maxX: 1.35, minZ: -3.1, maxZ: -1.1 } },
   { name: 'Quầy thông tin thư viện', box: { minX: -4.5, maxX: -2.7, minZ: -1.4, maxZ: 0.2 } },
   { name: 'Bảng từ vựng thư viện', box: { minX: 2.9, maxX: 4.4, minZ: -1.2, maxZ: 0.0 } },

@@ -1,19 +1,34 @@
 // ---------------------------------------------------------------------------
-// LibraryLobby.tsx — SẢNH TẦNG 1 THƯ VIỆN TẠ QUANG BỬU (Giai đoạn 4).
-// Dựng theo tư liệu ảnh thật Sảnh tầng 1 Thư viện Tạ Quang Bửu (docs/reference-visual.md §3):
-//   - Tượng bán thân đồng GS. Tạ Quang Bửu (1910–1986) trên bệ gỗ gụ cao có
-//     biển đồng khắc tên, bao quanh bởi 4 trụ inox mạ vàng và dây nhung đỏ.
-//   - Bức tường hậu cảnh ốp gỗ nâu trầm với họa tiết NHỊ PHÂN 0/1 (vòng tròn &
-//     thanh đứng) phát sáng vàng hổ phách ấm + diềm hồi văn phát sáng phía trên.
-//   - Sàn đá hoa văn rẻ quạt đồng tâm (đỏ nâu đất nung, kem sáng, xám đá).
-//   - Quầy thông tin thư viện (借书处) & Bảng từ vựng Hán ngữ chuyên đề Thư viện
-//     & Khoa học để người chơi tương tác (phím E hoặc click chuột).
+// LibraryLobby.tsx — NỘI THẤT ĐA TẦNG THƯ VIỆN TẠ QUANG BỬU (TẦNG 1–10)
+// Chuẩn hóa toàn diện theo mô hình kiến trúc thủ tục studywithhuster.cyou kết hợp
+// 100% tính năng học HSK & Multiplayer Study Presence (PR8/PR9):
+//   - Khối A (Tầng 1–5): Đại sảnh thông tầng 5 tầng hình sân vận động (Stadium Atrium
+//     39m × 26m × 22.5m), sàn ngôi sao 16 cánh, tranh trần Mặt trời, 2 cầu thang xoắn
+//     đôi lên Tầng 2, 3 thang máy hoạt động, Phòng Mượn Sách tầng 1, hành lang tự học
+//     Tầng 2–3 và 11 Phòng đọc Tầng 4–5 (Phòng 401, 501, 411, 419, 402, 418, 404...).
+//   - Khối B (Tầng 6–7): Không gian Sáng tạo & Lounge ("INNOVATE · CONNECT ·
+//     COLLABORATE · CREATE"), cột phễu loe LatheGeometry, đảo gỗ 3 ô dù, ghế bành
+//     Mustard và Đại dương cầm 88 phím (Grand Piano) phát nhạc WebAudio tương tác.
+//   - Khối D (Sân thượng Tầng 10): Sân thượng ngắm sao, giàn gỗ Pergola chăng đèn
+//     dây vàng, ghế tắm nắng, Đài ngắm sao tròn và Kính thiên văn xoay hướng bầu trời.
+//   - Bảo toàn 100% tọa độ & raycast của Tượng GS. Tạ Quang Bửu, Quầy thông tin,
+//     Bảng từ vựng HSK và 4 ghế ngồi học Multiplayer (tqb-1f-t1-s1..s2, tqb-1f-t2-s1..s2).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { LibraryStudyArea } from '../../features/campus/buildings/library';
+import {
+  LibraryStudyArea,
+  buildFloor10Rooftop,
+  buildFloors1To5,
+  buildFloors6To7,
+  disposeObject3D,
+  type Floor10RooftopController,
+  type Floors6To7Controller,
+} from '../../features/campus/buildings/library';
 import { LIBRARY_LOBBY } from '../../lib/campus';
+import { playerState } from '../../lib/playerState';
 import { LabelPlane } from './TextPlate';
 
 export interface LibraryLobbyProps {
@@ -22,82 +37,12 @@ export interface LibraryLobbyProps {
   onObjectClick?: (id: string) => void;
 }
 
-const WALL_CREAM = '#F3EFE6';
-const COLUMN_STONE = '#E5DEC9';
 const WOOD_DARK = '#3B2214';
 const WOOD_MID = '#54321E';
 const BRONZE_DARK = '#4A3623';
 const GOLD_BRASS = '#D4AF37';
 const VELVET_RED = '#A81C24';
 const AMBER_GLOW = '#FFB627';
-
-// --- Sàn đá hoa văn rẻ quạt (Sunburst Marble Floor) --------------------------
-function makeSunburstFloorTexture(): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = 1024;
-  c.height = 1024;
-  const ctx = c.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D không khả dụng');
-
-  const cx = 512;
-  const cy = 280; // Tâm rẻ quạt đặt gần khu vực tượng GS. Tạ Quang Bửu
-
-  // Nền đá kem sáng
-  ctx.fillStyle = '#E8DFCE';
-  ctx.fillRect(0, 0, 1024, 1024);
-
-  // Các nan quạt tỏa ra từ tâm tượng
-  const rays = 24;
-  for (let i = 0; i < rays; i++) {
-    const a0 = (i / rays) * Math.PI * 2;
-    const a1 = ((i + 1) / rays) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, 920, a0, a1);
-    ctx.closePath();
-    ctx.fillStyle = i % 2 === 0 ? '#E6DDD0' : '#D9CFC0';
-    ctx.fill();
-  }
-
-  // Các vành khuyên đồng tâm: đỏ nâu đất nung, xám đá, kem
-  const rings: Array<{ rOuter: number; rInner: number; color: string }> = [
-    { rOuter: 640, rInner: 575, color: '#9E543E' },
-    { rOuter: 460, rInner: 410, color: '#878C92' },
-    { rOuter: 310, rInner: 245, color: '#A65B43' },
-    { rOuter: 175, rInner: 135, color: '#7D8288' },
-    { rOuter: 135, rInner: 0, color: '#DDD3C2' },
-  ];
-  for (const rg of rings) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, rg.rOuter, 0, Math.PI * 2);
-    if (rg.rInner > 0) {
-      ctx.arc(cx, cy, rg.rInner, 0, Math.PI * 2, true);
-    }
-    ctx.fillStyle = rg.color;
-    ctx.fill();
-  }
-
-  // Mạch gạch đồng tâm & hướng tâm
-  ctx.strokeStyle = 'rgba(60, 50, 42, 0.32)';
-  ctx.lineWidth = 2;
-  for (let r = 80; r <= 880; r += 65) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  for (let i = 0; i < rays; i++) {
-    const a = (i / rays) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a) * 60, cy + Math.sin(a) * 60);
-    ctx.lineTo(cx + Math.cos(a) * 900, cy + Math.sin(a) * 900);
-    ctx.stroke();
-  }
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
-}
 
 // --- Bức tường gỗ nhị phân 0/1 & diềm hồi văn phát sáng ----------------------
 function makeBinaryWallTextures(): { map: THREE.CanvasTexture; emissiveMap: THREE.CanvasTexture } {
@@ -113,7 +58,6 @@ function makeBinaryWallTextures(): { map: THREE.CanvasTexture; emissiveMap: THRE
   cEm.height = h;
   const ctxE = cEm.getContext('2d')!;
 
-  // Nền gỗ óc chó nâu trầm có vân dọc nhẹ
   const grad = ctxM.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, '#3D2314');
   grad.addColorStop(0.5, '#4E2E1B');
@@ -124,7 +68,6 @@ function makeBinaryWallTextures(): { map: THREE.CanvasTexture; emissiveMap: THRE
   ctxE.fillStyle = '#000000';
   ctxE.fillRect(0, 0, w, h);
 
-  // Chia pano gỗ dọc
   ctxM.strokeStyle = 'rgba(20, 10, 4, 0.55)';
   ctxM.lineWidth = 3;
   for (let x = 64; x < w; x += 64) {
@@ -134,7 +77,6 @@ function makeBinaryWallTextures(): { map: THREE.CanvasTexture; emissiveMap: THRE
     ctxM.stroke();
   }
 
-  // Diềm hồi văn (Greek key / meander) phát sáng ở mép trên (y = 14..52)
   const drawMeander = (ctx: CanvasRenderingContext2D, color: string, glow: boolean) => {
     ctx.save();
     ctx.strokeStyle = color;
@@ -160,8 +102,6 @@ function makeBinaryWallTextures(): { map: THREE.CanvasTexture; emissiveMap: THRE
   drawMeander(ctxM, '#FFD57E', false);
   drawMeander(ctxE, '#FFB830', true);
 
-  // Các cột ký hiệu nhị phân 0 (vòng tròn) và 1 (vạch đứng) phát sáng hai bên tượng
-  // Chừa khoảng giữa (x = 380..644) phía sau tượng bán thân thoáng hơn một chút để tôn tượng
   let seed = 19101986;
   const rnd = () => {
     seed = (seed * 16807) % 2147483647;
@@ -175,7 +115,6 @@ function makeBinaryWallTextures(): { map: THREE.CanvasTexture; emissiveMap: THRE
     const isCenterBehindStatue = c >= 6 && c <= 9;
     for (let r = 0; r < rows; r++) {
       const cy = 92 + r * 58;
-      // Ở vùng ngay sau đầu tượng, giảm mật độ để đầu tượng nổi bật
       if (isCenterBehindStatue && r >= 1 && r <= 4 && rnd() < 0.55) continue;
 
       const isZero = (c + r) % 2 === 0 || rnd() > 0.48;
@@ -278,16 +217,97 @@ export default function LibraryLobby({
   nearestSeatId = null,
   onObjectClick,
 }: LibraryLobbyProps) {
-  const floorTex = useMemo(() => makeSunburstFloorTexture(), []);
   const binaryWall = useMemo(() => makeBinaryWallTextures(), []);
+
+  // Khởi tạo 3 phân khu kiến trúc đa tầng của Thư viện Tạ Quang Bửu (Tầng 1–5, Tầng 6–7, Sân thượng Tầng 10)
+  // Các tầng trên (Tầng 2–5 nội thất hành lang/phòng đọc, Khối B Tầng 6–7, Khối D Tầng 10)
+  // được khởi tạo lười (lazy-init) ngay khi chuyển tới tầng đó để mount Tầng 1 tức thì.
+  const multiFloor = useMemo(() => {
+    const groupA = new THREE.Group();
+    const ctrlA = buildFloors1To5(groupA);
+
+    const groupB = new THREE.Group();
+    groupB.visible = false;
+    let ctrlB: Floors6To7Controller | null = null;
+    const ensureBlockB = () => {
+      if (!ctrlB) ctrlB = buildFloors6To7(groupB);
+      return ctrlB;
+    };
+
+    const groupD = new THREE.Group();
+    groupD.visible = false;
+    let ctrlD: Floor10RooftopController | null = null;
+    const ensureBlockD = () => {
+      if (!ctrlD) ctrlD = buildFloor10Rooftop(groupD);
+      return ctrlD;
+    };
+
+    return { groupA, ctrlA, groupB, ensureBlockB, groupD, ensureBlockD };
+  }, []);
+
+  const floor1AnchorsRef = useRef<THREE.Group>(null);
+  const floor6InteractiveRef = useRef<THREE.Group>(null);
+  const floor10InteractiveRef = useRef<THREE.Group>(null);
+
+  useEffect(() => {
+    const onPianoNote = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ midi?: number; velocity?: number }>).detail;
+      if (detail && typeof detail.midi === 'number') {
+        multiFloor.ensureBlockB().playPianoNote(detail.midi, detail.velocity ?? 0.8);
+      }
+    };
+    const onElevatorCall = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ floor?: number }>).detail;
+      if (detail && typeof detail.floor === 'number' && detail.floor >= 1 && detail.floor <= 5) {
+        multiFloor.ctrlA.callLift(detail.floor);
+      }
+    };
+    window.addEventListener('bkhn:piano-note', onPianoNote);
+    window.addEventListener('bkhn:elevator-call', onElevatorCall);
+    return () => {
+      window.removeEventListener('bkhn:piano-note', onPianoNote);
+      window.removeEventListener('bkhn:elevator-call', onElevatorCall);
+    };
+  }, [multiFloor]);
 
   useEffect(() => {
     return () => {
-      floorTex.dispose();
       binaryWall.map.dispose();
       binaryWall.emissiveMap.dispose();
+      disposeObject3D(multiFloor.groupA);
+      disposeObject3D(multiFloor.groupB);
+      disposeObject3D(multiFloor.groupD);
     };
-  }, [floorTex, binaryWall]);
+  }, [binaryWall, multiFloor]);
+
+  useFrame((state, rawDelta) => {
+    const dt = Math.min(rawDelta, 0.05);
+    const flr = playerState.libraryFloor;
+    const showBlockA = flr >= 1 && flr <= 5;
+    const showBlockB = flr === 6 || flr === 7;
+    const showBlockD = flr === 10;
+
+    if (multiFloor.groupA.visible !== showBlockA) multiFloor.groupA.visible = showBlockA;
+    if (multiFloor.groupB.visible !== showBlockB) multiFloor.groupB.visible = showBlockB;
+    if (multiFloor.groupD.visible !== showBlockD) multiFloor.groupD.visible = showBlockD;
+    if (floor1AnchorsRef.current && floor1AnchorsRef.current.visible !== showBlockA) {
+      floor1AnchorsRef.current.visible = showBlockA;
+    }
+    if (floor6InteractiveRef.current && floor6InteractiveRef.current.visible !== showBlockB) {
+      floor6InteractiveRef.current.visible = showBlockB;
+    }
+    if (floor10InteractiveRef.current && floor10InteractiveRef.current.visible !== showBlockD) {
+      floor10InteractiveRef.current.visible = showBlockD;
+    }
+
+    if (showBlockA) {
+      multiFloor.ctrlA.update(dt, playerState.pos.x, playerState.libraryY, playerState.pos.z);
+    } else if (showBlockB) {
+      multiFloor.ensureBlockB().update(dt);
+    } else if (showBlockD) {
+      multiFloor.ensureBlockD().update(dt, state.clock.elapsedTime);
+    }
+  });
 
   const clickObj = (id: string) => (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
@@ -311,371 +331,269 @@ export default function LibraryLobby({
 
   return (
     <group>
-      {/* Ánh sáng ấm đặc trưng của Sảnh tầng 1 Thư viện Tạ Quang Bửu */}
-      <pointLight position={[0, 3.6, -1.6]} color="#FFE2A8" intensity={1.8} distance={12} />
-      <pointLight position={[-3.2, 3.4, 0.5]} color="#FFF3D6" intensity={1.1} distance={10} />
-      <pointLight position={[3.2, 3.4, 0.5]} color="#FFF3D6" intensity={1.1} distance={10} />
-
-      {/* Sàn đá hoa văn rẻ quạt 12 × 8.4 m */}
-      <mesh position={[0, -0.05, 0]} receiveShadow>
-        <boxGeometry args={[12, 0.1, 8.4]} />
-        <meshStandardMaterial map={floorTex} roughness={0.35} metalness={0.08} />
-      </mesh>
-
-      {/* Trần sảnh cao 4.2 m + gờ thông tầng lửng (mezzanine ring) */}
-      <mesh position={[0, 4.25, 0]}>
-        <boxGeometry args={[12.2, 0.12, 8.6]} />
-        <meshStandardMaterial color="#FAF7F0" roughness={0.85} />
-      </mesh>
-      {/* Dải đèn âm trần phát sáng ấm */}
-      {[-3.2, 0, 3.2].map((lx) => (
-        <mesh key={`ceil-light-${lx}`} position={[lx, 4.18, 0]}>
-          <boxGeometry args={[0.45, 0.02, 5.8]} />
-          <meshStandardMaterial color="#FFFDF6" emissive="#FFE4A3" emissiveIntensity={0.95} />
-        </mesh>
-      ))}
-
-      {/* Tường bắc (hậu cảnh), tường tây, tường đông, tường nam (cửa kính ra sân) */}
-      <mesh position={[0, 2.1, -4.15]} receiveShadow>
-        <boxGeometry args={[12.2, 4.2, 0.2]} />
-        <meshStandardMaterial color={WALL_CREAM} roughness={0.88} />
-      </mesh>
-      <mesh position={[-5.9, 2.1, 0]} receiveShadow>
-        <boxGeometry args={[0.2, 4.2, 8.4]} />
-        <meshStandardMaterial color={WALL_CREAM} roughness={0.88} />
-      </mesh>
-      <mesh position={[5.9, 2.1, 0]} receiveShadow>
-        <boxGeometry args={[0.2, 4.2, 8.4]} />
-        <meshStandardMaterial color={WALL_CREAM} roughness={0.88} />
-      </mesh>
-      {/* Tường nam có khung cửa kính lớn nhìn ra quảng trường Thư viện */}
-      <mesh position={[-3.6, 2.1, 4.15]}>
-        <boxGeometry args={[4.8, 4.2, 0.2]} />
-        <meshStandardMaterial color={WALL_CREAM} roughness={0.88} />
-      </mesh>
-      <mesh position={[3.6, 2.1, 4.15]}>
-        <boxGeometry args={[4.8, 4.2, 0.2]} />
-        <meshStandardMaterial color={WALL_CREAM} roughness={0.88} />
-      </mesh>
-      <mesh position={[0, 3.55, 4.15]}>
-        <boxGeometry args={[2.4, 1.3, 0.2]} />
-        <meshStandardMaterial color={WALL_CREAM} roughness={0.88} />
-      </mesh>
-      {/* Cửa kính sảnh chính phía nam */}
-      <mesh position={[0, 1.45, 4.12]}>
-        <boxGeometry args={[2.3, 2.9, 0.06]} />
-        <meshStandardMaterial color="#9CC5D8" roughness={0.2} metalness={0.15} transparent opacity={0.55} />
-      </mesh>
-
-      {/* 4 cột trụ tròn ốp đá kem trong sảnh */}
-      {[
-        [-4.2, -3.2],
-        [4.2, -3.2],
-        [-4.2, 2.6],
-        [4.2, 2.6],
-      ].map(([cx, cz], idx) => (
-        <group key={`lobby-col-${idx}`} position={[cx, 0, cz]}>
-          <mesh position={[0, 2.1, 0]} castShadow receiveShadow>
-            <cylinderGeometry args={[0.32, 0.34, 4.2, 20]} />
-            <meshStandardMaterial color={COLUMN_STONE} roughness={0.7} />
-          </mesh>
-          <mesh position={[0, 0.12, 0]}>
-            <cylinderGeometry args={[0.38, 0.4, 0.24, 20]} />
-            <meshStandardMaterial color="#8A8275" roughness={0.75} />
-          </mesh>
-        </group>
-      ))}
+      {/* Hệ thống ánh sáng ấm áp cho Đại sảnh thông tầng & các tầng đọc sách (1 đèn điểm trung tâm tối ưu shader) */}
+      <pointLight position={[0, 7.5, 0]} color="#FFEBC2" intensity={1.9} distance={42} decay={1.1} />
 
       {/* =====================================================================
-          BỨC TƯỜNG NHỊ PHÂN 0/1 PHÁT SÁNG (Hậu cảnh tượng GS. Tạ Quang Bửu)
+          3 PHÂN KHU KIẾN TRÚC ĐA TẦNG THƯ VIỆN TẠ QUANG BỬU (TẦNG 1–10)
           ===================================================================== */}
-      <group position={[0, 0, -3.96]}>
-        {/* Khung gỗ viền ngoài */}
-        <mesh position={[0, 2.0, -0.04]} receiveShadow>
-          <boxGeometry args={[7.8, 3.85, 0.08]} />
-          <meshStandardMaterial color={WOOD_DARK} roughness={0.65} />
-        </mesh>
-        {/* Mặt tường gỗ óc chó kèm họa tiết 0/1 & hồi văn phát sáng */}
-        <mesh
-          position={[0, 2.0, 0.02]}
+      <primitive object={multiFloor.groupA} />
+      <primitive object={multiFloor.groupB} />
+      <primitive object={multiFloor.groupD} />
+
+      {/* =====================================================================
+          CÁC ĐIỂM TƯƠNG TÁC HỌC HSK & MULTIPLAYER SEATING TẠI SẢNH TẦNG 1
+          ===================================================================== */}
+      <group ref={floor1AnchorsRef}>
+        {/* Bức tường gỗ nhị phân 0/1 & diềm hồi văn phát sáng tích hợp trên vách Bắc Đại sảnh */}
+        <group position={[0, 0, -12.38]}>
+          <mesh
+            position={[0, 2.05, 0.02]}
+            onClick={clickObj('statue')}
+            onPointerOver={hover}
+            onPointerOut={leave}
+          >
+            <planeGeometry args={[7.4, 3.65]} />
+            <meshStandardMaterial
+              map={binaryWall.map}
+              emissiveMap={binaryWall.emissiveMap}
+              emissive={new THREE.Color(AMBER_GLOW)}
+              emissiveIntensity={0.95}
+              roughness={0.5}
+            />
+          </mesh>
+        </group>
+
+        {/* TƯỢNG BÁN THÂN ĐỒNG GS. TẠ QUANG BỬU (1910–1986) TẠI TÂM BẮC NGÔI SAO 16 CÁNH */}
+        <group
+          position={[LIBRARY_LOBBY.statue.x, 0, LIBRARY_LOBBY.statue.z]}
           onClick={clickObj('statue')}
           onPointerOver={hover}
           onPointerOut={leave}
         >
-          <planeGeometry args={[7.4, 3.65]} />
-          <meshStandardMaterial
-            map={binaryWall.map}
-            emissiveMap={binaryWall.emissiveMap}
-            emissive={new THREE.Color(AMBER_GLOW)}
-            emissiveIntensity={0.95}
-            roughness={0.5}
+          {/* Bậc đá nguyên khối đen xám dưới chân bệ */}
+          <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
+            <boxGeometry args={[1.45, 0.16, 1.25]} />
+            <meshStandardMaterial color="#2A2B2E" roughness={0.5} metalness={0.15} />
+          </mesh>
+          {/* Bệ gỗ gụ cao 1,35 m có phào chỉ trên/dưới */}
+          <mesh position={[0, 0.82, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.82, 1.32, 0.74]} />
+            <meshStandardMaterial color={WOOD_DARK} roughness={0.55} />
+          </mesh>
+          <mesh position={[0, 1.48, 0]} castShadow>
+            <boxGeometry args={[0.92, 0.08, 0.84]} />
+            <meshStandardMaterial color={WOOD_MID} roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 0.2, 0]} castShadow>
+            <boxGeometry args={[0.92, 0.08, 0.84]} />
+            <meshStandardMaterial color={WOOD_MID} roughness={0.5} />
+          </mesh>
+
+          {/* Biển đồng khắc tên GS. Tạ Quang Bửu ở mặt trước bệ (+Z) */}
+          <LabelPlane
+            textureKey="tqb-statue-plaque"
+            canvasW={768}
+            canvasH={320}
+            draw={drawStatuePlaque}
+            size={[0.68, 0.28]}
+            position={[0, 0.96, 0.385]}
+            transparent={false}
           />
-        </mesh>
-        {/* Các vòng tròn 0 và thanh 1 nổi 3D phát sáng để tạo chiều sâu thật */}
-        {[-3.1, -2.4, -1.7, 1.7, 2.4, 3.1].map((bx, i) => (
-          <group key={`bin3d-${i}`} position={[bx, 2.1, 0.05]}>
-            <mesh position={[0, 0.55, 0]}>
-              <torusGeometry args={[0.14, 0.024, 12, 24]} />
-              <meshStandardMaterial
-                color="#FFE599"
-                emissive="#FFA812"
-                emissiveIntensity={1.1}
-                roughness={0.3}
-              />
+
+          {/* Đế đồng dưới tượng bán thân */}
+          <mesh position={[0, 1.56, 0]} castShadow>
+            <boxGeometry args={[0.56, 0.08, 0.44]} />
+            <meshStandardMaterial color={BRONZE_DARK} roughness={0.35} metalness={0.68} />
+          </mesh>
+
+          {/* Tượng bán thân đồng: vai + áo vest + cà vạt + cổ + đầu + vầng trán cao */}
+          <group position={[0, 1.6, 0]}>
+            <mesh position={[0, 0.22, 0]} castShadow>
+              <boxGeometry args={[0.74, 0.42, 0.38]} />
+              <meshStandardMaterial color={BRONZE_DARK} roughness={0.32} metalness={0.72} />
             </mesh>
-            <mesh position={[0, -0.1, 0]}>
-              <boxGeometry args={[0.05, 0.3, 0.03]} />
-              <meshStandardMaterial
-                color="#FFE599"
-                emissive="#FFA812"
-                emissiveIntensity={1.1}
-                roughness={0.3}
-              />
+            {[-0.36, 0.36].map((sx) => (
+              <mesh key={`sh-${sx}`} position={[sx, 0.26, 0]} castShadow>
+                <sphereGeometry args={[0.16, 16, 14]} />
+                <meshStandardMaterial color={BRONZE_DARK} roughness={0.32} metalness={0.72} />
+              </mesh>
+            ))}
+            <mesh position={[-0.1, 0.24, 0.195]} rotation={[0, 0, 0.22]}>
+              <boxGeometry args={[0.07, 0.32, 0.03]} />
+              <meshStandardMaterial color="#59412A" roughness={0.3} metalness={0.74} />
             </mesh>
-            <mesh position={[0, -0.75, 0]}>
-              <torusGeometry args={[0.14, 0.024, 12, 24]} />
-              <meshStandardMaterial
-                color="#FFE599"
-                emissive="#FFA812"
-                emissiveIntensity={1.1}
-                roughness={0.3}
-              />
+            <mesh position={[0.1, 0.24, 0.195]} rotation={[0, 0, -0.22]}>
+              <boxGeometry args={[0.07, 0.32, 0.03]} />
+              <meshStandardMaterial color="#59412A" roughness={0.3} metalness={0.74} />
+            </mesh>
+            <mesh position={[0, 0.22, 0.198]}>
+              <boxGeometry args={[0.055, 0.28, 0.025]} />
+              <meshStandardMaterial color="#684D33" roughness={0.28} metalness={0.76} />
+            </mesh>
+            <mesh position={[0, 0.49, 0.01]} castShadow>
+              <cylinderGeometry args={[0.105, 0.12, 0.16, 18]} />
+              <meshStandardMaterial color={BRONZE_DARK} roughness={0.32} metalness={0.72} />
+            </mesh>
+            <mesh position={[0, 0.69, 0.02]} scale={[0.92, 1.12, 0.98]} castShadow>
+              <sphereGeometry args={[0.19, 24, 20]} />
+              <meshStandardMaterial color={BRONZE_DARK} roughness={0.3} metalness={0.74} />
+            </mesh>
+            <mesh position={[0, 0.78, -0.01]} scale={[0.95, 0.85, 1.0]}>
+              <sphereGeometry args={[0.185, 20, 16]} />
+              <meshStandardMaterial color="#3B2A1B" roughness={0.38} metalness={0.68} />
+            </mesh>
+            <mesh position={[0, 0.73, 0.195]}>
+              <boxGeometry args={[0.16, 0.028, 0.04]} />
+              <meshStandardMaterial color="#59412A" roughness={0.3} metalness={0.75} />
+            </mesh>
+            <mesh position={[0, 0.67, 0.21]} rotation={[0.18, 0, 0]}>
+              <boxGeometry args={[0.038, 0.095, 0.05]} />
+              <meshStandardMaterial color="#59412A" roughness={0.3} metalness={0.75} />
+            </mesh>
+            {[-0.175, 0.175].map((ex) => (
+              <mesh key={`ear-${ex}`} position={[ex, 0.68, 0.01]}>
+                <boxGeometry args={[0.03, 0.08, 0.05]} />
+                <meshStandardMaterial color={BRONZE_DARK} roughness={0.32} metalness={0.72} />
+              </mesh>
+            ))}
+          </group>
+        </group>
+
+        {/* 4 TRỤ INOX MẠ VÀNG + DÂY NHUNG ĐỎ BAO QUANH TƯỢNG */}
+        {stanchions.map(([sx, sz], idx) => (
+          <group key={`stanchion-${idx}`} position={[sx, 0, sz]}>
+            <mesh position={[0, 0.03, 0]}>
+              <cylinderGeometry args={[0.16, 0.18, 0.06, 20]} />
+              <meshStandardMaterial color={GOLD_BRASS} roughness={0.25} metalness={0.85} />
+            </mesh>
+            <mesh position={[0, 0.48, 0]} castShadow>
+              <cylinderGeometry args={[0.028, 0.028, 0.9, 14]} />
+              <meshStandardMaterial color={GOLD_BRASS} roughness={0.22} metalness={0.88} />
+            </mesh>
+            <mesh position={[0, 0.96, 0]}>
+              <sphereGeometry args={[0.055, 14, 12]} />
+              <meshStandardMaterial color={GOLD_BRASS} roughness={0.2} metalness={0.9} />
             </mesh>
           </group>
         ))}
-      </group>
-
-      {/* =====================================================================
-          TƯỢNG BÁN THÂN ĐỒNG GS. TẠ QUANG BỬU (1910–1986)
-          ===================================================================== */}
-      <group
-        position={[LIBRARY_LOBBY.statue.x, 0, LIBRARY_LOBBY.statue.z]}
-        onClick={clickObj('statue')}
-        onPointerOver={hover}
-        onPointerOut={leave}
-      >
-        {/* Bậc đá nguyên khối đen xám dưới chân bệ */}
-        <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
-          <boxGeometry args={[1.45, 0.16, 1.25]} />
-          <meshStandardMaterial color="#2A2B2E" roughness={0.5} metalness={0.15} />
+        <mesh position={[0, 0.82, -1.25]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.022, 0.022, 2.32, 12]} />
+          <meshStandardMaterial color={VELVET_RED} roughness={0.75} />
         </mesh>
-        {/* Bệ gỗ gụ cao 1,35 m có phào chỉ trên/dưới */}
-        <mesh position={[0, 0.82, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.82, 1.32, 0.74]} />
-          <meshStandardMaterial color={WOOD_DARK} roughness={0.55} />
+        <mesh position={[-1.18, 0.82, -2.1]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.022, 0.022, 1.66, 12]} />
+          <meshStandardMaterial color={VELVET_RED} roughness={0.75} />
         </mesh>
-        <mesh position={[0, 1.48, 0]} castShadow>
-          <boxGeometry args={[0.92, 0.08, 0.84]} />
-          <meshStandardMaterial color={WOOD_MID} roughness={0.5} />
-        </mesh>
-        <mesh position={[0, 0.2, 0]} castShadow>
-          <boxGeometry args={[0.92, 0.08, 0.84]} />
-          <meshStandardMaterial color={WOOD_MID} roughness={0.5} />
+        <mesh position={[1.18, 0.82, -2.1]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.022, 0.022, 1.66, 12]} />
+          <meshStandardMaterial color={VELVET_RED} roughness={0.75} />
         </mesh>
 
-        {/* Biển đồng khắc tên GS. Tạ Quang Bửu ở mặt trước bệ (+Z) */}
-        <LabelPlane
-          textureKey="tqb-statue-plaque"
-          canvasW={768}
-          canvasH={320}
-          draw={drawStatuePlaque}
-          size={[0.68, 0.28]}
-          position={[0, 0.96, 0.385]}
-          transparent={false}
-        />
-
-        {/* Đế đồng dưới tượng bán thân */}
-        <mesh position={[0, 1.56, 0]} castShadow>
-          <boxGeometry args={[0.56, 0.08, 0.44]} />
-          <meshStandardMaterial color={BRONZE_DARK} roughness={0.35} metalness={0.68} />
-        </mesh>
-
-        {/* Tượng bán thân đồng: vai + áo vest + cà vạt + cổ + đầu + vầng trán cao */}
-        <group position={[0, 1.6, 0]}>
-          {/* Ngực & hai vai áo vest */}
-          <mesh position={[0, 0.22, 0]} castShadow>
-            <boxGeometry args={[0.74, 0.42, 0.38]} />
-            <meshStandardMaterial color={BRONZE_DARK} roughness={0.32} metalness={0.72} />
+        {/* QUẦY THÔNG TIN & MƯỢN SÁCH (Bên trái sảnh, x = -3.6, z = -0.6) */}
+        <group
+          position={[LIBRARY_LOBBY.infoDesk.x, 0, LIBRARY_LOBBY.infoDesk.z]}
+          onClick={clickObj('info-desk')}
+          onPointerOver={hover}
+          onPointerOut={leave}
+        >
+          <mesh position={[0, 0.52, 0]} castShadow receiveShadow>
+            <boxGeometry args={[1.6, 1.04, 1.3]} />
+            <meshStandardMaterial color={WOOD_MID} roughness={0.65} />
           </mesh>
-          {/* Hai bờ vai bo tròn */}
-          {[-0.36, 0.36].map((sx) => (
-            <mesh key={`sh-${sx}`} position={[sx, 0.26, 0]} castShadow>
-              <sphereGeometry args={[0.16, 16, 14]} />
-              <meshStandardMaterial color={BRONZE_DARK} roughness={0.32} metalness={0.72} />
-            </mesh>
-          ))}
-          {/* Ve áo vest & cà vạt nổi */}
-          <mesh position={[-0.1, 0.24, 0.195]} rotation={[0, 0, 0.22]}>
-            <boxGeometry args={[0.07, 0.32, 0.03]} />
-            <meshStandardMaterial color="#59412A" roughness={0.3} metalness={0.74} />
+          <mesh position={[0, 1.07, 0]} castShadow>
+            <boxGeometry args={[1.72, 0.06, 1.42]} />
+            <meshStandardMaterial color="#E8DFCE" roughness={0.4} />
           </mesh>
-          <mesh position={[0.1, 0.24, 0.195]} rotation={[0, 0, -0.22]}>
-            <boxGeometry args={[0.07, 0.32, 0.03]} />
-            <meshStandardMaterial color="#59412A" roughness={0.3} metalness={0.74} />
-          </mesh>
-          <mesh position={[0, 0.22, 0.198]}>
-            <boxGeometry args={[0.055, 0.28, 0.025]} />
-            <meshStandardMaterial color="#684D33" roughness={0.28} metalness={0.76} />
-          </mesh>
-          {/* Cổ */}
-          <mesh position={[0, 0.49, 0.01]} castShadow>
-            <cylinderGeometry args={[0.105, 0.12, 0.16, 18]} />
-            <meshStandardMaterial color={BRONZE_DARK} roughness={0.32} metalness={0.72} />
-          </mesh>
-          {/* Đầu & khuôn mặt điêu khắc */}
-          <mesh position={[0, 0.69, 0.02]} scale={[0.92, 1.12, 0.98]} castShadow>
-            <sphereGeometry args={[0.19, 24, 20]} />
-            <meshStandardMaterial color={BRONZE_DARK} roughness={0.3} metalness={0.74} />
-          </mesh>
-          {/* Mái tóc chải ngược & vầng trán cao đặc trưng */}
-          <mesh position={[0, 0.78, -0.01]} scale={[0.95, 0.85, 1.0]}>
-            <sphereGeometry args={[0.185, 20, 16]} />
-            <meshStandardMaterial color="#3B2A1B" roughness={0.38} metalness={0.68} />
-          </mesh>
-          {/* Chân mày, sống mũi & hai tai */}
-          <mesh position={[0, 0.73, 0.195]}>
-            <boxGeometry args={[0.16, 0.028, 0.04]} />
-            <meshStandardMaterial color="#59412A" roughness={0.3} metalness={0.75} />
-          </mesh>
-          <mesh position={[0, 0.67, 0.21]} rotation={[0.18, 0, 0]}>
-            <boxGeometry args={[0.038, 0.095, 0.05]} />
-            <meshStandardMaterial color="#59412A" roughness={0.3} metalness={0.75} />
-          </mesh>
-          {[-0.175, 0.175].map((ex) => (
-            <mesh key={`ear-${ex}`} position={[ex, 0.68, 0.01]}>
-              <boxGeometry args={[0.03, 0.08, 0.05]} />
-              <meshStandardMaterial color={BRONZE_DARK} roughness={0.32} metalness={0.72} />
+          <LabelPlane
+            textureKey="lobby-info-desk-sign"
+            canvasW={512}
+            canvasH={128}
+            draw={drawInfoDeskSign}
+            size={[1.45, 0.36]}
+            position={[0.81, 0.62, 0]}
+            rotation={[0, Math.PI / 2, 0]}
+            transparent={false}
+          />
+          {['#A54432', '#1F5C8A', '#2E7D32'].map((col, idx) => (
+            <mesh key={`book-${idx}`} position={[0.2, 1.12 + idx * 0.045, -0.3]}>
+              <boxGeometry args={[0.28, 0.04, 0.2]} />
+              <meshStandardMaterial color={col} roughness={0.75} />
             </mesh>
           ))}
         </group>
-      </group>
 
-      {/* =====================================================================
-          4 TRỤ INOX MẠ VÀNG + DÂY NHUNG ĐỎ BAO QUANH TƯỢNG
-          ===================================================================== */}
-      {stanchions.map(([sx, sz], idx) => (
-        <group key={`stanchion-${idx}`} position={[sx, 0, sz]}>
-          <mesh position={[0, 0.03, 0]}>
-            <cylinderGeometry args={[0.16, 0.18, 0.06, 20]} />
-            <meshStandardMaterial color={GOLD_BRASS} roughness={0.25} metalness={0.85} />
+        {/* BẢNG TỪ VỰNG HÁN NGỮ THƯ VIỆN TẠ QUANG BỬU (Bên phải sảnh, x = 3.6, z = -0.6) */}
+        <group
+          position={[LIBRARY_LOBBY.vocabBoard.x, 0, LIBRARY_LOBBY.vocabBoard.z]}
+          rotation={[0, -Math.PI / 5, 0]}
+          onClick={clickObj('vocab-board')}
+          onPointerOver={hover}
+          onPointerOut={leave}
+        >
+          <mesh position={[-0.65, 0.95, 0]} castShadow>
+            <boxGeometry args={[0.08, 1.9, 0.08]} />
+            <meshStandardMaterial color={WOOD_DARK} roughness={0.7} />
           </mesh>
-          <mesh position={[0, 0.48, 0]} castShadow>
-            <cylinderGeometry args={[0.028, 0.028, 0.9, 14]} />
-            <meshStandardMaterial color={GOLD_BRASS} roughness={0.22} metalness={0.88} />
+          <mesh position={[0.65, 0.95, 0]} castShadow>
+            <boxGeometry args={[0.08, 1.9, 0.08]} />
+            <meshStandardMaterial color={WOOD_DARK} roughness={0.7} />
           </mesh>
-          <mesh position={[0, 0.96, 0]}>
-            <sphereGeometry args={[0.055, 14, 12]} />
-            <meshStandardMaterial color={GOLD_BRASS} roughness={0.2} metalness={0.9} />
+          <mesh position={[0, 1.45, 0]} castShadow>
+            <boxGeometry args={[1.6, 1.1, 0.08]} />
+            <meshStandardMaterial color={WOOD_DARK} roughness={0.65} />
           </mesh>
+          <LabelPlane
+            textureKey="lobby-vocab-board"
+            canvasW={1024}
+            canvasH={640}
+            draw={drawLibraryVocabBoard}
+            size={[1.48, 0.96]}
+            position={[0, 1.45, 0.055]}
+            transparent={false}
+          />
         </group>
-      ))}
-      {/* Dây nhung đỏ nối mặt trước và hai bên */}
-      <mesh position={[0, 0.82, -1.25]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.022, 0.022, 2.32, 12]} />
-        <meshStandardMaterial color={VELVET_RED} roughness={0.75} />
-      </mesh>
-      <mesh position={[-1.18, 0.82, -2.1]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.022, 0.022, 1.66, 12]} />
-        <meshStandardMaterial color={VELVET_RED} roughness={0.75} />
-      </mesh>
-      <mesh position={[1.18, 0.82, -2.1]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.022, 0.022, 1.66, 12]} />
-        <meshStandardMaterial color={VELVET_RED} roughness={0.75} />
-      </mesh>
 
-      {/* Hai chậu cây cảnh đối xứng hai bên bức tường nhị phân */}
-      {[-2.4, 2.4].map((px) => (
-        <group key={`plant-${px}`} position={[px, 0, -3.2]}>
-          <mesh position={[0, 0.28, 0]} castShadow>
-            <cylinderGeometry args={[0.26, 0.2, 0.56, 16]} />
-            <meshStandardMaterial color="#D8CFC0" roughness={0.7} />
-          </mesh>
-          <mesh position={[0, 0.85, 0]} castShadow>
-            <sphereGeometry args={[0.42, 14, 12]} />
-            <meshStandardMaterial color="#2E5E36" roughness={0.85} />
-          </mesh>
-        </group>
-      ))}
-
-      {/* =====================================================================
-          QUẦY THÔNG TIN & MƯỢN SÁCH (Bên trái sảnh, x = -3.6, z = -0.6)
-          ===================================================================== */}
-      <group
-        position={[LIBRARY_LOBBY.infoDesk.x, 0, LIBRARY_LOBBY.infoDesk.z]}
-        onClick={clickObj('info-desk')}
-        onPointerOver={hover}
-        onPointerOut={leave}
-      >
-        <mesh position={[0, 0.52, 0]} castShadow receiveShadow>
-          <boxGeometry args={[1.6, 1.04, 1.3]} />
-          <meshStandardMaterial color={WOOD_MID} roughness={0.65} />
-        </mesh>
-        <mesh position={[0, 1.07, 0]} castShadow>
-          <boxGeometry args={[1.72, 0.06, 1.42]} />
-          <meshStandardMaterial color="#E8DFCE" roughness={0.4} />
-        </mesh>
-        <LabelPlane
-          textureKey="lobby-info-desk-sign"
-          canvasW={512}
-          canvasH={128}
-          draw={drawInfoDeskSign}
-          size={[1.45, 0.36]}
-          position={[0.81, 0.62, 0]}
-          rotation={[0, Math.PI / 2, 0]}
-          transparent={false}
-        />
-        {/* Chồng sách tham khảo trên quầy */}
-        {['#A54432', '#1F5C8A', '#2E7D32'].map((col, idx) => (
-          <mesh key={`book-${idx}`} position={[0.2, 1.12 + idx * 0.045, -0.3]}>
-            <boxGeometry args={[0.28, 0.04, 0.2]} />
-            <meshStandardMaterial color={col} roughness={0.75} />
-          </mesh>
-        ))}
-      </group>
-
-      {/* =====================================================================
-          BẢNG TỪ VỰNG HÁN NGỮ THƯ VIỆN TẠ QUANG BỬU (Bên phải sảnh, x = 3.6, z = -0.6)
-          ===================================================================== */}
-      <group
-        position={[LIBRARY_LOBBY.vocabBoard.x, 0, LIBRARY_LOBBY.vocabBoard.z]}
-        rotation={[0, -Math.PI / 5, 0]}
-        onClick={clickObj('vocab-board')}
-        onPointerOver={hover}
-        onPointerOut={leave}
-      >
-        {/* Chân giá đỡ gỗ */}
-        <mesh position={[-0.65, 0.95, 0]} castShadow>
-          <boxGeometry args={[0.08, 1.9, 0.08]} />
-          <meshStandardMaterial color={WOOD_DARK} roughness={0.7} />
-        </mesh>
-        <mesh position={[0.65, 0.95, 0]} castShadow>
-          <boxGeometry args={[0.08, 1.9, 0.08]} />
-          <meshStandardMaterial color={WOOD_DARK} roughness={0.7} />
-        </mesh>
-        <mesh position={[0, 1.45, 0]} castShadow>
-          <boxGeometry args={[1.6, 1.1, 0.08]} />
-          <meshStandardMaterial color={WOOD_DARK} roughness={0.65} />
-        </mesh>
-        <LabelPlane
-          textureKey="lobby-vocab-board"
-          canvasW={1024}
-          canvasH={640}
-          draw={drawLibraryVocabBoard}
-          size={[1.48, 0.96]}
-          position={[0, 1.45, 0.055]}
-          transparent={false}
+        {/* KHU VỰC BÀN GHẾ NGỒI HỌC TƯƠNG TÁC MULTIPLAYER (PR8/PR9) */}
+        <LibraryStudyArea
+          activeSeatId={activeSeatId}
+          nearestSeatId={nearestSeatId}
+          onSelectSeat={(seatId) => onObjectClick?.(`seat:${seatId}`)}
         />
       </group>
 
-      {/* =====================================================================
-          KHU VỰC BÀN GHẾ NGỒI HỌC TƯƠNG TÁC (PR8 Local Interactive Seating)
-          2 bàn đọc + 4 ghế ngồi học (tqb-1f-t1-s1..s2, tqb-1f-t2-s1..s2)
-          ===================================================================== */}
-      <LibraryStudyArea
-        activeSeatId={activeSeatId}
-        nearestSeatId={nearestSeatId}
-        onSelectSeat={(seatId) => onObjectClick?.(`seat:${seatId}`)}
-      />
+      {/* Vùng tương tác click chuột vào Đại dương cầm Grand Piano trên Tầng 6 */}
+      <group ref={floor6InteractiveRef} visible={false}>
+        <mesh
+          position={[-6.6, 1.25, 3.6]}
+          onClick={(e) => {
+            e.stopPropagation();
+            // Phát hợp âm Đô trưởng (C4-E4-G4-C5) và mở thanh đàn Piano
+            [60, 64, 67, 72].forEach((m, idx) =>
+              setTimeout(() => multiFloor.ensureBlockB().playPianoNote(m, 0.8), idx * 90),
+            );
+            onObjectClick?.('piano-6f');
+          }}
+          onPointerOver={hover}
+          onPointerOut={leave}
+        >
+          <boxGeometry args={[2.1, 1.5, 2.2]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      </group>
+
+      {/* Vùng tương tác click chuột vào Kính thiên văn ngắm sao trên Sân thượng Tầng 10 */}
+      <group ref={floor10InteractiveRef} visible={false}>
+        <mesh
+          position={[15.4, 1.2, 0.6]}
+          onClick={clickObj('telescope-10f')}
+          onPointerOver={hover}
+          onPointerOut={leave}
+        >
+          <boxGeometry args={[1.6, 1.8, 1.6]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      </group>
     </group>
   );
 }

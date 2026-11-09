@@ -52,6 +52,7 @@ import { getEarnedGlobalBadgeIds, GLOBAL_BADGES } from '../lib/learn/badges';
 import { getNextSuggestion } from '../lib/learn/suggest';
 import type { QuestAnswer } from '../components/learn/QuestPanel';
 import CharacterCreatorModal from '../components/ui/CharacterCreatorModal';
+import { LibraryFloorNav } from '../components/ui/LibraryFloorNav';
 import type { HomeworkState } from '../components/three/Classroom';
 import {
   createInitialSeatingState,
@@ -116,6 +117,7 @@ export default function HomePage() {
   const [outfitOpen, setOutfitOpen] = useState(false);
   const [characterProfile, setCharacterProfile] = useState<CharacterProfile>(DEFAULT_CHARACTER_PROFILE);
   const [lobbyModal, setLobbyModal] = useState<LibraryLobbyTopic | null>(null);
+  const [libraryExtraModal, setLibraryExtraModal] = useState<'piano' | 'telescope' | null>(null);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [homework, setHomework] = useState<HomeworkState>('desk');
   const [actionDone, setActionDone] = useState(false);
@@ -868,6 +870,16 @@ export default function HomePage() {
         speakText('你好，我想借书');
         return;
       }
+      if (id === 'piano-6f') {
+        setLibraryExtraModal('piano');
+        showToast('🎹 Đại dương cầm Tầng 6 — bấm các phím đàn trên thanh Piano để tấu nhạc!');
+        return;
+      }
+      if (id === 'telescope-10f') {
+        setLibraryExtraModal('telescope');
+        speakText('天文望远镜，星空，银河');
+        return;
+      }
       if (id === 'board') {
         if (!near(CLASSROOM.board.x, CLASSROOM.board.z, 2.5)) {
           showToast('Hãy đến gần bảng hơn để chọn.');
@@ -1440,6 +1452,13 @@ export default function HomePage() {
             onInteract={handleInteract}
             onSetHelpOpen={setHelpOpen}
             onShowToast={showToast}
+          />
+
+          {/* Bảng điều khiển Thang máy & Chuyển tầng Thư viện Tạ Quang Bửu (Tầng 1–10) */}
+          <LibraryFloorNav
+            visible={inLibraryLobby && !study.focusPolicy.suspend3DRendering}
+            externalModal={libraryExtraModal}
+            onClearExternalModal={() => setLibraryExtraModal(null)}
           />
         </>
       )}

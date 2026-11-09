@@ -87,8 +87,12 @@ export const playerState = {
   /** Bước 5 — true khi đang ở phòng học mô phỏng (mode phòng học, tọa độ
    *  cục bộ CLASSROOM thay cho campus). */
   inClassroom: false,
-  /** Giai đoạn 4 — true khi đang ở Sảnh tầng 1 Thư viện Tạ Quang Bửu (tọa độ cục bộ LIBRARY_LOBBY). */
+  /** Giai đoạn 4 — true khi đang ở Sảnh tầng 1–10 Thư viện Tạ Quang Bửu (tọa độ cục bộ LIBRARY_LOBBY). */
   inLibraryLobby: false,
+  /** Tầng hiện tại trong Thư viện Tạ Quang Bửu (1, 2, 3, 4, 5, 6, 7, 10 theo chuẩn studywithhuster.cyou). */
+  libraryFloor: 1 as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10,
+  /** Cao độ Y cục bộ của người chơi trong Thư viện (T1=0, T2=4.5, T3=9.0, T4=13.5, T5=18.0, T6=0/0.6, T7=5.25, T10=0/0.18). */
+  libraryY: 0,
   /** Giai đoạn 2 — chế độ thời gian ngày / hoàng hôn / đêm. */
   timeOfDay: 'day' as TimeOfDay,
   /** Việc 2 — Hệ thống nhân vật & đồng phục sinh viên Bách khoa. */
@@ -126,4 +130,54 @@ export function updatePlayerState(pos: Vec2, moving: boolean): void {
   playerState.pos = pos;
   playerState.zone = nearestZone(pos);
   playerState.moving = moving;
+}
+
+/**
+ * Tính cao độ mặt sàn Y và tầng tự động (khi đi bộ trên 2 cầu thang xoắn đôi
+ * giữa Tầng 1 và Tầng 2 hoặc bước lên bục Tầng 6 / Đài ngắm sao Tầng 10).
+ */
+export function computeLibraryElevation(
+  x: number,
+  z: number,
+  currentFloor: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10,
+  currentY: number,
+): { y: number; floor: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10 } {
+  if (currentFloor === 10) {
+    const onStarDeck = Math.hypot(x - 14.8, z - 0.4) < 4.2;
+    return { y: onStarDeck ? 0.18 : 0, floor: 10 };
+  }
+  if (currentFloor === 7) {
+    return { y: 5.25, floor: 7 };
+  }
+  if (currentFloor === 6) {
+    const cx = Math.max(-7.5, Math.min(7.5, x));
+    const onPlatform = Math.hypot(x - cx, z) < 9.5;
+    return { y: onPlatform ? 0.6 : 0, floor: 6 };
+  }
+  // Khối A (Tầng 1–5): kiểm tra 2 cầu thang xoắn đôi dẫn từ Tầng 1 (y = 0) lên Tầng 2 (y = 4.5)
+  if (currentFloor === 1 || currentFloor === 2) {
+    const L = 6.5;
+    const ST_R0 = 7.55;
+    const ST_R1 = 9.35;
+    for (const st of [
+      { side: 1, a0: -0.34, a1: 0.34 },
+      { side: -1, a0: Math.PI - 0.34, a1: Math.PI + 0.34 },
+    ]) {
+      const dx = x - st.side * L;
+      const r = Math.hypot(dx, z);
+      if (r < ST_R0 - 0.15 || r > ST_R1 + 0.15) continue;
+      let a = Math.atan2(z, dx);
+      if (st.side < 0 && a < 0) a += Math.PI * 2;
+      const lo = Math.min(st.a0, st.a1) - 0.06;
+      const hi = Math.max(st.a0, st.a1) + 0.06;
+      if (a >= lo && a <= hi) {
+        const t = Math.max(0, Math.min(1, (a - st.a0) / (st.a1 - st.a0)));
+        const stairY = t * 4.5;
+        if (Math.abs(currentY - stairY) < 1.6) {
+          return { y: stairY, floor: stairY >= 2.25 ? 2 : 1 };
+        }
+      }
+    }
+  }
+  return { y: (currentFloor - 1) * 4.5, floor: currentFloor };
 }

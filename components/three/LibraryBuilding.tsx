@@ -50,10 +50,11 @@
 // Chữ dùng canvas texture (TextPlate.tsx), không dùng drei Text.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { LIBRARY } from '../../lib/campus';
-import type { TimeOfDay } from '../../lib/playerState';
+import { playerState, type TimeOfDay } from '../../lib/playerState';
 import { LabelPlane, drawClockFace } from './TextPlate';
 import { makeGraniteStoneTexture, makeWeatheredConcreteTexture } from './materials';
 import { ImprovedTree } from './Trees';
@@ -406,6 +407,42 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
   const clockR = LIBRARY.clock.radius; // 1,3 m — giữ đúng hằng số (đợt 4)
   const clock = LIBRARY.clock; // (38, 7,3, 23,9), mặt bắc
 
+  const hourHandRef = useRef<THREE.Group>(null);
+  const minuteHandRef = useRef<THREE.Group>(null);
+  const secondHandRef = useRef<THREE.Group>(null);
+  const leftDoorRef = useRef<THREE.Group>(null);
+  const rightDoorRef = useRef<THREE.Group>(null);
+  const doorOpenRef = useRef(0);
+
+  useFrame((_, rawDelta) => {
+    // 1. Đồng hồ thời gian thực theo múi giờ Hà Nội (UTC+7) như studywithhuster.cyou
+    const hanoiMs = Date.now() + 7 * 3600 * 1000;
+    const d = new Date(hanoiMs);
+    const sec = d.getUTCSeconds() + d.getUTCMilliseconds() / 1000;
+    const min = d.getUTCMinutes() + sec / 60;
+    const hr = (d.getUTCHours() % 12) + min / 60;
+    if (hourHandRef.current) hourHandRef.current.rotation.z = -(hr / 12) * Math.PI * 2;
+    if (minuteHandRef.current) minuteHandRef.current.rotation.z = -(min / 60) * Math.PI * 2;
+    if (secondHandRef.current) secondHandRef.current.rotation.z = -(sec / 60) * Math.PI * 2;
+
+    // 2. Cửa kính tự động trượt mở hai bên khi người chơi lại gần thềm sảnh Thư viện
+    const px = playerState.pos.x;
+    const pz = playerState.pos.z;
+    const nearPorch =
+      !playerState.inLibraryLobby &&
+      !playerState.inClassroom &&
+      px >= 33.5 &&
+      px <= 42.5 &&
+      pz >= 18.5 &&
+      pz <= 27.2;
+    const targetOpen = nearPorch ? 1 : 0;
+    const dt = Math.min(rawDelta, 0.05);
+    doorOpenRef.current += (targetOpen - doorOpenRef.current) * Math.min(1, dt * 6);
+    const slideOffset = doorOpenRef.current * 1.45;
+    if (leftDoorRef.current) leftDoorRef.current.position.x = 37.1 - slideOffset;
+    if (rightDoorRef.current) rightDoorRef.current.position.x = 38.9 + slideOffset;
+  });
+
   // Mặt đồng hồ vẽ bằng canvas (vạch + số 12/3/6/9), tạo một lần.
   const clockTex = useMemo(() => {
     const canvas = document.createElement('canvas');
@@ -670,18 +707,28 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
           <meshStandardMaterial color={LIB_BLUE} roughness={0.65} metalness={0.2} />
         </mesh>
         <group position={[0, 0, 0.08]}>
-          <group rotation-z={-((10 * 30 + 10 * 0.5) * Math.PI) / 180}>
+          <group ref={hourHandRef} rotation-z={-((10 * 30 + 10 * 0.5) * Math.PI) / 180}>
             <mesh position={[0, 0.365, 0]}>
               <boxGeometry args={[0.08, 0.73, 0.05]} />
               <meshStandardMaterial color={INK} roughness={0.6} />
             </mesh>
           </group>
-          <group rotation-z={-((10 * 6) * Math.PI) / 180}>
+          <group ref={minuteHandRef} rotation-z={-((10 * 6) * Math.PI) / 180}>
             <mesh position={[0, 0.505, 0]}>
               <boxGeometry args={[0.06, 1.01, 0.05]} />
               <meshStandardMaterial color={INK} roughness={0.6} />
             </mesh>
           </group>
+          <group ref={secondHandRef} rotation-z={0}>
+            <mesh position={[0, 0.44, 0.015]}>
+              <boxGeometry args={[0.028, 1.08, 0.03]} />
+              <meshStandardMaterial color={HUST_RED} roughness={0.4} />
+            </mesh>
+          </group>
+          <mesh position={[0, 0, 0.025]} rotation-x={Math.PI / 2}>
+            <cylinderGeometry args={[0.075, 0.075, 0.06, 16]} />
+            <meshStandardMaterial color={LIB_BLUE} roughness={0.4} metalness={0.35} />
+          </mesh>
         </group>
       </group>
       {/* 2 chấm đen nhỏ hai bên đồng hồ */}
@@ -810,9 +857,32 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
         <boxGeometry args={[9.2, 5.4, 1.4]} />
         <meshStandardMaterial color={INTERIOR_DARK} roughness={1} />
       </mesh>
-      {[37.1, 38.9].map((x) => (
-        <GlassBox key={`lib-door-${x}`} p={[x, 2.6, 26.5]} s={[1.6, 4.0, 0.06]} />
-      ))}
+      {/* Ánh sáng ấm của Đại sảnh thông tầng nhìn qua cửa kính tự động */}
+      <mesh position={[38, 2.55, 26.58]}>
+        <planeGeometry args={[3.4, 3.85]} />
+        <meshStandardMaterial
+          color="#FFF3D1"
+          emissive="#FFD782"
+          emissiveIntensity={isNight ? 0.85 : 0.42}
+          roughness={0.6}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* 2 cánh cửa kính trung tâm tự động trượt mở sang hai bên khi người chơi tới gần */}
+      <group ref={leftDoorRef} position={[37.1, 2.6, 26.5]}>
+        <GlassBox p={[0, 0, 0]} s={[1.6, 4.0, 0.06]} />
+        <mesh position={[0.68, -0.1, -0.045]}>
+          <boxGeometry args={[0.04, 0.72, 0.04]} />
+          <meshStandardMaterial color="#D8DCE2" roughness={0.25} metalness={0.78} />
+        </mesh>
+      </group>
+      <group ref={rightDoorRef} position={[38.9, 2.6, 26.5]}>
+        <GlassBox p={[0, 0, 0]} s={[1.6, 4.0, 0.06]} />
+        <mesh position={[-0.68, -0.1, -0.045]}>
+          <boxGeometry args={[0.04, 0.72, 0.04]} />
+          <meshStandardMaterial color="#D8DCE2" roughness={0.25} metalness={0.78} />
+        </mesh>
+      </group>
       {[35.1, 40.9].map((x) => (
         <GlassBox key={`lib-door-side-${x}`} p={[x, 2.6, 26.5]} s={[2.1, 4.0, 0.06]} />
       ))}
@@ -896,6 +966,8 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       <LibPalm x={49.5} z={15} />
       <LibPalm x={49.5} z={19} />
       <LibBench x={49.0} z={13.5} />
+      <LibBench x={49.0} z={16.5} />
+      <LibBench x={25.0} z={14.0} />
       <LibLamp x={26} z={11} balls={5} isNight={isNight} />
       <LibLamp x={30} z={11} balls={5} isNight={isNight} />
       <LibLamp x={26} z={17.5} balls={5} isNight={isNight} />
