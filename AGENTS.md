@@ -55,6 +55,7 @@ npm run build              # 6. Xuất bản tĩnh Next.js (out/) thành công
 
 ## 4. Quy tắc Git & Tự động Commit/Push (`Git Policy`)
 
+- **Nhánh chính Production / Go-Live là `master`** (không dùng nhánh `main`).
 - **Luôn tự động `git commit` và `git push` lên nhánh hiện tại (`origin`)** ngay sau khi hoàn thành nhiệm vụ và vượt qua toàn bộ các cổng kiểm thử ở Mục 3.
 - Không ghi đè hoặc hoàn tác các thay đổi chưa commit trong working tree.
-- Không tự ý merge vào `main`/`master` hoặc deploy khi đang làm việc trên nhánh tính năng (`feat/*`) nếu chưa có yêu cầu từ người dùng.
+- Không tự ý merge vào `master` hoặc deploy khi đang làm việc trên nhánh tính năng (`feat/*`) nếu chưa có yêu cầu từ người dùng.

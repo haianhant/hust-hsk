@@ -11,3 +11,4 @@ export * from './colliders';
 export * from './zones';
 export * from './navigation';
 export * from './spatial-utils';
+export * from './library-spatial';

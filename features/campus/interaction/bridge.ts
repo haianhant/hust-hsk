@@ -61,6 +61,16 @@ export type BkhnHook = {
   projectSeatToScreen?: (
     seatId: string,
   ) => { x: number; y: number; inFront: boolean } | null;
+  setLibraryFloor?: (
+    floor: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10,
+    customX?: number,
+    customZ?: number,
+    customYaw?: number,
+    customPitch?: number,
+  ) => void;
+  getLibraryFloor?: () => 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10;
+  getLibrarySpatialDiagnostics?: () => unknown;
+  setLibraryCollisionDebug?: (enabled: boolean) => boolean;
 };
 
 export function getHook(): BkhnHook | undefined {
@@ -72,6 +82,7 @@ export interface InteractableDetectionInput {
   pos: { x: number; z: number };
   inClassroom: boolean;
   inLibraryLobby: boolean;
+  libraryFloor?: number;
   bikeRiding: boolean;
   bikeSpeed: number;
   bikePos: { x: number; z: number };
@@ -92,7 +103,7 @@ export interface DetectedInteractable {
 
 /**
  * Thứ tự ưu tiên prompt E — chỉ HIỆN ĐÚNG 1 prompt:
- *   1. Trong sảnh Thư viện (`seat-stand-up`, `seat:<seatId>`, `lobby-statue`, `lobby-vocab-board`, `lobby-info-desk`)
+ *   1. Trong sảnh Thư viện Tầng 1 (`seat-stand-up`, `seat:<seatId>`, `lobby-statue`, `lobby-vocab-board`, `lobby-info-desk`)
  *   2. Đang lái xe ngoài sân → `bike-dismount`
  *   3. Đứng gần xe (≤ 2,2 m) ngoài sân → `bike-mount`
  *   4. Tương tác ngoài sân (`npc-minh`, `classroom-door`, `library-door`)
@@ -105,6 +116,7 @@ export function findNearestInteractable(
     pos,
     inClassroom,
     inLibraryLobby,
+    libraryFloor = 1,
     bikeRiding,
     bikeSpeed,
     bikePos,
@@ -122,7 +134,10 @@ export function findNearestInteractable(
     if (seated) {
       return { id: 'seat-stand-up', label: 'E — Đứng dậy' };
     }
-    const nearestSeat = findNearestLibrarySeat(pos, SEAT_INTERACT_RADIUS);
+    if (libraryFloor !== 1) {
+      return null;
+    }
+    const nearestSeat = findNearestLibrarySeat(pos, SEAT_INTERACT_RADIUS, libraryFloor);
     if (nearestSeat) {
       const sid = nearestSeat.seat.seatId;
       if (pendingSeatId === sid) {

@@ -2,9 +2,9 @@ name: CI Verification Gates
 
 on:
   push:
-    branches: [main, master]
+    branches: [master]
   pull_request:
-    branches: [main, master]
+    branches: [master]
 
 jobs:
   verify:
@@ -44,3 +44,8 @@ jobs:
 
       - name: Gate 6 — Next.js Static Export Build
         run: npm run build
+
+      - name: Gate 7 — PR10B Browser Verification Gate (No Silent Skip)
+        run: |
+          npm install --no-save playwright-core@1.48.2
+          PLAYWRIGHT_CORE_PATH=$(pwd)/node_modules/playwright-core npm run test:pr10b

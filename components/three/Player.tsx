@@ -62,6 +62,19 @@ import {
   resolveClassroomCollisions,
   resolveCollisions,
   resolveLibraryLobbyCollisions,
+  createLibraryLocation,
+  findNearestLibraryDoorway,
+  getBlockForFloor,
+  getCameraVerticalBoundsAt,
+  libraryNavigationController,
+  queryLibraryGround,
+  resolveLibraryCameraOcclusion,
+  resolveLibraryFloorTransition,
+  resolveLibraryMovement,
+  stepLibraryCameraDistance,
+  type LibraryCameraOcclusionResult,
+  type LibraryFloor,
+  type LibrarySpatialDiagnostics,
   type Vec2,
 } from '../../lib/campus';
 import { activeWalkingStudentPositions } from './AmbientLife';
@@ -81,6 +94,7 @@ import {
 import {
   computeSafeStandUpPosition,
   createInitialSeatingState,
+  findNearestLibrarySeat,
   transitionToSeated,
   transitionToStanding,
   type LocalSeatingState,
@@ -316,16 +330,21 @@ export default function Player() {
     let d = distRef.current;
     if (ridingRef.current) d = Math.max(d, 7.5);
     if (playerState.inClassroom) d = Math.min(d, 4.5);
-    if (playerState.inLibraryLobby) d = Math.min(d, 6.2);
+    if (playerState.inLibraryLobby) d = Math.min(d, seatedNow ? 2.6 : 4.2);
     let camPos = placeCamera(d);
     if (playerState.inClassroom) {
       camPos.x = clamp(camPos.x, -4.3, 4.3);
       camPos.z = clamp(camPos.z, -2.8, 2.8);
       camPos.y = Math.min(camPos.y, 2.85);
     } else if (playerState.inLibraryLobby) {
-      camPos.x = clamp(camPos.x, -34.8, 34.8);
-      camPos.z = clamp(camPos.z, -37.6, 26.8);
-      camPos.y = clamp(camPos.y, libY + 0.35, libY + 8.5);
+      const occ = resolveLibraryCameraOcclusion({
+        floor: playerState.libraryFloor,
+        target: { x: target.x, y: target.y, z: target.z },
+        desiredPosition: { x: camPos.x, y: camPos.y, z: camPos.z },
+      });
+      libCamDistRef.current = occ.safeDistance;
+      lastLibCamDiagRef.current = occ;
+      camPos.set(occ.position.x, occ.position.y, occ.position.z);
     }
     let guard = 0;
     while (
@@ -408,6 +427,9 @@ export default function Player() {
   const yawRef = useRef(playerState.cameraYaw ?? Math.PI / 2); // hướng nhìn ban đầu: -X (tây, từ cổng Trần Đại Nghĩa vào trong trường)
   const pitchRef = useRef(playerState.cameraPitch ?? 0.18); // nhìn hơi chúc xuống — đủ thấy ngọn các công trình cao
   const distRef = useRef(playerState.inClassroom || playerState.inLibraryLobby ? 3 : 7);
+  const libCamDistRef = useRef(3.2);
+  const lastLibCamDiagRef = useRef<LibraryCameraOcclusionResult | null>(null);
+  const navInputLockedRef = useRef(false);
   const facingRef = useRef(
     initialSeatDef ? initialSeatDef.facing : (playerState.facing ?? -Math.PI / 2),
   );
@@ -584,6 +606,7 @@ export default function Player() {
       seatId,
       playerPos: posRef.current,
       inLibraryLobby: playerState.inLibraryLobby,
+      libraryFloor: playerState.libraryFloor,
       inClassroom: playerState.inClassroom,
       bikeRiding: ridingRef.current,
       uiLocked: playerState.uiLocked,
@@ -636,7 +659,11 @@ export default function Player() {
     playerState.facing = facingRef.current;
     playerState.moving = false;
     if (groupRef.current) {
-      groupRef.current.position.set(res.standUpPos.x, 0, res.standUpPos.z);
+      groupRef.current.position.set(
+        res.standUpPos.x,
+        playerState.inLibraryLobby ? playerState.libraryY : 0,
+        res.standUpPos.z,
+      );
       groupRef.current.rotation.y = facingRef.current;
     }
     applyPoseImmediately(false);
@@ -926,6 +953,7 @@ export default function Player() {
         playerState.libraryFloor = 1;
         playerState.libraryY = 0;
         posRef.current = { ...LIBRARY_LOBBY.spawn };
+        playerState.pos = { ...LIBRARY_LOBBY.spawn };
         facingRef.current = Math.PI;
         yawRef.current = 0; // nhìn thẳng về bắc (-Z), hướng tượng GS. Tạ Quang Bửu & tường nhị phân 0/1
         playerState.cameraYaw = 0;
@@ -933,16 +961,24 @@ export default function Player() {
         playerState.cameraPitch = 0.2;
         distRef.current = 3.8;
         viewModeRef.current = 'follow';
+        libraryNavigationController.notifyNaturalFloorChange(
+          1,
+          { x: LIBRARY_LOBBY.spawn.x, y: 0, z: LIBRARY_LOBBY.spawn.z, yaw: 0, pitch: 0.2 },
+          'f1-atrium',
+        );
+        syncCameraTransform();
         window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: true } }));
         window.dispatchEvent(new CustomEvent('bkhn:library-floor', { detail: { floor: 1 } }));
       },
       exitLibraryLobby: () => {
+        libraryNavigationController.cancelInFlightTransition();
         seatActionsRef.current.forceClearSeat();
         playerState.inLibraryLobby = false;
         playerState.libraryFloor = 1;
         playerState.libraryY = 0;
         // Ra khỏi sảnh về trước mái hiên Thư viện (x = 38, z = 20.5), nhìn về bắc (yaw = 0) ra chữ HUST & sân trước
         posRef.current = { x: LIBRARY_DOOR.pos.x, z: 20.5 };
+        playerState.pos = { ...posRef.current };
         facingRef.current = Math.PI;
         yawRef.current = 0;
         playerState.cameraYaw = 0;
@@ -950,10 +986,24 @@ export default function Player() {
         playerState.cameraPitch = 0.18;
         distRef.current = 7;
         viewModeRef.current = 'follow';
+        syncCameraTransform();
         window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: false } }));
       },
       isInLibraryLobby: () => playerState.inLibraryLobby,
       getLibraryFloor: () => ({ floor: playerState.libraryFloor, y: playerState.libraryY }),
+      getLibraryNavState: () => libraryNavigationController.getSnapshot(),
+      navigateLibraryPreset: (presetId: string) => {
+        if (!playerState.inLibraryLobby) {
+          return {
+            ok: false,
+            status: 'failed' as const,
+            reason: 'not-in-library' as const,
+            phase: 'failed' as const,
+            phaseHistory: ['failed' as const],
+          };
+        }
+        return libraryNavigationController.navigateToPreset(presetId);
+      },
       setLibraryFloor: (
         floor: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10,
         x?: number,
@@ -961,51 +1011,90 @@ export default function Player() {
         yaw?: number,
         pitch?: number,
       ) => {
-        if (!playerState.inLibraryLobby) return { ok: false, reason: 'not-in-library' };
-        seatActionsRef.current.forceClearSeat();
-        keysRef.current.clear();
-        playerInput.move.x = 0;
-        playerInput.move.y = 0;
-        playerInput.run = false;
-        moveBlendRef.current = 0;
-        playerState.libraryFloor = floor;
-        const defaultSpawns: Record<number, { x: number; z: number; yaw: number }> = {
-          1: { x: 0, z: 2.4, yaw: 0 },
-          2: { x: 16.5, z: 0, yaw: Math.PI / 2 },
-          3: { x: 16.5, z: 0, yaw: Math.PI / 2 },
-          4: { x: -10.8, z: -18.5, yaw: 0 },
-          5: { x: -10.8, z: -18.5, yaw: 0 },
-          6: { x: -4.2, z: 5.5, yaw: -0.45 },
-          7: { x: 0, z: 13.2, yaw: 0 },
-          10: { x: 8.5, z: -0.6, yaw: -Math.PI / 2 },
-        };
-        const sp = defaultSpawns[floor] ?? defaultSpawns[1];
-        const nx = typeof x === 'number' ? x : sp.x;
-        const nz = typeof z === 'number' ? z : sp.z;
-        const resolved = resolveLibraryLobbyCollisions({ x: nx, z: nz }, AVATAR.radius, floor).pos;
-        posRef.current = resolved;
-        playerState.pos = { ...resolved };
-        const elev = computeLibraryElevation(resolved.x, resolved.z, floor, (floor - 1) * 4.5);
-        playerState.libraryY = elev.y;
-        const targetYaw = typeof yaw === 'number' ? yaw : sp.yaw;
-        yawRef.current = targetYaw;
-        playerState.cameraYaw = targetYaw;
-        facingRef.current = targetYaw + Math.PI;
-        playerState.facing = facingRef.current;
-        if (typeof pitch === 'number') {
-          pitchRef.current = pitch;
-          playerState.cameraPitch = pitch;
+        if (!playerState.inLibraryLobby) {
+          return { ok: false, status: 'failed' as const, reason: 'not-in-library' };
         }
-        if (groupRef.current) {
-          groupRef.current.position.set(resolved.x, elev.y, resolved.z);
-          groupRef.current.rotation.y = facingRef.current;
+        const outcome = libraryNavigationController.navigateToFloor(floor, x, z, yaw, pitch);
+        if (!outcome.ok || outcome.status === 'failed') {
+          return {
+            ok: false,
+            status: 'failed' as const,
+            reason: outcome.reason ?? 'invalid-floor',
+            phase: outcome.phase,
+            phaseHistory: outcome.phaseHistory,
+          };
+        }
+        return {
+          ok: true,
+          status: outcome.status,
+          phase: outcome.phase,
+          phaseHistory: outcome.phaseHistory,
+          floor: outcome.floor,
+          block: outcome.location.block,
+          pos: { x: outcome.location.x, z: outcome.location.z },
+          y: outcome.location.y,
+          clampedToSpawn: outcome.usedFallbackSpawn,
+          seatReleased: outcome.seatReleased,
+        };
+      },
+      getLibraryCameraDiagnostics: () => ({
+        occlusion: lastLibCamDiagRef.current,
+        cameraPos: {
+          x: +camera.position.x.toFixed(3),
+          y: +camera.position.y.toFixed(3),
+          z: +camera.position.z.toFixed(3),
+        },
+        yaw: yawRef.current,
+        pitch: pitchRef.current,
+        desiredDist: distRef.current,
+        activeDist: libCamDistRef.current,
+        floor: playerState.libraryFloor,
+      }),
+      setCameraAngles: (yaw: number, pitch?: number, dist?: number) => {
+        if (typeof yaw === 'number' && Number.isFinite(yaw)) {
+          yawRef.current = yaw;
+          playerState.cameraYaw = yaw;
+        }
+        if (typeof pitch === 'number' && Number.isFinite(pitch)) {
+          pitchRef.current = clamp(pitch, -0.35, 1.25);
+          playerState.cameraPitch = pitchRef.current;
+        }
+        if (typeof dist === 'number' && Number.isFinite(dist)) {
+          distRef.current = clamp(dist, 1.5, 10);
         }
         syncCameraTransform();
-        window.dispatchEvent(new CustomEvent('bkhn:library-floor', { detail: { floor } }));
-        if (floor >= 1 && floor <= 5) {
-          window.dispatchEvent(new CustomEvent('bkhn:elevator-call', { detail: { floor } }));
-        }
-        return { ok: true, floor, pos: { ...resolved }, y: elev.y };
+        return hook.getLibraryCameraDiagnostics();
+      },
+      getLibrarySpatialDiagnostics: (): LibrarySpatialDiagnostics => {
+        const floor = playerState.libraryFloor;
+        const block = getBlockForFloor(floor);
+        const px = posRef.current.x;
+        const py = playerState.libraryY;
+        const pz = posRef.current.z;
+        const loc = createLibraryLocation(floor, px, pz, py);
+        const ground = queryLibraryGround(loc);
+        const nearDoor = findNearestLibraryDoorway(floor, px, pz);
+        const nearSeat = findNearestLibrarySeat({ x: px, z: pz }, 100, 1);
+        return {
+          block,
+          floor,
+          pos: { x: px, y: py, z: pz },
+          grounded: ground.supported,
+          surfaceId: playerState.librarySpatialDiag.surfaceId ?? ground.surfaceId,
+          lastCollisionId: playerState.librarySpatialDiag.lastCollisionId,
+          collisionIds: playerState.librarySpatialDiag.lastCollisionId
+            ? [playerState.librarySpatialDiag.lastCollisionId]
+            : [],
+          nearestDoorId: nearDoor ? nearDoor.id : null,
+          nearestSeatId: nearSeat ? nearSeat.seat.seatId : null,
+          nearestSeatFloor: 1,
+          activeSeatId: seatingStateRef.current.seatId,
+          debugCollisionOverlay: playerState.libraryCollisionDebug,
+        };
+      },
+      setLibraryCollisionDebug: (enabled: boolean) => {
+        playerState.libraryCollisionDebug = Boolean(enabled);
+        return playerState.libraryCollisionDebug;
       },
       sitAtSeat: (seatId: string) => seatActionsRef.current.sitAtSeat(seatId),
       standUp: () => seatActionsRef.current.standUp(),
@@ -1033,10 +1122,97 @@ export default function Player() {
         };
       },
     };
-    (window as unknown as { __bkhn?: unknown }).__bkhn = hook;
+    const unsubNavHooks = libraryNavigationController.registerHooks({
+      getPlayerContext: () => ({
+        floor: playerState.libraryFloor,
+        x: posRef.current.x,
+        y: playerState.libraryY,
+        z: posRef.current.z,
+        yaw: yawRef.current,
+        pitch: pitchRef.current,
+        seated: seatingStateRef.current.status === 'seated',
+        seatId: seatingStateRef.current.seatId,
+      }),
+      setInputLocked: (locked: boolean) => {
+        navInputLockedRef.current = locked;
+        if (locked) {
+          keysRef.current.clear();
+          playerInput.move.x = 0;
+          playerInput.move.y = 0;
+          playerInput.run = false;
+          moveBlendRef.current = 0;
+        }
+      },
+      executeTransition: (payload) => {
+        if (!playerState.inLibraryLobby) {
+          return { ok: false, seatReleased: false };
+        }
+        const wasSeated =
+          seatingStateRef.current.status === 'seated' ||
+          Boolean(seatingStateRef.current.seatId) ||
+          Boolean(playerState.seatId);
+        seatActionsRef.current.forceClearSeat();
+        keysRef.current.clear();
+        playerInput.move.x = 0;
+        playerInput.move.y = 0;
+        playerInput.run = false;
+        moveBlendRef.current = 0;
+
+        const resolvedFloor = payload.targetFloor;
+        playerState.libraryFloor = resolvedFloor;
+        playerState.libraryY = payload.location.y;
+        posRef.current = { x: payload.location.x, z: payload.location.z };
+        playerState.pos = { ...posRef.current };
+        yawRef.current = payload.yaw;
+        playerState.cameraYaw = payload.yaw;
+        facingRef.current = payload.yaw + Math.PI;
+        playerState.facing = facingRef.current;
+        pitchRef.current = payload.pitch;
+        playerState.cameraPitch = payload.pitch;
+
+        if (groupRef.current) {
+          groupRef.current.position.set(
+            payload.location.x,
+            payload.location.y,
+            payload.location.z,
+          );
+          groupRef.current.rotation.y = facingRef.current;
+        }
+        const support = queryLibraryGround(payload.location);
+        const nearDoor = findNearestLibraryDoorway(
+          resolvedFloor,
+          payload.location.x,
+          payload.location.z,
+        );
+        playerState.librarySpatialDiag = {
+          block: payload.location.block,
+          floor: resolvedFloor,
+          surfaceId: support.surfaceId,
+          grounded: support.supported,
+          lastCollisionId: null,
+          nearestDoorId: nearDoor ? nearDoor.id : null,
+        };
+        syncCameraTransform();
+        window.dispatchEvent(
+          new CustomEvent('bkhn:library-floor', { detail: { floor: resolvedFloor } }),
+        );
+        if (resolvedFloor >= 1 && resolvedFloor <= 5) {
+          window.dispatchEvent(
+            new CustomEvent('bkhn:elevator-call', { detail: { floor: resolvedFloor } }),
+          );
+        }
+        return { ok: true, seatReleased: wasSeated };
+      },
+    });
+
+    (window as unknown as { __bkhn?: unknown; __bkhnLibrarySpatialDebug?: () => LibrarySpatialDiagnostics }).__bkhn = hook;
+    (window as unknown as { __bkhnLibrarySpatialDebug?: () => LibrarySpatialDiagnostics }).__bkhnLibrarySpatialDebug =
+      hook.getLibrarySpatialDiagnostics;
     return () => {
+      unsubNavHooks();
       if ((window as unknown as { __bkhn?: unknown }).__bkhn === hook) {
         delete (window as unknown as { __bkhn?: unknown }).__bkhn;
+        delete (window as unknown as { __bkhnLibrarySpatialDebug?: unknown }).__bkhnLibrarySpatialDebug;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1296,9 +1472,13 @@ export default function Player() {
       }
     } else {
     // --- Di chuyển theo hướng camera (yaw) ----------------------------------
-    // Bước 5: uiLocked (panel học mở) → move = 0, cả phím lẫn joystick.
-    const mx = playerState.uiLocked ? 0 : playerInput.move.x;
-    const my = playerState.uiLocked ? 0 : playerInput.move.y;
+    // Bước 5: uiLocked (panel học mở) hoặc đang chuyển tầng (navInputLocked) → move = 0.
+    const inputLocked =
+      playerState.uiLocked ||
+      navInputLockedRef.current ||
+      libraryNavigationController.isInputLocked();
+    const mx = inputLocked ? 0 : playerInput.move.x;
+    const my = inputLocked ? 0 : playerInput.move.y;
     moving = mx !== 0 || my !== 0;
     let dirX = 0;
     let dirZ = 0;
@@ -1327,34 +1507,77 @@ export default function Player() {
       const subDt = walkDelta / walkSubSteps;
       let curPos: Vec2 = { x: prevX, z: prevZ };
       let hit: string | null = null;
-      for (let s = 0; s < walkSubSteps; s++) {
-        const next: Vec2 = {
-          x: curPos.x + dirX * speed * subDt,
-          z: curPos.z + dirZ * speed * subDt,
+      if (playerState.inLibraryLobby) {
+        const curLoc = createLibraryLocation(
+          playerState.libraryFloor,
+          prevX,
+          prevZ,
+          playerState.libraryY,
+        );
+        const desiredLoc = createLibraryLocation(
+          playerState.libraryFloor,
+          prevX + dirX * speed * walkDelta,
+          prevZ + dirZ * speed * walkDelta,
+          playerState.libraryY,
+        );
+        const moveRes = resolveLibraryMovement(curLoc, desiredLoc, AVATAR.radius, AVATAR.height);
+        curPos = { x: moveRes.position.x, z: moveRes.position.z };
+        hit = moveRes.hit;
+        playerState.libraryY = moveRes.position.y;
+        const nearDoor = findNearestLibraryDoorway(
+          moveRes.recommendedFloor,
+          moveRes.position.x,
+          moveRes.position.z,
+        );
+        playerState.librarySpatialDiag = {
+          block: moveRes.position.block,
+          floor: moveRes.recommendedFloor,
+          surfaceId: moveRes.surfaceId,
+          grounded: moveRes.grounded,
+          lastCollisionId: moveRes.collisionIds[0] ?? null,
+          nearestDoorId: nearDoor ? nearDoor.id : null,
         };
-        const res = playerState.inClassroom
-          ? resolveClassroomCollisions(next, AVATAR.radius)
-          : playerState.inLibraryLobby
-            ? resolveLibraryLobbyCollisions(next, AVATAR.radius, playerState.libraryFloor)
-            : resolveCollisions(next, AVATAR.radius);
-        curPos = res.pos;
-        if (res.hit) hit = res.hit;
-        // Chặn đi xuyên qua sinh viên đang đi bộ (AmbientLife) và người chơi khác (RemotePlayers) ngoài sân trường
-        if (!playerState.inClassroom && !playerState.inLibraryLobby) {
-          for (const wp of activeWalkingStudentPositions) {
-            const pushed = pushOutOfCircle(curPos.x, curPos.z, wp, 0.38, AVATAR.radius);
-            if (pushed) {
-              curPos = pushed;
-              if (!hit) hit = 'Sinh viên (NPC)';
-            }
-          }
-          remoteRenderPos.forEach((rp) => {
-            const pushed = pushOutOfCircle(curPos.x, curPos.z, rp, 0.4, AVATAR.radius);
-            if (pushed) {
-              curPos = pushed;
-              if (!hit) hit = 'Sinh viên (MP)';
-            }
+        if (moveRes.recommendedFloor !== playerState.libraryFloor) {
+          playerState.libraryFloor = moveRes.recommendedFloor;
+          libraryNavigationController.notifyNaturalFloorChange(moveRes.recommendedFloor, {
+            x: moveRes.position.x,
+            y: moveRes.position.y,
+            z: moveRes.position.z,
+            yaw: yawRef.current,
+            pitch: pitchRef.current,
           });
+          window.dispatchEvent(
+            new CustomEvent('bkhn:library-floor', { detail: { floor: moveRes.recommendedFloor } }),
+          );
+        }
+      } else {
+        for (let s = 0; s < walkSubSteps; s++) {
+          const next: Vec2 = {
+            x: curPos.x + dirX * speed * subDt,
+            z: curPos.z + dirZ * speed * subDt,
+          };
+          const res = playerState.inClassroom
+            ? resolveClassroomCollisions(next, AVATAR.radius)
+            : resolveCollisions(next, AVATAR.radius);
+          curPos = res.pos;
+          if (res.hit) hit = res.hit;
+          // Chặn đi xuyên qua sinh viên đang đi bộ (AmbientLife) và người chơi khác (RemotePlayers) ngoài sân trường
+          if (!playerState.inClassroom && !playerState.inLibraryLobby) {
+            for (const wp of activeWalkingStudentPositions) {
+              const pushed = pushOutOfCircle(curPos.x, curPos.z, wp, 0.38, AVATAR.radius);
+              if (pushed) {
+                curPos = pushed;
+                if (!hit) hit = 'Sinh viên (NPC)';
+              }
+            }
+            remoteRenderPos.forEach((rp) => {
+              const pushed = pushOutOfCircle(curPos.x, curPos.z, rp, 0.4, AVATAR.radius);
+              if (pushed) {
+                curPos = pushed;
+                if (!hit) hit = 'Sinh viên (MP)';
+              }
+            });
+          }
         }
       }
       const pos = curPos;
@@ -1481,6 +1704,13 @@ export default function Player() {
       playerState.libraryY = elev.y;
       if (elev.floor !== playerState.libraryFloor) {
         playerState.libraryFloor = elev.floor;
+        libraryNavigationController.notifyNaturalFloorChange(elev.floor, {
+          x: posRef.current.x,
+          y: elev.y,
+          z: posRef.current.z,
+          yaw: yawRef.current,
+          pitch: pitchRef.current,
+        });
         window.dispatchEvent(new CustomEvent('bkhn:library-floor', { detail: { floor: elev.floor } }));
       }
       groundY = elev.y;
@@ -1540,16 +1770,29 @@ export default function Player() {
     let d = distRef.current;
     if (ridingRef.current) d = Math.max(d, 7.5);
     if (playerState.inClassroom) d = Math.min(d, 4.5);
-    if (playerState.inLibraryLobby) d = Math.min(d, 6.2);
+    if (playerState.inLibraryLobby) d = Math.min(d, seatedNow ? 2.6 : 4.2);
     let camPos = placeCamera(d);
     if (playerState.inClassroom) {
       camPos.x = clamp(camPos.x, -4.3, 4.3);
       camPos.z = clamp(camPos.z, -2.8, 2.8);
       camPos.y = Math.min(camPos.y, 2.85);
     } else if (playerState.inLibraryLobby) {
-      camPos.x = clamp(camPos.x, -34.8, 34.8);
-      camPos.z = clamp(camPos.z, -37.6, 26.8);
-      camPos.y = clamp(camPos.y, groundY + 0.35, groundY + 8.5);
+      const occ = resolveLibraryCameraOcclusion({
+        floor: playerState.libraryFloor,
+        target: { x: target.x, y: target.y, z: target.z },
+        desiredPosition: { x: camPos.x, y: camPos.y, z: camPos.z },
+      });
+      const steppedDist = stepLibraryCameraDistance(
+        libCamDistRef.current,
+        occ.desiredDistance,
+        occ.safeDistance,
+        rawDelta,
+      );
+      libCamDistRef.current = steppedDist;
+      lastLibCamDiagRef.current = occ;
+      camPos = placeCamera(steppedDist);
+      const vBounds = getCameraVerticalBoundsAt(playerState.libraryFloor, camPos.x, camPos.z);
+      camPos.y = clamp(camPos.y, vBounds.minY + 0.22, vBounds.maxY - 0.22);
     }
     let guard = 0;
     while (

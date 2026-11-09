@@ -17,15 +17,19 @@
 
 import {
   ROOM_IDS,
+  decodeMoveTelemetry,
   derivePublicPlayerId,
+  encodeMoveTelemetry,
   extractValidAppearance,
   isRemoteState,
   sanitizeReconnectToken,
+  type MultiplayerSceneId,
   type RemoteAppearance,
   type RemotePlayer,
   type RemoteState,
 } from '../shared/contracts/multiplayer';
 import {
+  getSeatDefinition,
   isSupportedLibrarySeatId,
   sanitizeRequestId,
   sanitizeSeatOccupancy,
@@ -36,8 +40,16 @@ import {
   type SeatOccupancy,
 } from '../shared/contracts/study';
 import { SPAWN } from '../shared/constants/world';
+import { rotateTabSessionCredentials } from './identity';
 
-export type { RemoteAppearance, RemotePlayer, RemoteState };
+export type { MultiplayerSceneId, RemoteAppearance, RemotePlayer, RemoteState };
+
+export interface MoveTelemetryContext {
+  scene: MultiplayerSceneId;
+  libraryFloor?: number;
+  seatedSeatId?: string | null;
+  appearance?: RemoteAppearance;
+}
 
 export type MpStatus = 'idle' | 'connecting' | 'online' | 'offline';
 
@@ -434,6 +446,14 @@ export class MultiplayerClient {
   private studyRevision = 0;
   private reqCounter = 0;
   private connectionGeneration = 0;
+  private lastJoinSentAt = 0;
+  private lastLocalMove: {
+    x: number;
+    z: number;
+    facing: number;
+    state: RemoteState;
+    context: MoveTelemetryContext;
+  } | null = null;
 
   private readonly webSocketFactory: (url: string) => WebSocket;
   private readonly setTimeoutFn: (cb: () => void, ms: number) => ReturnType<typeof setTimeout>;
@@ -483,6 +503,10 @@ export class MultiplayerClient {
 
   getSnapshot(): MultiplayerSnapshot {
     return this.snapshot;
+  }
+
+  getRemotePlayer(id: string): RemotePlayer | undefined {
+    return this.players.get(id);
   }
 
   subscribe(fn: Listener): () => void {
@@ -721,6 +745,15 @@ export class MultiplayerClient {
     this.name = name;
     this.mssv = mssv;
     this.appearance = { ...appearance };
+    if (this.lastLocalMove) {
+      this.lastLocalMove = {
+        ...this.lastLocalMove,
+        context: {
+          ...this.lastLocalMove.context,
+          appearance: { ...this.appearance },
+        },
+      };
+    }
     if (!this.ws || this.ws.readyState !== 1 /* WebSocket.OPEN */ || !this.selfId) return;
     try {
       this.ws.send(
@@ -734,6 +767,7 @@ export class MultiplayerClient {
     } catch {
       // ignore
     }
+    this.flushLocalMoveTelemetry();
   }
 
   /**
@@ -1034,6 +1068,7 @@ export class MultiplayerClient {
     }
     this.players.clear();
     this.clearLiveStudyRoomState('disconnect');
+    this.lastLocalMove = null;
     this.roomId = null;
     this.count = 0;
     this.selfId = null;
@@ -1041,13 +1076,103 @@ export class MultiplayerClient {
   }
 
   /** Gửi vị trí + hướng + trạng thái hiện tại (gọi ~10 lần/giây khi đổi). */
-  sendMove(x: number, z: number, facing: number, state: RemoteState) {
+  sendMove(
+    x: number,
+    z: number,
+    facing: number,
+    state: RemoteState,
+    context?: MoveTelemetryContext,
+  ) {
+    if (context) {
+      this.lastLocalMove = {
+        x,
+        z,
+        facing,
+        state,
+        context: {
+          ...context,
+          appearance: context.appearance ?? this.appearance,
+        },
+      };
+    }
     if (!this.ws || this.ws.readyState !== 1 /* WebSocket.OPEN */ || !this.selfId) return;
+    if (context && this.studyRevision === 0) {
+      const now = this.nowFn();
+      if (now - this.lastJoinSentAt > 8000) {
+        this.lastJoinSentAt = now;
+        try {
+          this.ws.send(
+            JSON.stringify({
+              type: 'join',
+              sessionId: this.sessionId,
+              ...(this.reconnectToken ? { reconnectToken: this.reconnectToken } : {}),
+              name: this.name,
+              mssv: this.mssv,
+              ...this.appearance,
+            }),
+          );
+        } catch {
+          // ignore
+        }
+      }
+    }
+    const wireFacing = context
+      ? encodeMoveTelemetry({
+          x,
+          z,
+          facing,
+          scene: context.scene,
+          libraryFloor: context.libraryFloor,
+          seatedSeatId: context.seatedSeatId,
+          appearance: context.appearance ?? this.appearance,
+        })
+      : facing;
     try {
-      this.ws.send(JSON.stringify({ type: 'move', x, z, facing, state }));
+      this.ws.send(JSON.stringify({ type: 'move', x, z, facing: wireFacing, state }));
     } catch {
       // ignore — lần gửi sau sẽ thử lại
     }
+  }
+
+  private flushLocalMoveTelemetry() {
+    if (!this.lastLocalMove) return;
+    const { x, z, facing, state, context } = this.lastLocalMove;
+    this.sendMove(x, z, facing, state, {
+      ...context,
+      appearance: { ...this.appearance, ...context.appearance },
+    });
+  }
+
+  private syncLegacyTelemetrySeat(rp: RemotePlayer): boolean {
+    if (this.studyRevision > 0) return false;
+    let changed = false;
+    for (const [sid, occ] of Array.from(this.seats.entries())) {
+      if (occ.occupantId === rp.id && sid !== rp.seatedSeatId) {
+        this.seats.delete(sid);
+        changed = true;
+      }
+    }
+    if (rp.seatedSeatId && getSeatDefinition(rp.seatedSeatId)) {
+      const existing = this.seats.get(rp.seatedSeatId);
+      if (!existing || existing.occupantId === rp.id) {
+        this.seats.set(rp.seatedSeatId, {
+          seatId: rp.seatedSeatId,
+          studyRoomId: 'library-lobby',
+          occupantId: rp.id,
+          occupantName: rp.name,
+          occupiedAtMs: existing?.occupiedAtMs ?? this.nowFn(),
+          color: rp.color,
+          gender: rp.gender,
+          outfit: rp.outfit,
+          hairStyle: rp.hairStyle,
+          skirt: rp.skirt,
+          glasses: rp.glasses,
+          backpack: rp.backpack,
+        });
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   private openSocket() {
@@ -1083,6 +1208,7 @@ export class MultiplayerClient {
     ws.onopen = () => {
       if (this.ws !== ws || this.connectionGeneration !== socketGen) return;
       this.reconnects = 0;
+      this.lastJoinSentAt = this.nowFn();
       ws.send(
         JSON.stringify({
           type: 'join',
@@ -1109,13 +1235,33 @@ export class MultiplayerClient {
           this.selfId = typeof msg.id === 'string' ? msg.id : null;
           this.roomId = typeof msg.roomId === 'string' ? msg.roomId : null;
           this.count = typeof msg.count === 'number' ? msg.count : 0;
+          const prevPlayers = new Map(this.players);
           this.players.clear();
           const list = Array.isArray(msg.players) ? msg.players : [];
           for (const p of list) {
             const rp = toRemotePlayer(p);
-            if (rp && rp.id !== this.selfId) this.players.set(rp.id, rp);
+            if (rp && rp.id !== this.selfId) {
+              const existing = prevPlayers.get(rp.id);
+              if (existing) {
+                const rawFacing = (p as Record<string, unknown>)?.facing;
+                const hasTel = decodeMoveTelemetry(rawFacing).hasTelemetry;
+                if (hasTel || rp.outfit !== undefined) {
+                  Object.assign(existing, rp);
+                } else {
+                  existing.name = rp.name;
+                  existing.mssv = rp.mssv;
+                  existing.color = rp.color;
+                }
+                this.players.set(existing.id, existing);
+                this.syncLegacyTelemetrySeat(existing);
+              } else {
+                this.players.set(rp.id, rp);
+                this.syncLegacyTelemetrySeat(rp);
+              }
+            }
           }
           this.setStatus('online', null);
+          this.flushLocalMoveTelemetry();
           break;
         }
         case 'study:room-snapshot': {
@@ -1530,7 +1676,50 @@ export class MultiplayerClient {
         }
         case 'join': {
           const rp = toRemotePlayer(msg.player);
-          if (rp && rp.id !== this.selfId) this.players.set(rp.id, rp);
+          if (rp && rp.id !== this.selfId) {
+            const prev = this.players.get(rp.id);
+            const rawFacing =
+              msg.player && typeof msg.player === 'object'
+                ? (msg.player as Record<string, unknown>).facing
+                : undefined;
+            const hasTel = decodeMoveTelemetry(rawFacing).hasTelemetry;
+            if (prev) {
+              if (hasTel || rp.outfit !== undefined) {
+                Object.assign(prev, rp);
+              } else {
+                prev.name = rp.name;
+                prev.mssv = rp.mssv;
+                prev.color = rp.color;
+              }
+              this.syncLegacyTelemetrySeat(prev);
+            } else {
+              this.players.set(rp.id, rp);
+              this.syncLegacyTelemetrySeat(rp);
+            }
+            if (this.lastLocalMove) {
+              const now = this.nowFn();
+              if (this.studyRevision === 0 && now - this.lastJoinSentAt > 4000) {
+                this.lastJoinSentAt = now;
+                try {
+                  ws.send(
+                    JSON.stringify({
+                      type: 'join',
+                      sessionId: this.sessionId,
+                      ...(this.reconnectToken
+                        ? { reconnectToken: this.reconnectToken }
+                        : {}),
+                      name: this.name,
+                      mssv: this.mssv,
+                      ...this.appearance,
+                    }),
+                  );
+                } catch {
+                  // ignore
+                }
+              }
+              this.flushLocalMoveTelemetry();
+            }
+          }
           this.emit();
           break;
         }
@@ -1586,10 +1775,67 @@ export class MultiplayerClient {
           if (typeof msg.id !== 'string') break;
           const p = this.players.get(msg.id);
           if (!p) break;
-          if (typeof msg.x === 'number') p.x = msg.x;
-          if (typeof msg.z === 'number') p.z = msg.z;
-          if (typeof msg.facing === 'number') p.facing = msg.facing;
-          if (typeof msg.state === 'string' && isRemoteState(msg.state)) p.state = msg.state;
+          if (typeof msg.state === 'string' && isRemoteState(msg.state)) {
+            p.state = msg.state;
+          }
+          const dec = decodeMoveTelemetry(msg.facing);
+          if (dec.hasTelemetry) {
+            p.facing = dec.facing;
+            const rawX = typeof msg.x === 'number' ? msg.x : dec.x!;
+            const rawZ = typeof msg.z === 'number' ? msg.z : dec.z!;
+            if (
+              dec.scene !== 'campus' ||
+              Math.hypot(dec.x! - rawX, dec.z! - rawZ) > 1.2
+            ) {
+              p.x = dec.x!;
+              p.z = dec.z!;
+            } else {
+              p.x = rawX;
+              p.z = rawZ;
+            }
+            let metaChanged = false;
+            if (p.scene !== dec.scene) {
+              p.scene = dec.scene;
+              metaChanged = true;
+            }
+            if (p.libraryFloor !== dec.libraryFloor) {
+              p.libraryFloor = dec.libraryFloor;
+              metaChanged = true;
+            }
+            if (p.seatedSeatId !== dec.seatedSeatId) {
+              p.seatedSeatId = dec.seatedSeatId;
+              metaChanged = true;
+            }
+            if (dec.appearance) {
+              const app = dec.appearance;
+              if (
+                p.gender !== app.gender ||
+                p.outfit !== app.outfit ||
+                p.hairStyle !== app.hairStyle ||
+                p.skirt !== app.skirt ||
+                p.glasses !== app.glasses ||
+                p.backpack !== app.backpack
+              ) {
+                p.gender = app.gender;
+                p.outfit = app.outfit;
+                p.hairStyle = app.hairStyle;
+                p.skirt = app.skirt;
+                p.glasses = app.glasses;
+                p.backpack = app.backpack;
+                metaChanged = true;
+              }
+            }
+            if (this.syncLegacyTelemetrySeat(p)) {
+              metaChanged = true;
+            }
+            if (metaChanged) {
+              this.emit();
+            }
+          } else {
+            if (typeof msg.x === 'number') p.x = msg.x;
+            if (typeof msg.z === 'number') p.z = msg.z;
+            if (typeof msg.facing === 'number') p.facing = msg.facing;
+          }
           break;
         }
         case 'state': {
@@ -1621,10 +1867,20 @@ export class MultiplayerClient {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev?: { code?: number; reason?: string }) => {
       if (this.ws !== ws || this.connectionGeneration !== socketGen) return;
       this.stopHeartbeat();
       if (this.intentionalClose) return;
+      if (
+        this.lastLocalMove &&
+        ev &&
+        (ev.code === 1000 ||
+          (typeof ev.reason === 'string' && ev.reason.includes('Replaced')))
+      ) {
+        const rotated = rotateTabSessionCredentials();
+        this.reconnectToken = rotated.reconnectToken;
+        this.sessionId = rotated.sessionId;
+      }
       this.clearLiveStudyRoomState('offline');
       this.setStatus('offline', 'Mất kết nối — đang chơi một mình.');
       this.scheduleReconnect();
@@ -1676,16 +1932,56 @@ function toRemotePlayer(raw: unknown): RemotePlayer | null {
   const p = raw as Record<string, unknown>;
   if (typeof p.id !== 'string') return null;
   const appearance = extractValidAppearance(p);
+  const rawX = typeof p.x === 'number' ? p.x : SPAWN.x;
+  const rawZ = typeof p.z === 'number' ? p.z : SPAWN.z;
+  const rawFacing = typeof p.facing === 'number' ? p.facing : 0;
+  const dec = decodeMoveTelemetry(rawFacing);
+
+  let x = rawX;
+  let z = rawZ;
+  let facing = rawFacing;
+  let scene: MultiplayerSceneId = 'campus';
+  let libraryFloor = 1;
+  let seatedSeatId: string | null = null;
+  let mergedAppearance: RemoteAppearance = { ...appearance };
+
+  if (dec.hasTelemetry) {
+    facing = dec.facing;
+    scene = dec.scene ?? 'campus';
+    libraryFloor = dec.libraryFloor ?? 1;
+    seatedSeatId = dec.seatedSeatId ?? null;
+    if (scene !== 'campus' || Math.hypot(dec.x! - rawX, dec.z! - rawZ) > 1.2) {
+      x = dec.x!;
+      z = dec.z!;
+    }
+    if (dec.appearance && mergedAppearance.outfit === undefined) {
+      mergedAppearance = { ...dec.appearance, ...mergedAppearance };
+    }
+  } else if (
+    rawX === -76 &&
+    rawZ === 10 &&
+    Math.abs(rawFacing - -Math.PI / 2) < 1e-4 &&
+    mergedAppearance.outfit === undefined
+  ) {
+    // Legacy deployed Worker initializes sessions at (-76, 10) before the first move arrives;
+    // map initial spawn to the canonical SPAWN (95.5, -6).
+    x = SPAWN.x;
+    z = SPAWN.z;
+  }
+
   return {
     id: p.id,
     name: typeof p.name === 'string' ? p.name : 'Bạn',
     mssv: typeof p.mssv === 'string' ? p.mssv : '',
     color: typeof p.color === 'string' ? p.color : '#1F3A5F',
-    x: typeof p.x === 'number' ? p.x : SPAWN.x,
-    z: typeof p.z === 'number' ? p.z : SPAWN.z,
-    facing: typeof p.facing === 'number' ? p.facing : 0,
+    x,
+    z,
+    facing,
     state: isRemoteState(p.state) ? p.state : 'idle',
-    ...appearance,
+    scene,
+    libraryFloor,
+    seatedSeatId,
+    ...mergedAppearance,
   };
 }
 

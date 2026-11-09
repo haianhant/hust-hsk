@@ -37,6 +37,7 @@ export type LocalSeatingStatus = 'standing' | 'seated';
 export type SeatSelectionRejectionReason =
   | 'invalid-seat'
   | 'wrong-room'
+  | 'wrong-floor'
   | 'riding-bike'
   | 'ui-locked'
   | 'transition-locked'
@@ -83,7 +84,9 @@ export function isLibraryLobbySeatId(seatId: unknown): seatId is string {
 export function findNearestLibrarySeat(
   pos: Vec2,
   maxRadius: number = SEAT_INTERACT_RADIUS,
+  libraryFloor = 1,
 ): { seat: StudySeatDefinition; distance: number } | null {
+  if (libraryFloor !== 1) return null;
   const seats = getLibraryLobbySeats();
   let bestSeat: StudySeatDefinition | null = null;
   let bestDist = Infinity;
@@ -155,6 +158,7 @@ export interface ValidateSeatSelectionInput {
   seatId: unknown;
   playerPos: Vec2;
   inLibraryLobby: boolean;
+  libraryFloor?: number;
   inClassroom: boolean;
   bikeRiding: boolean;
   uiLocked?: boolean;
@@ -182,6 +186,7 @@ export function validateSeatSelection(
     seatId,
     playerPos,
     inLibraryLobby,
+    libraryFloor = 1,
     inClassroom,
     bikeRiding,
     uiLocked = false,
@@ -202,6 +207,14 @@ export function validateSeatSelection(
       ok: false,
       reason: 'wrong-room',
       message: 'Bạn cần ở trong Sảnh tầng 1 Thư viện Tạ Quang Bửu để ngồi ghế này.',
+    };
+  }
+
+  if (libraryFloor !== 1) {
+    return {
+      ok: false,
+      reason: 'wrong-floor',
+      message: 'Ghế học nhóm này nằm tại Sảnh Tầng 1 — hãy xuống Tầng 1 để ngồi học.',
     };
   }
 
@@ -364,12 +377,18 @@ export function transitionToStanding(current: LocalSeatingState): StandTransitio
  */
 export function reconcileSeatingWithEnvironment(
   current: LocalSeatingState,
-  env: { inLibraryLobby: boolean; inClassroom: boolean; bikeRiding: boolean },
+  env: {
+    inLibraryLobby: boolean;
+    inClassroom: boolean;
+    bikeRiding: boolean;
+    libraryFloor?: number;
+  },
 ): { state: LocalSeatingState; released: boolean; releasedSeatId: string | null } {
   if (current.status !== 'seated') {
     return { state: current, released: false, releasedSeatId: null };
   }
-  if (!env.inLibraryLobby || env.inClassroom || env.bikeRiding) {
+  const activeFloor = env.libraryFloor ?? 1;
+  if (!env.inLibraryLobby || env.inClassroom || env.bikeRiding || activeFloor !== 1) {
     return {
       state: createInitialSeatingState(),
       released: true,
@@ -387,10 +406,14 @@ export function reconcileSeatingWithEnvironment(
  */
 export function reconcilePersistedSessionSeat(
   session: StudySessionState,
-  env: { inLibraryLobby: boolean; activeSeatId: string | null },
+  env: { inLibraryLobby: boolean; activeSeatId: string | null; libraryFloor?: number },
 ): StudySessionState {
+  const onFloor1 = (env.libraryFloor ?? 1) === 1;
   const validLobbySeat =
-    env.inLibraryLobby && env.activeSeatId && isLibraryLobbySeatId(env.activeSeatId)
+    env.inLibraryLobby &&
+    onFloor1 &&
+    env.activeSeatId &&
+    isLibraryLobbySeatId(env.activeSeatId)
       ? env.activeSeatId
       : null;
 
@@ -565,6 +588,7 @@ export type ReconnectSeatDecision =
  */
 export function evaluateReconnectSeatAction(input: {
   inLibraryLobby: boolean;
+  libraryFloor?: number;
   localSeated: boolean;
   localSeatId: string | null;
   mpStatus: 'idle' | 'connecting' | 'online' | 'offline';
@@ -580,7 +604,8 @@ export function evaluateReconnectSeatAction(input: {
       (sid) => input.seatMap[sid]?.occupantId === input.selfId,
     ) ?? null;
 
-  if (!input.inLibraryLobby || !input.localSeated || !input.localSeatId) {
+  const onFloor1 = (input.libraryFloor ?? 1) === 1;
+  if (!input.inLibraryLobby || !onFloor1 || !input.localSeated || !input.localSeatId) {
     if (serverOwnedSeatId) {
       return { action: 'release-stale-server-seat', seatId: serverOwnedSeatId };
     }
@@ -648,12 +673,14 @@ export function evaluateReclaimOutcome(input: {
         occupiedByName?: string;
       };
   currentlyInLibraryLobby: boolean;
+  currentLibraryFloor?: number;
   currentlySeated: boolean;
   currentLocalSeatId: string | null;
   previousServerSeatId?: string | null;
 }): ReclaimOutcomeDecision {
   const stillSeatedAtTarget =
     input.currentlyInLibraryLobby &&
+    (input.currentLibraryFloor ?? 1) === 1 &&
     input.currentlySeated &&
     input.currentLocalSeatId === input.targetSeatId;
 

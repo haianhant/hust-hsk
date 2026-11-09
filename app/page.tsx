@@ -269,6 +269,7 @@ export default function HomePage() {
         seatId,
         playerPos: playerState.pos,
         inLibraryLobby: playerState.inLibraryLobby,
+        libraryFloor: playerState.libraryFloor,
         inClassroom: playerState.inClassroom,
         bikeRiding: bikeState.riding,
         uiLocked: playerState.uiLocked,
@@ -414,6 +415,7 @@ export default function HomePage() {
       const snap = multiplayer.snapshot;
       const decision = evaluateReconnectSeatAction({
         inLibraryLobby: playerState.inLibraryLobby,
+        libraryFloor: playerState.libraryFloor,
         localSeated: playerState.seated,
         localSeatId: playerState.seated ? playerState.seatId : null,
         mpStatus: snap.status,
@@ -464,6 +466,7 @@ export default function HomePage() {
               targetSeatId,
               outcome,
               currentlyInLibraryLobby: playerState.inLibraryLobby,
+              currentLibraryFloor: playerState.libraryFloor,
               currentlySeated: playerState.seated,
               currentLocalSeatId: playerState.seated ? playerState.seatId : null,
               previousServerSeatId,
@@ -675,15 +678,43 @@ export default function HomePage() {
         setInLibraryLobby(d.inLibraryLobby);
         if (!d.inLibraryLobby) {
           setLobbyModal(null);
+          setLibraryExtraModal(null);
           multiplayer.setLocalSeatedSeatId(null);
         }
       }
     };
+    const onLibraryFloor = (e: Event) => {
+      const d = (e as CustomEvent<{ floor: number }>).detail;
+      if (!d) return;
+      if (d.floor !== 1) {
+        setLobbyModal(null);
+        const snap = multiplayer.snapshot;
+        if (snap.seatClaimState === 'requesting') {
+          multiplayer.cancelPendingSeatClaim();
+        }
+        if (playerState.seated || snap.mySeatId) {
+          multiplayer.setLocalSeatedSeatId(null);
+          releaseActiveSeatSafely({
+            driver: getHook(),
+            fallbackSeatId: playerState.seatId ?? snap.mySeatId,
+          });
+          multiplayer.requestSeatRelease(playerState.seatId ?? snap.mySeatId);
+          setSeatedSeatId(null);
+          setSeatedSeatLabel(null);
+          bindSeatRef.current('library-lobby', null);
+        }
+      }
+      if (d.floor !== 6 && d.floor !== 10) {
+        setLibraryExtraModal(null);
+      }
+    };
     window.addEventListener('bkhn:classroom', onMode);
     window.addEventListener('bkhn:library-lobby', onLobbyMode);
+    window.addEventListener('bkhn:library-floor', onLibraryFloor);
     return () => {
       window.removeEventListener('bkhn:classroom', onMode);
       window.removeEventListener('bkhn:library-lobby', onLobbyMode);
+      window.removeEventListener('bkhn:library-floor', onLibraryFloor);
     };
   }, []);
 
@@ -756,6 +787,7 @@ export default function HomePage() {
         pos: playerState.pos,
         inClassroom,
         inLibraryLobby,
+        libraryFloor: playerState.libraryFloor,
         seated: playerState.seated,
         seatId: playerState.seatId,
         occupiedByOtherSeatIds: occupiedOtherSet,
@@ -856,26 +888,31 @@ export default function HomePage() {
       const pos = playerState.pos;
       const near = (x: number, z: number, r: number) => Math.hypot(pos.x - x, pos.z - z) <= r;
       if (id === 'statue') {
+        if (playerState.libraryFloor !== 1) return;
         setLobbyModal('statue');
         speakText('谢光宝教授图书馆');
         return;
       }
       if (id === 'vocab-board') {
+        if (playerState.libraryFloor !== 1) return;
         setLobbyModal('vocab-board');
         speakText('图书馆，科学，技术，借书，阅读');
         return;
       }
       if (id === 'info-desk') {
+        if (playerState.libraryFloor !== 1) return;
         setLobbyModal('info-desk');
         speakText('你好，我想借书');
         return;
       }
       if (id === 'piano-6f') {
+        if (playerState.libraryFloor !== 6) return;
         setLibraryExtraModal('piano');
         showToast('🎹 Đại dương cầm Tầng 6 — bấm các phím đàn trên thanh Piano để tấu nhạc!');
         return;
       }
       if (id === 'telescope-10f') {
+        if (playerState.libraryFloor !== 10) return;
         setLibraryExtraModal('telescope');
         speakText('天文望远镜，星空，银河');
         return;

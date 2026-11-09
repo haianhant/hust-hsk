@@ -1,6 +1,12 @@
 // Trạng thái chạy chia sẻ giữa Player (3D, cập nhật mỗi frame) và HUD/Minimap (DOM).
 // Dùng object mutable thay vì React state để tránh re-render mỗi frame.
-import { SPAWN, nearestZone, type Vec2 } from './campus';
+import {
+  SPAWN,
+  nearestZone,
+  computeCanonicalLibraryElevation,
+  type LibraryFloor,
+  type Vec2,
+} from './campus';
 import type {
   AvatarGender,
   AvatarHairStyle,
@@ -90,9 +96,20 @@ export const playerState = {
   /** Giai đoạn 4 — true khi đang ở Sảnh tầng 1–10 Thư viện Tạ Quang Bửu (tọa độ cục bộ LIBRARY_LOBBY). */
   inLibraryLobby: false,
   /** Tầng hiện tại trong Thư viện Tạ Quang Bửu (1, 2, 3, 4, 5, 6, 7, 10 theo chuẩn studywithhuster.cyou). */
-  libraryFloor: 1 as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10,
+  libraryFloor: 1 as LibraryFloor,
   /** Cao độ Y cục bộ của người chơi trong Thư viện (T1=0, T2=4.5, T3=9.0, T4=13.5, T5=18.0, T6=0/0.6, T7=5.25, T10=0/0.18). */
   libraryY: 0,
+  /** Cờ bật/tắt lớp lưới debug va chạm nội thất thư viện (chỉ dùng cho dev/test). */
+  libraryCollisionDebug: false,
+  /** Thông tin chẩn đoán không gian thư viện mới nhất (cập nhật mỗi frame trong Player). */
+  librarySpatialDiag: {
+    block: 'A' as 'A' | 'B' | 'D',
+    floor: 1 as LibraryFloor,
+    surfaceId: 'f1-main-lobby' as string | null,
+    grounded: true,
+    lastCollisionId: null as string | null,
+    nearestDoorId: null as string | null,
+  },
   /** Giai đoạn 2 — chế độ thời gian ngày / hoàng hôn / đêm. */
   timeOfDay: 'day' as TimeOfDay,
   /** Việc 2 — Hệ thống nhân vật & đồng phục sinh viên Bách khoa. */
@@ -139,45 +156,8 @@ export function updatePlayerState(pos: Vec2, moving: boolean): void {
 export function computeLibraryElevation(
   x: number,
   z: number,
-  currentFloor: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10,
+  currentFloor: LibraryFloor,
   currentY: number,
-): { y: number; floor: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10 } {
-  if (currentFloor === 10) {
-    const onStarDeck = Math.hypot(x - 14.8, z - 0.4) < 4.2;
-    return { y: onStarDeck ? 0.18 : 0, floor: 10 };
-  }
-  if (currentFloor === 7) {
-    return { y: 5.25, floor: 7 };
-  }
-  if (currentFloor === 6) {
-    const cx = Math.max(-7.5, Math.min(7.5, x));
-    const onPlatform = Math.hypot(x - cx, z) < 9.5;
-    return { y: onPlatform ? 0.6 : 0, floor: 6 };
-  }
-  // Khối A (Tầng 1–5): kiểm tra 2 cầu thang xoắn đôi dẫn từ Tầng 1 (y = 0) lên Tầng 2 (y = 4.5)
-  if (currentFloor === 1 || currentFloor === 2) {
-    const L = 6.5;
-    const ST_R0 = 7.55;
-    const ST_R1 = 9.35;
-    for (const st of [
-      { side: 1, a0: -0.34, a1: 0.34 },
-      { side: -1, a0: Math.PI - 0.34, a1: Math.PI + 0.34 },
-    ]) {
-      const dx = x - st.side * L;
-      const r = Math.hypot(dx, z);
-      if (r < ST_R0 - 0.15 || r > ST_R1 + 0.15) continue;
-      let a = Math.atan2(z, dx);
-      if (st.side < 0 && a < 0) a += Math.PI * 2;
-      const lo = Math.min(st.a0, st.a1) - 0.06;
-      const hi = Math.max(st.a0, st.a1) + 0.06;
-      if (a >= lo && a <= hi) {
-        const t = Math.max(0, Math.min(1, (a - st.a0) / (st.a1 - st.a0)));
-        const stairY = t * 4.5;
-        if (Math.abs(currentY - stairY) < 1.6) {
-          return { y: stairY, floor: stairY >= 2.25 ? 2 : 1 };
-        }
-      }
-    }
-  }
-  return { y: (currentFloor - 1) * 4.5, floor: currentFloor };
+): { y: number; floor: LibraryFloor } {
+  return computeCanonicalLibraryElevation(x, z, currentFloor, currentY);
 }

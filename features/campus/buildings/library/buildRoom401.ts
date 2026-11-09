@@ -7,7 +7,12 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { lin, mulberry32 } from './procedural-helpers';
+import { canvasTex, lin, mulberry32, optimizeStaticLibraryGroup } from './procedural-helpers';
+import {
+  ROOM_401_DIMS,
+  createLibraryLocation,
+  resolveLibraryMovement,
+} from '../../world-data/library-spatial';
 
 export interface Room401Controller {
   hit: (x: number, z: number) => boolean;
@@ -18,35 +23,36 @@ export function buildRoom401(
   rootGroup: THREE.Group,
   roomLabel = 'PHÒNG ĐỌC 401',
 ): Room401Controller {
-  const S = 0.6;
-  const RW = 48 * S;
-  const RD = 36 * S;
-  const RH = 6.2 * S;
-  const HW = RW / 2;
-  const HD = RD / 2;
-  const WT = 0.35 * S;
-  const DOOR_X = -10.8;
-  const DOOR_W = 2.64;
-
-  const TX = [-9.6, -5.04, 5.04, 9.6];
-  const TZ = [-4.56, 0.96, 6.48];
-  const TW = 2.88;
-  const TD = 2.64;
-  const TH = 0.78;
-  const STACK_X = lin(6, -12, -2.4);
-  const STACK_Z = -12.3;
-  const STACK_W = 0.66;
-  const STACK_D = 6.6;
-  const STACK_H = 2.28;
-  const COMP_W = 14.52;
-  const COMP_R = 11.4;
-  const COMP_CD = 0.66;
-  const DESK_X = -10.8;
-  const DESK_Z = 8.4;
-  const DESK_W = 3.12;
-  const DESK_D = 1.68;
+  const {
+    RW,
+    RD,
+    RH,
+    HW,
+    HD,
+    WT,
+    DOOR_X,
+    DOOR_W,
+    TX,
+    TZ_LOCAL: TZ,
+    TW,
+    TD,
+    TH,
+    STACK_X,
+    STACK_Z_LOCAL: STACK_Z,
+    STACK_W,
+    STACK_D,
+    STACK_H,
+    COMP_W,
+    COMP_R,
+    COMP_CD,
+    DESK_X,
+    DESK_Z_LOCAL: DESK_Z,
+    DESK_W,
+    DESK_D,
+  } = ROOM_401_DIMS;
 
   const mats: Record<string, THREE.MeshStandardMaterial> = {};
+  const gCache: Record<string, THREE.BufferGeometry> = {};
   const M = (c: number, r = 0.7, m = 0, ex?: THREE.MeshStandardMaterialParameters) => {
     const k = `${c}_${r}_${m}_${ex ? JSON.stringify(ex) : ''}`;
     if (!mats[k]) {
@@ -55,9 +61,9 @@ export function buildRoom401(
     return mats[k];
   };
   const B = (w: number, h: number, d: number, m: THREE.Material) =>
-    new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    new THREE.Mesh((gCache[`b_${w}_${h}_${d}`] ??= new THREE.BoxGeometry(w, h, d)), m);
   const C = (rt: number, rb: number, h: number, s: number, m: THREE.Material) =>
-    new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, s), m);
+    new THREE.Mesh((gCache[`c_${rt}_${rb}_${h}_${s}`] ??= new THREE.CylinderGeometry(rt, rb, h, s)), m);
   const add = <T extends THREE.Object3D>(
     p: THREE.Object3D,
     o: T,
@@ -136,24 +142,25 @@ export function buildRoom401(
   const mSignGreen = M(0x1e7a3a, 0.5, 0, { emissive: 0x0e4a22, emissiveIntensity: 0.5 });
 
   // Sàn gạch caro sáng
-  const fc = document.createElement('canvas');
-  fc.width = fc.height = 256;
-  const fctx = fc.getContext('2d')!;
-  fctx.fillStyle = '#e9e4d6';
-  fctx.fillRect(0, 0, 256, 256);
-  fctx.fillStyle = '#dfdacb';
-  fctx.fillRect(0, 0, 128, 128);
-  fctx.fillRect(128, 128, 128, 128);
-  fctx.strokeStyle = '#c9c2b0';
-  fctx.lineWidth = 3;
-  fctx.strokeRect(0, 0, 128, 128);
-  fctx.strokeRect(128, 0, 128, 128);
-  fctx.strokeRect(0, 128, 128, 128);
-  fctx.strokeRect(128, 128, 128, 128);
-  const floorTex = new THREE.CanvasTexture(fc);
-  floorTex.colorSpace = THREE.SRGBColorSpace;
-  floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-  floorTex.repeat.set(RW / 2, RD / 2);
+  const floorTex = canvasTex(
+    256,
+    256,
+    (fctx) => {
+      fctx.fillStyle = '#e9e4d6';
+      fctx.fillRect(0, 0, 256, 256);
+      fctx.fillStyle = '#dfdacb';
+      fctx.fillRect(0, 0, 128, 128);
+      fctx.fillRect(128, 128, 128, 128);
+      fctx.strokeStyle = '#c9c2b0';
+      fctx.lineWidth = 3;
+      fctx.strokeRect(0, 0, 128, 128);
+      fctx.strokeRect(128, 0, 128, 128);
+      fctx.strokeRect(0, 128, 128, 128);
+      fctx.strokeRect(128, 128, 128, 128);
+    },
+    RW / 2,
+    RD / 2,
+  );
 
   add(
     rootGroup,
@@ -525,31 +532,27 @@ export function buildRoom401(
   }
   const tvG = G(rootGroup, -HW + WT / 2 + 0.06, 2.28, DESK_Z + 0.18, Math.PI / 2);
   bx(tvG, 1.56, 0.9, 0.048, mBlack);
-  const tvCanvas = document.createElement('canvas');
-  tvCanvas.width = 512;
-  tvCanvas.height = 288;
-  const tvCtx = tvCanvas.getContext('2d')!;
-  const grad = tvCtx.createLinearGradient(0, 0, 512, 288);
-  grad.addColorStop(0, '#0d2b52');
-  grad.addColorStop(1, '#1e5aa8');
-  tvCtx.fillStyle = grad;
-  tvCtx.fillRect(0, 0, 512, 288);
-  tvCtx.fillStyle = '#c8102e';
-  tvCtx.fillRect(0, 0, 512, 54);
-  tvCtx.fillStyle = '#ffffff';
-  tvCtx.font = 'bold 24px sans-serif';
-  tvCtx.textAlign = 'center';
-  tvCtx.fillText('THƯ VIỆN TẠ QUANG BỬU - HUST', 256, 36);
-  tvCtx.fillStyle = '#ffd166';
-  tvCtx.font = 'bold 30px sans-serif';
-  tvCtx.fillText(roomLabel, 256, 118);
-  tvCtx.fillStyle = '#e8f1ff';
-  tvCtx.font = '20px sans-serif';
-  tvCtx.fillText('• Giữ trật tự, tắt chuông điện thoại', 256, 168);
-  tvCtx.fillText('• Quẹt thẻ sinh viên khi ra / vào cổng', 256, 204);
-  tvCtx.fillText('• Để sách đúng vị trí sau khi đọc', 256, 240);
-  const tvTex = new THREE.CanvasTexture(tvCanvas);
-  tvTex.colorSpace = THREE.SRGBColorSpace;
+  const tvTex = canvasTex(512, 288, (tvCtx) => {
+    const grad = tvCtx.createLinearGradient(0, 0, 512, 288);
+    grad.addColorStop(0, '#0d2b52');
+    grad.addColorStop(1, '#1e5aa8');
+    tvCtx.fillStyle = grad;
+    tvCtx.fillRect(0, 0, 512, 288);
+    tvCtx.fillStyle = '#c8102e';
+    tvCtx.fillRect(0, 0, 512, 54);
+    tvCtx.fillStyle = '#ffffff';
+    tvCtx.font = 'bold 24px sans-serif';
+    tvCtx.textAlign = 'center';
+    tvCtx.fillText('THƯ VIỆN TẠ QUANG BỬU - HUST', 256, 36);
+    tvCtx.fillStyle = '#ffd166';
+    tvCtx.font = 'bold 30px sans-serif';
+    tvCtx.fillText(roomLabel, 256, 118);
+    tvCtx.fillStyle = '#e8f1ff';
+    tvCtx.font = '20px sans-serif';
+    tvCtx.fillText('• Giữ trật tự, tắt chuông điện thoại', 256, 168);
+    tvCtx.fillText('• Quẹt thẻ sinh viên khi ra / vào cổng', 256, 204);
+    tvCtx.fillText('• Để sách đúng vị trí sau khi đọc', 256, 240);
+  });
   add(
     tvG,
     new THREE.Mesh(
@@ -565,36 +568,33 @@ export function buildRoom401(
   const clkG = G(rootGroup, -HW + WT / 2 + 0.04, 2.95, DESK_Z + 0.18, Math.PI / 2);
   const clkR = 0.24;
   cy(clkG, clkR + 0.022, clkR + 0.022, 0.042, 32, mBlack, 0, 0, 0, Math.PI / 2);
-  const clkC = document.createElement('canvas');
-  clkC.width = clkC.height = 256;
-  const clkX = clkC.getContext('2d')!;
-  clkX.fillStyle = '#faf8f2';
-  clkX.beginPath();
-  clkX.arc(128, 128, 122, 0, Math.PI * 2);
-  clkX.fill();
-  clkX.strokeStyle = '#1a1c20';
-  for (let i = 0; i < 60; i++) {
-    const a = (i * Math.PI) / 30 - Math.PI / 2;
-    const r1 = i % 5 === 0 ? 96 : 106;
-    clkX.lineWidth = i % 5 === 0 ? 5 : 2;
+  const clkTex = canvasTex(256, 256, (clkX) => {
+    clkX.fillStyle = '#faf8f2';
     clkX.beginPath();
-    clkX.moveTo(128 + Math.cos(a) * r1, 128 + Math.sin(a) * r1);
-    clkX.lineTo(128 + Math.cos(a) * 114, 128 + Math.sin(a) * 114);
-    clkX.stroke();
-  }
-  clkX.fillStyle = '#1a1c20';
-  clkX.font = 'bold 24px sans-serif';
-  clkX.textAlign = 'center';
-  clkX.textBaseline = 'middle';
-  for (let n = 1; n <= 12; n++) {
-    const a = (n * Math.PI) / 6 - Math.PI / 2;
-    clkX.fillText(String(n), 128 + Math.cos(a) * 76, 128 + Math.sin(a) * 76);
-  }
-  clkX.fillStyle = '#c8102e';
-  clkX.font = 'bold 14px sans-serif';
-  clkX.fillText('HUST', 128, 88);
-  const clkTex = new THREE.CanvasTexture(clkC);
-  clkTex.colorSpace = THREE.SRGBColorSpace;
+    clkX.arc(128, 128, 122, 0, Math.PI * 2);
+    clkX.fill();
+    clkX.strokeStyle = '#1a1c20';
+    for (let i = 0; i < 60; i++) {
+      const a = (i * Math.PI) / 30 - Math.PI / 2;
+      const r1 = i % 5 === 0 ? 96 : 106;
+      clkX.lineWidth = i % 5 === 0 ? 5 : 2;
+      clkX.beginPath();
+      clkX.moveTo(128 + Math.cos(a) * r1, 128 + Math.sin(a) * r1);
+      clkX.lineTo(128 + Math.cos(a) * 114, 128 + Math.sin(a) * 114);
+      clkX.stroke();
+    }
+    clkX.fillStyle = '#1a1c20';
+    clkX.font = 'bold 24px sans-serif';
+    clkX.textAlign = 'center';
+    clkX.textBaseline = 'middle';
+    for (let n = 1; n <= 12; n++) {
+      const a = (n * Math.PI) / 6 - Math.PI / 2;
+      clkX.fillText(String(n), 128 + Math.cos(a) * 76, 128 + Math.sin(a) * 76);
+    }
+    clkX.fillStyle = '#c8102e';
+    clkX.font = 'bold 14px sans-serif';
+    clkX.fillText('HUST', 128, 88);
+  });
   add(clkG, new THREE.Mesh(new THREE.CircleGeometry(clkR, 32), new THREE.MeshStandardMaterial({ map: clkTex, roughness: 0.4 })), 0, 0, 0.023);
   const clockHour = G(clkG, 0, 0, 0.026);
   bx(clockHour, 0.016, clkR * 0.52, 0.006, mBlack, 0, clkR * 0.22, 0);
@@ -641,7 +641,10 @@ export function buildRoom401(
     cy(g, 0.03, 0.036, 0.48, 8, mWoodDark, 0, 0.54, 0);
     for (let i = 0; i < 6; i++) {
       const a = (i * Math.PI) / 3;
-      const s = new THREE.Mesh(new THREE.SphereGeometry(0.192, 10, 8), mLeaf);
+      const s = new THREE.Mesh(
+        (gCache['sph_0.192_10_8'] ??= new THREE.SphereGeometry(0.192, 10, 8)),
+        mLeaf,
+      );
       s.scale.set(1.2, 0.7, 0.9);
       add(g, s, Math.cos(a) * 0.132, 0.78 + (i % 2) * 0.108, Math.sin(a) * 0.132);
     }
@@ -676,27 +679,20 @@ export function buildRoom401(
   makeWCDoor(HW - WT / 2 - 0.01, 4.9, 0x1f5fa8);
   makeWCDoor(HW - WT / 2 - 0.01, 8.1, 0xc83e5b);
 
+  // Batch static room meshes into InstancedMesh & disable decorative pointer raycast
+  optimizeStaticLibraryGroup(rootGroup, [
+    ...fanHubs,
+    turnstile1.hub,
+    turnstile2.hub,
+    clockHour,
+    clockMin,
+    clockSec,
+  ]);
+
   const hit = (x: number, z: number): boolean => {
-    const m = 0.22;
-    if (x < -HW + WT + m || x > HW - WT - m || z < -HD + WT + m) return true;
-    if (z > HD - WT - m && Math.abs(x - DOOR_X) > DOOR_W / 2 - m) return true;
-    for (const tx of TX) {
-      for (const tz of TZ) {
-        if (Math.abs(x - tx) < TW / 2 + 0.33 && Math.abs(z - tz) < TD / 2 + 0.15) return true;
-      }
-    }
-    for (const sx of STACK_X) {
-      if (Math.abs(x - sx) < STACK_W / 2 + 0.21 && Math.abs(z - STACK_Z) < STACK_D / 2 + 0.18) return true;
-    }
-    if (x > cBackX0 - 0.18 && x < cBackX1 + 0.18 && z < cBackZ + COMP_CD / 2 + 0.3) return true;
-    if (x > cRightX - COMP_CD / 2 - 0.3 && z > cRightZ0 - 0.18 && z < cRightZ1 + 0.18) return true;
-    if (Math.abs(x - DESK_X) < DESK_W / 2 + 0.18 && Math.abs(z - DESK_Z) < DESK_D / 2 + 0.18) return true;
-    for (const ix of [-5.04, 5.04]) {
-      for (const iz of [-2.4, 3.6]) {
-        if (Math.abs(x - ix) < 0.39 && Math.abs(z - iz) < 0.39) return true;
-      }
-    }
-    return false;
+    const loc = createLibraryLocation(4, x, z + ROOM_401_DIMS.R4Z);
+    const res = resolveLibraryMovement(loc, loc);
+    return res.blocked || !res.grounded;
   };
 
   const update = (dt: number, px: number, pz: number, active: boolean) => {

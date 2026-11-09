@@ -22,6 +22,7 @@ import {
   type MultiplayerSnapshot,
   type RemotePlayer,
 } from '../../../lib/multiplayer';
+import { playerState } from '../../../lib/playerState';
 import {
   getSeatDefinition,
   type PlayerStudyPresence,
@@ -294,26 +295,41 @@ export interface RemoteStudySeatsProps {
 
 export function RemoteStudySeats({ onSelectOccupiedSeat }: RemoteStudySeatsProps) {
   const [snap, setSnap] = useState<MultiplayerSnapshot>(() => multiplayer.snapshot);
+  const [activeFloor, setActiveFloor] = useState<number>(() => playerState.libraryFloor);
 
   useEffect(() => {
     syncWindowRemoteSeatsDebug();
     setSnap(multiplayer.snapshot);
+    setActiveFloor(playerState.libraryFloor);
     const unsub = multiplayer.subscribe((next) => {
       setSnap(next);
     });
+    const onFloorChange = (ev: Event) => {
+      const flr = (ev as CustomEvent<{ floor?: number }>).detail?.floor;
+      setActiveFloor(typeof flr === 'number' ? flr : playerState.libraryFloor);
+    };
+    window.addEventListener('bkhn:library-floor', onFloorChange);
     return () => {
       unsub();
+      window.removeEventListener('bkhn:library-floor', onFloorChange);
       remoteSeatedRenderMap.clear();
     };
   }, []);
 
   const remoteLobbySeats = useMemo(() => {
+    if (activeFloor !== 1) return [];
     return snap.seats.filter(
       (occ) =>
         occ.studyRoomId === 'library-lobby' &&
         (!snap.selfId || occ.occupantId !== snap.selfId),
     );
-  }, [snap.seats, snap.selfId]);
+  }, [activeFloor, snap.seats, snap.selfId]);
+
+  useEffect(() => {
+    if (activeFloor !== 1) {
+      remoteSeatedRenderMap.clear();
+    }
+  }, [activeFloor]);
 
   const playerMap = useMemo(() => {
     const map = new Map<string, RemotePlayer>();
