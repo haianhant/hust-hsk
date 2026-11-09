@@ -510,3 +510,138 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
   assert.equal(claimedInHsk2.occupancy.occupantId, 'sess-c');
 });
 
+test('(7) PR9 Review Fix 4 — HskRoom enforces 1-socket-to-1-sessionId invariant and prevents orphaned sessions/seats', async () => {
+  const ctx = createMockDoState();
+  const room = new workerRoom.HskRoom(ctx);
+
+  const ws1 = createMockSocket();
+  const wsObserver = createMockSocket();
+  ctx.acceptWebSocket(ws1);
+  ctx.acceptWebSocket(wsObserver);
+
+  // 1. Socket ws1 joins session A and claims seat tqb-1f-t1-s1
+  await room.webSocketMessage(
+    ws1,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'sess-alpha',
+      name: 'Sinh viên Alpha',
+      mssv: '20226001',
+    }),
+  );
+  await room.webSocketMessage(
+    ws1,
+    JSON.stringify({
+      type: 'study:claim-seat',
+      seatId: 'tqb-1f-t1-s1',
+      subjectTag: 'Giải tích 1',
+      requestId: 'req-alpha-seat',
+    }),
+  );
+  assert.ok(
+    ws1.sent.some(
+      (m) => m.type === 'study:seat-claimed' && m.occupancy?.occupantId === 'sess-alpha',
+    ),
+  );
+
+  // Repeating join with the SAME sessionId on the same socket is idempotent
+  ws1.sent.length = 0;
+  await room.webSocketMessage(
+    ws1,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'sess-alpha',
+      name: 'Sinh viên Alpha Updated',
+      mssv: '20226001',
+    }),
+  );
+  const welcomeSame = ws1.sent.find((m) => m.type === 'welcome');
+  assert.ok(welcomeSame, 'Same sessionId re-join on same socket is idempotent');
+  assert.equal(welcomeSame.count, 1);
+
+  // 2. Same socket ws1 attempts to join session B ('sess-beta') -> rejected!
+  ws1.sent.length = 0;
+  await room.webSocketMessage(
+    ws1,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'sess-beta',
+      name: 'Attacker Beta',
+      mssv: '20226999',
+    }),
+  );
+  const errSwitch = ws1.sent.find((m) => m.type === 'error');
+  assert.ok(errSwitch, 'Attempting to switch sessionId on a bound socket must return error');
+  assert.match(errSwitch.message, /already bound to a different sessionId/i);
+
+  // Verify 'sess-beta' was never created and room count is still 1
+  const countBeforeClose = await (
+    await room.fetch(new Request('https://internal/__count'))
+  ).json();
+  assert.equal(countBeforeClose.count, 1);
+
+  // 3. Legitimate reconnect: new socket ws1Reconnect joins with 'sess-alpha' -> replaces ws1
+  const ws1Reconnect = createMockSocket();
+  ctx.acceptWebSocket(ws1Reconnect);
+  await room.webSocketMessage(
+    ws1Reconnect,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'sess-alpha',
+      name: 'Sinh viên Alpha',
+      mssv: '20226001',
+    }),
+  );
+  assert.equal(ws1.closed.length, 1, 'Old socket ws1 must be closed upon reconnect');
+
+  // Closing the old replaced socket ws1 must NOT release 'sess-alpha' or its seat
+  await room.webSocketClose(ws1);
+  const countAfterOldClose = await (
+    await room.fetch(new Request('https://internal/__count'))
+  ).json();
+  assert.equal(
+    countAfterOldClose.count,
+    1,
+    'Closing replaced socket must not drop active reconnected session',
+  );
+
+  // Observer joins to watch final disconnect cleanup
+  await room.webSocketMessage(
+    wsObserver,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'sess-observer',
+      name: 'Quan sát viên',
+      mssv: '20226002',
+    }),
+  );
+  const obsSnap = wsObserver.sent.find((m) => m.type === 'study:room-snapshot');
+  assert.equal(obsSnap.seats.length, 1);
+  assert.equal(obsSnap.seats[0].occupantId, 'sess-alpha');
+
+  // 4. Close ws1Reconnect -> session A and seat tqb-1f-t1-s1 are released; observer sees count=1 and seat released
+  wsObserver.sent.length = 0;
+  ws1Reconnect.close(1000, 'Done');
+  await room.webSocketClose(ws1Reconnect);
+  assert.ok(
+    wsObserver.sent.some(
+      (m) =>
+        m.type === 'study:seat-released' &&
+        m.seatId === 'tqb-1f-t1-s1' &&
+        m.occupantId === 'sess-alpha',
+    ),
+    'Closing active socket must release its seat',
+  );
+  assert.ok(
+    wsObserver.sent.some((m) => m.type === 'leave' && m.id === 'sess-alpha'),
+    'Closing active socket must broadcast leave for sess-alpha',
+  );
+
+  // Close observer -> room count is 0
+  wsObserver.close(1000, 'Done');
+  await room.webSocketClose(wsObserver);
+  const finalCount = await (await room.fetch(new Request('https://internal/__count'))).json();
+  assert.equal(finalCount.count, 0, 'Room count must be 0 after all sockets close');
+});
+
+

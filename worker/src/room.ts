@@ -420,9 +420,20 @@ export class HskRoom {
     const now = Date.now();
 
     if (msg.type === 'join') {
-      const sessionId = typeof msg.sessionId === 'string' ? msg.sessionId.slice(0, 64) : '';
+      const sessionId =
+        typeof msg.sessionId === 'string' ? msg.sessionId.trim().slice(0, 64) : '';
       if (!sessionId) {
         this.send(ws, { type: 'error', message: 'Missing sessionId' });
+        return;
+      }
+      // Enforce strict invariant: one WebSocket is bound to at most one sessionId.
+      // Attempting to switch sessionId on an already-joined socket is rejected.
+      const boundSessionId = this.getSocketSessionId(ws);
+      if (boundSessionId && boundSessionId !== sessionId) {
+        this.send(ws, {
+          type: 'error',
+          message: 'Socket is already bound to a different sessionId',
+        });
         return;
       }
       const mssv = sanitizeMssv(msg.mssv);
@@ -430,7 +441,8 @@ export class HskRoom {
         this.send(ws, { type: 'error', message: 'MSSV phải là 8 chữ số' });
         return;
       }
-      // Reconnect with the same sessionId replaces any old socket
+      const isSameSocketRepeatJoin = boundSessionId === sessionId;
+      // Reconnect with the same sessionId on a NEW socket replaces any old socket
       // (both in-memory and hibernated sockets): no duplicate avatar, ever.
       const allSockets = new Set<WebSocket>([
         ...this.bySocket.keys(),
@@ -440,12 +452,17 @@ export class HskRoom {
         if (oldWs === ws) continue;
         const oldId = this.getSocketSessionId(oldWs);
         if (oldId === sessionId) {
+          this.bySocket.delete(oldWs);
+          try {
+            (oldWs as HibernatableWebSocket).serializeAttachment?.({ id: '' });
+          } catch {
+            // ignore
+          }
           try {
             oldWs.close(1000, 'Replaced by reconnect');
           } catch {
             // ignore
           }
-          this.bySocket.delete(oldWs);
         }
       }
       if (this.sessions.size >= ROOM_CAPACITY && !this.sessions.has(sessionId)) {
@@ -471,7 +488,9 @@ export class HskRoom {
       session.mssv = mssv;
       applyAppearance(session, msg);
       session.lastUpdate = now;
-      session.msgTimes = [];
+      if (!isSameSocketRepeatJoin) {
+        session.msgTimes = [];
+      }
       this.sessions.set(sessionId, session);
       this.bySocket.set(ws, sessionId);
 
@@ -816,6 +835,11 @@ export class HskRoom {
     this.restoreHibernatedSessions();
     const sessionId = this.getSocketSessionId(ws);
     this.bySocket.delete(ws);
+    try {
+      (ws as HibernatableWebSocket).serializeAttachment?.({ id: '' });
+    } catch {
+      // ignore
+    }
     if (!sessionId) return;
     // Only remove if no other active socket is still bound to this sessionId
     // (a reconnect may already have replaced it).

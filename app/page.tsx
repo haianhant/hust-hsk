@@ -54,6 +54,8 @@ import CharacterCreatorModal from '../components/ui/CharacterCreatorModal';
 import type { HomeworkState } from '../components/three/Classroom';
 import {
   createInitialSeatingState,
+  evaluateReclaimOutcome,
+  evaluateReconnectSeatAction,
   findNearestInteractable,
   getHook,
   LibraryLobbyModal,
@@ -227,7 +229,7 @@ export default function HomePage() {
       );
       if (!d.seated) {
         const snap = multiplayer.snapshot;
-        if (snap.mySeatId || snap.seatClaimState !== 'idle') {
+        if (snap.mySeatId || snap.seatClaimState === 'requesting') {
           multiplayer.requestSeatRelease(snap.mySeatId);
         }
       }
@@ -296,6 +298,9 @@ export default function HomePage() {
           })
           .then((outcome) => {
             if (!outcome.ok) {
+              if (outcome.reason === 'cancelled' || outcome.reason === 'pending-request') {
+                return;
+              }
               if (outcome.reason === 'already-occupied') {
                 showToast(
                   `🪑 Ghế này vừa có ${outcome.occupiedByName || 'bạn khác'} ngồi trước rồi. Hãy chọn ghế trống khác nhé!`,
@@ -375,33 +380,114 @@ export default function HomePage() {
     study.endSession();
   }, [seatedSeatId, study]);
 
-  // PR9 — Đồng bộ lại quyền giữ ghế khi kết nối lại (study:room-snapshot)
+  // PR9 (FIX 5) — Đồng bộ & đối soát quyền giữ ghế khi kết nối lại (study:room-snapshot)
+  // hoặc khi có thông báo chiếm ghế có thẩm quyền từ server (bkhn:mp-seat-claimed)
   useEffect(() => {
-    const onStudySnapshot = () => {
-      const localSeatId = playerState.seated ? playerState.seatId : null;
-      if (!localSeatId || !playerState.inLibraryLobby) return;
-      const snap = multiplayer.snapshot;
-      if (snap.status !== 'online' || !snap.selfId) return;
-      const occ = snap.seatMap[localSeatId];
-      if (occ && occ.occupantId !== snap.selfId) {
-        releaseActiveSeatSafely({
-          driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
-          fallbackSeatId: localSeatId,
-        });
-        setSeatedSeatId(null);
-        setSeatedSeatLabel(null);
+    const forceStandUpFromLostSeat = (seatId: string, occupiedByName?: string) => {
+      releaseActiveSeatSafely({
+        driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
+        fallbackSeatId: seatId,
+      });
+      setSeatedSeatId(null);
+      setSeatedSeatLabel(null);
+      bindSeatRef.current(playerState.inLibraryLobby ? 'library-lobby' : null, null);
+      const seatLabel = getSeatDefinition(seatId)?.label ?? seatId;
+      if (occupiedByName) {
         showToast(
-          `🪑 Ghế ${getSeatDefinition(localSeatId)?.label ?? localSeatId} đã có ${occ.occupantName} ngồi khi kết nối lại — bạn đã đứng dậy.`,
+          `🪑 Ghế ${seatLabel} đã có ${occupiedByName} ngồi khi kết nối lại — bạn đã đứng dậy.`,
         );
-      } else if (!occ) {
-        void multiplayer.requestSeatClaim(localSeatId, {
-          subjectTag: study.session.subjectTag,
-          pomodoroPhase: study.session.pomodoro.phase,
-        });
+      } else {
+        showToast(
+          `🪑 Không thể giữ lại ghế ${seatLabel} sau khi kết nối lại — bạn đã đứng dậy.`,
+        );
       }
     };
+
+    const onStudySnapshot = () => {
+      const snap = multiplayer.snapshot;
+      const decision = evaluateReconnectSeatAction({
+        inLibraryLobby: playerState.inLibraryLobby,
+        localSeated: playerState.seated,
+        localSeatId: playerState.seated ? playerState.seatId : null,
+        mpStatus: snap.status,
+        selfId: snap.selfId,
+        seatMap: snap.seatMap,
+      });
+
+      if (decision.action === 'none') {
+        return;
+      }
+
+      if (decision.action === 'preserve-confirmed') {
+        const seatDef = getSeatDefinition(decision.seatId);
+        setSeatedSeatId(decision.seatId);
+        setSeatedSeatLabel(seatDef?.label ?? decision.seatId);
+        bindSeatRef.current('library-lobby', decision.seatId);
+        return;
+      }
+
+      if (decision.action === 'stand-up-occupied') {
+        forceStandUpFromLostSeat(decision.seatId, decision.occupiedByName);
+        return;
+      }
+
+      if (decision.action === 'reclaim-available') {
+        const targetSeatId = decision.seatId;
+        void multiplayer
+          .requestSeatClaim(targetSeatId, {
+            subjectTag: study.session.subjectTag,
+            pomodoroPhase: study.session.pomodoro.phase,
+          })
+          .then((outcome) => {
+            const postDecision = evaluateReclaimOutcome({
+              targetSeatId,
+              outcome,
+              currentlyInLibraryLobby: playerState.inLibraryLobby,
+              currentlySeated: playerState.seated,
+              currentLocalSeatId: playerState.seated ? playerState.seatId : null,
+            });
+
+            if (postDecision.action === 'keep-seated') {
+              const seatDef = getSeatDefinition(postDecision.seatId);
+              setSeatedSeatId(postDecision.seatId);
+              setSeatedSeatLabel(seatDef?.label ?? postDecision.seatId);
+              bindSeatRef.current('library-lobby', postDecision.seatId);
+            } else if (postDecision.action === 'release-server-seat') {
+              multiplayer.requestSeatRelease(postDecision.seatId);
+            } else if (postDecision.action === 'stand-up-failed') {
+              forceStandUpFromLostSeat(
+                postDecision.seatId,
+                postDecision.occupiedByName,
+              );
+            }
+          });
+      }
+    };
+
+    const onRemoteSeatClaimed = (e: Event) => {
+      const d = (
+        e as CustomEvent<{
+          occupancy?: { seatId: string; occupantId: string; occupantName?: string };
+        }>
+      ).detail;
+      const occ = d?.occupancy;
+      if (!occ || !playerState.inLibraryLobby || !playerState.seated) return;
+      const snap = multiplayer.snapshot;
+      if (
+        snap.selfId &&
+        occ.occupantId !== snap.selfId &&
+        playerState.seatId === occ.seatId
+      ) {
+        forceStandUpFromLostSeat(occ.seatId, occ.occupantName || 'bạn khác');
+      }
+    };
+
     window.addEventListener('bkhn:mp-study-snapshot', onStudySnapshot);
-    return () => window.removeEventListener('bkhn:mp-study-snapshot', onStudySnapshot);
+    window.addEventListener('bkhn:mp-seat-claimed', onRemoteSeatClaimed);
+    return () => {
+      window.removeEventListener('bkhn:mp-study-snapshot', onStudySnapshot);
+      window.removeEventListener('bkhn:mp-seat-claimed', onRemoteSeatClaimed);
+    };
   }, [
     showToast,
     study.focusPolicy.suspend3DRendering,

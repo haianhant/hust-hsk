@@ -424,7 +424,33 @@ function connectClient(room = 'hsk-1') {
         leaveMsg.id === 'sess-b',
     );
 
+    // 17. PR9 Review Fix 4: Prevent multiple sessionIds on the same WebSocket
+    wsA2.send(
+      JSON.stringify({
+        type: 'join',
+        sessionId: 'sess-spoofed-second-id',
+        name: 'Spoofed Second Session',
+        mssv: '20226099',
+      }),
+    );
+    const switchErr = await wsA2.waitFor((m) => m.type === 'error');
+    assert(
+      'PR9 Fix 4: Server rejects joining a second sessionId on an already bound socket',
+      switchErr &&
+        switchErr.type === 'error' &&
+        String(switchErr.message).includes('different sessionId'),
+      JSON.stringify(switchErr),
+    );
+
     wsA2.close();
+    await new Promise((r) => setTimeout(r, 150));
+    const roomsAfterAllClose = await fetch(`${BASE_HTTP}/api/rooms`).then((r) => r.json());
+    const hsk1Room = (roomsAfterAllClose.rooms || []).find((r) => r.id === 'hsk-1');
+    assert(
+      'PR9 Fix 4: Room hsk-1 count returns to 0 with no orphaned sessions after socket closes',
+      hsk1Room && hsk1Room.count === 0,
+      JSON.stringify(hsk1Room),
+    );
     console.log(`test-clients summary: ${passed} passed, ${failed} failed`);
     process.exit(failed === 0 ? 0 : 1);
   } catch (err) {

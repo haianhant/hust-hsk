@@ -123,15 +123,21 @@ function startWsShimServer() {
   });
 }
 
-async function seedCharacterAndEnterLibrary(page, profile, roomUrl) {
-  await page.addInitScript((prof) => {
-    window.localStorage.setItem(
-      'bkhn-identity-v1',
-      JSON.stringify({ name: prof.name, mssv: prof.mssv }),
-    );
-    window.localStorage.setItem('bkhn-character-v1', JSON.stringify(prof));
-    window.localStorage.setItem('bkhn-session-id', prof.sessionId);
-  }, profile);
+async function seedCharacterAndEnterLibrary(page, profile, roomUrl, wsOverrideUrl = WS_URL) {
+  await page.addInitScript(
+    ({ prof, wsUrl }) => {
+      if (wsUrl) {
+        window.__HUST_TEST_MP_WS_URL = wsUrl;
+      }
+      window.localStorage.setItem(
+        'bkhn-identity-v1',
+        JSON.stringify({ name: prof.name, mssv: prof.mssv }),
+      );
+      window.localStorage.setItem('bkhn-character-v1', JSON.stringify(prof));
+      window.localStorage.setItem('bkhn-session-id', prof.sessionId);
+    },
+    { prof: profile, wsUrl: wsOverrideUrl },
+  );
 
   await page.goto(roomUrl, { waitUntil: 'domcontentloaded' });
   await page.locator('#enter-campus').click();
@@ -177,8 +183,9 @@ async function run() {
       args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader'],
     });
 
-    const roomHsk1Url = `${BASE_HTTP}/?room=hsk-1&mpWs=${encodeURIComponent(WS_URL)}`;
-    const roomHsk2Url = `${BASE_HTTP}/?room=hsk-2&mpWs=${encodeURIComponent(WS_URL)}`;
+    // Include an untrusted ?mpWs= query parameter in roomHsk1Url to prove FIX 1 ignores it in the browser
+    const roomHsk1Url = `${BASE_HTTP}/?room=hsk-1&mpWs=${encodeURIComponent('wss://attacker.example/ws')}`;
+    const roomHsk2Url = `${BASE_HTTP}/?room=hsk-2`;
 
     const contextA = await browser.newContext({ viewport: { width: 960, height: 600 } });
     const contextB = await browser.newContext({ viewport: { width: 960, height: 600 } });
@@ -314,8 +321,8 @@ async function run() {
     await pageB.locator('[data-testid="close-study-panel"]').click();
     await pageB.locator('[data-testid="study-panel"]').waitFor({ state: 'hidden', timeout: 5000 });
 
-    // Position Student B at (-0.3, 0.2) (>1.65m from seats so no center E prompt banner overlays the 3D view) looking at Student A seated at tqb-1f-t1-s1
-    await pageB.evaluate(() => window.__bkhn.teleport(-0.3, 0.2, Math.PI - 0.85, 0.24));
+    // Position Student B at (-0.6, 1.2) (>1.65m from seats and >2.5m from statue so no center E prompt banner overlays the 3D view) looking West at Student A seated at tqb-1f-t1-s1
+    await pageB.evaluate(() => window.__bkhn.teleport(-0.6, 1.2, Math.PI / 2, 0.22));
     await new Promise((r) => setTimeout(r, 500));
     await pageB.screenshot({ path: path.join(SHOT_DIR, 'pr9-01-b-sees-a-studying.png') });
     console.log('  PASS: Student B sees Student A seated in 3D + live Pomodoro badge -> pr9-01-b-sees-a-studying.png & pr9-05-study-panel-presence.png');
@@ -547,13 +554,46 @@ async function run() {
       { timeout: 6000 },
     );
     await contextC.close();
+
+    // Verify FIX 5 on connected Student A: if a reconnect snapshot / remote claim indicates
+    // tqb-1f-t1-s1 was claimed by another student while A was seated, A stands up safely
+    await pageA.evaluate(() => {
+      window.dispatchEvent(
+        new CustomEvent('bkhn:mp-seat-claimed', {
+          detail: {
+            occupancy: {
+              seatId: 'tqb-1f-t1-s1',
+              studyRoomId: 'library-lobby',
+              occupantId: 'pr9-student-b',
+              occupantName: 'Trần Minh Quân',
+              occupiedAtMs: Date.now(),
+            },
+          },
+        }),
+      );
+    });
+    await pageA.waitForFunction(
+      () =>
+        Boolean(
+          window.__bkhn.getSeatState &&
+            !window.__bkhn.getSeatState().seated &&
+            window.__bkhn.getSeatState().seatId === null,
+        ),
+      null,
+      { timeout: 5000 },
+    );
+    const standPosAfterConflict = await pageA.evaluate(() => window.__bkhn.getPos());
+    assert.ok(
+      Math.hypot(standPosAfterConflict.x - -2.4, standPosAfterConflict.z - 0.54) < 0.05,
+      `Expected avatar to stand at safe spot (-2.4, 0.54), got (${standPosAfterConflict.x}, ${standPosAfterConflict.z})`,
+    );
     await contextA.close();
-    console.log('  PASS: Student C in room hsk-2 claimed tqb-1f-t1-s1 while Student A held it in room hsk-1.');
+    console.log('  PASS: Student C in room hsk-2 claimed tqb-1f-t1-s1 while Student A held it in room hsk-1, and FIX 5 remote seat takeover stood Student A up safely.');
 
     // 15. Offline fallback verification
     const contextOffline = await browser.newContext({ viewport: { width: 960, height: 600 } });
     const pageOffline = await contextOffline.newPage();
-    const offlineUrl = `${BASE_HTTP}/?mpWs=${encodeURIComponent('ws://127.0.0.1:1/ws')}`;
+    const offlineUrl = `${BASE_HTTP}/?room=hsk-1`;
     await seedCharacterAndEnterLibrary(
       pageOffline,
       {
@@ -568,6 +608,7 @@ async function run() {
         backpack: true,
       },
       offlineUrl,
+      'ws://127.0.0.1:1/ws',
     );
     await pageOffline.waitForFunction(
       () => document.body.innerText.includes('Chế độ ngoại tuyến (chỉ hiển thị cục bộ)'),

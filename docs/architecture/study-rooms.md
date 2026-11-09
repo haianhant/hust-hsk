@@ -58,8 +58,21 @@ Các bản tin mở rộng được khai báo tại [`shared/contracts/multiplay
 
 ---
 
-## 4. Máy Trạng thái Giữ chỗ ở Client & Chế độ Ngoại tuyến
+## 4. Máy Trạng thái Giữ chỗ Tất định ở Client & Chế độ Ngoại tuyến
 
+### Máy trạng thái giữ chỗ (`SeatClaimClientState` — `FIX 2` & `FIX 3`)
+Trong [`lib/multiplayer.ts`](../../lib/multiplayer.ts), `MultiplayerClient` quản lý vòng đời yêu cầu giữ chỗ ghế theo 7 trạng thái tất định:
+- `idle → requesting → confirmed`
+- `requesting → rejected | timed-out | cancelled`
+- `confirmed → releasing → idle`
+
+Các bất biến đồng bộ hóa giữa Client và Server:
+1. **Khớp lệnh nghiêm ngặt (`Strict Correlation`):** Bản tin `study:seat-claimed` cho `selfId` chỉ được chấp nhận chuyển sang `confirmed` khi khớp đúng bộ ba `(requestId, seatId, connectionGeneration)` của `pendingSeatRequest` đang chờ.
+2. **Giải phóng ghế mồ côi khi ACK đến muộn (`Late ACK Auto-Release`):** Nếu yêu cầu giữ ghế đã quá hạn (`SEAT_CLAIM_TIMEOUT_MS = 4000ms`) hoặc bị hủy (`cancelPendingSeatClaim` khi người chơi đứng dậy/rời sảnh) mà sau đó server mới gửi `study:seat-claimed`, client **không** tự ý ngồi xuống mà lập tức gửi `study:release-seat` để giải phóng ghế trên server.
+3. **Xử lý yêu cầu chồng lấn (`Concurrent / Superseded Claims`):** Nếu người chơi gửi yêu cầu giữ ghế B trong khi ghế A đang chờ phản hồi, yêu cầu A bị hủy tường minh (`reason: 'cancelled'`) trước khi gửi B. Nếu server đã cấp ghế A rồi từ chối ghế B, client tự động gửi `study:release-seat` cho ghế A để không bao giờ giữ ghế A trên server trong khi người chơi đang đứng ở client.
+4. **Đối soát khi kết nối lại (`Reconnect Reclaim Reconciliation — FIX 5`):** Khi kết nối lại và nhận `study:room-snapshot`, [`evaluateReconnectSeatAction`](../../features/campus/interaction/seat-interaction.ts) và [`evaluateReclaimOutcome`](../../features/campus/interaction/seat-interaction.ts) kiểm tra kết quả tái giữ chỗ: nếu ghế đã bị người khác chiếm trong lúc mất mạng hoặc yêu cầu tái giữ chỗ thất bại, nhân vật lập tức đứng dậy an toàn qua `releaseActiveSeatSafely`, xóa `seatId` trong `StudySession` và thông báo rõ bằng tiếng Việt.
+
+### 5 Trạng thái hiển thị trực quan của ghế 3D
 Trong [`app/page.tsx`](../../app/page.tsx) và [`features/campus/buildings/library/StudyChair.tsx`](../../features/campus/buildings/library/StudyChair.tsx), mỗi ghế có 5 trạng thái hiển thị trực quan:
 
 1. **`available` (Ghế trống):**

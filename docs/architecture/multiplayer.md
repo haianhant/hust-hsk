@@ -20,9 +20,17 @@ Mọi hằng số, kiểu dữ liệu và hàm kiểm tra hợp lệ được kh
 
 ---
 
-## 2. Giao thức Bản tin WebSocket (Wire Protocol)
+## 2. Giao thức Bản tin WebSocket & Xác thực Endpoint (`Wire Protocol & Endpoint Security`)
 
-Kết nối WebSocket được thiết lập tới `wss://<worker-host>/ws?room=<roomId>`:
+Kết nối WebSocket được thiết lập tới `wss://<worker-host>/ws?room=<roomId>` thông qua [`resolveWsUrl`](../../lib/multiplayer.ts) và [`validateWsEndpointUrl`](../../lib/multiplayer.ts):
+
+- **Bảo mật Endpoint (`Anti-Redirect / FIX 1`):**
+  - Client **tuyệt đối không** đọc tham số URL `?mpWs=` từ thanh địa chỉ trình duyệt để ghi đè máy chủ WebSocket, ngăn chặn tấn công lừa đảo qua liên kết độc hại đánh cắp `sessionId` hoặc `mssv` trong bản tin `join`.
+  - Tham số URL chỉ được phép chọn mã phòng hợp lệ (`?room=hsk-1`..`hsk-5`).
+  - Trên môi trường Production, chỉ chấp nhận giao thức mã hóa `wss:` tới host tin cậy (`TRUSTED_PROD_WS_HOSTS` hoặc host cấu hình lúc build).
+  - Trong môi trường phát triển cục bộ hoặc kiểm thử tự động Playwright trên `127.0.0.1` / `localhost`, có thể chỉ định `window.__HUST_TEST_MP_WS_URL` và giá trị này bắt buộc phải trỏ tới địa chỉ loopback (`127.0.0.1`, `localhost`, `[::1]`).
+- **Ràng buộc `1 WebSocket = 1 sessionId` (`FIX 4`):**
+  - Trên [`HskRoom`](../../worker/src/room.ts), một kết nối WebSocket sau khi đã `join` thành công với `sessionId` A không được phép gửi `join` đổi sang `sessionId` B (server trả lỗi `Socket is already bound to a different sessionId`), ngăn chặn việc tạo phiên/ghế mồ côi không thể giải phóng khi đóng socket.
 
 ```mermaid
 sequenceDiagram

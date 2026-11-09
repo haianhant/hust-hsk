@@ -538,3 +538,119 @@ export function releaseActiveSeatSafely(
     viaMountedPlayer: false,
   };
 }
+
+export type ReconnectSeatDecision =
+  | { action: 'none' }
+  | { action: 'preserve-confirmed'; seatId: string }
+  | {
+      action: 'stand-up-occupied';
+      seatId: string;
+      occupiedByName: string;
+    }
+  | {
+      action: 'reclaim-available';
+      seatId: string;
+    };
+
+/**
+ * Pure decision helper for FIX 5 — evaluates what action to take for the local
+ * seated avatar when an authoritative `study:room-snapshot` arrives on reconnect.
+ */
+export function evaluateReconnectSeatAction(input: {
+  inLibraryLobby: boolean;
+  localSeated: boolean;
+  localSeatId: string | null;
+  mpStatus: 'idle' | 'connecting' | 'online' | 'offline';
+  selfId: string | null;
+  seatMap: Record<string, { occupantId: string; occupantName: string }>;
+}): ReconnectSeatDecision {
+  if (!input.inLibraryLobby || !input.localSeated || !input.localSeatId) {
+    return { action: 'none' };
+  }
+  if (input.mpStatus !== 'online' || !input.selfId) {
+    return { action: 'none' };
+  }
+  if (!isLibraryLobbySeatId(input.localSeatId)) {
+    return {
+      action: 'stand-up-occupied',
+      seatId: input.localSeatId,
+      occupiedByName: 'hệ thống',
+    };
+  }
+  const occ = input.seatMap[input.localSeatId];
+  if (occ && occ.occupantId === input.selfId) {
+    return { action: 'preserve-confirmed', seatId: input.localSeatId };
+  }
+  if (occ && occ.occupantId !== input.selfId) {
+    return {
+      action: 'stand-up-occupied',
+      seatId: input.localSeatId,
+      occupiedByName: occ.occupantName || 'bạn khác',
+    };
+  }
+  return {
+    action: 'reclaim-available',
+    seatId: input.localSeatId,
+  };
+}
+
+export type ReclaimOutcomeDecision =
+  | { action: 'keep-seated'; seatId: string }
+  | { action: 'release-server-seat'; seatId: string }
+  | { action: 'keep-offline'; seatId: string }
+  | { action: 'noop' }
+  | {
+      action: 'stand-up-failed';
+      seatId: string;
+      reason: string;
+      occupiedByName?: string;
+    };
+
+/**
+ * Pure reconciliation helper for FIX 5 — determines how to reconcile local seating
+ * after an async `requestSeatClaim` triggered by `reclaim-available` settles.
+ */
+export function evaluateReclaimOutcome(input: {
+  targetSeatId: string;
+  outcome:
+    | { ok: true; occupancy: { seatId: string; occupantId: string } }
+    | {
+        ok: false;
+        seatId: string;
+        reason: string;
+        occupiedBy?: string;
+        occupiedByName?: string;
+      };
+  currentlyInLibraryLobby: boolean;
+  currentlySeated: boolean;
+  currentLocalSeatId: string | null;
+}): ReclaimOutcomeDecision {
+  const stillSeatedAtTarget =
+    input.currentlyInLibraryLobby &&
+    input.currentlySeated &&
+    input.currentLocalSeatId === input.targetSeatId;
+
+  if (input.outcome.ok) {
+    if (stillSeatedAtTarget) {
+      return { action: 'keep-seated', seatId: input.targetSeatId };
+    }
+    return { action: 'release-server-seat', seatId: input.targetSeatId };
+  }
+
+  if (!stillSeatedAtTarget) {
+    return { action: 'noop' };
+  }
+
+  if (input.outcome.reason === 'offline') {
+    return { action: 'keep-offline', seatId: input.targetSeatId };
+  }
+
+  return {
+    action: 'stand-up-failed',
+    seatId: input.targetSeatId,
+    reason: input.outcome.reason,
+    ...(input.outcome.occupiedByName
+      ? { occupiedByName: input.outcome.occupiedByName }
+      : {}),
+  };
+}

@@ -44,6 +44,8 @@ const {
   reconcileSeatingWithEnvironment,
   reconcilePersistedSessionSeat,
   releaseActiveSeatSafely,
+  evaluateReconnectSeatAction,
+  evaluateReclaimOutcome,
 } = require('../features/campus/interaction/seat-interaction.ts');
 const { playerState } = require('../lib/playerState.ts');
 const {
@@ -573,4 +575,153 @@ test('PR9 (14) findNearestInteractable distinguishes available, pending, and occ
     },
   );
 });
+
+test('PR9 Review Fix 5 — Reclaim Failure After Reconnect stands avatar up safely and clears local + StudySession seat', () => {
+  // 1. Client A is seated locally at tqb-1f-t1-s1 inside LibraryLobby with an active StudySession
+  playerState.inLibraryLobby = true;
+  playerState.inClassroom = false;
+  playerState.seated = true;
+  playerState.seatId = 'tqb-1f-t1-s1';
+  playerState.pos = { x: -2.4, z: 1.2 };
+
+  let session = startStudySession(createInitialStudySession(), {
+    nowMs: 1_700_000_000_000,
+    subjectTag: 'Giải tích 1',
+    studyRoomId: 'library-lobby',
+    seatId: 'tqb-1f-t1-s1',
+  });
+
+  // Case A: Snapshot confirms selfId still owns tqb-1f-t1-s1 -> preserve-confirmed
+  const snapConfirmed = evaluateReconnectSeatAction({
+    inLibraryLobby: true,
+    localSeated: true,
+    localSeatId: 'tqb-1f-t1-s1',
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {
+      'tqb-1f-t1-s1': {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: 1000,
+      },
+    },
+  });
+  assert.deepEqual(snapConfirmed, {
+    action: 'preserve-confirmed',
+    seatId: 'tqb-1f-t1-s1',
+  });
+
+  // Case B: Snapshot shows tqb-1f-t1-s1 is already owned by Student B -> stand-up-occupied immediately
+  const snapOccupied = evaluateReconnectSeatAction({
+    inLibraryLobby: true,
+    localSeated: true,
+    localSeatId: 'tqb-1f-t1-s1',
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {
+      'tqb-1f-t1-s1': {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-b',
+        occupantName: 'Trần Thị B',
+        occupiedAtMs: 1200,
+      },
+    },
+  });
+  assert.deepEqual(snapOccupied, {
+    action: 'stand-up-occupied',
+    seatId: 'tqb-1f-t1-s1',
+    occupiedByName: 'Trần Thị B',
+  });
+
+  // Case C: Snapshot shows tqb-1f-t1-s1 is free -> reclaim-available
+  const snapAvailable = evaluateReconnectSeatAction({
+    inLibraryLobby: true,
+    localSeated: true,
+    localSeatId: 'tqb-1f-t1-s1',
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {},
+  });
+  assert.deepEqual(snapAvailable, {
+    action: 'reclaim-available',
+    seatId: 'tqb-1f-t1-s1',
+  });
+
+  // Client A attempts to reclaim tqb-1f-t1-s1, but Student B claims it first -> requestSeatClaim resolves ok: false ('already-occupied')
+  const reclaimRejectedDecision = evaluateReclaimOutcome({
+    targetSeatId: 'tqb-1f-t1-s1',
+    outcome: {
+      ok: false,
+      seatId: 'tqb-1f-t1-s1',
+      reason: 'already-occupied',
+      occupiedBy: 'student-b',
+      occupiedByName: 'Trần Thị B',
+      requestId: 'req-reclaim-1',
+    },
+    currentlyInLibraryLobby: playerState.inLibraryLobby,
+    currentlySeated: playerState.seated,
+    currentLocalSeatId: playerState.seatId,
+  });
+  assert.equal(reclaimRejectedDecision.action, 'stand-up-failed');
+  assert.equal(reclaimRejectedDecision.seatId, 'tqb-1f-t1-s1');
+  assert.equal(reclaimRejectedDecision.reason, 'already-occupied');
+  assert.equal(reclaimRejectedDecision.occupiedByName, 'Trần Thị B');
+
+  // Reconcile local state on stand-up-failed: stand up safely + unbind StudySession seat
+  const releaseRes = releaseActiveSeatSafely({
+    driver: undefined,
+    fallbackSeatId: reclaimRejectedDecision.seatId,
+  });
+  session = bindSessionSeat(session, 'library-lobby', null);
+
+  assert.equal(releaseRes.released, true);
+  assert.equal(playerState.seated, false, 'Player must no longer be seated locally');
+  assert.equal(playerState.seatId, null, 'playerState.seatId must be cleared');
+  assert.deepEqual(playerState.pos, { x: -2.4, z: 0.54 }, 'Avatar must stand at collision-safe spot');
+  assert.equal(resolveLibraryLobbyCollisions(playerState.pos, AVATAR.radius).hit, null);
+  assert.equal(session.seatId, null, 'StudySession seatId must be cleared');
+
+  // Case D: Reclaim times out -> also triggers stand-up-failed
+  const reclaimTimeoutDecision = evaluateReclaimOutcome({
+    targetSeatId: 'tqb-1f-t1-s1',
+    outcome: {
+      ok: false,
+      seatId: 'tqb-1f-t1-s1',
+      reason: 'timeout',
+      requestId: 'req-reclaim-timeout',
+    },
+    currentlyInLibraryLobby: true,
+    currentlySeated: true,
+    currentLocalSeatId: 'tqb-1f-t1-s1',
+  });
+  assert.equal(reclaimTimeoutDecision.action, 'stand-up-failed');
+  assert.equal(reclaimTimeoutDecision.reason, 'timeout');
+
+  // Case E: Reclaim succeeds AFTER player already stood up or left lobby -> release-server-seat
+  const reclaimLateSuccessAfterStand = evaluateReclaimOutcome({
+    targetSeatId: 'tqb-1f-t1-s1',
+    outcome: {
+      ok: true,
+      requestId: 'req-reclaim-ok',
+      occupancy: {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: 2000,
+      },
+    },
+    currentlyInLibraryLobby: true,
+    currentlySeated: false,
+    currentLocalSeatId: null,
+  });
+  assert.deepEqual(reclaimLateSuccessAfterStand, {
+    action: 'release-server-seat',
+    seatId: 'tqb-1f-t1-s1',
+  });
+});
+
 
