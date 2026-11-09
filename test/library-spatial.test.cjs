@@ -419,13 +419,30 @@ test('PR10A Spatial (6) Regression — Mesh & collider bounding boxes match 1:1 
   }
 });
 
-test('PR10B Navigation (7) Unified LibraryNavigationController — state machine, 11 presets, concurrency lock, input lock & seat release', () => {
+test('PR10B Navigation (7) Unified LibraryNavigationController — mandatory executor, state machine, 11 presets, concurrency lock, input lock & seat release', () => {
   const nav = createLibraryNavigationController();
   const initialSnap = nav.getSnapshot();
   assert.equal(initialSnap.phase, 'idle');
   assert.equal(initialSnap.currentFloor, 1);
   assert.equal(initialSnap.activePresetId, 'f1-atrium');
   assert.equal(nav.getPresets().length, 11);
+
+  // 0. Mandatory executor check: navigation without an executeTransition hook MUST fail with 'executor-failed'
+  // and preserve floor, activePresetId, location, and camera state.
+  const noExecPreset = nav.navigateToPreset('f4-r401');
+  assert.equal(noExecPreset.ok, false);
+  assert.equal(noExecPreset.status, 'failed');
+  assert.equal(noExecPreset.reason, 'executor-failed');
+  assert.deepEqual(noExecPreset.phaseHistory, ['preparing', 'transitioning', 'failed']);
+  assert.equal(nav.getSnapshot().currentFloor, 1);
+  assert.equal(nav.getSnapshot().activePresetId, 'f1-atrium');
+  assert.equal(nav.isInputLocked(), false);
+
+  const noExecFloor = nav.navigateToFloor(6);
+  assert.equal(noExecFloor.ok, false);
+  assert.equal(noExecFloor.reason, 'executor-failed');
+  assert.equal(nav.getSnapshot().currentFloor, 1);
+  assert.equal(nav.getSnapshot().activePresetId, 'f1-atrium');
 
   const callOrder = [];
   const lockEvents = [];
@@ -518,10 +535,13 @@ test('PR10B Navigation (7) Unified LibraryNavigationController — state machine
   assert.equal(nav.getSnapshot().activePresetId, 'f4-r401');
 
   // 3. Double-click / re-entrant concurrent transition during 'preparing' is rejected with 'transition-in-progress'
+  // and does NOT overwrite active snapshot.phase or snapshot.transitionId
   let nestedOutcome = null;
+  let phaseAfterNestedReject = null;
   const unsubReentry = nav.registerHooks({
     prepareFloor: () => {
       nestedOutcome = nav.navigateToPreset('f10-rooftop');
+      phaseAfterNestedReject = nav.getSnapshot().phase;
       return true;
     },
   });
@@ -532,8 +552,29 @@ test('PR10B Navigation (7) Unified LibraryNavigationController — state machine
   assert.ok(nestedOutcome !== null);
   assert.equal(nestedOutcome.ok, false);
   assert.equal(nestedOutcome.reason, 'transition-in-progress');
+  assert.equal(phaseAfterNestedReject, 'preparing', 'Rejected concurrent call must not overwrite active phase');
   assert.equal(nav.getSnapshot().currentFloor, 6);
   assert.equal(nav.getSnapshot().activePresetId, 'f6-lounge');
+
+  // 4. Stale cancellation during 'preparing' aborts cleanly without executing transition or mutating state
+  let executedAfterCancel = false;
+  const unsubCancel = nav.registerHooks({
+    prepareFloor: () => {
+      nav.cancelInFlightTransition();
+      return true;
+    },
+    executeTransition: () => {
+      executedAfterCancel = true;
+      return { ok: true };
+    },
+  });
+  const cancelledOutcome = nav.navigateToPreset('f10-rooftop');
+  unsubCancel();
+  assert.equal(cancelledOutcome.ok, false);
+  assert.equal(executedAfterCancel, false, 'Cancelled transition must not call executeTransition');
+  assert.equal(nav.getSnapshot().currentFloor, 6, 'Cancelled transition must preserve Floor 6');
+  assert.equal(nav.getSnapshot().activePresetId, 'f6-lounge');
+  assert.equal(nav.isInputLocked(), false);
 });
 
 test('PR10B Camera (8) Collision-aware third-person indoor camera prevents wall, ceiling, column & tall furniture clipping', () => {

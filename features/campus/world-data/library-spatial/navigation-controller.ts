@@ -137,7 +137,10 @@ export class LibraryNavigationController {
   private hooks: LibraryNavigationAdapterHooks = {};
   private inFlightTransitionId: number | null = null;
 
-  constructor() {
+  constructor(initialHooks?: LibraryNavigationAdapterHooks) {
+    if (initialHooks) {
+      this.hooks = { ...initialHooks };
+    }
     const initialLoc = createLibraryLocation(
       DEFAULT_INITIAL_PRESET.floor,
       DEFAULT_INITIAL_PRESET.x,
@@ -157,6 +160,21 @@ export class LibraryNavigationController {
       lastError: null,
       lastOutcome: null,
     };
+  }
+
+  /**
+   * Cancels any in-flight transition (e.g., when exiting the library lobby)
+   * and restores movement input without mutating floor/location state.
+   */
+  public cancelInFlightTransition(): void {
+    if (this.inFlightTransitionId !== null) {
+      this.inFlightTransitionId = null;
+      this.snapshot.transitionId += 1;
+      this.snapshot.phase = 'idle';
+      this.snapshot.phaseHistory = ['idle'];
+      this.setInputLockState(false);
+      this.emit();
+    }
   }
 
   public getSnapshot(): LibraryNavigationSnapshot {
@@ -360,6 +378,28 @@ export class LibraryNavigationController {
     return outcome;
   }
 
+  private rejectConcurrentWhileBusy(presetId: string | null): LibraryNavigationOutcome {
+    const current = this.captureCurrentLocation();
+    const outcome: LibraryNavigationOutcome = {
+      ok: false,
+      transitionId: this.inFlightTransitionId ?? this.snapshot.transitionId,
+      phase: 'failed',
+      phaseHistory: ['failed'],
+      status: 'failed',
+      reason: 'transition-in-progress',
+      presetId: presetId ?? this.snapshot.activePresetId,
+      floor: current.floor,
+      location: current.location,
+      yaw: current.yaw,
+      pitch: current.pitch,
+      usedFallbackSpawn: false,
+      seatReleased: false,
+    };
+    // Preserve active in-flight snapshot.phase, snapshot.phaseHistory, and transitionId
+    this.snapshot.lastError = 'transition-in-progress';
+    return outcome;
+  }
+
   private executeValidatedTransition(request: {
     targetFloor: unknown;
     x?: number;
@@ -369,11 +409,9 @@ export class LibraryNavigationController {
     preset: LibrarySpawnPoint | null;
   }): LibraryNavigationOutcome {
     // 1. Concurrency guard: reject double-clicks or overlapping transitions
+    // without clobbering the active in-flight transition's snapshot phase.
     if (this.isBusy()) {
-      return this.failWithoutMutatingState(
-        'transition-in-progress',
-        request.preset?.id ?? null,
-      );
+      return this.rejectConcurrentWhileBusy(request.preset?.id ?? null);
     }
 
     const prev = this.captureCurrentLocation();
@@ -411,6 +449,10 @@ export class LibraryNavigationController {
       this.snapshot.lastError = null;
       this.emit();
 
+      if (this.inFlightTransitionId !== transitionId) {
+        return this.rejectConcurrentWhileBusy(request.preset?.id ?? null);
+      }
+
       if (this.hooks.prepareFloor) {
         try {
           const prepOk = this.hooks.prepareFloor(targetFloor);
@@ -436,55 +478,50 @@ export class LibraryNavigationController {
         }
       }
 
-      // Guard against stale completion if a reset occurred mid-preparation
+      // Guard against stale completion if cancelled/superseded during preparation
       if (this.inFlightTransitionId !== transitionId) {
+        return this.rejectConcurrentWhileBusy(request.preset?.id ?? null);
+      }
+
+      // 4. Phase: 'transitioning' — mandatory executor applies player/camera state & seat release
+      phaseHistory.push('transitioning');
+      this.snapshot.phase = 'transitioning';
+      this.snapshot.phaseHistory = [...phaseHistory];
+      this.emit();
+
+      if (this.inFlightTransitionId !== transitionId) {
+        return this.rejectConcurrentWhileBusy(request.preset?.id ?? null);
+      }
+
+      if (!this.hooks.executeTransition) {
+        this.inFlightTransitionId = null;
         this.setInputLockState(false);
         return this.failWithoutMutatingState(
-          'transition-in-progress',
+          'executor-failed',
           request.preset?.id ?? null,
           phaseHistory,
           transitionId,
         );
       }
 
-      // 4. Phase: 'transitioning' — release Floor 1 seat if needed & apply player/camera state
-      phaseHistory.push('transitioning');
-      this.snapshot.phase = 'transitioning';
-      this.snapshot.phaseHistory = [...phaseHistory];
-      this.emit();
-
       let seatReleased = false;
-      if (this.hooks.executeTransition) {
-        try {
-          const execRes = this.hooks.executeTransition({
-            transitionId,
-            preset: request.preset,
-            previousFloor: prev.floor,
-            previousLocation: prev.location,
-            targetFloor,
-            location: spatialResult.location,
-            yaw: spatialResult.yaw,
-            pitch: spatialResult.pitch,
-            usedFallbackSpawn: spatialResult.usedFallbackSpawn,
-            status: spatialResult.status === 'corrected' ? 'corrected' : 'success',
-          });
-          if (
-            execRes === false ||
-            (typeof execRes === 'object' && execRes !== null && execRes.ok === false)
-          ) {
-            this.inFlightTransitionId = null;
-            this.setInputLockState(false);
-            return this.failWithoutMutatingState(
-              'executor-failed',
-              request.preset?.id ?? null,
-              phaseHistory,
-              transitionId,
-            );
-          }
-          if (typeof execRes === 'object' && execRes !== null && execRes.seatReleased) {
-            seatReleased = true;
-          }
-        } catch {
+      try {
+        const execRes = this.hooks.executeTransition({
+          transitionId,
+          preset: request.preset,
+          previousFloor: prev.floor,
+          previousLocation: prev.location,
+          targetFloor,
+          location: spatialResult.location,
+          yaw: spatialResult.yaw,
+          pitch: spatialResult.pitch,
+          usedFallbackSpawn: spatialResult.usedFallbackSpawn,
+          status: spatialResult.status === 'corrected' ? 'corrected' : 'success',
+        });
+        if (
+          execRes === false ||
+          (typeof execRes === 'object' && execRes !== null && execRes.ok === false)
+        ) {
           this.inFlightTransitionId = null;
           this.setInputLockState(false);
           return this.failWithoutMutatingState(
@@ -494,6 +531,23 @@ export class LibraryNavigationController {
             transitionId,
           );
         }
+        if (typeof execRes === 'object' && execRes !== null && execRes.seatReleased) {
+          seatReleased = true;
+        }
+      } catch {
+        this.inFlightTransitionId = null;
+        this.setInputLockState(false);
+        return this.failWithoutMutatingState(
+          'executor-failed',
+          request.preset?.id ?? null,
+          phaseHistory,
+          transitionId,
+        );
+      }
+
+      // Guard against stale completion if cancelled/superseded during execution
+      if (this.inFlightTransitionId !== transitionId) {
+        return this.rejectConcurrentWhileBusy(request.preset?.id ?? null);
       }
 
       // 5. Phase: 'completed' — commit canonical UI & spatial state and restore movement controls
@@ -539,16 +593,18 @@ export class LibraryNavigationController {
     } finally {
       if (this.inFlightTransitionId === transitionId) {
         this.inFlightTransitionId = null;
-      }
-      if (this.snapshot.inputLocked) {
-        this.setInputLockState(false);
+        if (this.snapshot.inputLocked) {
+          this.setInputLockState(false);
+        }
       }
     }
   }
 }
 
-export function createLibraryNavigationController(): LibraryNavigationController {
-  return new LibraryNavigationController();
+export function createLibraryNavigationController(
+  initialHooks?: LibraryNavigationAdapterHooks,
+): LibraryNavigationController {
+  return new LibraryNavigationController(initialHooks);
 }
 
 export const libraryNavigationController = createLibraryNavigationController();

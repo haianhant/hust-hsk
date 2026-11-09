@@ -88,7 +88,12 @@ function startStaticServer() {
 
 function runDeterministicRaceAndStairChecks() {
   console.log('[PR10B Transition Race] Running deterministic race & curved stair continuity checks...');
-  const nav = createLibraryNavigationController();
+  const unhookedNav = createLibraryNavigationController();
+  assert.equal(unhookedNav.navigateToPreset('f4-r401').reason, 'executor-failed');
+
+  const nav = createLibraryNavigationController({
+    executeTransition: () => ({ ok: true }),
+  });
 
   // 1. Rapid sequential burst across all 11 presets 5 times (55 transitions)
   for (let round = 0; round < 5; round++) {
@@ -104,13 +109,17 @@ function runDeterministicRaceAndStairChecks() {
   // 2. Double-click / re-entrant race during both 'preparing' and 'transitioning'
   let rejectedDuringPrepare = null;
   let rejectedDuringExecute = null;
+  let phaseDuringPrepare = null;
+  let phaseDuringExecute = null;
   const unsub = nav.registerHooks({
     prepareFloor: () => {
       rejectedDuringPrepare = nav.navigateToPreset('f10-rooftop');
+      phaseDuringPrepare = nav.getSnapshot().phase;
       return true;
     },
     executeTransition: () => {
       rejectedDuringExecute = nav.navigateToPreset('f7-mezz');
+      phaseDuringExecute = nav.getSnapshot().phase;
       return { ok: true, seatReleased: false };
     },
   });
@@ -121,8 +130,10 @@ function runDeterministicRaceAndStairChecks() {
   assert.equal(winner.floor, 4);
   assert.equal(rejectedDuringPrepare.ok, false);
   assert.equal(rejectedDuringPrepare.reason, 'transition-in-progress');
+  assert.equal(phaseDuringPrepare, 'preparing', 'Concurrent rejection must not overwrite active preparing phase');
   assert.equal(rejectedDuringExecute.ok, false);
   assert.equal(rejectedDuringExecute.reason, 'transition-in-progress');
+  assert.equal(phaseDuringExecute, 'transitioning', 'Concurrent rejection must not overwrite active transitioning phase');
   assert.equal(nav.getSnapshot().currentFloor, 4);
   assert.equal(nav.getSnapshot().activePresetId, 'f4-r401');
 
@@ -190,10 +201,12 @@ async function runBrowserRaceAndLifecycleSmoke() {
   const pw = loadPlaywright();
   const executablePath = resolveBrowserExecutable();
   const outIndex = path.join(ROOT, 'out', 'index.html');
-  if (!pw || !executablePath || !fs.existsSync(outIndex)) {
-    console.log('[PR10B Transition Race] Skipping live browser phase (no out/ build or browser binary).');
-    return;
-  }
+  assert.ok(pw, '[PR10B Transition Race] Playwright is required for browser verification (silent skip is forbidden)');
+  assert.ok(executablePath, '[PR10B Transition Race] Chromium/Chrome executable is required for browser verification');
+  assert.ok(
+    fs.existsSync(outIndex),
+    '[PR10B Transition Race] out/index.html is missing — run `npm run build` before browser verification',
+  );
 
   const server = await startStaticServer();
   let browser;
@@ -276,9 +289,7 @@ async function runBrowserRaceAndLifecycleSmoke() {
 
 async function main() {
   runDeterministicRaceAndStairChecks();
-  if (process.env.SKIP_BROWSER_SMOKE !== '1') {
-    await runBrowserRaceAndLifecycleSmoke();
-  }
+  await runBrowserRaceAndLifecycleSmoke();
 }
 
 main().catch((err) => {

@@ -90,7 +90,16 @@ function runDeterministicChecks() {
   console.log('[PR10B Nav Smoke] Running deterministic controller & preset checks...');
   assert.equal(LIBRARY_NAV_PRESETS.length, 11, 'Must have all 11 canonical library presets');
 
-  const nav = createLibraryNavigationController();
+  // Verify mandatory executor enforcement before registering executor
+  const unhookedNav = createLibraryNavigationController();
+  const unhookedRes = unhookedNav.navigateToPreset('f4-r401');
+  assert.equal(unhookedRes.ok, false, 'Navigation without registered executor must fail');
+  assert.equal(unhookedRes.reason, 'executor-failed');
+  assert.equal(unhookedNav.getSnapshot().currentFloor, 1);
+
+  const nav = createLibraryNavigationController({
+    executeTransition: () => ({ ok: true }),
+  });
   for (const preset of LIBRARY_NAV_PRESETS) {
     const outcome = nav.navigateToPreset(preset.id);
     assert.equal(outcome.ok, true, `Preset ${preset.id} must succeed`);
@@ -109,10 +118,12 @@ async function runBrowserSmoke() {
   const pw = loadPlaywright();
   const executablePath = resolveBrowserExecutable();
   const outIndex = path.join(ROOT, 'out', 'index.html');
-  if (!pw || !executablePath || !fs.existsSync(outIndex)) {
-    console.log('[PR10B Nav Smoke] Skipping live browser phase (no out/ build or browser binary).');
-    return;
-  }
+  assert.ok(pw, '[PR10B Nav Smoke] Playwright is required for browser verification (silent skip is forbidden)');
+  assert.ok(executablePath, '[PR10B Nav Smoke] Chromium/Chrome executable is required for browser verification');
+  assert.ok(
+    fs.existsSync(outIndex),
+    '[PR10B Nav Smoke] out/index.html is missing — run `npm run build` before browser verification',
+  );
 
   fs.mkdirSync(SHOT_DIR, { recursive: true });
   const server = await startStaticServer();
@@ -229,9 +240,7 @@ async function runBrowserSmoke() {
 
 async function main() {
   runDeterministicChecks();
-  if (process.env.SKIP_BROWSER_SMOKE !== '1') {
-    await runBrowserSmoke();
-  }
+  await runBrowserSmoke();
 }
 
 main().catch((err) => {

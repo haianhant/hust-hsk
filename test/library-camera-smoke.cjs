@@ -150,10 +150,12 @@ async function runBrowserCameraSmoke() {
   const pw = loadPlaywright();
   const executablePath = resolveBrowserExecutable();
   const outIndex = path.join(ROOT, 'out', 'index.html');
-  if (!pw || !executablePath || !fs.existsSync(outIndex)) {
-    console.log('[PR10B Camera Smoke] Skipping live browser phase (no out/ build or browser binary).');
-    return;
-  }
+  assert.ok(pw, '[PR10B Camera Smoke] Playwright is required for browser verification (silent skip is forbidden)');
+  assert.ok(executablePath, '[PR10B Camera Smoke] Chromium/Chrome executable is required for browser verification');
+  assert.ok(
+    fs.existsSync(outIndex),
+    '[PR10B Camera Smoke] out/index.html is missing — run `npm run build` before browser verification',
+  );
 
   fs.mkdirSync(SHOT_DIR, { recursive: true });
   const server = await startStaticServer();
@@ -233,9 +235,7 @@ async function runBrowserCameraSmoke() {
 
 async function main() {
   runDeterministicCameraSweep();
-  if (process.env.SKIP_BROWSER_SMOKE !== '1') {
-    await runBrowserCameraSmoke();
-  }
+  await runBrowserCameraSmoke();
 }
 
 main().catch((err) => {

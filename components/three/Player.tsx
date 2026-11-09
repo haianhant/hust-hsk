@@ -971,6 +971,7 @@ export default function Player() {
         window.dispatchEvent(new CustomEvent('bkhn:library-floor', { detail: { floor: 1 } }));
       },
       exitLibraryLobby: () => {
+        libraryNavigationController.cancelInFlightTransition();
         seatActionsRef.current.forceClearSeat();
         playerState.inLibraryLobby = false;
         playerState.libraryFloor = 1;

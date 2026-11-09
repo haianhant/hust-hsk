@@ -50,16 +50,8 @@ export function LibraryFloorNav({
     const unsub = libraryNavigationController.subscribe((snap) => {
       setNavSnap(snap);
     });
-    const onFloorChange = (ev: Event) => {
-      const flr = (ev as CustomEvent<{ floor?: LibraryFloorNumber }>).detail?.floor;
-      if (flr) {
-        libraryNavigationController.notifyNaturalFloorChange(flr);
-      }
-    };
-    window.addEventListener('bkhn:library-floor', onFloorChange);
     return () => {
       unsub();
-      window.removeEventListener('bkhn:library-floor', onFloorChange);
     };
   }, []);
 
