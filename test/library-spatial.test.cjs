@@ -25,12 +25,16 @@ const {
   colliderFromFurniturePlacement,
   computeRotatedBoxBounds,
   createLibraryLocation,
+  createLibraryNavigationController,
   getBlockAFurniturePlacements,
   getBlockForFloor,
+  getCameraVerticalBoundsAt,
   getCollidersForFloor,
   getWalkableSurfacesForFloor,
+  resolveLibraryCameraOcclusion,
   resolveLibraryMovement,
   resolveLibraryLobbyCollisions,
+  stepLibraryCameraDistance,
 } = require(path.join(ROOT, 'lib/campus.ts'));
 
 test('PR10A Spatial (1) All canonical library floors have valid walkable surfaces, colliders, and collision-free grounded spawns & presets', () => {
@@ -414,3 +418,269 @@ test('PR10A Spatial (6) Regression — Mesh & collider bounding boxes match 1:1 
     assert.ok(preset.fullLabel && preset.fullLabel.length > 0, `Preset ${preset.id} must include fullLabel`);
   }
 });
+
+test('PR10B Navigation (7) Unified LibraryNavigationController — state machine, 11 presets, concurrency lock, input lock & seat release', () => {
+  const nav = createLibraryNavigationController();
+  const initialSnap = nav.getSnapshot();
+  assert.equal(initialSnap.phase, 'idle');
+  assert.equal(initialSnap.currentFloor, 1);
+  assert.equal(initialSnap.activePresetId, 'f1-atrium');
+  assert.equal(nav.getPresets().length, 11);
+
+  const callOrder = [];
+  const lockEvents = [];
+  let simulatedPlayer = {
+    floor: 1,
+    x: 0,
+    y: 0,
+    z: 2.4,
+    yaw: 0,
+    pitch: 0.2,
+    seated: true,
+    seatId: 'tqb-1f-t1-s1',
+  };
+
+  nav.registerHooks({
+    getPlayerContext: () => ({ ...simulatedPlayer }),
+    prepareFloor: (floor) => {
+      callOrder.push(`prepare:${floor}`);
+      return true;
+    },
+    setInputLocked: (locked) => {
+      lockEvents.push(locked);
+    },
+    executeTransition: (payload) => {
+      callOrder.push(`execute:${payload.targetFloor}`);
+      const wasSeated = simulatedPlayer.seated;
+      simulatedPlayer = {
+        floor: payload.targetFloor,
+        x: payload.location.x,
+        y: payload.location.y,
+        z: payload.location.z,
+        yaw: payload.yaw,
+        pitch: payload.pitch,
+        seated: false,
+        seatId: null,
+      };
+      return { ok: true, seatReleased: wasSeated };
+    },
+  });
+
+  // 1. Navigate across all 11 canonical presets and verify phaseHistory = ['preparing', 'transitioning', 'completed']
+  for (const preset of LIBRARY_NAV_PRESETS) {
+    callOrder.length = 0;
+    lockEvents.length = 0;
+    const outcome = nav.navigateToPreset(preset.id);
+    assert.equal(outcome.ok, true, `Preset ${preset.id} must succeed`);
+    assert.equal(outcome.phase, 'completed');
+    assert.deepEqual(outcome.phaseHistory, ['preparing', 'transitioning', 'completed']);
+    assert.equal(outcome.floor, preset.floor);
+    assert.equal(outcome.presetId, preset.id);
+    assert.deepEqual(callOrder, [`prepare:${preset.floor}`, `execute:${preset.floor}`]);
+    assert.equal(lockEvents[0], true, 'Input must be locked at start of transition');
+    assert.equal(lockEvents[lockEvents.length - 1], false, 'Input must be unlocked after transition');
+    assert.equal(nav.isInputLocked(), false);
+
+    const snap = nav.getSnapshot();
+    assert.equal(snap.currentFloor, preset.floor);
+    assert.equal(snap.activePresetId, preset.id);
+    assert.equal(snap.location.floor, preset.floor);
+    assert.equal(snap.location.block, getBlockForFloor(preset.floor));
+    if (preset.id === LIBRARY_NAV_PRESETS[0].id) {
+      assert.equal(outcome.seatReleased, true, 'First transition while seated must release seat');
+      assert.equal(simulatedPlayer.seated, false);
+    }
+  }
+
+  // 2. Invalid floor and unknown preset fail without mutating floor, position, camera or seating
+  nav.navigateToPreset('f4-r401');
+  simulatedPlayer.seated = false;
+  const beforeFail = nav.getSnapshot();
+
+  for (const badFloor of [0, 8, 9, 99, -2, null, undefined, 'invalid']) {
+    const badRes = nav.navigateToFloor(badFloor);
+    assert.equal(badRes.ok, false);
+    assert.equal(badRes.status, 'failed');
+    assert.equal(badRes.reason, 'invalid-floor');
+    assert.deepEqual(badRes.phaseHistory, ['failed']);
+    const afterFail = nav.getSnapshot();
+    assert.equal(afterFail.currentFloor, beforeFail.currentFloor);
+    assert.equal(afterFail.activePresetId, beforeFail.activePresetId);
+    assert.deepEqual(afterFail.location, beforeFail.location);
+    assert.equal(afterFail.yaw, beforeFail.yaw);
+    assert.equal(afterFail.pitch, beforeFail.pitch);
+  }
+
+  const unknownPresetRes = nav.navigateToPreset('non-existent-preset');
+  assert.equal(unknownPresetRes.ok, false);
+  assert.equal(unknownPresetRes.reason, 'preset-not-found');
+  assert.equal(nav.getSnapshot().currentFloor, 4);
+  assert.equal(nav.getSnapshot().activePresetId, 'f4-r401');
+
+  // 3. Double-click / re-entrant concurrent transition during 'preparing' is rejected with 'transition-in-progress'
+  let nestedOutcome = null;
+  const unsubReentry = nav.registerHooks({
+    prepareFloor: () => {
+      nestedOutcome = nav.navigateToPreset('f10-rooftop');
+      return true;
+    },
+  });
+  const primaryOutcome = nav.navigateToPreset('f6-lounge');
+  unsubReentry();
+  assert.equal(primaryOutcome.ok, true);
+  assert.equal(primaryOutcome.floor, 6);
+  assert.ok(nestedOutcome !== null);
+  assert.equal(nestedOutcome.ok, false);
+  assert.equal(nestedOutcome.reason, 'transition-in-progress');
+  assert.equal(nav.getSnapshot().currentFloor, 6);
+  assert.equal(nav.getSnapshot().activePresetId, 'f6-lounge');
+});
+
+test('PR10B Camera (8) Collision-aware third-person indoor camera prevents wall, ceiling, column & tall furniture clipping', () => {
+  // 1. Room 401 South partition wall at z = -13.0 blocks camera ray when player at (-5, 13.5, -14.2) looks North (camera behind player toward z = -11.0)
+  const r401WallOcc = resolveLibraryCameraOcclusion({
+    floor: 4,
+    target: { x: -5.0, y: 13.5 + 1.2, z: -14.2 },
+    desiredPosition: { x: -5.0, y: 13.5 + 1.8, z: -10.8 },
+  });
+  assert.equal(r401WallOcc.occluded, true);
+  assert.equal(r401WallOcc.blockerKind, 'wall');
+  assert.ok(
+    r401WallOcc.position.z < -13.15,
+    `Camera inside Room 401 must not clip South across wall z = -13.0, got z = ${r401WallOcc.position.z}`,
+  );
+  assert.ok(r401WallOcc.safeDistance < r401WallOcc.desiredDistance);
+
+  // 2. Room 401 ceiling at 13.5 + 3.66 = 17.16m clamps high-pitch camera ray
+  const r401CeilOcc = resolveLibraryCameraOcclusion({
+    floor: 4,
+    target: { x: 0, y: 13.5 + 1.2, z: -20.0 },
+    desiredPosition: { x: 0, y: 13.5 + 5.5, z: -17.0 },
+  });
+  assert.equal(r401CeilOcc.occluded, true);
+  assert.ok(
+    r401CeilOcc.position.y <= 13.5 + 3.66,
+    `Camera inside Room 401 must stay below acoustic ceiling (17.16m), got y = ${r401CeilOcc.position.y}`,
+  );
+
+  // 3. Tall bookshelf stack in Room 401 (height 2.28m >= 1.35m) blocks camera ray
+  const stackX = ROOM_401_DIMS.STACK_X[2]; // -8.16
+  const stackZ = ROOM_401_DIMS.R4Z + ROOM_401_DIMS.STACK_Z_LOCAL; // -32.08
+  const stackOcc = resolveLibraryCameraOcclusion({
+    floor: 4,
+    target: { x: stackX - 1.1, y: 13.5 + 1.2, z: stackZ },
+    desiredPosition: { x: stackX + 1.2, y: 13.5 + 1.4, z: stackZ },
+  });
+  assert.equal(stackOcc.occluded, true);
+  assert.equal(stackOcc.blockerKind, 'furniture');
+  assert.ok(stackOcc.position.x < stackX - 0.3);
+
+  // 4. Player standing near a wall looking INTO the room (camera moving away from wall) is NOT falsely occluded by that wall
+  const lookAwayFromWall = resolveLibraryCameraOcclusion({
+    floor: 4,
+    target: { x: 0, y: 13.5 + 1.2, z: -13.45 }, // 0.45m inside Room 401 near z = -13.0 wall
+    desiredPosition: { x: 0, y: 13.5 + 1.6, z: -16.8 }, // camera deeper inside Room 401 (away from z = -13.0 wall)
+  });
+  assert.equal(lookAwayFromWall.occluded, false);
+  assert.ok(Math.abs(lookAwayFromWall.safeDistance - lookAwayFromWall.desiredDistance) < 1e-3);
+
+  // 5. Floor 6 curved stadium outer wall & Floor 7 mezzanine underside clamp camera cleanly
+  const f6StadiumOcc = resolveLibraryCameraOcclusion({
+    floor: 6,
+    target: { x: 0, y: 1.2, z: 14.5 },
+    desiredPosition: { x: 0, y: 1.8, z: 18.5 },
+  });
+  assert.equal(f6StadiumOcc.occluded, true);
+  assert.ok(f6StadiumOcc.position.z < 16.3);
+
+  const f6MezzCeilBounds = getCameraVerticalBoundsAt(6, 0, 13.5);
+  assert.ok(f6MezzCeilBounds.maxY <= 4.85, 'Outer ring of Floor 6 sits under Floor 7 mezzanine slab (~4.82m)');
+
+  // 6. Smooth camera distance stepping: immediate pull-in on obstruction, smooth exponential recovery when clear
+  const pulledIn = stepLibraryCameraDistance(3.8, 3.8, 1.4, 0.016);
+  assert.equal(pulledIn, 1.4, 'Must pull in immediately when obstructed to prevent single-frame wall penetration');
+
+  let recovered = pulledIn;
+  for (let frame = 0; frame < 30; frame++) {
+    const next = stepLibraryCameraDistance(recovered, 3.8, 3.8, 0.033);
+    assert.ok(next >= recovered, 'Recovery distance must increase monotonically without oscillation');
+    assert.ok(next <= 3.8);
+    recovered = next;
+  }
+  assert.ok(recovered > 3.5, `Expected smooth recovery near 3.8m after 1s, got ${recovered}`);
+});
+
+test('PR10B Stairs & Elevators (9) Curved stair T1↔T2 landing thresholds, side-rail channel & elevator shaft safety', () => {
+  // 1. Standing and walking on Floor 2 balcony at f2-balcony (14.8, 4.5, 0) stays at y = 4.5m without snapping to mid-stair (2.25m)
+  const f2Start = createLibraryLocation(2, 14.8, 0.0, 4.5);
+  const f2WalkMid = resolveLibraryMovement(
+    f2Start,
+    createLibraryLocation(2, 14.8, 1.2, 4.5),
+    AVATAR.radius,
+    AVATAR.height,
+  );
+  assert.equal(f2WalkMid.position.y, 4.5, 'Walking along Floor 2 balcony near z = 1.2 must stay on Floor 2 slab (4.5m)');
+  assert.equal(f2WalkMid.recommendedFloor, 2);
+
+  // 2. Mid-stair side railings keep a player on the curved stair within [innerRadius, outerRadius]
+  const onStairMid = createLibraryLocation(1, 6.5 + 8.45, 0.0, 2.25);
+  const pushInner = resolveLibraryMovement(
+    onStairMid,
+    createLibraryLocation(1, 6.5 + 6.8, 0.0, 2.25),
+    AVATAR.radius,
+    AVATAR.height,
+  );
+  const rInner = Math.hypot(pushInner.position.x - 6.5, pushInner.position.z);
+  assert.ok(rInner >= 7.55, `Inner curved stair railing must keep player at r >= 7.55, got ${rInner}`);
+
+  // 3. Elevator bank shaft colliders on Floors 1–7 block entry and buildFloors1To5.surface() never treats cabs as walkable
+  const { buildFloors1To5 } = require(path.join(ROOT, 'features/campus/buildings/library/buildFloors1To5.ts'));
+  const THREE = require('three');
+  const dummyGroup = new THREE.Group();
+  const ctrl15 = buildFloors1To5(dummyGroup);
+  const cabSurf = ctrl15.surface(20.38, 0, 0);
+  assert.equal(cabSurf.ok, false, 'Elevator cab interior at x = 20.38 must not be treated as walkable gameplay floor');
+
+  for (const floor of [1, 2, 3, 4, 5, 6, 7]) {
+    const colliders = getCollidersForFloor(floor);
+    const elevShaft = colliders.find((c) => c.id === `f${floor}-elevator-bank`);
+    assert.ok(elevShaft, `Floor ${floor} must have an explicit elevator-bank shaft collider`);
+    assert.equal(elevShaft.kind, 'shaft');
+  }
+
+  // 4. Scene lifecycle & InstancedMesh batching: Room 401, Floors 4–5, Floors 6–7 & Floor 10 use InstancedMesh & NOOP_RAYCAST
+  const { buildRoom401 } = require(path.join(ROOT, 'features/campus/buildings/library/buildRoom401.ts'));
+  const { buildFloors6To7 } = require(path.join(ROOT, 'features/campus/buildings/library/buildFloors6To7.ts'));
+  const { buildFloor10Rooftop } = require(path.join(ROOT, 'features/campus/buildings/library/buildFloor10Rooftop.ts'));
+  const { NOOP_RAYCAST, disposeObject3D } = require(path.join(ROOT, 'features/campus/buildings/library/procedural-helpers.ts'));
+
+  const r401Group = new THREE.Group();
+  buildRoom401(r401Group, 'PHÒNG ĐỌC 401');
+  let r401InstancedCount = 0;
+  let r401MeshCount = 0;
+  r401Group.traverse((obj) => {
+    if (obj.isInstancedMesh) {
+      r401InstancedCount += 1;
+      assert.equal(obj.raycast, NOOP_RAYCAST, 'InstancedMesh in Room 401 must use NOOP_RAYCAST');
+    } else if (obj.isMesh) {
+      r401MeshCount += 1;
+      assert.equal(obj.raycast, NOOP_RAYCAST, 'Static/dynamic Mesh in Room 401 must use NOOP_RAYCAST');
+    }
+  });
+  assert.ok(r401InstancedCount >= 20, `Expected Room 401 to batch into >= 20 InstancedMeshes, got ${r401InstancedCount}`);
+  assert.ok(r401MeshCount < 160, `Expected Room 401 un-batched Mesh count < 160 (down from ~1,200), got ${r401MeshCount}`);
+
+  ctrl15.prepareFloor(4);
+  ctrl15.prepareFloor(5);
+  const f67Group = new THREE.Group();
+  const ctrl67 = buildFloors6To7(f67Group);
+  const f10Group = new THREE.Group();
+  buildFloor10Rooftop(f10Group);
+
+  ctrl67.dispose();
+  disposeObject3D(dummyGroup);
+  disposeObject3D(r401Group);
+  disposeObject3D(f67Group);
+  disposeObject3D(f10Group);
+});
+

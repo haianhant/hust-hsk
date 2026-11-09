@@ -27,6 +27,16 @@ export function canvasTex(
   rx = 0,
   ry = 0,
 ): THREE.CanvasTexture {
+  if (typeof document === 'undefined') {
+    const dt = new THREE.DataTexture(new Uint8Array(4), 1, 1);
+    dt.colorSpace = THREE.SRGBColorSpace;
+    if (rx) {
+      dt.wrapS = THREE.RepeatWrapping;
+      dt.wrapT = THREE.RepeatWrapping;
+      dt.repeat.set(rx, ry || rx);
+    }
+    return dt as unknown as THREE.CanvasTexture;
+  }
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
@@ -37,10 +47,101 @@ export function canvasTex(
   t.anisotropy = 4;
   if (rx) {
     t.wrapS = THREE.RepeatWrapping;
-    t. wrapT = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(rx, ry || rx);
   }
   return t;
+}
+
+/**
+ * No-op raycast handler for purely decorative procedural meshes so R3F pointer
+ * events skip thousands of non-interactive triangles.
+ */
+export const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => {};
+
+/**
+ * Batches static `THREE.Mesh` objects sharing `(geometry, material)` inside
+ * `container` into `THREE.InstancedMesh` instances (preserving any animated
+ * subtrees in `preserveRoots`) and disables pointer raycasting on all procedural
+ * meshes inside `container`.
+ */
+export function optimizeStaticLibraryGroup(
+  container: THREE.Object3D,
+  preserveRoots: ReadonlyArray<THREE.Object3D | null | undefined> = [],
+): { batchedMeshes: number; instancedGroups: number } {
+  const preserved = new Set<THREE.Object3D>();
+  for (let i = 0; i < preserveRoots.length; i++) {
+    const root = preserveRoots[i];
+    if (!root) continue;
+    root.traverse((node: THREE.Object3D) => {
+      preserved.add(node);
+    });
+  }
+
+  container.updateMatrixWorld(true);
+  const containerInverse = new THREE.Matrix4().copy(container.matrixWorld).invert();
+
+  const buckets = new Map<
+    string,
+    {
+      geometry: THREE.BufferGeometry;
+      material: THREE.Material;
+      meshes: THREE.Mesh[];
+      matrices: THREE.Matrix4[];
+    }
+  >();
+
+  container.traverse((obj) => {
+    const inst = obj as THREE.InstancedMesh;
+    if (inst.isInstancedMesh) {
+      inst.raycast = NOOP_RAYCAST;
+      return;
+    }
+
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.raycast = NOOP_RAYCAST;
+
+    if (preserved.has(mesh) || mesh.children.length > 0) return;
+    if (!mesh.geometry || !mesh.material || Array.isArray(mesh.material)) return;
+
+    const key = `${mesh.geometry.uuid}_${mesh.material.uuid}`;
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = {
+        geometry: mesh.geometry,
+        material: mesh.material,
+        meshes: [],
+        matrices: [],
+      };
+      buckets.set(key, bucket);
+    }
+    bucket.meshes.push(mesh);
+    bucket.matrices.push(
+      new THREE.Matrix4().multiplyMatrices(containerInverse, mesh.matrixWorld),
+    );
+  });
+
+  let batchedMeshes = 0;
+  let instancedGroups = 0;
+
+  buckets.forEach(({ geometry, material, meshes, matrices }) => {
+    if (meshes.length < 2) return;
+    for (const m of meshes) {
+      m.parent?.remove(m);
+    }
+    const im = new THREE.InstancedMesh(geometry, material, matrices.length);
+    im.raycast = NOOP_RAYCAST;
+    for (let i = 0; i < matrices.length; i++) {
+      im.setMatrixAt(i, matrices[i]);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    container.add(im);
+    batchedMeshes += meshes.length;
+    instancedGroups += 1;
+  });
+
+  return { batchedMeshes, instancedGroups };
 }
 
 /**

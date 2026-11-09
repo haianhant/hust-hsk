@@ -1212,6 +1212,7 @@ function buildFloor1Colliders(): SpatialCollider[] {
     makeBoxCollider('lobby-display-case-2', 'Tủ trưng bày Sảnh Bắc 2', 1, 'furniture', -11.7, -9.5, -12.35, -11.45, 1.45),
     makeBoxCollider('lobby-magazine-rack', 'Kệ báo & tạp chí Tầng 1', 1, 'furniture', -7.7, -5.9, -12.13, -11.67, 1.55),
     makeBoxCollider('lobby-vending-machine', 'Máy bán nước tự động Tầng 1', 1, 'furniture', 13.72, 14.88, -12.33, -11.47, 1.95),
+    makeBoxCollider('f1-elevator-bank', 'Lõi Thang máy T1', 1, 'shaft', XW - 0.3, XW + 2.05, -4.05, 4.05, 3.5),
   );
 
   // 6. PR8 Study Tables (derived directly from LIBRARY_LOBBY.studyTables[].box) & 4 Study Chairs
@@ -1259,6 +1260,7 @@ function buildFloor2Or3Colliders(floor: 2 | 3): SpatialCollider[] {
     makeBoxCollider(`f${floor}-wall-south`, `Tường Nam T${floor}`, floor, 'wall', -XW, XW, ZF - WT, ZF + WT),
     makeBoxCollider(`f${floor}-wall-west`, `Tường Tây T${floor}`, floor, 'wall', -XW - WT, -XW + WT, ZB, ZF),
     makeBoxCollider(`f${floor}-wall-east`, `Tường Đông T${floor}`, floor, 'wall', XW - WT, XW + WT, ZB, ZF),
+    makeBoxCollider(`f${floor}-elevator-bank`, `Lõi Thang máy T${floor}`, floor, 'shaft', XW - 0.3, XW + 2.05, -4.05, 4.05, 3.5),
   ];
 
   // 8 Atrium Columns
@@ -1291,6 +1293,7 @@ function buildFloor4Or5Colliders(floor: 4 | 5): SpatialCollider[] {
     ...buildWallSegmentsWithDoors(`f${floor}-corr-south`, `Tường Hành lang Nam T${floor}`, floor, 'x', ZF, -XW, XW, WT, doors),
     ...buildWallSegmentsWithDoors(`f${floor}-corr-west`, `Tường Hành lang Tây T${floor}`, floor, 'z', -XW, ZB, ZF, WT, doors),
     ...buildWallSegmentsWithDoors(`f${floor}-corr-east`, `Tường Hành lang Đông T${floor}`, floor, 'z', XW, ZB, ZF, WT, doors),
+    makeBoxCollider(`f${floor}-elevator-bank`, `Lõi Thang máy T${floor}`, floor, 'shaft', XW - 0.3, XW + 2.05, -4.05, 4.05, 3.5),
   );
 
   // 2. 8 Atrium Columns & shared corridor furniture in corridor
@@ -1590,12 +1593,15 @@ function buildFloor6Colliders(): SpatialCollider[] {
   for (const c of BLOCK_B_COLUMNS) {
     cols.push(makeCylinderCollider(`f6-${c.id}`, 'Cột thông tầng T6', 6, 'column', c.x, c.z, c.radius, 9.6, 0.0));
   }
+  cols.push(makeBoxCollider('f6-elevator-bank', 'Lõi Thang máy T6', 6, 'shaft', 23.0, 25.8, -4.05, 4.05, 3.5, 0.0));
 
   return cols;
 }
 
 function buildFloor7Colliders(): SpatialCollider[] {
-  const cols: SpatialCollider[] = [];
+  const cols: SpatialCollider[] = [
+    makeBoxCollider('f7-elevator-bank', 'Lõi Thang máy T7', 7, 'shaft', 23.0, 25.8, -4.05, 4.05, 3.5, BLOCK_B_DIMS.MZ),
+  ];
   for (const c of BLOCK_B_COLUMNS) {
     cols.push(
       makeCylinderCollider(`f7-${c.id}`, 'Cột thông tầng T7', 7, 'column', c.x, c.z, c.radius, 4.4, BLOCK_B_DIMS.MZ),

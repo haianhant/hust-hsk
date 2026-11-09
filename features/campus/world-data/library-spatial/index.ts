@@ -9,3 +9,5 @@ export * from './geometry';
 export * from './elevation';
 export * from './collision';
 export * from './transitions';
+export * from './camera';
+export * from './navigation-controller';

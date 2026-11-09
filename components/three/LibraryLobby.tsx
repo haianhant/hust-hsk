@@ -30,6 +30,7 @@ import {
 import {
   LIBRARY_LOBBY,
   getCollidersForFloor,
+  libraryNavigationController,
   type LibraryFloor,
 } from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
@@ -237,6 +238,9 @@ export default function LibraryLobby({
       if (!ctrlB) ctrlB = buildFloors6To7(groupB);
       return ctrlB;
     };
+    const disposeBlockB = () => {
+      ctrlB?.dispose();
+    };
 
     const groupD = new THREE.Group();
     groupD.visible = false;
@@ -246,7 +250,7 @@ export default function LibraryLobby({
       return ctrlD;
     };
 
-    return { groupA, ctrlA, groupB, ensureBlockB, groupD, ensureBlockD };
+    return { groupA, ctrlA, groupB, ensureBlockB, disposeBlockB, groupD, ensureBlockD };
   }, []);
 
   const floor1AnchorsRef = useRef<THREE.Group>(null);
@@ -254,6 +258,35 @@ export default function LibraryLobby({
   const floor10InteractiveRef = useRef<THREE.Group>(null);
   const debugOverlayRef = useRef<THREE.Group>(null);
   const debugFloorRenderedRef = useRef<LibraryFloor | null>(null);
+  const perfStatsRef = useRef({ lastFrameDeltaMs: 0, maxFrameDeltaMs: 0 });
+
+  useEffect(() => {
+    const prepareFloor = (flr: LibraryFloor) => {
+      const showFloor1 = flr === 1;
+      const showBlockA = flr >= 1 && flr <= 5;
+      const showBlockB = flr === 6 || flr === 7;
+      const showBlockD = flr === 10;
+
+      if (showBlockA) {
+        multiFloor.ctrlA.prepareFloor(flr);
+      } else if (showBlockB) {
+        multiFloor.ensureBlockB();
+      } else if (showBlockD) {
+        multiFloor.ensureBlockD();
+      }
+
+      multiFloor.groupA.visible = showBlockA;
+      multiFloor.groupB.visible = showBlockB;
+      multiFloor.groupD.visible = showBlockD;
+      if (floor1AnchorsRef.current) floor1AnchorsRef.current.visible = showFloor1;
+      if (floor6InteractiveRef.current) floor6InteractiveRef.current.visible = flr === 6;
+      if (floor10InteractiveRef.current) floor10InteractiveRef.current.visible = showBlockD;
+      perfStatsRef.current.maxFrameDeltaMs = 0;
+      return true;
+    };
+
+    return libraryNavigationController.registerHooks({ prepareFloor });
+  }, [multiFloor]);
 
   useEffect(() => {
     const onPianoNote = (ev: Event) => {
@@ -280,6 +313,7 @@ export default function LibraryLobby({
     return () => {
       binaryWall.map.dispose();
       binaryWall.emissiveMap.dispose();
+      multiFloor.disposeBlockB();
       disposeObject3D(multiFloor.groupA);
       disposeObject3D(multiFloor.groupB);
       disposeObject3D(multiFloor.groupD);
@@ -290,6 +324,33 @@ export default function LibraryLobby({
   }, [binaryWall, multiFloor]);
 
   useFrame((state, rawDelta) => {
+    const dtMs = rawDelta * 1000;
+    perfStatsRef.current.lastFrameDeltaMs = Number(dtMs.toFixed(2));
+    if (dtMs > perfStatsRef.current.maxFrameDeltaMs && dtMs < 2000) {
+      perfStatsRef.current.maxFrameDeltaMs = Number(dtMs.toFixed(2));
+    }
+    if (typeof window !== 'undefined') {
+      const w = window as unknown as {
+        __bkhnLibraryPerf?: {
+          calls: number;
+          triangles: number;
+          geometries: number;
+          textures: number;
+          lastFrameDeltaMs: number;
+          maxFrameDeltaMs: number;
+          floor: number;
+        };
+      };
+      w.__bkhnLibraryPerf = {
+        calls: state.gl.info.render.calls,
+        triangles: state.gl.info.render.triangles,
+        geometries: state.gl.info.memory.geometries,
+        textures: state.gl.info.memory.textures,
+        lastFrameDeltaMs: perfStatsRef.current.lastFrameDeltaMs,
+        maxFrameDeltaMs: perfStatsRef.current.maxFrameDeltaMs,
+        floor: playerState.libraryFloor,
+      };
+    }
     const dt = Math.min(rawDelta, 0.05);
     const flr = playerState.libraryFloor;
     const showFloor1 = flr === 1;

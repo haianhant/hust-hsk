@@ -162,9 +162,9 @@ export function queryLibraryGround(location: LibraryLocation): FloorSupportResul
     const stairHit = evaluateCurvedStairAt(x, z);
     if (stairHit) {
       const verticalDelta = Math.abs(y - stairHit.elevation);
-      const nearBottomOnF1 = floor === 1 && stairHit.progress <= 0.36;
-      const nearTopOnF2 = floor === 2 && stairHit.progress >= 0.64;
-      if (verticalDelta <= 1.85 || nearBottomOnF1 || nearTopOnF2) {
+      const nearBottomOnF1 = floor === 1 && stairHit.progress <= 0.14;
+      const nearTopOnF2 = floor === 2 && stairHit.progress >= 0.86;
+      if (verticalDelta <= 0.65 || nearBottomOnF1 || nearTopOnF2) {
         // Hysteresis prevents floor-flipping oscillation at the stair midpoint
         let recommendedFloor: LibraryFloor = floor;
         if (floor === 1 && stairHit.elevation >= BLOCK_A_FLOOR_HEIGHT - 0.35) {

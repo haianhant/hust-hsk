@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { canvasTex, mulberry32 } from './procedural-helpers';
+import { canvasTex, mulberry32, optimizeStaticLibraryGroup } from './procedural-helpers';
 import {
   createLibraryLocation,
   queryLibraryGround,
@@ -336,6 +336,9 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
     );
     skyG.add(sPts);
   }
+
+  // Gộp mesh tĩnh Sân thượng Tầng 10 thành InstancedMesh & tắt raycast trang trí
+  optimizeStaticLibraryGroup(world, [scopePivot, skyG]);
 
   const groundY = (x: number, z: number) => {
     const support = queryLibraryGround(createLibraryLocation(10, x, z, 0));

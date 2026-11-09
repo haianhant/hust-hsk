@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { canvasTex, mulberry32 } from './procedural-helpers';
+import { canvasTex, mulberry32, optimizeStaticLibraryGroup } from './procedural-helpers';
 import {
   BLOCK_B_DIMS,
   createLibraryLocation,
@@ -30,6 +30,7 @@ export interface Floors6To7Controller {
   groundY: (x: number, z: number, level: 6 | 7) => number;
   blockedAt: (x: number, z: number, level: 6 | 7) => boolean;
   update: (dt: number) => void;
+  dispose: () => void;
 }
 
 export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
@@ -514,8 +515,20 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
     }
   }
 
+  // Gộp mesh tĩnh Tầng 6–7 thành InstancedMesh & tắt raycast trang trí
+  optimizeStaticLibraryGroup(
+    world,
+    pianoKeys.map((k) => k.pivot),
+  );
+
   // Bộ tổng hợp âm thanh WebAudio cho Đại dương cầm 88 phím
   let audioCtx: AudioContext | null = null;
+  const dispose = () => {
+    if (audioCtx && audioCtx.state !== 'closed') {
+      audioCtx.close().catch(() => {});
+    }
+    audioCtx = null;
+  };
   const playPianoNote = (midi: number, velocity = 0.75) => {
     const keyObj = pianoKeys.find((k) => k.midi === midi);
     if (keyObj) {
@@ -587,5 +600,6 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
     groundY,
     blockedAt,
     update,
+    dispose,
   };
 }
