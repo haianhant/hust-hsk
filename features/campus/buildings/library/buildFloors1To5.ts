@@ -8,6 +8,14 @@
 import * as THREE from 'three';
 import { buildRoom401, type Room401Controller } from './buildRoom401';
 import { canvasTex, lin, mulberry32 } from './procedural-helpers';
+import {
+  createLibraryLocation,
+  evaluateCurvedStairAt,
+  queryLibraryGround,
+  resolveLibraryMovement,
+  sanitizeLibraryFloor,
+  type LibraryFloor,
+} from '../../world-data/library-spatial';
 
 export interface ElevatorCarState {
   z: number;
@@ -32,7 +40,7 @@ export interface Floors1To5Controller {
   nearShaft: (x: number, z: number) => number;
   stairAt: (x: number, z: number) => { y: number } | null;
   surface: (x: number, z: number, curY: number) => { ok: boolean; y: number };
-  update: (dt: number, px: number, py: number, pz: number) => void;
+  update: (dt: number, px: number, py: number, pz: number, activeFloor?: number) => void;
 }
 
 const BOOK_PAL = [
@@ -1124,22 +1132,23 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
         box(1.2, 0.04, 0.32, M_LGT, lx, h - 0.02, lz);
       }
     }
-    const cd = dw - 0.5;
+    const cd = dw - 1.8;
     const cX = x1 - 0.55;
-    box(0.78, 1.04, cd, M_WOOD_M, cX, 0.52, zc);
-    box(0.92, 0.07, cd + 0.12, M_TRIM, cX, 1.07, zc);
-    box(0.84, 0.14, cd + 0.04, M_HUST, cX + 0.04, 0.88, zc);
-    box(0.04, 0.65, cd - 0.4, M_GLS, cX + 0.34, 1.43, zc);
-    for (const dz of [-1.4, 0, 1.4]) {
-      box(0.06, 0.72, 0.06, M_CHR, cX + 0.34, 1.44, zc + dz);
+    const cZ = zc + 0.65;
+    box(0.78, 1.04, cd, M_WOOD_M, cX, 0.52, cZ);
+    box(0.92, 0.07, cd + 0.12, M_TRIM, cX, 1.07, cZ);
+    box(0.84, 0.14, cd + 0.04, M_HUST, cX + 0.04, 0.88, cZ);
+    box(0.04, 0.65, cd - 0.4, M_GLS, cX + 0.34, 1.43, cZ);
+    for (const dz of [-1.0, 0, 1.0]) {
+      box(0.06, 0.72, 0.06, M_CHR, cX + 0.34, 1.44, cZ + dz);
       if (dz !== 0) {
-        box(0.05, 0.32, 0.46, M_DRK, cX - 0.08, 1.26, zc + dz);
-        box(0.055, 0.27, 0.41, M_SCR, cX - 0.05, 1.26, zc + dz);
-        place('chairR', cX - 0.85, 0, zc + dz, Math.PI / 2);
+        box(0.05, 0.32, 0.46, M_DRK, cX - 0.08, 1.26, cZ + dz);
+        box(0.055, 0.27, 0.41, M_SCR, cX - 0.05, 1.26, cZ + dz);
+        place('chairR', cX - 0.85, 0, cZ + dz, Math.PI / 2);
       }
     }
     for (let i = 0; i < 3; i++) {
-      box(0.28, 0.18, 0.22, mat(BOOK_PAL[i * 3], 0.5), cX + 0.1, 1.18, zc - 0.35 + i * 0.35);
+      box(0.28, 0.18, 0.22, mat(BOOK_PAL[i * 3], 0.5), cX + 0.1, 1.18, cZ - 0.35 + i * 0.35);
     }
     for (const sz of [z0 + 1.55, z0 + 3.1, z1 - 3.1, z1 - 1.55]) {
       place('shelf', x0 + 2.05, 0, sz, 0);
@@ -1358,7 +1367,7 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       }
       fans4.push(h);
     };
-    const shellRoom = (x0: number, x1: number, z0: number, z1: number, y0: number, h: number, skip: 'x0' | 'x1' | 'z0') => {
+    const shellRoom = (x0: number, x1: number, z0: number, z1: number, y0: number, h: number, skip: 'x0' | 'x1' | 'z0' | 'z1') => {
       const w = x1 - x0;
       const d = z1 - z0;
       const cx = (x0 + x1) / 2;
@@ -1366,7 +1375,7 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       mk(new THREE.PlaneGeometry(w, d), M_FLR_W, cx, y0 + 0.012, cz, -Math.PI / 2, 0, 0, f45Group);
       mk(new THREE.PlaneGeometry(w, d), M_CEIL, cx, y0 + h, cz, Math.PI / 2, 0, 0, f45Group);
       if (skip !== 'z0') box(w, h, 0.25, M_WALL, cx, y0 + h / 2, z0, 0, 0, 0, f45Group);
-      box(w, h, 0.25, M_WALL, cx, y0 + h / 2, z1, 0, 0, 0, f45Group);
+      if (skip !== 'z1') box(w, h, 0.25, M_WALL, cx, y0 + h / 2, z1, 0, 0, 0, f45Group);
       if (skip !== 'x0') box(0.25, h, d, M_WALL, x0, y0 + h / 2, cz, 0, 0, 0, f45Group);
       if (skip !== 'x1') box(0.25, h, d, M_WALL, x1, y0 + h / 2, cz, 0, 0, 0, f45Group);
       for (const lx of lin(3, x0 + 2.6, x1 - 2.6)) {
@@ -1442,6 +1451,7 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       place('gate', 0.7, y0, z0 + 1.1);
     };
     const fill418 = (y0: number) => {
+      shellRoom(5.0, 18.0, -31.5, ZB, y0, 3.9, 'z1');
       for (const tx of [8.2, 13.8]) {
         for (const tz of [-17.5, -22, -26.5]) place('r4LongTbl', tx, y0, tz, 0);
       }
@@ -1497,90 +1507,34 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   };
 
   const stairAt = (x: number, z: number) => {
-    for (const st of STR) {
-      const dx = x - st.side * L;
-      const r = Math.hypot(dx, z);
-      if (r < ST_R0 - 0.15 || r > ST_R1 + 0.15) continue;
-      let a = Math.atan2(z, dx);
-      if (st.side < 0 && a < 0) a += Math.PI * 2;
-      const lo = Math.min(st.a0, st.a1) - 0.06;
-      const hi = Math.max(st.a0, st.a1) + 0.06;
-      if (a >= lo && a <= hi) {
-        const t = Math.max(0, Math.min(1, (a - st.a0) / (st.a1 - st.a0)));
-        return { y: t * FH };
-      }
-    }
-    return null;
+    const hit = evaluateCurvedStairAt(x, z);
+    return hit ? { y: hit.elevation } : null;
   };
 
   const surface = (x: number, z: number, curY: number): { ok: boolean; y: number } => {
-    for (const [cx, cz] of COLS) {
-      if (Math.hypot(x - cx, z - cz) < 0.62) return { ok: false, y: curY };
-    }
     const ci = insideCab(x, z);
     if (ci >= 0) {
       const c = elevators[ci];
       if (Math.abs(curY - c.y) < 0.9) return { ok: true, y: c.y };
     }
-    if (x > XW - 0.35 && Math.abs(z) < 4.5 && z > -4.2) {
-      for (const c of elevators) {
-        const f = Math.round(curY / FH) + 1;
-        if (Math.abs(z - c.z) < 0.72 && c.floor === f && Math.abs(c.y - (f - 1) * FH) < 0.08 && c.open > 0.65) {
-          if (x < ECX + ECW / 2 - 0.2) return { ok: true, y: c.y };
-        }
-      }
-    }
-    const st = stairAt(x, z);
-    if (st && curY <= FH + 0.6 && Math.abs(curY - st.y) < 1.25) return { ok: true, y: st.y };
-
-    const flr = Math.max(0, Math.min(NF - 1, Math.round(curY / FH)));
-    const fy = flr * FH;
-    if (flr === 0 && x < -XW + 0.35) {
-      if (x > BRM.x0 + 0.35 && z > BRM.z0 + 0.35 && z < BRM.z1 - 0.35) {
-        if (x > -XW - 0.35 && Math.abs(z - BRM.zc) > BRM.dw / 2 - 0.25) return { ok: false, y: curY };
-        if (Math.abs(x - (BRM.x1 - 0.55)) < 0.62 && Math.abs(z - BRM.zc) < (BRM.dw - 0.4) / 2) return { ok: false, y: curY };
-        return { ok: true, y: 0 };
-      }
+    const flrNum = Math.max(1, Math.min(NF, Math.round(curY / FH) + 1)) as LibraryFloor;
+    const loc = createLibraryLocation(flrNum, x, z, curY);
+    const moved = resolveLibraryMovement(loc, loc);
+    if (moved.blocked || !moved.grounded) {
       return { ok: false, y: curY };
     }
-    if (flr === 3 || flr === 4) {
-      const rCtrl = flr === 3 ? ensureR401() : ensureR501();
-      if (z < ZB + 0.35) {
-        if (z > ZB - 0.4 && (Math.abs(x - R4DX) < R4DW / 2 - 0.22 || Math.abs(x - 11.5) < 1.0)) return { ok: true, y: fy };
-        if (!rCtrl.hit(x, z - R4Z)) return { ok: true, y: fy };
-        return { ok: false, y: curY };
-      }
-      if (x > XW - 0.35) {
-        if (x < XW + 0.4 && (Math.abs(z + 9) < 1.0 || Math.abs(z - 9) < 1.0)) return { ok: true, y: fy };
-        if (x > XW + 0.3 && x < 35.1 && Math.abs(z) < 12.6) return { ok: true, y: fy };
-        return { ok: false, y: curY };
-      }
-      if (x < -XW + 0.35) {
-        if (x > -XW - 0.4 && (Math.abs(z - 4.5) < 1.1 || Math.abs(z + 6.5) < 1.0)) return { ok: true, y: fy };
-        if (x < -XW - 0.3 && x > -35.1 && Math.abs(z) < 12.6) return { ok: true, y: fy };
-        return { ok: false, y: curY };
-      }
-      if (z > ZF - 0.35) {
-        if (z < ZF + 0.4 && Math.abs(x) < 1.35) return { ok: true, y: fy };
-        if (z > ZF + 0.3 && z < 27.1 && Math.abs(x) < 15.6) return { ok: true, y: fy };
-        return { ok: false, y: curY };
-      }
-    }
-    if (Math.abs(x) > XW - 0.4 || z < ZB + 0.4 || z > ZF - 0.4) return { ok: false, y: curY };
-    if (flr > 0 && inside(x, z, FR + 0.22)) {
-      if (flr === 1) {
-        const s = sOf(x, z);
-        if ((s > S2R0 && s < S2R1) || (s > S2L0 && s < S2L1)) {
-          if (st) return { ok: true, y: st.y };
-        }
-      }
-      return { ok: false, y: curY };
-    }
-    return { ok: true, y: fy };
+    const ground = queryLibraryGround(moved.position);
+    return {
+      ok: ground.supported && ground.elevation !== null,
+      y: ground.elevation ?? curY,
+    };
   };
 
-  const update = (dt: number, px: number, py: number, pz: number) => {
-    const pFlr = Math.max(1, Math.min(NF, Math.round(py / FH) + 1));
+  const update = (dt: number, px: number, py: number, pz: number, activeFloor?: number) => {
+    const pFlr =
+      typeof activeFloor === 'number'
+        ? sanitizeLibraryFloor(activeFloor, 1)
+        : Math.max(1, Math.min(NF, Math.round(py / FH) + 1));
     const onF45 = pFlr === 4 || pFlr === 5;
     if (onF45) ensureFloors4To5();
     if (f45Group.visible !== onF45) f45Group.visible = onF45;
