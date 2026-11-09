@@ -13,6 +13,8 @@ import { playerState } from '../../lib/playerState';
 import {
   C6AndC8Block,
   C7ComplexBuilding,
+  C7FacultyParkingLane,
+  D3D5ParkingGarage,
   VietDucCenterBuilding,
 } from '../../features/campus/buildings/C6C7C8Cluster';
 import {
@@ -39,6 +41,8 @@ import {
 export {
   C6AndC8Block,
   C7ComplexBuilding,
+  C7FacultyParkingLane,
+  D3D5ParkingGarage,
   VietDucCenterBuilding,
   SoictB1Building,
   EastCampusBlocks,
@@ -83,6 +87,12 @@ export default function CampusExpansion({
         floorHeight={C8_BUILDING.floorHeight}
         isNight={isNight}
       />
+
+      {/* Bên trái Cổng Trần Đại Nghĩa (+Z): Nhà để xe sinh viên D3 - D5 (tham-khao/Nha-de-xe-D3-D5/images.jpg) */}
+      <D3D5ParkingGarage />
+
+      {/* Bên phải Cổng Trần Đại Nghĩa (-Z): Trục đường & làn đỗ xe ô tô giảng viên cạnh tòa C7 */}
+      <C7FacultyParkingLane isNight={isNight} />
 
       {/* Nhà Bắc Hồ Tiền (VDZ) */}
       <VietDucCenterBuilding isNight={isNight} />

@@ -70,7 +70,8 @@ export type FigureVariant =
   | 'windbreaker'
   | 'bomber'
   | 'tshirt'
-  | 'sweater';
+  | 'sweater'
+  | 'sport';
 export type HairStyle = AvatarHairStyle;
 
 export interface FigureProps {
@@ -132,7 +133,7 @@ export const OUTFIT_PRESETS: Record<
 > = {
   'windbreaker-hust': {
     label: 'Áo khoác gió HUST',
-    desc: 'Đồng phục chính thức ĐHBK Hà Nội (Trắng – Đỏ)',
+    desc: 'Đồng phục chính thức ĐHBK Hà Nội (Áo khoác gió đỏ mũ trùm viền trắng)',
     variant: 'windbreaker',
     shirt: HUST_CRIMSON,
     shirtDark: HUST_CRIMSON_DARK,
@@ -235,12 +236,12 @@ export const OUTFIT_PRESETS: Record<
   },
   'sport-pe': {
     label: 'Đồ Thể chất HUST',
-    desc: 'Trang phục Giáo dục thể chất xanh Bách khoa',
-    variant: 'polo',
-    shirt: '#1D4ED8',
-    shirtDark: '#1E3A8A',
+    desc: 'Áo thể thao cổ tròn đỏ Bách khoa viền trắng & quần thể thao xanh đen',
+    variant: 'sport',
+    shirt: '#9E1B20',
+    shirtDark: '#7F161A',
     defaultSkirtColor: '#F8FAFC',
-    pants: '#172554',
+    pants: '#14213D',
     shoe: SHOE_WHITE,
     shoeSole: SHOE_SOLE,
   },

@@ -50,7 +50,9 @@ export function Torso({
   const hipScaleX = isFemale ? 0.98 : 1.0;
   const isWindbreaker = variant === 'windbreaker';
   const isBomber = variant === 'bomber';
-  const topColor = isWindbreaker ? (upperYokeColor ?? WINDBREAKER_WHITE) : shirt;
+  const isSport = variant === 'sport';
+  const topColor = shirt;
+  const pipingColor = upperYokeColor ?? WINDBREAKER_WHITE;
   const pelvisTone = skirtColor ?? pants;
 
   return (
@@ -134,62 +136,87 @@ export function Torso({
         <meshStandardMaterial color={shirtDark} roughness={0.86} />
       </mesh>
 
-      {/* --- 1. ÁO KHOÁC GIÓ ĐỒNG PHỤC HUST (Mặc định cho cả Nam và Nữ) --- */}
+      {/* --- 1. ÁO KHOÁC GIÓ ĐỒNG PHỤC HUST (ao-khoac-gio.png & ao-khoac-gio-do-chi-tiet-01.jpg) --- */}
       {isWindbreaker && (
         <group>
-          {/* Hai cánh đường cắt chữ V (Chevron V-Seam) trước ngực phân tách mảng trắng trên & đỏ HUST dưới */}
-          <mesh position={[-0.068, 1.115, 0.138]} rotation={[0.06, -0.22, -0.34]}>
-            <boxGeometry args={[0.155, 0.018, 0.012]} />
-            <meshStandardMaterial color="#1E293B" roughness={0.65} />
+          {/* Hai đường viền trắng chạy cong từ cổ xuống vai/nách (Raglan White Shoulder Piping) */}
+          <mesh position={[-0.102, 1.275, 0.116]} rotation={[0.18, -0.32, 0.56]}>
+            <boxGeometry args={[0.145, 0.011, 0.012]} />
+            <meshStandardMaterial color={pipingColor} roughness={0.65} />
           </mesh>
-          <mesh position={[0.068, 1.115, 0.138]} rotation={[0.06, 0.22, 0.34]}>
-            <boxGeometry args={[0.155, 0.018, 0.012]} />
-            <meshStandardMaterial color="#1E293B" roughness={0.65} />
+          <mesh position={[0.102, 1.275, 0.116]} rotation={[0.18, 0.32, -0.56]}>
+            <boxGeometry args={[0.145, 0.011, 0.012]} />
+            <meshStandardMaterial color={pipingColor} roughness={0.65} />
           </mesh>
-          {/* Đường cắt ngang sau lưng nối 2 mảng trắng – đỏ */}
-          <mesh position={[0, 1.115, -0.138]}>
-            <boxGeometry args={[0.31, 0.016, 0.01]} />
-            <meshStandardMaterial color="#1E293B" roughness={0.65} />
+          <mesh position={[-0.102, 1.275, -0.116]} rotation={[-0.18, 0.32, 0.56]}>
+            <boxGeometry args={[0.145, 0.011, 0.012]} />
+            <meshStandardMaterial color={pipingColor} roughness={0.65} />
+          </mesh>
+          <mesh position={[0.102, 1.275, -0.116]} rotation={[-0.18, -0.32, -0.56]}>
+            <boxGeometry args={[0.145, 0.011, 0.012]} />
+            <meshStandardMaterial color={pipingColor} roughness={0.65} />
           </mesh>
 
-          {/* Cổ trụ đứng (Stand Collar) đặc trưng áo khoác gió Bách khoa */}
+          {/* Cổ trụ cao nối liền mũ trùm gió + lớp lót trong màu xanh đen (#14213D) */}
           <mesh position={[0, 1.352, -0.004]} castShadow>
-            <cylinderGeometry args={[0.078, 0.088, 0.056, 18]} />
-            <meshStandardMaterial color={topColor} roughness={0.78} />
+            <cylinderGeometry args={[0.079, 0.089, 0.058, 18]} />
+            <meshStandardMaterial color={shirt} roughness={0.76} />
           </mesh>
-          {/* Lớp lót cổ trong màu tối */}
-          <mesh position={[0, 1.366, -0.004]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.076, 0.006, 8, 18]} />
-            <meshStandardMaterial color="#1E293B" roughness={0.75} />
+          <mesh position={[0, 1.368, -0.004]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.076, 0.0065, 8, 18]} />
+            <meshStandardMaterial color="#14213D" roughness={0.75} />
+          </mesh>
+          {/* Mũ trùm gió 3D màu đỏ Bách Khoa có lòng mũ xanh đen phía sau gáy (ao-khoac-gio.png) */}
+          <mesh position={[0, 1.368, -0.102]} scale={[1.06, 0.54, 0.78]} castShadow>
+            <sphereGeometry args={[0.12, 16, 12]} />
+            <meshStandardMaterial color={shirt} roughness={0.78} />
+          </mesh>
+          <mesh position={[0, 1.384, -0.092]} scale={[0.9, 0.36, 0.62]}>
+            <sphereGeometry args={[0.108, 14, 10]} />
+            <meshStandardMaterial color="#14213D" roughness={0.88} />
           </mesh>
 
-          {/* Nẹp khóa kéo dọc chính giữa thân trước (Center Storm-Flap Zipper) */}
+          {/* 2 dây rút mũ màu đen + chốt khóa dây trụ đen ở hai bên cổ áo (ao-khoac-gio.png) */}
+          {[-0.048, 0.048].map((dx, idx) => (
+            <group key={`wb-cord-${idx}`} position={[dx, 1.292, 0.142]} rotation={[0, 0, dx > 0 ? -0.05 : 0.05]}>
+              <mesh>
+                <cylinderGeometry args={[0.004, 0.004, 0.078, 6]} />
+                <meshStandardMaterial color="#18181B" roughness={0.75} />
+              </mesh>
+              <mesh position={[0, -0.015, 0.004]}>
+                <cylinderGeometry args={[0.0075, 0.0075, 0.018, 8]} />
+                <meshStandardMaterial color="#09090B" roughness={0.45} metalness={0.35} />
+              </mesh>
+            </group>
+          ))}
+
+          {/* Nẹp khóa kéo dọc chính giữa thân trước màu đỏ trầm đồng bộ áo */}
           <mesh position={[0, 1.095, 0.143]}>
-            <boxGeometry args={[0.022, 0.53, 0.01]} />
-            <meshStandardMaterial color="#1E293B" roughness={0.55} metalness={0.25} />
+            <boxGeometry args={[0.02, 0.53, 0.01]} />
+            <meshStandardMaterial color={shirtDark} roughness={0.62} />
           </mesh>
           {/* Đầu kéo khóa kim loại bạc */}
-          <mesh position={[0, 1.29, 0.151]}>
-            <boxGeometry args={[0.012, 0.024, 0.008]} />
+          <mesh position={[0, 1.305, 0.151]}>
+            <boxGeometry args={[0.011, 0.022, 0.008]} />
             <meshStandardMaterial color={SILVER} roughness={0.3} metalness={0.8} />
           </mesh>
 
-          {/* Hai túi chéo hai bên hông có nẹp viền */}
-          {[-0.105, 0.105].map((px, idx) => (
+          {/* Hai túi khóa kéo chéo hai bên hông (ao-khoac-gio.png) */}
+          {[-0.108, 0.108].map((px, idx) => (
             <mesh
               key={`wb-pocket-${idx}`}
-              position={[px, 0.945, 0.132]}
-              rotation={[0, px > 0 ? -0.35 : 0.35, px > 0 ? -0.22 : 0.22]}
+              position={[px, 0.955, 0.133]}
+              rotation={[0, px > 0 ? -0.35 : 0.35, px > 0 ? -0.18 : 0.18]}
             >
-              <boxGeometry args={[0.016, 0.115, 0.01]} />
-              <meshStandardMaterial color={shirtDark} roughness={0.75} />
+              <boxGeometry args={[0.014, 0.12, 0.01]} />
+              <meshStandardMaterial color="#18181B" roughness={0.65} />
             </mesh>
           ))}
 
-          {/* Phù hiệu chữ HUST đỏ trên mảng trắng ngực trái (+X) */}
-          <mesh position={[0.068, 1.225, 0.142]} rotation={[0, 0.38, 0]}>
-            <planeGeometry args={[0.088, 0.033]} />
-            <meshStandardMaterial map={hustCrimsonTex} transparent roughness={0.65} />
+          {/* Logo chữ HUST trắng sắc nét trên ngực trái (+X) đúng ảnh thật ao-khoac-gio.png */}
+          <mesh position={[0.068, 1.22, 0.143]} rotation={[0, 0.38, 0]}>
+            <planeGeometry args={[0.088, 0.031]} />
+            <meshStandardMaterial map={hustTex} transparent roughness={0.65} />
           </mesh>
         </group>
       )}
@@ -283,7 +310,7 @@ export function Torso({
         </group>
       )}
 
-      {/* --- 4. ÁO HOODIE (Dùng cho NPC Minh & Hoodie HUST Thu-Đông) --- */}
+      {/* --- 4. ÁO HOODIE ĐỎ BÁCH KHOA (ao-hoodie-1.png: chữ HUST trắng lớn chính giữa ngực, dây rút đỏ đầu kim loại bạc) --- */}
       {variant === 'hoodie' && (
         <group>
           {/* Túi Kangaroo vát chéo 2 bên trước bụng */}
@@ -310,31 +337,63 @@ export function Torso({
             <cylinderGeometry args={[0.082, 0.092, 0.052, 16]} />
             <meshStandardMaterial color={shirtDark} roughness={0.86} />
           </mesh>
-          {/* Dây rút mũ + đầu bịt kim loại bạc */}
+          {/* Dây rút mũ đồng màu đỏ áo + đầu bịt kim loại bạc (khớp ao-hoodie-1.png) */}
           {[-0.044, 0.044].map((dx, idx) => (
             <group key={`hood-cord-${idx}`} position={[dx, 1.255, 0.148]} rotation={[0, 0, dx > 0 ? -0.06 : 0.06]}>
               <mesh>
                 <cylinderGeometry args={[0.0055, 0.0055, 0.115, 6]} />
-                <meshStandardMaterial color={WHITE} roughness={0.8} />
+                <meshStandardMaterial color={shirt} roughness={0.8} />
               </mesh>
               <mesh position={[0, -0.062, 0]}>
-                <cylinderGeometry args={[0.006, 0.006, 0.018, 6]} />
-                <meshStandardMaterial color={SILVER} roughness={0.35} metalness={0.75} />
+                <cylinderGeometry args={[0.006, 0.006, 0.02, 6]} />
+                <meshStandardMaterial color={SILVER} roughness={0.35} metalness={0.78} />
               </mesh>
             </group>
           ))}
-          {/* Mũ trùm 3D gấp sau gáy có lòng mũ tối màu tạo chiều sâu */}
+          {/* Mũ trùm 3D gấp sau gáy có lòng mũ đỏ trầm */}
           <mesh position={[0, 1.365, -0.105]} scale={[1.08, 0.56, 0.8]} castShadow>
             <sphereGeometry args={[0.122, 16, 12]} />
             <meshStandardMaterial color={shirtDark} roughness={0.88} />
           </mesh>
           <mesh position={[0, 1.382, -0.095]} scale={[0.92, 0.38, 0.64]}>
             <sphereGeometry args={[0.11, 14, 10]} />
-            <meshStandardMaterial color="#182232" roughness={0.9} />
+            <meshStandardMaterial color="#580C10" roughness={0.9} />
           </mesh>
-          <mesh position={[0.065, 1.22, 0.139]} rotation={[0, 0.45, 0]}>
-            <planeGeometry args={[0.084, 0.027]} />
-            <meshStandardMaterial map={hustTex} transparent roughness={0.75} />
+          {/* Chữ HUST trắng cỡ lớn đặt chính giữa ngực áo Hoodie (ao-hoodie-1.png) */}
+          <mesh position={[0, 1.195, 0.144]}>
+            <planeGeometry args={[0.156, 0.05]} />
+            <meshStandardMaterial map={hustTex} transparent roughness={0.7} />
+          </mesh>
+        </group>
+      )}
+
+      {/* --- 4a. ÁO THỂ THAO CỔ TRÒN ĐỎ VIỀN TRẮNG (ao-the-thao-co-tron.png) --- */}
+      {isSport && (
+        <group>
+          {/* Cổ tròn dệt kim màu đỏ đậm */}
+          <mesh position={[0, 1.345, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.078, 0.009, 8, 18]} />
+            <meshStandardMaterial color={shirtDark} roughness={0.84} />
+          </mesh>
+          {/* Đường viền trắng chạy cong từ cổ qua cầu vai và dọc 2 bên sườn áo (ao-the-thao-co-tron.png) */}
+          <mesh position={[-0.102, 1.278, 0.116]} rotation={[0.18, -0.32, 0.56]}>
+            <boxGeometry args={[0.142, 0.01, 0.011]} />
+            <meshStandardMaterial color={WHITE} roughness={0.7} />
+          </mesh>
+          <mesh position={[0.102, 1.278, 0.116]} rotation={[0.18, 0.32, -0.56]}>
+            <boxGeometry args={[0.142, 0.01, 0.011]} />
+            <meshStandardMaterial color={WHITE} roughness={0.7} />
+          </mesh>
+          {[-1, 1].map((sx) => (
+            <mesh key={`sport-side-pipe-${sx}`} position={[sx * 0.188 * waistScaleX, 1.03, 0.02]}>
+              <boxGeometry args={[0.009, 0.36, 0.016]} />
+              <meshStandardMaterial color={WHITE} roughness={0.72} />
+            </mesh>
+          ))}
+          {/* Logo chữ HUST trắng trên ngực trái (+X) */}
+          <mesh position={[0.068, 1.22, 0.142]} rotation={[0, 0.38, 0]}>
+            <planeGeometry args={[0.084, 0.028]} />
+            <meshStandardMaterial map={hustTex} transparent roughness={0.7} />
           </mesh>
         </group>
       )}

@@ -119,22 +119,25 @@ test('(4) resolveClassroomCollisions and resolveLibraryLobbyCollisions enforce i
   assert.equal(statueHit.hit, 'Tượng GS. Tạ Quang Bửu');
 });
 
-test('(5) resolveBikeCollisions blocks motorbike on tree trunks and NPC Minh while pedestrians pass trees', () => {
+test('(5) resolveCollisions and resolveBikeCollisions block both pedestrians and motorbikes on tree trunks and NPCs', () => {
   const { resolveCollisions, resolveBikeCollisions, TREE_TRUNKS, NPC_CIRCLES, AVATAR, BIKE_RADIUS } =
     campusFacade;
 
   const treePos = TREE_TRUNKS[0];
-  // Pedestrian is not blocked by tree trunk
+  // Pedestrian is blocked by tree trunk (cannot walk through trees)
   const pedTree = resolveCollisions(treePos, AVATAR.radius);
-  assert.equal(pedTree.hit, null);
+  assert.equal(pedTree.hit, 'Thân cây');
+  assert.ok(Math.hypot(pedTree.pos.x - treePos.x, pedTree.pos.z - treePos.z) >= 0.3 + AVATAR.radius - 1e-6);
 
   // Motorbike is blocked by tree trunk
   const bikeTree = resolveBikeCollisions(treePos, BIKE_RADIUS);
   assert.equal(bikeTree.hit, 'Thân cây');
   assert.ok(Math.hypot(bikeTree.pos.x - treePos.x, bikeTree.pos.z - treePos.z) >= 0.3 + BIKE_RADIUS - 1e-6);
 
-  // Motorbike is blocked by NPC Minh
+  // Pedestrian and Motorbike are blocked by NPC Minh and ambient student NPCs
   const minhPos = NPC_CIRCLES[0].pos;
+  const pedMinh = resolveCollisions(minhPos, AVATAR.radius);
+  assert.equal(pedMinh.hit, 'Minh (NPC)');
   const bikeMinh = resolveBikeCollisions(minhPos, BIKE_RADIUS);
   assert.equal(bikeMinh.hit, 'Minh (NPC)');
 });
@@ -153,17 +156,18 @@ test('(6) nearestZone, nearestRoadPoint, findFreeSpotNear, and getFastTravelDest
   // Default SPAWN is at Cổng Trần Đại Nghĩa (95.5, -6)
   assert.deepEqual(SPAWN, { x: 95.5, z: -6 });
   assert.equal(nearestZone(SPAWN), 'Cổng Trần Đại Nghĩa (Cổng B8)');
-  assert.equal(nearestZone({ x: -88, z: 10 }), 'Cổng Parabol');
-  assert.equal(nearestZone({ x: -29, z: -2 }), 'Nhà C9'); // C9 fast-travel spot must not be swallowed by Tien Lake
-  assert.equal(nearestZone({ x: -2, z: 40 }), 'Hồ Tiền');
+  assert.equal(nearestZone({ x: -88, z: -6 }), 'Cổng Parabol');
+  assert.equal(nearestZone({ x: -60, z: -17 }), 'Nhà C9'); // C9 fast-travel spot in West C-cluster, separated from Tien Lake
+  assert.equal(nearestZone({ x: 76, z: 7.5 }), 'Nhà để xe D3 - D5');
+  assert.equal(nearestZone({ x: -2, z: 48 }), 'Hồ Tiền');
   assert.equal(nearestZone({ x: 38, z: 32 }), 'Thư viện Tạ Quang Bửu');
   assert.equal(nearestZone({ x: 112, z: 14 }), 'Nhà B1 (Viện CNTT&TT - SoICT)');
   assert.equal(nearestZone({ x: 132, z: 78 }), 'Sân vận động Bách Khoa');
 
-  // nearestRoadPoint projects onto ROADS
-  const rp = nearestRoadPoint({ x: -70, z: 15 });
+  // nearestRoadPoint projects onto straight East-West main axis z = -6
+  const rp = nearestRoadPoint({ x: -70, z: -1 });
   assert.equal(rp.x, -70);
-  assert.equal(rp.z, 10);
+  assert.equal(rp.z, -6);
 
   // findFreeSpotNear returns a valid bike spot
   const freeSpot = findFreeSpotNear(SPAWN, 2, 12);

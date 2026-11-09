@@ -15,6 +15,7 @@ import { ImprovedTree } from './Trees';
 import { LabelPlane } from './TextPlate';
 import {
   BIKE_PARKING_SHED,
+  CAMPUS_SHADE_TREES,
   D4_BUILDING,
   LECTURE_BUILDINGS,
   type LectureBuildingSpec,
@@ -117,8 +118,8 @@ function LectureSkybridges() {
     { x: -5.5, z: -51.5, w: 2.2, d: 4.8, y: 3.6 },
     { x: -18.5, z: -40.5, w: 2.2, d: 4.8, y: 3.6 },
     { x: -5.5, z: -40.5, w: 2.2, d: 4.8, y: 3.6 },
-    // Cầu nối giữa D3 (z=18) ↔ D5 (z=32)
-    { x: 58, z: 25, w: 2.2, d: 7.2, y: 3.5 },
+    // Cầu nối giữa D3 (z=21) ↔ D5 (z=34)
+    { x: 58, z: 27.5, w: 2.2, d: 6.2, y: 3.5 },
     // Cầu nối giữa D6 (z=38) ↔ D8 (z=54)
     { x: -46, z: 46, w: 2.4, d: 8.6, y: 3.4 },
   ];
@@ -288,42 +289,22 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
   );
 }
 
-// --- Cây nền quanh khuôn viên (đặt ngoài footprint của mọi tòa nhà & đường đi) ---
-const BACKGROUND_TREES: Array<{ x: number; z: number; trunkH: number; canopyR: number }> = [
-  // Hàng cây phía Bắc & dọc trục C1 – C3..C10 – C7 (đặt trên dải cỏ thoáng, không chạm C7 x=27..65)
-  { x: -28, z: -62, trunkH: 2.6, canopyR: 1.6 },
-  { x: -28, z: -48, trunkH: 2.8, canopyR: 1.7 },
-  { x: 4, z: -62, trunkH: 2.5, canopyR: 1.5 },
-  { x: 4, z: -46, trunkH: 2.8, canopyR: 1.7 },
-  { x: 18, z: -60, trunkH: 2.9, canopyR: 1.7 },
-  { x: 18, z: -42, trunkH: 2.6, canopyR: 1.6 },
-  { x: 70, z: -62, trunkH: 3.0, canopyR: 1.8 },
-  { x: 80, z: -62, trunkH: 2.6, canopyR: 1.6 },
-  // Hàng dọc đường Trần Đại Nghĩa (x = 88)
-  { x: 88, z: -52, trunkH: 2.5, canopyR: 1.5 },
-  { x: 88, z: -38, trunkH: 3.0, canopyR: 1.8 },
-  { x: 88, z: 14, trunkH: 2.7, canopyR: 1.6 },
-  { x: 88, z: 32, trunkH: 2.4, canopyR: 1.5 },
-  // Hàng phía Nam (z = 78..82)
-  { x: -80, z: 78, trunkH: 2.7, canopyR: 1.6 },
-  { x: -64, z: 78, trunkH: 2.5, canopyR: 1.5 },
-  { x: -32, z: 78, trunkH: 2.6, canopyR: 1.6 },
-  { x: 28, z: 78, trunkH: 2.8, canopyR: 1.7 },
-  { x: 52, z: 78, trunkH: 3.0, canopyR: 1.8 },
-  // Hàng phía Tây sát đường Giải Phóng (x = -92)
-  { x: -92, z: -60, trunkH: 2.8, canopyR: 1.7 },
-  { x: -92, z: -46, trunkH: 2.5, canopyR: 1.5 },
-  { x: -92, z: 62, trunkH: 2.8, canopyR: 1.7 },
-  { x: -92, z: 74, trunkH: 3.0, canopyR: 1.8 },
-];
+// --- Cây nền quanh khuôn viên (đồng bộ 100% với CAMPUS_SHADE_TREES trong lib/campus.ts để có collider thân cây) ---
+const BACKGROUND_TREES: Array<{ x: number; z: number; trunkH: number; canopyR: number }> =
+  CAMPUS_SHADE_TREES.map((t, idx) => ({
+    x: t.x,
+    z: t.z,
+    trunkH: 2.5 + (idx % 4) * 0.16,
+    canopyR: 1.5 + (idx % 4) * 0.1,
+  }));
 
-// --- Đèn đường mảnh dọc tuyến hiện có (ngoài mép đường ≥ 1 m) ----------------
+// --- Đèn đường mảnh dọc tuyến trục chính (ngoài mép đường ≥ 1 m) ----------------
 const LAMPS: Array<{ x: number; z: number }> = [
-  // Dọc đường tình yêu, phía bắc đường (mép đường z = -18,5), xen giữa cây cũ.
-  { x: -32, z: -19.8 }, { x: -8, z: -19.8 }, { x: 16, z: -19.8 },
-  { x: 40, z: -19.8 }, { x: 64, z: -19.8 },
+  // Dọc trục chính Parabol – Trần Đại Nghĩa (z = -6), phía bắc vỉa hè (z = -11.2)
+  { x: -34, z: -11.2 }, { x: -8, z: -11.2 }, { x: 18, z: -11.2 },
+  { x: 44, z: -11.2 }, { x: 60, z: -11.2 },
   // Dọc đường ven hồ phía đông (mép đường x = 27), ngoài bờ kè.
-  { x: 28, z: -10 }, { x: 28, z: 10 }, { x: 28, z: 60 }, { x: 28, z: 78 },
+  { x: 28, z: 14 }, { x: 28, z: 36 }, { x: 28, z: 60 }, { x: 28, z: 82 },
 ];
 
 function Lamp({ x, z }: { x: number; z: number }) {
@@ -473,18 +454,10 @@ export default function BackgroundBuildings({ timeOfDay = 'day' }: { timeOfDay?:
       {LAMPS.map((l, i) => (
         <Lamp key={`lamp-${i}`} x={l.x} z={l.z} />
       ))}
-      <CampusSignpost x={-49.5} z={14.2} rotationY={Math.PI} />
-      <CampusSignpost x={19.5} z={-19.5} rotationY={0} />
+      <CampusSignpost x={-52.5} z={-1.2} rotationY={Math.PI} />
+      <CampusSignpost x={19.5} z={-10.8} rotationY={0} />
       <BikeParkingShed />
-      {/* Sân lát nhỏ + ghế ngắm đường tình yêu (x 13..19, z -12,3..-9,3:
-          ngoài mép đường z = -13,5; y = 0,025, trên cỏ y = 0, không chồng mặt nào). */}
-      <mesh rotation-x={-Math.PI / 2} position={[16, 0.025, -10.8]} receiveShadow>
-        <planeGeometry args={[6, 3]} />
-        <meshStandardMaterial color={PAVE_TONE} roughness={0.95} />
-      </mesh>
-      <BgBench x={16} z={-10.8} rotationY={Math.PI} />
-      {/* Ghế bờ tây hồ bổ sung, quay mặt ra hồ (như ghế hồ hiện có). */}
-      <BgBench x={-27.5} z={45} rotationY={Math.PI / 2} />
+      <BgBench x={-27.5} z={48} rotationY={Math.PI / 2} />
     </group>
   );
 }

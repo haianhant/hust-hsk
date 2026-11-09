@@ -6,6 +6,8 @@
 export {
   C6AndC8Block,
   C7ComplexBuilding,
+  C7FacultyParkingLane,
+  D3D5ParkingGarage,
   VietDucCenterBuilding,
 } from './C6C7C8Cluster';
 export { EastCampusBlocks, SoictB1Building } from './EastCampusBlocks';

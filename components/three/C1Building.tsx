@@ -449,58 +449,115 @@ function drawStar2D(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: nu
 }
 
 function drawHustEmblem(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // Biểu trưng dọc ĐHBK Hà Nội trên mảng tường đặc bên phải tháp hoa gió (c1-can-luoi-hoa-gio-05.jpg):
-  // Nền kem ngà có viền gờ nổi, nửa trên là lá cờ đỏ sao vàng uốn lượn,
-  // giữa là chữ "ĐẠI HỌC BÁCH KHOA" trên trang sách mở trắng, dưới là bánh răng vàng & compa.
-  ctx.fillStyle = '#F3EAD8';
-  ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = '#8C6D46';
-  ctx.lineWidth = 10;
-  ctx.strokeRect(8, 8, w - 16, h - 16);
+  // Biểu trưng dọc ĐHBK Hà Nội chuẩn trên mảng tường đặc bên phải tháp hoa gió (c1-mat-tien-01.jpg):
+  // Chia dọc 2 nửa Đỏ (#D91E26, sao vàng góc trên trái) & Trắng kem (#FAF8F2, chữ "ĐẠI HỌC" đỏ bên phải),
+  // chính giữa là compa + trang sách mở trắng + nửa bánh răng vàng, đáy là dải băng vàng chữ "BÁCH KHOA" đỏ.
+  ctx.clearRect(0, 0, w, h);
 
-  // Lá cờ đỏ sao vàng chiếm nửa trên bên trái
+  // Nền chia đôi dọc: nửa trái Đỏ cờ, nửa phải Trắng ngà
   ctx.fillStyle = '#D91E26';
-  ctx.beginPath();
-  ctx.moveTo(w * 0.08, h * 0.04);
-  ctx.lineTo(w * 0.68, h * 0.04);
-  ctx.quadraticCurveTo(w * 0.58, h * 0.25, w * 0.70, h * 0.46);
-  ctx.lineTo(w * 0.08, h * 0.46);
-  ctx.closePath();
-  ctx.fill();
+  ctx.fillRect(0, 0, w * 0.5, h * 0.84);
+  ctx.fillStyle = '#FAF8F2';
+  ctx.fillRect(w * 0.5, 0, w * 0.5, h * 0.84);
 
+  // Dải băng vàng chân biểu trưng (h: 0.84..1.0)
   ctx.fillStyle = '#F5C518';
-  drawStar2D(ctx, w * 0.36, h * 0.24, 58);
+  ctx.fillRect(0, h * 0.84, w, h * 0.16);
 
-  // Chữ ĐẠI HỌC BÁCH KHOA màu đỏ sẫm
+  // Viền khung kim loại vàng đồng bao ngoài
+  ctx.strokeStyle = '#C8962E';
+  ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, w - 10, h - 10);
+
+  // Ngôi sao vàng 5 cánh ở phần trên nửa nền đỏ bên trái
+  ctx.fillStyle = '#F5C518';
+  drawStar2D(ctx, w * 0.25, h * 0.16, 54);
+
+  // Chữ "ĐẠI HỌC" màu đỏ đậm ở nửa trắng bên phải
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#7A1C18';
-  ctx.font = '800 38px Arial, sans-serif';
-  ctx.fillText('ĐẠI HỌC', w * 0.56, h * 0.53);
   ctx.fillStyle = '#C81E24';
-  ctx.font = '900 58px Arial, sans-serif';
-  ctx.fillText('BÁCH KHOA', w * 0.5, h * 0.61);
+  ctx.font = '900 40px Arial, sans-serif';
+  ctx.fillText('ĐẠI', w * 0.75, h * 0.13);
+  ctx.fillText('HỌC', w * 0.75, h * 0.19);
 
-  // Trang sách mở trắng + bánh răng vàng bên dưới
-  ctx.fillStyle = '#FFFFFF';
-  ctx.strokeStyle = '#6E5030';
-  ctx.lineWidth = 6;
+  // Nửa bánh răng vàng ở phần dưới trung tâm (tâm tại w*0.5, h*0.64)
+  const gx = w * 0.5;
+  const gy = h * 0.64;
+  const grOuter = w * 0.34;
+  const grInner = w * 0.25;
+  ctx.fillStyle = '#F5C518';
+  ctx.strokeStyle = '#9A6B12';
+  ctx.lineWidth = 4;
+  for (let i = 0; i < 9; i++) {
+    const a0 = (Math.PI * i) / 8.5 + 0.04;
+    const a1 = a0 + 0.22;
+    ctx.beginPath();
+    ctx.arc(gx, gy, grOuter, a0, a1);
+    ctx.arc(gx, gy, grInner * 0.85, a1, a0, true);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
   ctx.beginPath();
-  ctx.moveTo(w * 0.12, h * 0.68);
-  ctx.quadraticCurveTo(w * 0.31, h * 0.65, w * 0.5, h * 0.70);
-  ctx.quadraticCurveTo(w * 0.69, h * 0.65, w * 0.88, h * 0.68);
-  ctx.lineTo(w * 0.88, h * 0.82);
-  ctx.quadraticCurveTo(w * 0.69, h * 0.79, w * 0.5, h * 0.84);
-  ctx.quadraticCurveTo(w * 0.31, h * 0.79, w * 0.12, h * 0.82);
+  ctx.arc(gx, gy, grInner, 0, Math.PI, false);
+  ctx.lineTo(gx - grInner, gy);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
 
-  // Bánh răng vàng phía dưới sách
-  ctx.fillStyle = '#E09F24';
+  // Lòng trong bánh răng
+  ctx.fillStyle = '#D91E26';
   ctx.beginPath();
-  ctx.arc(w * 0.5, h * 0.84, w * 0.22, 0, Math.PI, false);
+  ctx.arc(gx, gy, grInner * 0.56, 0, Math.PI, false);
+  ctx.fillStyle = '#FAF8F2';
   ctx.fill();
+
+  // Compa vàng (chân compa mở hình chữ A từ đỉnh h*0.29 xuống h*0.68)
+  ctx.strokeStyle = '#F5C518';
+  ctx.lineWidth = 14;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(w * 0.5, h * 0.30);
+  ctx.lineTo(w * 0.31, h * 0.67);
+  ctx.moveTo(w * 0.5, h * 0.30);
+  ctx.lineTo(w * 0.69, h * 0.67);
+  ctx.stroke();
+  // Khớp đỉnh compa & thanh ngang compa
+  ctx.fillStyle = '#F5C518';
+  ctx.beginPath();
+  ctx.arc(w * 0.5, h * 0.29, 14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.38, h * 0.49);
+  ctx.lineTo(w * 0.62, h * 0.49);
+  ctx.stroke();
+
+  // Trang sách mở trắng viền vàng đặt ngang qua tâm biểu trưng (h: 0.53..0.66)
+  ctx.fillStyle = '#FFFFFF';
+  ctx.strokeStyle = '#B8860B';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.14, h * 0.54);
+  ctx.quadraticCurveTo(w * 0.32, h * 0.51, w * 0.5, h * 0.56);
+  ctx.quadraticCurveTo(w * 0.68, h * 0.51, w * 0.86, h * 0.54);
+  ctx.lineTo(w * 0.86, h * 0.66);
+  ctx.quadraticCurveTo(w * 0.68, h * 0.63, w * 0.5, h * 0.68);
+  ctx.quadraticCurveTo(w * 0.32, h * 0.63, w * 0.14, h * 0.66);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Gáy sách giữa
+  ctx.beginPath();
+  ctx.moveTo(w * 0.5, h * 0.56);
+  ctx.lineTo(w * 0.5, h * 0.68);
+  ctx.stroke();
+
+  // Chữ "BÁCH KHOA" đỏ đậm trên dải băng vàng phía dưới
+  ctx.fillStyle = '#C81E24';
+  ctx.font = '900 54px Arial, sans-serif';
+  ctx.fillText('BÁCH KHOA', w * 0.5, h * 0.92);
 }
 
 function drawVnFlag(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -518,6 +575,7 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
   const woodTex = useMemo(() => makeWoodGrainTexture(2, 1), []);
   const geos = useMemo(() => {
     const white: BoxSpec[] = [];
+    const rails: BoxSpec[] = [];
     const glass: BoxSpec[] = [];
     const frame: BoxSpec[] = [];
     const mullion: BoxSpec[] = [];
@@ -557,18 +615,18 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
           x: midX, y: f * FH - 0.32, z: SOUTH_Z - 1.5,
         });
       }
-      // Lan can tầng 2–4 theo ảnh: 3 thanh ngang trắng + thanh đứng thưa
-      // (bước ~1,6 m), cao 1,05 m — thoáng, nhấn ngang, không phải lưới
-      // kim loại dày đặc.
+      // Lan can tầng 2–4 theo ảnh thật (c1-mat-tien-01.jpg): lan can sắt sơn đỏ Bách Khoa
+      // kết hợp tay vịn trắng, 3 thanh ngang + thanh đứng giữa các cột loggia.
       for (let f = 1; f < C1.floors; f++) {
         const y = f * FH;
-        for (const ry of [0.15, 0.6, 1.05]) {
-          white.push({ w: x1 - x0, h: 0.07, d: 0.07, x: midX, y: y + ry, z: SOUTH_Z });
+        white.push({ w: x1 - x0, h: 0.075, d: 0.08, x: midX, y: y + 1.05, z: SOUTH_Z });
+        for (const ry of [0.18, 0.52, 0.86]) {
+          rails.push({ w: x1 - x0, h: 0.055, d: 0.055, x: midX, y: y + ry, z: SOUTH_Z });
         }
-        const n = Math.max(2, Math.floor((x1 - x0 - 0.8) / 1.6));
+        const n = Math.max(2, Math.floor((x1 - x0 - 0.8) / 1.2));
         for (let i = 0; i <= n; i++) {
           const x = x0 + 0.4 + ((x1 - x0 - 0.8) * i) / n;
-          white.push({ w: 0.05, h: 0.9, d: 0.05, x, y: y + 0.6, z: SOUTH_Z });
+          rails.push({ w: 0.045, h: 0.88, d: 0.045, x, y: y + 0.56, z: SOUTH_Z });
         }
       }
     }
@@ -670,6 +728,7 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
 
     return {
       whiteGeo: mergeBoxes(white),
+      railsGeo: mergeBoxes(rails),
       glassGeo: mergeBoxes(glass),
       stepsGeo: mergeBoxes(darkSteps),
       shadowGeo: mergeBoxes(shadow),
@@ -684,6 +743,7 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
   useEffect(
     () => () => {
       geos.whiteGeo.dispose();
+      geos.railsGeo.dispose();
       geos.glassGeo.dispose();
       geos.stepsGeo.dispose();
       geos.shadowGeo.dispose();
@@ -724,6 +784,11 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
           bumpScale={0.01}
           roughness={0.88}
         />
+      </mesh>
+
+      {/* Lan can hành lang mở (loggia) sơn đỏ Bách Khoa (c1-mat-tien-01.jpg). */}
+      <mesh geometry={geos.railsGeo} castShadow>
+        <meshStandardMaterial color="#C42828" roughness={0.65} metalness={0.25} />
       </mesh>
 
       {/* Kính lùi (xám-xanh ban ngày, phát sáng vàng ấm áp khi Hoàng hôn & Đêm). */}

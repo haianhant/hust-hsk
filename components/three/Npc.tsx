@@ -119,7 +119,7 @@ function NameLabel({ name, y = 1.95 }: { name: string; y?: number }) {
 /** NPC bạn đồng hành "Minh" — hoodie xanh navy + mũ lưỡi trai đỏ + quần kaki
  *  + ba lô xám. Khác hẳn người chơi (polo đỏ Bách khoa, ba lô đen, không
  *  mũ) để không đọc thành bản sao từ sau hay từ xa. */
-export function MinhNpc({ position = [-72, 8] as [number, number], rotationY = Math.PI / 2 }: {
+export function MinhNpc({ position = [-72, -8.5] as [number, number], rotationY = Math.PI / 2 }: {
   position?: [number, number];
   rotationY?: number;
 }) {

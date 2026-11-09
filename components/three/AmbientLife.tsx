@@ -56,26 +56,26 @@ interface WalkerSpec {
 }
 
 const WALKING_STUDENTS: WalkerSpec[] = [
-  // 1. Nữ sinh viên mặc Áo khoác gió đồng phục HUST đi dạo dọc mép bắc Đường Tình Yêu
+  // 1. Nữ sinh viên mặc Áo khoác gió đồng phục HUST đi dạo dọc mép bắc Trục đường chính (z = -9.2)
   {
     id: 'walk-love-1',
-    a: [-36, -18.2],
-    b: [12, -18.2],
+    a: [-36, -9.2],
+    b: [12, -9.2],
     speed: 1.55,
     phaseOffset: 0.4,
     variant: 'windbreaker',
-    shirt: '#BA1C24',
+    shirt: '#B5121B',
     shirtDark: '#821017',
     pants: '#1E293B',
     hairStyle: 'ponytail',
     lanyard: true,
     backpack: true,
   },
-  // 2. Nam sinh viên mặc Áo Bomber HUST đi dọc mép nam Đường Tình Yêu hướng về Quảng trường TĐN
+  // 2. Nam sinh viên mặc Áo Bomber HUST đi dọc mép nam Trục đường chính hướng về Quảng trường TĐN
   {
     id: 'walk-love-2',
-    a: [18, -14.0],
-    b: [64, -14.0],
+    a: [18, -2.8],
+    b: [64, -2.8],
     speed: 1.65,
     phaseOffset: 1.9,
     variant: 'bomber',
@@ -90,7 +90,7 @@ const WALKING_STUDENTS: WalkerSpec[] = [
   // 3. Nữ sinh viên mặc Áo phông xanh HUST + Chân váy xếp ly trắng đi dạo bờ Tây Hồ Tiền
   {
     id: 'walk-lake-west',
-    a: [-26.2, 18],
+    a: [-26.2, 20],
     b: [-26.2, 56],
     speed: 1.4,
     phaseOffset: 3.1,
@@ -141,10 +141,10 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     b: [86, 59],
     speed: 2.4,
     phaseOffset: 1.1,
-    variant: 'tshirt',
-    shirt: '#1D3557',
-    shirtDark: '#12233B',
-    pants: '#172554',
+    variant: 'sport',
+    shirt: '#9E1B20',
+    shirtDark: '#7F161A',
+    pants: '#14213D',
     hairStyle: 'short',
     lanyard: false,
     backpack: false,
@@ -172,7 +172,7 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     speed: 1.55,
     phaseOffset: 1.5,
     variant: 'windbreaker',
-    shirt: '#BA1C24',
+    shirt: '#B5121B',
     shirtDark: '#821017',
     pants: '#1E293B',
     hairStyle: 'short',
@@ -182,7 +182,12 @@ const WALKING_STUDENTS: WalkerSpec[] = [
   },
 ];
 
-function WalkingStudent({ spec }: { spec: WalkerSpec }) {
+/** Vị trí tức thời của các sinh viên đang đi bộ trên sân trường — phục vụ kiểm tra va chạm người-với-người trong Player.tsx */
+export const activeWalkingStudentPositions: Array<{ x: number; z: number }> = WALKING_STUDENTS.map(
+  (s) => ({ x: s.a[0], z: s.a[1] }),
+);
+
+function WalkingStudent({ spec, index }: { spec: WalkerSpec; index: number }) {
   const groupRef = useRef<THREE.Group>(null!);
   const joints = useJoints();
 
@@ -201,6 +206,8 @@ function WalkingStudent({ spec }: { spec: WalkerSpec }) {
     const dirX = forward ? dx : -dx;
     const dirZ = forward ? dz : -dz;
     const facing = Math.atan2(dirX, dirZ);
+
+    activeWalkingStudentPositions[index] = { x, z };
 
     if (groupRef.current) {
       groupRef.current.position.set(x, 0, z);
@@ -269,10 +276,10 @@ const STANDING_STUDENTS: StandingSpec[] = [
   // Sinh viên đứng chờ xe buýt tại Nhà chờ Cổng Parabol
   {
     id: 'stand-bus-1',
-    pos: [-86.8, 22.8],
+    pos: [-86.8, 7.2],
     rotY: Math.PI / 2,
     variant: 'windbreaker',
-    shirt: '#BA1C24',
+    shirt: '#B5121B',
     shirtDark: '#821017',
     pants: '#232E3D',
     hairStyle: 'bob',
@@ -280,11 +287,11 @@ const STANDING_STUDENTS: StandingSpec[] = [
     lanyard: true,
     backpack: true,
   },
-  // Hai sinh viên trao đổi bài gần Quảng trường C1 (bên đông bậc tam cấp, ngoài lối đi)
+  // Hai sinh viên trao đổi bài tại Quảng trường C1
   {
     id: 'stand-c1-1',
-    pos: [-46.5, -36.5],
-    rotY: -Math.PI / 3,
+    pos: [-62.5, -34.0],
+    rotY: Math.PI / 2,
     variant: 'shirt',
     shirt: '#F5F5F0',
     shirtDark: '#D8D5CC',
@@ -296,8 +303,8 @@ const STANDING_STUDENTS: StandingSpec[] = [
   },
   {
     id: 'stand-c1-2',
-    pos: [-48.0, -35.6],
-    rotY: (Math.PI * 2) / 3,
+    pos: [-61.5, -34.0],
+    rotY: -Math.PI / 2,
     variant: 'hoodie',
     shirt: '#9E1B22',
     shirtDark: '#6B1015',
@@ -307,10 +314,10 @@ const STANDING_STUDENTS: StandingSpec[] = [
     lanyard: false,
     backpack: true,
   },
-  // Sinh viên đứng ngắm hoa súng bờ Bắc Hồ Tiền / gần VDZ
+  // Hai sinh viên đứng ngắm hoa súng bờ Bắc Hồ Tiền / gần VDZ
   {
-    id: 'stand-vdz-lake',
-    pos: [4.5, -6.2],
+    id: 'stand-vdz-lake-1',
+    pos: [-6.5, 2.2],
     rotY: 0,
     variant: 'bomber',
     shirt: '#8E1B22',
@@ -320,11 +327,23 @@ const STANDING_STUDENTS: StandingSpec[] = [
     lanyard: true,
     backpack: true,
   },
-  // Sinh viên trước sân Thư viện Tạ Quang Bửu (góc đông sân, ngoài lối đi vào cửa)
   {
-    id: 'stand-lib-east',
-    pos: [44.5, 16.5],
-    rotY: -Math.PI / 4,
+    id: 'stand-vdz-lake-2',
+    pos: [-5.3, 2.2],
+    rotY: -Math.PI / 6,
+    variant: 'polo',
+    shirt: '#B91D24',
+    shirtDark: '#7F1217',
+    pants: '#1E293B',
+    hairStyle: 'ponytail',
+    lanyard: true,
+    backpack: false,
+  },
+  // Hai sinh viên trước sân Thư viện Tạ Quang Bửu (góc đông sân, ngoài lối đi vào cửa)
+  {
+    id: 'stand-lib-east-1',
+    pos: [43.5, 14.5],
+    rotY: -Math.PI / 2,
     variant: 'sweater',
     shirt: '#ECE7DF',
     shirtDark: '#D4CDC1',
@@ -333,6 +352,47 @@ const STANDING_STUDENTS: StandingSpec[] = [
     glasses: true,
     lanyard: true,
     backpack: false,
+  },
+  {
+    id: 'stand-lib-east-2',
+    pos: [42.3, 14.5],
+    rotY: Math.PI / 2,
+    variant: 'sport',
+    shirt: '#9E1B20',
+    shirtDark: '#7F161A',
+    pants: '#14213D',
+    hairStyle: 'short',
+    glasses: false,
+    lanyard: true,
+    backpack: true,
+  },
+  // Hai sinh viên trước Nhà B1 SoICT
+  {
+    id: 'stand-soict-1',
+    pos: [108.0, 3.5],
+    rotY: Math.PI / 2,
+    variant: 'windbreaker',
+    shirt: '#B5121B',
+    shirtDark: '#821017',
+    pants: '#1E293B',
+    hairStyle: 'short',
+    glasses: true,
+    lanyard: true,
+    backpack: true,
+  },
+  {
+    id: 'stand-soict-2',
+    pos: [109.2, 3.5],
+    rotY: -Math.PI / 2,
+    variant: 'polo',
+    shirt: '#B91D24',
+    shirtDark: '#7F1217',
+    pants: '#1E293B',
+    skirt: true,
+    hairStyle: 'ponytail',
+    glasses: false,
+    lanyard: true,
+    backpack: true,
   },
 ];
 
@@ -381,13 +441,13 @@ function StandingStudent({ spec }: { spec: StandingSpec }) {
 
 // --- Sinh viên ngồi đọc sách / ôn bài trên ghế đá ven Hồ Tiền (tham-khao/ho-tien/) ---
 const SITTING_STUDENTS: StandingSpec[] = [
-  // 1. Nam sinh viên ngồi đọc giáo trình trên ghế bờ Tây Hồ Tiền (z = 30, dưới bóng liễu)
+  // 1. Nam sinh viên ngồi đọc giáo trình trên ghế bờ Tây Hồ Tiền (z = 34, dưới bóng liễu)
   {
     id: 'sit-lake-west-1',
-    pos: [-27.38, 30.0],
+    pos: [-27.38, 34.0],
     rotY: Math.PI / 2,
     variant: 'windbreaker',
-    shirt: '#BA1C24',
+    shirt: '#B5121B',
     shirtDark: '#821017',
     pants: '#1E293B',
     hairStyle: 'short',
@@ -395,10 +455,10 @@ const SITTING_STUDENTS: StandingSpec[] = [
     lanyard: true,
     backpack: false,
   },
-  // 2. Nữ sinh viên ngồi ôn bài trên ghế bờ Đông Hồ Tiền nhìn ra mặt hồ sen/súng (z = 20)
+  // 2. Nữ sinh viên ngồi ôn bài trên ghế bờ Đông Hồ Tiền nhìn ra mặt hồ sen/súng (z = 24)
   {
     id: 'sit-lake-east-1',
-    pos: [22.18, 20.0],
+    pos: [22.18, 24.0],
     rotY: -Math.PI / 2,
     variant: 'tshirt',
     shirt: '#1D3557',
@@ -410,10 +470,10 @@ const SITTING_STUDENTS: StandingSpec[] = [
     lanyard: true,
     backpack: false,
   },
-  // 3. Nữ sinh viên mặc Sweater Kem ngồi đọc sách trên ghế giữa bờ Tây Hồ Tiền (z = 45)
+  // 3. Nữ sinh viên mặc Sweater Kem ngồi đọc sách trên ghế bờ Tây Hồ Tiền (z = 66)
   {
     id: 'sit-lake-west-2',
-    pos: [-27.38, 45.0],
+    pos: [-27.38, 66.0],
     rotY: Math.PI / 2,
     variant: 'sweater',
     shirt: '#ECE7DF',
@@ -492,8 +552,8 @@ function SittingStudent({ spec }: { spec: StandingSpec }) {
 export default function AmbientLife() {
   return (
     <group>
-      {WALKING_STUDENTS.map((s) => (
-        <WalkingStudent key={s.id} spec={s} />
+      {WALKING_STUDENTS.map((s, idx) => (
+        <WalkingStudent key={s.id} spec={s} index={idx} />
       ))}
       {STANDING_STUDENTS.map((s) => (
         <StandingStudent key={s.id} spec={s} />

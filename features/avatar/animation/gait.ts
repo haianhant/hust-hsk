@@ -15,22 +15,34 @@ export function computeNaturalGaitTargets(
   t: number,
   isRunning: boolean,
 ) {
-  const legSwing = Math.sin(phase) * swing * blend;
+  const sinP = Math.sin(phase);
+  const cosP = Math.cos(phase);
+  // Chu kỳ đùi vung mượt tự nhiên (chống giật cục ở điểm đảo chiều)
+  const legSwing = sinP * swing * blend;
   const legLTarget = legSwing;
   const legRTarget = -legSwing;
-  const kneeLTarget = 0.05 + (isRunning ? 0.96 : 0.82) * Math.max(0, -Math.cos(phase)) * blend;
-  const kneeRTarget = 0.05 + (isRunning ? 0.96 : 0.82) * Math.max(0, Math.cos(phase)) * blend;
-  const footLTarget = Math.min(Math.max(-(legLTarget + kneeLTarget) * 0.85, -0.45), 0.45) * blend;
-  const footRTarget = Math.min(Math.max(-(legRTarget + kneeRTarget) * 0.85, -0.45), 0.45) * blend;
-  const armSwing = legSwing * (isRunning ? 0.82 : 0.72);
-  const armLTarget = -armSwing + (1 - blend) * 0.08;
-  const armRTarget = armSwing + (1 - blend) * -0.04;
-  const elbowLTarget = -(0.28 + (isRunning ? 0.34 : 0.18) * blend * Math.max(0, Math.sin(phase)));
-  const elbowRTarget = -(0.36 + (isRunning ? 0.34 : 0.18) * blend * Math.max(0, Math.sin(phase + Math.PI)));
-  const bodyLeanTarget = 0.045 * blend + (isRunning ? 0.055 * blend : 0);
-  // Giảm mạnh lắc ngang thân (0.008 rad) để triệt tiêu hoàn toàn dáng đi lạch bạch
-  const bodyRollTarget = Math.sin(phase) * 0.008 * blend + Math.sin(t * 0.9) * 0.008 * (1 - blend);
-  const bodyBobTarget = Math.abs(Math.cos(phase)) * 0.016 * blend + Math.sin(t * 1.4) * 0.004;
+  // Gối gập tự nhiên trong pha nhấc chân đưa về trước (swing phase) và hơi chùng mềm khi tiếp đất
+  const swingKneeAmp = isRunning ? 0.92 : 0.72;
+  const stanceSoftKnee = 0.08 * Math.max(0, Math.sin(phase * 2)) * blend;
+  const kneeLTarget =
+    0.05 + (swingKneeAmp * Math.pow(Math.max(0, -cosP), 1.15) + stanceSoftKnee) * blend;
+  const kneeRTarget =
+    0.05 + (swingKneeAmp * Math.pow(Math.max(0, cosP), 1.15) + stanceSoftKnee) * blend;
+  // Cổ chân miết từ gót sang mũi bàn chân (heel-strike -> toe-off) và giữ đế giày song song mặt đất
+  const rawFootL = -(legLTarget + kneeLTarget) * 0.82 + 0.08 * sinP * blend;
+  const rawFootR = -(legRTarget + kneeRTarget) * 0.82 - 0.08 * sinP * blend;
+  const footLTarget = Math.min(Math.max(rawFootL, -0.45), 0.45) * blend;
+  const footRTarget = Math.min(Math.max(rawFootR, -0.45), 0.45) * blend;
+  // Tay đánh đối pha với chân, biên độ vừa phải tự nhiên, khuỷu tay hơi co mềm
+  const armSwing = legSwing * (isRunning ? 0.78 : 0.64);
+  const armLTarget = -armSwing + (1 - blend) * 0.06;
+  const armRTarget = armSwing + (1 - blend) * -0.03;
+  const elbowLTarget = -(0.24 + (isRunning ? 0.34 : 0.18) * blend * Math.max(0, sinP));
+  const elbowRTarget = -(0.32 + (isRunning ? 0.34 : 0.18) * blend * Math.max(0, -sinP));
+  const bodyLeanTarget = 0.038 * blend + (isRunning ? 0.055 * blend : 0);
+  // Giữ trục thân thẳng vững chãi (<= 0.008 rad) để triệt tiêu hoàn toàn dáng đi lạch bạch
+  const bodyRollTarget = sinP * 0.006 * blend + Math.sin(t * 0.9) * 0.006 * (1 - blend);
+  const bodyBobTarget = Math.abs(cosP) * 0.014 * blend + Math.sin(t * 1.4) * 0.0035;
 
   return {
     legLTarget,

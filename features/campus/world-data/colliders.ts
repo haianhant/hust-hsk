@@ -9,8 +9,10 @@ import {
   C2_BUILDING,
   C6_BUILDING,
   C7_BUILDING,
+  C7_FACULTY_PARKING,
   C8_BUILDING,
   C9,
+  D3_D5_PARKING_GARAGE,
   D4_BUILDING,
   DORM_COMPLEX,
   EAST_CAMPUS_BLOCKS,
@@ -32,50 +34,96 @@ export type NamedCollider = {
   box: AABB;
 };
 
+// Cây xanh sân trước Thư viện (2 cây bóng mát đối xứng + 2 hàng cau vua) và cây rìa khuôn viên
+export const LIBRARY_TREES: Vec2[] = [
+  { x: 30.5, z: 14.5 },
+  { x: 45.5, z: 14.5 },
+  { x: 26.5, z: 11 },
+  { x: 26.5, z: 15 },
+  { x: 26.5, z: 19 },
+  { x: 49.5, z: 11 },
+  { x: 49.5, z: 15 },
+  { x: 49.5, z: 19 },
+];
+
+export const CAMPUS_SHADE_TREES: Vec2[] = [
+  { x: -28, z: -62 },
+  { x: -28, z: -48 },
+  { x: 4, z: -62 },
+  { x: 4, z: -46 },
+  { x: 18, z: -60 },
+  { x: 18, z: -42 },
+  { x: 70, z: -62 },
+  { x: 80, z: -62 },
+  { x: 88, z: -52 },
+  { x: 88, z: -38 },
+  { x: 88, z: 14 },
+  { x: 88, z: 32 },
+  { x: -80, z: 78 },
+  { x: -64, z: 78 },
+  { x: -32, z: 78 },
+  { x: 28, z: 78 },
+  { x: 52, z: 78 },
+  { x: -92, z: -60 },
+  { x: -92, z: -46 },
+  { x: -92, z: 62 },
+  { x: -92, z: 74 },
+  // 4 cây lớn hai bên Cổng Parabol & 2 cây sân sau Thư viện
+  { x: -93.5, z: -12 },
+  { x: -93.5, z: 0 },
+  { x: -82.5, z: -13.5 },
+  { x: -82.5, z: 1.5 },
+  { x: 30, z: 52 },
+  { x: 49, z: 52 },
+];
+
 export const BUILDING_COLLIDERS: NamedCollider[] = [
   { name: 'C1', box: { minX: -82, maxX: -34, minZ: -63, maxZ: -49 } },
   { name: 'Tháp hoa gió đầu hồi C1', box: { minX: -34.2, maxX: -32.2, minZ: -58.5, maxZ: -53.5 } },
   { name: 'Bậc tam cấp C1', box: C1.steps },
   { name: 'Bệ chữ I LOVE BK', box: I_LOVE_BK.plinth },
   { name: 'Khối đá trắng', box: WHITE_ROCK.box },
-  { name: 'Thư viện Tạ Quang Bửu (tháp)', box: { minX: 25.5, maxX: 50.5, minZ: 29.5, maxZ: 43.5 } }, // Mở rộng tháp 3 nhịp x 25,5..50,5 (25 m, mái đua tới 24,7..51,3) theo tham-khao/thu-vien/
-  { name: 'Thư viện Tạ Quang Bửu (khối đế)', box: { minX: 31.0, maxX: 45.0, minZ: 23.5, maxZ: 30.5 } }, // Khối đế rộng 14 m (x 31..45), z 24..30; mái hiên 6 cột tròn (z 18..24,5) + bậc (z 17..19) ngoài collider để avatar đứng được dưới mái trước cửa; avatar áp sát từ phía bắc dừng ở z ≈ 23,1, cách cửa kính (z 26,5) ~3,4 m
-  { name: 'Bệ chữ HUST', box: HUST_SIGN.plinth }, // đợt 4: bệ đen chữ HUST trước sảnh; đi vòng qua 2 bên (lối rộng ~2 m phía tây, ~5 m phía đông)
-  { name: 'C9', box: { minX: -52, maxX: -32, minZ: -8, maxZ: 4 } },
+  { name: 'Thư viện Tạ Quang Bửu (tháp)', box: { minX: 25.5, maxX: 50.5, minZ: 29.5, maxZ: 43.5 } },
+  { name: 'Thư viện Tạ Quang Bửu (khối đế)', box: { minX: 31.0, maxX: 45.0, minZ: 23.5, maxZ: 30.5 } },
+  // Khối đế hai cánh, thành bậc tam cấp và cột sảnh Thư viện — chặn đi xuyên qua hông cầu thang/cột sảnh,
+  // chỉ mở lối chính diện x = 31.2..44.8 để bước lên bậc tam cấp (có nâng độ cao Y mượt trên bậc & hiên sảnh).
+  { name: 'Cánh tây khối đế Thư viện', box: { minX: 25.4, maxX: 31.0, minZ: 18.8, maxZ: 29.8 } },
+  { name: 'Cánh đông khối đế Thư viện', box: { minX: 45.0, maxX: 50.6, minZ: 18.8, maxZ: 29.8 } },
+  { name: 'Thành bậc tam cấp Thư viện (tây)', box: { minX: 30.2, maxX: 31.1, minZ: 16.8, maxZ: 19.2 } },
+  { name: 'Thành bậc tam cấp Thư viện (đông)', box: { minX: 44.9, maxX: 45.8, minZ: 16.8, maxZ: 19.2 } },
+  { name: 'Cột sảnh Thư viện (tây-bắc)', box: { minX: 31.05, maxX: 31.95, minZ: 19.05, maxZ: 19.95 } },
+  { name: 'Cột sảnh Thư viện (đông-bắc)', box: { minX: 44.05, maxX: 44.95, minZ: 19.05, maxZ: 19.95 } },
+  { name: 'Cột sảnh Thư viện (tây-nam)', box: { minX: 31.05, maxX: 31.95, minZ: 22.35, maxZ: 23.25 } },
+  { name: 'Cột sảnh Thư viện (đông-nam)', box: { minX: 44.05, maxX: 44.95, minZ: 22.35, maxZ: 23.25 } },
+  { name: 'Bệ chữ HUST', box: HUST_SIGN.plinth },
+  { name: 'C9', box: { minX: -85, maxX: -65, minZ: -23, maxZ: -11 } },
   { name: 'Cầu thang C9', box: C9.stairs.box },
-  { name: 'Chân cổng Parabol (nam)', box: PARABOL_GATE.legAabbs[0] },
-  { name: 'Chân cổng Parabol (bắc)', box: PARABOL_GATE.legAabbs[1] },
+  { name: 'Chân cổng Parabol (bắc)', box: PARABOL_GATE.legAabbs[0] },
+  { name: 'Chân cổng Parabol (nam)', box: PARABOL_GATE.legAabbs[1] },
   { name: 'Nhà gác cổng Parabol', box: PARABOL_GATE.guardHouse },
-  // Cổng Trần Đại Nghĩa (biển đá trung tâm chia 2 làn xe & nhà bảo vệ bên phải theo tham-khao/cong-tran-dai-nghia/)
+  // Cổng Trần Đại Nghĩa, Nhà để xe D3 - D5 (bên trái) và dàn ô tô giảng viên đỗ cạnh tòa C7 (bên phải)
   { name: 'Biển đá Cổng Trần Đại Nghĩa', box: { minX: 91.1, maxX: 93.4, minZ: -8.8, maxZ: -3.2 } },
   { name: 'Nhà bảo vệ Cổng Trần Đại Nghĩa', box: { minX: 89.2, maxX: 93.2, minZ: -17.2, maxZ: -13.6 } },
+  { name: 'Nhà để xe D3 - D5', box: D3_D5_PARKING_GARAGE.box },
+  ...C7_FACULTY_PARKING.cars.map((car) => ({ name: 'Ô tô giảng viên C7', box: car.box })),
   { name: 'Bờ kè Hồ Tiền (tây)', box: LAKE_BANK[0] },
   { name: 'Bờ kè Hồ Tiền (đông)', box: LAKE_BANK[1] },
   { name: 'Bờ kè Hồ Tiền (bắc)', box: LAKE_BANK[2] },
   { name: 'Bờ kè Hồ Tiền (nam)', box: LAKE_BANK[3] },
   // Ghế (mặt ngồi 1,9 × 0,7 m) — đều đặt ngoài đường đi chính.
-  { name: 'Ghế bờ hồ', box: { minX: -27.85, maxX: -27.15, minZ: 29.05, maxZ: 30.95 } },
-  { name: 'Ghế bờ hồ', box: { minX: -27.85, maxX: -27.15, minZ: 61.05, maxZ: 62.95 } },
-  { name: 'Ghế bờ hồ', box: { minX: 21.95, maxX: 22.65, minZ: 19.05, maxZ: 20.95 } },
-  { name: 'Ghế bờ hồ', box: { minX: 21.95, maxX: 22.65, minZ: 67.05, maxZ: 68.95 } },
+  { name: 'Ghế bờ hồ', box: { minX: -27.85, maxX: -27.15, minZ: 33.05, maxZ: 34.95 } },
+  { name: 'Ghế bờ hồ', box: { minX: -27.85, maxX: -27.15, minZ: 65.05, maxZ: 66.95 } },
+  { name: 'Ghế bờ hồ', box: { minX: 21.95, maxX: 22.65, minZ: 23.05, maxZ: 24.95 } },
+  { name: 'Ghế bờ hồ', box: { minX: 21.95, maxX: 22.65, minZ: 71.05, maxZ: 72.95 } },
   { name: 'Ghế quảng trường C1', box: { minX: -72.95, maxX: -71.05, minZ: -30.35, maxZ: -29.65 } },
   { name: 'Ghế quảng trường C1', box: { minX: -44.95, maxX: -43.05, minZ: -44.35, maxZ: -43.65 } },
-  // Bồn cỏ quảng trường C1 (Ground.tsx, đợt sửa kiến trúc): hộp cỏ 14 × 3 m,
-  // đỉnh y = 0,20 — avatar đi xuyên qua sẽ lún chân vào cỏ nên chặn bằng
-  // collider; chừa lối giữa rộng 16 m (x −66..−50) vào bậc tam cấp và không
-  // chặn chặng nào (leg2 kết thúc ở (−58,−36), cách bồn ≥ 6,5 m; cửa phòng
-  // học ở (−58,−45,5) nằm đúng lối giữa).
   { name: 'Bồn cỏ quảng trường C1 (tây)', box: { minX: -80, maxX: -66, minZ: -45.5, maxZ: -42.5 } },
   { name: 'Bồn cỏ quảng trường C1 (đông)', box: { minX: -50, maxX: -36, minZ: -45.5, maxZ: -42.5 } },
-  // Bồn cỏ 11 × 12 m trong C1Building.tsx (cx −69,5 và −46,5, z −43..−31,
-  // đỉnh y = 0,12, có cây Lipa trồng trong bồn): hai bồn kẹp lối giữa
-  // x −64..−52 rộng 12 m — leg2 (−58,−36) và cửa phòng học (−58,−45,5)
-  // đều nằm đúng lối giữa nên không chặn đường.
   { name: 'Bồn cỏ C1Building (tây)', box: { minX: -75, maxX: -64, minZ: -43.15, maxZ: -30.85 } },
   { name: 'Bồn cỏ C1Building (đông)', box: { minX: -52, maxX: -41, minZ: -43.15, maxZ: -30.85 } },
-  { name: 'Ghế đường tình yêu', box: { minX: -30.95, maxX: -29.05, minZ: -13.35, maxZ: -12.65 } },
-  { name: 'Ghế đường tình yêu', box: { minX: 19.05, maxX: 20.95, minZ: -13.35, maxZ: -12.65 } },
-  { name: 'Ghế đường tình yêu', box: { minX: 69.05, maxX: 70.95, minZ: -13.35, maxZ: -12.65 } },
+  { name: 'Ghế đường tình yêu', box: { minX: -38.95, maxX: -37.05, minZ: -10.95, maxZ: -10.25 } },
+  { name: 'Ghế đường tình yêu', box: { minX: -22.95, maxX: -21.05, minZ: -10.95, maxZ: -10.25 } },
+  { name: 'Ghế đường tình yêu', box: { minX: 15.05, maxX: 16.95, minZ: -10.95, maxZ: -10.25 } },
   // Các công trình mở rộng toàn trường theo Bản đồ Bách Khoa (khuon-vien-truong.png)
   { name: 'Nhà C2', box: C2_BUILDING.box },
   { name: 'Tòa nhà C6', box: C6_BUILDING.box },
@@ -112,10 +160,10 @@ export const BUILDING_COLLIDERS: NamedCollider[] = [
   { name: 'Tường rào Đại Cồ Việt (giữa)', box: { minX: -45.5, maxX: 92.1, minZ: -75.45, maxZ: -74.95 } },
   { name: 'Tường rào Đại Cồ Việt (đông 1)', box: { minX: 98.0, maxX: 120.2, minZ: -75.45, maxZ: -74.95 } },
   { name: 'Tường rào Đại Cồ Việt (đông 2)', box: { minX: 131.8, maxX: 166.0, minZ: -75.45, maxZ: -74.95 } },
-  { name: 'Tường rào Giải Phóng (bắc)', box: { minX: -95.45, maxX: -94.95, minZ: -75.2, maxZ: -12.0 } },
-  { name: 'Tường rào Parabol (bắc)', box: { minX: -88.25, maxX: -87.75, minZ: -12.0, maxZ: 3.2 } },
-  { name: 'Tường rào Parabol (nam)', box: { minX: -88.25, maxX: -87.75, minZ: 16.8, maxZ: 20.2 } },
-  { name: 'Tường rào Giải Phóng (nam)', box: { minX: -95.45, maxX: -94.95, minZ: 26.5, maxZ: 106.5 } },
+  { name: 'Tường rào Giải Phóng (bắc)', box: { minX: -95.45, maxX: -94.95, minZ: -75.2, maxZ: -17.0 } },
+  { name: 'Tường rào Parabol (bắc)', box: { minX: -88.25, maxX: -87.75, minZ: -17.0, maxZ: -12.8 } },
+  { name: 'Tường rào Parabol (nam)', box: { minX: -88.25, maxX: -87.75, minZ: 0.8, maxZ: 4.5 } },
+  { name: 'Tường rào Giải Phóng (nam)', box: { minX: -95.45, maxX: -94.95, minZ: 11.0, maxZ: 106.5 } },
   { name: 'Tường rào Lê Thanh Nghị (nam)', box: { minX: -95.2, maxX: 166.0, minZ: 106.25, maxZ: 106.75 } },
   { name: 'Tường rào biên Đông', box: { minX: 165.75, maxX: 166.25, minZ: -75.2, maxZ: 106.5 } },
 ];
@@ -150,18 +198,34 @@ export const LIBRARY_LOBBY_COLLIDERS: NamedCollider[] = [
   { name: 'Ghế học tqb-1f-t2-s2', box: { minX: 2.18, maxX: 2.62, minZ: 2.14, maxZ: 2.48 } },
 ];
 
-// --- Helper xe máy (đợt 3 giai đoạn 4) ---------------------------------------
-// Cây KHÔNG có collider cho người đi bộ (quyết định đợt 3 giai đoạn 3: tán
-// thoáng, không kẹt dưới tán) — nhưng xe chạy nhanh đâm vào thân cây thì
-// phải dừng/trượt, nên RIÊNG xe dùng thêm các vòng tròn thân cây (r 0,3 m,
-// chỉ quanh thân, không bao tán) + vòng tròn NPC Minh (r 0,5 m).
+// Danh sách toàn bộ gốc cây trong khuôn viên (chặn cả người đi bộ lẫn xe máy để không đi xuyên qua thân cây)
 export const TREE_TRUNKS: Vec2[] = [
   ...LOVE_ROAD_TREES,
   ...LAKE_WILLOWS,
   ...C1.lipaTrees,
+  ...LIBRARY_TREES,
+  ...CAMPUS_SHADE_TREES,
 ];
 
-/** NPC Minh đứng gần cổng Parabol — xe không được đâm xuyên qua. */
-export const NPC_CIRCLES: { pos: Vec2; radius: number }[] = [
-  { pos: { x: -72, z: 8 }, radius: 0.5 },
+/** Danh sách NPC đứng/ngồi tĩnh trong sân trường (Minh + các nhóm sinh viên trò chuyện/đọc sách) — không đi xuyên qua người khác. */
+export const NPC_CIRCLES: { pos: Vec2; radius: number; name?: string }[] = [
+  { pos: { x: -72, z: -8.5 }, radius: 0.5, name: 'Minh (NPC)' },
+  // Sinh viên đứng chờ tại Nhà chờ Xe buýt Cổng Parabol
+  { pos: { x: -86.8, z: 7.2 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  // Nhóm 1: 2 sinh viên đứng trò chuyện tại sân Quảng trường C1
+  { pos: { x: -62.5, z: -34.0 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  { pos: { x: -61.5, z: -34.0 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  // Nhóm 2: 2 sinh viên trao đổi bài trước sảnh Thư viện Tạ Quang Bửu
+  { pos: { x: 43.5, z: 14.5 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  { pos: { x: 42.3, z: 14.5 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  // Nhóm 3: 2 sinh viên đứng ngắm cảnh bờ Bắc Hồ Tiền
+  { pos: { x: -6.5, z: 2.2 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  { pos: { x: -5.3, z: 2.2 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  // Nhóm 4: 2 sinh viên trước Nhà B1 SoICT
+  { pos: { x: 108.0, z: 3.5 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  { pos: { x: 109.2, z: 3.5 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  // Nhóm 5: 3 sinh viên ngồi đọc sách trên ghế đá ven Hồ Tiền
+  { pos: { x: -27.38, z: 34.0 }, radius: 0.45, name: 'Sinh viên (NPC)' },
+  { pos: { x: 22.18, z: 24.0 }, radius: 0.45, name: 'Sinh viên (NPC)' },
+  { pos: { x: -27.38, z: 66.0 }, radius: 0.45, name: 'Sinh viên (NPC)' },
 ];

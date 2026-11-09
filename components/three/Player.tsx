@@ -55,13 +55,17 @@ import {
   ROADS,
   SPAWN,
   findFreeSpotNear,
+  getCampusGroundElevation,
   nearestRoadPoint,
+  pushOutOfCircle,
   resolveBikeCollisions,
   resolveClassroomCollisions,
   resolveCollisions,
   resolveLibraryLobbyCollisions,
   type Vec2,
 } from '../../lib/campus';
+import { activeWalkingStudentPositions } from './AmbientLife';
+import { remoteRenderPos } from './RemotePlayers';
 import {
   bikeInput,
   bikeState,
@@ -748,8 +752,12 @@ export default function Player() {
         if (typeof yaw === 'number') yawRef.current = yaw;
         if (typeof pitch === 'number') pitchRef.current = pitch;
         viewModeRef.current = 'follow';
+        const groundY =
+          !playerState.inClassroom && !playerState.inLibraryLobby
+            ? getCampusGroundElevation(resolved.x, resolved.z)
+            : 0;
         if (groupRef.current) {
-          groupRef.current.position.set(resolved.x, 0, resolved.z);
+          groupRef.current.position.set(resolved.x, groundY, resolved.z);
         }
         syncCameraTransform();
       },
@@ -1252,11 +1260,30 @@ export default function Player() {
         x: prevX + dirX * speed * delta,
         z: prevZ + dirZ * speed * delta,
       };
-      const { pos, hit } = playerState.inClassroom
+      let { pos, hit } = playerState.inClassroom
         ? resolveClassroomCollisions(next, AVATAR.radius)
         : playerState.inLibraryLobby
           ? resolveLibraryLobbyCollisions(next, AVATAR.radius)
           : resolveCollisions(next, AVATAR.radius);
+      // Chặn đi xuyên qua sinh viên đang đi bộ (AmbientLife) và người chơi khác (RemotePlayers) ngoài sân trường
+      if (!playerState.inClassroom && !playerState.inLibraryLobby) {
+        let cur = pos;
+        for (const wp of activeWalkingStudentPositions) {
+          const pushed = pushOutOfCircle(cur.x, cur.z, wp, 0.38, AVATAR.radius);
+          if (pushed) {
+            cur = pushed;
+            if (!hit) hit = 'Sinh viên (NPC)';
+          }
+        }
+        remoteRenderPos.forEach((rp) => {
+          const pushed = pushOutOfCircle(cur.x, cur.z, rp, 0.4, AVATAR.radius);
+          if (pushed) {
+            cur = pushed;
+            if (!hit) hit = 'Sinh viên (MP)';
+          }
+        });
+        pos = cur;
+      }
       posRef.current = pos;
       // Đếm va chạm: chỉ đếm một lần khi vừa chạm vật mới (không đếm mỗi frame
       // khi đang trượt dọc tường).
@@ -1369,16 +1396,21 @@ export default function Player() {
       bodyRef.current.position.y += (bodyBobTarget - bodyRef.current.position.y) * ease;
     }
 
+    const groundY =
+      !playerState.inClassroom && !playerState.inLibraryLobby && !ridingRef.current && !seatedNow
+        ? getCampusGroundElevation(posRef.current.x, posRef.current.z)
+        : 0;
+
     groupRef.current.position.set(
       posRef.current.x,
-      seatedNow ? SEATED_GROUP_Y_OFFSET : 0,
+      seatedNow ? SEATED_GROUP_Y_OFFSET : groundY,
       posRef.current.z,
     );
     groupRef.current.rotation.y = facingRef.current;
     if (nameplateGroupRef.current) {
       nameplateGroupRef.current.position.set(
         posRef.current.x,
-        ridingRef.current ? 2.05 : seatedNow ? 1.62 : 1.95,
+        (ridingRef.current ? 2.05 : seatedNow ? 1.62 : 1.95) + groundY,
         posRef.current.z,
       );
     }
@@ -1406,7 +1438,7 @@ export default function Player() {
     }
     const target = new THREE.Vector3(
       posRef.current.x,
-      ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2,
+      (ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2) + groundY,
       posRef.current.z,
     );
     const placeCamera = (d: number): THREE.Vector3 => {

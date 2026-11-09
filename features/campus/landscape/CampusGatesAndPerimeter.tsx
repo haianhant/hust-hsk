@@ -135,13 +135,13 @@ const FENCE_RUNS: FenceRunSpec[] = [
   { axis: 'x', fixed: -75.2, from: 98.0, to: 120.2 },
   { axis: 'x', fixed: -75.2, from: 131.8, to: 166.0 },
 
-  // 3. Tuyến biên Tây — Đường Giải Phóng (x = -95.2) & tường nối Cổng Parabol (x = -88.0)
-  { axis: 'z', fixed: -95.2, from: -75.2, to: -12.0 },
-  { axis: 'x', fixed: -12.0, from: -95.2, to: -88.0 },
-  { axis: 'z', fixed: -88.0, from: -12.0, to: 3.2 },
-  { axis: 'z', fixed: -88.0, from: 16.8, to: 20.2 },
-  { axis: 'x', fixed: 26.5, from: -95.2, to: -88.0 },
-  { axis: 'z', fixed: -95.2, from: 26.5, to: 106.5 },
+  // 3. Tuyến biên Tây — Đường Giải Phóng (x = -95.2) & tường nối Cổng Parabol (x = -88.0, mở thông trục z = -6)
+  { axis: 'z', fixed: -95.2, from: -75.2, to: -17.0 },
+  { axis: 'x', fixed: -17.0, from: -95.2, to: -88.0 },
+  { axis: 'z', fixed: -88.0, from: -17.0, to: -12.8 },
+  { axis: 'z', fixed: -88.0, from: 0.8, to: 4.5 },
+  { axis: 'x', fixed: 11.0, from: -95.2, to: -88.0 },
+  { axis: 'z', fixed: -95.2, from: 11.0, to: 106.5 },
 
   // 4. Tuyến biên Nam — Đường Lê Thanh Nghị (z = 106.5)
   { axis: 'x', fixed: 106.5, from: -95.2, to: 166.0 },
