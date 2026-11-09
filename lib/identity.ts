@@ -18,12 +18,13 @@ import {
   VALID_GENDERS,
   VALID_HAIR_STYLES,
   VALID_OUTFIT_IDS,
+  derivePublicPlayerId,
   isAvatarGender,
   isAvatarHairStyle,
   isAvatarOutfitId,
 } from '../shared/contracts/multiplayer';
 
-export { MSSV_RE };
+export { MSSV_RE, derivePublicPlayerId };
 
 export interface Identity {
   name: string;
@@ -45,6 +46,7 @@ export interface CharacterProfile {
 export const IDENTITY_KEY = 'bkhn-identity-v1';
 export const CHARACTER_KEY = 'bkhn-character-v1';
 export const SESSION_KEY = 'bkhn-session-id';
+export const RECONNECT_TOKEN_KEY = 'bkhn-reconnect-token-v1';
 
 export const DEFAULT_CHARACTER_PROFILE: CharacterProfile = {
   name: 'Sinh viên',
@@ -194,16 +196,49 @@ export function clearIdentity(): void {
   }
 }
 
-/** Session id ổn định theo trình duyệt — để server nhận ra khi kết nối lại. */
-export function getSessionId(): string {
+let fallbackMemoryReconnectToken: string | null = null;
+
+/**
+ * Secret credential dùng riêng để xác thực kết nối lại (reconnect) với HskRoom.
+ * Giá trị này chỉ lưu trong localStorage của trình duyệt hiện tại và chỉ gửi
+ * trong gói tin `join` tới server — TUYỆT ĐỐI không phát quảng bá cho người chơi khác.
+ */
+export function getReconnectToken(): string {
   try {
-    let id = localStorage.getItem(SESSION_KEY);
-    if (!id) {
-      id = `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      localStorage.setItem(SESSION_KEY, id);
+    let token = localStorage.getItem(RECONNECT_TOKEN_KEY);
+    if (!token) {
+      const legacy = localStorage.getItem(SESSION_KEY);
+      if (legacy && !legacy.startsWith('p-')) {
+        token = legacy;
+      } else {
+        token = `rt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+      }
+      localStorage.setItem(RECONNECT_TOKEN_KEY, token);
+      localStorage.setItem(SESSION_KEY, derivePublicPlayerId(token));
     }
-    return id;
+    return token;
   } catch {
-    return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    if (!fallbackMemoryReconnectToken) {
+      fallbackMemoryReconnectToken = `rt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+    return fallbackMemoryReconnectToken;
   }
+}
+
+/**
+ * Mã định danh công khai của người chơi (`p-...`) dẫn xuất một chiều từ
+ * `reconnectToken` — an toàn để hiển thị công khai trong phòng học mà không
+ * thể dùng ngược lại để chiếm quyền phiên kết nối.
+ */
+export function getSessionId(): string {
+  const token = getReconnectToken();
+  const publicId = derivePublicPlayerId(token);
+  try {
+    if (localStorage.getItem(SESSION_KEY) !== publicId) {
+      localStorage.setItem(SESSION_KEY, publicId);
+    }
+  } catch {
+    // ignore
+  }
+  return publicId;
 }

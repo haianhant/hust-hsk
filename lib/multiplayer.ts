@@ -17,8 +17,10 @@
 
 import {
   ROOM_IDS,
+  derivePublicPlayerId,
   extractValidAppearance,
   isRemoteState,
+  sanitizeReconnectToken,
   type RemoteAppearance,
   type RemotePlayer,
   type RemoteState,
@@ -407,6 +409,7 @@ export class MultiplayerClient {
   private selfId: string | null = null;
   private error: string | null = null;
   private sessionId = '';
+  private reconnectToken = '';
   private name = '';
   private mssv = '';
   private appearance: RemoteAppearance = {};
@@ -420,6 +423,7 @@ export class MultiplayerClient {
   private seats = new Map<string, SeatOccupancy>();
   private presences = new Map<string, PlayerStudyPresence>();
   private mySeatId: string | null = null;
+  private localDesiredSeatId: string | null = null;
   private seatClaimState: SeatClaimClientState = 'idle';
   private pendingSeatRequest: PendingSeatRequest | null = null;
   private pendingClaimTimer: ReturnType<typeof setTimeout> | null = null;
@@ -551,6 +555,21 @@ export class MultiplayerClient {
   }
 
   /**
+   * Synchronizes the local avatar's current seated seat ID (`null` when standing
+   * or outside `LibraryLobby`). Used on reconnect / `study:room-snapshot` to
+   * detect when the server still holds a seat for `selfId` while the local player
+   * has already stood up, and automatically release the stale server seat.
+   */
+  setLocalSeatedSeatId(seatId: string | null): void {
+    this.localDesiredSeatId =
+      seatId && isSupportedLibrarySeatId(seatId) ? seatId : null;
+  }
+
+  getLocalSeatedSeatId(): string | null {
+    return this.localDesiredSeatId;
+  }
+
+  /**
    * Explicitly cancels any in-flight seat claim request and settles its Promise
    * with `reason: 'cancelled'`. If the server later ACKs the cancelled request,
    * `onmessage` will automatically release the orphaned server seat.
@@ -560,6 +579,9 @@ export class MultiplayerClient {
     this.clearPendingClaimTimer();
     const req = this.pendingSeatRequest;
     this.pendingSeatRequest = null;
+    if (this.localDesiredSeatId === req.seatId) {
+      this.localDesiredSeatId = this.mySeatId;
+    }
     this.recordTerminatedClaim(
       req.requestId,
       req.seatId,
@@ -657,6 +679,7 @@ export class MultiplayerClient {
     this.seatClaimState = 'idle';
     this.studyRevision = 0;
     if (reason === 'disconnect') {
+      this.localDesiredSeatId = null;
       this.lastSeatRejection = null;
       this.terminatedClaimRequests.clear();
     }
@@ -668,8 +691,22 @@ export class MultiplayerClient {
     return `${prefix}-${sid}-${this.nowFn()}-${this.reqCounter}`;
   }
 
-  connect(sessionId: string, name: string, mssv: string, appearance: RemoteAppearance = {}) {
-    this.sessionId = sessionId;
+  connect(
+    sessionId: string,
+    name: string,
+    mssv: string,
+    appearance: RemoteAppearance = {},
+    reconnectToken?: string,
+  ) {
+    const cleanToken = sanitizeReconnectToken(reconnectToken);
+    const cleanSessionId = sanitizeReconnectToken(sessionId);
+    this.reconnectToken = cleanToken ?? cleanSessionId ?? sessionId;
+    this.sessionId =
+      cleanToken && cleanSessionId
+        ? cleanSessionId
+        : cleanSessionId
+          ? derivePublicPlayerId(cleanSessionId)
+          : sessionId;
     this.name = name;
     this.mssv = mssv;
     this.appearance = { ...appearance };
@@ -794,6 +831,7 @@ export class MultiplayerClient {
     }
 
     const connGen = this.connectionGeneration;
+    this.localDesiredSeatId = seatId;
     this.pendingSeatRequest = {
       seatId,
       requestId,
@@ -810,6 +848,9 @@ export class MultiplayerClient {
       this.pendingClaimTimer = this.setTimeoutFn(() => {
         if (this.pendingSeatRequest?.requestId !== requestId) return;
         this.pendingSeatRequest = null;
+        if (this.localDesiredSeatId === seatId) {
+          this.localDesiredSeatId = this.mySeatId;
+        }
         this.recordTerminatedClaim(requestId, seatId, 'timed-out', connGen);
         this.seatClaimState = this.mySeatId ? 'confirmed' : 'timed-out';
         const timeoutNotice: SeatRejectionNotice = {
@@ -846,6 +887,9 @@ export class MultiplayerClient {
         if (this.pendingSeatRequest?.requestId === requestId) {
           this.pendingSeatRequest = null;
         }
+        if (this.localDesiredSeatId === seatId) {
+          this.localDesiredSeatId = this.mySeatId;
+        }
         this.recordTerminatedClaim(requestId, seatId, 'offline', connGen);
         this.seatClaimState = this.mySeatId ? 'confirmed' : 'idle';
         this.settlePendingClaimAsFailed(requestId, seatId, 'offline');
@@ -869,6 +913,10 @@ export class MultiplayerClient {
       this.cancelPendingSeatClaim();
     }
 
+    if (!seatId || this.localDesiredSeatId === seatId) {
+      this.localDesiredSeatId = null;
+    }
+
     // Guard against releasing a newer valid seat when a stale seatId is passed
     if (seatId && this.mySeatId && this.mySeatId !== seatId) {
       return;
@@ -876,6 +924,13 @@ export class MultiplayerClient {
 
     const targetSeatId = seatId ?? this.mySeatId ?? this.orphanedServerSeatId;
     this.orphanedServerSeatId = null;
+
+    if (targetSeatId) {
+      const occ = this.seats.get(targetSeatId);
+      if (occ && (!this.selfId || occ.occupantId === this.selfId)) {
+        this.seats.delete(targetSeatId);
+      }
+    }
 
     if (this.mySeatId) {
       this.seatClaimState = 'releasing';
@@ -1032,6 +1087,7 @@ export class MultiplayerClient {
         JSON.stringify({
           type: 'join',
           sessionId: this.sessionId,
+          ...(this.reconnectToken ? { reconnectToken: this.reconnectToken } : {}),
           name: this.name,
           mssv: this.mssv,
           ...this.appearance,
@@ -1112,9 +1168,20 @@ export class MultiplayerClient {
           } else if (this.studyRevision === 0) {
             this.studyRevision = 1;
           }
-          this.mySeatId = foundMySeat;
-          if (!this.pendingSeatRequest) {
-            this.seatClaimState = foundMySeat ? 'confirmed' : 'idle';
+          // Reconcile when local player is already standing (or at a different seat)
+          // while the server snapshot still holds `foundMySeat` for `selfId`.
+          if (
+            foundMySeat &&
+            !this.pendingSeatRequest &&
+            this.localDesiredSeatId !== foundMySeat
+          ) {
+            this.mySeatId = null;
+            this.releaseOrphanedServerSeat(foundMySeat);
+          } else {
+            this.mySeatId = foundMySeat;
+            if (!this.pendingSeatRequest) {
+              this.seatClaimState = foundMySeat ? 'confirmed' : 'idle';
+            }
           }
           this.emit();
           if (typeof window !== 'undefined') {
@@ -1229,6 +1296,7 @@ export class MultiplayerClient {
             }
 
             this.mySeatId = occ.seatId;
+            this.localDesiredSeatId = occ.seatId;
             this.seatClaimState = 'confirmed';
             this.lastSeatRejection = null;
 
@@ -1371,6 +1439,9 @@ export class MultiplayerClient {
 
           this.clearPendingClaimTimer();
           this.pendingSeatRequest = null;
+          if (this.localDesiredSeatId === activeReq.seatId) {
+            this.localDesiredSeatId = this.mySeatId;
+          }
           const reason = (
             typeof msg.reason === 'string' ? msg.reason : 'invalid-payload'
           ) as SeatClaimRejectionReason;

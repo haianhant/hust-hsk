@@ -1524,6 +1524,117 @@ test('PR9 Review Fix 3 — Concurrent / Superseded Seat Claim Requests & Out-of-
   }
 });
 
+test('(28) Reconnect reconciliation when local player is already standing while server still holds seat + separated public ID vs reconnectToken', async () => {
+  const { derivePublicPlayerId } = require('../shared/contracts/multiplayer.ts');
+  const { getReconnectToken, getSessionId } = require('../lib/identity.ts');
+
+  // 1. Verify identity separation between secret reconnectToken and derived public sessionId
+  const token = getReconnectToken();
+  const publicId = getSessionId();
+  assert.ok(typeof token === 'string' && token.length >= 4);
+  assert.equal(publicId, derivePublicPlayerId(token));
+  assert.notEqual(publicId, token);
+
+  // 2. Verify MultiplayerClient sends both public sessionId and secret reconnectToken on join
+  const h = createTestMultiplayerHarness();
+  h.client.connect(publicId, 'Nguyễn Văn A', '20226001', {}, token);
+  const ws = h.sockets[0];
+  ws.serverOpen(publicId);
+  const joinMsg = ws.sent.find((m) => m.type === 'join');
+  assert.ok(joinMsg, 'Client must send join message on socket open');
+  assert.equal(joinMsg.sessionId, publicId);
+  assert.equal(joinMsg.reconnectToken, token);
+
+  // 3. Player claims tqb-1f-t1-s1 while online -> confirmed
+  const claimP = h.client.requestSeatClaim('tqb-1f-t1-s1');
+  const claimReq = ws.sent.find((m) => m.type === 'study:claim-seat');
+  ws.serverSend({
+    type: 'study:seat-claimed',
+    revision: 2,
+    requestId: claimReq.requestId,
+    occupancy: {
+      seatId: 'tqb-1f-t1-s1',
+      studyRoomId: 'library-lobby',
+      occupantId: publicId,
+      occupantName: 'Nguyễn Văn A',
+      occupiedAtMs: h.getNow(),
+    },
+  });
+  const claimOut = await claimP;
+  assert.equal(claimOut.ok, true);
+  assert.equal(h.client.getSnapshot().mySeatId, 'tqb-1f-t1-s1');
+  assert.equal(h.client.getLocalSeatedSeatId(), 'tqb-1f-t1-s1');
+
+  // 4. Connection drops (offline), and while offline the player stands up locally
+  ws.close();
+  assert.equal(h.client.getSnapshot().status, 'offline');
+  h.client.setLocalSeatedSeatId(null);
+  h.client.requestSeatRelease('tqb-1f-t1-s1');
+  assert.equal(h.client.getLocalSeatedSeatId(), null);
+
+  // 5. Reconnect fires, and the server snapshot STILL holds 'tqb-1f-t1-s1' for `publicId`
+  h.advanceTime(1500);
+  const ws2 = h.sockets[1];
+  assert.ok(ws2, 'Reconnect must open a second socket');
+  ws2.readyState = 1;
+  ws2.onopen({});
+  ws2.serverSend({
+    type: 'welcome',
+    id: publicId,
+    roomId: 'hsk-1',
+    count: 1,
+    players: [{ id: publicId, name: 'Nguyễn Văn A', x: 0, z: 0, facing: 0, state: 'idle' }],
+  });
+  ws2.sent.length = 0;
+
+  ws2.serverSend({
+    type: 'study:room-snapshot',
+    roomId: 'hsk-1',
+    revision: 3,
+    seats: [
+      {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: publicId,
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: h.getNow() - 5000,
+      },
+    ],
+    presences: {
+      [publicId]: {
+        status: 'studying',
+        studyRoomId: 'library-lobby',
+        seatId: 'tqb-1f-t1-s1',
+        pomodoroPhase: 'focus',
+        subjectTag: 'Giải tích 1',
+        updatedAtMs: h.getNow() - 5000,
+      },
+    },
+  });
+
+  // Because local player is already standing (`localDesiredSeatId === null`),
+  // MultiplayerClient must NOT adopt `tqb-1f-t1-s1` as `mySeatId` and must immediately
+  // send `study:release-seat` to the server to release the stale seat!
+  assert.equal(
+    h.client.getSnapshot().mySeatId,
+    null,
+    'Standing local client must not adopt stale server seat on reconnect snapshot',
+  );
+  assert.equal(
+    Boolean(h.client.getSnapshot().seatMap['tqb-1f-t1-s1']),
+    false,
+    'Stale server seat for selfId must be removed from local seatMap immediately',
+  );
+  const autoReleaseMsg = ws2.sent.find(
+    (m) => m.type === 'study:release-seat' && m.seatId === 'tqb-1f-t1-s1',
+  );
+  assert.ok(
+    autoReleaseMsg,
+    'Client must automatically send study:release-seat when server snapshot still holds a seat while local is standing',
+  );
+});
+
+
 
 
 

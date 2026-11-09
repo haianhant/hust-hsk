@@ -722,6 +722,80 @@ test('PR9 Review Fix 5 — Reclaim Failure After Reconnect stands avatar up safe
     action: 'release-server-seat',
     seatId: 'tqb-1f-t1-s1',
   });
+
+  // Case F: Local player has already stood up (or exited LibraryLobby) while server snapshot still holds a seat for selfId -> release-stale-server-seat
+  const staleSeatWhileStanding = evaluateReconnectSeatAction({
+    inLibraryLobby: true,
+    localSeated: false,
+    localSeatId: null,
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {
+      'tqb-1f-t1-s1': {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: 1000,
+      },
+    },
+  });
+  assert.deepEqual(staleSeatWhileStanding, {
+    action: 'release-stale-server-seat',
+    seatId: 'tqb-1f-t1-s1',
+  });
+
+  const staleSeatOutsideLobby = evaluateReconnectSeatAction({
+    inLibraryLobby: false,
+    localSeated: false,
+    localSeatId: null,
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {
+      'tqb-1f-t2-s2': {
+        seatId: 'tqb-1f-t2-s2',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: 1000,
+      },
+    },
+  });
+  assert.deepEqual(staleSeatOutsideLobby, {
+    action: 'release-stale-server-seat',
+    seatId: 'tqb-1f-t2-s2',
+  });
+
+  // Case G: Local player switched to tqb-1f-t1-s2 while offline, server still holds tqb-1f-t1-s1, and tqb-1f-t1-s2 is occupied by B
+  const crossSeatOccupied = evaluateReconnectSeatAction({
+    inLibraryLobby: true,
+    localSeated: true,
+    localSeatId: 'tqb-1f-t1-s2',
+    mpStatus: 'online',
+    selfId: 'student-a',
+    seatMap: {
+      'tqb-1f-t1-s1': {
+        seatId: 'tqb-1f-t1-s1',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-a',
+        occupantName: 'Nguyễn Văn A',
+        occupiedAtMs: 1000,
+      },
+      'tqb-1f-t1-s2': {
+        seatId: 'tqb-1f-t1-s2',
+        studyRoomId: 'library-lobby',
+        occupantId: 'student-b',
+        occupantName: 'Trần Thị B',
+        occupiedAtMs: 1100,
+      },
+    },
+  });
+  assert.deepEqual(crossSeatOccupied, {
+    action: 'stand-up-occupied',
+    seatId: 'tqb-1f-t1-s2',
+    occupiedByName: 'Trần Thị B',
+    releaseServerSeatId: 'tqb-1f-t1-s1',
+  });
 });
 
 

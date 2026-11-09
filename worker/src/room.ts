@@ -40,12 +40,14 @@ import {
   ROOM_CAPACITY,
   SHIRT_COLORS,
   clampMoveStep,
+  derivePublicPlayerId,
   extractValidAppearance,
   hashString,
   isRemoteState,
   pickShirtColor,
   sanitizeMssv,
   sanitizeName,
+  sanitizeReconnectToken,
   type AvatarGender,
   type AvatarHairStyle,
   type AvatarOutfitId,
@@ -66,15 +68,18 @@ export {
   ROOM_CAPACITY,
   SHIRT_COLORS,
   SPAWN,
+  derivePublicPlayerId,
   hashString,
   sanitizeMssv,
   sanitizeName,
+  sanitizeReconnectToken,
   type Player,
   type PlayerState,
 };
 
 export interface SocketAttachment {
   id: string;
+  reconnectKey?: string;
   roomId?: string;
   name?: string;
   mssv?: string;
@@ -108,6 +113,7 @@ interface HibernatableWebSocket extends WebSocket {
 
 interface Session {
   id: string;
+  reconnectKey: string;
   name: string;
   mssv: string;
   color: string;
@@ -191,6 +197,10 @@ export class HskRoom {
         const mssv = sanitizeMssv(att.mssv) ?? '20226010';
         const session: Session = {
           id: att.id,
+          reconnectKey:
+            typeof att.reconnectKey === 'string' && att.reconnectKey
+              ? att.reconnectKey
+              : att.id,
           name: sanitizeName(att.name),
           mssv,
           color: typeof att.color === 'string' ? att.color : pickShirtColor(att.id),
@@ -280,6 +290,7 @@ export class HskRoom {
       const presence = this.presences.get(session.id);
       hws.serializeAttachment?.({
         id: session.id,
+        reconnectKey: session.reconnectKey,
         roomId: this.roomId,
         name: session.name,
         mssv: session.mssv,
@@ -420,12 +431,40 @@ export class HskRoom {
     const now = Date.now();
 
     if (msg.type === 'join') {
-      const sessionId =
-        typeof msg.sessionId === 'string' ? msg.sessionId.trim().slice(0, 64) : '';
-      if (!sessionId) {
+      const rawSessionId = sanitizeReconnectToken(msg.sessionId);
+      const rawReconnectToken = sanitizeReconnectToken(msg.reconnectToken);
+      const reconnectKey = rawReconnectToken ?? rawSessionId ?? '';
+      if (!reconnectKey) {
         this.send(ws, { type: 'error', message: 'Missing sessionId' });
         return;
       }
+
+      // Separate public player identity (`id` / `occupantId` / `playerId`) from
+      // the secret reconnect credential (`reconnectKey`):
+      // 1. An active player's public ID (`p-...`) is broadcast to peers and must
+      //    NEVER be accepted as a reconnect credential to hijack that session.
+      if (this.sessions.has(reconnectKey)) {
+        this.send(ws, {
+          type: 'error',
+          message: 'Public player ID cannot be used as reconnect credential',
+        });
+        return;
+      }
+
+      const sessionId = derivePublicPlayerId(reconnectKey);
+      if (
+        rawReconnectToken &&
+        rawSessionId &&
+        rawSessionId !== sessionId &&
+        rawSessionId !== rawReconnectToken
+      ) {
+        this.send(ws, {
+          type: 'error',
+          message: 'Invalid reconnect credential for session',
+        });
+        return;
+      }
+
       // Enforce strict invariant: one WebSocket is bound to at most one sessionId.
       // Attempting to switch sessionId on an already-joined socket is rejected.
       const boundSessionId = this.getSocketSessionId(ws);
@@ -436,13 +475,21 @@ export class HskRoom {
         });
         return;
       }
+      const existing = this.sessions.get(sessionId);
+      if (existing && existing.reconnectKey !== reconnectKey) {
+        this.send(ws, {
+          type: 'error',
+          message: 'Invalid reconnect credential',
+        });
+        return;
+      }
       const mssv = sanitizeMssv(msg.mssv);
       if (!mssv) {
         this.send(ws, { type: 'error', message: 'MSSV phải là 8 chữ số' });
         return;
       }
       const isSameSocketRepeatJoin = boundSessionId === sessionId;
-      // Reconnect with the same sessionId on a NEW socket replaces any old socket
+      // Reconnect with the same secret reconnectKey on a NEW socket replaces any old socket
       // (both in-memory and hibernated sockets): no duplicate avatar, ever.
       const allSockets = new Set<WebSocket>([
         ...this.bySocket.keys(),
@@ -471,9 +518,9 @@ export class HskRoom {
       }
       const name = sanitizeName(msg.name);
       const color = pickShirtColor(sessionId);
-      const existing = this.sessions.get(sessionId);
       const session: Session = existing ?? {
         id: sessionId,
+        reconnectKey,
         name,
         mssv,
         color,
@@ -484,6 +531,7 @@ export class HskRoom {
         lastUpdate: now,
         msgTimes: [],
       };
+      session.reconnectKey = reconnectKey;
       session.name = name;
       session.mssv = mssv;
       applyAppearance(session, msg);

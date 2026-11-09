@@ -38,6 +38,7 @@ import {
 import { hasChineseVoice, speak, stopSpeaking } from '../lib/learn/speech';
 import {
   DEFAULT_CHARACTER_PROFILE,
+  getReconnectToken,
   getSessionId,
   loadCharacterProfile,
   loadIdentity,
@@ -219,6 +220,7 @@ export default function HomePage() {
       if (!d) return;
       setSeatedSeatId(d.seated ? d.seatId : null);
       setSeatedSeatLabel(d.seated ? d.seatLabel : null);
+      multiplayer.setLocalSeatedSeatId(d.seated ? d.seatId : null);
       bindSeatRef.current(
         d.seated
           ? (d.studyRoomId ?? 'library-lobby')
@@ -352,6 +354,7 @@ export default function HomePage() {
 
   const handleStandUp = useCallback(() => {
     const activeId = seatedSeatId ?? study.session.seatId ?? multiplayer.snapshot.mySeatId;
+    multiplayer.setLocalSeatedSeatId(null);
     const r = releaseActiveSeatSafely({
       driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
       fallbackSeatId: activeId,
@@ -368,6 +371,7 @@ export default function HomePage() {
 
   const handleEndStudySession = useCallback(() => {
     const activeId = seatedSeatId ?? study.session.seatId ?? multiplayer.snapshot.mySeatId;
+    multiplayer.setLocalSeatedSeatId(null);
     releaseActiveSeatSafely({
       driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
       fallbackSeatId: activeId,
@@ -384,6 +388,7 @@ export default function HomePage() {
   // hoặc khi có thông báo chiếm ghế có thẩm quyền từ server (bkhn:mp-seat-claimed)
   useEffect(() => {
     const forceStandUpFromLostSeat = (seatId: string, occupiedByName?: string) => {
+      multiplayer.setLocalSeatedSeatId(null);
       releaseActiveSeatSafely({
         driver: study.focusPolicy.suspend3DRendering ? undefined : getHook(),
         fallbackSeatId: seatId,
@@ -418,8 +423,18 @@ export default function HomePage() {
         return;
       }
 
+      if (decision.action === 'release-stale-server-seat') {
+        multiplayer.setLocalSeatedSeatId(null);
+        setSeatedSeatId(null);
+        setSeatedSeatLabel(null);
+        bindSeatRef.current(playerState.inLibraryLobby ? 'library-lobby' : null, null);
+        multiplayer.requestSeatRelease(decision.seatId);
+        return;
+      }
+
       if (decision.action === 'preserve-confirmed') {
         const seatDef = getSeatDefinition(decision.seatId);
+        multiplayer.setLocalSeatedSeatId(decision.seatId);
         setSeatedSeatId(decision.seatId);
         setSeatedSeatLabel(seatDef?.label ?? decision.seatId);
         bindSeatRef.current('library-lobby', decision.seatId);
@@ -427,12 +442,16 @@ export default function HomePage() {
       }
 
       if (decision.action === 'stand-up-occupied') {
+        if (decision.releaseServerSeatId) {
+          multiplayer.requestSeatRelease(decision.releaseServerSeatId);
+        }
         forceStandUpFromLostSeat(decision.seatId, decision.occupiedByName);
         return;
       }
 
       if (decision.action === 'reclaim-available') {
         const targetSeatId = decision.seatId;
+        const previousServerSeatId = decision.previousServerSeatId ?? null;
         void multiplayer
           .requestSeatClaim(targetSeatId, {
             subjectTag: study.session.subjectTag,
@@ -445,16 +464,21 @@ export default function HomePage() {
               currentlyInLibraryLobby: playerState.inLibraryLobby,
               currentlySeated: playerState.seated,
               currentLocalSeatId: playerState.seated ? playerState.seatId : null,
+              previousServerSeatId,
             });
 
             if (postDecision.action === 'keep-seated') {
               const seatDef = getSeatDefinition(postDecision.seatId);
+              multiplayer.setLocalSeatedSeatId(postDecision.seatId);
               setSeatedSeatId(postDecision.seatId);
               setSeatedSeatLabel(seatDef?.label ?? postDecision.seatId);
               bindSeatRef.current('library-lobby', postDecision.seatId);
             } else if (postDecision.action === 'release-server-seat') {
               multiplayer.requestSeatRelease(postDecision.seatId);
             } else if (postDecision.action === 'stand-up-failed') {
+              if (postDecision.releaseServerSeatId) {
+                multiplayer.requestSeatRelease(postDecision.releaseServerSeatId);
+              }
               forceStandUpFromLostSeat(
                 postDecision.seatId,
                 postDecision.occupiedByName,
@@ -647,7 +671,10 @@ export default function HomePage() {
       const d = (e as CustomEvent<{ inLibraryLobby: boolean }>).detail;
       if (d) {
         setInLibraryLobby(d.inLibraryLobby);
-        if (!d.inLibraryLobby) setLobbyModal(null);
+        if (!d.inLibraryLobby) {
+          setLobbyModal(null);
+          multiplayer.setLocalSeatedSeatId(null);
+        }
       }
     };
     window.addEventListener('bkhn:classroom', onMode);
@@ -1115,6 +1142,7 @@ export default function HomePage() {
       const qs = p?.questState;
       playerState.seated = false;
       playerState.seatId = null;
+      multiplayer.setLocalSeatedSeatId(null);
       setSeatedSeatId(null);
       setSeatedSeatLabel(null);
       bindSeatRef.current(null, null);
@@ -1158,14 +1186,20 @@ export default function HomePage() {
       setSavedIdentity(identity);
       setIdentityName(finalProfile.name);
       setIdentityMssv(finalProfile.mssv);
-      multiplayer.connect(getSessionId(), identity.name, identity.mssv, {
-        gender: finalProfile.gender,
-        outfit: finalProfile.outfit,
-        hairStyle: finalProfile.hairStyle,
-        skirt: finalProfile.skirt,
-        glasses: finalProfile.glasses,
-        backpack: finalProfile.backpack,
-      });
+      multiplayer.connect(
+        getSessionId(),
+        identity.name,
+        identity.mssv,
+        {
+          gender: finalProfile.gender,
+          outfit: finalProfile.outfit,
+          hairStyle: finalProfile.hairStyle,
+          skirt: finalProfile.skirt,
+          glasses: finalProfile.glasses,
+          backpack: finalProfile.backpack,
+        },
+        getReconnectToken(),
+      );
       enterCampus(resumeQuest);
     },
     [characterProfile, identityName, identityMssv, enterCampus],

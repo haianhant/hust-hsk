@@ -555,6 +555,18 @@ async function run() {
     );
     await contextC.close();
 
+    const identitySeparation = await pageA.evaluate(() => ({
+      publicId: localStorage.getItem('bkhn-session-id'),
+      reconnectToken: localStorage.getItem('bkhn-reconnect-token-v1'),
+    }));
+    assert.ok(
+      identitySeparation.publicId &&
+        identitySeparation.publicId.startsWith('p-') &&
+        identitySeparation.reconnectToken &&
+        identitySeparation.publicId !== identitySeparation.reconnectToken,
+      `Expected separated publicId vs reconnectToken, got ${JSON.stringify(identitySeparation)}`,
+    );
+
     // Verify FIX 5 on connected Student A: if a reconnect snapshot / remote claim indicates
     // tqb-1f-t1-s1 was claimed by another student while A was seated, A stands up safely
     await pageA.evaluate(() => {
@@ -588,7 +600,7 @@ async function run() {
       `Expected avatar to stand at safe spot (-2.4, 0.54), got (${standPosAfterConflict.x}, ${standPosAfterConflict.z})`,
     );
     await contextA.close();
-    console.log('  PASS: Student C in room hsk-2 claimed tqb-1f-t1-s1 while Student A held it in room hsk-1, and FIX 5 remote seat takeover stood Student A up safely.');
+    console.log('  PASS: Student C in room hsk-2 claimed tqb-1f-t1-s1 while Student A held it in room hsk-1, public identity is separated from reconnectToken, and FIX 5 remote seat takeover stood Student A up safely.');
 
     // 15. Offline fallback verification
     const contextOffline = await browser.newContext({ viewport: { width: 960, height: 600 } });

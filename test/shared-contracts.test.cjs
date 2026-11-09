@@ -145,6 +145,10 @@ test('(5) HskRoom Durable Object: join, hibernation wakeup restoration, reconnec
   ctx.acceptWebSocket(wsA);
   ctx.acceptWebSocket(wsB);
 
+  const pubA = mpContracts.derivePublicPlayerId('sess-a');
+  const pubB = mpContracts.derivePublicPlayerId('sess-b');
+  assert.notEqual(pubA, 'sess-a', 'Public player ID must not expose raw credential');
+
   // Client A joins
   await room1.webSocketMessage(
     wsA,
@@ -162,6 +166,7 @@ test('(5) HskRoom Durable Object: join, hibernation wakeup restoration, reconnec
     }),
   );
   assert.equal(wsA.sent[0].type, 'welcome');
+  assert.equal(wsA.sent[0].id, pubA);
   assert.equal(wsA.sent[0].count, 1);
 
   // Client B joins
@@ -177,8 +182,10 @@ test('(5) HskRoom Durable Object: join, hibernation wakeup restoration, reconnec
     }),
   );
   const welcomeB = wsB.sent.find((m) => m.type === 'welcome');
+  assert.equal(welcomeB.id, pubB);
   assert.equal(welcomeB.count, 2);
-  const aInB = welcomeB.players.find((p) => p.id === 'sess-a');
+  const aInB = welcomeB.players.find((p) => p.id === pubA);
+  assert.ok(aInB, 'Peer B must see Client A under derived public ID pubA');
   assert.equal(aInB.outfit, 'tshirt-navy');
   assert.equal(aInB.skirt, true);
 
@@ -207,10 +214,10 @@ test('(5) HskRoom Durable Object: join, hibernation wakeup restoration, reconnec
   );
   assert.equal(wsB.sent.length, 1, 'Client B must receive move broadcast after DO hibernation');
   assert.equal(wsB.sent[0].type, 'move');
-  assert.equal(wsB.sent[0].id, 'sess-a');
+  assert.equal(wsB.sent[0].id, pubA);
   assert.ok(Math.abs(wsB.sent[0].x - targetX) < 0.01);
 
-  // After hibernation, Client A reconnects with a new socket `wsA2` using the same sessionId 'sess-a'
+  // After hibernation, Client A reconnects with a new socket `wsA2` using the same credential 'sess-a'
   const wsA2 = createMockSocket();
   ctx.acceptWebSocket(wsA2);
   await hibernatedRoom.webSocketMessage(
@@ -229,7 +236,7 @@ test('(5) HskRoom Durable Object: join, hibernation wakeup restoration, reconnec
   assert.equal(wsA.closed.length, 1);
   assert.equal(wsA.closed[0].code, 1000);
 
-  // When the old socket's close handler fires, 'sess-a' must NOT be deleted because wsA2 is active
+  // When the old socket's close handler fires, pubA must NOT be deleted because wsA2 is active
   wsB.sent.length = 0;
   await hibernatedRoom.webSocketClose(wsA);
   assert.equal(
@@ -247,7 +254,7 @@ test('(5) HskRoom Durable Object: join, hibernation wakeup restoration, reconnec
   wsA2.sent.length = 0;
   wsB.close(1000, 'Client left');
   await hibernatedRoom.webSocketClose(wsB);
-  assert.equal(wsA2.sent.some((m) => m.type === 'leave' && m.id === 'sess-b'), true);
+  assert.equal(wsA2.sent.some((m) => m.type === 'leave' && m.id === pubB), true);
   assert.equal(wsA2.sent.some((m) => m.type === 'count' && m.count === 1), true);
 });
 
@@ -259,6 +266,10 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
   const wsB = createMockSocket();
   ctx1.acceptWebSocket(wsA);
   ctx1.acceptWebSocket(wsB);
+
+  const pubA = mpContracts.derivePublicPlayerId('sess-a');
+  const pubB = mpContracts.derivePublicPlayerId('sess-b');
+  const pubC = mpContracts.derivePublicPlayerId('sess-c');
 
   // 1. Client A joins and receives welcome + study:room-snapshot
   await roomHsk1.webSocketMessage(
@@ -307,7 +318,7 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
   assert.ok(claimedOnA && claimedOnB, 'Both A and B must receive study:seat-claimed');
   assert.equal(claimedOnA.requestId, 'req-a-1');
   assert.equal(claimedOnB.occupancy.seatId, 'tqb-1f-t1-s1');
-  assert.equal(claimedOnB.occupancy.occupantId, 'sess-a');
+  assert.equal(claimedOnB.occupancy.occupantId, pubA);
   assert.equal(claimedOnB.occupancy.occupantName, 'Nguyễn Văn A');
   assert.equal('occupantMssv' in claimedOnB.occupancy, false);
 
@@ -324,7 +335,7 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
   const rejectedB = wsB.sent.find((m) => m.type === 'study:seat-rejected');
   assert.ok(rejectedB, 'Client B must receive study:seat-rejected');
   assert.equal(rejectedB.reason, 'already-occupied');
-  assert.equal(rejectedB.occupiedBy, 'sess-a');
+  assert.equal(rejectedB.occupiedBy, pubA);
   assert.equal(rejectedB.occupiedByName, 'Nguyễn Văn A');
   assert.equal(rejectedB.requestId, 'req-b-conflict');
 
@@ -365,7 +376,7 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
     (m) => m.type === 'study:seat-claimed' && m.occupancy.seatId === 'tqb-1f-t1-s1',
   );
   assert.ok(claimedBOk, 'Client B must now succeed in claiming tqb-1f-t1-s1');
-  assert.equal(claimedBOk.occupancy.occupantId, 'sess-b');
+  assert.equal(claimedBOk.occupancy.occupantId, pubB);
 
   // 5. Client A sends study:presence ('studying', 'focus', subjectTag); Client B receives study:presence
   wsB.sent.length = 0;
@@ -382,7 +393,7 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
       },
     }),
   );
-  const presFromA = wsB.sent.find((m) => m.type === 'study:presence' && m.playerId === 'sess-a');
+  const presFromA = wsB.sent.find((m) => m.type === 'study:presence' && m.playerId === pubA);
   assert.ok(presFromA, 'Client B must receive study:presence broadcast from Client A');
   assert.equal(presFromA.presence.status, 'studying');
   assert.equal(presFromA.presence.seatId, 'tqb-1f-t1-s2');
@@ -403,7 +414,7 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
       },
     }),
   );
-  const presFromB = wsA.sent.find((m) => m.type === 'study:presence' && m.playerId === 'sess-b');
+  const presFromB = wsA.sent.find((m) => m.type === 'study:presence' && m.playerId === pubB);
   assert.ok(presFromB);
   assert.equal(
     presFromB.presence.seatId,
@@ -411,7 +422,7 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
     'Server must override spoofed presence seatId with authoritative owned seat',
   );
 
-  // 8 & 9. Simulated DO hibernation while A & B are seated, plus A reconnecting with same sessionId
+  // 8 & 9. Simulated DO hibernation while A & B are seated, plus A reconnecting with same credential
   const hibernatedRoom = new workerRoom.HskRoom(ctx1);
   const wsA2 = createMockSocket();
   ctx1.acceptWebSocket(wsA2);
@@ -430,8 +441,8 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
   const snapAfterHibernation = wsA2.sent.find((m) => m.type === 'study:room-snapshot');
   assert.ok(snapAfterHibernation, 'Reconnected A after DO hibernation receives study:room-snapshot');
   assert.equal(snapAfterHibernation.seats.length, 2, 'Both seats must survive DO hibernation & reconnect');
-  const seatAInSnap = snapAfterHibernation.seats.find((s) => s.occupantId === 'sess-a');
-  const seatBInSnap = snapAfterHibernation.seats.find((s) => s.occupantId === 'sess-b');
+  const seatAInSnap = snapAfterHibernation.seats.find((s) => s.occupantId === pubA);
+  const seatBInSnap = snapAfterHibernation.seats.find((s) => s.occupantId === pubB);
   assert.equal(seatAInSnap.seatId, 'tqb-1f-t1-s2');
   assert.equal(seatBInSnap.seatId, 'tqb-1f-t1-s1');
 
@@ -477,7 +488,7 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
   wsA2.close(1000, 'Client left');
   await hibernatedRoom.webSocketClose(wsA2);
   const releaseOnDisconnect = wsB.sent.find(
-    (m) => m.type === 'study:seat-released' && m.occupantId === 'sess-a',
+    (m) => m.type === 'study:seat-released' && m.occupantId === pubA,
   );
   assert.ok(releaseOnDisconnect, 'Disconnect must broadcast study:seat-released for occupant seat');
   assert.equal(releaseOnDisconnect.reason, 'disconnect');
@@ -507,7 +518,7 @@ test('(6) PR9 HskRoom Durable Object: authoritative seat claims, conflicts, atom
   );
   const claimedInHsk2 = wsC.sent.find((m) => m.type === 'study:seat-claimed');
   assert.ok(claimedInHsk2, 'Client C in hsk-2 must be able to claim tqb-1f-t1-s1 independently');
-  assert.equal(claimedInHsk2.occupancy.occupantId, 'sess-c');
+  assert.equal(claimedInHsk2.occupancy.occupantId, pubC);
 });
 
 test('(7) PR9 Review Fix 4 — HskRoom enforces 1-socket-to-1-sessionId invariant and prevents orphaned sessions/seats', async () => {
@@ -518,6 +529,8 @@ test('(7) PR9 Review Fix 4 — HskRoom enforces 1-socket-to-1-sessionId invarian
   const wsObserver = createMockSocket();
   ctx.acceptWebSocket(ws1);
   ctx.acceptWebSocket(wsObserver);
+
+  const pubAlpha = mpContracts.derivePublicPlayerId('sess-alpha');
 
   // 1. Socket ws1 joins session A and claims seat tqb-1f-t1-s1
   await room.webSocketMessage(
@@ -540,7 +553,7 @@ test('(7) PR9 Review Fix 4 — HskRoom enforces 1-socket-to-1-sessionId invarian
   );
   assert.ok(
     ws1.sent.some(
-      (m) => m.type === 'study:seat-claimed' && m.occupancy?.occupantId === 'sess-alpha',
+      (m) => m.type === 'study:seat-claimed' && m.occupancy?.occupantId === pubAlpha,
     ),
   );
 
@@ -617,7 +630,7 @@ test('(7) PR9 Review Fix 4 — HskRoom enforces 1-socket-to-1-sessionId invarian
   );
   const obsSnap = wsObserver.sent.find((m) => m.type === 'study:room-snapshot');
   assert.equal(obsSnap.seats.length, 1);
-  assert.equal(obsSnap.seats[0].occupantId, 'sess-alpha');
+  assert.equal(obsSnap.seats[0].occupantId, pubAlpha);
 
   // 4. Close ws1Reconnect -> session A and seat tqb-1f-t1-s1 are released; observer sees count=1 and seat released
   wsObserver.sent.length = 0;
@@ -628,13 +641,13 @@ test('(7) PR9 Review Fix 4 — HskRoom enforces 1-socket-to-1-sessionId invarian
       (m) =>
         m.type === 'study:seat-released' &&
         m.seatId === 'tqb-1f-t1-s1' &&
-        m.occupantId === 'sess-alpha',
+        m.occupantId === pubAlpha,
     ),
     'Closing active socket must release its seat',
   );
   assert.ok(
-    wsObserver.sent.some((m) => m.type === 'leave' && m.id === 'sess-alpha'),
-    'Closing active socket must broadcast leave for sess-alpha',
+    wsObserver.sent.some((m) => m.type === 'leave' && m.id === pubAlpha),
+    'Closing active socket must broadcast leave for pubAlpha',
   );
 
   // Close observer -> room count is 0
@@ -642,6 +655,128 @@ test('(7) PR9 Review Fix 4 — HskRoom enforces 1-socket-to-1-sessionId invarian
   await room.webSocketClose(wsObserver);
   const finalCount = await (await room.fetch(new Request('https://internal/__count'))).json();
   assert.equal(finalCount.count, 0, 'Room count must be 0 after all sockets close');
+});
+
+test('(8) Public player identity is separated from secret reconnect credential and prevents session/seat hijacking', async () => {
+  const ctx = createMockDoState();
+  const room = new workerRoom.HskRoom(ctx);
+
+  const secretVictimToken = 'rt-victim-secret-99887766';
+  const victimPublicId = mpContracts.derivePublicPlayerId(secretVictimToken);
+  assert.ok(victimPublicId.startsWith('p-'), 'Derived public ID must have p- prefix');
+  assert.equal(
+    victimPublicId.includes(secretVictimToken),
+    false,
+    'Public ID must never contain the secret reconnect token',
+  );
+
+  const wsVictim = createMockSocket();
+  const wsPeer = createMockSocket();
+  ctx.acceptWebSocket(wsVictim);
+  ctx.acceptWebSocket(wsPeer);
+
+  // 1. Victim joins with separated public sessionId and secret reconnectToken, then claims a seat
+  await room.webSocketMessage(
+    wsVictim,
+    JSON.stringify({
+      type: 'join',
+      sessionId: victimPublicId,
+      reconnectToken: secretVictimToken,
+      name: 'Phạm Minh Tuấn',
+      mssv: '20226111',
+    }),
+  );
+  await room.webSocketMessage(
+    wsVictim,
+    JSON.stringify({
+      type: 'study:claim-seat',
+      seatId: 'tqb-1f-t1-s1',
+      subjectTag: 'Vật lý đại cương',
+      requestId: 'req-victim-seat',
+    }),
+  );
+
+  // 2. Peer joins and receives welcome + study:room-snapshot
+  await room.webSocketMessage(
+    wsPeer,
+    JSON.stringify({
+      type: 'join',
+      sessionId: mpContracts.derivePublicPlayerId('rt-peer-secret-112233'),
+      reconnectToken: 'rt-peer-secret-112233',
+      name: 'Hoàng Thu Trang',
+      mssv: '20226222',
+    }),
+  );
+
+  const peerDump = JSON.stringify(wsPeer.sent);
+  assert.equal(
+    peerDump.includes(secretVictimToken),
+    false,
+    'Broadcasts to peers must never leak victim secret reconnectToken',
+  );
+  assert.equal(
+    peerDump.includes(victimPublicId),
+    true,
+    'Broadcasts to peers must use victim derived public player ID',
+  );
+
+  // 3. Attacker socket sees `victimPublicId` in public broadcasts and attempts to hijack victim's session
+  const wsAttacker1 = createMockSocket();
+  ctx.acceptWebSocket(wsAttacker1);
+  await room.webSocketMessage(
+    wsAttacker1,
+    JSON.stringify({
+      type: 'join',
+      sessionId: victimPublicId, // Attacker only knows public ID!
+      name: 'Kẻ giả mạo 1',
+      mssv: '20229999',
+    }),
+  );
+  const errHijack1 = wsAttacker1.sent.find((m) => m.type === 'error');
+  assert.ok(errHijack1, 'Hijack attempt using public player ID as sessionId must be rejected');
+  assert.equal(wsVictim.closed.length, 0, 'Victim socket must NOT be closed by hijack attempt');
+
+  // 4. Attacker socket attempts to supply `victimPublicId` + a forged `reconnectToken`
+  const wsAttacker2 = createMockSocket();
+  ctx.acceptWebSocket(wsAttacker2);
+  await room.webSocketMessage(
+    wsAttacker2,
+    JSON.stringify({
+      type: 'join',
+      sessionId: victimPublicId,
+      reconnectToken: 'rt-forged-wrong-secret',
+      name: 'Kẻ giả mạo 2',
+      mssv: '20229999',
+    }),
+  );
+  const errHijack2 = wsAttacker2.sent.find((m) => m.type === 'error');
+  assert.ok(errHijack2, 'Hijack attempt with mismatched reconnectToken must be rejected');
+  assert.equal(wsVictim.closed.length, 0, 'Victim socket must remain open and unharmed');
+
+  // 5. Legitimate victim reconnects on a new socket with `secretVictimToken` after DO hibernation
+  const hibernatedRoom = new workerRoom.HskRoom(ctx);
+  const wsVictimReconnect = createMockSocket();
+  ctx.acceptWebSocket(wsVictimReconnect);
+  await hibernatedRoom.webSocketMessage(
+    wsVictimReconnect,
+    JSON.stringify({
+      type: 'join',
+      sessionId: victimPublicId,
+      reconnectToken: secretVictimToken,
+      name: 'Phạm Minh Tuấn',
+      mssv: '20226111',
+    }),
+  );
+  assert.equal(wsVictim.closed.length, 1, 'Legitimate reconnect with secret token replaces old socket');
+  await hibernatedRoom.webSocketClose(wsVictim);
+
+  const welcomeReconn = wsVictimReconnect.sent.find((m) => m.type === 'welcome');
+  const snapReconn = wsVictimReconnect.sent.find((m) => m.type === 'study:room-snapshot');
+  assert.ok(welcomeReconn && snapReconn, 'Legitimate reconnect must receive welcome + study:room-snapshot');
+  assert.equal(welcomeReconn.id, victimPublicId);
+  assert.equal(snapReconn.seats.length, 1);
+  assert.equal(snapReconn.seats[0].seatId, 'tqb-1f-t1-s1');
+  assert.equal(snapReconn.seats[0].occupantId, victimPublicId);
 });
 
 

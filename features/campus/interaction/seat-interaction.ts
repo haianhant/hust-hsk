@@ -542,19 +542,26 @@ export function releaseActiveSeatSafely(
 export type ReconnectSeatDecision =
   | { action: 'none' }
   | { action: 'preserve-confirmed'; seatId: string }
+  | { action: 'release-stale-server-seat'; seatId: string }
   | {
       action: 'stand-up-occupied';
       seatId: string;
       occupiedByName: string;
+      releaseServerSeatId?: string;
     }
   | {
       action: 'reclaim-available';
       seatId: string;
+      previousServerSeatId?: string;
     };
 
 /**
  * Pure decision helper for FIX 5 — evaluates what action to take for the local
- * seated avatar when an authoritative `study:room-snapshot` arrives on reconnect.
+ * player when an authoritative `study:room-snapshot` arrives on reconnect.
+ *
+ * Also reconciles the inverse case where the local player has already stood up
+ * (or left `LibraryLobby` / switched seats while offline) while the server still
+ * holds an old seat for `selfId`.
  */
 export function evaluateReconnectSeatAction(input: {
   inLibraryLobby: boolean;
@@ -564,19 +571,31 @@ export function evaluateReconnectSeatAction(input: {
   selfId: string | null;
   seatMap: Record<string, { occupantId: string; occupantName: string }>;
 }): ReconnectSeatDecision {
-  if (!input.inLibraryLobby || !input.localSeated || !input.localSeatId) {
-    return { action: 'none' };
-  }
   if (input.mpStatus !== 'online' || !input.selfId) {
     return { action: 'none' };
   }
+
+  const serverOwnedSeatId =
+    Object.keys(input.seatMap).find(
+      (sid) => input.seatMap[sid]?.occupantId === input.selfId,
+    ) ?? null;
+
+  if (!input.inLibraryLobby || !input.localSeated || !input.localSeatId) {
+    if (serverOwnedSeatId) {
+      return { action: 'release-stale-server-seat', seatId: serverOwnedSeatId };
+    }
+    return { action: 'none' };
+  }
+
   if (!isLibraryLobbySeatId(input.localSeatId)) {
     return {
       action: 'stand-up-occupied',
       seatId: input.localSeatId,
       occupiedByName: 'hệ thống',
+      ...(serverOwnedSeatId ? { releaseServerSeatId: serverOwnedSeatId } : {}),
     };
   }
+
   const occ = input.seatMap[input.localSeatId];
   if (occ && occ.occupantId === input.selfId) {
     return { action: 'preserve-confirmed', seatId: input.localSeatId };
@@ -586,11 +605,17 @@ export function evaluateReconnectSeatAction(input: {
       action: 'stand-up-occupied',
       seatId: input.localSeatId,
       occupiedByName: occ.occupantName || 'bạn khác',
+      ...(serverOwnedSeatId && serverOwnedSeatId !== input.localSeatId
+        ? { releaseServerSeatId: serverOwnedSeatId }
+        : {}),
     };
   }
   return {
     action: 'reclaim-available',
     seatId: input.localSeatId,
+    ...(serverOwnedSeatId && serverOwnedSeatId !== input.localSeatId
+      ? { previousServerSeatId: serverOwnedSeatId }
+      : {}),
   };
 }
 
@@ -604,6 +629,7 @@ export type ReclaimOutcomeDecision =
       seatId: string;
       reason: string;
       occupiedByName?: string;
+      releaseServerSeatId?: string;
     };
 
 /**
@@ -624,6 +650,7 @@ export function evaluateReclaimOutcome(input: {
   currentlyInLibraryLobby: boolean;
   currentlySeated: boolean;
   currentLocalSeatId: string | null;
+  previousServerSeatId?: string | null;
 }): ReclaimOutcomeDecision {
   const stillSeatedAtTarget =
     input.currentlyInLibraryLobby &&
@@ -638,6 +665,9 @@ export function evaluateReclaimOutcome(input: {
   }
 
   if (!stillSeatedAtTarget) {
+    if (input.previousServerSeatId) {
+      return { action: 'release-server-seat', seatId: input.previousServerSeatId };
+    }
     return { action: 'noop' };
   }
 
@@ -651,6 +681,9 @@ export function evaluateReclaimOutcome(input: {
     reason: input.outcome.reason,
     ...(input.outcome.occupiedByName
       ? { occupiedByName: input.outcome.occupiedByName }
+      : {}),
+    ...(input.previousServerSeatId
+      ? { releaseServerSeatId: input.previousServerSeatId }
       : {}),
   };
 }
