@@ -114,12 +114,13 @@ function resolveStadiumConstraints(
   radius: number,
   floor: LibraryFloor,
 ): { x: number; z: number; collisionId: string | null } {
-  // 1. Floors 1 & 2: Curved staircase side-rail channel protection when mid-stair
+  // 1. Floors 1 & 2: Curved staircase side-rail channel protection when mid-stair,
+  // and under-stair masonry parapet protection when walking on Floor 1 slab (y <= 0.55).
   if (floor === 1 || floor === 2) {
     const stairHit = evaluateCurvedStairAt(x, z, 0.25);
     if (stairHit && stairHit.progress > 0.08 && stairHit.progress < 0.92) {
       const verticalDelta = Math.abs(y - stairHit.elevation);
-      if (verticalDelta <= 1.85) {
+      if (verticalDelta <= 0.65 && y > 0.25 && y < BLOCK_A_DIMS.FH - 0.25) {
         const minR = stairHit.stair.innerRadius + radius * 0.45;
         const maxR = stairHit.stair.outerRadius - radius * 0.25;
         const dx = x - stairHit.stair.centerX;
@@ -140,6 +141,20 @@ function resolveStadiumConstraints(
           };
         }
         return { x, z, collisionId: null };
+      } else if (floor === 1 && y <= 0.55 && stairHit.progress > 0.18) {
+        const dx = x - stairHit.stair.centerX;
+        const dz = z - stairHit.stair.centerZ;
+        const r = Math.hypot(dx, dz) || 1e-5;
+        const innerLim = stairHit.stair.innerRadius - radius * 0.45;
+        const outerLim = stairHit.stair.outerRadius + radius * 0.45;
+        if (r > innerLim && r < outerLim) {
+          const targetR = r < stairHit.stair.midRadius ? innerLim : outerLim;
+          return {
+            x: stairHit.stair.centerX + (dx / r) * targetR,
+            z: stairHit.stair.centerZ + (dz / r) * targetR,
+            collisionId: `${stairHit.stair.id}-understair-wall`,
+          };
+        }
       }
     }
   }
@@ -149,7 +164,7 @@ function resolveStadiumConstraints(
     // On Floor 2, allow entering/exiting the twin curved stairs at the East/West landings
     if (floor === 2) {
       const stairHit = evaluateCurvedStairAt(x, z, 0.12);
-      if (stairHit && (stairHit.progress >= 0.55 || Math.abs(y - stairHit.elevation) <= 1.85)) {
+      if (stairHit && (stairHit.progress >= 0.84 || Math.abs(y - stairHit.elevation) <= 0.65)) {
         return { x, z, collisionId: null };
       }
     }

@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { buildRoom401, type Room401Controller } from './buildRoom401';
-import { canvasTex, lin, mulberry32 } from './procedural-helpers';
+import { canvasTex, lin, mulberry32, optimizeStaticLibraryGroup } from './procedural-helpers';
 import {
   createLibraryLocation,
   evaluateCurvedStairAt,
@@ -248,6 +248,7 @@ export interface Floors1To5Controller {
   nearShaft: (x: number, z: number) => number;
   stairAt: (x: number, z: number) => { y: number } | null;
   surface: (x: number, z: number, curY: number) => { ok: boolean; y: number };
+  prepareFloor: (floor: number) => void;
   update: (dt: number, px: number, py: number, pz: number, activeFloor?: number) => void;
 }
 
@@ -1391,50 +1392,16 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   buildProps(world);
 
   // Gộp toàn bộ các khối Mesh tĩnh cùng cặp (geometry, material) thành InstancedMesh
-  // để giảm ~500 draw calls kiến trúc (tường, đố cửa, bậc thang xoắn, cột, nan đồng, tủ kệ) xuống còn ~20 draw calls.
+  // và tắt pointer raycast trên mesh trang trí để giảm draw calls & tránh giật khung hình.
   {
-    const dynamicObjects = new Set<THREE.Object3D>();
+    const dynamicObjects: THREE.Object3D[] = [];
     for (const c of elevators) {
-      dynamicObjects.add(c.cab);
+      dynamicObjects.push(c.cab);
       for (const f in c.doors) {
-        dynamicObjects.add(c.doors[f].l);
-        dynamicObjects.add(c.doors[f].r);
+        dynamicObjects.push(c.doors[f].l, c.doors[f].r);
       }
     }
-    world.updateMatrixWorld(true);
-    const buckets = new Map<
-      string,
-      { g: THREE.BufferGeometry; m: THREE.Material; meshes: THREE.Mesh[]; mats: THREE.Matrix4[] }
-    >();
-    const visit = (obj: THREE.Object3D) => {
-      if (dynamicObjects.has(obj)) return;
-      if ((obj as THREE.InstancedMesh).isInstancedMesh) return;
-      const mesh = obj as THREE.Mesh;
-      if (mesh.isMesh && mesh.geometry && mesh.material && !Array.isArray(mesh.material)) {
-        const key = `${mesh.geometry.uuid}_${mesh.material.uuid}`;
-        let b = buckets.get(key);
-        if (!b) {
-          b = { g: mesh.geometry, m: mesh.material, meshes: [], mats: [] };
-          buckets.set(key, b);
-        }
-        b.meshes.push(mesh);
-        b.mats.push(mesh.matrixWorld.clone());
-      }
-      for (const child of obj.children) visit(child);
-    };
-    visit(world);
-    buckets.forEach(({ g, m, meshes, mats }) => {
-      if (meshes.length < 2) return;
-      for (const mesh of meshes) {
-        mesh.parent?.remove(mesh);
-      }
-      const im = new THREE.InstancedMesh(g, m, mats.length);
-      for (let i = 0; i < mats.length; i++) {
-        im.setMatrixAt(i, mats[i]);
-      }
-      im.instanceMatrix.needsUpdate = true;
-      world.add(im);
-    });
+    optimizeStaticLibraryGroup(world, dynamicObjects);
   }
 
   // Phòng 401 (Tầng 4), Phòng 501 (Tầng 5) & 9 Phòng đọc phụ Tầng 4–5
@@ -1631,6 +1598,20 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     }
 
     buildProps(f45Group);
+    optimizeStaticLibraryGroup(f45Group, fans4);
+  };
+
+  const prepareFloor = (flrInput: number) => {
+    const pFlr = sanitizeLibraryFloor(flrInput, 1);
+    const onF45 = pFlr === 4 || pFlr === 5;
+    if (onF45) {
+      ensureFloors4To5();
+      if (pFlr === 4) ensureR401();
+      if (pFlr === 5) ensureR501();
+    }
+    f45Group.visible = onF45;
+    r401G.visible = pFlr === 4;
+    r501G.visible = pFlr === 5;
   };
 
   const insideCab = (x: number, z: number) =>
@@ -1671,11 +1652,6 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   };
 
   const surface = (x: number, z: number, curY: number): { ok: boolean; y: number } => {
-    const ci = insideCab(x, z);
-    if (ci >= 0) {
-      const c = elevators[ci];
-      if (Math.abs(curY - c.y) < 0.9) return { ok: true, y: c.y };
-    }
     const flrNum = Math.max(1, Math.min(NF, Math.round(curY / FH) + 1)) as LibraryFloor;
     const loc = createLibraryLocation(flrNum, x, z, curY);
     const moved = resolveLibraryMovement(loc, loc);
@@ -1760,6 +1736,7 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     nearShaft,
     stairAt,
     surface,
+    prepareFloor,
     update,
   };
 }

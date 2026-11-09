@@ -7,10 +7,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   LIBRARY_PRESET_DESTINATIONS,
+  libraryNavigationController,
   type LibraryFloor,
+  type LibraryNavigationSnapshot,
   type LibrarySpawnPoint,
 } from '../../lib/campus';
-import { playerState } from '../../lib/playerState';
 
 export type LibraryFloorNumber = LibraryFloor;
 export type LibraryPresetDestination = LibrarySpawnPoint;
@@ -38,18 +39,20 @@ export function LibraryFloorNav({
   externalModal = null,
   onClearExternalModal,
 }: LibraryFloorNavProps) {
-  const [activeDestId, setActiveDestId] = useState<string>('f1-atrium');
-  const [currentFloor, setCurrentFloor] = useState<LibraryFloorNumber>(playerState.libraryFloor);
+  const [navSnap, setNavSnap] = useState<LibraryNavigationSnapshot>(() =>
+    libraryNavigationController.getSnapshot(),
+  );
   const [expanded, setExpanded] = useState<boolean>(false);
   const [showTelescopeModal, setShowTelescopeModal] = useState<boolean>(false);
 
   useEffect(() => {
-    const onFloorChange = (ev: Event) => {
-      const flr = (ev as CustomEvent<{ floor?: LibraryFloorNumber }>).detail?.floor;
-      if (flr) setCurrentFloor(flr);
+    setNavSnap(libraryNavigationController.getSnapshot());
+    const unsub = libraryNavigationController.subscribe((snap) => {
+      setNavSnap(snap);
+    });
+    return () => {
+      unsub();
     };
-    window.addEventListener('bkhn:library-floor', onFloorChange);
-    return () => window.removeEventListener('bkhn:library-floor', onFloorChange);
   }, []);
 
   useEffect(() => {
@@ -63,24 +66,16 @@ export function LibraryFloorNav({
 
   if (!visible) return null;
 
+  const currentFloor = navSnap.currentFloor;
+  const activeDestId = navSnap.activePresetId;
+  const isBusy = navSnap.phase === 'preparing' || navSnap.phase === 'transitioning';
+
   const jumpToPreset = (dest: LibraryPresetDestination) => {
-    setActiveDestId(dest.id);
-    setCurrentFloor(dest.floor);
-    setShowTelescopeModal(false);
-    const bkhn = (
-      window as unknown as {
-        __bkhn?: {
-          setLibraryFloor?: (
-            floor: LibraryFloorNumber,
-            x?: number,
-            z?: number,
-            yaw?: number,
-            pitch?: number,
-          ) => void;
-        };
-      }
-    ).__bkhn;
-    bkhn?.setLibraryFloor?.(dest.floor, dest.x, dest.z, dest.yaw, dest.pitch);
+    if (libraryNavigationController.isBusy()) return;
+    const outcome = libraryNavigationController.navigateToPreset(dest.id);
+    if (outcome.ok) {
+      setShowTelescopeModal(false);
+    }
   };
 
   const triggerPianoNote = (midi: number) => {
@@ -103,6 +98,9 @@ export function LibraryFloorNav({
     <>
       <div
         data-testid="library-floor-nav"
+        data-nav-phase={navSnap.phase}
+        data-current-floor={currentFloor}
+        data-active-preset={activePreset.id}
         className="pointer-events-auto fixed left-3 top-14 z-20 flex max-w-[calc(100vw-24px)] flex-col gap-1.5"
       >
         {/* Thanh trạng thái Tầng hiện tại + nút mở/thu gọn bảng thang máy Tầng 1–10 */}
@@ -134,9 +132,10 @@ export function LibraryFloorNav({
                 <button
                   key={dest.id}
                   type="button"
+                  disabled={isBusy}
                   data-testid={`lib-floor-btn-${dest.id}`}
                   onClick={() => jumpToPreset(dest)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold disabled:opacity-50 ${
                     isCurrent
                       ? 'border border-amber-300 bg-amber-500 text-slate-950 shadow-sm'
                       : 'border border-slate-700 bg-slate-800/80 text-slate-200 hover:border-amber-400/60 hover:bg-slate-700'

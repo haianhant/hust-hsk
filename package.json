@@ -10,6 +10,7 @@
     "test:learn": "node test/learn.test.cjs",
     "test:contracts": "node --test test/shared-contracts.test.cjs",
     "test:world": "node --test test/world-data.test.cjs test/library-spatial.test.cjs test/library-elevation.test.cjs test/library-floor-seating.test.cjs",
+    "test:pr10b": "node test/library-navigation-smoke.cjs && node test/library-camera-smoke.cjs && node test/library-transition-race.cjs",
     "test:avatar": "node --test test/avatar-modules.test.cjs",
     "test:ui": "node --test test/ui-gameplay.test.cjs",
     "test:study": "node --test test/study-social-contracts.test.cjs",
