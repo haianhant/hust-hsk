@@ -698,9 +698,17 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
           <meshStandardMaterial color={LIB_BLUE} roughness={0.85} />
         </mesh>
       ))}
-      {/* Gờ mái đế thấp phía trước (bên trái ảnh = phía Đông x > 38) + mái đế xanh dương đậm trên đỉnh khối đế. */}
-      <mesh position={[40.8, 9.95, 24.0]} castShadow>
-        <boxGeometry args={[8.4, 0.28, 0.9]} />
+      {/* Gờ mái đế thấp đối xứng hai bên cụm lam + dải diềm xanh giật cấp phía trên đồng hồ + mái đế xanh dương đậm trên đỉnh khối đế (khớp thu-vien-mat-tien-01.jpg & thu-vien-cao-nhin-cheo-01.jpg). */}
+      <mesh position={[33.8, 9.95, 24.0]} castShadow>
+        <boxGeometry args={[5.4, 0.28, 0.9]} />
+        <meshStandardMaterial color={LIB_BLUE} roughness={0.85} />
+      </mesh>
+      <mesh position={[42.2, 9.95, 24.0]} castShadow>
+        <boxGeometry args={[5.4, 0.28, 0.9]} />
+        <meshStandardMaterial color={LIB_BLUE} roughness={0.85} />
+      </mesh>
+      <mesh position={[38, 9.68, 24.02]} castShadow>
+        <boxGeometry args={[3.2, 0.24, 0.72]} />
         <meshStandardMaterial color={LIB_BLUE} roughness={0.85} />
       </mesh>
       <mesh position={[38, 11.3, 27]} castShadow>
@@ -879,11 +887,14 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
         <planeGeometry args={[3.5, 8]} />
         <meshStandardMaterial color={LAWN} roughness={1} />
       </mesh>
-      <LibTree x={28.5} z={17.5} trunkH={2.2} canopyR={1.5} canopyY={3.2} />
-      <LibTree x={28.5} z={11} trunkH={1.6} canopyR={0.9} canopyY={2.4} />
-      <LibTree x={48.0} z={15} trunkH={1.8} canopyR={1.2} canopyY={2.7} />
-      <LibFanPalm x={47.5} z={12.5} />
-      <LibFanPalm x={49.0} z={17.5} />
+      <LibTree x={30.5} z={14.5} trunkH={2.2} canopyR={1.5} canopyY={3.2} />
+      <LibTree x={45.5} z={14.5} trunkH={2.2} canopyR={1.5} canopyY={3.2} />
+      <LibPalm x={26.5} z={11} />
+      <LibPalm x={26.5} z={15} />
+      <LibPalm x={26.5} z={19} />
+      <LibPalm x={49.5} z={11} />
+      <LibPalm x={49.5} z={15} />
+      <LibPalm x={49.5} z={19} />
       <LibBench x={49.0} z={13.5} />
       <LibLamp x={26} z={11} balls={5} isNight={isNight} />
       <LibLamp x={30} z={11} balls={5} isNight={isNight} />
@@ -936,8 +947,6 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
         <meshStandardMaterial color={LEAF} roughness={1} />
       </mesh>
       <LibTree x={30} z={52} trunkH={1.8} canopyR={1.2} canopyY={2.6} />
-      <LibPalm x={33} z={15.5} />
-      <LibPalm x={43} z={15.5} />
       <ImprovedTree x={49} z={52} trunkH={2.2} canopyR={1.35} canopyY={3.0} canopyColor={RED_LEAF} />
     </group>
   );

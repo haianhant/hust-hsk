@@ -88,6 +88,7 @@ export function HumanFigure(props: FigureProps) {
         shoe={shoe}
         shoeSole={shoeSole}
         fabricTex={fabricTex}
+        hustTex={hustTex}
         hipRef={joints?.legL}
         kneeRef={joints?.kneeL}
         footRef={joints?.footL}
@@ -101,6 +102,7 @@ export function HumanFigure(props: FigureProps) {
         shoe={shoe}
         shoeSole={shoeSole}
         fabricTex={fabricTex}
+        hustTex={hustTex}
         hipRef={joints?.legR}
         kneeRef={joints?.kneeR}
         footRef={joints?.footR}

@@ -48,7 +48,7 @@ export const AVATAR = {
 /** Personal motorbike constants (m, m/s). */
 export const BIKE_PARK: Vec2 & { heading: number } = {
   x: -70,
-  z: 14.5,
+  z: -1.5,
   heading: Math.PI / 2,
 };
 export const BIKE_MAX_SPEED = 14;

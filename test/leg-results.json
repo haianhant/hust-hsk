@@ -10,12 +10,12 @@
       "name": "Cổng Parabol → Nhà C9",
       "pass": true,
       "reason": "đến đích trong 1,5 m",
-      "steps": 490,
-      "seconds": 8.2,
-      "distanceM": 32.7,
+      "steps": 362,
+      "seconds": 6,
+      "distanceM": 24.1,
       "endPos": {
-        "x": -43.46,
-        "z": 11.78
+        "x": -60.2,
+        "z": -15.52
       },
       "hits": {}
     },
@@ -24,12 +24,12 @@
       "name": "Nhà C9 → Quảng trường C1",
       "pass": true,
       "reason": "đến đích trong 1,5 m",
-      "steps": 848,
-      "seconds": 14.1,
-      "distanceM": 56.5,
+      "steps": 371,
+      "seconds": 6.2,
+      "distanceM": 24.7,
       "endPos": {
-        "x": -57.32,
-        "z": -34.74
+        "x": -56.87,
+        "z": -35.11
       },
       "hits": {}
     },
@@ -38,28 +38,26 @@
       "name": "Quảng trường C1 → Thư viện",
       "pass": true,
       "reason": "đến đích trong 1,5 m",
-      "steps": 1972,
-      "seconds": 32.9,
-      "distanceM": 130.4,
+      "steps": 2090,
+      "seconds": 34.8,
+      "distanceM": 139.3,
       "endPos": {
-        "x": 23.96,
-        "z": 26.52
+        "x": 23.94,
+        "z": 26.54
       },
-      "hits": {
-        "Bồn cỏ C1Building (đông)": 27
-      }
+      "hits": {}
     },
     {
       "id": "leg4",
       "name": "Thư viện → Bờ Hồ Tiền",
       "pass": true,
       "reason": "đến đích trong 1,5 m",
-      "steps": 249,
-      "seconds": 4.2,
-      "distanceM": 16.6,
+      "steps": 369,
+      "seconds": 6.2,
+      "distanceM": 24.6,
       "endPos": {
         "x": 23.19,
-        "z": 44.55
+        "z": 52.55
       },
       "hits": {}
     }

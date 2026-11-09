@@ -9,7 +9,7 @@ import type { AABB, Vec2 } from './bounds';
 // --- Landmark chính ---------------------------------------------------------
 
 export const PARABOL_GATE = {
-  center: { x: -88, z: 10 },
+  center: { x: -88, z: -6 },
   /** chiều rộng thông thủy giữa hai chân (m) — theo báo chí 11/2026, chưa có bản vẽ chính thức */
   clearWidth: 8,
   /** chiều cao đỉnh vòm (m) — theo báo chí 11/2026 */
@@ -17,13 +17,13 @@ export const PARABOL_GATE = {
   legThickness: 1.5, // độ dày chân trụ theo trục Z
   depth: 1.2, // độ rộng dải băng vòm (theo mặt phẳng vòm) — Bước 3: dải phẳng, không còn ống tròn
   ribbonThickness: 0.6, // độ dày dải băng theo trục X (phương đường đi)
-  /** chân trụ: hai AABB kẹp lối đi (lối đi z = 6..14, rộng 8 m) */
+  /** chân trụ: hai AABB kẹp lối đi (lối đi z = -10..-2, rộng 8 m thẳng trục z = -6 với Cổng Trần Đại Nghĩa) */
   legAabbs: [
-    { minX: -89.2, maxX: -86.8, minZ: 3.5, maxZ: 6 },
-    { minX: -89.2, maxX: -86.8, minZ: 14, maxZ: 16.5 },
+    { minX: -89.2, maxX: -86.8, minZ: -12.5, maxZ: -10 },
+    { minX: -89.2, maxX: -86.8, minZ: -2, maxZ: 0.5 },
   ],
   /** nhà gác trắng phía bắc cổng (ƯỚC LƯỢNG vị trí theo ảnh: bên trái cổng) */
-  guardHouse: { minX: -90, maxX: -86, minZ: -0.5, maxZ: 2.5 },
+  guardHouse: { minX: -90, maxX: -86, minZ: -16.5, maxZ: -13.5 },
 } as const;
 
 export const C1 = {
@@ -74,56 +74,52 @@ export const HUST_SIGN = {
 
 /** Hồ Tiền — HÌNH CHỮ NHẬT, trục dài bắc–nam, dài gấp đôi rộng (khóa bằng vệ
  *  tinh, satellite-and-c9 §1). Bản blockout ellipse rx 40 × rz 30 là SAI.
- *  45 × 88 m ≈ 3.960 m², tỉ lệ 88/45 ≈ 1,96 ≈ 2:1, khớp số liệu ~4.000 m² (báo cáo 2010). */
+ *  45 × 88 m ≈ 3.960 m², tỉ lệ 88/45 ≈ 1,96 ≈ 2:1, khớp số liệu ~4.000 m² (báo cáo 2010).
+ *  Nằm hoàn toàn ở phía Nam trục đường chính Parabol – Trần Đại Nghĩa (z = -6). */
 export const LAKE = {
-  center: { x: -2, z: 40 },
+  center: { x: -2, z: 48 },
   halfW: 22.5, // nửa chiều rộng (trục X, đông–tây): hồ rộng 45 m
-  halfL: 44, // nửa chiều dài (trục Z, bắc–nam): hồ dài 88 m
+  halfL: 44, // nửa chiều dài (trục Z, bắc–nam): hồ dài 88 m (z: 4..92)
   waterY: 0.05,
 } as const;
 
 /** Bờ kè đá hộc quanh hồ (4 dải, rộng 1,2 m, ôm đúng mép nước). Collider riêng
  *  cho bờ kè; mặt nước chặn bằng hình chữ nhật hồ (pointInLake). */
 export const LAKE_BANK: AABB[] = [
-  { minX: -25.1, maxX: -23.9, minZ: -4, maxZ: 84 }, // bờ tây
-  { minX: 19.9, maxX: 21.1, minZ: -4, maxZ: 84 }, // bờ đông
-  { minX: -24.5, maxX: 20.5, minZ: -4.6, maxZ: -3.4 }, // bờ bắc
-  { minX: -24.5, maxX: 20.5, minZ: 83.4, maxZ: 84.6 }, // bờ nam
+  { minX: -25.1, maxX: -23.9, minZ: 4, maxZ: 92 }, // bờ tây
+  { minX: 19.9, maxX: 21.1, minZ: 4, maxZ: 92 }, // bờ đông
+  { minX: -24.5, maxX: 20.5, minZ: 3.4, maxZ: 4.6 }, // bờ bắc
+  { minX: -24.5, maxX: 20.5, minZ: 91.4, maxZ: 92.6 }, // bờ nam
 ];
 
+/** Nhà C9 — Nằm ở phân khu Tây-Bắc (ngay phía Nam nhà C2, phía Tây vườn hoa C1
+ *  và phía Bắc trục đường chính Cổng Parabol – Cổng Trần Đại Nghĩa theo đúng
+ *  Bản đồ Khuôn viên docs/khuon-vien-truong.png, tách biệt hoàn toàn khỏi Hồ Tiền). */
 export const C9 = {
-  center: { x: -42, z: -2 },
+  center: { x: -75, z: -17 },
   size: { x: 20, z: 12 },
-  floors: 4, // ƯỚC LƯỢNG — số tầng nhà C9 chưa xác minh (xem campus-reference §2.5)
+  floors: 4,
   floorHeight: 3.4,
-  /** Cầu thang bộ NGOÀI TRỜI zic-zac ở mặt ĐÔNG nhà (theo ảnh: bê tông trắng,
-   *  lan can kim loại đỏ, 4–5 đợt — satellite-and-c9 §3). Đợt sửa kiến trúc
-   *  CHỐT 4 vế × 3,4 m (mỗi vế lên đúng một tầng, chiếu nghỉ trùng cao độ
-   *  sàn tầng — 5 vế × 2,72 m cũ làm chiếu nghỉ lệch 0,68 m so với sàn tầng,
-   *  cửa lơ lửng; xem C9Building.tsx). Thang CHỈ LÀ HÌNH ẢNH: avatar đi ở
-   *  y = 0, engine này không có hệ leo thang — không tự bịa collider dốc.
-   *  Số tầng vẫn chưa xác minh nên ghi rõ là theo ảnh, không bịa thêm tầng.
-   *  Thang ở mặt ngoài, không chắn lối đi chính (đường ven hồ cách mép
-   *  thang ~1 m). */
+  /** Cầu thang bộ NGOÀI TRỜI zic-zac ở mặt ĐÔNG nhà C9 (bê tông trắng, lan can
+   *  kim loại đỏ, 4 vế × 3,4 m khớp cao độ sàn tầng theo tham-khao/c9/c9-cau-thang-do-01.jpg). */
   stairs: {
     face: 'east' as const,
     flights: 4,
     /** AABB bao toàn bộ thang (kể cả chiếu nghỉ hai đầu) */
-    box: { minX: -32.6, maxX: -29.6, minZ: -6.8, maxZ: 2.8 },
+    box: { minX: -65.6, maxX: -62.6, minZ: -21.8, maxZ: -12.2 },
   },
 } as const;
 
-/** Khối đá trắng (reference-visual §6): tảng đá xám-trắng, chữ đen 2 dòng,
- *  đặt trên thảm cỏ viền bê tông ở góc tây quảng trường C1. Vị trí tương đối
- *  đá ↔ đài phun nước CHƯA xác minh — đặt ở đây là ƯỚC LƯỢNG (gần tháp hoa
- *  gió C1 như trong ảnh), không chặn đường đi. */
+/** Khối đá trắng "ĐẠI HỌC BÁCH KHOA HÀ NỘI" (reference-visual §6):
+ *  Đặt thẳng trên trục chính diện phía trước (phía Nam) tòa C1 (x = -58, z = -22),
+ *  ngay giữa lối dẫn từ trục đường chính vào Quảng trường C1. */
 export const WHITE_ROCK = {
-  center: { x: -78, z: -31 },
-  box: { minX: -80.8, maxX: -75.2, minZ: -32.1, maxZ: -29.9 },
+  center: { x: -58, z: -22 },
+  box: { minX: -60.1, maxX: -55.9, minZ: -23.0, maxZ: -21.0 },
 } as const;
 
 export const C1_FOUNTAIN = {
-  center: { x: -78, z: -36.5 },
+  center: { x: -74, z: -32 },
 } as const;
 
 export const DAI_CO_VIET_GATE = {
@@ -131,15 +127,10 @@ export const DAI_CO_VIET_GATE = {
 } as const;
 
 /** Quảng trường Trần Đại Nghĩa (reference-visual §7): sân xanh ngọc + vạch
- *  trắng kiểu mạch điện. Đặt cạnh cổng Trần Đại Nghĩa (phía đông). Kích thước
- *  sân và họa tiết mạch cụ thể CHƯA xác minh (chỉ có ảnh cận cảnh biển tên) —
- *  sân vẽ theo ước lượng, biển đồng dựng đúng chữ đọc được trong ảnh. */
-export const TDN_SQUARE = { minX: 72, maxX: 92, minZ: -18, maxZ: 6 } as const;
+ *  trắng kiểu mạch điện. Đặt cạnh cổng Trần Đại Nghĩa (phía đông). */
+export const TDN_SQUARE = { minX: 72, maxX: 92, minZ: -18, maxZ: 2 } as const;
 
-/** Tượng đài trước C2 (reference-visual §5): CHỈ dựng bia cẩm thạch trắng +
- *  chữ khắc đỏ — ảnh hiện có chỉ thấy mặt bia. TUYỆT ĐỐI KHÔNG dựng pho tượng
- *  "mũ cối trên sách mở" (chưa có ảnh toàn cảnh). Chỉ tái hiện dòng ngày tháng
- *  đã đọc được trong ảnh; toàn văn lời khắc CHƯA xác minh nên không bịa chữ. */
+/** Tượng đài kỷ niệm (reference-visual §5): bia cẩm thạch trắng + chữ khắc đỏ. */
 export const MONUMENT = {
   center: { x: 82, z: -14 },
   box: { minX: 80.7, maxX: 83.3, minZ: -15.2, maxZ: -12.8 },
@@ -149,12 +140,82 @@ export const MONUMENT = {
 
 export const TRAN_DAI_NGHIA_GATE = { center: { x: 92, z: -6 } } as const;
 
+/** Nhà để xe sinh viên D3 - D5 (nằm ngay bên tay trái / phía Nam +Z khi đi từ Cổng Trần Đại Nghĩa vào).
+ *  Đối chiếu ảnh thật: tham-khao/Nha-de-xe-D3-D5/images.jpg ("ĐIỂM TRÔNG GIỮ XE D3 - D5"). */
+export const D3_D5_PARKING_GARAGE = {
+  center: { x: 76, z: 7.5 },
+  size: { x: 18, z: 9.5 },
+  height: 4.2,
+  signZ: 2.2,
+  box: { minX: 67, maxX: 85, minZ: 2.75, maxZ: 12.25 },
+} as const;
+
+/** Trục đường & bãi đỗ xe ô tô của các thầy cô giảng viên cạnh tòa C7
+ *  (nằm ngay bên tay phải / phía Bắc -Z khi đi từ Cổng Trần Đại Nghĩa vào). */
+export const C7_FACULTY_PARKING = {
+  roadX: 66,
+  minZ: -52,
+  maxZ: -6,
+  cars: [
+    {
+      id: 'c7-car-1',
+      x: 71.5,
+      z: -20.5,
+      yaw: -Math.PI / 2,
+      color: '#0F172A',
+      kind: 'sedan' as const,
+      plate: '30A-682.19',
+      box: { minX: 69.3, maxX: 73.7, minZ: -21.5, maxZ: -19.5 },
+    },
+    {
+      id: 'c7-car-2',
+      x: 71.5,
+      z: -26.0,
+      yaw: -Math.PI / 2,
+      color: '#F8FAFC',
+      kind: 'suv' as const,
+      plate: '30H-915.42',
+      box: { minX: 69.2, maxX: 73.8, minZ: -27.05, maxZ: -24.95 },
+    },
+    {
+      id: 'c7-car-3',
+      x: 71.5,
+      z: -31.5,
+      yaw: -Math.PI / 2,
+      color: '#94A3B8',
+      kind: 'sedan' as const,
+      plate: '29A-403.88',
+      box: { minX: 69.3, maxX: 73.7, minZ: -32.5, maxZ: -30.5 },
+    },
+    {
+      id: 'c7-car-4',
+      x: 71.5,
+      z: -37.0,
+      yaw: -Math.PI / 2,
+      color: '#991B1B',
+      kind: 'sedan' as const,
+      plate: '30G-771.05',
+      box: { minX: 69.3, maxX: 73.7, minZ: -38.0, maxZ: -36.0 },
+    },
+    {
+      id: 'c7-car-5',
+      x: 71.5,
+      z: -42.5,
+      yaw: -Math.PI / 2,
+      color: '#1E3A8A',
+      kind: 'suv' as const,
+      plate: '30K-558.26',
+      box: { minX: 69.2, maxX: 73.8, minZ: -43.55, maxZ: -41.45 },
+    },
+  ],
+} as const;
+
 // --- Quy hoạch toàn bộ khuôn viên theo Bản đồ Bách Khoa (docs/khuon-vien-truong.png) ---
 // 1. Nhà C2: nằm dọc Bắc–Nam ở phía Tây vườn hoa C1, ngay phía Bắc nhà C9.
 export const C2_BUILDING = {
-  center: { x: -86, z: -22 },
+  center: { x: -86, z: -34 },
   size: { x: 7.5, z: 15 },
-  box: { minX: -89.75, maxX: -82.25, minZ: -29.5, maxZ: -14.5 },
+  box: { minX: -89.75, maxX: -82.25, minZ: -41.5, maxZ: -26.5 },
 } as const;
 
 // 2. Cụm nhà C6 – C7 – C8: xếp 3 dãy ngang từ Bắc xuống Nam ở phía Đông dãy C3–C4–C5–C10,
@@ -185,11 +246,11 @@ export const C8_BUILDING = {
 
 // 3. Khối nhà phía Bắc Hồ Tiền (Trung tâm Hợp tác Việt – Đức / Thủy Tạ bờ Bắc Hồ Tiền).
 export const VDZ_CENTER = {
-  center: { x: -2, z: -9.8 },
+  center: { x: -2, z: 0.4 },
   size: { x: 11, z: 3.4 },
   floors: 2,
   floorHeight: 3.3,
-  box: { minX: -7.5, maxX: 3.5, minZ: -11.5, maxZ: -8.1 },
+  box: { minX: -7.5, maxX: 3.5, minZ: -1.3, maxZ: 2.1 },
 } as const;
 
 // 4. Nhà B1 (Trường Công nghệ Thông tin & Truyền thông — SoICT): tòa nhà góc cong giật cấp 7–8 tầng
@@ -273,11 +334,11 @@ export const TA_QUANG_BUU_GATE = {
 } as const;
 
 export const PARABOL_BUS_STOP = {
-  center: { x: -88, z: 23 },
+  center: { x: -88, z: 7 },
 } as const;
 
 export const BIKE_PARKING_SHED = {
-  center: { x: -64, z: 30 },
+  center: { x: -68, z: 7.5 },
 } as const;
 
 export type LectureBuildingFacing = 's' | 'n' | 'e' | 'w';
@@ -426,42 +487,42 @@ export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
     box: { minX: 29, maxX: 47, minZ: 59.25, maxZ: 66.75 },
   },
 
-  // Cụm D3 – D5 – D3-5 & D7 phía Đông Thư viện Tạ Quang Bửu
+  // Cụm D3 – D5 – D3-5 & D7 phía Đông Thư viện Tạ Quang Bửu (ngay sau Nhà để xe D3 - D5)
   {
     code: 'D3',
     subtitle: 'VIỆN TOÁN ỨNG DỤNG & TIN HỌC',
     x: 64,
-    z: 18,
+    z: 21,
     w: 14,
     d: 7,
     h: 10.5,
     face: 's',
     tone: 3,
-    box: { minX: 57, maxX: 71, minZ: 14.5, maxZ: 21.5 },
+    box: { minX: 57, maxX: 71, minZ: 17.5, maxZ: 24.5 },
   },
   {
     code: 'D5',
     subtitle: 'GIẢNG ĐƯỜNG D5',
     x: 64,
-    z: 32,
+    z: 34,
     w: 14,
     d: 7,
     h: 10.5,
     face: 'n',
     tone: 0,
-    box: { minX: 57, maxX: 71, minZ: 28.5, maxZ: 35.5 },
+    box: { minX: 57, maxX: 71, minZ: 30.5, maxZ: 37.5 },
   },
   {
     code: 'D3-5',
     subtitle: 'KHỐI GIẢNG ĐƯỜNG D3-5',
     x: 75,
-    z: 25,
+    z: 27.5,
     w: 6.5,
-    d: 21,
+    d: 20,
     h: 10.5,
     face: 'w',
     tone: 1,
-    box: { minX: 71.75, maxX: 78.25, minZ: 14.5, maxZ: 35.5 },
+    box: { minX: 71.75, maxX: 78.25, minZ: 17.5, maxZ: 37.5 },
   },
   {
     code: 'D7',
@@ -486,8 +547,8 @@ export const D4_BUILDING = {
 // Ghế gỗ dọc bờ Hồ Tiền (quay mặt ra hồ) + ghế quảng trường C1.
 // Ghế bờ đông đặt sát bờ kè (x = 22,3) để chừa lối đi bộ ven hồ (x = 24) thông thoáng.
 export const LAKE_BENCHES: Vec2[] = [
-  { x: -27.5, z: 30 }, { x: -27.5, z: 62 },
-  { x: 22.3, z: 20 }, { x: 22.3, z: 68 },
+  { x: -27.5, z: 34 }, { x: -27.5, z: 66 },
+  { x: 22.3, z: 24 }, { x: 22.3, z: 72 },
 ];
 
 export const C1_BENCHES: Vec2[] = [
@@ -497,10 +558,10 @@ export const C1_BENCHES: Vec2[] = [
 // Liễu rủ quanh Hồ Tiền — đặt NGOÀI bờ kè hình chữ nhật (bờ tây/đông/bắc/nam).
 // Cây bờ đông đặt sát bờ kè (x = 22,2) để không chắn lối đi bộ ven hồ (x = 24).
 export const LAKE_WILLOWS: Vec2[] = [
-  { x: -27.5, z: 15 }, { x: -27.5, z: 50 }, { x: -27.5, z: 75 },
-  { x: 22.2, z: 10 }, { x: 22.2, z: 72 },
-  { x: -12, z: -7 }, { x: 8, z: -7 },
-  { x: -10, z: 85.5 }, { x: 10, z: 85.5 },
+  { x: -27.5, z: 18 }, { x: -27.5, z: 54 }, { x: -27.5, z: 80 },
+  { x: 22.2, z: 14 }, { x: 22.2, z: 76 },
+  { x: -14, z: 1.5 }, { x: 10, z: 1.5 },
+  { x: -10, z: 94.0 }, { x: 10, z: 94.0 },
 ];
 
 // --- Phòng học mô phỏng — Bước 5 --------------------------------------------

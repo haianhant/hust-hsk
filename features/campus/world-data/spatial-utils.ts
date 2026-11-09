@@ -70,7 +70,7 @@ export function resolveAabbCollisions(
   return { pos: { x, z }, hit };
 }
 
-/** Đẩy vị trí ra khỏi mọi collider sân trường (AABB + Hồ Tiền + biên campus).
+/** Đẩy vị trí ra khỏi mọi collider sân trường (AABB + Hồ Tiền + Thân cây + NPC + biên campus).
  *  Trả về vị trí đã sửa + tên vật cản (nếu có). */
 export function resolveCollisions(p: Vec2, radius: number): { pos: Vec2; hit: string | null } {
   const base = resolveAabbCollisions(p, radius, BOUNDS, BUILDING_COLLIDERS);
@@ -90,7 +90,61 @@ export function resolveCollisions(p: Vec2, radius: number): { pos: Vec2; hit: st
     else z = LAKE.center.z - LAKE.halfL - radius * 0.5;
     hit = 'Hồ Tiền';
   }
+
+  // Đẩy ra khỏi thân cây (r = 0.3m) và NPC đứng/ngồi tĩnh trong sân trường để không đi xuyên qua cây và người khác
+  const pushOutCircle = (cx: number, cz: number, r: number, name: string) => {
+    const dx = x - cx;
+    const dz = z - cz;
+    const d = Math.hypot(dx, dz);
+    const min = r + radius;
+    if (d < min) {
+      if (d > 1e-9) {
+        x = cx + (dx / d) * min;
+        z = cz + (dz / d) * min;
+      } else {
+        x = cx + min;
+      }
+      hit = name;
+    }
+  };
+  for (const t of TREE_TRUNKS) pushOutCircle(t.x, t.z, 0.3, 'Thân cây');
+  for (const n of NPC_CIRCLES) pushOutCircle(n.pos.x, n.pos.z, n.radius, n.name ?? 'Minh (NPC)');
+
   return { pos: { x, z }, hit };
+}
+
+/** Đẩy tọa độ `(x, z)` ra khỏi hình tròn `center` bán kính `obstacleRadius` (trả về `null` nếu không va chạm). */
+export function pushOutOfCircle(
+  x: number,
+  z: number,
+  center: Vec2,
+  obstacleRadius: number,
+  playerRadius: number,
+): Vec2 | null {
+  const dx = x - center.x;
+  const dz = z - center.z;
+  const d = Math.hypot(dx, dz);
+  const min = obstacleRadius + playerRadius;
+  if (d >= min) return null;
+  if (d > 1e-9) {
+    return { x: center.x + (dx / d) * min, z: center.z + (dz / d) * min };
+  }
+  return { x: center.x + min, z: center.z };
+}
+
+/**
+ * Tính cao độ mặt sàn ngoài trời (Y) tại tọa độ `(x, z)` để khi người chơi
+ * bước lên bậc tam cấp và hiên sảnh Thư viện Tạ Quang Bửu (z = 16.8..23.6, x = 31..45)
+ * nhân vật bước LÊN trên mặt bậc thang thay vì đi xuyên qua bậc thang.
+ */
+export function getCampusGroundElevation(x: number, z: number): number {
+  // Bậc tam cấp & hiên sảnh chính Thư viện Tạ Quang Bửu (x: 31.0..45.0, z: 16.8..23.6)
+  if (x >= 31.0 && x <= 45.0 && z >= 16.8 && z <= 23.6) {
+    if (z >= 19.0) return 0.6;
+    const t = Math.max(0, Math.min(1, (z - 16.8) / (19.0 - 16.8)));
+    return t * 0.6;
+  }
+  return 0;
 }
 
 /** Đẩy vị trí ra khỏi collider phòng học + biên phòng. */
@@ -109,33 +163,13 @@ export function resolveLibraryLobbyCollisions(
   return resolveAabbCollisions(p, radius, LIBRARY_LOBBY.bounds, LIBRARY_LOBBY_COLLIDERS);
 }
 
-/** Va chạm cho XE MÁY: resolveCollisions (nhà/hồ/bờ kè/biên) + thân cây + NPC.
+/** Va chạm cho XE MÁY: resolveCollisions (nhà/hồ/bờ kè/biên/thân cây/NPC).
  *  Trả về vị trí đã sửa + tên vật cản (nếu có). */
 export function resolveBikeCollisions(
   p: Vec2,
   radius: number,
 ): { pos: Vec2; hit: string | null } {
-  const base = resolveCollisions(p, radius);
-  let { x, z } = base.pos;
-  let hit = base.hit;
-  const pushOut = (cx: number, cz: number, r: number, name: string) => {
-    const dx = x - cx;
-    const dz = z - cz;
-    const d = Math.hypot(dx, dz);
-    const min = r + radius;
-    if (d < min) {
-      if (d > 1e-9) {
-        x = cx + (dx / d) * min;
-        z = cz + (dz / d) * min;
-      } else {
-        x = cx + min;
-      }
-      hit = name;
-    }
-  };
-  for (const t of TREE_TRUNKS) pushOut(t.x, t.z, 0.3, 'Thân cây');
-  for (const n of NPC_CIRCLES) pushOut(n.pos.x, n.pos.z, n.radius, 'Minh (NPC)');
-  return { pos: { x, z }, hit };
+  return resolveCollisions(p, radius);
 }
 
 /** Điểm trên đường gần nhất (tính trên các đoạn polyline ROADS). */

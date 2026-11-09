@@ -370,8 +370,8 @@ export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       ))}
 
       {/* 2 đầu máy cổng xếp tự động (inox + bảng LED đỏ) đặt sát chân trong của vòm Parabol (cong-parabol-01.jpg) */}
-      {[6.25, 13.75].map((gz, i) => (
-        <group key={`parabol-gate-motor-${i}`} position={[-88, 0, gz]}>
+      {[-3.75, 3.75].map((dz, i) => (
+        <group key={`parabol-gate-motor-${i}`} position={[-88, 0, PARABOL_GATE.center.z + dz]}>
           <mesh position={[0, 0.58, 0]} castShadow>
             <boxGeometry args={[0.52, 1.16, 0.42]} />
             <meshStandardMaterial color="#CBD5E1" roughness={0.35} metalness={0.65} />
@@ -390,8 +390,8 @@ export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       {/* Đèn pha hắt sáng chân vòm Parabol khi Hoàng hôn & Ban đêm */}
       {isNight && (
         <>
-          {[6.2, 13.8].map((fz, i) => (
-            <group key={`parabol-flood-${i}`} position={[-87.2, 0.15, fz]}>
+          {[-3.8, 3.8].map((dz, i) => (
+            <group key={`parabol-flood-${i}`} position={[-87.2, 0.15, PARABOL_GATE.center.z + dz]}>
               <mesh>
                 <boxGeometry args={[0.35, 0.22, 0.35]} />
                 <meshStandardMaterial color={IRON_BLACK} roughness={0.5} metalness={0.5} />
@@ -410,7 +410,7 @@ export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       )}
 
       {/* Nhà gác trắng phía bắc cổng: hộp 4 × 3 × 3, mái bằng đua sang lối phụ Bắc (cong-parabol-01.jpg, cong-parabol-02.jpg) */}
-      <group position={[-88, 0, 1]}>
+      <group position={[-88, 0, PARABOL_GATE.center.z - 9]}>
         <mesh position={[0, 1.5, 0]} castShadow receiveShadow>
           <boxGeometry args={[4, 3, 3]} />
           <meshStandardMaterial
@@ -448,7 +448,7 @@ export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       </group>
 
       {/* Mái che phẳng phía nam cổng trên 4 cột + cổng xếp sắt đen. */}
-      <group position={[-88, 0, 19]}>
+      <group position={[-88, 0, PARABOL_GATE.center.z + 9]}>
         <mesh position={[0, 3.2, 0]} castShadow>
           <boxGeometry args={[5, 0.25, 4]} />
           <meshStandardMaterial
@@ -494,10 +494,10 @@ export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       </group>
 
       {/* Cây lớn hai bên cổng sử dụng ImprovedTree có vân vỏ cây + tán lá PBR */}
-      <ImprovedTree x={-93.5} z={4} trunkH={3.4} canopyR={3.2} canopyY={5} />
-      <ImprovedTree x={-93.5} z={16} trunkH={3.4} canopyR={3.2} canopyY={5} />
-      <ImprovedTree x={-82.5} z={2.5} trunkH={3} canopyR={2.6} canopyY={4.4} />
-      <ImprovedTree x={-82.5} z={17.5} trunkH={3} canopyR={2.6} canopyY={4.4} />
+      <ImprovedTree x={-93.5} z={PARABOL_GATE.center.z - 6} trunkH={3.4} canopyR={3.2} canopyY={5} />
+      <ImprovedTree x={-93.5} z={PARABOL_GATE.center.z + 6} trunkH={3.4} canopyR={3.2} canopyY={5} />
+      <ImprovedTree x={-82.5} z={PARABOL_GATE.center.z - 7.5} trunkH={3} canopyR={2.6} canopyY={4.4} />
+      <ImprovedTree x={-82.5} z={PARABOL_GATE.center.z + 7.5} trunkH={3} canopyR={2.6} canopyY={4.4} />
     </group>
   );
 }

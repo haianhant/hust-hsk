@@ -84,7 +84,7 @@ const STEP_RISE = RISE / STEPS_PER_FLIGHT; // ≈ 0,162 m/bậc
 const TREAD = 0.29; // sâu mặt bậc
 const RUN = STEPS_PER_FLIGHT * TREAD; // 6,09 m/vế
 const STAIR_W = 2.4; // rộng thang (trục X)
-const STAIR_X = -30.85; // tâm thang: x -32,05..-29,65 (mép trong ôm mặt tường)
+const STAIR_X = EAST_WALL_X + 1.15; // tâm thang: mép trong ôm mặt tường Đông của C9
 const STAIR_X_MIN = STAIR_X - STAIR_W / 2; // -32,05 (0,05 m trong tường: gắn chặt)
 const STAIR_X_MAX = STAIR_X + STAIR_W / 2; // -29,65
 const Z_C = C9.center.z; // tâm vế thang theo trục Z: -2
@@ -199,8 +199,8 @@ export function C9Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
           const bands: Array<{ cx: number; w: number; cols: number }> =
             f === 0 && side === 1
               ? [
-                  { cx: -46.5, w: 7.0, cols: 3 },
-                  { cx: -37.5, w: 7.0, cols: 3 },
+                  { cx: C9.center.x - 4.5, w: 7.0, cols: 3 },
+                  { cx: C9.center.x + 4.5, w: 7.0, cols: 3 },
                 ]
               : [{ cx: C9.center.x, w: C9.size.x - 3, cols: 7 }];
           return bands.map(({ cx, w, cols }) => {
@@ -324,7 +324,7 @@ export function C9Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         <boxGeometry args={[0.12, 0.5, C9.size.z + 0.2]} />
         <meshStandardMaterial color={PLINTH_GREY} roughness={0.92} />
       </mesh>
-      {([-46.5, -37.5] as const).map((px) => (
+      {([C9.center.x - 4.5, C9.center.x + 4.5] as const).map((px) => (
         <mesh key={`c9-plinth-s-${px}`} position={[px, 0.25, C9.center.z + HZ + 0.06]}>
           <boxGeometry args={[7.2, 0.5, 0.12]} />
           <meshStandardMaterial color={PLINTH_GREY} roughness={0.92} />
@@ -344,11 +344,11 @@ export function C9Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         <boxGeometry args={[0.15, 0.35, C9.size.z]} />
         <meshStandardMaterial color={WALL} roughness={0.9} />
       </mesh>
-      <mesh position={[EAST_WALL_X + 0.075, HEIGHT + 0.175, -7.22]}>
+      <mesh position={[EAST_WALL_X + 0.075, HEIGHT + 0.175, C9.center.z - 5.22]}>
         <boxGeometry args={[0.15, 0.35, 1.56]} />
         <meshStandardMaterial color={WALL} roughness={0.9} />
       </mesh>
-      <mesh position={[EAST_WALL_X + 0.075, HEIGHT + 0.175, -0.52]}>
+      <mesh position={[EAST_WALL_X + 0.075, HEIGHT + 0.175, C9.center.z + 1.48]}>
         <boxGeometry args={[0.15, 0.35, 9.05]} />
         <meshStandardMaterial color={WALL} roughness={0.9} />
       </mesh>
@@ -478,7 +478,7 @@ export function C9Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
           ctx.fillText('NHÀ C9', w / 2, h / 2 + 2);
         }}
         size={[1.36, 0.48]}
-        position={[EAST_WALL_X + 0.065, 3.65, 3.18]}
+        position={[EAST_WALL_X + 0.065, 3.65, C9.center.z + 5.18]}
         rotation={[0, Math.PI / 2, 0]}
         transparent={false}
       />
@@ -699,7 +699,7 @@ export function C9Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
           L4 ở cao độ mái (13,6 m): không có tường tầng trên để mở cửa nên
           đặt khối tum nhỏ trên mái, cửa tum mở ra chiếu nghỉ; mái tum đua ra
           che chiếu nghỉ đỉnh như trong ảnh (tấm sàn mỏng trên cao). */}
-      <mesh position={[-33, HEIGHT + 1.25, LAND_N_Z]} castShadow>
+      <mesh position={[EAST_WALL_X - 1.0, HEIGHT + 1.25, LAND_N_Z]} castShadow>
         <boxGeometry args={[2, 2.5, LAND_D]} />
         <meshStandardMaterial color={WALL} roughness={0.95} />
       </mesh>
@@ -709,7 +709,7 @@ export function C9Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         <meshStandardMaterial color={DOOR_YELLOW} roughness={0.8} />
       </mesh>
       {/* Mái che chiếu nghỉ đỉnh: tấm mỏng đua ra từ mái tum. */}
-      <mesh position={[-31.78, HEIGHT + 2.59, LAND_N_Z]} castShadow>
+      <mesh position={[EAST_WALL_X + 0.22, HEIGHT + 2.59, LAND_N_Z]} castShadow>
         <boxGeometry args={[4.45, 0.18, 1.7]} />
         <meshStandardMaterial color={STAIR_WHITE} roughness={0.95} />
       </mesh>

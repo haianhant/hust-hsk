@@ -586,9 +586,9 @@ function LakeBench({
 // y = 0,035, viền sẫm y = 0,045 — đều cao hơn cỏ (0) / đường (0,02) / sân
 // (0,015) nhưng không chồng lên bất kỳ mặt nào khác.
 const WALKWAYS: Array<{ cx: number; cz: number; w: number; l: number }> = [
-  { cx: -26.35, cz: 40, w: 2.5, l: 89.2 }, // tây
-  { cx: -3.25, cz: -5.8, w: 48.7, l: 2.4 }, // bắc
-  { cx: -3.25, cz: 85.3, w: 48.7, l: 1.4 }, // nam
+  { cx: -26.35, cz: LAKE.center.z, w: 2.5, l: 89.2 }, // tây
+  { cx: -3.25, cz: LAKE.center.z - LAKE.halfL - 1.8, w: 48.7, l: 2.4 }, // bắc (phía nam đường chính z = -6)
+  { cx: -3.25, cz: LAKE.center.z + LAKE.halfL + 1.3, w: 48.7, l: 1.4 }, // nam
 ];
 
 export function TienLake() {
@@ -745,15 +745,15 @@ export function TienLake() {
 
       {/* Hàng cột đèn sân vườn 5 chao cầu trắng dọc lối dạo gạch ven Hồ Tiền (ho-tien-01.jpg) */}
       {[
-        { x: -27.4, z: 5 },
-        { x: -27.4, z: 24 },
-        { x: -27.4, z: 42 },
-        { x: -27.4, z: 58 },
-        { x: -27.4, z: 78 },
-        { x: 22.1, z: 6 },
-        { x: 22.1, z: 28 },
-        { x: 22.1, z: 52 },
-        { x: 22.1, z: 76 },
+        { x: -27.4, z: 13 },
+        { x: -27.4, z: 32 },
+        { x: -27.4, z: 50 },
+        { x: -27.4, z: 66 },
+        { x: -27.4, z: 86 },
+        { x: 22.1, z: 14 },
+        { x: 22.1, z: 36 },
+        { x: 22.1, z: 60 },
+        { x: 22.1, z: 84 },
       ].map((lp, idx) => (
         <group key={`lake-garden-lamp-${idx}`} position={[lp.x, 0, lp.z]}>
           <mesh position={[0, 1.6, 0]} castShadow>

@@ -4,7 +4,7 @@
 // Module IDs: building.c6-c8, building.c7, building.viet-duc-center
 // ---------------------------------------------------------------------------
 
-import { C7_BUILDING, VDZ_CENTER } from '../world-data';
+import { C7_BUILDING, C7_FACULTY_PARKING, D3_D5_PARKING_GARAGE, VDZ_CENTER } from '../world-data';
 import { LabelPlane } from '../../../components/three/TextPlate';
 
 const WALL_BLUE_LIGHT = '#DCEAF7';
@@ -390,6 +390,426 @@ export function VietDucCenterBuilding({ isNight }: { isNight: boolean }) {
         position={[0, h - 0.55, size.z / 2 + 0.05]}
         transparent={false}
       />
+    </group>
+  );
+}
+
+/**
+ * Nhà để xe sinh viên D3 - D5 ("ĐIỂM TRÔNG GIỮ XE D3 - D5")
+ * Nằm ngay bên tay trái (phía Nam +Z) khi đi từ Cổng Trần Đại Nghĩa vào khuôn viên.
+ * Dựng chuẩn theo ảnh thật: tham-khao/Nha-de-xe-D3-D5/images.jpg
+ */
+export function D3D5ParkingGarage() {
+  const { center, size, height } = D3_D5_PARKING_GARAGE;
+  const frontZ = -size.z / 2; // Mặt tiền cổng vào quay về phía Bắc (-Z, nhìn ra trục chính Cổng Trần Đại Nghĩa)
+
+  return (
+    <group position={[center.x, 0, center.z]}>
+      {/* Nền bê tông nhà để xe D3 - D5 + đường dẫn vào cổng */}
+      <mesh position={[0, 0.028, -0.6]} receiveShadow>
+        <boxGeometry args={[size.x + 1.2, 0.056, size.z + 2.4]} />
+        <meshStandardMaterial color="#8E9299" roughness={0.92} />
+      </mesh>
+
+      {/* Kết cấu mái tôn khung thép phẳng xám sáng che mưa nắng cho nhà xe */}
+      <mesh position={[0, height - 0.15, 0.4]} castShadow receiveShadow>
+        <boxGeometry args={[size.x + 0.6, 0.26, size.z - 0.4]} />
+        <meshStandardMaterial color="#CBD5E1" roughness={0.7} metalness={0.35} />
+      </mesh>
+      {/* Dải tôn lấy sáng màu trắng đục trên mái nhà xe */}
+      {[-5.2, 0, 5.2].map((sx) => (
+        <mesh key={`d3d5-skylight-${sx}`} position={[sx, height + 0.01, 0.4]}>
+          <boxGeometry args={[2.2, 0.04, size.z - 1.2]} />
+          <meshStandardMaterial color="#F1F5F9" roughness={0.4} metalness={0.1} />
+        </mesh>
+      ))}
+
+      {/* Hàng cột thép tròn màu bạc đỡ mái và cổng biển hiệu (3 cột mặt tiền + 3 cột hậu) */}
+      {[-7.8, -1.4, 7.8].map((cx) =>
+        [frontZ - 0.2, size.z / 2 - 0.4].map((cz, zIdx) => (
+          <mesh key={`d3d5-col-${cx}-${zIdx}`} position={[cx, height / 2, cz]} castShadow>
+            <cylinderGeometry args={[0.14, 0.14, height, 14]} />
+            <meshStandardMaterial color="#D1D5DB" roughness={0.42} metalness={0.65} />
+          </mesh>
+        )),
+      )}
+
+      {/* Rèm vải trắng trang trí (valance bunting) treo dưới dầm cổng như trong ảnh thật */}
+      {[-6.2, -3.8, -1.4, 1.4, 3.8, 6.2].map((vx, idx) => (
+        <mesh
+          key={`d3d5-valance-${idx}`}
+          position={[vx, height - 0.92, frontZ - 0.22]}
+          scale={[1.2, 0.36, 0.18]}
+        >
+          <sphereGeometry args={[0.95, 12, 8]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.85} />
+        </mesh>
+      ))}
+
+      {/* BIỂN HIỆU ĐỎ "ĐIỂM TRÔNG GIỮ XE D3 - D5" (khớp 100% tham-khao/Nha-de-xe-D3-D5/images.jpg) */}
+      <mesh position={[0, height - 0.35, frontZ - 0.24]} castShadow>
+        <boxGeometry args={[16.8, 1.18, 0.18]} />
+        <meshStandardMaterial color="#C81E24" roughness={0.62} />
+      </mesh>
+      <LabelPlane
+        textureKey="d3-d5-parking-sign-front"
+        canvasW={1024}
+        canvasH={192}
+        draw={(ctx, w, h) => {
+          // Nền đỏ Bách khoa
+          ctx.fillStyle = '#C81E24';
+          ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#F8FAFC';
+          ctx.lineWidth = 5;
+          ctx.strokeRect(4, 4, w - 8, h - 8);
+
+          // 1. Huy hiệu dọc ĐHBK Hà Nội ở góc trái (nền đỏ/trắng + sao vàng + bánh răng/compa + chữ BÁCH KHOA)
+          ctx.fillStyle = '#D91E26';
+          ctx.fillRect(14, 14, 58, 132);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(72, 14, 58, 132);
+          ctx.fillStyle = '#FACC15';
+          ctx.fillRect(14, 146, 116, 32);
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(14, 14, 116, 164);
+          // Sao vàng & compa trong huy hiệu
+          ctx.fillStyle = '#FACC15';
+          ctx.font = 'bold 26px Arial, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('★', 43, 44);
+          ctx.fillStyle = '#C81E24';
+          ctx.font = '900 15px Arial, sans-serif';
+          ctx.fillText('ĐẠI HỌC', 101, 38);
+          ctx.fillStyle = '#FACC15';
+          ctx.beginPath();
+          ctx.arc(72, 95, 26, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#C81E24';
+          ctx.font = '900 18px Arial, sans-serif';
+          ctx.fillText('BK', 72, 101);
+          ctx.font = '900 17px Arial, sans-serif';
+          ctx.fillText('BÁCH KHOA', 72, 168);
+
+          // 2. Dòng chữ chính giữa: "ĐIỂM TRÔNG GIỮ XE" (trắng) & "D3 - D5" (đen đậm)
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '900 62px Arial, sans-serif';
+          ctx.fillText('ĐIỂM TRÔNG GIỮ XE', w * 0.5, 64);
+
+          ctx.fillStyle = '#111827';
+          ctx.font = '900 66px Arial, sans-serif';
+          ctx.fillText('D3 - D5', w * 0.5, 142);
+
+          // 3. Biển tròn xanh dương chữ "P" đỗ xe bên phải
+          const px = w - 92;
+          const py = h / 2;
+          ctx.fillStyle = '#1D4ED8';
+          ctx.beginPath();
+          ctx.arc(px, py, 68, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 8;
+          ctx.stroke();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '900 68px Arial, sans-serif';
+          ctx.fillText('P', px - 14, py - 8);
+          ctx.font = '700 22px Arial, sans-serif';
+          ctx.fillText('🛵', px + 26, py + 24);
+        }}
+        size={[16.5, 1.12]}
+        position={[0, height - 0.35, frontZ - 0.35]}
+        rotation={[0, Math.PI, 0]}
+        transparent={false}
+      />
+
+      {/* 2 đảo phân làn sơn sọc vàng-đen + bốt quẹt thẻ màu cam + trụ camera & thanh chắn barie */}
+      {[-4.6, 1.8].map((ix, idx) => (
+        <group key={`d3d5-booth-${idx}`} position={[ix, 0, frontZ - 0.1]}>
+          {/* Bệ đảo bê tông sơn sọc vàng đen */}
+          <mesh position={[0, 0.12, 0]} castShadow receiveShadow>
+            <boxGeometry args={[0.92, 0.24, 2.2]} />
+            <meshStandardMaterial color="#FACC15" roughness={0.75} />
+          </mesh>
+          {[-0.7, -0.2, 0.3, 0.8].map((sz, sIdx) => (
+            <mesh key={`stripe-${sIdx}`} position={[0, 0.125, sz]}>
+              <boxGeometry args={[0.94, 0.25, 0.22]} />
+              <meshStandardMaterial color="#18181B" roughness={0.8} />
+            </mesh>
+          ))}
+          {/* Tủ máy quẹt thẻ gửi xe thông minh màu cam đỏ */}
+          <mesh position={[0, 0.72, -0.35]} castShadow>
+            <boxGeometry args={[0.52, 0.96, 0.48]} />
+            <meshStandardMaterial color="#EA580C" roughness={0.45} metalness={0.25} />
+          </mesh>
+          {/* Màn hình đọc thẻ trên tủ */}
+          <mesh position={[0, 0.95, -0.6]}>
+            <boxGeometry args={[0.34, 0.26, 0.04]} />
+            <meshStandardMaterial color="#0F172A" roughness={0.3} />
+          </mesh>
+          {/* Cột gắn camera nhận diện biển số sơn vàng-đen */}
+          <mesh position={[0, 1.35, 0.55]} castShadow>
+            <cylinderGeometry args={[0.06, 0.06, 2.3, 10]} />
+            <meshStandardMaterial color="#FACC15" roughness={0.5} metalness={0.3} />
+          </mesh>
+          {/* Thanh chắn barie trắng-đỏ */}
+          <mesh position={[1.35, 0.88, -0.35]} castShadow>
+            <boxGeometry args={[2.1, 0.07, 0.07]} />
+            <meshStandardMaterial color="#F8FAFC" roughness={0.5} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Biển tròn "Cấm đỗ xe" gắn trên cột thép phải đúng theo ảnh */}
+      <mesh position={[7.8, 2.15, frontZ - 0.36]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.28, 0.28, 0.04, 18]} />
+        <meshStandardMaterial color="#DC2626" roughness={0.5} />
+      </mesh>
+      <mesh position={[7.8, 2.15, frontZ - 0.38]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.2, 0.2, 0.04, 18]} />
+        <meshStandardMaterial color="#1D4ED8" roughness={0.5} />
+      </mesh>
+
+      {/* Các dãy xe máy & xe đạp sinh viên xếp gọn gàng dưới mái nhà xe D3 - D5 */}
+      {[-6.0, -4.4, -2.8, -1.2, 0.6, 2.2, 3.8, 5.4].map((bx, bIdx) =>
+        [-1.2, 2.2].map((bz, rowIdx) => {
+          const bodyColors = ['#1E293B', '#991B1B', '#1D4ED8', '#F8FAFC', '#334155', '#0F766E'];
+          const col = bodyColors[(bIdx + rowIdx * 3) % bodyColors.length];
+          return (
+            <group key={`parked-moto-${bIdx}-${rowIdx}`} position={[bx, 0, bz]}>
+              {/* Bánh trước & sau */}
+              <mesh position={[0, 0.24, -0.52]} rotation={[0, Math.PI / 2, 0]}>
+                <torusGeometry args={[0.18, 0.055, 8, 14]} />
+                <meshStandardMaterial color="#18181B" roughness={0.85} />
+              </mesh>
+              <mesh position={[0, 0.24, 0.52]} rotation={[0, Math.PI / 2, 0]}>
+                <torusGeometry args={[0.18, 0.055, 8, 14]} />
+                <meshStandardMaterial color="#18181B" roughness={0.85} />
+              </mesh>
+              {/* Thân xe & yên xe */}
+              <mesh position={[0, 0.52, 0.08]} castShadow>
+                <boxGeometry args={[0.38, 0.36, 1.15]} />
+                <meshStandardMaterial color={col} roughness={0.35} metalness={0.4} />
+              </mesh>
+              <mesh position={[0, 0.74, 0.16]}>
+                <boxGeometry args={[0.32, 0.12, 0.68]} />
+                <meshStandardMaterial color="#1E293B" roughness={0.8} />
+              </mesh>
+              {/* Cổ lái & đầu đèn */}
+              <mesh position={[0, 0.82, -0.42]} rotation={[-0.25, 0, 0]}>
+                <boxGeometry args={[0.56, 0.1, 0.12]} />
+                <meshStandardMaterial color={col} roughness={0.4} />
+              </mesh>
+            </group>
+          );
+        }),
+      )}
+    </group>
+  );
+}
+
+/**
+ * Một chiếc ô tô 3D của giảng viên đỗ trên trục đường cạnh tòa C7
+ */
+function FacultyParkedCar({
+  x,
+  z,
+  yaw,
+  color,
+  kind,
+  plate,
+  isNight,
+}: {
+  x: number;
+  z: number;
+  yaw: number;
+  color: string;
+  kind: 'sedan' | 'suv';
+  plate: string;
+  isNight: boolean;
+}) {
+  const isSuv = kind === 'suv';
+  const bodyH = isSuv ? 0.68 : 0.56;
+  const cabinH = isSuv ? 0.58 : 0.48;
+  const cabinL = isSuv ? 2.45 : 2.05;
+  const cabinZ = isSuv ? -0.18 : -0.1;
+
+  return (
+    <group position={[x, 0, z]} rotation-y={yaw}>
+      {/* Bóng đổ tiếp xúc dưới gầm ô tô */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.024, 0]}>
+        <planeGeometry args={[2.05, 4.5]} />
+        <meshBasicMaterial color="#0F172A" transparent opacity={0.38} depthWrite={false} />
+      </mesh>
+
+      {/* 4 bánh xe hợp kim đa chấu */}
+      {[
+        [-0.86, -1.32],
+        [0.86, -1.32],
+        [-0.86, 1.32],
+        [0.86, 1.32],
+      ].map(([wx, wz], idx) => (
+        <group key={`wheel-${idx}`} position={[wx, 0.32, wz]}>
+          <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.32, 0.32, 0.22, 16]} />
+            <meshStandardMaterial color="#18181B" roughness={0.85} />
+          </mesh>
+          <mesh rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.2, 0.2, 0.23, 12]} />
+            <meshStandardMaterial color="#CBD5E1" roughness={0.3} metalness={0.75} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Thân xe dưới (Lower Chassis) sơn bóng kim loại */}
+      <mesh position={[0, 0.32 + bodyH / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1.82, bodyH, 4.32]} />
+        <meshStandardMaterial color={color} roughness={0.28} metalness={0.55} />
+      </mesh>
+      {/* Cản trước & cản sau */}
+      <mesh position={[0, 0.38, 2.18]} castShadow>
+        <boxGeometry args={[1.76, 0.24, 0.12]} />
+        <meshStandardMaterial color="#1E293B" roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.38, -2.18]} castShadow>
+        <boxGeometry args={[1.76, 0.24, 0.12]} />
+        <meshStandardMaterial color="#1E293B" roughness={0.6} />
+      </mesh>
+
+      {/* Khoang cabin & kính chắn gió trước/sau/bên hông */}
+      <mesh position={[0, 0.32 + bodyH + cabinH / 2 - 0.04, cabinZ]} castShadow>
+        <boxGeometry args={[1.58, cabinH, cabinL]} />
+        <meshStandardMaterial color={color} roughness={0.3} metalness={0.5} />
+      </mesh>
+      <mesh position={[0, 0.32 + bodyH + cabinH * 0.48, cabinZ]}>
+        <boxGeometry args={[1.61, cabinH * 0.76, cabinL * 0.92]} />
+        <meshStandardMaterial color="#1E293B" roughness={0.18} metalness={0.65} />
+      </mesh>
+
+      {/* Cụm đèn pha trước & lưới tản nhiệt mạ crôm */}
+      <mesh position={[0, 0.56, 2.17]}>
+        <boxGeometry args={[0.92, 0.18, 0.04]} />
+        <meshStandardMaterial color="#94A3B8" roughness={0.3} metalness={0.8} />
+      </mesh>
+      {[-0.64, 0.64].map((lx) => (
+        <mesh key={`headlight-${lx}`} position={[lx, 0.62, 2.17]}>
+          <boxGeometry args={[0.32, 0.14, 0.04]} />
+          <meshStandardMaterial
+            color="#F8FAFC"
+            emissive="#FEF08A"
+            emissiveIntensity={isNight ? 0.9 : 0.15}
+            roughness={0.2}
+          />
+        </mesh>
+      ))}
+      {/* Cụm đèn hậu đỏ */}
+      {[-0.64, 0.64].map((lx) => (
+        <mesh key={`taillight-${lx}`} position={[lx, 0.64, -2.17]}>
+          <boxGeometry args={[0.34, 0.14, 0.04]} />
+          <meshStandardMaterial
+            color="#DC2626"
+            emissive="#EF4444"
+            emissiveIntensity={isNight ? 0.8 : 0.2}
+            roughness={0.3}
+          />
+        </mesh>
+      ))}
+      {/* Biển số xe trắng */}
+      <LabelPlane
+        textureKey={`car-plate-${plate}`}
+        canvasW={192}
+        canvasH={48}
+        draw={(ctx, w, h) => {
+          ctx.fillStyle = '#F8FAFC';
+          ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#1E293B';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(2, 2, w - 4, h - 4);
+          ctx.fillStyle = '#0F172A';
+          ctx.font = '900 26px Arial, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(plate, w / 2, h / 2 + 1);
+        }}
+        size={[0.48, 0.12]}
+        position={[0, 0.42, 2.25]}
+        transparent={false}
+      />
+    </group>
+  );
+}
+
+/**
+ * Trục đường & làn đỗ xe ô tô của các thầy cô giảng viên cạnh tòa C7
+ * Nằm ngay bên tay phải (phía Bắc -Z) khi đi từ Cổng Trần Đại Nghĩa vào khuôn viên.
+ */
+export function C7FacultyParkingLane({ isNight }: { isNight: boolean }) {
+  return (
+    <group>
+      {/* Dải nền bê tông nhựa đỗ xe ô tô dọc theo trục đường C7 (x: 68.8..74.4, z: -45.5..-17.5) */}
+      <mesh rotation-x={-Math.PI / 2} position={[71.5, 0.018, -31.5]} receiveShadow>
+        <planeGeometry args={[5.8, 28.0]} />
+        <meshStandardMaterial color="#64686E" roughness={0.9} />
+      </mesh>
+
+      {/* Vạch sơn trắng phân chia 5 ô đỗ xe ô tô chuẩn kích thước */}
+      {[-17.8, -23.3, -28.8, -34.3, -39.8, -45.2].map((lineZ, idx) => (
+        <mesh key={`c7-stall-line-${idx}`} rotation-x={-Math.PI / 2} position={[71.5, 0.022, lineZ]}>
+          <planeGeometry args={[5.2, 0.14]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.85} />
+        </mesh>
+      ))}
+      <mesh rotation-x={-Math.PI / 2} position={[74.1, 0.022, -31.5]}>
+        <planeGeometry args={[0.14, 27.5]} />
+        <meshStandardMaterial color="#F8FAFC" roughness={0.85} />
+      </mesh>
+
+      {/* Biển báo "P — KHU ĐỖ XE Ô TÔ CÁN BỘ GIẢNG VIÊN C7" ở đầu trục đường */}
+      <group position={[70.2, 0, -16.8]} rotation-y={0}>
+        <mesh position={[0, 1.15, 0]} castShadow>
+          <cylinderGeometry args={[0.045, 0.045, 2.3, 10]} />
+          <meshStandardMaterial color="#94A3B8" roughness={0.4} metalness={0.7} />
+        </mesh>
+        <LabelPlane
+          textureKey="c7-faculty-parking-sign"
+          canvasW={384}
+          canvasH={256}
+          draw={(ctx, w, h) => {
+            ctx.fillStyle = '#1D4ED8';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(8, 8, w - 16, h - 16);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center';
+            ctx.font = '900 84px Arial, sans-serif';
+            ctx.fillText('P', w / 2, 88);
+            ctx.font = '800 26px Arial, sans-serif';
+            ctx.fillText('KHU ĐỖ XE Ô TÔ', w / 2, 152);
+            ctx.fillStyle = '#FDE047';
+            ctx.font = '800 24px Arial, sans-serif';
+            ctx.fillText('GIẢNG VIÊN TÒA C7', w / 2, 196);
+          }}
+          size={[1.05, 0.72]}
+          position={[0, 2.05, 0.05]}
+          transparent={false}
+        />
+      </group>
+
+      {/* 5 chiếc ô tô giảng viên đỗ ngay ngắn trong ô */}
+      {C7_FACULTY_PARKING.cars.map((car) => (
+        <FacultyParkedCar
+          key={car.id}
+          x={car.x}
+          z={car.z}
+          yaw={car.yaw}
+          color={car.color}
+          kind={car.kind}
+          plate={car.plate}
+          isNight={isNight}
+        />
+      ))}
     </group>
   );
 }

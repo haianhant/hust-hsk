@@ -25,20 +25,21 @@ export type ZoneSpec = {
 };
 
 export const ZONES: ZoneSpec[] = [
-  { name: 'Cổng Parabol', center: { x: -88, z: 10 }, radius: 13 },
-  { name: 'Nhà C9', center: { x: -42, z: -2 }, radius: 15 },
-  { name: 'Nhà C2 (VP Đoàn - Đảng ủy)', center: { x: -86, z: -22 }, radius: 11 },
+  { name: 'Cổng Parabol', center: { x: -88, z: -6 }, radius: 13 },
+  { name: 'Nhà C9', center: { x: -75, z: -17 }, radius: 17 },
+  { name: 'Nhà C2 (VP Đoàn - Đảng ủy)', center: { x: -86, z: -34 }, radius: 11 },
   { name: 'Quảng trường C1', center: { x: -58, z: -38 }, radius: 19 },
   { name: 'Cụm Giảng đường C3 – C4 – C5 – C10', center: { x: -12, z: -50 }, radius: 22 },
   { name: 'Cụm Tòa nhà C6 – C7 – C8', center: { x: 46, z: -46 }, radius: 22 },
   { name: 'Thư viện Tạ Quang Bửu', center: { x: 38, z: 32 }, radius: 20 },
-  { name: 'Hồ Tiền', center: { x: -2, z: 40 }, radius: 34 }, // bán kính chỉ để tham khảo — nearestZone kiểm tra theo hình chữ nhật (xem dưới)
+  { name: 'Hồ Tiền', center: { x: -2, z: 48 }, radius: 34 }, // bán kính chỉ để tham khảo — nearestZone kiểm tra theo hình chữ nhật (xem dưới)
   { name: 'Cụm Giảng đường D2 – D2a – D2b', center: { x: -60, z: 23 }, radius: 16 },
   { name: 'Nhà D4 (Viện Ngoại ngữ)', center: { x: -78, z: 44 }, radius: 15 },
   { name: 'Cụm Giảng đường D6 – D8', center: { x: -46, z: 46 }, radius: 16 },
   { name: 'Cụm Giảng đường D3 – D5 – D7 – D9', center: { x: 60, z: 36 }, radius: 22 },
+  { name: 'Nhà để xe D3 - D5', center: { x: 76, z: 7.5 }, radius: 12 },
   { name: 'Cổng Trần Đại Nghĩa (Cổng B8)', center: { x: 92, z: -6 }, radius: 14 },
-  { name: 'Đường tình yêu', center: { x: 0, z: -16 }, radius: 11 },
+  { name: 'Đường tình yêu', center: { x: 0, z: -6 }, radius: 11 },
   { name: 'Nhà B1 (Viện CNTT&TT - SoICT)', center: { x: 112, z: 14 }, radius: 16 },
   { name: 'Khu Ký túc xá Bách Khoa (B3 – B13)', center: { x: 122, z: -40 }, radius: 28 },
   { name: 'Nhà thi đấu TC & Bể bơi Bách Khoa', center: { x: 112, z: 56 }, radius: 20 },
@@ -60,7 +61,7 @@ export const CAMPUS_MAP_BUILDINGS: CampusMapBuildingSpec[] = [
   // Khu C (Bắc trục đường chính Parabol – Trần Đại Nghĩa)
   { code: 'C1', label: 'Nhà C1 (Hành chính)', box: { minX: -82, maxX: -34, minZ: -63, maxZ: -49 }, kind: 'main' },
   { code: 'C2', label: 'Nhà C2 (VP Đoàn - Đảng ủy)', box: C2_BUILDING.box, kind: 'main' },
-  { code: 'C9', label: 'Nhà C9 (Cầu đỏ)', box: { minX: -52, maxX: -32, minZ: -8, maxZ: 4 }, kind: 'main' },
+  { code: 'C9', label: 'Nhà C9 (Cầu thang đỏ)', box: { minX: -85, maxX: -65, minZ: -23, maxZ: -11 }, kind: 'main' },
   { code: 'C3', label: 'Nhà C3', box: { minX: -23, maxX: -1, minZ: -71.25, maxZ: -64.75 }, kind: 'lecture' },
   { code: 'C4', label: 'Nhà C4 (Hóa - Sinh - Thực phẩm)', box: { minX: -23, maxX: -1, minZ: -60.25, maxZ: -53.75 }, kind: 'lecture' },
   { code: 'C5', label: 'Nhà C5 (Vật liệu - Dệt may)', box: { minX: -23, maxX: -1, minZ: -49.25, maxZ: -42.75 }, kind: 'lecture' },
@@ -78,9 +79,10 @@ export const CAMPUS_MAP_BUILDINGS: CampusMapBuildingSpec[] = [
   { code: 'VDZ', label: 'Nhà Bắc Hồ Tiền (VDZ)', box: VDZ_CENTER.box, kind: 'main' },
   { code: 'Thư Viện', label: 'Thư viện Tạ Quang Bửu', box: { minX: 25.5, maxX: 50.5, minZ: 23.5, maxZ: 43.5 }, kind: 'main' },
   { code: 'D9', label: 'Nhà D9', box: { minX: 29, maxX: 47, minZ: 59.25, maxZ: 66.75 }, kind: 'lecture' },
-  { code: 'D3', label: 'Nhà D3 (Toán - Tin)', box: { minX: 57, maxX: 71, minZ: 14.5, maxZ: 21.5 }, kind: 'lecture' },
-  { code: 'D5', label: 'Nhà D5', box: { minX: 57, maxX: 71, minZ: 28.5, maxZ: 35.5 }, kind: 'lecture' },
-  { code: 'D3-5', label: 'Nhà D3-5', box: { minX: 71.75, maxX: 78.25, minZ: 14.5, maxZ: 35.5 }, kind: 'lecture' },
+  { code: 'Nhà xe D3-D5', label: 'Nhà để xe D3 - D5', box: { minX: 67, maxX: 85, minZ: 2.75, maxZ: 12.25 }, kind: 'lecture' },
+  { code: 'D3', label: 'Nhà D3 (Toán - Tin)', box: { minX: 57, maxX: 71, minZ: 17.5, maxZ: 24.5 }, kind: 'lecture' },
+  { code: 'D5', label: 'Nhà D5', box: { minX: 57, maxX: 71, minZ: 30.5, maxZ: 37.5 }, kind: 'lecture' },
+  { code: 'D3-5', label: 'Nhà D3-5', box: { minX: 71.75, maxX: 78.25, minZ: 17.5, maxZ: 37.5 }, kind: 'lecture' },
   { code: 'D7', label: 'Nhà D7', box: { minX: 53, maxX: 67, minZ: 44, maxZ: 56 }, kind: 'lecture' },
   // Phân khu Đông Đường Trần Đại Nghĩa (KTX B3–B13, B1, A17, H1, H3, Nhà T, Khu Thể thao & SVĐ)
   { code: 'B6', label: 'KTX B6', box: DORM_COMPLEX.b6Box, kind: 'dorm' },
@@ -103,7 +105,7 @@ export const CAMPUS_MAP_BUILDINGS: CampusMapBuildingSpec[] = [
   { code: 'Bể bơi', label: 'Bể bơi Bách Khoa', box: SPORTS_COMPLEX.poolBox, kind: 'sport' },
   { code: 'SVĐ', label: 'SVĐ Bách Khoa (Sân bóng đá)', box: { minX: 115, maxX: 149, minZ: 67, maxZ: 89 }, kind: 'sport' },
   { code: 'KTX Lào', label: 'KTX Lào', box: SPORTS_COMPLEX.ktxLaoBox, kind: 'dorm' },
-  { code: 'Parabol', label: 'Cổng Parabol (Giải Phóng)', box: { minX: -90, maxX: -86, minZ: 3.5, maxZ: 16.5 }, kind: 'gate' },
+  { code: 'Parabol', label: 'Cổng Parabol (Giải Phóng)', box: { minX: -90, maxX: -86, minZ: -12.5, maxZ: 0.5 }, kind: 'gate' },
   { code: 'Cổng TĐN', label: 'Cổng Trần Đại Nghĩa (B8)', box: { minX: 90.5, maxX: 93.5, minZ: -11, maxZ: -1 }, kind: 'gate' },
   { code: 'Cổng TQB', label: 'Cổng Tạ Quang Bửu', box: { minX: 121, maxX: 131, minZ: -69.5, maxZ: -66.5 }, kind: 'gate' },
 ];
