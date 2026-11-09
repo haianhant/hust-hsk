@@ -16,7 +16,214 @@ import {
   resolveLibraryMovement,
   sanitizeLibraryFloor,
   type LibraryFloor,
+  type LibraryFurniturePlacement,
+  type LibraryFurniturePropKind,
 } from '../../world-data/library-spatial';
+
+export interface CompositePropBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+  maxRadiusXZ: number;
+}
+
+/**
+ * Builds the exact Three.js composite geometry parts (`BufferGeometry` + local
+ * `Matrix4`) for `chairR`, `table4` (table + 4 chairs), `round4` (round table +
+ * 4 chairs), `armchair`, `sofa` (sofa + coffee table), and `shelf`.
+ * Used by regression tests to verify that collision footprints match actual
+ * composite Three.js mesh bounds 1:1.
+ */
+export function buildFurnitureCompositeGeometries(): Record<
+  LibraryFurniturePropKind | 'chairR',
+  Array<{ g: THREE.BufferGeometry; l: THREE.Matrix4 }>
+> {
+  const composeMat = (
+    x = 0,
+    y = 0,
+    z = 0,
+    rx = 0,
+    ry = 0,
+    rz = 0,
+    sx = 1,
+    sy = 1,
+    sz = 1,
+  ) =>
+    new THREE.Matrix4().compose(
+      new THREE.Vector3(x, y, z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)),
+      new THREE.Vector3(sx, sy, sz),
+    );
+  const unitBox = new THREE.BoxGeometry(1, 1, 1);
+  const cylCache: Record<string, THREE.BufferGeometry> = {};
+  const defs: Record<string, Array<{ g: THREE.BufferGeometry; l: THREE.Matrix4 }>> = {};
+  let cParts: Array<{ g: THREE.BufferGeometry; l: THREE.Matrix4 }> | null = null;
+
+  const defineProp = (name: string, fn: () => void) => {
+    cParts = defs[name] = [];
+    fn();
+    cParts = null;
+  };
+  const pBox = (w: number, h: number, d: number, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
+    cParts!.push({ g: unitBox, l: composeMat(x, y, z, rx, ry, rz, w, h, d) });
+  };
+  const pCyl = (rt: number, rb: number, h: number, s: number, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
+    const useUnit = Math.abs(rt - rb) < 1e-6;
+    const g = useUnit
+      ? (cylCache[`uc_${s}`] ??= new THREE.CylinderGeometry(1, 1, 1, s))
+      : (cylCache[`c_${rt}_${rb}_${h}_${s}`] ??= new THREE.CylinderGeometry(rt, rb, h, s));
+    const l = useUnit ? composeMat(x, y, z, rx, ry, rz, rt, h, rt) : composeMat(x, y, z, rx, ry, rz);
+    cParts!.push({ g, l });
+  };
+
+  defineProp('chairR', () => {
+    pBox(0.46, 0.05, 0.44, 0, 0.45, 0);
+    pBox(0.44, 0.42, 0.05, 0, 0.68, -0.2, 0.08);
+    for (const [lx, lz] of [
+      [-0.19, -0.18],
+      [0.19, -0.18],
+      [-0.19, 0.18],
+      [0.19, 0.18],
+    ]) {
+      pCyl(0.018, 0.018, 0.44, 6, lx, 0.22, lz);
+    }
+  });
+  defineProp('table4', () => {
+    pBox(1.5, 0.05, 0.85, 0, 0.74, 0);
+    pBox(1.46, 0.03, 0.81, 0, 0.71, 0);
+    for (const [lx, lz] of [
+      [-0.68, -0.36],
+      [0.68, -0.36],
+      [-0.68, 0.36],
+      [0.68, 0.36],
+    ]) {
+      pCyl(0.025, 0.025, 0.72, 6, lx, 0.36, lz);
+    }
+    for (const [cx, cz, ry] of [
+      [-0.42, -0.56, 0],
+      [0.42, -0.56, 0],
+      [-0.42, 0.56, Math.PI],
+      [0.42, 0.56, Math.PI],
+    ]) {
+      const xf = composeMat(cx, 0, cz, 0, ry, 0);
+      for (const p of defs.chairR) cParts!.push({ g: p.g, l: xf.clone().multiply(p.l) });
+    }
+  });
+  defineProp('round4', () => {
+    pCyl(0.62, 0.62, 0.05, 18, 0, 0.74, 0);
+    pCyl(0.06, 0.06, 0.7, 10, 0, 0.36, 0);
+    pCyl(0.34, 0.36, 0.03, 14, 0, 0.02, 0);
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2 + Math.PI / 4;
+      const xf = composeMat(Math.cos(a) * 0.82, 0, Math.sin(a) * 0.82, 0, -a - Math.PI / 2, 0);
+      for (const p of defs.chairR) cParts!.push({ g: p.g, l: xf.clone().multiply(p.l) });
+    }
+  });
+  defineProp('armchair', () => {
+    pBox(0.76, 0.36, 0.72, 0, 0.22, 0);
+    pBox(0.76, 0.44, 0.16, 0, 0.56, -0.28);
+    pBox(0.13, 0.34, 0.72, -0.32, 0.42, 0);
+    pBox(0.13, 0.34, 0.72, 0.32, 0.42, 0);
+    pBox(0.5, 0.08, 0.54, 0, 0.42, 0.04);
+  });
+  defineProp('sofa', () => {
+    pBox(1.85, 0.36, 0.78, 0, 0.22, 0);
+    pBox(1.85, 0.46, 0.16, 0, 0.58, -0.31);
+    pBox(0.14, 0.36, 0.78, -0.86, 0.42, 0);
+    pBox(0.14, 0.36, 0.78, 0.86, 0.42, 0);
+    pBox(1.56, 0.08, 0.58, 0, 0.42, 0.04);
+    pBox(0.95, 0.04, 0.52, 0, 0.42, 0.92);
+    pCyl(0.03, 0.03, 0.4, 8, -0.38, 0.2, 0.92);
+    pCyl(0.03, 0.03, 0.4, 8, 0.38, 0.2, 0.92);
+  });
+  defineProp('shelf', () => {
+    const w = 2.4;
+    const h = 2.15;
+    const d = 0.42;
+    pBox(w, h, 0.04, 0, h / 2, -d / 2);
+    pBox(0.05, h, d, -w / 2, h / 2, 0);
+    pBox(0.05, h, d, w / 2, h / 2, 0);
+    pBox(0.04, h, d - 0.02, 0, h / 2, 0);
+  });
+
+  return defs as Record<
+    LibraryFurniturePropKind | 'chairR',
+    Array<{ g: THREE.BufferGeometry; l: THREE.Matrix4 }>
+  >;
+}
+
+/**
+ * Computes exact local-space bounding box and radial extent from the composite
+ * Three.js vertex geometry of each Block A furniture prop (`table4`, `round4`,
+ * `sofa`, `armchair`, `shelf`).
+ */
+export function computeCompositePropBounds(
+  prop: LibraryFurniturePropKind,
+): CompositePropBounds {
+  const defs = buildFurnitureCompositeGeometries();
+  const box = new THREE.Box3();
+  let maxR = 0;
+  const v = new THREE.Vector3();
+  for (const { g, l } of defs[prop]) {
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(l);
+      box.expandByPoint(v);
+      const r = Math.hypot(v.x, v.z);
+      if (r > maxR) maxR = r;
+    }
+  }
+  return {
+    minX: Number(box.min.x.toFixed(4)),
+    maxX: Number(box.max.x.toFixed(4)),
+    minY: Number(box.min.y.toFixed(4)),
+    maxY: Number(box.max.y.toFixed(4)),
+    minZ: Number(box.min.z.toFixed(4)),
+    maxZ: Number(box.max.z.toFixed(4)),
+    maxRadiusXZ: Number(maxR.toFixed(4)),
+  };
+}
+
+/**
+ * Computes the exact world-space `THREE.Box3` of a placed composite furniture
+ * prop (`table4`, `round4`, `sofa`, `armchair`, `shelf`) at `(x, y, z, ry)`.
+ */
+export function computePlacedPropWorldBounds(
+  placement: LibraryFurniturePlacement,
+): CompositePropBounds {
+  const defs = buildFurnitureCompositeGeometries();
+  const placeMat = new THREE.Matrix4().compose(
+    new THREE.Vector3(placement.x, placement.y, placement.z),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, placement.ry, 0)),
+    new THREE.Vector3(1, 1, 1),
+  );
+  const box = new THREE.Box3();
+  let maxR = 0;
+  const v = new THREE.Vector3();
+  const worldMat = new THREE.Matrix4();
+  for (const { g, l } of defs[placement.prop]) {
+    worldMat.multiplyMatrices(placeMat, l);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(worldMat);
+      box.expandByPoint(v);
+      const r = Math.hypot(v.x - placement.x, v.z - placement.z);
+      if (r > maxR) maxR = r;
+    }
+  }
+  return {
+    minX: Number(box.min.x.toFixed(4)),
+    maxX: Number(box.max.x.toFixed(4)),
+    minY: Number(box.min.y.toFixed(4)),
+    maxY: Number(box.max.y.toFixed(4)),
+    minZ: Number(box.min.z.toFixed(4)),
+    maxZ: Number(box.max.z.toFixed(4)),
+    maxRadiusXZ: Number(maxR.toFixed(4)),
+  };
+}
 
 export interface ElevatorCarState {
   z: number;

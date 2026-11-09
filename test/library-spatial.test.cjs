@@ -325,7 +325,29 @@ test('PR10A Spatial (6) Regression — Mesh & collider bounding boxes match 1:1 
     }
   }
 
-  // 2. Shared Block A furniture placements (Floors 1–5) match collider bounding boxes 1:1
+  // 2. Composite Three.js geometry bounds (including chairs in table4 & round4) match PROP_DIMENSIONS & colliders
+  const {
+    computeCompositePropBounds,
+    computePlacedPropWorldBounds,
+  } = require(path.join(ROOT, 'features/campus/buildings/library/buildFloors1To5.ts'));
+
+  for (const prop of ['table4', 'round4', 'sofa', 'armchair', 'shelf']) {
+    const actualLocal = computeCompositePropBounds(prop);
+    const dim = PROP_DIMENSIONS[prop];
+    assert.equal(dim.minLX, actualLocal.minX, `${prop} minLX must match composite geometry minX`);
+    assert.equal(dim.maxLX, actualLocal.maxX, `${prop} maxLX must match composite geometry maxX`);
+    assert.equal(dim.minLZ, actualLocal.minZ, `${prop} minLZ must match composite geometry minZ`);
+    assert.equal(dim.maxLZ, actualLocal.maxZ, `${prop} maxLZ must match composite geometry maxZ`);
+    assert.equal(dim.height, actualLocal.maxY, `${prop} height must match composite geometry maxY`);
+    if (prop === 'round4') {
+      assert.equal(
+        dim.radius,
+        actualLocal.maxRadiusXZ,
+        'round4 radius must match composite geometry outer radius including 4 chairs',
+      );
+    }
+  }
+
   for (const floor of [1, 2, 3, 4, 5]) {
     const placements = getBlockAFurniturePlacements(floor);
     const colliders = getCollidersForFloor(floor);
@@ -337,19 +359,44 @@ test('PR10A Spatial (6) Regression — Mesh & collider bounding boxes match 1:1 
       const expected = colliderFromFurniturePlacement(fp);
       assert.deepEqual(col.bounds, expected.bounds, `Bounds mismatch for ${fp.id} on floor ${floor}`);
 
+      const actualWorld = computePlacedPropWorldBounds(fp);
       if (fp.prop === 'round4') {
         assert.ok(col.cylinder, `Round table ${fp.id} must have cylinder collider metadata`);
-        assert.equal(col.cylinder.radius, PROP_DIMENSIONS.round4.radius);
+        assert.equal(col.cylinder.radius, actualWorld.maxRadiusXZ);
+        assert.ok(col.bounds.minX <= actualWorld.minX + 1e-3);
+        assert.ok(col.bounds.maxX >= actualWorld.maxX - 1e-3);
+        assert.ok(col.bounds.minZ <= actualWorld.minZ + 1e-3);
+        assert.ok(col.bounds.maxZ >= actualWorld.maxZ - 1e-3);
       } else {
-        const d = PROP_DIMENSIONS[fp.prop];
-        const rotBox = computeRotatedBoxBounds(fp.x, fp.z, fp.ry, d.minLX, d.maxLX, d.minLZ, d.maxLZ);
-        assert.equal(col.bounds.minX, rotBox.minX);
-        assert.equal(col.bounds.maxX, rotBox.maxX);
-        assert.equal(col.bounds.minZ, rotBox.minZ);
-        assert.equal(col.bounds.maxZ, rotBox.maxZ);
+        assert.ok(Math.abs(col.bounds.minX - actualWorld.minX) <= 1e-3, `${fp.id} minX mismatch: ${col.bounds.minX} vs ${actualWorld.minX}`);
+        assert.ok(Math.abs(col.bounds.maxX - actualWorld.maxX) <= 1e-3, `${fp.id} maxX mismatch: ${col.bounds.maxX} vs ${actualWorld.maxX}`);
+        assert.ok(Math.abs(col.bounds.minZ - actualWorld.minZ) <= 1e-3, `${fp.id} minZ mismatch: ${col.bounds.minZ} vs ${actualWorld.minZ}`);
+        assert.ok(Math.abs(col.bounds.maxZ - actualWorld.maxZ) <= 1e-3, `${fp.id} maxZ mismatch: ${col.bounds.maxZ} vs ${actualWorld.maxZ}`);
       }
+      assert.ok(Math.abs(col.bounds.maxY - actualWorld.maxY) <= 1e-3, `${fp.id} maxY mismatch: ${col.bounds.maxY} vs ${actualWorld.maxY}`);
     }
   }
+
+  // Verify outer chair positions of table4 (|z_local| = 0.78m) and round4 (r = 1.02m) block movement
+  const f4CorrTable = getBlockAFurniturePlacements(4).find((p) => p.prop === 'table4' && p.x === 0 && p.z === -9.6);
+  assert.ok(f4CorrTable, 'Expected Floor 4 corridor table4 at (0, -9.6)');
+  const chairBackrestHit = resolveLibraryMovement(
+    createLibraryLocation(4, 0, -9.6 - 0.78, 13.5),
+    createLibraryLocation(4, 0, -9.6 - 0.78, 13.5),
+    AVATAR.radius,
+    AVATAR.height,
+  );
+  assert.equal(chairBackrestHit.blocked, true, 'Outer chair backrest of table4 must block movement');
+
+  const f4CorrRound = getBlockAFurniturePlacements(4).find((p) => p.prop === 'round4' && p.x === 15.8 && p.z === 0);
+  assert.ok(f4CorrRound, 'Expected Floor 4 corridor round4 at (15.8, 0)');
+  const roundChairHit = resolveLibraryMovement(
+    createLibraryLocation(4, 15.8 + 1.02, 0, 13.5),
+    createLibraryLocation(4, 15.8 + 1.02, 0, 13.5),
+    AVATAR.radius,
+    AVATAR.height,
+  );
+  assert.equal(roundChairHit.blocked, true, 'Outer chair ring of round4 must block movement');
 
   // 3. Navigation presets in LibraryFloorNav.tsx use the exact canonical LIBRARY_NAV_PRESETS
   const navModule = require(path.join(ROOT, 'components/ui/LibraryFloorNav.tsx'));

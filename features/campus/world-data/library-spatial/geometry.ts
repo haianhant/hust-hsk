@@ -57,15 +57,41 @@ export const BOOK_LENDING_ROOM_DIMS = {
 
 /**
  * Local-space bounding dimensions of each shared InstancedMesh furniture prop
- * in `buildFloors1To5.ts`, matching the procedural mesh geometry 1:1.
+ * in `buildFloors1To5.ts`, derived from the full composite Three.js geometry
+ * (including the 4 `chairR` chairs attached to `table4` and `round4` and the
+ * coffee table attached to `sofa`).
  */
 export const PROP_DIMENSIONS = {
-  table4: { minLX: -0.75, maxLX: 0.75, minLZ: -0.68, maxLZ: 0.68, height: 0.88 },
-  round4: { radius: 0.92, height: 0.88 },
-  sofa: { minLX: -0.93, maxLX: 0.93, minLZ: -0.39, maxLZ: 1.18, height: 0.88 },
-  armchair: { minLX: -0.38, maxLX: 0.38, minLZ: -0.36, maxLZ: 0.36, height: 0.84 },
-  shelf: { minLX: -1.20, maxLX: 1.20, minLZ: -0.21, maxLZ: 0.21, height: 2.15 },
+  table4: { minLX: -0.75, maxLX: 0.75, minLZ: -0.8017, maxLZ: 0.8017, height: 0.8913 },
+  round4: {
+    minLX: -0.9063,
+    maxLX: 0.9063,
+    minLZ: -0.9063,
+    maxLZ: 0.9063,
+    radius: 1.0843,
+    height: 0.8913,
+  },
+  sofa: { minLX: -0.93, maxLX: 0.93, minLZ: -0.39, maxLZ: 1.18, height: 0.81 },
+  armchair: { minLX: -0.385, maxLX: 0.385, minLZ: -0.36, maxLZ: 0.36, height: 0.78 },
+  shelf: { minLX: -1.225, maxLX: 1.225, minLZ: -0.23, maxLZ: 0.21, height: 2.15 },
 } as const;
+
+const PROP_COMPOSITE_SUB_BOXES: Record<
+  Exclude<LibraryFurniturePropKind, 'round4'>,
+  ReadonlyArray<{ minLX: number; maxLX: number; minLZ: number; maxLZ: number }>
+> = {
+  table4: [
+    { minLX: -0.75, maxLX: 0.75, minLZ: -0.425, maxLZ: 0.425 }, // Tabletop (1.50 × 0.85)
+    { minLX: -0.65, maxLX: 0.65, minLZ: -0.78, maxLZ: 0.78 }, // 4 Chair seat pans
+    { minLX: -0.64, maxLX: 0.64, minLZ: -0.8017, maxLZ: 0.8017 }, // 4 Chair backrests
+  ],
+  sofa: [
+    { minLX: -0.93, maxLX: 0.93, minLZ: -0.39, maxLZ: 0.39 }, // Sofa body (1.86 × 0.78)
+    { minLX: -0.475, maxLX: 0.475, minLZ: 0.66, maxLZ: 1.18 }, // Coffee table (0.95 × 0.52 at z=0.92)
+  ],
+  armchair: [{ minLX: -0.385, maxLX: 0.385, minLZ: -0.36, maxLZ: 0.36 }],
+  shelf: [{ minLX: -1.225, maxLX: 1.225, minLZ: -0.23, maxLZ: 0.21 }],
+};
 
 export const ROOM_401_DIMS = {
   S: 0.6,
@@ -1094,8 +1120,30 @@ export function colliderFromFurniturePlacement(p: LibraryFurniturePlacement): Sp
     return makeCylinderCollider(p.id, p.name, p.floor, 'furniture', p.x, p.z, d.radius, d.height, p.y);
   }
   const d = PROP_DIMENSIONS[p.prop];
-  const box = computeRotatedBoxBounds(p.x, p.z, p.ry, d.minLX, d.maxLX, d.minLZ, d.maxLZ);
-  return makeBoxCollider(p.id, p.name, p.floor, 'furniture', box.minX, box.maxX, box.minZ, box.maxZ, d.height, p.y);
+  const subBoxes = PROP_COMPOSITE_SUB_BOXES[p.prop];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const sb of subBoxes) {
+    const b = computeRotatedBoxBounds(p.x, p.z, p.ry, sb.minLX, sb.maxLX, sb.minLZ, sb.maxLZ);
+    if (b.minX < minX) minX = b.minX;
+    if (b.maxX > maxX) maxX = b.maxX;
+    if (b.minZ < minZ) minZ = b.minZ;
+    if (b.maxZ > maxZ) maxZ = b.maxZ;
+  }
+  return makeBoxCollider(
+    p.id,
+    p.name,
+    p.floor,
+    'furniture',
+    Number(minX.toFixed(4)),
+    Number(maxX.toFixed(4)),
+    Number(minZ.toFixed(4)),
+    Number(maxZ.toFixed(4)),
+    d.height,
+    p.y,
+  );
 }
 
 function buildFloor1Colliders(): SpatialCollider[] {
