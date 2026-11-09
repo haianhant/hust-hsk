@@ -657,25 +657,87 @@ test('(7) PR9 Review Fix 4 — HskRoom enforces 1-socket-to-1-sessionId invarian
   assert.equal(finalCount.count, 0, 'Room count must be 0 after all sockets close');
 });
 
-test('(8) Public player identity is separated from secret reconnect credential and prevents session/seat hijacking', async () => {
+test('(8) Public player identity is separated from secret reconnect credential, migrates legacy session IDs via CSPRNG, preserves F5 persistence, and prevents session/seat hijacking', async () => {
+  const identityLib = require('../lib/identity.ts');
   const ctx = createMockDoState();
   const room = new workerRoom.HskRoom(ctx);
 
-  const secretVictimToken = 'rt-victim-secret-99887766';
-  const victimPublicId = mpContracts.derivePublicPlayerId(secretVictimToken);
-  assert.ok(victimPublicId.startsWith('p-'), 'Derived public ID must have p- prefix');
+  // Create an in-memory Storage simulating a browser that previously stored a publicly broadcast legacy session ID
+  const backing = new Map();
+  const mockStorage = {
+    getItem: (k) => (backing.has(k) ? backing.get(k) : null),
+    setItem: (k, v) => backing.set(k, String(v)),
+    removeItem: (k) => backing.delete(k),
+  };
+
+  const knownLegacySessionId = 's-lw9x8z-known-public-legacy-id';
+  mockStorage.setItem(identityLib.SESSION_KEY, knownLegacySessionId);
+
+  // 1. Safe migration: must NOT reuse `knownLegacySessionId` as reconnectToken; must generate fresh CSPRNG secret
+  const secretVictimToken = identityLib.getReconnectToken(mockStorage);
+  const victimPublicId = identityLib.getSessionId(mockStorage);
+
   assert.equal(
-    victimPublicId.includes(secretVictimToken),
-    false,
-    'Public ID must never contain the secret reconnect token',
+    identityLib.isValidReconnectToken(secretVictimToken),
+    true,
+    `Expected CSPRNG reconnectToken matching /^rt-[0-9a-f]{32,64}$/, got ${secretVictimToken}`,
   );
+  assert.notEqual(
+    secretVictimToken,
+    knownLegacySessionId,
+    'Legacy session ID must NEVER be reused as secret reconnectToken',
+  );
+  assert.notEqual(
+    victimPublicId,
+    knownLegacySessionId,
+    'Migrated public player ID must not equal legacy session ID',
+  );
+  assert.notEqual(
+    victimPublicId,
+    mpContracts.derivePublicPlayerId(knownLegacySessionId),
+    'Migrated public player ID must not be derived from known legacy session ID',
+  );
+  assert.equal(
+    victimPublicId,
+    mpContracts.derivePublicPlayerId(secretVictimToken),
+    'Public player ID must be derived from the new CSPRNG reconnectToken',
+  );
+  assert.equal(
+    mockStorage.getItem(identityLib.RECONNECT_TOKEN_KEY),
+    secretVictimToken,
+    'CSPRNG reconnectToken must be persisted in bkhn-reconnect-token-v1',
+  );
+  assert.equal(
+    mockStorage.getItem(identityLib.SESSION_KEY),
+    victimPublicId,
+    'bkhn-session-id must be overwritten with the new derived public ID',
+  );
+
+  // 2. F5 Persistence: reloading the page with the same localStorage preserves both reconnectToken and publicId
+  const tokenAfterF5 = identityLib.getReconnectToken(mockStorage);
+  const publicIdAfterF5 = identityLib.getSessionId(mockStorage);
+  assert.equal(tokenAfterF5, secretVictimToken, 'reconnectToken must persist across F5 reloads');
+  assert.equal(publicIdAfterF5, victimPublicId, 'Derived publicId must persist across F5 reloads');
+
+  // Even if bkhn-reconnect-token-v1 was corrupted with the legacy ID, getReconnectToken rotates to a new CSPRNG secret
+  const corruptedStorageMap = new Map([
+    [identityLib.RECONNECT_TOKEN_KEY, knownLegacySessionId],
+    [identityLib.SESSION_KEY, knownLegacySessionId],
+  ]);
+  const corruptedStorage = {
+    getItem: (k) => (corruptedStorageMap.has(k) ? corruptedStorageMap.get(k) : null),
+    setItem: (k, v) => corruptedStorageMap.set(k, String(v)),
+  };
+  const rotatedToken = identityLib.getReconnectToken(corruptedStorage);
+  assert.equal(identityLib.isValidReconnectToken(rotatedToken), true);
+  assert.notEqual(rotatedToken, knownLegacySessionId);
 
   const wsVictim = createMockSocket();
   const wsPeer = createMockSocket();
   ctx.acceptWebSocket(wsVictim);
   ctx.acceptWebSocket(wsPeer);
 
-  // 1. Victim joins with separated public sessionId and secret reconnectToken, then claims a seat
+  // 3. Victim joins with separated public sessionId and secret reconnectToken, then claims a seat
   await room.webSocketMessage(
     wsVictim,
     JSON.stringify({
@@ -696,13 +758,14 @@ test('(8) Public player identity is separated from secret reconnect credential a
     }),
   );
 
-  // 2. Peer joins and receives welcome + study:room-snapshot
+  // 4. Peer joins and receives welcome + study:room-snapshot
+  const peerSecret = identityLib.generateSecureReconnectToken();
   await room.webSocketMessage(
     wsPeer,
     JSON.stringify({
       type: 'join',
-      sessionId: mpContracts.derivePublicPlayerId('rt-peer-secret-112233'),
-      reconnectToken: 'rt-peer-secret-112233',
+      sessionId: mpContracts.derivePublicPlayerId(peerSecret),
+      reconnectToken: peerSecret,
       name: 'Hoàng Thu Trang',
       mssv: '20226222',
     }),
@@ -715,12 +778,12 @@ test('(8) Public player identity is separated from secret reconnect credential a
     'Broadcasts to peers must never leak victim secret reconnectToken',
   );
   assert.equal(
-    peerDump.includes(victimPublicId),
+    peerDump.includes( victimPublicId),
     true,
     'Broadcasts to peers must use victim derived public player ID',
   );
 
-  // 3. Attacker socket sees `victimPublicId` in public broadcasts and attempts to hijack victim's session
+  // 5. Attacker socket sees `victimPublicId` in public broadcasts and attempts to hijack victim's session
   const wsAttacker1 = createMockSocket();
   ctx.acceptWebSocket(wsAttacker1);
   await room.webSocketMessage(
@@ -736,24 +799,27 @@ test('(8) Public player identity is separated from secret reconnect credential a
   assert.ok(errHijack1, 'Hijack attempt using public player ID as sessionId must be rejected');
   assert.equal(wsVictim.closed.length, 0, 'Victim socket must NOT be closed by hijack attempt');
 
-  // 4. Attacker socket attempts to supply `victimPublicId` + a forged `reconnectToken`
-  const wsAttacker2 = createMockSocket();
-  ctx.acceptWebSocket(wsAttacker2);
+  // 6. Attacker who previously recorded `knownLegacySessionId` attempts to hijack victim's new session
+  const wsAttackerLegacy = createMockSocket();
+  ctx.acceptWebSocket(wsAttackerLegacy);
   await room.webSocketMessage(
-    wsAttacker2,
+    wsAttackerLegacy,
     JSON.stringify({
       type: 'join',
       sessionId: victimPublicId,
-      reconnectToken: 'rt-forged-wrong-secret',
-      name: 'Kẻ giả mạo 2',
+      reconnectToken: knownLegacySessionId,
+      name: 'Kẻ giả mạo Legacy',
       mssv: '20229999',
     }),
   );
-  const errHijack2 = wsAttacker2.sent.find((m) => m.type === 'error');
-  assert.ok(errHijack2, 'Hijack attempt with mismatched reconnectToken must be rejected');
+  const errHijackLegacy = wsAttackerLegacy.sent.find((m) => m.type === 'error');
+  assert.ok(
+    errHijackLegacy,
+    'Hijack attempt using previously known legacy session ID as reconnectToken must be rejected',
+  );
   assert.equal(wsVictim.closed.length, 0, 'Victim socket must remain open and unharmed');
 
-  // 5. Legitimate victim reconnects on a new socket with `secretVictimToken` after DO hibernation
+  // 7. Legitimate victim reconnects after F5 reload (`tokenAfterF5` / `publicIdAfterF5`) & DO hibernation
   const hibernatedRoom = new workerRoom.HskRoom(ctx);
   const wsVictimReconnect = createMockSocket();
   ctx.acceptWebSocket(wsVictimReconnect);
@@ -761,8 +827,8 @@ test('(8) Public player identity is separated from secret reconnect credential a
     wsVictimReconnect,
     JSON.stringify({
       type: 'join',
-      sessionId: victimPublicId,
-      reconnectToken: secretVictimToken,
+      sessionId: publicIdAfterF5,
+      reconnectToken: tokenAfterF5,
       name: 'Phạm Minh Tuấn',
       mssv: '20226111',
     }),

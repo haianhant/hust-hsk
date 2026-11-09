@@ -217,7 +217,7 @@ function connectClient(room = 'hsk-1') {
     const welcomeA2 = await wsA2.waitFor((m) => m.type === 'welcome');
     assert('Reconnect same sessionId keeps room count = 2', welcomeA2.count === 2, `count=${welcomeA2.count}`);
 
-    // 7b. Attacker attempting to hijack Client A using public player ID `pubA` is rejected
+    // 7b. Attacker attempting to hijack Client A using public player ID `pubA` or mismatched reconnectToken is rejected
     const wsHijack = await connectClient('hsk-1');
     wsHijack.send(
       JSON.stringify({
@@ -232,6 +232,21 @@ function connectClient(room = 'hsk-1') {
       'Public player ID cannot be used as reconnect credential to hijack session',
       hijackErr && hijackErr.type === 'error',
       JSON.stringify(hijackErr),
+    );
+    wsHijack.send(
+      JSON.stringify({
+        type: 'join',
+        sessionId: pubA,
+        reconnectToken: 's-legacy-session-id-guess',
+        name: 'Attacker Legacy Guess',
+        mssv: '20226999',
+      }),
+    );
+    const hijackLegacyErr = await wsHijack.waitFor((m) => m.type === 'error');
+    assert(
+      'Forged/legacy reconnectToken with victim public player ID is rejected',
+      hijackLegacyErr && hijackLegacyErr.type === 'error',
+      JSON.stringify(hijackLegacyErr),
     );
     wsHijack.close();
 

@@ -1524,16 +1524,37 @@ test('PR9 Review Fix 3 — Concurrent / Superseded Seat Claim Requests & Out-of-
   }
 });
 
-test('(28) Reconnect reconciliation when local player is already standing while server still holds seat + separated public ID vs reconnectToken', async () => {
+test('(28) Reconnect reconciliation when local player is already standing while server still holds seat + separated public ID vs CSPRNG reconnectToken & safe legacy migration', async () => {
   const { derivePublicPlayerId } = require('../shared/contracts/multiplayer.ts');
-  const { getReconnectToken, getSessionId } = require('../lib/identity.ts');
+  const {
+    RECONNECT_TOKEN_KEY,
+    SESSION_KEY,
+    getReconnectToken,
+    getSessionId,
+    isValidReconnectToken,
+  } = require('../lib/identity.ts');
 
-  // 1. Verify identity separation between secret reconnectToken and derived public sessionId
-  const token = getReconnectToken();
-  const publicId = getSessionId();
-  assert.ok(typeof token === 'string' && token.length >= 4);
+  // 1. Verify safe migration from a previously broadcast legacy bkhn-session-id + F5 persistence
+  const storeMap = new Map([[SESSION_KEY, 's-legacy-broadcast-id-001']]);
+  const mockStorage = {
+    getItem: (k) => (storeMap.has(k) ? storeMap.get(k) : null),
+    setItem: (k, v) => storeMap.set(k, String(v)),
+  };
+
+  const token = getReconnectToken(mockStorage);
+  const publicId = getSessionId(mockStorage);
+  assert.equal(isValidReconnectToken(token), true, 'reconnectToken must be generated via CSPRNG');
+  assert.notEqual(token, 's-legacy-broadcast-id-001', 'Must never reuse legacy session ID as reconnectToken');
   assert.equal(publicId, derivePublicPlayerId(token));
   assert.notEqual(publicId, token);
+  assert.notEqual(publicId, 's-legacy-broadcast-id-001');
+  assert.notEqual(publicId, derivePublicPlayerId('s-legacy-broadcast-id-001'));
+  assert.equal(mockStorage.getItem(RECONNECT_TOKEN_KEY), token);
+  assert.equal(mockStorage.getItem(SESSION_KEY), publicId);
+
+  // F5 persistence: subsequent calls return the exact same CSPRNG token and derived publicId
+  assert.equal(getReconnectToken(mockStorage), token);
+  assert.equal(getSessionId(mockStorage), publicId);
 
   // 2. Verify MultiplayerClient sends both public sessionId and secret reconnectToken on join
   const h = createTestMultiplayerHarness();

@@ -134,7 +134,9 @@ async function seedCharacterAndEnterLibrary(page, profile, roomUrl, wsOverrideUr
         JSON.stringify({ name: prof.name, mssv: prof.mssv }),
       );
       window.localStorage.setItem('bkhn-character-v1', JSON.stringify(prof));
-      window.localStorage.setItem('bkhn-session-id', prof.sessionId);
+      if (!window.localStorage.getItem('bkhn-reconnect-token-v1')) {
+        window.localStorage.setItem('bkhn-session-id', prof.sessionId);
+      }
     },
     { prof: profile, wsUrl: wsOverrideUrl },
   );
@@ -563,8 +565,11 @@ async function run() {
       identitySeparation.publicId &&
         identitySeparation.publicId.startsWith('p-') &&
         identitySeparation.reconnectToken &&
+        /^rt-[0-9a-f]{32,64}$/.test(identitySeparation.reconnectToken) &&
+        identitySeparation.reconnectToken !== 'pr9-student-a' &&
+        identitySeparation.publicId !== 'pr9-student-a' &&
         identitySeparation.publicId !== identitySeparation.reconnectToken,
-      `Expected separated publicId vs reconnectToken, got ${JSON.stringify(identitySeparation)}`,
+      `Expected separated publicId vs CSPRNG reconnectToken (never reusing legacy sessionId), got ${JSON.stringify(identitySeparation)}`,
     );
 
     // Verify FIX 5 on connected Student A: if a reconnect snapshot / remote claim indicates
