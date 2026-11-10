@@ -327,15 +327,15 @@ export default function CharacterCreatorModal({
       data-testid="character-creator-modal"
       className={
         mode === 'entry'
-          ? 'w-full max-w-5xl rounded-3xl border border-white/40 bg-[#FAF6F0]/95 p-4 text-[#2B2B2B] shadow-2xl backdrop-blur-md sm:p-6'
-          : 'fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 backdrop-blur-xs sm:p-5'
+          ? 'w-full max-w-5xl rounded-3xl border border-white/40 bg-[#FAF6F0]/95 p-4 text-left text-[#2B2B2B] shadow-2xl backdrop-blur-md sm:p-6'
+          : 'fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 text-left backdrop-blur-xs sm:p-5'
       }
     >
       <div
         className={
           mode === 'entry'
-            ? 'w-full'
-            : 'max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-white/30 bg-[#FAF6F0] p-4 text-[#2B2B2B] shadow-2xl sm:p-6'
+            ? 'w-full text-left'
+            : 'max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-white/30 bg-[#FAF6F0] p-4 text-left text-[#2B2B2B] shadow-2xl sm:p-6'
         }
       >
         {/* Header */}
@@ -592,11 +592,11 @@ export default function CharacterCreatorModal({
 
             {/* 4. Chọn đồng phục HUST (Mặc định Áo khoác gió HUST + 3 Bomber HUST + Polo/Sơ mi/Thể chất) */}
             <div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#1E293B]">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                <span className="whitespace-nowrap text-xs font-bold text-[#1E293B]">
                   Trang phục & Đồng phục ĐHBK Hà Nội
                 </span>
-                <span className="text-[11px] font-semibold text-[#B5121B]">
+                <span className="truncate text-[11px] font-semibold text-[#B5121B]">
                   {OUTFIT_PRESETS[outfit]?.desc}
                 </span>
               </div>
