@@ -10,7 +10,7 @@
   - Đơn vị: **mét (m)**. `+X` = Đông (phía đường Trần Đại Nghĩa), `-X` = Tây (phía đường Giải Phóng), `-Z` = Bắc (phía đường Đại Cồ Việt), `+Z` = Nam (phía đường Tạ Quang Bửu / Lê Thanh Nghị).
   - `Y = 0` là mặt đất cơ sở; `AVATAR.height = 1.7m`, `AVATAR.radius = 0.4m` là chuẩn tỉ lệ con người cho mọi cửa, bậc thang, lan can, bàn ghế.
 - **Kết hợp linh hoạt Procedural PBR & Tài nguyên Thực tế ([`tham-khao/`](./tham-khao/README.md)):**
-  - Ưu tiên sinh **Canvas 2D (`THREE.CanvasTexture`)** có seed cố định (`mulberry32` / LCG) cho các bề mặt kiến trúc lặp lại và bảng chữ qua `components/three/TextPlate.tsx` ([ADR-0002](./docs/adr/0002-procedural-pbr-and-zero-external-3d-assets.md)).
+  - Ưu tiên sinh **Canvas 2D (`THREE.CanvasTexture`)** có seed cố định (`mulberry32` / LCG) cho các bề mặt kiến trúc lặp lại và bảng chữ qua `components/three/TextPlate.tsx` (`CANVAS_VN_FONT`, `wrapVietnameseCanvasContext` chuẩn hóa font `Be Vietnam Pro` & Unicode NFC để hiển thị đầy đủ dấu tiếng Việt) ([ADR-0002](./docs/adr/0002-procedural-pbr-and-zero-external-3d-assets.md)).
 
 ## 2. Nguyên tắc Tái hiện Đại học Bách khoa Hà Nội (HUST Authenticity)
 - **Bắt buộc lấy Bản đồ Khuôn viên ĐHBK Hà Nội & Bộ ảnh thật [`tham-khao/`](./tham-khao/README.md) làm chuẩn (Official Ground Truth):**
@@ -23,7 +23,7 @@
   - **`landscape.tien-lake` ([`c9-parabol-lake.md`](./docs/world/buildings/c9-parabol-lake.md)):** Hình chữ nhật trục Bắc–Nam (`45m × 88m`), bờ kè đá có gờ bê tông, đèn sân vườn, hàng liễu rủ ven hồ, mặt hồ phủ sen/súng hồng có khoảng nước thoáng.
   - **`building.c9` ([`c9-parabol-lake.md`](./docs/world/buildings/c9-parabol-lake.md)):** Khối nhà trắng/kem 4 tầng với **cầu thang bộ ngoài trời gấp khúc zic-zac** gắn mặt đông (4 vế × 3.4m khớp đúng cao độ sàn tầng), lan can kim loại đỏ mảnh, khung cửa sổ 3D và cửa gỗ tầng trệt.
   - **`building.c7` ([`c7.md`](./docs/world/buildings/c7.md)):** Khối nhà lớn 9 tầng màu trắng hiện đại tạo hình **chữ E** (3 cánh nhô về phía Nam tạo 2 sân trong trồng cây xanh), tầng 1–2 vách kính cao làm giảng đường, mái phẳng có ô mái ngói đỏ.
-  - **`building.b1-soict` & `building.dorm-complex` ([`east-campus.md`](./docs/world/buildings/east-campus.md)):** Tòa B1 có mặt chính góc cong đặc trưng, tầng trệt ốp đỏ nâu, biển `B1`; Khu KTX gồm nhà B9 màu vàng có sân trong/cổng Hội Sinh viên và tòa KTX mới cao tầng sơn xanh–trắng.
+  - **`building.b1-soict` & `building.dorm-complex` ([`east-campus.md`](./docs/world/buildings/east-campus.md)):** Tòa B1 sơn màu trắng kiến trúc (`#FFFFFF` / `#F8FAFC`), quay mặt chính có khối sảnh tròn rotunda, thảm cỏ bán nguyệt và biển `"B1"` xanh dương về hướng Bắc (`-Z`, trục đường chính từ Cổng Trần Đại Nghĩa); Khu KTX gồm nhà B9 màu vàng có sân trong/cổng Hội Sinh viên và tòa KTX mới cao tầng sơn xanh–trắng; Nhà để xe `D3-D5` trải sâu `34m` dọc trục Bắc–Nam (`z = 2.5..36.5`) cạnh cụm giảng đường `D3 – D5 – D3-5 – D7`.
   - **`avatar.rig` & `avatar.outfit.*` ([`outfits.md`](./docs/world/avatar/outfits.md)):** Sinh viên Nam & Nữ tỉ lệ chuẩn với 10 bộ đồng phục HUST (mặc định **Áo khoác gió HUST** trắng–đỏ cắt chữ V, 3 mẫu **Áo Bomber**, **Áo Polo đỏ**, **Áo Hoodie đỏ**, **Áo phông xanh**, **Sơ mi trắng/xanh**, **Sweater kem**) và tùy chọn **Chân váy xếp ly chữ A** cho Nữ.
 
 ## 3. Quy chuẩn Đồ họa & Hiệu năng 3D ([`docs/architecture/frontend.md`](./docs/architecture/frontend.md))

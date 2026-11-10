@@ -11,13 +11,13 @@
   - 3 ảnh chụp thực tế tại [`tham-khao/b1-soict/`](../../../tham-khao/b1-soict/README.md) (`b1-soict-01.jpg` .. `b1-soict-03.jpg`).
 - **Current Implementation Status:** **Production** (Đã nâng cấp mặt chính góc cong ở Đợt 7).
 - **Invariants (Ràng buộc Bất biến):**
-  1. **Tọa độ & Quy mô:** Tâm tại `(112, 14)`, kích thước `22m × 14m` (`box: { minX: 101, maxX: 123, minZ: 7, maxZ: 21 }`), cao `8 tầng × 3.2m`.
-  2. **Kiến trúc Góc Cong Đặc trưng:**
-     - Khối góc mặt tiền được bo cong `1/4` hình trụ với các dải kính cong liên tục giữa các tầng.
-     - Tầng trệt và sảnh chính ốp gạch màu đỏ nâu Bách khoa đặc trưng (`b1-soict-03.jpg`).
-     - Trên trán mái gắn biển chữ `"B1"` màu đỏ nổi bật cùng tên đơn vị.
+  1. **Tọa độ & Quy mô:** Tâm tại `(112, 14)`, kích thước `22m × 14m` (`box: { minX: 101, maxX: 123, minZ: 7, maxZ: 21 }`), cao `8 tầng × 3.2m`, quay mặt chính về hướng Bắc (`-Z`, `rotation-y = Math.PI`) nhìn ra trục đường chính từ Cổng Trần Đại Nghĩa (`z = -6`).
+  2. **Kiến trúc Sảnh Tròn Rotunda & Sơn Trắng:**
+     - Toàn bộ mặt đứng sơn màu trắng kiến trúc (`#FFFFFF` / `#F8FAFC`) với chỉ viền xám nhạt (`#E2E8F0`) theo đúng ảnh thực tế `b1-soict-01..02.jpg`.
+     - Chính giữa mặt Bắc là khối sảnh hình trụ tròn (rotunda) có hàng cột đen tầng trệt, thảm cỏ bán nguyệt có viền đá trắng và biển tên trường SoICT nền xanh chữ trắng.
+     - Trên trán mái gắn biển chữ `"B1"` màu xanh dương (`#1D4E9E`) nổi bật.
 - **Acceptance Criteria:**
-  - Nhìn từ trục đường Trần Đại Nghĩa nhận diện rõ khối góc bo cong, tầng trệt đỏ nâu và biển `"B1"`.
+  - Nhìn từ trục đường chính Cổng Trần Đại Nghĩa (`z = -6`) về phía Nam (`+Z`) nhận diện rõ mặt tiền trắng của Tòa B1, khối sảnh tròn rotunda, thảm cỏ bán nguyệt và biển `"B1"`.
 - **Known Limitations:**
   - Các tòa nhà phụ cận phía Đông-Nam B1 (`A17`, `H1`, `H3`, `Nhà T` trong `EAST_CAMPUS_BLOCKS`) được dựng ở mức ngoại thất tiêu chuẩn làm bối cảnh không gian.
 
