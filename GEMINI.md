@@ -45,6 +45,6 @@ Sau mỗi thay đổi về 3D, kiến trúc hoặc logic, phải đảm bảo 6 
 6. `npm run build` — Xuất bản tĩnh Next.js (`out/`) thành công.
 
 ## 5. Quy trình Git & Tự động Commit/Push (Git Policy)
-- **Nhánh chính Production / Go-Live là `master`:** Mọi bản phát hành chính thức và CI/CD go-live chạy qua nhánh `master` (không sử dụng nhánh `main`).
+- **Nhánh chính Production / Go-Live là `main`:** Mọi bản phát hành chính thức và CI/CD go-live (Vercel Production & GitHub Actions) chạy qua nhánh mặc định `main` (đã loại bỏ nhánh `master`).
 - **Tự động `git commit` và `git push` sau khi hoàn thành công việc:** Sau khi hoàn tất yêu cầu và toàn bộ các cổng kiểm thử ở Mục 4 đã PASS (`exit code 0`), **luôn chủ động tạo commit và push thẳng lên nhánh làm việc hiện tại trên remote (`origin`)**.
-- **Bảo vệ nhánh chính:** Không tự ý merge vào `master` hoặc deploy nếu nhiệm vụ yêu cầu làm việc trên nhánh tính năng riêng (`feat/*`), trừ khi người dùng yêu cầu trực tiếp.
+- **Bảo vệ nhánh chính:** Không tự ý merge vào `main` hoặc deploy nếu nhiệm vụ yêu cầu làm việc trên nhánh tính năng riêng (`feat/*`), trừ khi người dùng yêu cầu trực tiếp.
