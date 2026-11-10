@@ -139,7 +139,8 @@ export default function HomePage() {
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('day');
   const [autoTimeOfDay, setAutoTimeOfDay] = useState<boolean>(true);
   const [realClockText, setRealClockText] = useState<string>('');
-  const [lofiPlaying, setLofiPlaying] = useState<boolean>(false);
+  const [lofiPlaying, setLofiPlaying] = useState<boolean>(true);
+  const lofiManuallyPausedRef = useRef<boolean>(false);
   const [outfitOpen, setOutfitOpen] = useState(false);
   const [characterProfile, setCharacterProfile] = useState<CharacterProfile>(DEFAULT_CHARACTER_PROFILE);
   const [lobbyModal, setLobbyModal] = useState<LibraryLobbyTopic | null>(null);
@@ -191,16 +192,25 @@ export default function HomePage() {
     return () => window.clearInterval(timer);
   }, [autoTimeOfDay]);
 
-  // Đồng bộ trạng thái nhạc Lofi Chill từ Web Audio engine
+  // Đồng bộ trạng thái nhạc Lofi Chill từ Web Audio engine & tự động phát khi vào game
   useEffect(() => {
     const unsub = lofiAudio.subscribe((snap) => {
       setLofiPlaying(snap.playing);
     });
+    if (!lofiManuallyPausedRef.current) {
+      lofiAudio.start();
+    }
     return () => {
       unsub();
       lofiAudio.stop();
     };
   }, []);
+
+  useEffect(() => {
+    if (entered && !lofiManuallyPausedRef.current) {
+      lofiAudio.start();
+    }
+  }, [entered]);
 
   const [noVoice, setNoVoice] = useState(false);
   const noVoiceDismissedRef = useRef(false);
@@ -1054,9 +1064,10 @@ export default function HomePage() {
 
   const handleToggleLofi = useCallback(() => {
     const nowPlaying = lofiAudio.toggle();
+    lofiManuallyPausedRef.current = !nowPlaying;
     setLofiPlaying(nowPlaying);
     if (nowPlaying) {
-      showToast('🎵 Đang phát nhạc Lofi Chill học tập (72 BPM · Warm Rhodes & Vinyl)');
+      showToast('🎵 Đang phát nhạc Lofi Chill học tập (75 BPM · Felt Piano & Warm Pad)');
     } else {
       showToast('🔇 Đã tắt nhạc Lofi Chill.');
     }
@@ -1336,6 +1347,9 @@ export default function HomePage() {
         setInLibraryLobby(false);
       }
       setEntered(true);
+      if (!lofiManuallyPausedRef.current) {
+        lofiAudio.start();
+      }
       if (resumeQuest && qs && !qs.done) {
         window.setTimeout(() => setPanel('quest'), 300);
       }

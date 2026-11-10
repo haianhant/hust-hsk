@@ -128,6 +128,7 @@ class LofiChillEngine {
   private nextStepTime = 0;
   private currentStep = 0;
   private listeners = new Set<LofiListener>();
+  private unlockBound: (() => void) | null = null;
 
   public getSnapshot(): LofiAudioSnapshot {
     return {
@@ -247,11 +248,55 @@ class LofiChillEngine {
       this.dryBus = dryBus;
       this.reverbSend = reverbSend;
       this.delaySend = delaySend;
+
+      ctx.onstatechange = () => {
+        if (this.playing && ctx.state === 'running') {
+          this.nextStepTime = Math.max(this.nextStepTime, ctx.currentTime + 0.05);
+          this.runScheduler();
+        }
+      };
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     }
     return this.ctx;
+  }
+
+  private attachGestureUnlock(): void {
+    if (typeof window === 'undefined' || this.unlockBound) return;
+    const unlock = () => {
+      if (!this.playing) {
+        this.detachGestureUnlock();
+        return;
+      }
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx
+          .resume()
+          .then(() => {
+            if (this.playing && this.ctx && this.ctx.state === 'running') {
+              this.detachGestureUnlock();
+              this.nextStepTime = this.ctx.currentTime + 0.05;
+              this.runScheduler();
+            }
+          })
+          .catch(() => {});
+      } else if (this.ctx && this.ctx.state === 'running') {
+        this.detachGestureUnlock();
+      }
+    };
+    this.unlockBound = unlock;
+    window.addEventListener('pointerdown', unlock, { passive: true });
+    window.addEventListener('keydown', unlock, { passive: true });
+    window.addEventListener('click', unlock, { passive: true });
+  }
+
+  private detachGestureUnlock(): void {
+    if (typeof window === 'undefined' || !this.unlockBound) return;
+    const fn = this.unlockBound;
+    this.unlockBound = null;
+    window.removeEventListener('pointerdown', fn);
+    window.removeEventListener('keydown', fn);
+    window.removeEventListener('click', fn);
   }
 
   /**
@@ -515,7 +560,7 @@ class LofiChillEngine {
   private runScheduler(): void {
     if (!this.playing) return;
     const ctx = this.ensureContext();
-    if (!ctx) return;
+    if (!ctx || ctx.state !== 'running') return;
 
     const now = ctx.currentTime;
     // Nếu tab vừa thức dậy sau khi ngủ dài, kéo nextStepTime về hiện tại mượt mà
@@ -533,7 +578,12 @@ class LofiChillEngine {
   public start(): boolean {
     const ctx = this.ensureContext();
     if (!ctx) return false;
-    if (this.playing) return true;
+    if (this.playing) {
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      return true;
+    }
     this.playing = true;
     this.currentStep = 0;
     this.nextStepTime = ctx.currentTime + 0.06;
@@ -544,13 +594,18 @@ class LofiChillEngine {
       this.masterGain.gain.linearRampToValueAtTime(this.volume, ctx.currentTime + 0.4);
     }
 
-    this.runScheduler();
+    if (ctx.state === 'running') {
+      this.runScheduler();
+    } else {
+      this.attachGestureUnlock();
+    }
     this.schedulerId = setInterval(() => this.runScheduler(), LOOKAHEAD_MS);
     this.emit();
     return true;
   }
 
   public stop(): void {
+    this.detachGestureUnlock();
     if (!this.playing && !this.schedulerId) return;
     this.playing = false;
     if (this.schedulerId) {
