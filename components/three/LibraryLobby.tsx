@@ -258,7 +258,6 @@ export default function LibraryLobby({
   const floor1AnchorsRef = useRef<THREE.Group>(null);
   const floor6InteractiveRef = useRef<THREE.Group>(null);
   const floor10InteractiveRef = useRef<THREE.Group>(null);
-  const floorFillLightRef = useRef<THREE.PointLight>(null);
   const debugOverlayRef = useRef<THREE.Group>(null);
   const debugFloorRenderedRef = useRef<LibraryFloor | null>(null);
   const perfStatsRef = useRef({ lastFrameDeltaMs: 0, maxFrameDeltaMs: 0 });
@@ -414,16 +413,6 @@ export default function LibraryLobby({
     } else if (showBlockD) {
       multiFloor.ensureBlockD().update(dt, state.clock.elapsedTime);
     }
-
-    if (floorFillLightRef.current) {
-      const targetLightY = showBlockD
-        ? 35.2
-        : showBlockB
-          ? playerState.libraryY + 3.6
-          : Math.max(16.2, playerState.libraryY + 3.8);
-      floorFillLightRef.current.position.y +=
-        (targetLightY - floorFillLightRef.current.position.y) * Math.min(1, dt * 8);
-    }
   });
 
   const clickObj = (id: string) => (e: { stopPropagation: () => void }) => {
@@ -448,17 +437,8 @@ export default function LibraryLobby({
 
   return (
     <group>
-      {/* Hệ thống ánh sáng ấm áp đa tầng cho Đại sảnh thông tầng, đèn chùm giếng trời & các tầng đọc sách */}
-      <pointLight position={[0, 7.5, 0]} color="#FFEBC2" intensity={1.95} distance={44} decay={1.08} />
-      <pointLight
-        ref={floorFillLightRef}
-        position={[0, 16.5, 0]}
-        color="#FFF2D6"
-        intensity={1.65}
-        distance={48}
-        decay={1.05}
-      />
-      <pointLight position={[0, 3.2, -1.55]} color="#FFF0C4" intensity={1.25} distance={9.5} decay={1.35} />
+      {/* Hệ thống ánh sáng ấm áp đa tầng cho Đại sảnh thông tầng & các tầng đọc sách (ambientLight giữ nguyên NUM_POINT_LIGHTS=0 để không phải biên dịch lại shader GLSL) */}
+      <ambientLight color="#FFEBC2" intensity={0.42} />
 
       {/* =====================================================================
           3 PHÂN KHU KIẾN TRÚC ĐA TẦNG THƯ VIỆN TẠ QUANG BỬU (TẦNG 1–10)
@@ -503,8 +483,6 @@ export default function LibraryLobby({
             <meshStandardMaterial
               color="#2A2B2E"
               map={granitePbr.map}
-              bumpMap={granitePbr.bumpMap}
-              bumpScale={0.01}
               roughness={0.42}
               metalness={0.18}
             />

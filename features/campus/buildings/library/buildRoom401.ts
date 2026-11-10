@@ -132,8 +132,6 @@ export function buildRoom401(
   const mWall = new THREE.MeshStandardMaterial({
     color: 0xf4f0e6,
     map: r4WallPbr.map,
-    bumpMap: r4WallPbr.bumpMap,
-    bumpScale: 0.004,
     roughness: 0.8,
   });
   const mCeiling = M(0xf7f5ef, 0.88);
@@ -142,24 +140,18 @@ export function buildRoom401(
   const mWoodLight = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: r4WoodLight.map,
-    bumpMap: r4WoodLight.bumpMap,
-    bumpScale: 0.007,
     roughness: 0.44,
     metalness: 0.05,
   });
   const mWoodMed = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: r4WoodMed.map,
-    bumpMap: r4WoodMed.bumpMap,
-    bumpScale: 0.007,
     roughness: 0.48,
     metalness: 0.05,
   });
   const mWoodDark = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: r4WoodDark.map,
-    bumpMap: r4WoodDark.bumpMap,
-    bumpScale: 0.008,
     roughness: 0.45,
     metalness: 0.06,
   });
@@ -167,15 +159,11 @@ export function buildRoom401(
   const mChairBlue = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: r4BlueFabric.map,
-    bumpMap: r4BlueFabric.bumpMap,
-    bumpScale: 0.006,
     roughness: 0.54,
   });
   const mChairRed = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: r4RedFabric.map,
-    bumpMap: r4RedFabric.bumpMap,
-    bumpScale: 0.006,
     roughness: 0.54,
   });
   const mMetal = M(0x3a3e44, 0.4, 0.7);

@@ -202,8 +202,6 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
   const M_WALL = new THREE.MeshStandardMaterial({
     color: 0xf6f3ec,
     map: bWallPbr.map,
-    bumpMap: bWallPbr.bumpMap,
-    bumpScale: 0.004,
     roughness: 0.76,
   });
   const M_CEIL = mat(0xf7f5ef, 0.86);
@@ -212,46 +210,34 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
   const M_WOOD_D = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: bWoodDark.map,
-    bumpMap: bWoodDark.bumpMap,
-    bumpScale: 0.008,
     roughness: 0.38,
     metalness: 0.08,
   });
   const M_WOOD_M = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: bWoodMed.map,
-    bumpMap: bWoodMed.bumpMap,
-    bumpScale: 0.007,
     roughness: 0.44,
     metalness: 0.06,
   });
   const M_WOOD_L = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: bWoodLight.map,
-    bumpMap: bWoodLight.bumpMap,
-    bumpScale: 0.007,
     roughness: 0.42,
     metalness: 0.05,
   });
   const M_NAVY = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: bNavyFabric.map,
-    bumpMap: bNavyFabric.bumpMap,
-    bumpScale: 0.006,
     roughness: 0.72,
   });
   const M_MUSTARD = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: bMustardFabric.map,
-    bumpMap: bMustardFabric.bumpMap,
-    bumpScale: 0.006,
     roughness: 0.58,
   });
   const M_RED_CH = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: bRedFabric.map,
-    bumpMap: bRedFabric.bumpMap,
-    bumpScale: 0.006,
     roughness: 0.52,
   });
   const M_CHR = mat(0xd2d7dd, 0.2, 0.88);

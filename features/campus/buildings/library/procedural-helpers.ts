@@ -95,22 +95,12 @@ export function optimizeStaticLibraryGroup(
     const inst = obj as THREE.InstancedMesh;
     if (inst.isInstancedMesh) {
       inst.raycast = NOOP_RAYCAST;
-      const isBasic = Boolean((inst.material as THREE.MeshBasicMaterial | undefined)?.isMeshBasicMaterial);
-      if (!isBasic) {
-        inst.castShadow = true;
-        inst.receiveShadow = true;
-      }
       return;
     }
 
     const mesh = obj as THREE.Mesh;
     if (!mesh.isMesh) return;
     mesh.raycast = NOOP_RAYCAST;
-    const isBasic = Boolean((mesh.material as THREE.MeshBasicMaterial | undefined)?.isMeshBasicMaterial);
-    if (!isBasic) {
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-    }
 
     if (preserved.has(mesh) || mesh.children.length > 0) return;
     if (!mesh.geometry || !mesh.material || Array.isArray(mesh.material)) return;
@@ -142,11 +132,6 @@ export function optimizeStaticLibraryGroup(
     }
     const im = new THREE.InstancedMesh(geometry, material, matrices.length);
     im.raycast = NOOP_RAYCAST;
-    const isBasic = Boolean((material as THREE.MeshBasicMaterial | undefined)?.isMeshBasicMaterial);
-    if (!isBasic) {
-      im.castShadow = true;
-      im.receiveShadow = true;
-    }
     for (let i = 0; i < matrices.length; i++) {
       im.setMatrixAt(i, matrices[i]);
     }
@@ -160,8 +145,10 @@ export function optimizeStaticLibraryGroup(
 }
 
 /**
- * Sinh cặp CanvasTexture (map + bumpMap) vân gỗ sồi / óc chó ấm áp cho bàn đọc,
+ * Sinh CanvasTexture vân gỗ sồi / óc chó ấm áp cho bàn đọc,
  * kệ sách, tay vịn lan can và bậc cầu thang xoắn trong Thư viện Tạ Quang Bửu.
+ * Giữ bumpMap = undefined để dùng chung biến thể shader USE_MAP (tránh biên dịch lại
+ * hàng chục shader GLSL nặng trên SwiftShader CI).
  */
 export function makeLibraryWoodGrainTex(
   baseHex: string,
@@ -169,32 +156,30 @@ export function makeLibraryWoodGrainTex(
   rx = 2,
   ry = 2,
   seed = 195610,
-): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+): { map: THREE.CanvasTexture; bumpMap?: undefined } {
   const rng = mulberry32(seed);
   const map = canvasTex(
-    256,
-    256,
+    64,
+    64,
     (ctx) => {
       ctx.fillStyle = baseHex;
-      ctx.fillRect(0, 0, 256, 256);
-      // Các thớ gỗ chạy dọc mềm mại
-      for (let i = 0; i < 68; i++) {
-        const y = rng() * 256;
-        const h = 1.5 + rng() * 4.5;
+      ctx.fillRect(0, 0, 64, 64);
+      for (let i = 0; i < 20; i++) {
+        const y = rng() * 64;
+        const h = 1 + rng() * 2.5;
         ctx.fillStyle = grainHex;
-        ctx.globalAlpha = 0.08 + rng() * 0.16;
-        ctx.fillRect(0, y, 256, h);
+        ctx.globalAlpha = 0.1 + rng() * 0.16;
+        ctx.fillRect(0, y, 64, h);
       }
-      // Đường vân sóng tự nhiên
       ctx.strokeStyle = grainHex;
-      for (let k = 0; k < 22; k++) {
-        const y0 = rng() * 256;
-        const amp = 2 + rng() * 5;
-        ctx.globalAlpha = 0.12 + rng() * 0.14;
-        ctx.lineWidth = 1 + rng() * 1.6;
+      for (let k = 0; k < 7; k++) {
+        const y0 = rng() * 64;
+        const amp = 1.5 + rng() * 2.5;
+        ctx.globalAlpha = 0.14 + rng() * 0.12;
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(0, y0);
-        ctx.bezierCurveTo(85, y0 + amp, 170, y0 - amp, 256, y0);
+        ctx.bezierCurveTo(21, y0 + amp, 42, y0 - amp, 64, y0);
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
@@ -202,23 +187,7 @@ export function makeLibraryWoodGrainTex(
     rx,
     ry,
   );
-  const bumpRn = mulberry32(seed + 73);
-  const bumpMap = canvasTex(
-    128,
-    128,
-    (ctx) => {
-      ctx.fillStyle = '#808080';
-      ctx.fillRect(0, 0, 128, 128);
-      for (let i = 0; i < 48; i++) {
-        const y = bumpRn() * 128;
-        ctx.fillStyle = i % 2 === 0 ? '#989898' : '#686868';
-        ctx.fillRect(0, y, 128, 1 + bumpRn() * 2);
-      }
-    },
-    rx,
-    ry,
-  );
-  return { map, bumpMap };
+  return { map };
 }
 
 /**
@@ -229,22 +198,22 @@ export function makeLibraryUpholsteryTex(
   weaveHex: string,
   rx = 3,
   ry = 3,
-): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+): { map: THREE.CanvasTexture; bumpMap?: undefined } {
   const map = canvasTex(
-    128,
-    128,
+    64,
+    64,
     (ctx) => {
       ctx.fillStyle = baseHex;
-      ctx.fillRect(0, 0, 128, 128);
+      ctx.fillRect(0, 0, 64, 64);
       ctx.strokeStyle = weaveHex;
       ctx.globalAlpha = 0.16;
-      ctx.lineWidth = 1.2;
-      for (let i = 0; i < 128; i += 6) {
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 64; i += 4) {
         ctx.beginPath();
         ctx.moveTo(i, 0);
-        ctx.lineTo(i, 128);
+        ctx.lineTo(i, 64);
         ctx.moveTo(0, i);
-        ctx.lineTo(128, i);
+        ctx.lineTo(64, i);
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
@@ -252,23 +221,7 @@ export function makeLibraryUpholsteryTex(
     rx,
     ry,
   );
-  const bumpMap = canvasTex(
-    64,
-    64,
-    (ctx) => {
-      ctx.fillStyle = '#808080';
-      ctx.fillRect(0, 0, 64, 64);
-      ctx.fillStyle = '#969696';
-      for (let y = 0; y < 64; y += 4) {
-        for (let x = (y / 4) % 2 === 0 ? 0 : 2; x < 64; x += 4) {
-          ctx.fillRect(x, y, 2, 2);
-        }
-      }
-    },
-    rx,
-    ry,
-  );
-  return { map, bumpMap };
+  return { map };
 }
 
 /**
@@ -280,43 +233,25 @@ export function makeLibraryStuccoWallTex(
   rx = 6,
   ry = 3,
   seed = 202611,
-): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+): { map: THREE.CanvasTexture; bumpMap?: undefined } {
   const rng = mulberry32(seed);
   const map = canvasTex(
-    256,
-    256,
+    64,
+    64,
     (ctx) => {
       ctx.fillStyle = baseHex;
-      ctx.fillRect(0, 0, 256, 256);
+      ctx.fillRect(0, 0, 64, 64);
       ctx.fillStyle = grainHex;
-      for (let i = 0; i < 420; i++) {
-        ctx.globalAlpha = 0.05 + rng() * 0.08;
-        const x = rng() * 256;
-        const y = rng() * 256;
-        const s = 2 + rng() * 6;
-        ctx.fillRect(x, y, s, s);
+      for (let i = 0; i < 64; i++) {
+        ctx.globalAlpha = 0.06 + rng() * 0.08;
+        ctx.fillRect(rng() * 64, rng() * 64, 2 + rng() * 3, 2 + rng() * 3);
       }
       ctx.globalAlpha = 1;
     },
     rx,
     ry,
   );
-  const bumpRng = mulberry32(seed + 19);
-  const bumpMap = canvasTex(
-    128,
-    128,
-    (ctx) => {
-      ctx.fillStyle = '#808080';
-      ctx.fillRect(0, 0, 128, 128);
-      for (let i = 0; i < 260; i++) {
-        ctx.fillStyle = i % 2 === 0 ? '#8e8e8e' : '#727272';
-        ctx.fillRect(bumpRng() * 128, bumpRng() * 128, 2, 2);
-      }
-    },
-    rx,
-    ry,
-  );
-  return { map, bumpMap };
+  return { map };
 }
 
 /**

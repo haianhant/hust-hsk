@@ -108,22 +108,16 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
   const M_WOOD_D = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: r10WoodDark.map,
-    bumpMap: r10WoodDark.bumpMap,
-    bumpScale: 0.008,
     roughness: 0.48,
   });
   const M_WOOD_M = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: r10WoodMed.map,
-    bumpMap: r10WoodMed.bumpMap,
-    bumpScale: 0.008,
     roughness: 0.46,
   });
   const M_WOOD_L = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: r10WoodLight.map,
-    bumpMap: r10WoodLight.bumpMap,
-    bumpScale: 0.007,
     roughness: 0.44,
   });
   const M_LAWN = mat(0x2d5a36, 0.9);
@@ -134,8 +128,6 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
   const M_FABRIC = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: r10Fabric.map,
-    bumpMap: r10Fabric.bumpMap,
-    bumpScale: 0.006,
     roughness: 0.68,
   });
   const M_GLS = new THREE.MeshStandardMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.3, roughness: 0.1, metalness: 0.1 });

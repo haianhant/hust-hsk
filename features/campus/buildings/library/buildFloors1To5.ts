@@ -366,10 +366,8 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     rz = 0,
     p: THREE.Object3D = world,
   ) => {
-    const hasMap = Boolean((m as { map?: unknown }).map);
-    const geo = hasMap ? (gCache[`b_${w}_${h}_${d}`] ??= new THREE.BoxGeometry(w, h, d)) : UNIT_BOX;
-    const mesh = mk(geo, m, x, y, z, rx, ry, rz, p);
-    if (!hasMap) mesh.scale.set(w, h, d);
+    const mesh = mk(UNIT_BOX, m, x, y, z, rx, ry, rz, p);
+    mesh.scale.set(w, h, d);
     return mesh;
   };
   const cyl = (
@@ -386,8 +384,7 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     rz = 0,
     p: THREE.Object3D = world,
   ) => {
-    const hasMap = Boolean((m as { map?: unknown }).map);
-    const useUnit = !hasMap && Math.abs(rt - rb) < 1e-6;
+    const useUnit = Math.abs(rt - rb) < 1e-6;
     const geo = useUnit
       ? (gCache[`uc_${s}`] ??= new THREE.CylinderGeometry(1, 1, 1, s))
       : (gCache[`c_${rt}_${rb}_${h}_${s}`] ??= new THREE.CylinderGeometry(rt, rb, h, s));
@@ -414,14 +411,11 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     cParts = null;
   };
   const pBox = (w: number, h: number, d: number, m: THREE.Material, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
-    const hasMap = Boolean((m as { map?: unknown }).map);
-    const g = hasMap ? (gCache[`b_${w}_${h}_${d}`] ??= new THREE.BoxGeometry(w, h, d)) : UNIT_BOX;
-    const l = hasMap ? compose(x, y, z, rx, ry, rz) : compose(x, y, z, rx, ry, rz, w, h, d);
-    cParts!.push({ g, m, l });
+    const l = compose(x, y, z, rx, ry, rz, w, h, d);
+    cParts!.push({ g: UNIT_BOX, m, l });
   };
   const pCyl = (rt: number, rb: number, h: number, s: number, m: THREE.Material, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
-    const hasMap = Boolean((m as { map?: unknown }).map);
-    const useUnit = !hasMap && Math.abs(rt - rb) < 1e-6;
+    const useUnit = Math.abs(rt - rb) < 1e-6;
     const g = useUnit
       ? (gCache[`uc_${s}`] ??= new THREE.CylinderGeometry(1, 1, 1, s))
       : (gCache[`c_${rt}_${rb}_${h}_${s}`] ??= new THREE.CylinderGeometry(rt, rb, h, s));
@@ -549,16 +543,12 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   const M_WALL = new THREE.MeshStandardMaterial({
     color: 0xf6f2ea,
     map: stuccoWallPbr.map,
-    bumpMap: stuccoWallPbr.bumpMap,
-    bumpScale: 0.004,
     roughness: 0.78,
   });
   const M_WALL2 = mat(0xebe5d9, 0.82);
   const M_COL = new THREE.MeshStandardMaterial({
     color: 0xfaf7f2,
     map: stuccoColPbr.map,
-    bumpMap: stuccoColPbr.bumpMap,
-    bumpScale: 0.004,
     roughness: 0.62,
     metalness: 0.04,
   });
@@ -568,24 +558,18 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   const M_WOOD_D = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: woodDarkPbr.map,
-    bumpMap: woodDarkPbr.bumpMap,
-    bumpScale: 0.008,
     roughness: 0.38,
     metalness: 0.08,
   });
   const M_WOOD_M = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: woodMedPbr.map,
-    bumpMap: woodMedPbr.bumpMap,
-    bumpScale: 0.008,
     roughness: 0.44,
     metalness: 0.06,
   });
   const M_WOOD_L = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: woodLightPbr.map,
-    bumpMap: woodLightPbr.bumpMap,
-    bumpScale: 0.007,
     roughness: 0.42,
     metalness: 0.06,
   });
@@ -595,16 +579,12 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   const M_RED = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: redFabricPbr.map,
-    bumpMap: redFabricPbr.bumpMap,
-    bumpScale: 0.006,
     roughness: 0.56,
   });
   const M_HUST = mat(0xa61c1c, 0.42);
   const M_CHAR = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: charFabricPbr.map,
-    bumpMap: charFabricPbr.bumpMap,
-    bumpScale: 0.006,
     roughness: 0.52,
   });
   const M_GLS = new THREE.MeshStandardMaterial({ color: 0xcfe7f5, transparent: true, opacity: 0.36, roughness: 0.08, metalness: 0.18 });
@@ -1307,8 +1287,8 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     pBox(1.5, 0.05, 0.85, M_WOOD_L, 0, 0.74, 0);
     pBox(1.46, 0.03, 0.81, M_WOOD_D, 0, 0.71, 0);
     // Đèn bàn đọc sách cổ điển chụp xanh ngọc bích + chân đồng ở giữa bàn & 2 cuốn sách mở
-    pCyl(0.08, 0.095, 0.025, 10, M_GOLD, 0, 0.778, 0);
-    pCyl(0.016, 0.016, 0.24, 8, M_GOLD, 0, 0.89, 0);
+    pCyl(0.085, 0.085, 0.025, 6, M_GOLD, 0, 0.778, 0);
+    pCyl(0.016, 0.016, 0.24, 6, M_GOLD, 0, 0.89, 0);
     pBox(0.28, 0.075, 0.14, M_LAMP_SHADE, 0, 1.01, 0);
     pBox(0.22, 0.024, 0.16, mat(0x1f4e79, 0.55), -0.38, 0.777, -0.18, 0, 0.12, 0);
     pBox(0.2, 0.022, 0.15, mat(0xfdfbf7, 0.7), 0.36, 0.776, 0.16, 0, -0.15, 0);
@@ -1334,10 +1314,10 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   defineProp('round4', () => {
     pCyl(0.62, 0.62, 0.05, 18, M_WOOD_D, 0, 0.74, 0);
     pCyl(0.06, 0.06, 0.7, 10, M_DRK, 0, 0.36, 0);
-    pCyl(0.34, 0.36, 0.03, 14, M_DRK, 0, 0.02, 0);
-    pCyl(0.07, 0.085, 0.022, 10, M_GOLD, 0, 0.776, 0);
-    pCyl(0.015, 0.015, 0.2, 8, M_GOLD, 0, 0.875, 0);
-    pCyl(0.11, 0.15, 0.09, 12, M_LAMP_SHADE, 0, 0.98, 0);
+    pCyl(0.35, 0.35, 0.03, 10, M_DRK, 0, 0.02, 0);
+    pCyl(0.075, 0.075, 0.022, 6, M_GOLD, 0, 0.776, 0);
+    pCyl(0.015, 0.015, 0.2, 6, M_GOLD, 0, 0.875, 0);
+    pBox(0.24, 0.075, 0.14, M_LAMP_SHADE, 0, 0.98, 0);
     for (let i = 0; i < 4; i++) {
       const a = (i * Math.PI) / 2 + Math.PI / 4;
       const xf = compose(Math.cos(a) * 0.82, 0, Math.sin(a) * 0.82, 0, -a - Math.PI / 2, 0);

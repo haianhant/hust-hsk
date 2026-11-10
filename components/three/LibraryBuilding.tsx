@@ -374,17 +374,12 @@ function drawOneLoveSlogan(ctx: CanvasRenderingContext2D, w: number, h: number) 
 }
 
 // --- Texture kính cửa sổ 4 ô khung nhôm & phản chiếu bầu trời + rèm sáo ngang ---
-function makeLibraryWindowTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
-  const size = 256;
+function makeLibraryWindowTexture(): { map: THREE.CanvasTexture } {
+  const size = 128;
   const cMap = document.createElement('canvas');
   cMap.width = size;
   cMap.height = size;
   const ctx = cMap.getContext('2d')!;
-
-  const cBump = document.createElement('canvas');
-  cBump.width = size;
-  cBump.height = size;
-  const ctxB = cBump.getContext('2d')!;
 
   // Nền kính xanh đá đậm có gradient phản chiếu bầu trời
   const grad = ctx.createLinearGradient(0, 0, size * 0.35, size);
@@ -395,78 +390,56 @@ function makeLibraryWindowTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
 
-  ctxB.fillStyle = '#505050';
-  ctxB.fillRect(0, 0, size, size);
-
   // Vệt phản chiếu chéo nhẹ trên mặt kính
-  ctx.fillStyle = 'rgba(210, 232, 255, 0.11)';
+  ctx.fillStyle = 'rgba(210, 232, 255, 0.12)';
   ctx.beginPath();
-  ctx.moveTo(24, 0);
-  ctx.lineTo(88, 0);
-  ctx.lineTo(20, size);
+  ctx.moveTo(12, 0);
+  ctx.lineTo(44, 0);
+  ctx.lineTo(10, size);
   ctx.lineTo(0, size);
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = 'rgba(210, 232, 255, 0.07)';
+  ctx.fillStyle = 'rgba(210, 232, 255, 0.08)';
   ctx.beginPath();
-  ctx.moveTo(148, 0);
-  ctx.lineTo(192, 0);
-  ctx.lineTo(118, size);
-  ctx.lineTo(78, size);
+  ctx.moveTo(74, 0);
+  ctx.lineTo(96, 0);
+  ctx.lineTo(59, size);
+  ctx.lineTo(39, size);
   ctx.closePath();
   ctx.fill();
 
   // Rèm sáo ngang mờ phía trên ô cửa
   ctx.fillStyle = 'rgba(226, 232, 240, 0.12)';
-  for (let y = 14; y < 74; y += 9) {
-    ctx.fillRect(12, y, size - 24, 4);
+  for (let y = 8; y < 38; y += 5) {
+    ctx.fillRect(6, y, size - 12, 2);
   }
 
   // Khung nhôm bao ngoài + đố đứng giữa + đố ngang (transom)
   ctx.strokeStyle = '#6D7A88';
-  ctx.lineWidth = 12;
-  ctx.strokeRect(6, 6, size - 12, size - 12);
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, size - 6, size - 6);
 
   ctx.fillStyle = '#73808E';
-  ctx.fillRect(size / 2 - 5, 6, 10, size - 12);
-  ctx.fillRect(6, Math.round(size * 0.34) - 4, size - 12, 8);
-
-  // Bump map nổi cho khung nhôm
-  ctxB.strokeStyle = '#E0E0E0';
-  ctxB.lineWidth = 12;
-  ctxB.strokeRect(6, 6, size - 12, size - 12);
-  ctxB.fillStyle = '#D8D8D8';
-  ctxB.fillRect(size / 2 - 5, 6, 10, size - 12);
-  ctxB.fillRect(6, Math.round(size * 0.34) - 4, size - 12, 8);
+  ctx.fillRect(size / 2 - 3, 3, 6, size - 6);
+  ctx.fillRect(3, Math.round(size * 0.34) - 2, size - 6, 4);
 
   const map = new THREE.CanvasTexture(cMap);
   map.colorSpace = THREE.SRGBColorSpace;
-  map.anisotropy = 4;
 
-  const bumpMap = new THREE.CanvasTexture(cBump);
-  bumpMap.anisotropy = 4;
-
-  return { map, bumpMap };
+  return { map };
 }
 
 // --- Texture gạch lát đỏ-nâu lối đi chính sân trước Thư viện ------------------
-function makeRedPaverTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
-  const size = 256;
+function makeRedPaverTexture(): { map: THREE.CanvasTexture } {
+  const size = 128;
   const cMap = document.createElement('canvas');
   cMap.width = size;
   cMap.height = size;
   const ctx = cMap.getContext('2d')!;
 
-  const cBump = document.createElement('canvas');
-  cBump.width = size;
-  cBump.height = size;
-  const ctxB = cBump.getContext('2d')!;
-
   ctx.fillStyle = '#8A4A32';
   ctx.fillRect(0, 0, size, size);
-  ctxB.fillStyle = '#909090';
-  ctxB.fillRect(0, 0, size, size);
 
   const rows = 8;
   const cols = 4;
@@ -485,16 +458,10 @@ function makeRedPaverTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.Canva
       const y = r * bh;
       const delta = Math.round((rnd() - 0.5) * 18);
       ctx.fillStyle = `rgb(${138 + delta}, ${74 + Math.round(delta * 0.6)}, ${50 + Math.round(delta * 0.5)})`;
-      ctx.fillRect(x + 2, y + 2, bw - 4, bh - 4);
+      ctx.fillRect(x + 1, y + 1, bw - 2, bh - 2);
       ctx.strokeStyle = 'rgba(48, 24, 16, 0.55)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 1, y + 1, bw - 2, bh - 2);
-
-      ctxB.fillStyle = '#C8C8C8';
-      ctxB.fillRect(x + 2, y + 2, bw - 4, bh - 4);
-      ctxB.strokeStyle = '#383838';
-      ctxB.lineWidth = 2;
-      ctxB.strokeRect(x + 1, y + 1, bw - 2, bh - 2);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, bw - 1, bh - 1);
     }
   }
 
@@ -502,14 +469,8 @@ function makeRedPaverTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.Canva
   map.colorSpace = THREE.SRGBColorSpace;
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
   map.repeat.set(6, 3);
-  map.anisotropy = 4;
 
-  const bumpMap = new THREE.CanvasTexture(cBump);
-  bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
-  bumpMap.repeat.set(6, 3);
-  bumpMap.anisotropy = 4;
-
-  return { map, bumpMap };
+  return { map };
 }
 
 // --- Hộp kính / hộp trắng dùng chung (có phản chiếu IBL & vật liệu PBR dùng chung) ----
@@ -568,8 +529,6 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       new THREE.MeshStandardMaterial({
         color: '#D8E6F5',
         map: windowPbr.map,
-        bumpMap: windowPbr.bumpMap,
-        bumpScale: 0.015,
         emissive: new THREE.Color(LIB_GLASS),
         emissiveIntensity: 0.36,
         roughness: 0.16,
@@ -582,8 +541,6 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       new THREE.MeshStandardMaterial({
         color: LIB_WHITE,
         map: concretePbr.map,
-        bumpMap: concretePbr.bumpMap,
-        bumpScale: 0.01,
         roughness: 0.84,
       }),
     [concretePbr],
@@ -647,9 +604,7 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       granitePbr.map.dispose();
       granitePbr.bumpMap.dispose();
       windowPbr.map.dispose();
-      windowPbr.bumpMap.dispose();
       paverPbr.map.dispose();
-      paverPbr.bumpMap.dispose();
       glassMat.dispose();
       whiteWallMat.dispose();
     },
@@ -1044,13 +999,6 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
           </mesh>
         )),
       )}
-      <pointLight
-        position={[38, 5.1, 22.0]}
-        color="#FFEAC2"
-        intensity={isNight ? 1.45 : 0.75}
-        distance={14}
-        decay={1.25}
-      />
 
       {/* 6 cột TRÒN lớn bọc tấm nhôm xám bạc (r = 0,28 m) có chân đế đá granite, vòng mạch nối & đầu cột theo thu-vien-mat-tien-01.jpg:
           4 cột hàng ngoài (z = 19,5) + 2 cột hàng trong (z = 22,8). */}
@@ -1201,8 +1149,6 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
         <meshStandardMaterial
           color="#FFFFFF"
           map={paverPbr.map}
-          bumpMap={paverPbr.bumpMap}
-          bumpScale={0.012}
           roughness={0.86}
         />
       </mesh>

@@ -79,35 +79,35 @@ const ATMOSPHERE: Record<
     fogNear: 165,
     fogFar: 500,
     hemiSky: '#ffd4a3',
-    hemiGround: '#6e5a4f',
-    hemiIntensity: 1.15,
+    hemiGround: '#7a6355',
+    hemiIntensity: 1.28,
     sunPos: [-95, 42, 18],
     sunColor: '#ff9e58',
-    sunIntensity: 1.55,
+    sunIntensity: 1.65,
     westFillColor: '#ffb87a',
-    westFillIntensity: 0.65,
+    westFillIntensity: 0.72,
     southFillColor: '#ffd9b3',
-    southFillIntensity: 0.35,
+    southFillIntensity: 0.45,
     northFillColor: '#e8c3a8',
-    northFillIntensity: 0.48,
+    northFillIntensity: 0.55,
   },
   night: {
     bg: '#131d31',
     fogColor: '#17233b',
     fogNear: 160,
     fogFar: 480,
-    hemiSky: '#4a6696',
-    hemiGround: '#253028',
-    hemiIntensity: 0.82,
+    hemiSky: '#5876ab',
+    hemiGround: '#2e3b32',
+    hemiIntensity: 0.98,
     sunPos: [-60, 95, -35],
     sunColor: '#b8d0ff',
-    sunIntensity: 0.72,
+    sunIntensity: 0.85,
     westFillColor: '#7694c4',
-    westFillIntensity: 0.42,
+    westFillIntensity: 0.52,
     southFillColor: '#FFE0A3',
-    southFillIntensity: 0.28,
+    southFillIntensity: 0.42,
     northFillColor: '#88a4d4',
-    northFillIntensity: 0.4,
+    northFillIntensity: 0.48,
   },
 };
 
@@ -303,56 +303,6 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
               </group>
             </>
           )}
-
-          {/* Hệ thống đèn chiếu sáng khuôn viên Bách khoa khi Hoàng hôn & Đêm */}
-          <pointLight
-            position={[-84, 7.5, 10]}
-            color="#FFD892"
-            intensity={timeOfDay === 'night' ? 2.4 : 1.1}
-            distance={36}
-          />
-          <pointLight
-            position={[-58, 8.5, -42]}
-            color="#FFE0A6"
-            intensity={timeOfDay === 'night' ? 2.8 : 1.2}
-            distance={44}
-          />
-          <pointLight
-            position={[38, 9.0, 18]}
-            color="#FFE0A6"
-            intensity={timeOfDay === 'night' ? 3.0 : 1.3}
-            distance={46}
-          />
-          <pointLight
-            position={[-30, 6.5, -2]}
-            color="#FFD48A"
-            intensity={timeOfDay === 'night' ? 2.0 : 0.9}
-            distance={32}
-          />
-          <pointLight
-            position={[24, 5.5, 36]}
-            color="#FFD892"
-            intensity={timeOfDay === 'night' ? 2.2 : 0.9}
-            distance={40}
-          />
-          <pointLight
-            position={[0, 5.5, -16]}
-            color="#FFD892"
-            intensity={timeOfDay === 'night' ? 2.0 : 0.85}
-            distance={38}
-          />
-          <pointLight
-            position={[112, 8.0, 14]}
-            color="#FFE0A6"
-            intensity={timeOfDay === 'night' ? 2.4 : 1.0}
-            distance={45}
-          />
-          <pointLight
-            position={[132, 11.0, 78]}
-            color="#FFF3C4"
-            intensity={timeOfDay === 'night' ? 3.0 : 1.2}
-            distance={55}
-          />
         </>
       )}
     </group>
@@ -389,7 +339,7 @@ export default function CampusScene({
     >
       <color attach="background" args={[activeAtm.bg]} />
       <fog attach="fog" args={[activeAtm.fogColor, activeAtm.fogNear, activeAtm.fogFar]} />
-      <ProceduralEnvironment timeOfDay={isIndoor ? 'day' : timeOfDay} />
+      <ProceduralEnvironment timeOfDay={timeOfDay} />
 
       <hemisphereLight args={[activeAtm.hemiSky, activeAtm.hemiGround, activeAtm.hemiIntensity]} />
       <directionalLight
