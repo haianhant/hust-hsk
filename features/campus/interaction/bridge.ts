@@ -102,8 +102,30 @@ export interface DetectedInteractable {
 }
 
 /**
+ * Phát hiện người chơi đang đứng trước cửa Thang máy Thư viện Tạ Quang Bửu ở tầng hiện tại.
+ */
+export function isNearLibraryElevator(pos: { x: number; z: number }, libraryFloor = 1): boolean {
+  if (libraryFloor >= 1 && libraryFloor <= 5) {
+    // Khối A (Tầng 1–5): cụm 3 thang máy ở tường Đông (x ≈ 19.28, z ∈ [-2.9, 2.9])
+    return pos.x >= 16.2 && pos.x <= 20.5 && Math.abs(pos.z) <= 4.0;
+  }
+  if (libraryFloor === 6 || libraryFloor === 7) {
+    // Khối B (Tầng 6–7): cụm 3 thang máy ở vòm Đông (x ≈ 23.77, z ∈ [-3.6, 3.6])
+    return pos.x >= 20.0 && pos.x <= 24.5 && Math.abs(pos.z) <= 4.4;
+  }
+  if (libraryFloor === 10) {
+    // Khối D (Sân thượng Tầng 10): 2 cửa thang máy ở mặt Nam phòng kỹ thuật (x = ±2.4, z = -3.34)
+    return (
+      Math.hypot(pos.x + 2.4, pos.z + 3.34) <= 2.1 ||
+      Math.hypot(pos.x - 2.4, pos.z + 3.34) <= 2.1
+    );
+  }
+  return false;
+}
+
+/**
  * Thứ tự ưu tiên prompt E — chỉ HIỆN ĐÚNG 1 prompt:
- *   1. Trong sảnh Thư viện Tầng 1 (`seat-stand-up`, `seat:<seatId>`, `lobby-statue`, `lobby-vocab-board`, `lobby-info-desk`)
+ *   1. Trong Thư viện Tạ Quang Bửu Tầng 1–10 (`seat-stand-up`, `seat:<seatId>`, `library-elevator`, `lobby-*`, `piano-6f`, `telescope-10f`)
  *   2. Đang lái xe ngoài sân → `bike-dismount`
  *   3. Đứng gần xe (≤ 2,2 m) ngoài sân → `bike-mount`
  *   4. Tương tác ngoài sân (`npc-minh`, `classroom-door`, `library-door`)
@@ -134,8 +156,11 @@ export function findNearestInteractable(
     if (seated) {
       return { id: 'seat-stand-up', label: 'E — Đứng dậy' };
     }
-    if (libraryFloor !== 1) {
-      return null;
+    if (isNearLibraryElevator(pos, libraryFloor)) {
+      return {
+        id: 'library-elevator',
+        label: 'E — Sử dụng Thang máy Thư viện (T1–T10)',
+      };
     }
     const nearestSeat = findNearestLibrarySeat(pos, SEAT_INTERACT_RADIUS, libraryFloor);
     if (nearestSeat) {
@@ -157,14 +182,22 @@ export function findNearestInteractable(
         label: 'E — Ngồi học',
       };
     }
-    if (dist(LIBRARY_LOBBY.statue.x, LIBRARY_LOBBY.statue.z) <= 2.6) {
-      return { id: 'lobby-statue', label: 'E — Tìm hiểu Tượng GS. Tạ Quang Bửu' };
+    if (libraryFloor === 1) {
+      if (dist(LIBRARY_LOBBY.statue.x, LIBRARY_LOBBY.statue.z) <= 2.6) {
+        return { id: 'lobby-statue', label: 'E — Tìm hiểu Tượng GS. Tạ Quang Bửu' };
+      }
+      if (dist(LIBRARY_LOBBY.vocabBoard.x, LIBRARY_LOBBY.vocabBoard.z) <= 2.4) {
+        return { id: 'lobby-vocab-board', label: 'E — Xem bảng từ vựng Thư viện' };
+      }
+      if (dist(LIBRARY_LOBBY.infoDesk.x, LIBRARY_LOBBY.infoDesk.z) <= 2.4) {
+        return { id: 'lobby-info-desk', label: 'E — Quầy thông tin & mượn sách' };
+      }
     }
-    if (dist(LIBRARY_LOBBY.vocabBoard.x, LIBRARY_LOBBY.vocabBoard.z) <= 2.4) {
-      return { id: 'lobby-vocab-board', label: 'E — Xem bảng từ vựng Thư viện' };
+    if (libraryFloor === 6 && dist(-6.6, 3.6) <= 2.5) {
+      return { id: 'piano-6f', label: 'E — Chơi đàn Đại dương cầm Grand Piano' };
     }
-    if (dist(LIBRARY_LOBBY.infoDesk.x, LIBRARY_LOBBY.infoDesk.z) <= 2.4) {
-      return { id: 'lobby-info-desk', label: 'E — Quầy thông tin & mượn sách' };
+    if (libraryFloor === 10 && dist(15.4, 0.6) <= 2.5) {
+      return { id: 'telescope-10f', label: 'E — Ngắm bầu trời sao qua Kính thiên văn' };
     }
     return null;
   }

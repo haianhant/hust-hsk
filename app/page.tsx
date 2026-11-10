@@ -48,6 +48,7 @@ import {
   type Identity,
 } from '../lib/identity';
 import { multiplayer } from '../lib/multiplayer';
+import { lofiAudio } from '../lib/lofiAudio';
 import { getEarnedGlobalBadgeIds, GLOBAL_BADGES } from '../lib/learn/badges';
 import { getNextSuggestion } from '../lib/learn/suggest';
 import type { QuestAnswer } from '../components/learn/QuestPanel';
@@ -59,7 +60,9 @@ import {
   evaluateReclaimOutcome,
   evaluateReconnectSeatAction,
   findNearestInteractable,
+  getAnyLibrarySeatDefinition,
   getHook,
+  isLibraryLobbySeatId,
   LibraryLobbyModal,
   releaseActiveSeatSafely,
   SPEECH_RATES,
@@ -95,6 +98,26 @@ const CampusScene = dynamic(() => import('../components/three/CampusScene'), {
   ssr: false,
 });
 
+function computeRealWorldTimeOfDay(now: Date = new Date()): {
+  timeOfDay: TimeOfDay;
+  clockText: string;
+} {
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const totalMinutes = hours * 60 + minutes;
+  const hh = String(hours).padStart(2, '0');
+  const mm = String(minutes).padStart(2, '0');
+  const clockText = `${hh}:${mm}`;
+  // 05:30 - 16:59 => Ban ngày; 17:00 - 18:29 => Hoàng hôn; 18:30 - 05:29 => Ban đêm
+  if (totalMinutes >= 5 * 60 + 30 && totalMinutes < 17 * 60) {
+    return { timeOfDay: 'day', clockText };
+  }
+  if (totalMinutes >= 17 * 60 && totalMinutes < 18 * 60 + 30) {
+    return { timeOfDay: 'sunset', clockText };
+  }
+  return { timeOfDay: 'night', clockText };
+}
+
 export default function HomePage() {
   const [entered, setEntered] = useState(false);
   const [zone, setZone] = useState(playerState.zone);
@@ -114,10 +137,13 @@ export default function HomePage() {
   const [seatedSeatLabel, setSeatedSeatLabel] = useState<string | null>(null);
   const [nearestSeatId, setNearestSeatId] = useState<string | null>(null);
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('day');
+  const [autoTimeOfDay, setAutoTimeOfDay] = useState<boolean>(true);
+  const [realClockText, setRealClockText] = useState<string>('');
+  const [lofiPlaying, setLofiPlaying] = useState<boolean>(false);
   const [outfitOpen, setOutfitOpen] = useState(false);
   const [characterProfile, setCharacterProfile] = useState<CharacterProfile>(DEFAULT_CHARACTER_PROFILE);
   const [lobbyModal, setLobbyModal] = useState<LibraryLobbyTopic | null>(null);
-  const [libraryExtraModal, setLibraryExtraModal] = useState<'piano' | 'telescope' | null>(null);
+  const [libraryExtraModal, setLibraryExtraModal] = useState<'piano' | 'telescope' | 'elevator' | null>(null);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [homework, setHomework] = useState<HomeworkState>('desk');
   const [actionDone, setActionDone] = useState(false);
@@ -148,6 +174,32 @@ export default function HomePage() {
       setIdentityName(saved.name);
       setIdentityMssv(saved.mssv);
     }
+  }, []);
+
+  // Tự động đồng bộ Ngày / Hoàng hôn / Đêm theo giờ thực ngoài đời (cập nhật mỗi 15 giây)
+  useEffect(() => {
+    const syncRealClock = () => {
+      const { timeOfDay: realTod, clockText } = computeRealWorldTimeOfDay(new Date());
+      setRealClockText(clockText);
+      if (autoTimeOfDay) {
+        setTimeOfDay(realTod);
+        playerState.timeOfDay = realTod;
+      }
+    };
+    syncRealClock();
+    const timer = window.setInterval(syncRealClock, 15_000);
+    return () => window.clearInterval(timer);
+  }, [autoTimeOfDay]);
+
+  // Đồng bộ trạng thái nhạc Lofi Chill từ Web Audio engine
+  useEffect(() => {
+    const unsub = lofiAudio.subscribe((snap) => {
+      setLofiPlaying(snap.playing);
+    });
+    return () => {
+      unsub();
+      lofiAudio.stop();
+    };
   }, []);
 
   const [noVoice, setNoVoice] = useState(false);
@@ -291,8 +343,13 @@ export default function HomePage() {
         return;
       }
 
-      // 3. Nếu đang kết nối Multiplayer (và server hỗ trợ giao thức phòng tự học PR9) -> yêu cầu HskRoom Durable Object cấp quyền giữ ghế (Server-Authoritative)
-      if (snap.status === 'online' && snap.selfId && snap.studyRevision > 0) {
+      // 3. Nếu đây là 1 trong 4 ghế sảnh tầng 1 có đồng bộ Multiplayer (Server-Authoritative PR9)
+      if (
+        isLibraryLobbySeatId(seatId) &&
+        snap.status === 'online' &&
+        snap.selfId &&
+        snap.studyRevision > 0
+      ) {
         if (snap.seatClaimState === 'requesting' && snap.pendingSeatRequest?.seatId === seatId) {
           return;
         }
@@ -342,11 +399,13 @@ export default function HomePage() {
         return;
       }
 
-      // 4. Chế độ ngoại tuyến (Offline fallback): vẫn cho phép ngồi học cục bộ và thông báo rõ
+      // 4. Bàn ghế ở các tầng khác (T1 sofa, T2–T10) hoặc chế độ ngoại tuyến: cho phép ngồi học ngay
       const r = getHook()?.sitAtSeat?.(seatId);
       if (r?.ok) {
+        const suffix =
+          isLibraryLobbySeatId(seatId) && snap.status !== 'online' ? ' (Chế độ ngoại tuyến)' : '';
         showToast(
-          `🪑 Đang ngồi học tại ${localCheck.seat.label}. Bấm "🍅 Tự học" để bắt đầu Pomodoro! (Chế độ ngoại tuyến)`,
+          `🪑 Đang ngồi học tại ${localCheck.seat.label}. Bấm "🍅 Tự học" để bắt đầu Pomodoro!${suffix}`,
         );
       } else {
         showToast(r?.message ?? 'Chưa thể ngồi vào ghế này.');
@@ -688,24 +747,28 @@ export default function HomePage() {
       if (!d) return;
       if (d.floor !== 1) {
         setLobbyModal(null);
-        const snap = multiplayer.snapshot;
-        if (snap.seatClaimState === 'requesting') {
-          multiplayer.cancelPendingSeatClaim();
+      }
+      const snap = multiplayer.snapshot;
+      if (d.floor !== 1 && snap.seatClaimState === 'requesting') {
+        multiplayer.cancelPendingSeatClaim();
+      }
+      const activeSeat = playerState.seatId ?? snap.mySeatId;
+      const activeSeatFloor = activeSeat ? (getAnyLibrarySeatDefinition(activeSeat)?.floor ?? 1) : null;
+      if ((playerState.seated || snap.mySeatId) && activeSeatFloor !== null && d.floor !== activeSeatFloor) {
+        multiplayer.setLocalSeatedSeatId(null);
+        releaseActiveSeatSafely({
+          driver: getHook(),
+          fallbackSeatId: activeSeat,
+        });
+        if (snap.mySeatId) {
+          multiplayer.requestSeatRelease(snap.mySeatId);
         }
-        if (playerState.seated || snap.mySeatId) {
-          multiplayer.setLocalSeatedSeatId(null);
-          releaseActiveSeatSafely({
-            driver: getHook(),
-            fallbackSeatId: playerState.seatId ?? snap.mySeatId,
-          });
-          multiplayer.requestSeatRelease(playerState.seatId ?? snap.mySeatId);
-          setSeatedSeatId(null);
-          setSeatedSeatLabel(null);
-          bindSeatRef.current('library-lobby', null);
-        }
+        setSeatedSeatId(null);
+        setSeatedSeatLabel(null);
+        bindSeatRef.current('library-lobby', null);
       }
       if (d.floor !== 6 && d.floor !== 10) {
-        setLibraryExtraModal(null);
+        setLibraryExtraModal((prev) => (prev === 'piano' || prev === 'telescope' ? null : prev));
       }
     };
     window.addEventListener('bkhn:classroom', onMode);
@@ -979,6 +1042,7 @@ export default function HomePage() {
   }, []);
 
   const cycleTimeOfDay = useCallback(() => {
+    setAutoTimeOfDay(false);
     setTimeOfDay((prev) => {
       const next: TimeOfDay = prev === 'day' ? 'sunset' : prev === 'sunset' ? 'night' : 'day';
       playerState.timeOfDay = next;
@@ -986,6 +1050,16 @@ export default function HomePage() {
       showToast(`Đã chuyển sang chế độ: ${label}`);
       return next;
     });
+  }, [showToast]);
+
+  const handleToggleLofi = useCallback(() => {
+    const nowPlaying = lofiAudio.toggle();
+    setLofiPlaying(nowPlaying);
+    if (nowPlaying) {
+      showToast('🎵 Đang phát nhạc Lofi Chill học tập (72 BPM · Warm Rhodes & Vinyl)');
+    } else {
+      showToast('🔇 Đã tắt nhạc Lofi Chill.');
+    }
   }, [showToast]);
 
   const handleSaveCharacterInGame = useCallback(
@@ -1071,7 +1145,36 @@ export default function HomePage() {
   // --- Xử lý phím E / nút Tương tác -------------------------------------------------
   const handleInteract = useCallback(() => {
     if (panelRef.current !== null) return;
-    const id = interactableRef.current;
+    const snapNow = multiplayer.snapshot;
+    const occupiedOtherSet = new Set<string>();
+    for (const occ of snapNow.seats) {
+      if (
+        occ.studyRoomId === 'library-lobby' &&
+        (!snapNow.selfId || occ.occupantId !== snapNow.selfId) &&
+        occ.seatId !== playerState.seatId
+      ) {
+        occupiedOtherSet.add(occ.seatId);
+      }
+    }
+    const liveFound = findNearestInteractable({
+      pos: playerState.pos,
+      inClassroom: playerState.inClassroom,
+      inLibraryLobby: playerState.inLibraryLobby,
+      libraryFloor: playerState.libraryFloor,
+      seated: playerState.seated,
+      seatId: playerState.seatId,
+      occupiedByOtherSeatIds: occupiedOtherSet,
+      pendingSeatId: snapNow.pendingSeatRequest?.seatId ?? null,
+      bikeRiding: bikeState.riding,
+      bikeSpeed: bikeState.speed,
+      bikePos: bikeState.pos,
+      questActive,
+      questDoneBefore,
+      anyQuestDone,
+      stepId: step?.id,
+    });
+    interactableRef.current = liveFound?.id ?? interactableRef.current;
+    const id = liveFound?.id ?? interactableRef.current;
     if (!id) {
       showToast('Hãy đến gần hơn để tương tác.');
       return;
@@ -1132,6 +1235,24 @@ export default function HomePage() {
     if (id === 'lobby-info-desk') {
       setLobbyModal('info-desk');
       speakText('你好，我想借书');
+      return;
+    }
+    if (id === 'library-elevator') {
+      window.dispatchEvent(
+        new CustomEvent('bkhn:elevator-call', { detail: { floor: playerState.libraryFloor } }),
+      );
+      window.dispatchEvent(new CustomEvent('bkhn:open-elevator-panel'));
+      setLibraryExtraModal('elevator');
+      return;
+    }
+    if (id === 'piano-6f') {
+      setLibraryExtraModal('piano');
+      showToast('🎹 Đại dương cầm Tầng 6 — bấm các phím đàn trên thanh Piano để tấu nhạc!');
+      return;
+    }
+    if (id === 'telescope-10f') {
+      setLibraryExtraModal('telescope');
+      speakText('天文望远镜，星空，银河');
       return;
     }
     if (id === 'board') {
@@ -1456,6 +1577,9 @@ export default function HomePage() {
             panel={panel}
             lessonsOpen={lessonsOpen}
             timeOfDay={timeOfDay}
+            realClockText={realClockText}
+            autoTimeOfDay={autoTimeOfDay}
+            lofiPlaying={lofiPlaying}
             soundOn={soundOn}
             speechRate={speechRate}
             objectiveText={objectiveText}
@@ -1479,6 +1603,7 @@ export default function HomePage() {
             onFastTravel={doFastTravel}
             onSetFastTravelOpen={setFastTravelOpen}
             onCycleTimeOfDay={cycleTimeOfDay}
+            onToggleLofi={handleToggleLofi}
             onToggleOutfit={() => setOutfitOpen((o) => !o)}
             onOpenLessons={() => setLessonsOpen(true)}
             onOpenHandbook={openHandbook}

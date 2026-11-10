@@ -5,17 +5,16 @@ import {
   BOUNDS,
   BUILDING_COLLIDERS,
   CAMPUS_MAP_BUILDINGS,
-  FAST_TRAVEL_DESTINATIONS,
   LAKE,
   ROADS,
 } from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
 
-// Minimap 2D + Bản đồ Toàn cảnh Khuôn viên Bách Khoa (Phím M) vẽ từ lib/campus.ts.
+// Minimap 2D (210×210 px) + Bản đồ Toàn cảnh Khuôn viên Bách Khoa (Phím M) vẽ từ lib/campus.ts.
 // -Z = bắc nên phía trên canvas là hướng Bắc ("B").
 
-const SIZE = 150;
-const PAD = 8;
+const SIZE = 210;
+const PAD = 10;
 
 function makeProject(size: number, pad: number) {
   const rangeX = BOUNDS.maxX - BOUNDS.minX;
@@ -41,7 +40,7 @@ function renderCampusMap(
   ctx.clearRect(0, 0, size, size);
 
   // Nền bản đồ
-  ctx.fillStyle = detailed ? 'rgba(14, 24, 18, 0.96)' : 'rgba(15, 23, 18, 0.84)';
+  ctx.fillStyle = detailed ? 'rgba(14, 24, 18, 0.96)' : 'rgba(15, 23, 18, 0.88)';
   ctx.fillRect(0, 0, size, size);
 
   // Khung bounds (4 tuyến phố bao quanh)
@@ -80,16 +79,29 @@ function renderCampusMap(
       if (i === 0) ctx.moveTo(project.x(p.x), project.y(p.z));
       else ctx.lineTo(project.x(p.x), project.y(p.z));
     });
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.48)';
-    ctx.lineWidth = Math.max(1.5, road.width * project.s * 0.6);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = Math.max(1.8, road.width * project.s * 0.62);
     ctx.stroke();
   }
   // Vẽ thêm Đường Trần Đại Nghĩa (x=90), Đường Tạ Quang Bửu (x=126) và Đường Lê Thanh Nghị trên bản đồ
   const extraStreets: Array<Array<{ x: number; z: number }>> = [
-    [{ x: 90, z: -74 }, { x: 90, z: 32 }, { x: 64, z: 68 }],
-    [{ x: 90, z: -6 }, { x: 158, z: -6 }],
-    [{ x: 126, z: -68 }, { x: 126, z: -6 }],
-    [{ x: 94, z: 62 }, { x: 156, z: 62 }],
+    [
+      { x: 90, z: -74 },
+      { x: 90, z: 32 },
+      { x: 64, z: 68 },
+    ],
+    [
+      { x: 90, z: -6 },
+      { x: 158, z: -6 },
+    ],
+    [
+      { x: 126, z: -68 },
+      { x: 126, z: -6 },
+    ],
+    [
+      { x: 94, z: 62 },
+      { x: 156, z: 62 },
+    ],
   ];
   for (const st of extraStreets) {
     ctx.beginPath();
@@ -98,12 +110,12 @@ function renderCampusMap(
       else ctx.lineTo(project.x(p.x), project.y(p.z));
     });
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.36)';
-    ctx.lineWidth = detailed ? 3.5 : 1.5;
+    ctx.lineWidth = detailed ? 3.5 : 1.8;
     ctx.stroke();
   }
 
   // Các tòa nhà trong toàn khuôn viên (CAMPUS_MAP_BUILDINGS + BUILDING_COLLIDERS)
-  ctx.font = detailed ? '700 9.5px system-ui, sans-serif' : '600 7.5px system-ui, sans-serif';
+  ctx.font = detailed ? '700 10px system-ui, sans-serif' : '700 8.5px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -134,7 +146,7 @@ function renderCampusMap(
     ctx.fillRect(x, y, w, h);
     ctx.strokeRect(x, y, w, h);
 
-    if (detailed || (w >= 9 && h >= 5)) {
+    if (detailed || (w >= 8 && h >= 5)) {
       ctx.fillStyle = '#FFFFFF';
       ctx.fillText(b.code, x + w / 2, y + h / 2);
     }
@@ -168,7 +180,7 @@ function renderCampusMap(
   ctx.translate(px, py);
   ctx.rotate(heading);
   ctx.beginPath();
-  const arrowScale = detailed ? 1.35 : 1;
+  const arrowScale = detailed ? 1.35 : 1.15;
   ctx.moveTo(0, -6 * arrowScale);
   ctx.lineTo(4.5 * arrowScale, 5 * arrowScale);
   ctx.lineTo(0, 2.5 * arrowScale);
@@ -182,7 +194,7 @@ function renderCampusMap(
   ctx.restore();
 
   if (!detailed) {
-    ctx.font = '700 10px system-ui, sans-serif';
+    ctx.font = '700 11px system-ui, sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -190,10 +202,9 @@ function renderCampusMap(
   }
 }
 
-export default function Minimap({ onFastTravel }: { onFastTravel?: (destId: string) => void }) {
+export default function Minimap(_props?: { onFastTravel?: (destId: string) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fullCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [open, setOpen] = useState(false);
   const [fullMapOpen, setFullMapOpen] = useState(false);
 
   // Phím M mở/đóng Bản đồ toàn cảnh Bách khoa
@@ -253,7 +264,10 @@ export default function Minimap({ onFastTravel }: { onFastTravel?: (destId: stri
   }, []);
 
   return (
-    <div className="pointer-events-auto relative flex flex-col items-end gap-1">
+    <div
+      data-testid="minimap"
+      className="pointer-events-auto relative flex flex-col items-end gap-1"
+    >
       <div className="relative">
         <canvas
           ref={canvasRef}
@@ -262,61 +276,24 @@ export default function Minimap({ onFastTravel }: { onFastTravel?: (destId: stri
           onClick={() => setFullMapOpen(true)}
           title="Bấm vào bản đồ (hoặc phím M) để mở Bản đồ Toàn cảnh ĐHBK Hà Nội"
           aria-label="Bản đồ thu nhỏ khuôn viên Bách khoa"
-          className="h-[150px] w-[150px] cursor-pointer rounded-xl border border-white/20 shadow-lg"
+          className="h-[210px] w-[210px] cursor-pointer rounded-2xl border border-white/25 shadow-xl"
         />
         <button
           id="open-full-map"
           type="button"
           onClick={() => setFullMapOpen(true)}
-          className="absolute bottom-1.5 right-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-black/85"
+          className="absolute bottom-2 right-2 rounded-md bg-black/65 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-black/85"
         >
           🗺️ M
         </button>
       </div>
-      {onFastTravel && (
-        <>
-          <button
-            id="minimap-fast-travel"
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="rounded-full bg-[#1c5c3a]/90 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-[#16492e]"
-          >
-            🚀 Đi nhanh
-          </button>
-          {open && (
-            <div
-              data-testid="minimap-fast-travel-panel"
-              className="absolute right-0 top-full z-30 mt-1 w-[200px] rounded-2xl bg-white p-2 shadow-2xl"
-            >
-              {FAST_TRAVEL_DESTINATIONS.map((d) => (
-                <button
-                  key={d.id}
-                  type="button"
-                  data-testid={`minimap-fast-travel-${d.id}`}
-                  onClick={() => {
-                    setOpen(false);
-                    onFastTravel(d.id);
-                  }}
-                  className="mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-[#1c5c3a]/10"
-                >
-                  <span className="text-base">{d.icon}</span>
-                  <span>
-                    <span className="block text-sm font-bold text-[#2B2B2B]">{d.name}</span>
-                    <span className="block text-xs text-[#2B2B2B]/60">{d.desc}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </>
-      )}
 
       {/* Modal Bản đồ Toàn cảnh ĐHBK Hà Nội (Phím M) */}
       {fullMapOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div
             data-testid="full-campus-map-modal"
-            className="w-full max-w-2xl rounded-2xl border border-white/20 bg-[#142018] p-4 text-white shadow-2xl"
+            className="w-full max-w-xl rounded-2xl border border-white/20 bg-[#142018] p-4 text-white shadow-2xl"
           >
             <div className="mb-3 flex items-center justify-between">
               <div>
@@ -336,35 +313,13 @@ export default function Minimap({ onFastTravel }: { onFastTravel?: (destId: stri
                 ✕
               </button>
             </div>
-            <div className="flex flex-col items-center gap-4 sm:flex-row">
+            <div className="flex flex-col items-center justify-center">
               <canvas
                 ref={fullCanvasRef}
                 width={420}
                 height={420}
-                className="h-[320px] w-[320px] shrink-0 rounded-xl border border-white/20 sm:h-[380px] sm:w-[380px]"
+                className="h-[340px] w-[340px] shrink-0 rounded-xl border border-white/20 sm:h-[400px] sm:w-[400px]"
               />
-              <div className="flex-1 space-y-2 text-xs">
-                <p className="font-bold text-[#86EFAC]">🚀 Dịch chuyển nhanh tới các khu chính:</p>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {FAST_TRAVEL_DESTINATIONS.map((d) => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => {
-                        setFullMapOpen(false);
-                        onFastTravel?.(d.id);
-                      }}
-                      className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-left transition hover:bg-white/20"
-                    >
-                      <span>{d.icon}</span>
-                      <div>
-                        <div className="font-bold text-white">{d.name}</div>
-                        <div className="text-[11px] text-white/65">{d.desc}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
         </div>

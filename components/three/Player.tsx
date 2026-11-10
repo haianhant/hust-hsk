@@ -95,6 +95,7 @@ import {
   computeSafeStandUpPosition,
   createInitialSeatingState,
   findNearestLibrarySeat,
+  getAnyLibrarySeatDefinition,
   transitionToSeated,
   transitionToStanding,
   type LocalSeatingState,
@@ -241,7 +242,7 @@ export default function Player() {
   // PR8 — Khởi tạo trạng thái ngồi học cục bộ (khôi phục nguyên trạng khi chuyển từ Zen 2D về 3D).
   const initialSeatDef =
     playerState.inLibraryLobby && playerState.seated && playerState.seatId
-      ? getSeatDefinition(playerState.seatId)
+      ? (getAnyLibrarySeatDefinition(playerState.seatId) ?? getSeatDefinition(playerState.seatId))
       : undefined;
   const seatingStateRef = useRef<LocalSeatingState>(
     initialSeatDef
@@ -302,7 +303,8 @@ export default function Player() {
       bodyRef.current.rotation.x = targets.bodyLeanTarget;
     }
     if (groupRef.current) {
-      groupRef.current.position.y = seatedNow ? SEATED_GROUP_Y_OFFSET : 0;
+      const baseLibY = playerState.inLibraryLobby ? playerState.libraryY : 0;
+      groupRef.current.position.y = baseLibY + (seatedNow ? SEATED_GROUP_Y_OFFSET : 0);
     }
   };
 
@@ -314,7 +316,7 @@ export default function Player() {
       return;
     }
     const seatedNow = seatingStateRef.current.status === 'seated';
-    const libY = playerState.inLibraryLobby && !seatedNow ? playerState.libraryY : 0;
+    const libY = playerState.inLibraryLobby ? playerState.libraryY : 0;
     const target = new THREE.Vector3(
       posRef.current.x,
       (ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2) + libY,
@@ -628,8 +630,12 @@ export default function Player() {
     playerState.moving = false;
     distRef.current = Math.min(distRef.current, 3.2);
     pitchRef.current = Math.max(pitchRef.current, 0.24);
+    const seatY = res.seat.y ?? (playerState.inLibraryLobby ? playerState.libraryY : 0);
+    if (playerState.inLibraryLobby) {
+      playerState.libraryY = seatY;
+    }
     if (groupRef.current) {
-      groupRef.current.position.set(res.seat.x, SEATED_GROUP_Y_OFFSET, res.seat.z);
+      groupRef.current.position.set(res.seat.x, seatY + SEATED_GROUP_Y_OFFSET, res.seat.z);
       groupRef.current.rotation.y = res.seat.facing;
     }
     applyPoseImmediately(true);
@@ -1121,7 +1127,7 @@ export default function Player() {
         const loc = createLibraryLocation(floor, px, pz, py);
         const ground = queryLibraryGround(loc);
         const nearDoor = findNearestLibraryDoorway(floor, px, pz);
-        const nearSeat = findNearestLibrarySeat({ x: px, z: pz }, 100, 1);
+        const nearSeat = findNearestLibrarySeat({ x: px, z: pz }, 100, floor);
         return {
           block,
           floor,
@@ -1134,7 +1140,7 @@ export default function Player() {
             : [],
           nearestDoorId: nearDoor ? nearDoor.id : null,
           nearestSeatId: nearSeat ? nearSeat.seat.seatId : null,
-          nearestSeatFloor: 1,
+          nearestSeatFloor: nearSeat ? nearSeat.seat.floor : floor,
           activeSeatId: seatingStateRef.current.seatId,
           debugCollisionOverlay: playerState.libraryCollisionDebug,
         };
@@ -1155,11 +1161,12 @@ export default function Player() {
         facing: facingRef.current,
       }),
       projectSeatToScreen: (seatId: string) => {
-        const seat = getSeatDefinition(seatId);
+        const seat = getAnyLibrarySeatDefinition(seatId) ?? getSeatDefinition(seatId);
         if (!seat) return null;
         syncCameraTransform();
         camera.updateProjectionMatrix();
-        const worldPt = new THREE.Vector3(seat.x, 0.44, seat.z);
+        const seatBaseY = 'y' in seat && typeof seat.y === 'number' ? seat.y : 0;
+        const worldPt = new THREE.Vector3(seat.x, seatBaseY + 0.44, seat.z);
         const ndc = worldPt.clone().project(camera);
         const rect = gl.domElement.getBoundingClientRect();
         return {
@@ -1772,13 +1779,15 @@ export default function Player() {
         window.dispatchEvent(new CustomEvent('bkhn:library-floor', { detail: { floor: elev.floor } }));
       }
       groundY = elev.y;
+    } else if (playerState.inLibraryLobby && seatedNow) {
+      groundY = playerState.libraryY;
     } else if (!playerState.inClassroom && !playerState.inLibraryLobby && !ridingRef.current && !seatedNow) {
       groundY = getCampusGroundElevation(posRef.current.x, posRef.current.z);
     }
 
     groupRef.current.position.set(
       posRef.current.x,
-      seatedNow ? SEATED_GROUP_Y_OFFSET : groundY,
+      groundY + (seatedNow ? SEATED_GROUP_Y_OFFSET : 0),
       posRef.current.z,
     );
     groupRef.current.rotation.y = facingRef.current;

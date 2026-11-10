@@ -222,12 +222,17 @@ async function run() {
     console.log('  PASS: Returned to 3D Campus with position preserved:', posAfterZen);
 
     // 9. Verify existing HUD and campus interactions remain functional
-    console.log('[9/9] Verifying existing HUD controls (Fast Travel, Handbook, Time of Day)...');
-    const fastTravelBtn = page.locator('#fast-travel');
-    await fastTravelBtn.waitFor({ state: 'visible', timeout: 10000 });
-    await fastTravelBtn.click();
-    await page.locator('[data-testid="fast-travel-panel"]').waitFor({ state: 'visible', timeout: 5000 });
-    await fastTravelBtn.click();
+    console.log('[9/9] Verifying HUD controls (Minimap 210x210, Lofi Chill, Handbook, Time of Day)...');
+    const minimapBox = await page.locator('[data-testid="minimap"] canvas').boundingBox();
+    assert.ok(minimapBox && minimapBox.width >= 200 && minimapBox.height >= 200, 'Minimap should be enlarged (~210x210px)');
+    assert.equal(await page.locator('#interact-button').count(), 0, 'Bottom-right interact button should be removed');
+    assert.equal(await page.locator('#call-bike').count(), 0, 'Call bike button should be removed');
+    assert.equal(await page.locator('#recall-bike').count(), 0, 'Recall bike button should be removed');
+    assert.equal(await page.locator('#fast-travel').count(), 0, 'Fast travel button should be removed');
+
+    const lofiBtn = page.locator('#toggle-lofi');
+    await lofiBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await lofiBtn.click();
 
     await page.locator('#open-handbook').click();
     await page.waitForFunction(() => document.body.innerText.includes('Sổ tay'), null, {

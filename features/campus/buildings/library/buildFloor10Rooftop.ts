@@ -165,10 +165,12 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
     const kz = (KS.z0 + KS.z1) / 2;
     box(kw, KS.h, kd, M_PARA, kx, KS.h / 2, kz);
     box(kw + 0.4, 0.22, kd + 0.4, M_STONE, kx, KS.h + 0.11, kz);
-    // Cửa thang máy sân thượng
-    box(1.9, 2.4, 0.12, M_CHR, 0, 1.2, KS.z1 + 0.06);
-    box(0.78, 2.25, 0.06, M_DRK, -0.41, 1.12, KS.z1 + 0.11);
-    box(0.78, 2.25, 0.06, M_DRK, 0.41, 1.12, KS.z1 + 0.11);
+    // 2 Cửa thang máy sân thượng (Tây & Đông)
+    for (const ex of [-2.4, 2.4]) {
+      box(1.9, 2.4, 0.12, M_CHR, ex, 1.2, KS.z1 + 0.06);
+      box(0.78, 2.25, 0.06, M_DRK, ex - 0.41, 1.12, KS.z1 + 0.11);
+      box(0.78, 2.25, 0.06, M_DRK, ex + 0.41, 1.12, KS.z1 + 0.11);
+    }
 
     const signTex = canvasTex(512, 96, (c) => {
       c.fillStyle = '#0f172a';

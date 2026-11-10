@@ -4,7 +4,7 @@
 // theo chuẩn mô hình Thư viện Tạ Quang Bửu tại studywithhuster.cyou.
 // ---------------------------------------------------------------------------
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   LIBRARY_PRESET_DESTINATIONS,
   libraryNavigationController,
@@ -28,9 +28,43 @@ const PIANO_OCTAVE_NOTES = [
   { midi: 72, label: 'C5', solfege: 'Đô+' },
 ];
 
+function playElevatorChime() {
+  if (typeof window === 'undefined') return;
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+    // Chuông thang máy 2 nốt chuẩn (E5 -> C5)
+    [
+      [659.25, 0, 0.45],
+      [523.25, 0.22, 0.65],
+    ].forEach(([freq, delay, dur]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + delay);
+      gain.gain.setValueAtTime(0.0001, now + delay);
+      gain.gain.linearRampToValueAtTime(0.14, now + delay + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0008, now + delay + dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + delay);
+      osc.stop(now + delay + dur + 0.05);
+    });
+    setTimeout(() => {
+      ctx.close().catch(() => {});
+    }, 1100);
+  } catch {
+    // Bỏ qua nếu trình duyệt chặn tự động phát âm thanh
+  }
+}
+
 export interface LibraryFloorNavProps {
   visible: boolean;
-  externalModal?: 'piano' | 'telescope' | null;
+  externalModal?: 'piano' | 'telescope' | 'elevator' | null;
   onClearExternalModal?: () => void;
 }
 
@@ -44,6 +78,7 @@ export function LibraryFloorNav({
   );
   const [expanded, setExpanded] = useState<boolean>(false);
   const [showTelescopeModal, setShowTelescopeModal] = useState<boolean>(false);
+  const [showElevatorModal, setShowElevatorModal] = useState<boolean>(false);
 
   useEffect(() => {
     setNavSnap(libraryNavigationController.getSnapshot());
@@ -56,27 +91,74 @@ export function LibraryFloorNav({
   }, []);
 
   useEffect(() => {
+    const onOpenElevator = () => {
+      setShowElevatorModal(true);
+      playElevatorChime();
+    };
+    window.addEventListener('bkhn:open-elevator-panel', onOpenElevator);
+    return () => window.removeEventListener('bkhn:open-elevator-panel', onOpenElevator);
+  }, []);
+
+  useEffect(() => {
     if (externalModal === 'telescope') {
       setShowTelescopeModal(true);
+      onClearExternalModal?.();
+    } else if (externalModal === 'elevator') {
+      setShowElevatorModal(true);
+      playElevatorChime();
       onClearExternalModal?.();
     } else if (externalModal === 'piano') {
       onClearExternalModal?.();
     }
   }, [externalModal, onClearExternalModal]);
 
+  const jumpToPreset = useCallback((dest: LibraryPresetDestination) => {
+    if (libraryNavigationController.isBusy()) return;
+    const outcome = libraryNavigationController.navigateToPreset(dest.id);
+    if (outcome.ok) {
+      playElevatorChime();
+      setShowTelescopeModal(false);
+      setShowElevatorModal(false);
+    }
+  }, []);
+
+  // Phím tắt bấm số tầng (1..7, 0 = Tầng 10, Escape = Đóng) khi Bảng điều khiển Thang máy đang mở
+  useEffect(() => {
+    if (!visible || !showElevatorModal) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowElevatorModal(false);
+        return;
+      }
+      const keyToFloor: Record<string, LibraryFloor> = {
+        '1': 1,
+        '2': 2,
+        '3': 3,
+        '4': 4,
+        '5': 5,
+        '6': 6,
+        '7': 7,
+        '0': 10,
+      };
+      const targetFloor = keyToFloor[e.key];
+      if (targetFloor) {
+        const dest = LIBRARY_PRESET_DESTINATIONS.find((d) => d.floor === targetFloor);
+        if (dest) {
+          e.preventDefault();
+          jumpToPreset(dest);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [visible, showElevatorModal, jumpToPreset]);
+
   if (!visible) return null;
 
   const currentFloor = navSnap.currentFloor;
   const activeDestId = navSnap.activePresetId;
   const isBusy = navSnap.phase === 'preparing' || navSnap.phase === 'transitioning';
-
-  const jumpToPreset = (dest: LibraryPresetDestination) => {
-    if (libraryNavigationController.isBusy()) return;
-    const outcome = libraryNavigationController.navigateToPreset(dest.id);
-    if (outcome.ok) {
-      setShowTelescopeModal(false);
-    }
-  };
 
   const triggerPianoNote = (midi: number) => {
     window.dispatchEvent(new CustomEvent('bkhn:piano-note', { detail: { midi, velocity: 0.82 } }));
@@ -101,14 +183,22 @@ export function LibraryFloorNav({
         data-nav-phase={navSnap.phase}
         data-current-floor={currentFloor}
         data-active-preset={activePreset.id}
-        className="pointer-events-auto fixed left-3 top-14 z-20 flex max-w-[calc(100vw-24px)] flex-col gap-1.5"
+        className="pointer-events-auto fixed right-3 top-14 z-20 flex max-w-[calc(100vw-24px)] flex-col items-end gap-1.5"
       >
         {/* Thanh trạng thái Tầng hiện tại + nút mở/thu gọn bảng thang máy Tầng 1–10 */}
         <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-amber-400/35 bg-slate-950/85 px-2.5 py-1.5 text-xs text-amber-100 shadow-lg backdrop-blur-md">
-          <span className="inline-flex items-center gap-1.5 font-bold text-amber-300">
+          <button
+            type="button"
+            data-testid="library-elevator-open-btn"
+            onClick={() => {
+              setShowElevatorModal(true);
+              playElevatorChime();
+            }}
+            className="inline-flex items-center gap-1.5 font-bold text-amber-300 hover:text-amber-200"
+          >
             <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
             🛗 Tầng {currentFloor}
-          </span>
+          </button>
           <span className="hidden text-slate-300 sm:inline">· {activePreset.fullLabel}</span>
           <button
             type="button"
@@ -160,7 +250,7 @@ export function LibraryFloorNav({
                 key={n.midi}
                 type="button"
                 onClick={() => triggerPianoNote(n.midi)}
-                className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm transition active: translate-y-0.5 hover:bg-amber-100"
+                className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-bold text-slate-900 shadow-sm transition hover:bg-amber-100 active:translate-y-0.5"
               >
                 {n.solfege}
               </button>
@@ -187,11 +277,82 @@ export function LibraryFloorNav({
               onClick={() => setShowTelescopeModal(true)}
               className="rounded-lg border border-sky-400/50 bg-sky-500/25 px-2.5 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/40"
             >
-              Ngắm bầu trời sao & Từ vựng Thiên văn HSK
+              Ngắm bầu trời sao &amp; Từ vựng Thiên văn HSK
             </button>
           </div>
         )}
       </div>
+
+      {/* Modal Bảng điều khiển Thang máy Thư viện Tạ Quang Bửu (mở khi lại gần thang máy bấm E) */}
+      {showElevatorModal && (
+        <div
+          data-testid="library-elevator-modal"
+          className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+        >
+          <div className="relative w-full max-w-xl rounded-2xl border border-amber-400/50 bg-slate-950 p-5 text-slate-100 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-16 flex-col items-center justify-center rounded-xl border border-amber-400/60 bg-black font-mono shadow-inner">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-amber-400/80">
+                    FLOOR
+                  </span>
+                  <span className="text-lg font-black text-amber-400">T{currentFloor}</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-amber-300">
+                    🛗 Thang Máy Thư Viện Tạ Quang Bửu · 图书馆电梯
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Chọn tầng hoặc phòng đọc muốn đến (phím tắt 1–7, 0 cho Tầng 10)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                data-testid="library-elevator-close"
+                onClick={() => setShowElevatorModal(false)}
+                className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-700"
+              >
+                Đóng ✕
+              </button>
+            </div>
+
+            <div className="mt-4 grid max-h-[65vh] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+              {[...LIBRARY_PRESET_DESTINATIONS].reverse().map((dest) => {
+                const isCurrent = dest.floor === currentFloor && dest.id === activePreset.id;
+                return (
+                  <button
+                    key={dest.id}
+                    type="button"
+                    disabled={isBusy}
+                    data-testid={`elevator-modal-btn-${dest.id}`}
+                    onClick={() => jumpToPreset(dest)}
+                    className={`flex items-center gap-3 rounded-xl border p-3 text-left transition disabled:opacity-50 ${
+                      isCurrent
+                        ? 'border-amber-400 bg-amber-500/20 text-amber-100 shadow-md'
+                        : 'border-slate-800 bg-slate-900/90 text-slate-200 hover:border-amber-400/60 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-xs font-black ${
+                        isCurrent
+                          ? 'border-amber-300 bg-amber-400 text-slate-950'
+                          : 'border-slate-600 bg-slate-800 text-amber-300'
+                      }`}
+                    >
+                      T{dest.floor}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-bold text-white">{dest.shortLabel}</div>
+                      <div className="truncate text-[11px] text-slate-400">{dest.fullLabel}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Kính thiên văn ngắm bầu trời sao Hà Nội & Từ vựng HSK trên Tầng 10 */}
       {showTelescopeModal && (

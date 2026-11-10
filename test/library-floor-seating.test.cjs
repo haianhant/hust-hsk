@@ -18,6 +18,7 @@ const {
   evaluateReconnectSeatAction,
   findNearestInteractable,
   findNearestLibrarySeat,
+  getAllLibrarySeatsForFloor,
   getLibraryLobbySeats,
   reconcilePersistedSessionSeat,
   reconcileSeatingWithEnvironment,
@@ -262,3 +263,95 @@ test('PR10A Floor-Seating (4) Switching floors while seated or reconnecting on n
     assert.equal(postReclaim.seatId, seat.seatId);
   }
 });
+
+test('PR11 Multi-Floor Seating (5) All accessible floors (1, 2, 3, 4, 5, 6, 7, 10) provide interactive seats that sit and stand up cleanly', () => {
+  const allAccessibleFloors = [1, 2, 3, 4, 5, 6, 7, 10];
+  for (const floor of allAccessibleFloors) {
+    const seats = getAllLibrarySeatsForFloor(floor);
+    assert.ok(seats.length > 0, `Floor ${floor} must have at least 1 interactive seat`);
+    const sampleSeat = seats[0];
+    const nearPos = { x: sampleSeat.x + 0.1, z: sampleSeat.z + 0.1 };
+
+    const found = findNearestLibrarySeat(nearPos, 1.85, floor);
+    assert.ok(found !== null, `Floor ${floor} seat ${sampleSeat.seatId} must be discoverable`);
+
+    const seatedRes = transitionToSeated(createInitialSeatingState(), {
+      seatId: sampleSeat.seatId,
+      playerPos: nearPos,
+      inLibraryLobby: true,
+      libraryFloor: floor,
+      inClassroom: false,
+      bikeRiding: false,
+      uiLocked: false,
+    });
+    assert.equal(seatedRes.ok, true, `Sitting at ${sampleSeat.seatId} on Floor ${floor} must succeed`);
+    assert.equal(seatedRes.state.status, 'seated');
+
+    // Staying on the same floor keeps the seat
+    const stayEnv = reconcileSeatingWithEnvironment(seatedRes.state, {
+      inLibraryLobby: true,
+      libraryFloor: floor,
+      inClassroom: false,
+      bikeRiding: false,
+    });
+    assert.equal(stayEnv.released, false, `Staying on Floor ${floor} must keep seat ${sampleSeat.seatId}`);
+
+    // Standing up succeeds
+    const standRes = transitionToStanding(seatedRes.state);
+    assert.equal(standRes.ok, true);
+    assert.ok(standRes.standUpPos);
+  }
+});
+
+test('PR11 Library Elevator (6) Approaching the elevator doors on Floors 1–7 and 10 triggers the E — Sử dụng Thang máy Thư viện prompt', () => {
+  const baseInput = {
+    inClassroom: false,
+    inLibraryLobby: true,
+    seated: false,
+    seatId: null,
+    occupiedByOtherSeatIds: new Set(),
+    pendingSeatId: null,
+    bikeRiding: false,
+    bikeSpeed: 0,
+    bikePos: { x: 999, z: 999 },
+    questActive: false,
+    questDoneBefore: false,
+    anyQuestDone: false,
+    stepId: undefined,
+  };
+
+  for (const floor of [1, 2, 3, 4, 5]) {
+    const found = findNearestInteractable({
+      ...baseInput,
+      libraryFloor: floor,
+      pos: { x: 18.0, z: -1.6 },
+    });
+    assert.deepEqual(found, {
+      id: 'library-elevator',
+      label: 'E — Sử dụng Thang máy Thư viện (T1–T10)',
+    });
+  }
+
+  for (const floor of [6, 7]) {
+    const found = findNearestInteractable({
+      ...baseInput,
+      libraryFloor: floor,
+      pos: { x: 22.0, z: -1.8 },
+    });
+    assert.deepEqual(found, {
+      id: 'library-elevator',
+      label: 'E — Sử dụng Thang máy Thư viện (T1–T10)',
+    });
+  }
+
+  const found10 = findNearestInteractable({
+    ...baseInput,
+    libraryFloor: 10,
+    pos: { x: -2.4, z: -3.2 },
+  });
+  assert.deepEqual(found10, {
+    id: 'library-elevator',
+    label: 'E — Sử dụng Thang máy Thư viện (T1–T10)',
+  });
+});
+

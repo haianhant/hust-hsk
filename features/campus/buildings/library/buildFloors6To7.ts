@@ -378,12 +378,12 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
 
     // Cụm ghế bành vàng Mustard + bàn trà tròn có đèn ngủ
     for (const [ax, az, ry] of [
-      [-1.8, -2.8, 0.4],
-      [0.4, -3.4, -0.2],
-      [4.2, -3.2, -0.6],
-      [-1.4, 2.6, 2.5],
-      [1.8, 3.1, 3.0],
-      [4.8, 2.4, -2.4],
+      [-5.2, -3.8, 0.4],
+      [0.4, -5.4, -0.2],
+      [5.4, -3.8, -0.6],
+      [-5.2, 3.8, 2.5],
+      [1.8, 4.8, 3.0],
+      [5.4, 3.2, -2.4],
     ]) {
       const ag = G(world, ax, PY, az, ry);
       box(0.82, 0.38, 0.78, M_MUSTARD, 0, 0.24, 0, 0, 0, 0, ag);

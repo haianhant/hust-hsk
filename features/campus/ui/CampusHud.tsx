@@ -10,7 +10,6 @@
 import QuestObjective from '../../../components/learn/QuestObjective';
 import Joystick from '../../../components/ui/Joystick';
 import Minimap from '../../../components/ui/Minimap';
-import { FAST_TRAVEL_DESTINATIONS } from '../../../lib/campus';
 import type { Progress } from '../../../lib/learn/types';
 import type { MultiplayerSnapshot } from '../../../lib/multiplayer';
 import { bikeInput, playerInput, type TimeOfDay } from '../../../lib/playerState';
@@ -20,7 +19,6 @@ import { MultiplayerStatusChip } from '../../social/multiplayer/MultiplayerStatu
 import type { FocusRuntimePolicy } from '../../study/focus-mode/focus-mode';
 import type { PomodoroState } from '../../study/pomodoro/timer';
 import { usePomodoro } from '../../study/pomodoro/usePomodoro';
-import { getHook } from '../interaction/bridge';
 
 function StudyHudButton({
   pomodoro,
@@ -62,9 +60,17 @@ function StudyHudButton({
           : 'bg-[#1c5c3a]/90 hover:bg-[#16492e]'
       }`}
     >
-      {hasActivePomodoro
-        ? `🍅 Tự học · ${displayRemainingMmSs}${evaluation.state.running ? '' : ' (Tạm dừng)'}`
-        : '🍅 Tự học'}
+      {hasActivePomodoro ? (
+        <span>
+          🍅 Tự học ·{' '}
+          <span className="inline-block w-[44px] text-center font-mono">
+            {displayRemainingMmSs}
+          </span>
+          {evaluation.state.running ? '' : ' (Tạm dừng)'}
+        </span>
+      ) : (
+        '🍅 Tự học'
+      )}
     </button>
   );
 }
@@ -85,6 +91,9 @@ export interface CampusHudProps {
   panel: LearningPanelType;
   lessonsOpen: boolean;
   timeOfDay: TimeOfDay;
+  realClockText?: string;
+  autoTimeOfDay?: boolean;
+  lofiPlaying?: boolean;
   soundOn: boolean;
   speechRate: number;
   objectiveText: string | null;
@@ -105,6 +114,7 @@ export interface CampusHudProps {
   onFastTravel: (destId: string) => void;
   onSetFastTravelOpen: (updater: (prev: boolean) => boolean) => void;
   onCycleTimeOfDay: () => void;
+  onToggleLofi?: () => void;
   onToggleOutfit: () => void;
   onOpenLessons: () => void;
   onOpenHandbook: (tab: HandbookTab) => void;
@@ -133,12 +143,13 @@ export function CampusHud({
   panel,
   lessonsOpen,
   timeOfDay,
+  realClockText,
+  autoTimeOfDay = true,
+  lofiPlaying = false,
   soundOn,
   speechRate,
   objectiveText,
   interactLabel,
-  fastTravelOpen,
-  traveling,
   helpOpen,
   toast,
   pomodoro,
@@ -150,9 +161,8 @@ export function CampusHud({
   onDismissNoVoice,
   onSetPanel,
   onSetReReviewIds,
-  onFastTravel,
-  onSetFastTravelOpen,
   onCycleTimeOfDay,
+  onToggleLofi,
   onToggleOutfit,
   onOpenLessons,
   onOpenHandbook,
@@ -162,7 +172,6 @@ export function CampusHud({
   onExitClassroom,
   onInteract,
   onSetHelpOpen,
-  onShowToast,
 }: CampusHudProps) {
   const hideNav = focusPolicy?.hideNavigationHud ?? false;
   const hideMove = focusPolicy?.hideMovementControls ?? false;
@@ -291,10 +300,10 @@ export function CampusHud({
         )}
       </div>
 
-      {/* Góc trên-phải: minimap + nút ngày/đêm, sổ tay, âm thanh, tốc độ, đổi bài. */}
-      <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
-        {!inClassroom && !inLibraryLobby && !hideNav && <Minimap onFastTravel={onFastTravel} />}
-        <div className="pointer-events-auto flex flex-wrap justify-end gap-2">
+      {/* Góc trên-phải: minimap + nút ngày/đêm, nhạc lofi, sổ tay, âm thanh, tốc độ, đổi bài. */}
+      <div className="absolute right-3 top-3 flex flex-col items-end gap-2 sm:flex-row-reverse sm:items-start">
+        {!inClassroom && !inLibraryLobby && !hideNav && <Minimap />}
+        <div className="pointer-events-auto flex max-w-[calc(100vw-240px)] flex-wrap justify-end gap-2">
           {onOpenStudyPanel && (
             <StudyHudButton
               pomodoro={pomodoro}
@@ -302,15 +311,45 @@ export function CampusHud({
               onReconcileStudyAt={onReconcileStudyAt}
             />
           )}
+          {onToggleLofi && (
+            <button
+              id="toggle-lofi"
+              data-testid="toggle-lofi"
+              type="button"
+              onClick={onToggleLofi}
+              aria-label={lofiPlaying ? 'Tắt nhạc Lofi Chill' : 'Bật nhạc Lofi Chill học tập'}
+              className={`rounded-full px-3.5 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition ${
+                lofiPlaying
+                  ? 'bg-amber-600/95 ring-1 ring-amber-300/60 hover:bg-amber-700'
+                  : 'bg-black/50 hover:bg-black/70'
+              }`}
+            >
+              {lofiPlaying ? '🎵 Lofi Chill' : '🎧 Nhạc Lofi'}
+            </button>
+          )}
           {!hideNav && (
             <button
               id="toggle-time"
+              data-testid="toggle-time"
               type="button"
               onClick={onCycleTimeOfDay}
-              aria-label="Chuyển đổi thời gian Ngày / Hoàng hôn / Đêm"
-              className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
+              aria-label="Chuyển đổi thời gian Ngày / Hoàng hôn / Đêm (Mặc định theo thời gian thực)"
+              title={
+                autoTimeOfDay
+                  ? 'Đang tự động theo giờ thực ngoài đời — bấm để chuyển thủ công'
+                  : 'Đang chỉnh giờ thủ công — bấm để xoay vòng hoặc quay về Tự động'
+              }
+              className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold tabular-nums text-white backdrop-blur-sm transition hover:bg-black/70"
             >
               {timeOfDay === 'day' ? '☀️ Ngày' : timeOfDay === 'sunset' ? '🌇 Hoàng hôn' : '🌙 Đêm'}
+              {realClockText ? (
+                <>
+                  {' · '}
+                  <span className="inline-block w-[42px] text-center font-mono">
+                    {realClockText}
+                  </span>
+                </>
+              ) : null}
             </button>
           )}
           {!hideNav && (
@@ -320,7 +359,7 @@ export function CampusHud({
               type="button"
               onClick={onToggleOutfit}
               aria-label="Nhân vật và trang phục"
-              className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
+              className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold tabular-nums text-white backdrop-blur-sm transition hover:bg-black/70"
             >
               👕 Nhân vật &amp; trang phục
             </button>
@@ -382,102 +421,45 @@ export function CampusHud({
         seated ? (
           <div
             data-testid="seated-interact-hint"
-            className="pointer-events-none absolute bottom-5 left-1/2 z-20 -translate-x-1/2 text-center"
+            className="pointer-events-auto absolute bottom-5 left-1/2 z-20 -translate-x-1/2 text-center"
           >
-            <div className="rounded-full bg-black/75 px-4 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-sm sm:text-sm">
+            <button
+              type="button"
+              onClick={onInteract}
+              className="rounded-full bg-black/75 px-4 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-black/90 sm:text-sm"
+            >
               <span className="mr-2 inline-block rounded-md bg-white px-2 py-0.5 font-black text-black">
                 E
               </span>
               <span>{interactLabel.replace(/^E — /, '')}</span>
-            </div>
+            </button>
           </div>
         ) : (
-          <div className="pointer-events-none absolute left-1/2 top-[36%] z-20 w-[min(92vw,560px)] -translate-x-1/2 -translate-y-1/2 text-center">
-            <div className="animate-pulse rounded-3xl bg-black/75 px-6 py-5 shadow-2xl backdrop-blur-sm sm:px-8">
+          <div
+            data-testid="center-interact-prompt"
+            className="pointer-events-auto absolute left-1/2 top-[36%] z-20 w-[min(92vw,560px)] -translate-x-1/2 -translate-y-1/2 text-center"
+          >
+            <button
+              type="button"
+              onClick={onInteract}
+              className="w-full animate-pulse rounded-3xl bg-black/75 px-6 py-5 shadow-2xl backdrop-blur-sm transition hover:bg-black/85 sm:px-8"
+            >
               <span className="mr-4 inline-block rounded-2xl bg-white px-5 py-2 align-middle text-4xl font-black text-black shadow">
                 E
               </span>
               <span className="align-middle text-2xl font-bold leading-tight text-white sm:text-3xl">
                 {interactLabel.replace(/^E — /, '')}
               </span>
-            </div>
+            </button>
             <p className="mt-3 text-sm font-semibold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-              Bấm phím E — hoặc nút ✋ Tương tác ở góc dưới phải
+              Nhấn phím [E] để tương tác
             </p>
           </div>
         )
       )}
 
-      {/* Góc dưới-phải: về vị trí an toàn + nút Tương tác (mobile). */}
+      {/* Góc dưới-phải: thoát sảnh/phòng, đứng dậy (khi đang ngồi) + về vị trí an toàn. */}
       <div className="absolute bottom-4 right-3 flex flex-col items-end gap-2">
-        {/* Đợt 3 giai đoạn 5 — dịch chuyển nhanh: nút mở panel + danh sách
-            6 điểm đến (mở ngay từ đầu). Panel hiện phía trên nút. */}
-        {!hideNav && fastTravelOpen && (
-          <div
-            data-testid="fast-travel-panel"
-            className="pointer-events-auto w-[248px] rounded-2xl bg-white p-2 shadow-2xl"
-          >
-            <p className="px-2 pb-1 pt-1 text-sm font-bold text-[#1c2b1f]">🚀 Đi nhanh tới…</p>
-            {FAST_TRAVEL_DESTINATIONS.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                data-testid={`fast-travel-${d.id}`}
-                disabled={traveling}
-                onClick={() => onFastTravel(d.id)}
-                className="mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-[#1c5c3a]/10 disabled:opacity-50"
-              >
-                <span className="text-lg">{d.icon}</span>
-                <span>
-                  <span className="block text-sm font-bold text-[#2B2B2B]">{d.name}</span>
-                  <span className="block text-xs text-[#2B2B2B]/60">{d.desc}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-        {!hideNav && (
-          <button
-            id="fast-travel"
-            type="button"
-            disabled={traveling}
-            onClick={() => onSetFastTravelOpen((o) => !o)}
-            className="pointer-events-auto rounded-full bg-[#1c5c3a] px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition hover:bg-[#16492e] disabled:opacity-60"
-          >
-            🚀 Đi nhanh
-          </button>
-        )}
-        {/* Đợt 3 giai đoạn 4 — xe máy: chỉ ngoài sân (không gọi xe trong
-            phòng học); "Gọi xe" ẩn khi đang lái vì đã ngồi trên xe rồi. */}
-        {!hideMove && !inClassroom && !inLibraryLobby && !riding && (
-          <button
-            id="call-bike"
-            type="button"
-            onClick={() => {
-              const r = getHook()?.callBike?.();
-              if (r?.ok) onShowToast('Xe đang tới chỗ bạn.');
-              else if (r?.reason === 'classroom') onShowToast('Đang trong phòng học thì không gọi xe được.');
-              else onShowToast('Quanh đây không có chỗ trống để đỗ xe.');
-            }}
-            className="pointer-events-auto rounded-full bg-[#1c5c3a] px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition hover:bg-[#16492e]"
-          >
-            🛵 Gọi xe
-          </button>
-        )}
-        {!hideMove && !inClassroom && !inLibraryLobby && (
-          <button
-            id="recall-bike"
-            type="button"
-            onClick={() => {
-              const r = getHook()?.recallBike?.();
-              if (r?.ok) onShowToast('Xe đã về đường gần nhất.');
-              else onShowToast('Chưa đưa xe về đường được — thử lại sau.');
-            }}
-            className="pointer-events-auto rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
-          >
-            🛵 Đưa xe về đường
-          </button>
-        )}
         {inLibraryLobby && (
           <button
             id="exit-library-lobby"
@@ -493,11 +475,6 @@ export function CampusHud({
             id="exit-classroom"
             type="button"
             onClick={() => {
-              // Thoát được cả khi panel học đang mở (trước đây chỉ thoát
-              // khi panel đóng nên học dở trong lớp thì kẹt). relative z-30
-              // để nút nổi trên panel dạng bottom sheet (z-20) trên mobile;
-              // các nút HUD khác vẫn nằm dưới sheet như trước để khỏi che
-              // nút trong bảng học.
               onSetPanel(null);
               onSetReReviewIds(null);
               onExitClassroom();
@@ -515,17 +492,9 @@ export function CampusHud({
             onClick={onStandUp}
             className="pointer-events-auto rounded-full bg-amber-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg transition hover:bg-amber-700"
           >
-            🚶 Đứng dậy
+            🚶 Đứng dậy (E)
           </button>
         )}
-        <button
-          id="interact-button"
-          type="button"
-          onClick={onInteract}
-          className="pointer-events-auto rounded-full bg-[#A54432] px-5 py-2.5 text-sm font-bold text-white shadow-lg transition hover:bg-[#8A3828]"
-        >
-          {seated ? '🚶 Đứng dậy (E)' : '✋ Tương tác'}
-        </button>
         <button
           id="safe-position"
           type="button"
@@ -665,11 +634,9 @@ export function CampusHud({
               <li>WASD / mũi tên — di chuyển</li>
               <li>Kéo chuột — xoay camera</li>
               <li>Lăn chuột — zoom</li>
-              <li>E — tương tác</li>
+              <li>E — tương tác khi lại gần</li>
               <li>Shift — chạy</li>
-              <li>🛵 Gọi xe — nút “Gọi xe” góc dưới-phải</li>
-              <li>Đang lái: W ga · S phanh · A/D lái · E xuống xe (khi dừng)</li>
-              <li>🚀 Đi nhanh — nút “Đi nhanh” góc dưới-phải / trên bản đồ</li>
+              <li>Đang lái xe: W ga · S phanh · A/D lái · E xuống xe</li>
             </ul>
           </div>
         ) : (

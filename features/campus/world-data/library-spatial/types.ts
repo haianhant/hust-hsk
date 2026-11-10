@@ -215,7 +215,7 @@ export interface LibrarySpatialDiagnostics {
   collisionIds: string[];
   nearestDoorId: string | null;
   nearestSeatId: string | null;
-  nearestSeatFloor: 1;
+  nearestSeatFloor: LibraryFloor;
   activeSeatId: string | null;
   debugCollisionOverlay: boolean;
 }
