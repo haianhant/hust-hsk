@@ -34,6 +34,7 @@ import {
   type LibraryFloor,
 } from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
+import { multiplayer } from '../../lib/multiplayer';
 import { makeGraniteStoneTexture } from './materials';
 import { LabelPlane } from './TextPlate';
 
@@ -292,9 +293,20 @@ export default function LibraryLobby({
 
   useEffect(() => {
     const onPianoNote = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ midi?: number; velocity?: number }>).detail;
+      const detail = (
+        ev as CustomEvent<{ midi?: number; velocity?: number; remoteId?: string }>
+      ).detail;
       if (detail && typeof detail.midi === 'number') {
-        multiFloor.ensureBlockB().playPianoNote(detail.midi, detail.velocity ?? 0.8);
+        const vel = detail.velocity ?? 0.82;
+        if (!detail.remoteId) {
+          multiplayer.sendPianoNote(detail.midi, vel);
+          if (playerState.libraryFloor === 6 && playerState.seatId !== 'tqb-6f-piano-bench') {
+            window.dispatchEvent(new CustomEvent('bkhn:sit-piano-bench'));
+          }
+        } else if (playerState.libraryFloor !== 6 && playerState.libraryFloor !== 7) {
+          return;
+        }
+        multiFloor.ensureBlockB().playPianoNote(detail.midi, vel);
       }
     };
     const onElevatorCall = (ev: Event) => {
@@ -411,7 +423,7 @@ export default function LibraryLobby({
     } else if (showBlockB) {
       multiFloor.ensureBlockB().update(dt);
     } else if (showBlockD) {
-      multiFloor.ensureBlockD().update(dt, state.clock.elapsedTime);
+      multiFloor.ensureBlockD().update(dt, state.clock.elapsedTime, playerState.timeOfDay);
     }
   });
 
@@ -679,11 +691,17 @@ export default function LibraryLobby({
           position={[-6.6, 1.25, 3.6]}
           onClick={(e) => {
             e.stopPropagation();
-            // Phát hợp âm Đô trưởng (C4-E4-G4-C5) và mở thanh đàn Piano
-            [60, 64, 67, 72].forEach((m, idx) =>
-              setTimeout(() => multiFloor.ensureBlockB().playPianoNote(m, 0.8), idx * 90),
-            );
             onObjectClick?.('piano-6f');
+            // Phát hợp âm Đô trưởng (C4-E4-G4-C5) và đồng bộ sang người chơi khác
+            [60, 64, 67, 72].forEach((m, idx) =>
+              setTimeout(
+                () =>
+                  window.dispatchEvent(
+                    new CustomEvent('bkhn:piano-note', { detail: { midi: m, velocity: 0.82 } }),
+                  ),
+                idx * 90,
+              ),
+            );
           }}
           onPointerOver={hover}
           onPointerOut={leave}
@@ -693,7 +711,7 @@ export default function LibraryLobby({
         </mesh>
       </group>
 
-      {/* Vùng tương tác click chuột vào Kính thiên văn ngắm sao trên Sân thượng Tầng 10 */}
+      {/* Vùng tương tác click chuột vào Kính thiên văn ngắm sao & Giường nệm trên Sân thượng Tầng 10 */}
       <group ref={floor10InteractiveRef} visible={false}>
         <mesh
           position={[15.4, 1.2, 0.6]}
@@ -704,6 +722,30 @@ export default function LibraryLobby({
           <boxGeometry args={[1.6, 1.8, 1.6]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
+        {([-17.2, -14.2, -11.2] as const).map((bx, idx) => (
+          <mesh
+            key={`f10-bed-hit-${idx + 1}`}
+            position={[bx, 0.35, -4.8]}
+            onClick={clickObj(`seat:tqb-10f-bed-${idx + 1}`)}
+            onPointerOver={hover}
+            onPointerOut={leave}
+          >
+            <boxGeometry args={[1.55, 0.7, 2.15]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        ))}
+        {([-17.2, -14.2, -11.2] as const).map((lx, idx) => (
+          <mesh
+            key={`f10-lounger-hit-${idx + 1}`}
+            position={[lx, 0.35, 3.4]}
+            onClick={clickObj(`seat:tqb-10f-lounger-${idx + 1}`)}
+            onPointerOver={hover}
+            onPointerOut={leave}
+          >
+            <boxGeometry args={[0.95, 0.65, 2.0]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        ))}
       </group>
 
       {/* Lớp hiển thị lưới va chạm phát triển (tắt mặc định trong production) */}

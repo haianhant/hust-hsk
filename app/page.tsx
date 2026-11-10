@@ -418,11 +418,22 @@ export default function HomePage() {
       // 4. Bàn ghế ở các tầng khác (T1 sofa, T2–T10) hoặc chế độ ngoại tuyến: cho phép ngồi học ngay
       const r = getHook()?.sitAtSeat?.(seatId);
       if (r?.ok) {
-        const suffix =
-          isLibraryLobbySeatId(seatId) && snap.status !== 'online' ? ' (Chế độ ngoại tuyến)' : '';
-        showToast(
-          `🪑 Đang ngồi học tại ${localCheck.seat.label}. Bấm "🍅 Tự học" để bắt đầu Pomodoro!${suffix}`,
-        );
+        if (seatId === 'tqb-6f-piano-bench') {
+          setLibraryExtraModal('piano');
+          showToast(
+            '🎹 Đã ngồi vào ghế Đại dương cầm Tầng 6 — bấm các phím đàn để tấu nhạc cho mọi người cùng nghe!',
+          );
+        } else if (seatId.startsWith('tqb-10f-bed-') || seatId.startsWith('tqb-10f-lounger-')) {
+          showToast(
+            `🛏️ Đang nằm thư giãn trên ${localCheck.seat.label} ngắm toàn cảnh ĐHBK Hà Nội!`,
+          );
+        } else {
+          const suffix =
+            isLibraryLobbySeatId(seatId) && snap.status !== 'online' ? ' (Chế độ ngoại tuyến)' : '';
+          showToast(
+            `🪑 Đang ngồi học tại ${localCheck.seat.label}. Bấm "🍅 Tự học" để bắt đầu Pomodoro!${suffix}`,
+          );
+        }
       } else {
         showToast(r?.message ?? 'Chưa thể ngồi vào ghế này.');
       }
@@ -988,6 +999,15 @@ export default function HomePage() {
       }
       if (id === 'piano-6f') {
         if (playerState.libraryFloor !== 6) return;
+        if (playerState.seatId !== 'tqb-6f-piano-bench') {
+          if (playerState.seated) {
+            getHook()?.standUp?.();
+          }
+          if (Math.hypot(playerState.pos.x - -6.963, playerState.pos.z - 2.69) > 3.0) {
+            getHook()?.teleport?.(-6.4, 3.1, -2.76);
+          }
+          getHook()?.sitAtSeat?.('tqb-6f-piano-bench');
+        }
         setLibraryExtraModal('piano');
         showToast('🎹 Đại dương cầm Tầng 6 — bấm các phím đàn trên thanh Piano để tấu nhạc!');
         return;
@@ -1265,6 +1285,15 @@ export default function HomePage() {
       return;
     }
     if (id === 'piano-6f') {
+      if (playerState.inLibraryLobby && playerState.libraryFloor === 6 && playerState.seatId !== 'tqb-6f-piano-bench') {
+        if (playerState.seated) {
+          getHook()?.standUp?.();
+        }
+        if (Math.hypot(playerState.pos.x - -6.963, playerState.pos.z - 2.69) > 3.0) {
+          getHook()?.teleport?.(-6.4, 3.1, -2.76);
+        }
+        getHook()?.sitAtSeat?.('tqb-6f-piano-bench');
+      }
       setLibraryExtraModal('piano');
       showToast('🎹 Đại dương cầm Tầng 6 — bấm các phím đàn trên thanh Piano để tấu nhạc!');
       return;
@@ -1300,8 +1329,27 @@ export default function HomePage() {
   useEffect(() => {
     if (!entered) return;
     const onInteract = () => handleInteract();
+    const onSitPianoBench = () => {
+      if (
+        playerState.inLibraryLobby &&
+        playerState.libraryFloor === 6 &&
+        playerState.seatId !== 'tqb-6f-piano-bench'
+      ) {
+        if (playerState.seated) {
+          getHook()?.standUp?.();
+        }
+        if (Math.hypot(playerState.pos.x - -6.963, playerState.pos.z - 2.69) > 3.0) {
+          getHook()?.teleport?.(-6.4, 3.1, -2.76);
+        }
+        getHook()?.sitAtSeat?.('tqb-6f-piano-bench');
+      }
+    };
     window.addEventListener('bkhn:interact', onInteract);
-    return () => window.removeEventListener('bkhn:interact', onInteract);
+    window.addEventListener('bkhn:sit-piano-bench', onSitPianoBench);
+    return () => {
+      window.removeEventListener('bkhn:interact', onInteract);
+      window.removeEventListener('bkhn:sit-piano-bench', onSitPianoBench);
+    };
   }, [entered, handleInteract]);
 
   // --- Hoàn thành quest --------------------------------------------------------------

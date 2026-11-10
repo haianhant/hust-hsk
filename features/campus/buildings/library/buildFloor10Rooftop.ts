@@ -26,7 +26,7 @@ export interface Floor10RooftopController {
   scopePivot: THREE.Group;
   groundY: (x: number, z: number) => number;
   blockedAt: (x: number, z: number) => boolean;
-  update: (dt: number, elapsed: number) => void;
+  update: (dt: number, elapsed: number, timeOfDay?: 'day' | 'sunset' | 'night') => void;
 }
 
 export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopController {
@@ -213,20 +213,78 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
     box(3.4, 0.56, 0.06, new THREE.MeshBasicMaterial({ map: signTex }), 0, 2.78, KS.z1 + 0.08);
   }
 
-  // Thảm cỏ Tây + Ghế tắm nắng đôi + Đèn bão & Thảm Picnic
+  // Đế sàn bê tông kiến trúc đỡ sân thượng Tầng 10 (kết nối liền khối với đỉnh tháp Thư viện Tạ Quang Bửu bên dưới)
+  box(RW + 0.6, 0.75, RD + 0.6, M_STONE, 0, -0.38, 0);
+
+  // Thảm cỏ Tây + Ghế tắm nắng đôi (có gối mềm màu) + Đèn bão & Thảm Picnic
   box(11.5, 0.06, 6.4, M_LAWN, -14.2, 0.03, 3.2);
-  for (const lx of [-17.2, -14.2, -11.2]) {
+  const loungerPillowColors = [0xf472b6, 0x38bdf8, 0x34d399];
+  [-17.2, -14.2, -11.2].forEach((lx, idx) => {
     const lg = G(world, lx, 0.06, 3.4, 0.15);
     box(0.78, 0.18, 1.95, M_WOOD_L, 0, 0.16, 0, 0, 0, 0, lg);
     box(0.72, 0.08, 1.25, M_FABRIC, 0, 0.28, 0.28, 0, 0, 0, lg);
     box(0.72, 0.08, 0.65, M_FABRIC, 0, 0.44, -0.62, 0.48, 0, 0, lg);
+    // Gối mềm màu tựa đầu trên ghế tắm nắng
+    const pMat = mat(loungerPillowColors[idx % loungerPillowColors.length], 0.58);
+    box(0.48, 0.11, 0.28, pMat, 0, 0.56, -0.68, 0.48, 0, 0, lg);
     cyl(0.08, 0.1, 0.24, 10, M_LED, 0.62, 0.14, -0.3, 0, 0, 0, lg);
+  });
+
+  // Khu Giường nệm thư giãn ngắm sao Tây-Bắc (Daybeds + Gối mềm nhiều màu pastel)
+  box(10.8, 0.05, 3.6, M_WOOD_D, -14.2, 0.025, -4.8);
+  box(10.84, 0.025, 0.06, M_LED, -14.2, 0.015, -2.98);
+  const daybedConfigs: Array<{
+    x: number;
+    blanketHex: number;
+    pillowLHex: number;
+    pillowRHex: number;
+    bolsterHex: number;
+  }> = [
+    { x: -17.2, blanketHex: 0xfbcfe8, pillowLHex: 0xf472b6, pillowRHex: 0xa78bfa, bolsterHex: 0x34d399 },
+    { x: -14.2, blanketHex: 0xbae6fd, pillowLHex: 0x38bdf8, pillowRHex: 0xfbbf24, bolsterHex: 0xfb7185 },
+    { x: -11.2, blanketHex: 0xd9f99d, pillowLHex: 0x34d399, pillowRHex: 0xc084fc, bolsterHex: 0xfde047 },
+  ];
+  for (const cfg of daybedConfigs) {
+    const bg = G(world, cfg.x, 0.05, -4.8);
+    // Khung gỗ & đầu giường ấm áp
+    box(1.48, 0.22, 2.12, M_WOOD_L, 0, 0.11, 0, 0, 0, 0, bg);
+    box(1.48, 0.58, 0.12, M_WOOD_M, 0, 0.34, -1.0, 0, 0, 0, bg);
+    // Đệm bông dày êm ái + chăn mỏng pastel cuối giường
+    box(1.38, 0.14, 1.96, M_FABRIC, 0, 0.28, 0.04, 0, 0, 0, bg);
+    box(1.4, 0.05, 0.86, mat(cfg.blanketHex, 0.65), 0, 0.36, 0.56, 0, 0, 0, bg);
+    // Cặp gối mềm màu lớn + gối ôm tròn nhiều màu sắc
+    const pL = mk(
+      new THREE.BoxGeometry(0.52, 0.14, 0.36),
+      mat(cfg.pillowLHex, 0.55),
+      -0.32,
+      0.41,
+      -0.68,
+      0.22,
+      0.06,
+      0,
+      bg,
+    );
+    pL.scale.set(1, 0.95, 1);
+    const pR = mk(
+      new THREE.BoxGeometry(0.52, 0.14, 0.36),
+      mat(cfg.pillowRHex, 0.55),
+      0.32,
+      0.41,
+      -0.68,
+      0.22,
+      -0.06,
+      0,
+      bg,
+    );
+    pR.scale.set(1, 0.95, 1);
+    cyl(0.09, 0.09, 0.78, 14, mat(cfg.bolsterHex, 0.55), 0, 0.42, -0.34, 0, 0, Math.PI / 2, bg);
   }
-  // Ghế lười (Beanbags)
+
+  // Ghế lười (Beanbags) dọc lối dạo giữa
   for (const [bxX, bzZ, col] of [
-    [-16.5, -4.2, 0xd97706],
-    [-14.2, -5.1, 0x2563eb],
-    [-11.8, -4.0, 0xdc2626],
+    [-16.5, -1.9, 0xd97706],
+    [-14.2, -1.9, 0x2563eb],
+    [-11.8, -1.9, 0xdc2626],
   ]) {
     const bb = new THREE.Mesh(new THREE.SphereGeometry(0.52, 16, 12), mat(col, 0.72));
     bb.scale.set(1.15, 0.68, 1.15);
@@ -345,6 +403,12 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
 
   // Vòm bầu trời đêm đầy sao + Dải Ngân Hà + Sao băng trên tầng 10
   const skyG = G(world, 0, 0, 0);
+  const starMat = new THREE.PointsMaterial({
+    color: 0xfff8dc,
+    size: 0.35,
+    transparent: true,
+    opacity: 0.9,
+  });
   {
     const rng = mulberry32(1010);
     const starCount = 900;
@@ -359,10 +423,7 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
     }
     const sGeo = new THREE.BufferGeometry();
     sGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const sPts = new THREE.Points(
-      sGeo,
-      new THREE.PointsMaterial({ color: 0xfff8dc, size: 0.35, transparent: true, opacity: 0.9 }),
-    );
+    const sPts = new THREE.Points(sGeo, starMat);
     skyG.add(sPts);
   }
 
@@ -380,9 +441,25 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
     return res.blocked || !res.grounded;
   };
 
-  const update = (dt: number, elapsed: number) => {
+  const update = (
+    dt: number,
+    elapsed: number,
+    timeOfDay: 'day' | 'sunset' | 'night' = 'night',
+  ) => {
     scopePivot.rotation.y = 0.55 + Math.sin(elapsed * 0.35) * 0.25;
     skyG.rotation.y += dt * 0.008;
+    if (timeOfDay === 'day') {
+      skyG.visible = false;
+      M_LED.color.setHex(0xffe8b0);
+    } else if (timeOfDay === 'sunset') {
+      skyG.visible = true;
+      starMat.opacity = 0.38;
+      M_LED.color.setHex(0xffc46b);
+    } else {
+      skyG.visible = true;
+      starMat.opacity = 0.92;
+      M_LED.color.setHex(0xffd584);
+    }
   };
 
   return {

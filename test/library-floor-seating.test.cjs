@@ -355,3 +355,75 @@ test('PR11 Library Elevator (6) Approaching the elevator doors on Floors 1–7 a
   });
 });
 
+test('PR12 Multi-Floor Seating, Grand Piano Bench & Floor 10 Daybed Lying Pose + Telemetry Sync', () => {
+  const {
+    decodeMoveTelemetry,
+    encodeMoveTelemetry,
+  } = require(path.join(ROOT, 'shared/contracts/multiplayer.ts'));
+  const {
+    LYING_GROUP_Y_OFFSET,
+    computeLyingPoseTargets,
+    computePianoPoseTargets,
+    isLyingSeatId,
+    isPianoBenchSeatId,
+  } = require(path.join(ROOT, 'features/avatar/animation/gait.ts'));
+
+  // 1. Floor 4 Room 401 reading table seats (6 chairs per table)
+  const f4Seats = getAllLibrarySeatsForFloor(4);
+  const r401Seat = f4Seats.find((s) => s.seatId === 'tqb-f4-r401-table-1-s1');
+  assert.ok(r401Seat, 'Room 401 table 1 seat 1 must exist');
+  assert.equal(r401Seat.y, 13.5);
+
+  // 2. Floor 6 Grand Piano bench seat & prompt
+  const f6Seats = getAllLibrarySeatsForFloor(6);
+  const pianoBench = f6Seats.find((s) => s.seatId === 'tqb-6f-piano-bench');
+  assert.ok(pianoBench, 'Floor 6 piano bench must exist');
+  assert.equal(isPianoBenchSeatId(pianoBench.seatId), true);
+  assert.equal(pianoBench.y, 0.6);
+
+  const pianoTele = encodeMoveTelemetry({
+    x: pianoBench.x,
+    z: pianoBench.z,
+    facing: pianoBench.facing,
+    scene: 'library',
+    libraryFloor: 6,
+    seatedSeatId: 'tqb-6f-piano-bench',
+  });
+  const decodedPiano = decodeMoveTelemetry(pianoTele);
+  assert.equal(decodedPiano.scene, 'library');
+  assert.equal(decodedPiano.libraryFloor, 6);
+  assert.equal(decodedPiano.seatedSeatId, 'tqb-6f-piano-bench');
+
+  const pianoPoseIdle = computePianoPoseTargets(1.0, false);
+  const pianoPoseActive = computePianoPoseTargets(1.0, true);
+  assert.notEqual(pianoPoseIdle.armLTarget, pianoPoseActive.armLTarget);
+
+  // 3. Floor 10 Rooftop Daybeds & Sun Loungers (lying down pose & telemetry)
+  const f10Seats = getAllLibrarySeatsForFloor(10);
+  const bed1 = f10Seats.find((s) => s.seatId === 'tqb-10f-bed-1');
+  const lounger1 = f10Seats.find((s) => s.seatId === 'tqb-10f-lounger-1');
+  assert.ok(bed1, 'Floor 10 daybed 1 must exist');
+  assert.ok(lounger1, 'Floor 10 sun lounger 1 must exist');
+  assert.equal(isLyingSeatId(bed1.seatId), true);
+  assert.equal(isLyingSeatId(lounger1.seatId), true);
+  assert.equal(LYING_GROUP_Y_OFFSET, -0.44);
+
+  const lyingTele = encodeMoveTelemetry({
+    x: bed1.x,
+    z: bed1.z,
+    facing: bed1.facing,
+    scene: 'library',
+    libraryFloor: 10,
+    seatedSeatId: bed1.seatId,
+  });
+  const decodedLying = decodeMoveTelemetry(lyingTele);
+  assert.equal(decodedLying.scene, 'library');
+  assert.equal(decodedLying.libraryFloor, 10);
+  assert.equal(decodedLying.seatedSeatId, 'lying-floor-10');
+  assert.equal(isLyingSeatId(decodedLying.seatedSeatId), true);
+
+  const lyingPose = computeLyingPoseTargets(1.5);
+  assert.ok(lyingPose.bodyLeanTarget < -1.0, 'Lying pose leans torso backward onto bed');
+});
+
+

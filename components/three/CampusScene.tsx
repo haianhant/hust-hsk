@@ -5,7 +5,7 @@
 // <Classroom/> thay cho Ground/Landmarks (+ NPC Minh chỉ ở campus).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
@@ -21,7 +21,8 @@ import CampusExpansion from './CampusExpansion';
 import AmbientLife from './AmbientLife';
 import Motorbike from './Motorbike';
 import { makeSkyEnvEquirectTexture, makeSunHaloTexture } from './materials';
-import type { TimeOfDay } from '../../lib/playerState';
+import { libraryNavigationController } from '../../lib/campus';
+import { playerState, type TimeOfDay } from '../../lib/playerState';
 
 export interface CampusSceneProps {
   inClassroom?: boolean;
@@ -319,8 +320,27 @@ export default function CampusScene({
   homework = 'desk',
   onObjectClick,
 }: CampusSceneProps) {
+  const [libraryFloor, setLibraryFloor] = useState<number>(() => playerState.libraryFloor);
+  useEffect(() => {
+    if (!inLibraryLobby) return;
+    setLibraryFloor(playerState.libraryFloor);
+    const onFloor = (e: Event) => {
+      const d = (e as CustomEvent<{ floor?: number }>).detail;
+      if (d && typeof d.floor === 'number') setLibraryFloor(d.floor);
+    };
+    const unsubNav = libraryNavigationController.subscribe((snap) => {
+      setLibraryFloor(snap.currentFloor);
+    });
+    window.addEventListener('bkhn:library-floor', onFloor);
+    return () => {
+      unsubNav();
+      window.removeEventListener('bkhn:library-floor', onFloor);
+    };
+  }, [inLibraryLobby]);
+
   const atm = ATMOSPHERE[timeOfDay] ?? ATMOSPHERE.day;
-  const isIndoor = inClassroom || inLibraryLobby;
+  const isOpenAirRooftop = inLibraryLobby && libraryFloor === 10;
+  const isIndoor = inClassroom || (inLibraryLobby && !isOpenAirRooftop);
   const activeAtm = isIndoor ? ATMOSPHERE.day : atm;
 
   useEffect(() => {
@@ -381,11 +401,24 @@ export default function CampusScene({
           onObjectClick={onObjectClick ?? (() => undefined)}
         />
       ) : inLibraryLobby ? (
-        <LibraryLobby
-          activeSeatId={activeSeatId}
-          nearestSeatId={nearestSeatId}
-          onObjectClick={onObjectClick}
-        />
+        <>
+          {isOpenAirRooftop && (
+            <>
+              <SkyAtmosphereAndNightLights timeOfDay={timeOfDay} />
+              <group position={[-38, -36.0, -36.5]}>
+                <Ground />
+                <Landmarks timeOfDay={timeOfDay} />
+                <BackgroundBuildings timeOfDay={timeOfDay} />
+                <CampusExpansion timeOfDay={timeOfDay} />
+              </group>
+            </>
+          )}
+          <LibraryLobby
+            activeSeatId={activeSeatId}
+            nearestSeatId={nearestSeatId}
+            onObjectClick={onObjectClick}
+          />
+        </>
       ) : (
         <>
           <SkyAtmosphereAndNightLights timeOfDay={timeOfDay} />

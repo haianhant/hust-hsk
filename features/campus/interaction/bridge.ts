@@ -177,6 +177,18 @@ export function findNearestInteractable(
           label: '🔒 Ghế đang có người ngồi — hãy chọn ghế khác',
         };
       }
+      if (sid === 'tqb-6f-piano-bench') {
+        return {
+          id: 'piano-6f',
+          label: 'E — Ngồi đánh đàn Đại dương cầm Grand Piano',
+        };
+      }
+      if (sid.startsWith('tqb-10f-bed-') || sid.startsWith('tqb-10f-lounger-')) {
+        return {
+          id: `seat:${sid}`,
+          label: 'E — Nằm lên giường & gối mềm thư giãn ngắm cảnh',
+        };
+      }
       return {
         id: `seat:${sid}`,
         label: 'E — Ngồi học',

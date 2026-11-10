@@ -513,6 +513,7 @@ export class MultiplayerClient {
   ];
   private chatBubbles = new Map<string, ActiveChatBubble>();
   private emotes = new Map<string, ActiveEmoteState>();
+  private pianoPlayingByPlayer = new Map<string, number>();
   private pendingOutboundChats: string[] = [];
   private pendingOutboundEmote: AvatarEmoteId | null = null;
   private lastServerLeaderboardEntry: StudyLeaderboardEntry | null = null;
@@ -1025,6 +1026,38 @@ export class MultiplayerClient {
         completedBlocksDelta,
         subjectTag,
       });
+    }
+    return true;
+  }
+
+  /**
+   * Kiểm tra người chơi có đang lướt tay đánh đàn Đại dương cầm Grand Piano (trong 1.5s gần nhất) hay không.
+   */
+  isPlayerPlayingPiano(playerId: string): boolean {
+    const exp = this.pianoPlayingByPlayer.get(playerId);
+    if (!exp) return false;
+    if (exp <= this.nowFn()) {
+      this.pianoPlayingByPlayer.delete(playerId);
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Phát nốt nhạc Đại dương cầm Grand Piano Tầng 6 sang các người chơi khác trong phòng.
+   */
+  sendPianoNote(midi: number, velocity = 0.82): boolean {
+    const m = Math.round(Number(midi) || 0);
+    if (m < 21 || m > 108) return false;
+    const v = Number.isFinite(velocity) ? Math.min(1, Math.max(0.05, velocity)) : 0.82;
+    const selfKey = this.selfId || this.sessionId || 'local-self';
+    this.pianoPlayingByPlayer.set(selfKey, this.nowFn() + 1500);
+    if (this.ws && this.ws.readyState === 1 /* WebSocket.OPEN */ && this.selfId) {
+      try {
+        this.ws.send(JSON.stringify({ type: 'piano:note', midi: m, velocity: v }));
+      } catch {
+        // ignore
+      }
     }
     return true;
   }
@@ -2670,6 +2703,40 @@ export class MultiplayerClient {
             expiresAtMs: now + duration,
           });
           this.emit();
+          break;
+        }
+        case 'piano:note': {
+          const senderId = typeof msg.id === 'string' ? msg.id : '';
+          const midi = Math.round(Number(msg.midi) || 0);
+          if (!senderId || midi < 21 || midi > 108) break;
+          if (this.selfId && senderId === this.selfId) break;
+          const rawVel = Number(msg.velocity);
+          const velocity = Number.isFinite(rawVel)
+            ? Math.min(1, Math.max(0.05, rawVel))
+            : 0.82;
+          const now = this.nowFn();
+          this.pianoPlayingByPlayer.set(senderId, now + 1600);
+          const peer = this.players.get(senderId);
+          if (peer) {
+            peer.scene = 'library';
+            peer.libraryFloor = 6;
+            peer.seatedSeatId = 'tqb-6f-piano-bench';
+            peer.x = -6.963;
+            peer.z = 2.69;
+            peer.facing = 0.38;
+            peer.state = 'idle';
+          }
+          if (
+            typeof window !== 'undefined' &&
+            playerState.inLibraryLobby &&
+            (playerState.libraryFloor === 6 || playerState.libraryFloor === 7)
+          ) {
+            window.dispatchEvent(
+              new CustomEvent('bkhn:piano-note', {
+                detail: { midi, velocity, remoteId: senderId },
+              }),
+            );
+          }
           break;
         }
         case 'study:leaderboard-ack': {

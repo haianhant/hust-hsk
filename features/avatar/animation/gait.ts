@@ -10,6 +10,22 @@ import type { AvatarEmoteId } from '../../../shared/contracts/multiplayer';
 /** Độ hạ thấp gốc nhân vật khi ngồi trên ghế thư viện (mặt đệm ghế cao 0.45m, khớp hông local ở y = 0.80m). */
 export const SEATED_GROUP_Y_OFFSET = -0.35;
 
+/** Độ hạ thấp gốc nhân vật khi nằm thư giãn trên giường nệm / ghế nằm Sân thượng Tầng 10 (mặt nệm y ≈ 0.36m). */
+export const LYING_GROUP_Y_OFFSET = -0.44;
+
+export function isLyingSeatId(seatId: string | null | undefined): boolean {
+  return (
+    typeof seatId === 'string' &&
+    (seatId.startsWith('tqb-10f-bed-') ||
+      seatId.startsWith('tqb-10f-lounger-') ||
+      seatId === 'lying-floor-10')
+  );
+}
+
+export function isPianoBenchSeatId(seatId: string | null | undefined): boolean {
+  return seatId === 'tqb-6f-piano-bench';
+}
+
 export interface EmoteDefinition {
   id: AvatarEmoteId;
   keyHint: string;
@@ -166,6 +182,56 @@ export function computeSeatedPoseTargets(t: number) {
     bodyLeanTarget: 0.07 + Math.sin(t * 1.4) * 0.008,
     bodyRollTarget: Math.sin(t * 0.8) * 0.005,
     bodyBobTarget: Math.sin(t * 1.4) * 0.002,
+  };
+}
+
+/**
+ * Góc khớp tư thế nằm thư giãn trên giường nệm & gối mềm Sân thượng Tầng 10:
+ * - Thân trên ngả ra sau quanh khớp eo (`bodyLeanTarget ≈ -1.16 rad`) để đầu gối êm lên gối mềm đa sắc.
+ * - Hai chân duỗi thẳng thoải mái dọc mặt nệm (`legTarget ≈ -1.52`, `kneeTarget ≈ 0.14..0.18`).
+ * - Hai tay buông thư giãn đặt nhẹ lên bụng/đùi kèm nhịp thở êm.
+ */
+export function computeLyingPoseTargets(t: number) {
+  return {
+    legLTarget: -1.52,
+    legRTarget: -1.50,
+    kneeLTarget: 0.14,
+    kneeRTarget: 0.18,
+    footLTarget: 0.24,
+    footRTarget: 0.26,
+    armLTarget: 0.88 + Math.sin(t * 0.9) * 0.012,
+    armRTarget: 0.85 + Math.cos(t * 1.0) * 0.012,
+    elbowLTarget: -0.64,
+    elbowRTarget: -0.68,
+    bodyLeanTarget: -1.16 + Math.sin(t * 1.1) * 0.008,
+    bodyRollTarget: Math.sin(t * 0.6) * 0.006,
+    bodyBobTarget: Math.sin(t * 1.1) * 0.002,
+  };
+}
+
+/**
+ * Góc khớp tư thế ngồi đánh đàn Đại dương cầm Grand Piano trên Tầng 6:
+ * - Chân phải hơi vươn nhẹ tới bàn đạp sustain pedal.
+ * - Khi đang gõ phím (`isPlaying = true`), hai tay lướt và nhấn nhịp nhàng trên bàn phím 88 phím,
+ *   thân trên đung đưa nhẹ theo giai điệu.
+ */
+export function computePianoPoseTargets(t: number, isPlaying = false) {
+  return {
+    legLTarget: -1.46,
+    legRTarget: -1.52,
+    kneeLTarget: 1.44,
+    kneeRTarget: 1.32,
+    footLTarget: 0.03,
+    footRTarget: 0.18,
+    armLTarget: -0.74 + (isPlaying ? Math.sin(t * 7.8) * 0.095 : Math.sin(t * 1.3) * 0.018),
+    armRTarget: -0.74 + (isPlaying ? Math.cos(t * 8.6) * 0.095 : Math.cos(t * 1.5) * 0.018),
+    armLZTarget: isPlaying ? Math.sin(t * 3.6) * 0.12 : 0.03,
+    armRZTarget: isPlaying ? Math.cos(t * 4.1) * 0.12 : -0.03,
+    elbowLTarget: -0.78 + (isPlaying ? Math.cos(t * 9.2) * 0.08 : 0),
+    elbowRTarget: -0.78 + (isPlaying ? Math.sin(t * 9.8) * 0.08 : 0),
+    bodyLeanTarget: 0.11 + (isPlaying ? Math.sin(t * 3.2) * 0.035 : Math.sin(t * 1.4) * 0.008),
+    bodyRollTarget: isPlaying ? Math.sin(t * 2.4) * 0.038 : Math.sin(t * 0.8) * 0.005,
+    bodyBobTarget: isPlaying ? Math.abs(Math.sin(t * 6.4)) * 0.006 : Math.sin(t * 1.4) * 0.002,
   };
 }
 

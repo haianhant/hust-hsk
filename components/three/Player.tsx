@@ -105,10 +105,15 @@ import {
 import { getSeatDefinition } from '../../shared/contracts/study';
 import StudentAvatar, {
   EMOTE_DEFINITIONS,
+  LYING_GROUP_Y_OFFSET,
   SEATED_GROUP_Y_OFFSET,
   computeEmotePoseTargets,
+  computeLyingPoseTargets,
   computeNaturalGaitTargets,
+  computePianoPoseTargets,
   computeSeatedPoseTargets,
+  isLyingSeatId,
+  isPianoBenchSeatId,
   type FigureJoints,
 } from './StudentAvatar';
 import {
@@ -302,9 +307,16 @@ export default function Player() {
     }
   };
 
-  const applyPoseImmediately = (seatedNow: boolean) => {
+  const applyPoseImmediately = (seatedNow: boolean, seatIdOverride?: string | null) => {
+    const activeSeatId = seatIdOverride !== undefined ? seatIdOverride : seatingStateRef.current.seatId;
+    const isLying = seatedNow && isLyingSeatId(activeSeatId);
+    const isPiano = seatedNow && isPianoBenchSeatId(activeSeatId);
     const targets = seatedNow
-      ? computeSeatedPoseTargets(0)
+      ? isLying
+        ? computeLyingPoseTargets(0)
+        : isPiano
+          ? computePianoPoseTargets(0, false)
+          : computeSeatedPoseTargets(0)
       : computeNaturalGaitTargets(0, WALK_SWING, 0, 0, false);
     if (legLRef.current) {
       legLRef.current.rotation.x = targets.legLTarget;
@@ -320,11 +332,11 @@ export default function Player() {
     if (footRRef.current) footRRef.current.rotation.x = targets.footRTarget;
     if (armLRef.current) {
       armLRef.current.rotation.x = targets.armLTarget;
-      armLRef.current.rotation.z = 0;
+      armLRef.current.rotation.z = 'armLZTarget' in targets ? (targets as { armLZTarget: number }).armLZTarget : 0;
     }
     if (armRRef.current) {
       armRRef.current.rotation.x = targets.armRTarget;
-      armRRef.current.rotation.z = 0;
+      armRRef.current.rotation.z = 'armRZTarget' in targets ? (targets as { armRZTarget: number }).armRZTarget : 0;
     }
     if (elbowLRef.current) elbowLRef.current.rotation.x = targets.elbowLTarget;
     if (elbowRRef.current) elbowRRef.current.rotation.x = targets.elbowRTarget;
@@ -336,7 +348,8 @@ export default function Player() {
     }
     if (groupRef.current) {
       const baseLibY = playerState.inLibraryLobby ? playerState.libraryY : 0;
-      groupRef.current.position.y = baseLibY + (seatedNow ? SEATED_GROUP_Y_OFFSET : 0);
+      const yOffset = seatedNow ? (isLying ? LYING_GROUP_Y_OFFSET : SEATED_GROUP_Y_OFFSET) : 0;
+      groupRef.current.position.y = baseLibY + yOffset;
     }
   };
 
@@ -402,11 +415,15 @@ export default function Player() {
 
   useEffect(() => {
     if (seatingStateRef.current.status === 'seated') {
-      applyPoseImmediately(true);
+      const seatId = seatingStateRef.current.seatId;
+      const baseLibY = playerState.inLibraryLobby ? (initialSeatDef?.y ?? playerState.libraryY) : 0;
+      if (playerState.inLibraryLobby) playerState.libraryY = baseLibY;
+      applyPoseImmediately(true, seatId);
       if (groupRef.current && seatingStateRef.current.anchorPos) {
+        const yOff = isLyingSeatId(seatId) ? LYING_GROUP_Y_OFFSET : SEATED_GROUP_Y_OFFSET;
         groupRef.current.position.set(
           seatingStateRef.current.anchorPos.x,
-          SEATED_GROUP_Y_OFFSET,
+          baseLibY + yOff,
           seatingStateRef.current.anchorPos.z,
         );
         if (typeof seatingStateRef.current.facing === 'number') {
@@ -667,11 +684,12 @@ export default function Player() {
     if (playerState.inLibraryLobby) {
       playerState.libraryY = seatY;
     }
+    const yOff = isLyingSeatId(res.seat.seatId) ? LYING_GROUP_Y_OFFSET : SEATED_GROUP_Y_OFFSET;
     if (groupRef.current) {
-      groupRef.current.position.set(res.seat.x, seatY + SEATED_GROUP_Y_OFFSET, res.seat.z);
+      groupRef.current.position.set(res.seat.x, seatY + yOff, res.seat.z);
       groupRef.current.rotation.y = res.seat.facing;
     }
-    applyPoseImmediately(true);
+    applyPoseImmediately(true, res.seat.seatId);
     syncSeatingToPlayerState(res.state);
     syncCameraTransform();
     return { ok: true, seatId: res.seat.seatId, label: res.seat.label };
@@ -1760,6 +1778,17 @@ export default function Player() {
     // tay đưa về trước lên tay lái (arm ≈ −0,95), khuỷu gập cẳng về
     // trước (elbow ÂM ≈ −0,55). Balô theo người trong `body` nên ngồi
     // trên yên mà không xuyên yên (yên y 0,78 ≈ hông 0,80).
+    const seatedNow = seatingStateRef.current.status === 'seated';
+    const currentSeatId = seatingStateRef.current.seatId;
+    const isLyingNow = seatedNow && isLyingSeatId(currentSeatId);
+    const isPianoNow = seatedNow && isPianoBenchSeatId(currentSeatId);
+    let legLZTarget = 0;
+    let legRZTarget = 0;
+    let armLZTarget = 0;
+    let armRZTarget = 0;
+    let bodyYawTarget = 0;
+    let emoteJumpYOffset = 0;
+
     if (ridingRef.current) {
       legLTarget = -1.25;
       legRTarget = -1.35;
@@ -1774,30 +1803,60 @@ export default function Player() {
       bodyLeanTarget = 0.12;
       bodyRollTarget = bikeLeanRef.current * 0.3;
       bodyBobTarget = 0;
-    } else if (seatingStateRef.current.status === 'seated') {
-      const seatedPose = computeSeatedPoseTargets(t);
-      legLTarget = seatedPose.legLTarget;
-      legRTarget = seatedPose.legRTarget;
-      kneeLTarget = seatedPose.kneeLTarget;
-      kneeRTarget = seatedPose.kneeRTarget;
-      footLTarget = seatedPose.footLTarget;
-      footRTarget = seatedPose.footRTarget;
-      armLTarget = seatedPose.armLTarget;
-      armRTarget = seatedPose.armRTarget;
-      elbowLTarget = seatedPose.elbowLTarget;
-      elbowRTarget = seatedPose.elbowRTarget;
-      bodyLeanTarget = seatedPose.bodyLeanTarget;
-      bodyRollTarget = seatedPose.bodyRollTarget;
-      bodyBobTarget = seatedPose.bodyBobTarget;
+    } else if (seatedNow) {
+      if (isLyingNow) {
+        const lyingPose = computeLyingPoseTargets(t);
+        legLTarget = lyingPose.legLTarget;
+        legRTarget = lyingPose.legRTarget;
+        kneeLTarget = lyingPose.kneeLTarget;
+        kneeRTarget = lyingPose.kneeRTarget;
+        footLTarget = lyingPose.footLTarget;
+        footRTarget = lyingPose.footRTarget;
+        armLTarget = lyingPose.armLTarget;
+        armRTarget = lyingPose.armRTarget;
+        elbowLTarget = lyingPose.elbowLTarget;
+        elbowRTarget = lyingPose.elbowRTarget;
+        bodyLeanTarget = lyingPose.bodyLeanTarget;
+        bodyRollTarget = lyingPose.bodyRollTarget;
+        bodyBobTarget = lyingPose.bodyBobTarget;
+      } else if (isPianoNow) {
+        const selfId = multiplayer.snapshot.selfId || 'local-self';
+        const pianoPose = computePianoPoseTargets(
+          t,
+          multiplayer.isPlayerPlayingPiano(selfId),
+        );
+        legLTarget = pianoPose.legLTarget;
+        legRTarget = pianoPose.legRTarget;
+        kneeLTarget = pianoPose.kneeLTarget;
+        kneeRTarget = pianoPose.kneeRTarget;
+        footLTarget = pianoPose.footLTarget;
+        footRTarget = pianoPose.footRTarget;
+        armLTarget = pianoPose.armLTarget;
+        armRTarget = pianoPose.armRTarget;
+        armLZTarget = pianoPose.armLZTarget;
+        armRZTarget = pianoPose.armRZTarget;
+        elbowLTarget = pianoPose.elbowLTarget;
+        elbowRTarget = pianoPose.elbowRTarget;
+        bodyLeanTarget = pianoPose.bodyLeanTarget;
+        bodyRollTarget = pianoPose.bodyRollTarget;
+        bodyBobTarget = pianoPose.bodyBobTarget;
+      } else {
+        const seatedPose = computeSeatedPoseTargets(t);
+        legLTarget = seatedPose.legLTarget;
+        legRTarget = seatedPose.legRTarget;
+        kneeLTarget = seatedPose.kneeLTarget;
+        kneeRTarget = seatedPose.kneeRTarget;
+        footLTarget = seatedPose.footLTarget;
+        footRTarget = seatedPose.footRTarget;
+        armLTarget = seatedPose.armLTarget;
+        armRTarget = seatedPose.armRTarget;
+        elbowLTarget = seatedPose.elbowLTarget;
+        elbowRTarget = seatedPose.elbowRTarget;
+        bodyLeanTarget = seatedPose.bodyLeanTarget;
+        bodyRollTarget = seatedPose.bodyRollTarget;
+        bodyBobTarget = seatedPose.bodyBobTarget;
+      }
     }
-
-    const seatedNow = seatingStateRef.current.status === 'seated';
-    let legLZTarget = 0;
-    let legRZTarget = 0;
-    let armLZTarget = 0;
-    let armRZTarget = 0;
-    let bodyYawTarget = 0;
-    let emoteJumpYOffset = 0;
 
     // Hoạt ảnh hành động tương tác (Emote: wave, dance, cheer, bow, clap, stretch)
     const frameStepSec = Math.min(rawDelta, 0.08);
@@ -1894,16 +1953,17 @@ export default function Player() {
       groundY = getCampusGroundElevation(posRef.current.x, posRef.current.z);
     }
 
+    const seatYOffset = isLyingNow ? LYING_GROUP_Y_OFFSET : SEATED_GROUP_Y_OFFSET;
     groupRef.current.position.set(
       posRef.current.x,
-      groundY + (seatedNow ? SEATED_GROUP_Y_OFFSET : smoothEmoteJumpY),
+      groundY + (seatedNow ? seatYOffset : smoothEmoteJumpY),
       posRef.current.z,
     );
     groupRef.current.rotation.y = facingRef.current;
     if (nameplateGroupRef.current) {
       nameplateGroupRef.current.position.set(
         posRef.current.x,
-        (ridingRef.current ? 2.05 : seatedNow ? 1.62 : 1.95) + groundY + smoothEmoteJumpY * 0.5,
+        (ridingRef.current ? 2.05 : isLyingNow ? 1.15 : seatedNow ? 1.62 : 1.95) + groundY + smoothEmoteJumpY * 0.5,
         posRef.current.z,
       );
     }
