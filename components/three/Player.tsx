@@ -771,10 +771,18 @@ export default function Player() {
         // Đẩy ra khỏi collider (hồ/tòa nhà) để một điểm teleport lỗi không đặt
         // avatar vào trong nước/tường — gameplay thật không bao giờ vào được
         // đó vì va chạm đã chặn lúc di chuyển.
+        const libMove = playerState.inLibraryLobby
+          ? resolveLibraryMovement(
+              createLibraryLocation(playerState.libraryFloor, x, z, playerState.libraryY),
+              createLibraryLocation(playerState.libraryFloor, x, z, playerState.libraryY),
+              AVATAR.radius,
+              AVATAR.height,
+            )
+          : null;
         const resolved = playerState.inClassroom
           ? resolveClassroomCollisions({ x, z }, AVATAR.radius).pos
-          : playerState.inLibraryLobby
-            ? resolveLibraryLobbyCollisions({ x, z }, AVATAR.radius, playerState.libraryFloor).pos
+          : libMove
+            ? { x: libMove.position.x, z: libMove.position.z }
             : resolveCollisions({ x, z }, AVATAR.radius).pos;
         posRef.current = resolved;
         // Đợt 5 — ghi playerState ngay để cầu nối multiplayer gửi vị trí
@@ -789,6 +797,15 @@ export default function Player() {
           playerState.libraryY = elev.y;
           playerState.libraryFloor = elev.floor;
           groundY = elev.y;
+          const nearDoor = findNearestLibraryDoorway(elev.floor, resolved.x, resolved.z);
+          playerState.librarySpatialDiag = {
+            block: getBlockForFloor(elev.floor),
+            floor: elev.floor,
+            surfaceId: libMove?.surfaceId ?? playerState.librarySpatialDiag.surfaceId,
+            grounded: libMove?.grounded ?? true,
+            lastCollisionId: libMove?.collisionIds[0] ?? null,
+            nearestDoorId: nearDoor ? nearDoor.id : null,
+          };
         } else if (!playerState.inClassroom) {
           groundY = getCampusGroundElevation(resolved.x, resolved.z);
         }

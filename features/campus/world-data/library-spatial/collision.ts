@@ -161,11 +161,25 @@ function resolveStadiumConstraints(
 
   // 2. Floors 2–5: Central Stadium Atrium Void (L = 6.5, FR = 7.5)
   if (floor >= 2 && floor <= 5) {
-    // On Floor 2, allow entering/exiting the twin curved stairs at the East/West landings
+    // On Floor 2, allow entering/exiting the twin curved stairs at the East/West top landings,
+    // while guarding the open stairwell cutout along its outer/bottom parapet when walking on Floor 2.
     if (floor === 2) {
       const stairHit = evaluateCurvedStairAt(x, z, 0.12);
-      if (stairHit && (stairHit.progress >= 0.84 || Math.abs(y - stairHit.elevation) <= 0.65)) {
-        return { x, z, collisionId: null };
+      if (stairHit) {
+        if (stairHit.progress >= 0.82 || Math.abs(y - stairHit.elevation) <= 0.65) {
+          return { x, z, collisionId: null };
+        }
+        const dx = x - stairHit.stair.centerX;
+        const dz = z - stairHit.stair.centerZ;
+        const r = Math.hypot(dx, dz) || 1e-5;
+        const guardR = stairHit.stair.outerRadius - 0.07;
+        if (r < guardR) {
+          return {
+            x: stairHit.stair.centerX + (dx / r) * guardR,
+            z: stairHit.stair.centerZ + (dz / r) * guardR,
+            collisionId: `${stairHit.stair.id}-f2-guardrail`,
+          };
+        }
       }
     }
 

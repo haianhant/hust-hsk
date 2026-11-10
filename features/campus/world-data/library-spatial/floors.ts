@@ -133,10 +133,10 @@ export const LIBRARY_NAV_PRESETS: readonly LibrarySpawnPoint[] = [
     label: 'Tầng 2 — Hành lang thông tầng & Đỉnh Thang xoắn',
     fullLabel: 'Tầng 2 · Hành lang thông tầng',
     description: 'Lan can kính nhìn xuống sảnh thông tầng Stadium & ghế sofa đọc sách',
-    x: 14.8,
+    x: 14.2,
     y: 4.5,
-    z: 0,
-    yaw: Math.PI / 2,
+    z: 3.6,
+    yaw: 0.45,
     pitch: 0.22,
   },
   {

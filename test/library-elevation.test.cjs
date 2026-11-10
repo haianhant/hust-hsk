@@ -16,9 +16,11 @@ const {
   createLibraryLocation,
   evaluateCurvedStairAt,
   getBlockForFloor,
+  getCameraVerticalBoundsAt,
   getFloorBaseElevation,
   queryLibraryGround,
   resolveLibraryFloorTransition,
+  resolveLibraryMovement,
 } = require(path.join(ROOT, 'lib/campus.ts'));
 const { computeLibraryElevation } = require(path.join(ROOT, 'lib/playerState.ts'));
 
@@ -88,6 +90,26 @@ test('PR10A Elevation (2) Twin curved stairs (East & West) provide continuous el
     const botZ = stair.centerZ + Math.sin(botAngle) * stair.midRadius;
     const nearBot = computeLibraryElevation(botX, botZ, 2, 0.4);
     assert.equal(nearBot.floor, 1);
+
+    // Double-height stairwell cutout check: ceiling above curved stairs is Floor 3 underside (8.64m), never Floor 1 ceiling (4.14m)
+    const vBoundsF1 = getCameraVerticalBoundsAt(1, midX, midZ);
+    const vBoundsF2 = getCameraVerticalBoundsAt(2, midX, midZ);
+    assert.equal(vBoundsF1.ceilingId, 'f2-stairwell-ceiling');
+    assert.ok(vBoundsF1.maxY >= 8.6, `Expected stairwell ceiling >= 8.6m on floor 1, got ${vBoundsF1.maxY}`);
+    assert.equal(vBoundsF2.ceilingId, 'f2-stairwell-ceiling');
+    assert.ok(vBoundsF2.maxY >= 8.6, `Expected stairwell ceiling >= 8.6m on floor 2, got ${vBoundsF2.maxY}`);
+
+    // On Floor 2 (y = 4.5), walking sideways from the balcony into the middle of the stairwell cutout is blocked by the guardrail
+    const balconyOutsideX = stair.centerX + Math.cos(midAngle) * (stair.outerRadius + 0.6);
+    const balconyOutsideZ = stair.centerZ + Math.sin(midAngle) * (stair.outerRadius + 0.6);
+    const guardrailTest = resolveLibraryMovement(
+      createLibraryLocation(2, balconyOutsideX, balconyOutsideZ, 4.5),
+      createLibraryLocation(2, midX, midZ, 4.5),
+      AVATAR.radius,
+      AVATAR.height,
+    );
+    assert.equal(guardrailTest.blocked, true, `Floor 2 outer stairwell guardrail must block walking into mid-stair void on ${stair.id}`);
+    assert.ok(guardrailTest.collisionIds.includes(`${stair.id}-f2-guardrail`));
   }
 });
 

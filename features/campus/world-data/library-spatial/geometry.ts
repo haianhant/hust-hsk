@@ -926,7 +926,7 @@ function buildBlockAFurniturePlacementsForFloor(floor: 1 | 2 | 3 | 4 | 5): Libra
     // Keep curved stair landings on Floor 2 completely unobstructed
     const isStairF = floor === 2;
     const inGap = (s: number) =>
-      isStairF && ((s > 0.22 && s < 0.38) || (s > 0.72 && s < 0.88));
+      isStairF && ((s > 0.22 && s < 0.42) || (s > 0.72 && s < 0.92));
 
     // Inner ring of 4-seat study tables (r = FR + 1.65 = 9.15m)
     const N = 16;
@@ -1193,9 +1193,9 @@ function buildFloor1Colliders(): SpatialCollider[] {
     cols.push(colliderFromFurniturePlacement(fp));
   }
 
-  // 4. 8 Atrium Columns
+  // 4. 8 Atrium Columns (extend through F1–F2 stairwell height)
   for (const c of ATRIUM_COLUMNS) {
-    cols.push(makeCylinderCollider(`f1-${c.id}`, 'Cột thông tầng Sảnh T1', 1, 'column', c.x, c.z, c.radius));
+    cols.push(makeCylinderCollider(`f1-${c.id}`, 'Cột thông tầng Sảnh T1', 1, 'column', c.x, c.z, c.radius, 9.0));
   }
 
   // 5. Interactive Anchors & Lobby Fixed Fixtures (Statue, Info Desk, Vocab Board, South Reception, Planters, OPAC, Display Cases, Vending)

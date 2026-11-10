@@ -91,11 +91,16 @@ export function getCameraVerticalBoundsAt(
   const baseY = getFloorBaseElevation(floor);
 
   if (block === 'A') {
-    let minY = baseY;
-    if (floor === 2) {
-      const stairHit = evaluateCurvedStairAt(x, z);
+    const minY = baseY;
+    if (floor === 1 || floor === 2) {
+      const stairHit = evaluateCurvedStairAt(x, z, 0.35);
       if (stairHit) {
-        minY = Math.min(baseY, stairHit.elevation);
+        return {
+          minY: floor === 1 ? 0 : Math.min(baseY, Math.max(0, stairHit.elevation - 0.35)),
+          maxY: BLOCK_A_DIMS.FH + 4.14,
+          ceilingId: 'f2-stairwell-ceiling',
+          floorId: stairHit.stair.id,
+        };
       }
     }
 
@@ -471,6 +476,11 @@ export function resolveLibraryCameraOcclusion(
 
   // 2. Sample along the ray for curved outer boundaries (Floors 6, 7, 10) and
   // ceiling/floor slab changes (atrium rim, mezzanine underside, room ceilings).
+  const effectiveEnvelopeFloor = (sampleY: number): LibraryFloor => {
+    if (floor === 1 && target.y > 3.8 && sampleY >= 4.4) return 2;
+    if (floor === 2 && target.y < 4.5 && sampleY < 4.1) return 1;
+    return floor;
+  };
   const sampleSteps = 20;
   for (let i = 1; i <= sampleSteps; i++) {
     const t = (i / sampleSteps) * bestT;
@@ -487,7 +497,7 @@ export function resolveLibraryCameraOcclusion(
       break;
     }
 
-    const vBounds = getCameraVerticalBoundsAt(floor, sx, sz);
+    const vBounds = getCameraVerticalBoundsAt(effectiveEnvelopeFloor(sy), sx, sz);
     const maxAllowedY = vBounds.maxY - radius * 0.85;
     const minAllowedY = vBounds.minY + radius * 0.85;
 
@@ -521,7 +531,7 @@ export function resolveLibraryCameraOcclusion(
 
   // Final vertical safety clamp at the resolved XZ point so even at minDistance
   // the camera stays strictly between floor slab + margin and ceiling - margin.
-  const endVBounds = getCameraVerticalBoundsAt(floor, finalX, finalZ);
+  const endVBounds = getCameraVerticalBoundsAt(effectiveEnvelopeFloor(finalY), finalX, finalZ);
   const loY = endVBounds.minY + radius * 0.85;
   const hiY = endVBounds.maxY - radius * 0.85;
   if (finalY > hiY) {

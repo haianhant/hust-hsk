@@ -692,55 +692,96 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   stadFlat(FR + 1.35, 0.01, M_FLR_R);
   mk(new THREE.CircleGeometry(5.6, 64), M_STAR, 0, 0.015, 0, -Math.PI / 2);
 
-  // Sàn các tầng 2–5 + Lan can thông tầng
-  const slabGeo = (() => {
+  // Sàn các tầng 2–5 + Lan can thông tầng (Tầng 2 khoét thêm 2 ô thông tầng cầu thang xoắn đôi Đông/Tây)
+  const ST_R0 = 7.55;
+  const ST_R1 = 9.35;
+  const ST_CUT_A0 = -0.355;
+  const ST_CUT_A1 = 0.33;
+  const stadHolePathF2 = (rInner: number, rOuter: number) => {
+    const h = new THREE.Path();
+    h.moveTo(-L, -rInner);
+    h.lineTo(L, -rInner);
+    h.absarc(L, 0, rInner, -Math.PI / 2, ST_CUT_A0, false);
+    h.lineTo(L + Math.cos(ST_CUT_A0) * rOuter, Math.sin(ST_CUT_A0) * rOuter);
+    h.absarc(L, 0, rOuter, ST_CUT_A0, ST_CUT_A1, false);
+    h.lineTo(L + Math.cos(ST_CUT_A1) * rInner, Math.sin(ST_CUT_A1) * rInner);
+    h.absarc(L, 0, rInner, ST_CUT_A1, Math.PI / 2, false);
+    h.lineTo(-L, rInner);
+    h.absarc(-L, 0, rInner, Math.PI / 2, Math.PI + ST_CUT_A0, false);
+    h.lineTo(-L + Math.cos(Math.PI + ST_CUT_A0) * rOuter, Math.sin(Math.PI + ST_CUT_A0) * rOuter);
+    h.absarc(-L, 0, rOuter, Math.PI + ST_CUT_A0, Math.PI + ST_CUT_A1, false);
+    h.lineTo(-L + Math.cos(Math.PI + ST_CUT_A1) * rInner, Math.sin(Math.PI + ST_CUT_A1) * rInner);
+    h.absarc(-L, 0, rInner, Math.PI + ST_CUT_A1, (Math.PI * 3) / 2, false);
+    return h;
+  };
+  const makeSlabGeo = (holePath: THREE.Path) => {
     const s = new THREE.Shape();
     s.moveTo(-XW, ZB);
     s.lineTo(XW, ZB);
     s.lineTo(XW, ZF);
     s.lineTo(-XW, ZF);
     s.closePath();
-    s.holes.push(stadHolePath(FR));
+    s.holes.push(holePath);
     const g = new THREE.ExtrudeGeometry(s, { depth: 0.32, bevelEnabled: false, curveSegments: 36 });
     g.rotateX(-Math.PI / 2);
     return g;
-  })();
-  const flrRingGeo = (() => {
+  };
+  const makeFlrRingGeo = (holePath: THREE.Path) => {
     const s = new THREE.Shape();
     s.moveTo(-XW + 0.15, ZB + 0.15);
     s.lineTo(XW - 0.15, ZB + 0.15);
     s.lineTo(XW - 0.15, ZF - 0.15);
     s.lineTo(-XW + 0.15, ZF - 0.15);
     s.closePath();
-    s.holes.push(stadHolePath(FR + 0.05));
+    s.holes.push(holePath);
     const g = new THREE.ShapeGeometry(s, 36);
     g.rotateX(-Math.PI / 2);
     return g;
-  })();
+  };
+  const slabGeo = makeSlabGeo(stadHolePath(FR));
+  const flrRingGeo = makeFlrRingGeo(stadHolePath(FR + 0.05));
+  const f2SlabGeo = makeSlabGeo(stadHolePathF2(FR, ST_R1 + 0.08));
+  const f2FlrRingGeo = makeFlrRingGeo(stadHolePathF2(FR + 0.05, ST_R1 + 0.12));
 
-  const S2R0 = 0.245;
-  const S2R1 = 0.295;
-  const S2L0 = 0.745;
-  const S2L1 = 0.795;
+  const S2E0 = sOf(L + Math.cos(ST_CUT_A0) * FR, Math.sin(ST_CUT_A0) * FR);
+  const S2E1 = sOf(L + Math.cos(ST_CUT_A1) * FR, Math.sin(ST_CUT_A1) * FR);
+  const S2W0 = sOf(-L + Math.cos(Math.PI + ST_CUT_A0) * FR, Math.sin(Math.PI + ST_CUT_A0) * FR);
+  const S2W1 = sOf(-L + Math.cos(Math.PI + ST_CUT_A1) * FR, Math.sin(Math.PI + ST_CUT_A1) * FR);
   for (let f = 1; f < NF; f++) {
     const y = f * FH;
-    mk(slabGeo, M_CEIL, 0, y - 0.32, 0);
-    mk(flrRingGeo, M_FLR_W, 0, y + 0.005, 0);
-    stadRing(PR, FR, y - 0.32, y + 0.12, M_TRIM);
+    mk(f === 1 ? f2SlabGeo : slabGeo, M_CEIL, 0, y - 0.32, 0);
+    mk(f === 1 ? f2FlrRingGeo : flrRingGeo, M_FLR_W, 0, y + 0.005, 0);
     if (f === 1) {
       for (const [a, b] of [
-        [0, S2R0],
-        [S2R1, S2L0],
-        [S2L1, 1],
+        [0, S2E0],
+        [S2E1, S2W0],
+        [S2W1, 1],
       ]) {
+        arcRun(a, b, PR, FR, y - 0.32, y + 0.12, M_TRIM, 48);
+        arcRun(a, b, FR - 0.08, FR + 0.02, y - 0.28, y - 0.22, M_LED, 48);
         arcRun(a, b, PR, FR, y, y + 1.05, M_PARA, 48);
         arcRun(a, b, PR - 0.03, FR + 0.03, y + 1.05, y + 1.13, M_WOOD_D, 48);
       }
+      for (const side of [1, -1] as const) {
+        const cx = side * L;
+        const baseA = side === 1 ? 0 : Math.PI;
+        const aStart = baseA + ST_CUT_A0;
+        const aEnd = baseA + ST_CUT_A1;
+        const outerPts: Array<[number, number]> = Array.from({ length: 25 }, (_, i) => {
+          const a = aStart + (aEnd - aStart) * (i / 24);
+          return [cx + Math.cos(a) * (ST_R1 + 0.08), Math.sin(a) * (ST_R1 + 0.08)];
+        });
+        ribbon(outerPts, ST_R1 + 0.04, ST_R1 + 0.16, y - 0.32, y + 0.12, M_TRIM);
+        ribbon(outerPts, ST_R1 + 0.02, ST_R1 + 0.1, y - 0.28, y - 0.22, M_LED);
+        ribbon(outerPts, ST_R1 + 0.04, ST_R1 + 0.16, y, y + 1.05, M_PARA);
+        ribbon(outerPts, ST_R1 + 0.01, ST_R1 + 0.19, y + 1.05, y + 1.13, M_WOOD_D);
+      }
     } else {
+      stadRing(PR, FR, y - 0.32, y + 0.12, M_TRIM);
       stadRing(PR, FR, y, y + 1.05, M_PARA);
       stadRing(PR - 0.03, FR + 0.03, y + 1.05, y + 1.13, M_WOOD_D);
+      stadRing(FR - 0.08, FR + 0.02, y - 0.28, y - 0.22, M_LED);
     }
-    stadRing(FR - 0.08, FR + 0.02, y - 0.28, y - 0.22, M_LED);
   }
 
   // Trần tầng 5 + Tranh vòm Mặt trời thông tầng
@@ -773,14 +814,28 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     cyl(0.5, 0.52, 0.18, 24, M_TRIM, cx, 0.09, cz);
   }
 
-  // Đèn âm trần InstancedMesh cho 5 tầng
+  // Đèn âm trần InstancedMesh cho 5 tầng (loại trừ vùng giếng trời & ô thông tầng cầu thang xoắn ở T1)
   {
+    const inF2StairCutout = (x: number, z: number) => {
+      for (const side of [-1, 1]) {
+        const dx = x - side * L;
+        const r = Math.hypot(dx, z);
+        if (r < FR - 0.2 || r > ST_R1 + 0.9) continue;
+        let a = Math.atan2(z, dx);
+        if (side < 0 && a < 0) a += Math.PI * 2;
+        const baseA = side === 1 ? 0 : Math.PI;
+        if (a >= baseA + ST_CUT_A0 - 0.1 && a <= baseA + ST_CUT_A1 + 0.1) return true;
+      }
+      return false;
+    };
     const pts: Array<[number, number, number]> = [];
     for (let f = 1; f <= NF; f++) {
       const cy = f * FH - 0.33;
       for (let x = -17; x <= 17; x += 3.4) {
         for (let z = -11.5; z <= 11.5; z += 3.3) {
-          if (!inside(x, z, FR + 0.9)) pts.push([x, cy, z]);
+          if (!inside(x, z, FR + 0.9) && !(f === 1 && inF2StairCutout(x, z))) {
+            pts.push([x, cy, z]);
+          }
         }
       }
     }
@@ -804,6 +859,26 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       box(l, y1 - y0, t, m, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, 0, -Math.atan2(z1 - z0, x1 - x0), 0);
     }
   };
+  // Lan can ngang đầu hố cầu thang và gờ dầm đỡ chiếu nghỉ đỉnh thang ở Tầng 2 (y = FH)
+  for (const side of [1, -1] as const) {
+    const cx = side * L;
+    const baseA = side === 1 ? 0 : Math.PI;
+    const aStart = baseA + ST_CUT_A0;
+    const aEnd = baseA + ST_CUT_A1;
+    const sx0 = cx + Math.cos(aStart) * PR;
+    const sz0 = Math.sin(aStart) * PR;
+    const sx1 = cx + Math.cos(aStart) * (ST_R1 + 0.14);
+    const sz1 = Math.sin(aStart) * (ST_R1 + 0.14);
+    wallSeg(sx0, sz0, sx1, sz1, FH - 0.32, FH + 0.12, 0.12, M_TRIM);
+    wallSeg(sx0, sz0, sx1, sz1, FH, FH + 1.05, 0.12, M_PARA);
+    wallSeg(sx0, sz0, sx1, sz1, FH + 1.05, FH + 1.13, 0.18, M_WOOD_D);
+
+    const ex0 = cx + Math.cos(aEnd) * PR;
+    const ez0 = Math.sin(aEnd) * PR;
+    const ex1 = cx + Math.cos(aEnd) * (ST_R1 + 0.14);
+    const ez1 = Math.sin(aEnd) * (ST_R1 + 0.14);
+    wallSeg(ex0, ez0, ex1, ez1, FH - 0.32, FH + 0.002, 0.12, M_TRIM);
+  }
   const wallWithDoors = (
     axis: 'x' | 'z',
     fixed: number,
@@ -938,8 +1013,6 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     { side: 1, a0: -0.34, a1: 0.34 },
     { side: -1, a0: Math.PI - 0.34, a1: Math.PI + 0.34 },
   ];
-  const ST_R0 = 7.55;
-  const ST_R1 = 9.35;
   for (const st of STR) {
     const N = 26;
     for (let i = 0; i < N; i++) {
@@ -995,10 +1068,10 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       g.computeVertexNormals();
       mk(g, m);
     };
-    ramp(ST_R0 - 0.08, ST_R0 + 0.04, -0.22, 0.92, M_PARA);
-    ramp(ST_R1 - 0.04, ST_R1 + 0.08, -0.22, 0.92, M_PARA);
-    ramp(ST_R0 - 0.1, ST_R0 + 0.06, 0.92, 0.99, M_WOOD_D);
-    ramp(ST_R1 - 0.06, ST_R1 + 0.1, 0.92, 0.99, M_WOOD_D);
+    ramp(ST_R0 - 0.08, ST_R0 + 0.04, -0.22, 1.05, M_PARA);
+    ramp(ST_R1 - 0.04, ST_R1 + 0.08, -0.22, 1.05, M_PARA);
+    ramp(ST_R0 - 0.1, ST_R0 + 0.06, 1.05, 1.13, M_WOOD_D);
+    ramp(ST_R1 - 0.06, ST_R1 + 0.1, 1.05, 1.13, M_WOOD_D);
     ramp(ST_R0 + 0.04, ST_R1 - 0.04, -0.28, -0.14, M_CEIL);
   }
 
