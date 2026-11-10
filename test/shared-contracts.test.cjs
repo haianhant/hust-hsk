@@ -1092,5 +1092,76 @@ test('(9) Move telemetry envelope, multi-floor library & classroom visibility sy
   clientB.disconnect();
 });
 
+test('(10) Real-time Campus Chat & Avatar Emote animations broadcast and pose computation', async () => {
+  const { computeEmotePoseTargets, EMOTE_DEFINITIONS } = require(
+    path.join(ROOT, 'features/avatar/animation/gait.ts'),
+  );
+  assert.equal(EMOTE_DEFINITIONS.length, 6);
+  for (const def of EMOTE_DEFINITIONS) {
+    assert.ok(mpContracts.isAvatarEmoteId(def.id));
+    const pose = computeEmotePoseTargets(def.id, 0.5, false);
+    assert.equal(typeof pose.armLTarget, 'number');
+    assert.equal(typeof pose.armRTarget, 'number');
+    assert.equal(typeof pose.jumpYOffset, 'number');
+  }
+  assert.equal(mpContracts.isAvatarEmoteId('invalid-emote'), false);
+  assert.equal(
+    mpContracts.sanitizeChatMessage('  <b>你好！Chào Bách Khoa</b>  '),
+    'b你好！Chào Bách Khoa/b',
+  );
+  assert.equal(mpContracts.sanitizeChatMessage('   '), null);
+
+  const wsA = createMockSocket();
+  const wsB = createMockSocket();
+  const doState = createMockDoState([wsA, wsB]);
+  const room = new workerRoom.HskRoom(doState);
+
+  await room.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'tok-chat-a',
+      name: 'Minh HUST',
+      mssv: '20225001',
+    }),
+  );
+  await room.webSocketMessage(
+    wsB,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'tok-chat-b',
+      name: 'Lan HUST',
+      mssv: '20225002',
+    }),
+  );
+
+  wsA.sent.length = 0;
+  wsB.sent.length = 0;
+
+  await room.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'chat',
+      text: '你好！Cùng học ở Thư viện Tạ Quang Bửu nhé!',
+    }),
+  );
+  const chatMsgB = wsB.sent.find((m) => m.type === 'chat');
+  assert.ok(chatMsgB, 'Peer B must receive broadcast chat message');
+  assert.equal(chatMsgB.name, 'Minh HUST');
+  assert.equal(chatMsgB.text, '你好！Cùng học ở Thư viện Tạ Quang Bửu nhé!');
+
+  await room.webSocketMessage(
+    wsB,
+    JSON.stringify({
+      type: 'emote',
+      emote: 'dance',
+    }),
+  );
+  const emoteMsgA = wsA.sent.find((m) => m.type === 'emote');
+  assert.ok(emoteMsgA, 'Peer A must receive broadcast emote');
+  assert.equal(emoteMsgA.emote, 'dance');
+});
+
+
 
 

@@ -14,12 +14,16 @@
 
 export {
   AVATAR_COLORS,
+  EMOTE_DEFINITIONS,
   HumanFigure,
   OUTFIT_PRESETS,
   SEATED_GROUP_Y_OFFSET,
   StudentAvatar as default,
+  computeEmotePoseTargets,
   computeNaturalGaitTargets,
   computeSeatedPoseTargets,
+  type EmoteDefinition,
+  type EmotePoseTargets,
   type FigureJoints,
   type FigureProps,
   type FigureVariant,

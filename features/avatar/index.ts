@@ -26,7 +26,11 @@ export { Torso } from './rig/Torso';
 export { Head } from './rig/Head';
 export { default as StudentAvatar, HumanFigure } from './rig/HumanFigure';
 export {
+  EMOTE_DEFINITIONS,
   SEATED_GROUP_Y_OFFSET,
+  computeEmotePoseTargets,
   computeNaturalGaitTargets,
   computeSeatedPoseTargets,
+  type EmoteDefinition,
+  type EmotePoseTargets,
 } from './animation/gait';

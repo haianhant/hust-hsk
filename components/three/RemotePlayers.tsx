@@ -17,12 +17,18 @@ import { useFrame } from '@react-three/fiber';
 import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import {
+  EMOTE_DEFINITIONS,
   HumanFigure,
   OUTFIT_PRESETS,
+  computeEmotePoseTargets,
   computeNaturalGaitTargets,
   type FigureJoints,
 } from './StudentAvatar';
-import { CANVAS_VN_FONT, wrapVietnameseCanvasContext } from './TextPlate';
+import {
+  CANVAS_VN_FONT,
+  drawSpeechBubbleCanvas,
+  wrapVietnameseCanvasContext,
+} from './TextPlate';
 import {
   computeCanonicalLibraryElevation,
   getBlockForFloor,
@@ -169,6 +175,17 @@ function RemotePlayerView({
   const phase = useRef(0);
   const label = `${player.name} (${player.mssv})`;
   const tagTex = useNameTagTexture(label);
+  const bubbleMeshRef = useRef<THREE.Mesh>(null!);
+  const lastBubbleTextRef = useRef<string>('');
+  const bubbleTex = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 128;
+    const t = new THREE.CanvasTexture(canvas);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
+  useEffect(() => () => bubbleTex.dispose(), [bubbleTex]);
 
   useEffect(() => {
     const latest = multiplayer.getRemotePlayer(player.id) ?? player;
@@ -264,23 +281,37 @@ function RemotePlayerView({
         : target.state;
 
     const j = joints;
-    const set = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'z', v: number) => {
+    const set = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'y' | 'z', v: number) => {
       if (ref.current) ref.current.rotation[axis] = v;
     };
+    const snap = multiplayer.snapshot;
+    const remoteEmote = snap.emotes[player.id];
+    const remoteBubble = snap.chatBubbles[player.id];
+    const wallNow = Date.now();
+    const isEmoting =
+      Boolean(remoteEmote) &&
+      wallNow < remoteEmote.expiresAtMs &&
+      effectiveState === 'idle';
+
     if (effectiveState === 'riding' && scene === 'campus') {
       // Tư thế ngồi lái (cùng số với Player): hông -1,25/-1,35, gối
       // 1,15/1,25, vai -0,95, khuỷu -0,55.
       set(j.legL, 'x', -1.25);
       set(j.legR, 'x', -1.35);
+      set(j.legL, 'z', 0);
+      set(j.legR, 'z', 0);
       set(j.kneeL, 'x', 1.15);
       set(j.kneeR, 'x', 1.25);
       set(j.footL, 'x', 0.15);
       set(j.footR, 'x', 0.15);
       set(j.armL, 'x', -0.95);
       set(j.armR, 'x', -0.95);
+      set(j.armL, 'z', 0);
+      set(j.armR, 'z', 0);
       set(j.elbowL, 'x', -0.55);
       set(j.elbowR, 'x', -0.55);
       set(j.body, 'x', 0.08);
+      set(j.body, 'y', 0);
       set(j.body, 'z', 0);
     } else if (effectiveState === 'walking' || effectiveState === 'running') {
       const isRun = effectiveState === 'running';
@@ -291,33 +322,88 @@ function RemotePlayerView({
       const gait = computeNaturalGaitTargets(phase.current, swing, 1, t, isRun);
       set(j.legL, 'x', gait.legLTarget);
       set(j.legR, 'x', gait.legRTarget);
+      set(j.legL, 'z', 0);
+      set(j.legR, 'z', 0);
       set(j.kneeL, 'x', gait.kneeLTarget);
       set(j.kneeR, 'x', gait.kneeRTarget);
       set(j.footL, 'x', gait.footLTarget);
       set(j.footR, 'x', gait.footRTarget);
       set(j.armL, 'x', gait.armLTarget);
       set(j.armR, 'x', gait.armRTarget);
+      set(j.armL, 'z', 0);
+      set(j.armR, 'z', 0);
       set(j.elbowL, 'x', gait.elbowLTarget);
       set(j.elbowR, 'x', gait.elbowRTarget);
       set(j.body, 'x', gait.bodyLeanTarget);
+      set(j.body, 'y', 0);
       set(j.body, 'z', gait.bodyRollTarget);
+    } else if (isEmoting && remoteEmote) {
+      const elapsedSec = Math.max(0, (wallNow - remoteEmote.startedAtMs) / 1000);
+      const emotePose = computeEmotePoseTargets(remoteEmote.emote, elapsedSec, false);
+      set(j.legL, 'x', emotePose.legLTarget);
+      set(j.legR, 'x', emotePose.legRTarget);
+      set(j.legL, 'z', emotePose.legLZTarget);
+      set(j.legR, 'z', emotePose.legRZTarget);
+      set(j.kneeL, 'x', emotePose.kneeLTarget);
+      set(j.kneeR, 'x', emotePose.kneeRTarget);
+      set(j.footL, 'x', emotePose.footLTarget);
+      set(j.footR, 'x', emotePose.footRTarget);
+      set(j.armL, 'x', emotePose.armLTarget);
+      set(j.armR, 'x', emotePose.armRTarget);
+      set(j.armL, 'z', emotePose.armLZTarget);
+      set(j.armR, 'z', emotePose.armRZTarget);
+      set(j.elbowL, 'x', emotePose.elbowLTarget);
+      set(j.elbowR, 'x', emotePose.elbowRTarget);
+      set(j.body, 'x', emotePose.bodyLeanTarget);
+      set(j.body, 'y', emotePose.bodyYawTarget);
+      set(j.body, 'z', emotePose.bodyRollTarget);
+      g.position.y = cur.current.y + emotePose.jumpYOffset;
     } else {
       // Đứng yên: thở nhẹ, tay hơi gập (như NPC).
       const t = performance.now() / 1000;
       set(j.legL, 'x', 0);
       set(j.legR, 'x', 0);
+      set(j.legL, 'z', 0);
+      set(j.legR, 'z', 0);
       set(j.kneeL, 'x', 0.05);
       set(j.kneeR, 'x', 0.05);
       set(j.footL, 'x', 0);
       set(j.footR, 'x', 0);
       set(j.armL, 'x', 0.08);
       set(j.armR, 'x', -0.04);
+      set(j.armL, 'z', 0);
+      set(j.armR, 'z', 0);
       set(j.elbowL, 'x', -0.28);
       set(j.elbowR, 'x', -0.36);
       if (j.body.current) {
         j.body.current.scale.y = 1 + Math.sin(t * 1.4) * 0.008;
         j.body.current.rotation.x = 0;
+        j.body.current.rotation.y = 0;
         j.body.current.rotation.z = Math.sin(t * 0.9) * 0.008;
+      }
+    }
+
+    let overheadText = '';
+    if (remoteBubble && wallNow < remoteBubble.expiresAtMs) {
+      overheadText = `💬 ${remoteBubble.text}`;
+    } else if (isEmoting && remoteEmote) {
+      const def = EMOTE_DEFINITIONS.find((d) => d.id === remoteEmote.emote);
+      if (def) overheadText = `${def.icon} ${def.labelVi} · ${def.labelZh}`;
+    }
+    if (bubbleMeshRef.current) {
+      if (overheadText) {
+        if (lastBubbleTextRef.current !== overheadText) {
+          lastBubbleTextRef.current = overheadText;
+          drawSpeechBubbleCanvas(
+            bubbleTex.image as HTMLCanvasElement,
+            overheadText,
+            remoteBubble ? '#0284C7' : '#F59E0B',
+          );
+          bubbleTex.needsUpdate = true;
+        }
+        bubbleMeshRef.current.visible = true;
+      } else {
+        bubbleMeshRef.current.visible = false;
       }
     }
   });
@@ -358,6 +444,15 @@ function RemotePlayerView({
       </group>
       {/* Billboard ngoài nhóm xoay — chữ luôn đọc xuôi (như Npc.tsx). */}
       <Billboard position={[0, 1.95, 0]}>
+        <mesh ref={bubbleMeshRef} visible={false} position={[0, 0.28, 0]}>
+          <planeGeometry args={[1.65, 0.42]} />
+          <meshBasicMaterial
+            map={bubbleTex}
+            transparent
+            depthTest={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
         <mesh>
           <planeGeometry args={[1.6, 0.2]} />
           <meshStandardMaterial map={tagTex} transparent depthWrite={false} roughness={0.8} side={THREE.DoubleSide} />

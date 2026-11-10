@@ -41,6 +41,14 @@ export type AvatarHairStyle =
   | 'bob'
   | 'bun';
 
+export type AvatarEmoteId =
+  | 'wave'
+  | 'dance'
+  | 'cheer'
+  | 'bow'
+  | 'clap'
+  | 'stretch';
+
 export const VALID_GENDERS: readonly AvatarGender[] = ['male', 'female'] as const;
 
 export const VALID_OUTFIT_IDS: readonly AvatarOutfitId[] = [
@@ -65,8 +73,20 @@ export const VALID_HAIR_STYLES: readonly AvatarHairStyle[] = [
   'bun',
 ] as const;
 
+export const VALID_EMOTE_IDS: readonly AvatarEmoteId[] = [
+  'wave',
+  'dance',
+  'cheer',
+  'bow',
+  'clap',
+  'stretch',
+] as const;
+
+export const MAX_CHAT_MESSAGE_LENGTH = 160;
+
 const OUTFIT_SET = new Set<string>(VALID_OUTFIT_IDS);
 const HAIR_SET = new Set<string>(VALID_HAIR_STYLES);
+const EMOTE_SET = new Set<string>(VALID_EMOTE_IDS);
 const STATE_SET = new Set<string>(['idle', 'walking', 'running', 'riding']);
 
 export const ROOM_IDS = ['hsk-1', 'hsk-2', 'hsk-3', 'hsk-4', 'hsk-5'] as const;
@@ -153,12 +173,24 @@ export interface ClientPingMessage {
   type: 'ping';
 }
 
+export interface ClientChatMessage {
+  type: 'chat';
+  text: string;
+}
+
+export interface ClientEmoteMessage {
+  type: 'emote';
+  emote: AvatarEmoteId;
+}
+
 export type ClientToServerMessage =
   | ClientJoinMessage
   | ClientMoveMessage
   | ClientStateMessage
   | ClientAppearanceMessage
   | ClientPingMessage
+  | ClientChatMessage
+  | ClientEmoteMessage
   | StudyClientToServerMessage;
 
 export interface ServerWelcomeMessage {
@@ -219,6 +251,22 @@ export interface ServerPongMessage {
   type: 'pong';
 }
 
+export interface ServerChatMessage {
+  type: 'chat';
+  id: string;
+  name: string;
+  color: string;
+  text: string;
+  t: number;
+}
+
+export interface ServerEmoteMessage {
+  type: 'emote';
+  id: string;
+  emote: AvatarEmoteId;
+  t: number;
+}
+
 export type ServerToClientMessage =
   | ServerWelcomeMessage
   | ServerJoinMessage
@@ -230,6 +278,8 @@ export type ServerToClientMessage =
   | ServerFullMessage
   | ServerErrorMessage
   | ServerPongMessage
+  | ServerChatMessage
+  | ServerEmoteMessage
   | StudyServerToClientMessage;
 
 // --- Pure Validation & Sanitization Helpers --------------------------------
@@ -317,6 +367,21 @@ export function isAvatarOutfitId(o: unknown): o is AvatarOutfitId {
 
 export function isAvatarHairStyle(h: unknown): h is AvatarHairStyle {
   return typeof h === 'string' && HAIR_SET.has(h);
+}
+
+export function isAvatarEmoteId(e: unknown): e is AvatarEmoteId {
+  return typeof e === 'string' && EMOTE_SET.has(e);
+}
+
+export function sanitizeChatMessage(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const clean = raw
+    .replace(/[<>&]/g, '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_CHAT_MESSAGE_LENGTH);
+  return clean.length >= 1 ? clean : null;
 }
 
 export function extractValidAppearance(msg: Record<string, unknown>): RemoteAppearance {

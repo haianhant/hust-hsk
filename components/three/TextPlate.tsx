@@ -341,6 +341,98 @@ export function drawClockFace(ctx: CanvasRenderingContext2D, w: number, h: numbe
 
 // --- Component mặt phẳng chữ --------------------------------------------------
 
+export function drawSpeechBubbleCanvas(
+  canvas: HTMLCanvasElement,
+  text: string,
+  accentColor = '#38BDF8',
+): void {
+  const w = canvas.width;
+  const h = canvas.height;
+  const rawCtx = canvas.getContext('2d');
+  if (!rawCtx) return;
+  const ctx = wrapVietnameseCanvasContext(rawCtx);
+  ctx.clearRect(0, 0, w, h);
+  if (!text) return;
+
+  const padX = 14;
+  const boxY = 8;
+  const boxW = w - padX * 2;
+  const boxH = h - 28;
+  const r = 24;
+
+  // Khung bong bóng trắng ngà hơi trong suốt + mũi nhọn trỏ xuống nhân vật
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 4;
+
+  ctx.beginPath();
+  ctx.moveTo(padX + r, boxY);
+  ctx.lineTo(padX + boxW - r, boxY);
+  ctx.quadraticCurveTo(padX + boxW, boxY, padX + boxW, boxY + r);
+  ctx.lineTo(padX + boxW, boxY + boxH - r);
+  ctx.quadraticCurveTo(padX + boxW, boxY + boxH, padX + boxW - r, boxY + boxH);
+  ctx.lineTo(w / 2 + 14, boxY + boxH);
+  ctx.lineTo(w / 2, h - 6);
+  ctx.lineTo(w / 2 - 14, boxY + boxH);
+  ctx.lineTo(padX + r, boxY + boxH);
+  ctx.quadraticCurveTo(padX, boxY + boxH, padX, boxY + boxH - r);
+  ctx.lineTo(padX, boxY + r);
+  ctx.quadraticCurveTo(padX, boxY, padX + r, boxY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Chia tối đa 2 dòng văn bản trong bong bóng
+  ctx.fillStyle = '#0F172A';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const maxTextW = boxW - 36;
+  ctx.font = `700 26px ${CANVAS_VN_FONT}`;
+
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxTextW || !current) {
+      current = candidate;
+    } else {
+      lines.push(current);
+      current = word;
+      if (lines.length === 1) break;
+    }
+  }
+  if (lines.length === 1 && current) {
+    const restIdx = words.indexOf(current);
+    const secondLine = restIdx >= 0 ? words.slice(restIdx).join(' ') : current;
+    lines.push(secondLine);
+  } else if (lines.length === 0 && current) {
+    lines.push(current);
+  }
+
+  if (lines.length === 1) {
+    let fontSize = 28;
+    ctx.font = `700 ${fontSize}px ${CANVAS_VN_FONT}`;
+    const tw = ctx.measureText(lines[0]).width;
+    if (tw > maxTextW) {
+      fontSize = Math.max(18, Math.floor((fontSize * maxTextW) / tw));
+      ctx.font = `700 ${fontSize}px ${CANVAS_VN_FONT}`;
+    }
+    ctx.fillText(lines[0], w / 2, boxY + boxH / 2 + 2, maxTextW);
+  } else {
+    ctx.font = `700 23px ${CANVAS_VN_FONT}`;
+    ctx.fillText(lines[0], w / 2, boxY + boxH * 0.34, maxTextW);
+    let line2 = lines[1];
+    if (ctx.measureText(line2).width > maxTextW) {
+      while (line2.length > 4 && ctx.measureText(`${line2}…`).width > maxTextW) {
+        line2 = line2.slice(0, -1);
+      }
+      line2 = `${line2}…`;
+    }
+    ctx.fillText(line2, w / 2, boxY + boxH * 0.68, maxTextW);
+  }
+}
+
 export function LabelPlane({
   textureKey,
   canvasW,

@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import QuestObjective from '../../../components/learn/QuestObjective';
+import CampusChat from '../../../components/ui/CampusChat';
 import Joystick from '../../../components/ui/Joystick';
 import Minimap from '../../../components/ui/Minimap';
 import type { Progress } from '../../../lib/learn/types';
@@ -608,6 +609,9 @@ export function CampusHud({
         </div>
       )}
 
+      {/* Góc dưới-trái: Khung Chat Giao tiếp & Thanh Hoạt ảnh Hành động (Emotes 1–6). */}
+      {!hideMove && <CampusChat />}
+
       {/* Góc dưới-trái: joystick (chỉ hiện trên thiết bị cảm ứng và khi không ngồi học). */}
       {!hideMove && !seated && (
         <div className="absolute bottom-4 left-3">
@@ -635,6 +639,7 @@ export function CampusHud({
               <li>Kéo chuột — xoay camera</li>
               <li>Lăn chuột — zoom</li>
               <li>E — tương tác khi lại gần</li>
+              <li>Phím 1–6 — vẫy tay, nhảy nhót, hoan hô...</li>
               <li>Shift — chạy</li>
               <li>Đang lái xe: W ga · S phanh · A/D lái · E xuống xe</li>
             </ul>

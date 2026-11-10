@@ -21,13 +21,23 @@ import {
   derivePublicPlayerId,
   encodeMoveTelemetry,
   extractValidAppearance,
+  isAvatarEmoteId,
   isRemoteState,
+  sanitizeChatMessage,
+  sanitizeName,
   sanitizeReconnectToken,
+  type AvatarEmoteId,
   type MultiplayerSceneId,
   type RemoteAppearance,
   type RemotePlayer,
   type RemoteState,
 } from '../shared/contracts/multiplayer';
+import {
+  EMOTE_DURATION_MS,
+   playerState,
+  setLocalPlayerChatBubble,
+  triggerLocalPlayerEmote,
+} from './playerState';
 import {
   getSeatDefinition,
   isSupportedLibrarySeatId,
@@ -42,7 +52,35 @@ import {
 import { SPAWN } from '../shared/constants/world';
 import { rotateTabSessionCredentials } from './identity';
 
-export type { MultiplayerSceneId, RemoteAppearance, RemotePlayer, RemoteState };
+export type {
+  AvatarEmoteId,
+  MultiplayerSceneId,
+  RemoteAppearance,
+  RemotePlayer,
+  RemoteState,
+};
+
+export interface ChatMessageEntry {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderColor: string;
+  text: string;
+  atMs: number;
+  isSelf?: boolean;
+  isCompanion?: boolean;
+}
+
+export interface ActiveChatBubble {
+  text: string;
+  expiresAtMs: number;
+}
+
+export interface ActiveEmoteState {
+  emote: AvatarEmoteId;
+  startedAtMs: number;
+  expiresAtMs: number;
+}
 
 export interface MoveTelemetryContext {
   scene: MultiplayerSceneId;
@@ -116,6 +154,10 @@ export interface MultiplayerSnapshot {
   pendingSeatRequest: PendingSeatRequest | null;
   lastSeatRejection: SeatRejectionNotice | null;
   studyRevision: number;
+  // Giao tiếp Chat & Hoạt ảnh Emote:
+  messages: ChatMessageEntry[];
+  chatBubbles: Record<string, ActiveChatBubble>;
+  emotes: Record<string, ActiveEmoteState>;
 }
 
 export const TRUSTED_PROD_WS_URL = 'wss://hust-hsk-rooms.hunganhz179.workers.dev/ws';
@@ -447,6 +489,21 @@ export class MultiplayerClient {
   private reqCounter = 0;
   private connectionGeneration = 0;
   private lastJoinSentAt = 0;
+  private messages: ChatMessageEntry[] = [
+    {
+      id: 'welcome-minh',
+      senderId: 'npc-minh',
+      senderName: 'Bạn học Minh (HUST)',
+      senderColor: '#DA1E26',
+      text: '你好！Chào mừng bạn đến khuôn viên Bách khoa 3D! Bạn có thể nhắn tin giao lưu hoặc bấm biểu tượng cảm xúc (1–6) nhé! 👋',
+      atMs: Date.now(),
+      isCompanion: true,
+    },
+  ];
+  private chatBubbles = new Map<string, ActiveChatBubble>();
+  private emotes = new Map<string, ActiveEmoteState>();
+  private companionReplyCounter = 0;
+  private companionReplyTimer: ReturnType<typeof setTimeout> | null = null;
   private lastLocalMove: {
     x: number;
     z: number;
@@ -474,6 +531,7 @@ export class MultiplayerClient {
   }
 
   get snapshot(): MultiplayerSnapshot {
+    const now = this.nowFn();
     const seatsList = Array.from(this.seats.values());
     const seatMap: Record<string, SeatOccupancy> = {};
     for (const s of seatsList) {
@@ -482,6 +540,22 @@ export class MultiplayerClient {
     const presencesMap: Record<string, PlayerStudyPresence> = {};
     for (const [pid, pres] of Array.from(this.presences.entries())) {
       presencesMap[pid] = pres;
+    }
+    const bubblesRecord: Record<string, ActiveChatBubble> = {};
+    for (const [pid, b] of Array.from(this.chatBubbles.entries())) {
+      if (b.expiresAtMs > now) {
+        bubblesRecord[pid] = b;
+      } else {
+        this.chatBubbles.delete(pid);
+      }
+    }
+    const emotesRecord: Record<string, ActiveEmoteState> = {};
+    for (const [pid, em] of Array.from(this.emotes.entries())) {
+      if (em.expiresAtMs > now) {
+        emotesRecord[pid] = em;
+      } else {
+        this.emotes.delete(pid);
+      }
     }
     return {
       status: this.status,
@@ -498,6 +572,9 @@ export class MultiplayerClient {
       pendingSeatRequest: this.pendingSeatRequest ? { ...this.pendingSeatRequest } : null,
       lastSeatRejection: this.lastSeatRejection ? { ...this.lastSeatRejection } : null,
       studyRevision: this.studyRevision,
+      messages: [...this.messages],
+      chatBubbles: bubblesRecord,
+      emotes: emotesRecord,
     };
   }
 
@@ -768,6 +845,152 @@ export class MultiplayerClient {
       // ignore
     }
     this.flushLocalMoveTelemetry();
+  }
+
+  /**
+   * Gửi tin nhắn giao tiếp trong phòng (hiển thị cả trong hộp CampusChat lẫn
+   * bong bóng 3D trên đầu nhân vật). Khi đang học 1 mình (không có người chơi khác
+   * trong phòng), Bạn học Minh (HUST) sẽ phản hồi song ngữ HSK thân thiện.
+   */
+  sendChatMessage(rawText: string, senderNameOverride?: string): boolean {
+    const text = sanitizeChatMessage(rawText);
+    if (!text) return false;
+    const now = this.nowFn();
+    const selfId = this.selfId || this.sessionId || 'local-self';
+    const senderName = sanitizeName(
+      senderNameOverride || this.name || playerState.avatarName || 'Sinh viên',
+    );
+
+    const entry: ChatMessageEntry = {
+      id: `chat-${selfId}-${now}-${++this.reqCounter}`,
+      senderId: selfId,
+      senderName,
+      senderColor: '#38BDF8',
+      text,
+      atMs: now,
+      isSelf: true,
+    };
+    this.appendChatMessage(entry);
+    this.chatBubbles.set(selfId, { text, expiresAtMs: now + 10000 });
+    setLocalPlayerChatBubble(text, 10000, now);
+    this.emit();
+
+    if (this.ws && this.ws.readyState === 1 /* WebSocket.OPEN */ && this.selfId) {
+      try {
+        this.ws.send(JSON.stringify({ type: 'chat', text }));
+      } catch {
+        // ignore
+      }
+    }
+
+    // Nếu người chơi đang ở một mình trong phòng (không có remote player nào),
+    // Bạn học Minh sẽ phản hồi song ngữ HSK khích lệ sau 750ms.
+    if (this.players.size === 0) {
+      if (this.companionReplyTimer) {
+        this.clearTimeoutFn(this.companionReplyTimer);
+      }
+      const replyText = this.buildCompanionReply(text);
+      this.companionReplyTimer = this.setTimeoutFn(() => {
+        this.companionReplyTimer = null;
+        if (this.players.size > 0) return;
+        const replyAt = this.nowFn();
+        this.appendChatMessage({
+          id: `chat-minh-${replyAt}-${++this.reqCounter}`,
+          senderId: 'npc-minh',
+          senderName: 'Bạn học Minh (HUST)',
+          senderColor: '#F59E0B',
+          text: replyText,
+          atMs: replyAt,
+          isCompanion: true,
+        });
+        this.emit();
+      }, 750);
+    }
+
+    return true;
+  }
+
+  /**
+   * Kích hoạt hoạt ảnh hành động tương tác (emote: wave, dance, cheer, bow, clap, stretch)
+   * cho nhân vật của bạn và đồng bộ tới mọi người chơi khác trong phòng.
+   */
+  sendEmote(emote: AvatarEmoteId): boolean {
+    if (!isAvatarEmoteId(emote)) return false;
+    const now = this.nowFn();
+    const duration = EMOTE_DURATION_MS[emote] ?? 2800;
+    const selfId = this.selfId || this.sessionId || 'local-self';
+    triggerLocalPlayerEmote(emote, now);
+    this.emotes.set(selfId, {
+      emote,
+      startedAtMs: now,
+      expiresAtMs: now + duration,
+    });
+    this.emit();
+
+    if (this.ws && this.ws.readyState === 1 /* WebSocket.OPEN */ && this.selfId) {
+      try {
+        this.ws.send(JSON.stringify({ type: 'emote', emote }));
+      } catch {
+        // ignore
+      }
+    }
+    return true;
+  }
+
+  private appendChatMessage(entry: ChatMessageEntry) {
+    this.messages.push(entry);
+    if (this.messages.length > 60) {
+      this.messages.splice(0, this.messages.length - 60);
+    }
+  }
+
+  private buildCompanionReply(userText: string): string {
+    const lower = userText.toLowerCase();
+    if (
+      lower.includes('你好') ||
+      lower.includes('chào') ||
+      lower.includes('hello') ||
+      lower.includes('hi ') ||
+      lower === 'hi'
+    ) {
+      return '你好！Chào bạn nha! Hôm nay cùng ôn từ vựng HSK ở Thư viện Tạ Quang Bửu nhé! 👋📚';
+    }
+    if (
+      lower.includes('học') ||
+      lower.includes('学习') ||
+      lower.includes('hsk') ||
+      lower.includes('từ vựng')
+    ) {
+      return '一起学习吧！Lại gần bàn học bấm phím E để ngồi và bật đồng hồ Pomodoro tập trung nhé! ✨';
+    }
+    if (
+      lower.includes('cố lên') ||
+      lower.includes('加油') ||
+      lower.includes('mệt') ||
+      lower.includes('thi')
+    ) {
+      return '加油 (Jiāyóu)! Sinh viên Bách khoa luôn kiên trì — bật nhạc Lofi Chill lên rồi cố gắng tiếp nào! 💪🎵';
+    }
+    if (
+      lower.includes('thư viện') ||
+      lower.includes('tqb') ||
+      lower.includes('thang máy') ||
+      lower.includes('tầng')
+    ) {
+      return '🏛️ Thư viện Tạ Quang Bửu có thang máy đi từ Tầng 1 lên tới Tầng 10 ngắm sao — tới cửa thang máy bấm E là chọn tầng được ngay!';
+    }
+    if (lower.includes('nhảy') || lower.includes('vui') || lower.includes('哈哈')) {
+      return '太棒了！Bấm các nút Hành động (1–6) để nhảy nhót, vẫy tay hoặc hoan hô giữa sân trường nhé! 💃🙌';
+    }
+    const pool = [
+      '加油！Mình vừa ôn xong 15 từ HSK ở Tầng 4 Thư viện TQB, bạn thử ghé lên học cùng nha! 📖',
+      '太好了！Bạn nhớ bật đài Lofi Chill ở góc trái trên để vừa nghe nhạc piano vừa học bài thật êm nhé! 🎧',
+      '我们一起努力吧！Chúc bạn một buổi tự học thật hiệu quả tại Bách khoa Hà Nội! 🌸',
+      '休息一下吧！Nếu học mỏi lưng thì bấm Hành động "🙆 Vươn vai" hoặc "💃 Nhảy nhót" thư giãn chút nha!',
+    ];
+    const pick = pool[this.companionReplyCounter % pool.length];
+    this.companionReplyCounter += 1;
+    return pick;
   }
 
   /**
@@ -1914,6 +2137,49 @@ export class MultiplayerClient {
           break;
         }
         case 'pong': {
+          break;
+        }
+        case 'chat': {
+          const senderId = typeof msg.id === 'string' ? msg.id : '';
+          const text = sanitizeChatMessage(msg.text);
+          if (!senderId || !text) break;
+          const now = this.nowFn();
+          // Nếu chính là tin nhắn của mình được server broadcast lại thì không nhân đôi
+          if (this.selfId && senderId === this.selfId) {
+            break;
+          }
+          const peer = this.players.get(senderId);
+          const senderName = sanitizeName(msg.name ?? peer?.name ?? 'Bạn học');
+          const senderColor =
+            typeof msg.color === 'string'
+              ? msg.color
+              : (peer?.color ?? '#38BDF8');
+          this.appendChatMessage({
+            id: `chat-${senderId}-${now}-${++this.reqCounter}`,
+            senderId,
+            senderName,
+            senderColor,
+            text,
+            atMs: now,
+          });
+          this.chatBubbles.set(senderId, {
+            text,
+            expiresAtMs: now + 10000,
+          });
+          this.emit();
+          break;
+        }
+        case 'emote': {
+          const senderId = typeof msg.id === 'string' ? msg.id : '';
+          if (!senderId || !isAvatarEmoteId(msg.emote)) break;
+          const now = this.nowFn();
+          const duration = EMOTE_DURATION_MS[msg.emote] ?? 2800;
+          this.emotes.set(senderId, {
+            emote: msg.emote,
+            startedAtMs: now,
+            expiresAtMs: now + duration,
+          });
+          this.emit();
           break;
         }
         default:

@@ -43,8 +43,10 @@ import {
   derivePublicPlayerId,
   extractValidAppearance,
   hashString,
+  isAvatarEmoteId,
   isRemoteState,
   pickShirtColor,
+  sanitizeChatMessage,
   sanitizeMssv,
   sanitizeName,
   sanitizeReconnectToken,
@@ -871,6 +873,33 @@ export class HskRoom {
           serverNowMs: now,
         });
       }
+      return;
+    }
+
+    if (msg.type === 'chat') {
+      const text = sanitizeChatMessage(msg.text);
+      if (!text) return;
+      session.lastUpdate = now;
+      this.broadcast({
+        type: 'chat',
+        id: sessionId,
+        name: session.name,
+        color: session.color,
+        text,
+        t: now,
+      });
+      return;
+    }
+
+    if (msg.type === 'emote') {
+      if (!isAvatarEmoteId(msg.emote)) return;
+      session.lastUpdate = now;
+      this.broadcast({
+        type: 'emote',
+        id: sessionId,
+        emote: msg.emote,
+        t: now,
+      });
       return;
     }
 

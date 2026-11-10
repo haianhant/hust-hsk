@@ -8,12 +8,13 @@ import {
   type Vec2,
 } from './campus';
 import type {
+  AvatarEmoteId,
   AvatarGender,
   AvatarHairStyle,
   AvatarOutfitId,
 } from '../shared/contracts/multiplayer';
 
-export type { AvatarGender, AvatarHairStyle, AvatarOutfitId };
+export type { AvatarEmoteId, AvatarGender, AvatarHairStyle, AvatarOutfitId };
 
 export const playerInput = {
   /** vector di chuyển từ phím hoặc joystick: x = phải/trái, y = tiến/lùi (theo hướng camera) */
@@ -141,7 +142,52 @@ export const playerState = {
   /** PR8 — trạng thái đang ngồi học cục bộ tại ghế thư viện (true khi đang ngồi, seatId là ID ghế chuẩn từ STUDY_SEATS). */
   seated: false,
   seatId: null as string | null,
+  /** Hoạt ảnh hành động tương tác (emote: wave, dance, cheer, bow, clap, stretch). */
+  activeEmote: null as {
+    id: AvatarEmoteId;
+    startedAt: number;
+    expiresAt: number;
+    renderedSec?: number;
+  } | null,
+  /** Bong bóng chat 3D hiển thị trên đầu nhân vật chính. */
+  chatBubble: null as {
+    text: string;
+    expiresAt: number;
+    renderedSec?: number;
+  } | null,
 };
+
+export const EMOTE_DURATION_MS: Record<AvatarEmoteId, number> = {
+  wave: 4500,
+  dance: 7500,
+  cheer: 5000,
+  bow: 4000,
+  clap: 5000,
+  stretch: 5500,
+};
+
+export function triggerLocalPlayerEmote(emote: AvatarEmoteId, nowMs = Date.now()): void {
+  const duration = EMOTE_DURATION_MS[emote] ?? 4500;
+  playerState.activeEmote = {
+    id: emote,
+    startedAt: nowMs,
+    expiresAt: nowMs + duration,
+    renderedSec: 0,
+  };
+}
+
+export function setLocalPlayerChatBubble(text: string, durationMs = 10000, nowMs = Date.now()): void {
+  const clean = text.trim();
+  if (!clean) {
+    playerState.chatBubble = null;
+    return;
+  }
+  playerState.chatBubble = {
+    text: clean.slice(0, 120),
+    expiresAt: nowMs + durationMs,
+    renderedSec: 0,
+  };
+}
 
 export function updatePlayerState(pos: Vec2, moving: boolean): void {
   playerState.pos = pos;

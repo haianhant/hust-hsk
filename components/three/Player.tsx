@@ -87,10 +87,12 @@ import {
   playerInput,
   playerState,
   updatePlayerState,
+  type AvatarEmoteId,
   type AvatarGender,
   type AvatarHairStyle,
   type AvatarOutfitId,
 } from '../../lib/playerState';
+import { multiplayer } from '../../lib/multiplayer';
 import {
   computeSafeStandUpPosition,
   createInitialSeatingState,
@@ -102,12 +104,18 @@ import {
 } from '../../features/campus/interaction';
 import { getSeatDefinition } from '../../shared/contracts/study';
 import StudentAvatar, {
+  EMOTE_DEFINITIONS,
   SEATED_GROUP_Y_OFFSET,
+  computeEmotePoseTargets,
   computeNaturalGaitTargets,
   computeSeatedPoseTargets,
   type FigureJoints,
 } from './StudentAvatar';
-import { CANVAS_VN_FONT, wrapVietnameseCanvasContext } from './TextPlate';
+import {
+  CANVAS_VN_FONT,
+  drawSpeechBubbleCanvas,
+  wrapVietnameseCanvasContext,
+} from './TextPlate';
 
 function usePlayerNameplateTexture(name: string): THREE.CanvasTexture {
   const display = (name || 'Sinh viên').trim() || 'Sinh viên';
@@ -238,6 +246,17 @@ export default function Player() {
   const [glassesOn, setGlassesOn] = useState<boolean>(playerState.avatarGlasses);
   const [lanyardOn, setLanyardOn] = useState<boolean>(playerState.avatarLanyard);
   const nameplateTex = usePlayerNameplateTexture(avatarName);
+  const bubbleMeshRef = useRef<THREE.Mesh>(null!);
+  const lastBubbleTextRef = useRef<string>('');
+  const bubbleTex = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 128;
+    const t = new THREE.CanvasTexture(canvas);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
+  useEffect(() => () => bubbleTex.dispose(), [bubbleTex]);
 
   // PR8 — Khởi tạo trạng thái ngồi học cục bộ (khôi phục nguyên trạng khi chuyển từ Zen 2D về 3D).
   const initialSeatDef =
@@ -854,6 +873,10 @@ export default function Player() {
         count: fastTravelState.count,
         lastDestId: fastTravelState.lastDestId,
       }),
+      triggerEmote: (emoteId: AvatarEmoteId) => multiplayer.sendEmote(emoteId),
+      getActiveEmote: () => playerState.activeEmote,
+      sendChat: (text: string) => multiplayer.sendChatMessage(text),
+      getChatBubble: () => playerState.chatBubble,
       // Đợt sửa lần 2 — số đo animation thật: phase, blend, góc các khớp,
       // cao độ cổ chân hai bên (đế giày ≈ cổ chân − 0,07 m khi bàn chân phẳng).
       // Góc khớp là rotation.x THÔ: gối DƯƠNG = gập đúng (cẳng chân về sau),
@@ -1310,6 +1333,24 @@ export default function Player() {
         // Bước 5: khi panel học mở (uiLocked) thì E không có tác dụng.
         window.dispatchEvent(new CustomEvent('bkhn:interact'));
       }
+      if (
+        !e.repeat &&
+        !playerState.uiLocked &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (e.code === 'Digit1' ||
+          e.code === 'Digit2' ||
+          e.code === 'Digit3' ||
+          e.code === 'Digit4' ||
+          e.code === 'Digit5' ||
+          e.code === 'Digit6')
+      ) {
+        const idx = Number(e.code.replace('Digit', '')) - 1;
+        const emoteDef = EMOTE_DEFINITIONS[idx];
+        if (emoteDef) {
+          multiplayer.sendEmote(emoteDef.id);
+        }
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
@@ -1737,22 +1778,74 @@ export default function Player() {
     }
 
     const seatedNow = seatingStateRef.current.status === 'seated';
-    const lerp = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'z', target: number) => {
+    let legLZTarget = 0;
+    let legRZTarget = 0;
+    let armLZTarget = 0;
+    let armRZTarget = 0;
+    let bodyYawTarget = 0;
+    let emoteJumpYOffset = 0;
+
+    // Hoạt ảnh hành động tương tác (Emote: wave, dance, cheer, bow, clap, stretch)
+    const frameStepSec = Math.min(rawDelta, 0.08);
+    if (playerState.activeEmote) {
+      const durationSec = Math.max(
+        2.5,
+        (playerState.activeEmote.expiresAt - playerState.activeEmote.startedAt) / 1000,
+      );
+      const nextRenderedSec = (playerState.activeEmote.renderedSec ?? 0) + frameStepSec;
+      playerState.activeEmote.renderedSec = nextRenderedSec;
+      if (effectivelyMoving || ridingRef.current || nextRenderedSec >= durationSec) {
+        playerState.activeEmote = null;
+      } else {
+        const emotePose = computeEmotePoseTargets(
+          playerState.activeEmote.id,
+          nextRenderedSec,
+          seatedNow,
+        );
+        legLTarget = emotePose.legLTarget;
+        legRTarget = emotePose.legRTarget;
+        legLZTarget = emotePose.legLZTarget;
+        legRZTarget = emotePose.legRZTarget;
+        kneeLTarget = emotePose.kneeLTarget;
+        kneeRTarget = emotePose.kneeRTarget;
+        footLTarget = emotePose.footLTarget;
+        footRTarget = emotePose.footRTarget;
+        armLTarget = emotePose.armLTarget;
+        armRTarget = emotePose.armRTarget;
+        armLZTarget = emotePose.armLZTarget;
+        armRZTarget = emotePose.armRZTarget;
+        elbowLTarget = emotePose.elbowLTarget;
+        elbowRTarget = emotePose.elbowRTarget;
+        bodyLeanTarget = emotePose.bodyLeanTarget;
+        bodyRollTarget = emotePose.bodyRollTarget;
+        bodyYawTarget = emotePose.bodyYawTarget;
+        bodyBobTarget = emotePose.bodyBobTarget;
+        emoteJumpYOffset = emotePose.jumpYOffset;
+      }
+    }
+
+    const poseEase = playerState.activeEmote ? Math.min(1, frameStepSec * 18) : ease;
+    const lerp = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'y' | 'z', target: number) => {
       if (ref.current) {
-        ref.current.rotation[axis] += (target - ref.current.rotation[axis]) * ease;
+        ref.current.rotation[axis] += (target - ref.current.rotation[axis]) * poseEase;
       }
     };
     lerp(legLRef, 'x', legLTarget);
     lerp(legRRef, 'x', legRTarget);
+    lerp(legLRef, 'z', legLZTarget);
+    lerp(legRRef, 'z', legRZTarget);
     lerp(kneeLRef, 'x', kneeLTarget);
     lerp(kneeRRef, 'x', kneeRTarget);
     lerp(footLRef, 'x', footLTarget);
     lerp(footRRef, 'x', footRTarget);
     lerp(armLRef, 'x', armLTarget);
     lerp(armRRef, 'x', armRTarget);
+    lerp(armLRef, 'z', armLZTarget);
+    lerp(armRRef, 'z', armRZTarget);
     lerp(elbowLRef, 'x', elbowLTarget);
     lerp(elbowRRef, 'x', elbowRTarget);
     lerp(bodyRef, 'x', bodyLeanTarget);
+    lerp(bodyRef, 'y', bodyYawTarget);
     lerp(bodyRef, 'z', bodyRollTarget);
     if (bodyRef.current) {
       bodyRef.current.position.y += (bodyBobTarget - bodyRef.current.position.y) * ease;
@@ -1787,16 +1880,50 @@ export default function Player() {
 
     groupRef.current.position.set(
       posRef.current.x,
-      groundY + (seatedNow ? SEATED_GROUP_Y_OFFSET : 0),
+      groundY + (seatedNow ? SEATED_GROUP_Y_OFFSET : emoteJumpYOffset),
       posRef.current.z,
     );
     groupRef.current.rotation.y = facingRef.current;
     if (nameplateGroupRef.current) {
       nameplateGroupRef.current.position.set(
         posRef.current.x,
-        (ridingRef.current ? 2.05 : seatedNow ? 1.62 : 1.95) + groundY,
+        (ridingRef.current ? 2.05 : seatedNow ? 1.62 : 1.95) + groundY + emoteJumpYOffset * 0.5,
         posRef.current.z,
       );
+    }
+
+    // Cập nhật bong bóng chat / biểu tượng hành động trên đầu nhân vật
+    if (playerState.chatBubble) {
+      const nextBubbleSec = (playerState.chatBubble.renderedSec ?? 0) + frameStepSec;
+      playerState.chatBubble.renderedSec = nextBubbleSec;
+      if (nextBubbleSec >= 10) {
+        playerState.chatBubble = null;
+      }
+    }
+    let activeOverheadText = '';
+    if (playerState.chatBubble?.text) {
+      activeOverheadText = `💬 ${playerState.chatBubble.text}`;
+    } else if (playerState.activeEmote) {
+      const def = EMOTE_DEFINITIONS.find((d) => d.id === playerState.activeEmote?.id);
+      if (def) {
+        activeOverheadText = `${def.icon} ${def.labelVi} · ${def.labelZh}`;
+      }
+    }
+    if (bubbleMeshRef.current) {
+      if (activeOverheadText) {
+        if (lastBubbleTextRef.current !== activeOverheadText) {
+          lastBubbleTextRef.current = activeOverheadText;
+          drawSpeechBubbleCanvas(
+            bubbleTex.image as HTMLCanvasElement,
+            activeOverheadText,
+            playerState.chatBubble ? '#0284C7' : '#F59E0B',
+          );
+          bubbleTex.needsUpdate = true;
+        }
+        bubbleMeshRef.current.visible = true;
+      } else {
+        bubbleMeshRef.current.visible = false;
+      }
     }
 
     updatePlayerState(posRef.current, moving);
@@ -1901,6 +2028,20 @@ export default function Player() {
       </group>
       <group ref={nameplateGroupRef} position={[SPAWN.x, 1.95, SPAWN.z]}>
         <Billboard position={[0, 0, 0]}>
+          <mesh
+            ref={bubbleMeshRef}
+            visible={false}
+            position={[0, 0.28, 0]}
+            userData={{ ignoreMeasure: true }}
+          >
+            <planeGeometry args={[1.65, 0.42]} />
+            <meshBasicMaterial
+              map={bubbleTex}
+              transparent
+              depthTest={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
           <mesh userData={{ ignoreMeasure: true }}>
             <planeGeometry args={[1.28, 0.2]} />
             <meshBasicMaterial
