@@ -37,6 +37,7 @@ export interface StudyPanelProps {
   focusPrefs: FocusModePreferences;
   focusPolicy: FocusRuntimePolicy;
   onClose: () => void;
+  onOpenLeaderboard?: () => void;
   onStandUp?: () => void;
   onReconcileAt?: (nowMs: number) => void;
   onStartSession: () => void;
@@ -90,6 +91,7 @@ export function StudyPanel({
   focusPrefs,
   focusPolicy,
   onClose,
+  onOpenLeaderboard,
   onStandUp,
   onReconcileAt,
   onStartSession,
@@ -175,6 +177,16 @@ export function StudyPanel({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {onOpenLeaderboard && (
+              <button
+                type="button"
+                data-testid="study-panel-open-leaderboard"
+                onClick={onOpenLeaderboard}
+                className="rounded-full bg-amber-400/95 px-3 py-1.5 text-xs font-extrabold text-amber-950 shadow transition hover:bg-amber-300"
+              >
+                🏆 Bảng xếp hạng
+              </button>
+            )}
             {activeSeatId && onStandUp && (
               <button
                 type="button"

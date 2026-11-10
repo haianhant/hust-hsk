@@ -420,6 +420,54 @@ function connectClient(room = 'hsk-1') {
     );
     wsD.close();
 
+    // 14b. Emote & Chat broadcast between nearby players (even after DO hibernation cold restart!)
+    const bSeeEmotePromise = wsB.waitFor((m) => m.type === 'emote' && m.id === pubA);
+    wsA2.send(JSON.stringify({ type: 'emote', emote: 'dance' }));
+    const bSeeEmote = await bSeeEmotePromise;
+    assert(
+      'Nearby Peer Emote: Client B receives dance emote from Client A after DO hibernation',
+      bSeeEmote.emote === 'dance' && bSeeEmote.id === pubA,
+      JSON.stringify(bSeeEmote),
+    );
+
+    const aSeeChatPromise = wsA2.waitFor((m) => m.type === 'chat' && m.id === pubB);
+    wsB.send(
+      JSON.stringify({
+        type: 'chat',
+        text: 'Mình đang ngồi cạnh bạn ở Thư viện Tạ Quang Bửu!',
+      }),
+    );
+    const aSeeChat = await aSeeChatPromise;
+    assert(
+      'Nearby Peer Chat: Client A receives chat message from Client B after DO hibernation',
+      aSeeChat.text === 'Mình đang ngồi cạnh bạn ở Thư viện Tạ Quang Bửu!' &&
+        aSeeChat.id === pubB,
+      JSON.stringify(aSeeChat),
+    );
+
+    // 14c. Study Hours Leaderboard progress sync over WebSocket
+    const lbAckPromise = wsA2.waitFor((m) => m.type === 'study:leaderboard-ack');
+    wsA2.send(
+      JSON.stringify({
+        type: 'study:progress',
+        deltaSeconds: 600,
+        completedBlocksDelta: 1,
+        streakDays: 4,
+        subjectTag: 'Vật lý đại cương',
+      }),
+    );
+    const lbAck = await lbAckPromise;
+    assert(
+      'Study Leaderboard WS: Client A receives study:leaderboard-ack with updated focus seconds',
+      lbAck &&
+        lbAck.playerId === pubA &&
+        lbAck.entry &&
+        lbAck.entry.dailyFocusSeconds >= 600 &&
+        lbAck.entry.completedBlocks >= 1 &&
+        lbAck.entry.cohortBadge === 'K67 · 2022****',
+      JSON.stringify(lbAck),
+    );
+
     // 15. PR9 Room Isolation: Client C in hsk-2 can claim tqb-1f-t1-s1 while B holds it in hsk-1
     const wsC = await connectClient('hsk-2');
     wsC.send(

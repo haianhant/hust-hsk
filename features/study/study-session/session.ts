@@ -13,6 +13,8 @@
 import { HSK3_LESSONS } from '../../../content/hsk3-index';
 import { HSK4_LESSONS } from '../../../content/hsk4-index';
 import {
+  getVietnamDayKey,
+  getVietnamWeekKey,
   isValidStudyRoomZone,
   sanitizeSubjectTag,
   type StudyRoomZoneId,
@@ -427,3 +429,69 @@ export function loadStudySession(
     return createInitialStudySession();
   }
 }
+
+export interface LocalStudyLeaderboardStats {
+  dailyFocusSeconds: number;
+  weeklyFocusSeconds: number;
+  totalFocusSeconds: number;
+  completedBlocks: number;
+  subjectTag: string | null;
+}
+
+/**
+ * Computes the local player's cumulative focus seconds (daily, weekly, all-time)
+ * from `session.history`, `session.pomodoro.totalFocusedMs`, and any currently
+ * active Pomodoro `'focus'` block.
+ */
+export function computeLocalStudyLeaderboardStats(
+  session: StudySessionState,
+  nowMs: number = Date.now(),
+): LocalStudyLeaderboardStats {
+  const dayKey = getVietnamDayKey(nowMs);
+  const weekKey = getVietnamWeekKey(nowMs);
+
+  let dailyMs = 0;
+  let weeklyMs = 0;
+  let historyTotalMs = 0;
+
+  for (const b of session.history) {
+    const dur = Math.max(0, Number(b.durationMs) || 0);
+    historyTotalMs += dur;
+    if (getVietnamDayKey(b.endedAtMs) === dayKey) {
+      dailyMs += dur;
+    }
+    if (getVietnamWeekKey(b.endedAtMs) === weekKey) {
+      weeklyMs += dur;
+    }
+  }
+
+  let activeFocusMs = 0;
+  if (session.pomodoro.phase === 'focus') {
+    const ev = evaluatePomodoroAt(session.pomodoro, nowMs);
+    activeFocusMs = Math.max(0, ev.elapsedInPhaseMs);
+  }
+
+  const baseTotalMs = Math.max(historyTotalMs, session.pomodoro.totalFocusedMs ?? 0);
+  const totalFocusSeconds = Math.floor((baseTotalMs + activeFocusMs) / 1000);
+  const dailyFocusSeconds = Math.min(
+    totalFocusSeconds,
+    Math.floor((dailyMs + activeFocusMs) / 1000),
+  );
+  const weeklyFocusSeconds = Math.min(
+    totalFocusSeconds,
+    Math.max(dailyFocusSeconds, Math.floor((weeklyMs + activeFocusMs) / 1000)),
+  );
+  const completedBlocks = Math.max(
+    session.history.length,
+    session.pomodoro.completedFocusBlocks ?? 0,
+  );
+
+  return {
+    dailyFocusSeconds,
+    weeklyFocusSeconds,
+    totalFocusSeconds,
+    completedBlocks,
+    subjectTag: session.subjectTag ?? 'Tự học HSK',
+  };
+}
+

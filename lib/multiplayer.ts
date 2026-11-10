@@ -39,25 +39,36 @@ import {
   triggerLocalPlayerEmote,
 } from './playerState';
 import {
+  formatHustCohortBadge,
   getSeatDefinition,
+  getVietnamDayKey,
+  getVietnamWeekKey,
   isSupportedLibrarySeatId,
+  isValidLeaderboardPeriod,
   sanitizeRequestId,
   sanitizeSeatOccupancy,
   sanitizeStudyPresence,
+  sanitizeSubjectTag,
+  type LeaderboardPeriod,
   type PlayerStudyPresence,
   type PomodoroPhase,
   type SeatClaimRejectionReason,
   type SeatOccupancy,
+  type StudyLeaderboardEntry,
+  type StudyLeaderboardResponse,
 } from '../shared/contracts/study';
 import { SPAWN } from '../shared/constants/world';
 import { rotateTabSessionCredentials } from './identity';
 
 export type {
   AvatarEmoteId,
+  LeaderboardPeriod,
   MultiplayerSceneId,
   RemoteAppearance,
   RemotePlayer,
   RemoteState,
+  StudyLeaderboardEntry,
+  StudyLeaderboardResponse,
 };
 
 export interface ChatMessageEntry {
@@ -502,6 +513,9 @@ export class MultiplayerClient {
   ];
   private chatBubbles = new Map<string, ActiveChatBubble>();
   private emotes = new Map<string, ActiveEmoteState>();
+  private pendingOutboundChats: string[] = [];
+  private pendingOutboundEmote: AvatarEmoteId | null = null;
+  private lastServerLeaderboardEntry: StudyLeaderboardEntry | null = null;
   private companionReplyCounter = 0;
   private companionReplyTimer: ReturnType<typeof setTimeout> | null = null;
   private lastLocalMove: {
@@ -584,6 +598,26 @@ export class MultiplayerClient {
 
   getRemotePlayer(id: string): RemotePlayer | undefined {
     return this.players.get(id);
+  }
+
+  getPlayerEmote(id: string): ActiveEmoteState | undefined {
+    const em = this.emotes.get(id);
+    if (!em) return undefined;
+    if (this.nowFn() >= em.expiresAtMs) {
+      this.emotes.delete(id);
+      return undefined;
+    }
+    return em;
+  }
+
+  getPlayerChatBubble(id: string): ActiveChatBubble | undefined {
+    const b = this.chatBubbles.get(id);
+    if (!b) return undefined;
+    if (this.nowFn() >= b.expiresAtMs) {
+      this.chatBubbles.delete(id);
+      return undefined;
+    }
+    return b;
   }
 
   subscribe(fn: Listener): () => void {
@@ -881,6 +915,11 @@ export class MultiplayerClient {
       } catch {
         // ignore
       }
+    } else {
+      this.pendingOutboundChats.push(text);
+      if (this.pendingOutboundChats.length > 5) {
+        this.pendingOutboundChats.shift();
+      }
     }
 
     // Nếu người chơi đang ở một mình trong phòng (không có remote player nào),
@@ -925,16 +964,417 @@ export class MultiplayerClient {
       startedAtMs: now,
       expiresAtMs: now + duration,
     });
+    if (
+      this.lastLocalMove &&
+      (this.lastLocalMove.state === 'walking' || this.lastLocalMove.state === 'running')
+    ) {
+      this.lastLocalMove.state = 'idle';
+    }
     this.emit();
 
     if (this.ws && this.ws.readyState === 1 /* WebSocket.OPEN */ && this.selfId) {
       try {
+        this.ws.send(JSON.stringify({ type: 'state', state: 'idle' }));
         this.ws.send(JSON.stringify({ type: 'emote', emote }));
       } catch {
         // ignore
       }
+    } else {
+      this.pendingOutboundEmote = emote;
     }
     return true;
+  }
+
+  /**
+   * Đồng bộ tiến độ thời gian tự học Pomodoro (`deltaSeconds`) lên Cloudflare
+   * Durable Object SQLite (`study_leaderboard`).
+   */
+  sendStudyProgress(params: {
+    deltaSeconds: number;
+    completedBlocksDelta?: number;
+    subjectTag?: string | null;
+  }): boolean {
+    const deltaSeconds = Math.max(0, Math.round(Number(params.deltaSeconds) || 0));
+    const completedBlocksDelta = Math.max(
+      0,
+      Math.round(Number(params.completedBlocksDelta) || 0),
+    );
+    if (deltaSeconds <= 0 && completedBlocksDelta <= 0) return false;
+    const subjectTag = sanitizeSubjectTag(params.subjectTag) ?? 'Tự học HSK';
+
+    if (this.ws && this.ws.readyState === 1 /* WebSocket.OPEN */ && this.selfId) {
+      try {
+        this.ws.send(
+          JSON.stringify({
+            type: 'study:progress',
+            deltaSeconds,
+            completedBlocksDelta,
+            subjectTag,
+          }),
+        );
+      } catch {
+        // ignore
+      }
+    }
+
+    // Nếu người chơi đang ở phòng khác hsk-1 hoặc đang tạm mất WS, đồng bộ thêm
+    // qua REST endpoint /api/leaderboard/record để bảng xếp hạng toàn trường luôn hợp nhất.
+    if (!this.ws || this.ws.readyState !== 1 || (this.roomId && this.roomId !== 'hsk-1')) {
+      void this.postLeaderboardRecordHttp({
+        deltaSeconds,
+        completedBlocksDelta,
+        subjectTag,
+      });
+    }
+    return true;
+  }
+
+  private resolveHttpApiBase(): string | null {
+    const resolved = this.resolveUrlFn();
+    if (!resolved.ok || !resolved.url) return null;
+    try {
+      const u = new URL(resolved.url);
+      u.protocol = u.protocol === 'wss:' ? 'https:' : 'http:';
+      u.pathname = '';
+      u.search = '';
+      return u.toString().replace(/\/$/, '');
+    } catch {
+      return null;
+    }
+  }
+
+  private async postLeaderboardRecordHttp(params: {
+    deltaSeconds: number;
+    completedBlocksDelta?: number;
+    subjectTag?: string | null;
+  }): Promise<StudyLeaderboardEntry | null> {
+    if (typeof fetch !== 'function') return null;
+    const base = this.resolveHttpApiBase();
+    if (!base) return null;
+    const selfId =
+      this.selfId ||
+      (this.sessionId ? derivePublicPlayerId(this.sessionId) : '') ||
+      'p-local';
+    try {
+      const controller = new AbortController();
+      const timer = this.setTimeoutFn(() => controller.abort(), 3500);
+      const res = await fetch(`${base}/api/leaderboard/record`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerId: selfId,
+          name: this.name || playerState.avatarName || 'Sinh viên',
+          mssv: this.mssv || '20226010',
+          gender: this.appearance.gender ?? playerState.avatarGender,
+          outfit: this.appearance.outfit ?? playerState.avatarOutfit,
+          hairStyle: this.appearance.hairStyle ?? playerState.avatarHairStyle,
+          subjectTag: params.subjectTag ?? 'Tự học HSK',
+          deltaSeconds: params.deltaSeconds,
+          completedBlocksDelta: params.completedBlocksDelta ?? 0,
+        }),
+        signal: controller.signal,
+      });
+      this.clearTimeoutFn(timer);
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        ok?: boolean;
+        entry?: StudyLeaderboardEntry;
+      };
+      if (data?.ok && data.entry) {
+        this.lastServerLeaderboardEntry = data.entry;
+        return data.entry;
+      }
+    } catch {
+      // ignore network failure in offline/test mode
+    }
+    return null;
+  }
+
+  /**
+   * Truy vấn Bảng xếp hạng giờ học (`daily` | `weekly` | `alltime`) từ SQLite
+   * của Cloudflare Durable Object, đồng thời kết hợp dữ liệu phiên học cục bộ
+   * để đảm bảo hiển thị chính xác ngay cả khi đang học ngoại tuyến.
+   */
+  async fetchLeaderboard(
+    period: LeaderboardPeriod = 'daily',
+    localFallback?: {
+      dailyFocusSeconds: number;
+      weeklyFocusSeconds: number;
+      totalFocusSeconds: number;
+      completedBlocks: number;
+      subjectTag?: string | null;
+    },
+  ): Promise<StudyLeaderboardResponse> {
+    const safePeriod: LeaderboardPeriod = isValidLeaderboardPeriod(period) ? period : 'daily';
+    const now = this.nowFn();
+    const selfId =
+      this.selfId ||
+      (this.sessionId && this.sessionId.startsWith('p-')
+        ? this.sessionId
+        : this.sessionId
+          ? derivePublicPlayerId(this.sessionId)
+          : 'p-local-self');
+    const base = this.resolveHttpApiBase();
+
+    if (typeof fetch === 'function' && base) {
+      try {
+        // Nếu người chơi đã có thời gian học cục bộ lớn hơn bản ghi trên server,
+        // đồng bộ phần chênh lệch lên SQLite trước khi đọc bảng xếp hạng.
+        if (localFallback && localFallback.totalFocusSeconds > 0) {
+          const prevServerTotal = this.lastServerLeaderboardEntry?.totalFocusSeconds ?? 0;
+          const unsyncedDelta = Math.min(
+            1800,
+            Math.max(0, localFallback.totalFocusSeconds - prevServerTotal),
+          );
+          if (unsyncedDelta >= 10) {
+            await this.postLeaderboardRecordHttp({
+              deltaSeconds: unsyncedDelta,
+              completedBlocksDelta: Math.max(
+                0,
+                localFallback.completedBlocks -
+                  (this.lastServerLeaderboardEntry?.completedBlocks ?? 0),
+              ),
+              subjectTag: localFallback.subjectTag,
+            });
+          }
+        }
+
+        const controller = new AbortController();
+        const timer = this.setTimeoutFn(() => controller.abort(), 3500);
+        const url = `${base}/api/leaderboard?period=${encodeURIComponent(safePeriod)}&limit=20&playerId=${encodeURIComponent(selfId)}`;
+        const res = await fetch(url, { signal: controller.signal });
+        this.clearTimeoutFn(timer);
+        if (res.ok) {
+          const data = (await res.json()) as StudyLeaderboardResponse;
+          if (data && data.ok && Array.isArray(data.entries)) {
+            if (data.myEntry) {
+              this.lastServerLeaderboardEntry = data.myEntry;
+            }
+            return this.mergeLocalStatsIntoLeaderboard(data, selfId, safePeriod, localFallback);
+          }
+        }
+      } catch {
+        // Fallback sang bảng xếp hạng cục bộ khi mất mạng hoặc chạy môi trường test offline
+      }
+    }
+
+    return this.buildOfflineLeaderboardFallback(safePeriod, selfId, now, localFallback);
+  }
+
+  private mergeLocalStatsIntoLeaderboard(
+    serverRes: StudyLeaderboardResponse,
+    selfId: string,
+    period: LeaderboardPeriod,
+    localFallback?: {
+      dailyFocusSeconds: number;
+      weeklyFocusSeconds: number;
+      totalFocusSeconds: number;
+      completedBlocks: number;
+      subjectTag?: string | null;
+    },
+  ): StudyLeaderboardResponse {
+    if (!localFallback) return serverRes;
+    const hasLocalStudy =
+      localFallback.totalFocusSeconds > 0 ||
+      localFallback.dailyFocusSeconds > 0 ||
+      localFallback.completedBlocks > 0;
+    if (!hasLocalStudy && serverRes.myEntry) return serverRes;
+
+    const myName = this.name || playerState.avatarName || 'Sinh viên Bách khoa';
+    const myCohort = formatHustCohortBadge(this.mssv || '20226010');
+    const existingSelf =
+      serverRes.entries.find((e) => e.playerId === selfId || e.isSelf) ?? serverRes.myEntry;
+
+    const mergedDaily = Math.max(
+      existingSelf?.dailyFocusSeconds ?? 0,
+      localFallback.dailyFocusSeconds,
+    );
+    const mergedWeekly = Math.max(
+      existingSelf?.weeklyFocusSeconds ?? 0,
+      localFallback.weeklyFocusSeconds,
+    );
+    const mergedTotal = Math.max(
+      existingSelf?.totalFocusSeconds ?? 0,
+      localFallback.totalFocusSeconds,
+    );
+    const mergedBlocks = Math.max(
+      existingSelf?.completedBlocks ?? 0,
+      localFallback.completedBlocks,
+    );
+
+    if (mergedTotal <= 0 && !existingSelf) {
+      return serverRes;
+    }
+
+    const focusSeconds =
+      period === 'daily'
+        ? mergedDaily
+        : period === 'weekly'
+          ? mergedWeekly
+          : mergedTotal;
+
+    const myEntry: StudyLeaderboardEntry = {
+      rank: existingSelf?.rank ?? serverRes.entries.length + 1,
+      playerId: selfId,
+      name: myName,
+      cohortBadge: myCohort,
+      color: '#DA1E26',
+      gender: this.appearance.gender ?? playerState.avatarGender,
+      outfit: this.appearance.outfit ?? playerState.avatarOutfit,
+      hairStyle: this.appearance.hairStyle ?? playerState.avatarHairStyle,
+      subjectTag:
+        localFallback.subjectTag ?? existingSelf?.subjectTag ?? 'Tự học HSK',
+      focusSeconds,
+      dailyFocusSeconds: mergedDaily,
+      weeklyFocusSeconds: mergedWeekly,
+      totalFocusSeconds: mergedTotal,
+      completedBlocks: mergedBlocks,
+      streakDays: existingSelf?.streakDays ?? 1,
+      updatedAtMs: this.nowFn(),
+      isSelf: true,
+    };
+
+    const others = serverRes.entries
+      .filter((e) => e.playerId !== selfId && !e.isSelf)
+      .map((e) => ({ ...e, isSelf: false }));
+    const combined = [...others, myEntry].sort((a, b) => {
+      if (b.focusSeconds !== a.focusSeconds) return b.focusSeconds - a.focusSeconds;
+      return b.totalFocusSeconds - a.totalFocusSeconds;
+    });
+
+    const reRanked = combined.map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+    }));
+    const finalMyEntry = reRanked.find((e) => e.playerId === selfId) ?? myEntry;
+
+    return {
+      ...serverRes,
+      entries: reRanked.slice(0, 20),
+      myEntry: finalMyEntry,
+      totalStudents: Math.max(serverRes.totalStudents, reRanked.length),
+    };
+  }
+
+  private buildOfflineLeaderboardFallback(
+    period: LeaderboardPeriod,
+    selfId: string,
+    nowMs: number,
+    localFallback?: {
+      dailyFocusSeconds: number;
+      weeklyFocusSeconds: number;
+      totalFocusSeconds: number;
+      completedBlocks: number;
+      subjectTag?: string | null;
+    },
+  ): StudyLeaderboardResponse {
+    const dayKey = getVietnamDayKey(nowMs);
+    const weekKey = getVietnamWeekKey(nowMs);
+    const seeds: StudyLeaderboardEntry[] = [
+      {
+        rank: 1,
+        playerId: 'seed-hust-1',
+        name: 'Trần Minh Hoàng',
+        cohortBadge: 'K67 · 2022****',
+        color: '#1F3A5F',
+        gender: 'male',
+        outfit: 'windbreaker-hust',
+        hairStyle: 'swept',
+        subjectTag: 'HSK 4 · Bài 5 — Ôn thi',
+        focusSeconds: period === 'daily' ? 5400 : period === 'weekly' ? 21600 : 64800,
+        dailyFocusSeconds: 5400,
+        weeklyFocusSeconds: 21600,
+        totalFocusSeconds: 64800,
+        completedBlocks: 43,
+        streakDays: 7,
+        updatedAtMs: nowMs - 60000,
+      },
+      {
+        rank: 2,
+        playerId: 'seed-hust-2',
+        name: 'Nguyễn Phương Linh',
+        cohortBadge: 'K68 · 2023****',
+        color: '#7C4DBE',
+        gender: 'female',
+        outfit: 'bomber-red-grey',
+        hairStyle: 'ponytail',
+        subjectTag: 'HSK 3 · Bài 12 — Giao tiếp',
+        focusSeconds: period === 'daily' ? 4200 : period === 'weekly' ? 18000 : 50400,
+        dailyFocusSeconds: 4200,
+        weeklyFocusSeconds: 18000,
+        totalFocusSeconds: 50400,
+        completedBlocks: 34,
+        streakDays: 5,
+        updatedAtMs: nowMs - 120000,
+      },
+      {
+        rank: 3,
+        playerId: 'seed-hust-3',
+        name: 'Lê Đức Anh',
+        cohortBadge: 'K67 · 2022****',
+        color: '#2E7D32',
+        gender: 'male',
+        outfit: 'hoodie-hust',
+        hairStyle: 'short',
+        subjectTag: 'Giải tích 1 & HSK 3',
+        focusSeconds: period === 'daily' ? 3000 : period === 'weekly' ? 13500 : 37800,
+        dailyFocusSeconds: 3000,
+        weeklyFocusSeconds: 13500,
+        totalFocusSeconds: 37800,
+        completedBlocks: 25,
+        streakDays: 4,
+        updatedAtMs: nowMs - 180000,
+      },
+      {
+        rank: 4,
+        playerId: 'seed-hust-4',
+        name: 'Phạm Thảo Vy',
+        cohortBadge: 'K69 · 2024****',
+        color: '#0E7C7B',
+        gender: 'female',
+        outfit: 'sweater-cream',
+        hairStyle: 'bob',
+        subjectTag: 'Từ vựng HSK 3 · Thư viện TQB',
+        focusSeconds: period === 'daily' ? 1800 : period === 'weekly' ? 9000 : 25200,
+        dailyFocusSeconds: 1800,
+        weeklyFocusSeconds: 9000,
+        totalFocusSeconds: 25200,
+        completedBlocks: 17,
+        streakDays: 3,
+        updatedAtMs: nowMs - 240000,
+      },
+      {
+        rank: 5,
+        playerId: 'seed-hust-5',
+        name: 'Vũ Quốc Khánh',
+        cohortBadge: 'K66 · 2021****',
+        color: '#C2571B',
+        gender: 'male',
+        outfit: 'polo-red',
+        hairStyle: 'layered',
+        subjectTag: 'Đồ án SoICT & HSK 4',
+        focusSeconds: period === 'daily' ? 1500 : period === 'weekly' ? 6000 : 16200,
+        dailyFocusSeconds: 1500,
+        weeklyFocusSeconds: 6000,
+        totalFocusSeconds: 16200,
+        completedBlocks: 11,
+        streakDays: 2,
+        updatedAtMs: nowMs - 300000,
+      },
+    ];
+
+    const baseRes: StudyLeaderboardResponse = {
+      ok: true,
+      period,
+      dayKey,
+      weekKey,
+      entries: seeds,
+      myEntry: this.lastServerLeaderboardEntry,
+      totalStudents: seeds.length,
+      serverNowMs: nowMs,
+    };
+
+    return this.mergeLocalStatsIntoLeaderboard(baseRes, selfId, period, localFallback);
   }
 
   private appendChatMessage(entry: ChatMessageEntry) {
@@ -1358,12 +1798,35 @@ export class MultiplayerClient {
   }
 
   private flushLocalMoveTelemetry() {
-    if (!this.lastLocalMove) return;
-    const { x, z, facing, state, context } = this.lastLocalMove;
-    this.sendMove(x, z, facing, state, {
-      ...context,
-      appearance: { ...this.appearance, ...context.appearance },
-    });
+    if (this.lastLocalMove) {
+      const { x, z, facing, state, context } = this.lastLocalMove;
+      this.sendMove(x, z, facing, state, {
+        ...context,
+        appearance: { ...this.appearance, ...context.appearance },
+      });
+    }
+    if (this.ws && this.ws.readyState === 1 /* WebSocket.OPEN */ && this.selfId) {
+      if (this.pendingOutboundChats.length > 0) {
+        const queuedChats = this.pendingOutboundChats.splice(0, this.pendingOutboundChats.length);
+        for (const text of queuedChats) {
+          try {
+            this.ws.send(JSON.stringify({ type: 'chat', text }));
+          } catch {
+            // ignore
+          }
+        }
+      }
+      if (this.pendingOutboundEmote) {
+        const em = this.pendingOutboundEmote;
+        this.pendingOutboundEmote = null;
+        try {
+          this.ws.send(JSON.stringify({ type: 'state', state: 'idle' }));
+          this.ws.send(JSON.stringify({ type: 'emote', emote: em }));
+        } catch {
+          // ignore
+        }
+      }
+    }
   }
 
   private syncLegacyTelemetrySeat(rp: RemotePlayer): boolean {
@@ -2041,6 +2504,8 @@ export class MultiplayerClient {
           if (typeof msg.id !== 'string') break;
           const p = this.players.get(msg.id);
           if (!p) break;
+          const prevX = p.x;
+          const prevZ = p.z;
           let metaChanged = false;
           if (typeof msg.state === 'string' && isRemoteState(msg.state)) {
             if (p.state !== msg.state) {
@@ -2097,16 +2562,37 @@ export class MultiplayerClient {
             if (this.syncLegacyTelemetrySeat(p)) {
               metaChanged = true;
             }
-            if (metaChanged) {
-              this.emit();
-            }
           } else {
             if (typeof msg.x === 'number') p.x = msg.x;
             if (typeof msg.z === 'number') p.z = msg.z;
             if (typeof msg.facing === 'number') p.facing = msg.facing;
-            if (metaChanged) {
-              this.emit();
+          }
+
+          // Nếu người chơi này vừa bấm hành động emote (< 750ms trước) thì giữ state = 'idle'
+          // để gói move đến trễ không hủy hoạt ảnh emote; nếu họ thực sự bước đi xa (> 0.28m)
+          // sau 750ms thì xóa emote để chuyển sang dáng đi tự nhiên.
+          const activeEmote = this.emotes.get(msg.id);
+          if (activeEmote) {
+            const now = this.nowFn();
+            if (now < activeEmote.expiresAtMs) {
+              const elapsed = now - activeEmote.startedAtMs;
+              const stepDist = Math.hypot(p.x - prevX, p.z - prevZ);
+              if (elapsed < 750) {
+                if (p.state === 'walking' || p.state === 'running') {
+                  p.state = 'idle';
+                }
+              } else if (
+                stepDist > 0.28 &&
+                (p.state === 'walking' || p.state === 'running')
+              ) {
+                this.emotes.delete(msg.id);
+                metaChanged = true;
+              }
             }
+          }
+
+          if (metaChanged) {
+            this.emit();
           }
           break;
         }
@@ -2174,12 +2660,22 @@ export class MultiplayerClient {
           if (!senderId || !isAvatarEmoteId(msg.emote)) break;
           const now = this.nowFn();
           const duration = EMOTE_DURATION_MS[msg.emote] ?? 2800;
+          const peer = this.players.get(senderId);
+          if (peer && (peer.state === 'walking' || peer.state === 'running')) {
+            peer.state = 'idle';
+          }
           this.emotes.set(senderId, {
             emote: msg.emote,
             startedAtMs: now,
             expiresAtMs: now + duration,
           });
           this.emit();
+          break;
+        }
+        case 'study:leaderboard-ack': {
+          if (msg.entry && typeof msg.entry === 'object') {
+            this.lastServerLeaderboardEntry = msg.entry as StudyLeaderboardEntry;
+          }
           break;
         }
         default:

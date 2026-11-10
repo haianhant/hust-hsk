@@ -262,6 +262,15 @@ function RemotePlayerView({
     } else {
       if (!g.visible) g.visible = true;
       cur.current.y = target.state === 'riding' ? 0.12 : 0;
+      // Ngoài sân trường (campus) hoặc phòng học, nếu 2 sinh viên đứng trùng điểm spawn/dịch chuyển (< 0.35m),
+      // cũng tách nhẹ vị trí hiển thị hình ảnh sang bên 0.62m để đứng cạnh nhau thay vì chồng lên nhau.
+      if (
+        target.state !== 'riding' &&
+        Math.hypot(cur.current.x - playerState.pos.x, cur.current.z - playerState.pos.z) < 0.35
+      ) {
+        const sideSign = (player.id.charCodeAt(0) + player.id.charCodeAt(player.id.length - 1)) % 2 === 0 ? 1 : -1;
+        renderX = cur.current.x + sideSign * 0.62;
+      }
     }
     g.position.set(renderX, cur.current.y, renderZ);
     if (figureRef.current) {
@@ -287,14 +296,13 @@ function RemotePlayerView({
         ref.current.rotation[axis] += (v - ref.current.rotation[axis]) * poseEase;
       }
     };
-    const snap = multiplayer.snapshot;
-    const remoteEmote = snap.emotes[player.id];
-    const remoteBubble = snap.chatBubbles[player.id];
+    const remoteEmote = multiplayer.getPlayerEmote(player.id);
+    const remoteBubble = multiplayer.getPlayerChatBubble(player.id);
     const wallNow = Date.now();
     const isEmoting =
       Boolean(remoteEmote) &&
-      wallNow < remoteEmote.expiresAtMs &&
-      effectiveState === 'idle';
+      wallNow < remoteEmote!.expiresAtMs &&
+      effectiveState !== 'riding';
 
     if (effectiveState === 'riding' && scene === 'campus') {
       // Tư thế ngồi lái (cùng số với Player): hông -1,25/-1,35, gối
@@ -316,30 +324,6 @@ function RemotePlayerView({
       set(j.body, 'x', 0.08);
       set(j.body, 'y', 0);
       set(j.body, 'z', 0);
-    } else if (effectiveState === 'walking' || effectiveState === 'running') {
-      const isRun = effectiveState === 'running';
-      const speed = isRun ? 10.5 : 7.5;
-      const swing = isRun ? 0.62 : 0.5;
-      phase.current += dt * speed;
-      const t = performance.now() / 1000;
-      const gait = computeNaturalGaitTargets(phase.current, swing, 1, t, isRun);
-      set(j.legL, 'x', gait.legLTarget);
-      set(j.legR, 'x', gait.legRTarget);
-      set(j.legL, 'z', 0);
-      set(j.legR, 'z', 0);
-      set(j.kneeL, 'x', gait.kneeLTarget);
-      set(j.kneeR, 'x', gait.kneeRTarget);
-      set(j.footL, 'x', gait.footLTarget);
-      set(j.footR, 'x', gait.footRTarget);
-      set(j.armL, 'x', gait.armLTarget);
-      set(j.armR, 'x', gait.armRTarget);
-      set(j.armL, 'z', 0);
-      set(j.armR, 'z', 0);
-      set(j.elbowL, 'x', gait.elbowLTarget);
-      set(j.elbowR, 'x', gait.elbowRTarget);
-      set(j.body, 'x', gait.bodyLeanTarget);
-      set(j.body, 'y', 0);
-      set(j.body, 'z', gait.bodyRollTarget);
     } else if (isEmoting && remoteEmote) {
       const elapsedSec = Math.max(0, (wallNow - remoteEmote.startedAtMs) / 1000);
       const emotePose = computeEmotePoseTargets(remoteEmote.emote, elapsedSec, false);
@@ -364,6 +348,33 @@ function RemotePlayerView({
         j.body.current.position.y += (emotePose.bodyBobTarget - j.body.current.position.y) * poseEase;
       }
       g.position.y = cur.current.y + emotePose.jumpYOffset;
+    } else if (effectiveState === 'walking' || effectiveState === 'running') {
+      const isRun = effectiveState === 'running';
+      const speed = isRun ? 10.5 : 7.5;
+      const swing = isRun ? 0.62 : 0.5;
+      phase.current += dt * speed;
+      const t = performance.now() / 1000;
+      const gait = computeNaturalGaitTargets(phase.current, swing, 1, t, isRun);
+      set(j.legL, 'x', gait.legLTarget);
+      set(j.legR, 'x', gait.legRTarget);
+      set(j.legL, 'z', 0);
+      set(j.legR, 'z', 0);
+      set(j.kneeL, 'x', gait.kneeLTarget);
+      set(j.kneeR, 'x', gait.kneeRTarget);
+      set(j.footL, 'x', gait.footLTarget);
+      set(j.footR, 'x', gait.footRTarget);
+      set(j.armL, 'x', gait.armLTarget);
+      set(j.armR, 'x', gait.armRTarget);
+      set(j.armL, 'z', 0);
+      set(j.armR, 'z', 0);
+      set(j.elbowL, 'x', gait.elbowLTarget);
+      set(j.elbowR, 'x', gait.elbowRTarget);
+      set(j.body, 'x', gait.bodyLeanTarget);
+      set(j.body, 'y', 0);
+      set(j.body, 'z', gait.bodyRollTarget);
+      if (j.body.current) {
+        j.body.current.position.y += (0 - j.body.current.position.y) * poseEase;
+      }
     } else {
       // Đứng yên: thở nhẹ, tay hơi gập (như NPC).
       const t = performance.now() / 1000;
@@ -479,7 +490,7 @@ function filterPlayersForScene(
   scene: MultiplayerSceneId,
 ): RemotePlayer[] {
   return players.filter((p) => {
-    if (seatedIds.has(p.id)) return false;
+    if (scene === 'library' && seatedIds.has(p.id)) return false;
     const pScene = p.scene ?? 'campus';
     return pScene === scene;
   });

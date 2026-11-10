@@ -19,11 +19,13 @@ export {
   collectUnnotifiedFocusBlocks,
   saveStudySession,
   loadStudySession,
+  computeLocalStudyLeaderboardStats,
   type HskLessonOption,
   type StudyTaskItem,
   type CompletedFocusBlock,
   type StudySessionState,
   type StudySessionEvaluation,
+  type LocalStudyLeaderboardStats,
   type StorageLike,
 } from './session';
 export {

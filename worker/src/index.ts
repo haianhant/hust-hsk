@@ -57,6 +57,25 @@ export default {
       return Response.json({ rooms }, { headers });
     }
 
+    if (url.pathname === '/api/leaderboard' && request.method === 'GET') {
+      const stub = env.HSK_ROOM.get(env.HSK_ROOM.idFromName(ROOMS[0]));
+      const res = await stub.fetch(`https://internal/__leaderboard${url.search}`);
+      const data = await res.json();
+      return Response.json(data, { status: res.status, headers });
+    }
+
+    if (url.pathname === '/api/leaderboard/record' && request.method === 'POST') {
+      const stub = env.HSK_ROOM.get(env.HSK_ROOM.idFromName(ROOMS[0]));
+      const bodyText = await request.text();
+      const res = await stub.fetch('https://internal/__leaderboard/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: bodyText,
+      });
+      const data = await res.json();
+      return Response.json(data, { status: res.status, headers });
+    }
+
     if (url.pathname === '/ws') {
       const requested = url.searchParams.get('room');
       const candidates = requested && ROOMS.includes(requested)

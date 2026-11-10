@@ -44,8 +44,17 @@ export default function CampusChat() {
       const snap = multiplayer.snapshot;
       setMessages(snap.messages);
       setOnlineCount(Math.max(1, snap.count));
-      if (!chatOpen && snap.messages.length > lastSeenCountRef.current) {
-        setUnreadCount((c) => c + (snap.messages.length - lastSeenCountRef.current));
+      if (snap.messages.length > lastSeenCountRef.current) {
+        const newMsgs = snap.messages.slice(lastSeenCountRef.current);
+        const hasRemotePeerMsg = newMsgs.some((m) => !m.isSelf && !m.isCompanion);
+        if (!chatOpen) {
+          if (hasRemotePeerMsg) {
+            setChatOpen(true);
+            setUnreadCount(0);
+          } else {
+            setUnreadCount((c) => c + newMsgs.length);
+          }
+        }
       }
       lastSeenCountRef.current = snap.messages.length;
     };

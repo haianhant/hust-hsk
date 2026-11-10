@@ -85,7 +85,12 @@ import {
   derivePlayerPresence,
   isSamePublicPresence,
 } from '../features/social/presence/presence';
-import { FocusModeView, StudyPanel, useStudySession } from '../features/study';
+import {
+  FocusModeView,
+  StudyLeaderboardModal,
+  StudyPanel,
+  useStudySession,
+} from '../features/study';
 import {
   getSeatDefinition,
   type PlayerStudyPresence,
@@ -216,6 +221,7 @@ export default function HomePage() {
   const noVoiceDismissedRef = useRef(false);
   const [fade, setFade] = useState(false);
   const [lessonsOpen, setLessonsOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [fastTravelOpen, setFastTravelOpen] = useState(false);
   const [traveling, setTraveling] = useState(false);
   const travelingRef = useRef(false);
@@ -714,11 +720,12 @@ export default function HomePage() {
     if (viewMode === 'top') setHelpOpen(false);
   }, [viewMode]);
 
-  // Khi panel học, menu chọn bài, bảng thông tin sảnh thư viện, bảng Tự học hoặc modal nhân vật mở: khóa di chuyển.
+  // Khi panel học, menu chọn bài, bảng thông tin sảnh thư viện, bảng Tự học, bảng Xếp hạng hoặc modal nhân vật mở: khóa di chuyển.
   useEffect(() => {
     playerState.uiLocked =
       panel !== null ||
       lessonsOpen ||
+      leaderboardOpen ||
       lobbyModal !== null ||
       outfitOpen ||
       study.studyPanelOpen ||
@@ -729,6 +736,7 @@ export default function HomePage() {
   }, [
     panel,
     lessonsOpen,
+    leaderboardOpen,
     lobbyModal,
     outfitOpen,
     study.studyPanelOpen,
@@ -1605,6 +1613,7 @@ export default function HomePage() {
             pomodoro={study.session.pomodoro}
             focusPolicy={study.focusPolicy}
             onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
+            onOpenLeaderboard={() => setLeaderboardOpen(true)}
             onStandUp={handleStandUp}
             onReconcileStudyAt={study.reconcileAt}
             onExitFocusMode={study.exitFocusMode}
@@ -1651,6 +1660,10 @@ export default function HomePage() {
           focusPrefs={study.focusPrefs}
           focusPolicy={study.focusPolicy}
           onClose={() => study.setStudyPanelOpen(false)}
+          onOpenLeaderboard={() => {
+            study.setStudyPanelOpen(false);
+            setLeaderboardOpen(true);
+          }}
           onStandUp={handleStandUp}
           onReconcileAt={study.reconcileAt}
           onStartSession={() =>
@@ -1675,6 +1688,14 @@ export default function HomePage() {
           onSetAutoHideHudOnFocus={study.setAutoHideHudOnFocus}
         />
       )}
+
+      {/* Bảng Xếp Hạng Giờ Học Bách Khoa (SQLite Cloud Sync) */}
+      <StudyLeaderboardModal
+        open={leaderboardOpen}
+        session={study.session}
+        onClose={() => setLeaderboardOpen(false)}
+        onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
+      />
 
       {/* Cửa sổ 3D Nhân vật & Trang phục HUST mở từ HUD trong sân trường */}
       {outfitOpen && entered && (

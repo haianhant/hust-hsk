@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { multiplayer } from '../../../lib/multiplayer';
 import { playerState } from '../../../lib/playerState';
 import {
   sanitizeSubjectTag,
@@ -106,6 +107,7 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
   }));
   const [studyPanelOpen, setStudyPanelOpen] = useState(false);
   const notifiedBlockIdsRef = useRef<Set<string>>(new Set());
+  const reportedInPhaseSecRef = useRef<number>(0);
 
   // Load persisted session and focus preferences on client mount
   useEffect(() => {
@@ -149,7 +151,8 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
     }
   }, [hydrated, focusPrefs]);
 
-  // Emit at most one notification per newly completed focus block outside state updaters
+  // Emit at most one notification per newly completed focus block outside state updaters,
+  // and sync the completed focus block to the Cloudflare Durable Object SQLite Leaderboard.
   useEffect(() => {
     if (!hydrated) return;
     const freshBlocks = collectUnnotifiedFocusBlocks(
@@ -157,11 +160,38 @@ export function useStudySession(options: UseStudySessionOptions = {}): UseStudyS
       notifiedBlockIdsRef.current,
     );
     if (freshBlocks.length > 0) {
+      const totalBlockSec = freshBlocks.reduce(
+        (acc, b) => acc + Math.max(0, Math.round((Number(b.durationMs) || 0) / 1000)),
+        0,
+      );
+      const remainingDeltaSec = Math.max(0, totalBlockSec - reportedInPhaseSecRef.current);
+      reportedInPhaseSecRef.current = 0;
+      multiplayer.sendStudyProgress({
+        deltaSeconds: remainingDeltaSec,
+        completedBlocksDelta: freshBlocks.length,
+        subjectTag: session.subjectTag,
+      });
       onNotifyRef.current?.(
-        `🎉 Hoàn thành ${freshBlocks.length} phiên Focus! Chuyển sang pha nghỉ.`,
+        `🎉 Hoàn thành ${freshBlocks.length} phiên Focus! Đã ghi nhận vào Bảng xếp hạng giờ học.`,
       );
     }
-  }, [hydrated, session.history]);
+  }, [hydrated, session.history, session.subjectTag]);
+
+  // Heartbeat 30 giây trong khi đang chạy pha Focus để Bảng xếp hạng cập nhật theo thời gian thực
+  useEffect(() => {
+    if (!hydrated || !session.pomodoro.running || session.pomodoro.phase !== 'focus') {
+      return;
+    }
+    const id = window.setInterval(() => {
+      reportedInPhaseSecRef.current += 30;
+      multiplayer.sendStudyProgress({
+        deltaSeconds: 30,
+        completedBlocksDelta: 0,
+        subjectTag: session.subjectTag,
+      });
+    }, 30000);
+    return () => window.clearInterval(id);
+  }, [hydrated, session.pomodoro.running, session.pomodoro.phase, session.subjectTag]);
 
   // Pure wall-clock phase reconciliation (no side effects inside setSession)
   const reconcileAt = useCallback((nowMs: number = Date.now()) => {

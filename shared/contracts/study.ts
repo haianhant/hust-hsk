@@ -534,10 +534,18 @@ export interface ClientPresenceMessage {
   requestId?: string;
 }
 
+export interface ClientStudyProgressMessage {
+  type: 'study:progress';
+  deltaSeconds: number;
+  completedBlocksDelta?: number;
+  subjectTag?: string | null;
+}
+
 export type StudyClientToServerMessage =
   | ClientClaimSeatMessage
   | ClientReleaseSeatMessage
-  | ClientPresenceMessage;
+  | ClientPresenceMessage
+  | ClientStudyProgressMessage;
 
 export interface ServerSeatClaimedMessage {
   type: 'study:seat-claimed';
@@ -586,9 +594,135 @@ export interface ServerStudyRoomSnapshotMessage {
   serverNowMs?: number;
 }
 
+export interface ServerLeaderboardAckMessage {
+  type: 'study:leaderboard-ack';
+  playerId: string;
+  entry: StudyLeaderboardEntry;
+  serverNowMs: number;
+}
+
 export type StudyServerToClientMessage =
   | ServerSeatClaimedMessage
   | ServerSeatReleasedMessage
   | ServerSeatRejectedMessage
   | ServerPresenceBroadcastMessage
-  | ServerStudyRoomSnapshotMessage;
+  | ServerStudyRoomSnapshotMessage
+  | ServerLeaderboardAckMessage;
+
+// ---------------------------------------------------------------------------
+// 6. Study Hours Leaderboard Contract (`feature.study.leaderboard`)
+// ---------------------------------------------------------------------------
+
+export type LeaderboardPeriod = 'daily' | 'weekly' | 'alltime';
+
+export const VALID_LEADERBOARD_PERIODS: readonly LeaderboardPeriod[] = [
+  'daily',
+  'weekly',
+  'alltime',
+] as const;
+
+const LEADERBOARD_PERIOD_SET = new Set<string>(VALID_LEADERBOARD_PERIODS);
+
+export function isValidLeaderboardPeriod(value: unknown): value is LeaderboardPeriod {
+  return typeof value === 'string' && LEADERBOARD_PERIOD_SET.has(value);
+}
+
+export interface StudyLeaderboardEntry {
+  rank: number;
+  playerId: string;
+  name: string;
+  /** Masked HUST cohort badge (e.g. "K67 · 2022****") — never exposes raw 8-digit MSSV. */
+  cohortBadge: string;
+  color: string;
+  gender?: AvatarGender;
+  outfit?: AvatarOutfitId;
+  hairStyle?: AvatarHairStyle;
+  subjectTag?: string | null;
+  /** Focus seconds for the currently selected period ('daily' | 'weekly' | 'alltime'). */
+  focusSeconds: number;
+  dailyFocusSeconds: number;
+  weeklyFocusSeconds: number;
+  totalFocusSeconds: number;
+  completedBlocks: number;
+  streakDays: number;
+  updatedAtMs: number;
+  isSelf?: boolean;
+}
+
+export interface StudyLeaderboardResponse {
+  ok: true;
+  period: LeaderboardPeriod;
+  dayKey: string;
+  weekKey: string;
+  entries: StudyLeaderboardEntry[];
+  myEntry: StudyLeaderboardEntry | null;
+  totalStudents: number;
+  serverNowMs: number;
+}
+
+const VN_TZ_OFFSET_MS = 7 * 3600 * 1000;
+
+/**
+ * Computes the canonical `YYYY-MM-DD` date key in Vietnam timezone (`UTC+7`).
+ */
+export function getVietnamDayKey(nowMs: number = Date.now()): string {
+  const vn = new Date(nowMs + VN_TZ_OFFSET_MS);
+  const y = vn.getUTCFullYear();
+  const m = String(vn.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(vn.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Computes the canonical `YYYY-Www` Monday-based ISO week key in Vietnam timezone (`UTC+7`).
+ */
+export function getVietnamWeekKey(nowMs: number = Date.now()): string {
+  const vn = new Date(nowMs + VN_TZ_OFFSET_MS);
+  const date = new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+/**
+ * Masks an 8-digit HUST MSSV into a privacy-safe cohort badge (`"K67 · 2022****"`).
+ */
+export function formatHustCohortBadge(mssv?: string | null): string {
+  if (typeof mssv !== 'string') return 'SV Bách Khoa';
+  const clean = mssv.trim();
+  const m = /^(20\d{2})\d{4}$/.exec(clean);
+  if (!m) return 'SV Bách Khoa';
+  const entryYear = Number(m[1]);
+  const k = clampScalar(entryYear - 1955, 50, 80);
+  return `K${k} · ${entryYear}****`;
+}
+
+/**
+ * Formats focus duration in seconds into natural Vietnamese (`"2 giờ 15 phút"`, `"45 phút"`).
+ */
+export function formatStudyDurationVi(seconds: number): string {
+  const safeSec = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (safeSec <= 0) return '0 phút';
+  if (safeSec < 60) return `${safeSec} giây`;
+  const totalMinutes = Math.floor(safeSec / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours <= 0) return `${minutes} phút`;
+  if (minutes <= 0) return `${hours} giờ`;
+  return `${hours} giờ ${String(minutes).padStart(2, '0')} phút`;
+}
+
+/**
+ * Formats focus duration in seconds into a compact badge (`"3.5h"`, `"25m"`).
+ */
+export function formatStudyHoursShort(seconds: number): string {
+  const safeSec = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (safeSec < 3600) {
+    return `${Math.max(1, Math.round(safeSec / 60))}p`;
+  }
+  const h = safeSec / 3600;
+  return `${h.toFixed(1).replace(/\.0$/, '')}h`;
+}
+

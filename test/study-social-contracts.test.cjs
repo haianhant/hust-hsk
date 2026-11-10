@@ -1762,6 +1762,182 @@ test('(29) Library multiplayer state stability across join/welcome updates and s
   assert.equal(peerB.seatedSeatId, null, 'study:seat-released must immediately clear seatedSeatId');
 });
 
+test('Multiplayer Nearby Players Emote & Chat Sync — emote clears walking state, survives trailing move packets, and chat bubbles sync across peers', () => {
+  const h = createTestMultiplayerHarness();
+  h.client.connect('secret-token-a', 'Nguyễn Văn A', '20226001');
+  const ws = h.sockets[0];
+  ws.serverOpen('p-student-a', 'hsk-1');
+
+  ws.serverSend({
+    type: 'welcome',
+    id: 'p-student-a',
+    roomId: 'hsk-1',
+    players: [
+      {
+        id: 'p-student-b',
+        name: 'Trần Thị B',
+        mssv: '20226002',
+        color: '#2E7D32',
+        x: -25,
+        z: 52,
+        facing: 0,
+        state: 'walking',
+      },
+    ],
+    count: 2,
+  });
+
+  // 1. Peer B triggers 'dance' emote right after walking up to A:
+  ws.serverSend({
+    type: 'emote',
+    id: 'p-student-b',
+    emote: 'dance',
+    t: h.getNow(),
+  });
+
+  let peerB = h.client.getRemotePlayer('p-student-b');
+  assert.ok(peerB);
+  assert.equal(peerB.state, 'idle', 'Incoming emote must immediately transition remote player from walking to idle');
+  const emoteState = h.client.getPlayerEmote('p-student-b');
+  assert.ok(emoteState);
+  assert.equal(emoteState.emote, 'dance');
+
+  // 2. A trailing move packet with state='walking' arrives 200ms later (in-flight packet before key release):
+  h.advanceTime(200);
+  ws.serverSend({
+    type: 'move',
+    id: 'p-student-b',
+    x: -25.05,
+    z: 52.02,
+    facing: 0,
+    state: 'walking',
+  });
+  peerB = h.client.getRemotePlayer('p-student-b');
+  assert.equal(peerB.state, 'idle', 'Trailing move packet within 750ms must not cancel active emote or revert to walking');
+  assert.ok(h.client.getPlayerEmote('p-student-b'), 'Emote must remain active');
+
+  // 3. Peer B sends a chat message:
+  ws.serverSend({
+    type: 'chat',
+    id: 'p-student-b',
+    name: 'Trần Thị B',
+    color: '#2E7D32',
+    text: 'Chào bạn! Cùng vào Thư viện Tạ Quang Bửu học HSK nhé!',
+    t: h.getNow(),
+  });
+
+  const bubble = h.client.getPlayerChatBubble('p-student-b');
+  assert.ok(bubble);
+  assert.equal(bubble.text, 'Chào bạn! Cùng vào Thư viện Tạ Quang Bửu học HSK nhé!');
+  const snap = h.client.getSnapshot();
+  assert.ok(snap.messages.some((m) => m.senderId === 'p-student-b' && m.text.includes('Thư viện Tạ Quang Bửu')));
+});
+
+test('Cloudflare Durable Object SQLite Study Hours Leaderboard — schema, anti-cheat clamping, daily/weekly/alltime ranking & privacy cohort masking', async () => {
+  const { HskRoom } = require('../worker/src/room.ts');
+  const {
+    formatHustCohortBadge,
+    formatStudyDurationVi,
+    formatStudyHoursShort,
+    getVietnamDayKey,
+    getVietnamWeekKey,
+  } = require('../shared/contracts/study.ts');
+  const { computeLocalStudyLeaderboardStats } = require('../features/study/study-session/session.ts');
+
+  // 1. Pure formatting & privacy masking helpers
+  assert.equal(formatHustCohortBadge('20226010'), 'K67 · 2022****');
+  assert.equal(formatHustCohortBadge('20231234'), 'K68 · 2023****');
+  assert.ok(!formatHustCohortBadge('20226010').includes('6010'), 'Must never leak last 4 digits of MSSV');
+  assert.equal(formatStudyDurationVi(5400), '1 giờ 30 phút');
+  assert.equal(formatStudyDurationVi(1500), '25 phút');
+  assert.equal(formatStudyHoursShort(5400), '1.5h');
+  assert.match(getVietnamDayKey(1700000000000), /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(getVietnamWeekKey(1700000000000), /^\d{4}-W\d{2}$/);
+
+  // 2. Durable Object HskRoom HTTP internal leaderboard endpoints & anti-cheat
+  const room = new HskRoom({
+    id: { toString: () => 'test-room' },
+    acceptWebSocket: () => {},
+    getWebSockets: () => [],
+  });
+
+  // Record 25 minutes (1500s) for student A
+  const recRes1 = await room.fetch(
+    new Request('https://internal/__leaderboard/record', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'secret-session-student-a',
+        name: 'Phạm Minh Tuấn',
+        mssv: '20226088',
+        gender: 'male',
+        outfit: 'windbreaker-hust',
+        hairStyle: 'short',
+        subjectTag: 'HSK 4 · Bài 8',
+        deltaSeconds: 1500,
+        completedBlocksDelta: 1,
+      }),
+    }),
+  );
+  const recJson1 = await recRes1.json();
+  assert.equal(recJson1.ok, true);
+  assert.equal(recJson1.entry.name, 'Phạm Minh Tuấn');
+  assert.equal(recJson1.entry.cohortBadge, 'K67 · 2022****');
+  assert.equal(recJson1.entry.dailyFocusSeconds, 1500);
+  assert.equal(recJson1.entry.completedBlocks, 1);
+
+  // Anti-cheat test: immediately sending 999,999 seconds (< 1 second later) is clamped to <= 62s
+  const recResCheat = await room.fetch(
+    new Request('https://internal/__leaderboard/record', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'secret-session-student-a',
+        name: 'Phạm Minh Tuấn',
+        mssv: '20226088',
+        deltaSeconds: 999999,
+        completedBlocksDelta: 99,
+      }),
+    }),
+  );
+  const recJsonCheat = await recResCheat.json();
+  assert.equal(recJsonCheat.ok, true);
+  assert.ok(
+    recJsonCheat.entry.dailyFocusSeconds <= 1565,
+    `Anti-cheat must clamp rapid huge deltaSeconds (got ${recJsonCheat.entry.dailyFocusSeconds})`,
+  );
+  assert.ok(recJsonCheat.entry.completedBlocks <= 5, 'Anti-cheat must clamp completedBlocksDelta <= 4');
+
+  // Query GET /__leaderboard?period=daily
+  const getRes = await room.fetch(
+    new Request(
+      `https://internal/__leaderboard?period=daily&limit=20&playerId=${encodeURIComponent(recJson1.playerId)}`,
+    ),
+  );
+  const lb = await getRes.json();
+  assert.equal(lb.ok, true);
+  assert.equal(lb.period, 'daily');
+  assert.ok(lb.entries.length >= 6, 'Includes 5 HUST seed students + recorded student');
+  assert.ok(lb.myEntry);
+  assert.equal(lb.myEntry.playerId, recJson1.playerId);
+  assert.equal(lb.myEntry.isSelf, true);
+
+  // Verify local study session stats aggregation
+  const nowMs = Date.now();
+  let s = createInitialStudySession();
+  s = recordFocusBlockCompletion(s, {
+    startedAtMs: nowMs - 1500_000,
+    endedAtMs: nowMs - 10_000,
+    durationMs: 1500_000,
+  });
+  const localStats = computeLocalStudyLeaderboardStats(s, nowMs);
+  assert.equal(localStats.dailyFocusSeconds, 1500);
+  assert.equal(localStats.weeklyFocusSeconds, 1500);
+  assert.equal(localStats.totalFocusSeconds, 1500);
+  assert.equal(localStats.completedBlocks, 1);
+});
+
+
 
 
 

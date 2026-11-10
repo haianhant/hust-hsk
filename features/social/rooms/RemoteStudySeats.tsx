@@ -11,13 +11,19 @@ import { useFrame } from '@react-three/fiber';
 import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import {
+  EMOTE_DEFINITIONS,
   HumanFigure,
   OUTFIT_PRESETS,
   SEATED_GROUP_Y_OFFSET,
+  computeEmotePoseTargets,
   computeSeatedPoseTargets,
   type FigureJoints,
 } from '../../../components/three/StudentAvatar';
-import { CANVAS_VN_FONT, wrapVietnameseCanvasContext } from '../../../components/three/TextPlate';
+import {
+  CANVAS_VN_FONT,
+  drawSpeechBubbleCanvas,
+  wrapVietnameseCanvasContext,
+} from '../../../components/three/TextPlate';
 import {
   multiplayer,
   type MultiplayerSnapshot,
@@ -189,6 +195,17 @@ function RemoteSeatedStudentView({
   );
   const displayName = player?.name || occupancy.occupantName || 'Sinh viên Bách khoa';
   const badgeTex = useStudyBadgeTexture(displayName, statusInfo.text, statusInfo.accentColor);
+  const bubbleMeshRef = useRef<THREE.Mesh>(null!);
+  const lastBubbleTextRef = useRef<string>('');
+  const bubbleTex = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 128;
+    const t = new THREE.CanvasTexture(canvas);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
+  useEffect(() => () => bubbleTex.dispose(), [bubbleTex]);
 
   useEffect(() => {
     syncWindowRemoteSeatsDebug();
@@ -212,27 +229,87 @@ function RemoteSeatedStudentView({
     };
   }, [seat, occupancy, displayName, presence, statusInfo.text]);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
+    const dt = Math.min(delta, 0.5);
+    const poseEase = Math.min(1, dt * 14);
     const t = clock.getElapsedTime();
-    const pose = computeSeatedPoseTargets(t);
+    const wallNow = Date.now();
+    const remoteEmote = multiplayer.getPlayerEmote(occupancy.occupantId);
+    const remoteBubble = multiplayer.getPlayerChatBubble(occupancy.occupantId);
+    const isEmoting = Boolean(remoteEmote) && wallNow < remoteEmote!.expiresAtMs;
     const j = joints;
-    const set = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'z', v: number) => {
-      if (ref.current) ref.current.rotation[axis] = v;
+    const set = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'y' | 'z', v: number) => {
+      if (ref.current) {
+        ref.current.rotation[axis] += (v - ref.current.rotation[axis]) * poseEase;
+      }
     };
-    set(j.legL, 'x', pose.legLTarget);
-    set(j.legR, 'x', pose.legRTarget);
-    set(j.kneeL, 'x', pose.kneeLTarget);
-    set(j.kneeR, 'x', pose.kneeRTarget);
-    set(j.footL, 'x', pose.footLTarget);
-    set(j.footR, 'x', pose.footRTarget);
-    set(j.armL, 'x', pose.armLTarget);
-    set(j.armR, 'x', pose.armRTarget);
-    set(j.elbowL, 'x', pose.elbowLTarget);
-    set(j.elbowR, 'x', pose.elbowRTarget);
-    if (j.body.current) {
-      j.body.current.rotation.x = pose.bodyLeanTarget;
-      j.body.current.rotation.z = pose.bodyRollTarget;
-      j.body.current.scale.y = 1 + Math.sin(t * 1.5) * 0.006;
+
+    if (isEmoting && remoteEmote) {
+      const elapsedSec = Math.max(0, (wallNow - remoteEmote.startedAtMs) / 1000);
+      const emotePose = computeEmotePoseTargets(remoteEmote.emote, elapsedSec, true);
+      set(j.legL, 'x', emotePose.legLTarget);
+      set(j.legR, 'x', emotePose.legRTarget);
+      set(j.legL, 'z', emotePose.legLZTarget);
+      set(j.legR, 'z', emotePose.legRZTarget);
+      set(j.kneeL, 'x', emotePose.kneeLTarget);
+      set(j.kneeR, 'x', emotePose.kneeRTarget);
+      set(j.footL, 'x', emotePose.footLTarget);
+      set(j.footR, 'x', emotePose.footRTarget);
+      set(j.armL, 'x', emotePose.armLTarget);
+      set(j.armR, 'x', emotePose.armRTarget);
+      set(j.armL, 'z', emotePose.armLZTarget);
+      set(j.armR, 'z', emotePose.armRZTarget);
+      set(j.elbowL, 'x', emotePose.elbowLTarget);
+      set(j.elbowR, 'x', emotePose.elbowRTarget);
+      set(j.body, 'x', emotePose.bodyLeanTarget);
+      set(j.body, 'y', emotePose.bodyYawTarget);
+      set(j.body, 'z', emotePose.bodyRollTarget);
+    } else {
+      const pose = computeSeatedPoseTargets(t);
+      set(j.legL, 'x', pose.legLTarget);
+      set(j.legR, 'x', pose.legRTarget);
+      set(j.legL, 'z', 0);
+      set(j.legR, 'z', 0);
+      set(j.kneeL, 'x', pose.kneeLTarget);
+      set(j.kneeR, 'x', pose.kneeRTarget);
+      set(j.footL, 'x', pose.footLTarget);
+      set(j.footR, 'x', pose.footRTarget);
+      set(j.armL, 'x', pose.armLTarget);
+      set(j.armR, 'x', pose.armRTarget);
+      set(j.armL, 'z', 0);
+      set(j.armR, 'z', 0);
+      set(j.elbowL, 'x', pose.elbowLTarget);
+      set(j.elbowR, 'x', pose.elbowRTarget);
+      set(j.body, 'x', pose.bodyLeanTarget);
+      set(j.body, 'y', 0);
+      set(j.body, 'z', pose.bodyRollTarget);
+      if (j.body.current) {
+        j.body.current.scale.y = 1 + Math.sin(t * 1.5) * 0.006;
+      }
+    }
+
+    let overheadText = '';
+    if (remoteBubble && wallNow < remoteBubble.expiresAtMs) {
+      overheadText = `💬 ${remoteBubble.text}`;
+    } else if (isEmoting && remoteEmote) {
+      const def = EMOTE_DEFINITIONS.find((d) => d.id === remoteEmote.emote);
+      if (def) overheadText = `${def.icon} ${def.labelVi} · ${def.labelZh}`;
+    }
+    if (bubbleMeshRef.current) {
+      if (overheadText) {
+        if (lastBubbleTextRef.current !== overheadText) {
+          lastBubbleTextRef.current = overheadText;
+          drawSpeechBubbleCanvas(
+            bubbleTex.image as HTMLCanvasElement,
+            overheadText,
+            remoteBubble ? '#0284C7' : '#F59E0B',
+          );
+          bubbleTex.needsUpdate = true;
+        }
+        bubbleMeshRef.current.visible = true;
+      } else {
+        bubbleMeshRef.current.visible = false;
+      }
     }
   });
 
@@ -282,6 +359,15 @@ function RemoteSeatedStudentView({
 
       {/* Billboard đặt ngoài nhóm xoay để chữ luôn đọc xuôi từ mọi góc camera */}
       <Billboard position={[0, 1.56, 0]}>
+        <mesh ref={bubbleMeshRef} visible={false} position={[0, 0.36, 0]}>
+          <planeGeometry args={[1.65, 0.42]} />
+          <meshBasicMaterial
+            map={bubbleTex}
+            transparent
+            depthTest={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
         <mesh>
           <planeGeometry args={[1.62, 0.36]} />
           <meshBasicMaterial map={badgeTex} transparent depthWrite={false} side={THREE.DoubleSide} />

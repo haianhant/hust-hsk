@@ -24,8 +24,22 @@ interface DurableObjectNamespace {
   get(id: DurableObjectId): DurableObjectStub;
 }
 
+interface SqlStorageCursor<T = Record<string, unknown>> extends Iterable<T> {
+  toArray(): T[];
+  one(): T;
+}
+
+interface SqlStorage {
+  exec<T = Record<string, unknown>>(query: string, ...bindings: unknown[]): SqlStorageCursor<T>;
+}
+
+interface DurableObjectStorage {
+  readonly sql?: SqlStorage;
+}
+
 interface DurableObjectState {
   readonly id: DurableObjectId;
+  readonly storage?: DurableObjectStorage;
   acceptWebSocket(ws: WebSocket, tags?: string[]): void;
   getWebSockets(tag?: string): WebSocket[];
 }

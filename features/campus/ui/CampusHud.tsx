@@ -106,6 +106,7 @@ export interface CampusHudProps {
   pomodoro?: PomodoroState;
   focusPolicy?: FocusRuntimePolicy;
   onOpenStudyPanel?: () => void;
+  onOpenLeaderboard?: () => void;
   onStandUp?: () => void;
   onReconcileStudyAt?: (nowMs: number) => void;
   onExitFocusMode?: () => void;
@@ -156,6 +157,7 @@ export function CampusHud({
   pomodoro,
   focusPolicy,
   onOpenStudyPanel,
+  onOpenLeaderboard,
   onStandUp,
   onReconcileStudyAt,
   onExitFocusMode,
@@ -311,6 +313,18 @@ export function CampusHud({
               onOpenStudyPanel={onOpenStudyPanel}
               onReconcileStudyAt={onReconcileStudyAt}
             />
+          )}
+          {onOpenLeaderboard && (
+            <button
+              id="open-study-leaderboard"
+              data-testid="open-study-leaderboard"
+              type="button"
+              onClick={onOpenLeaderboard}
+              title="Bảng xếp hạng giờ học Bách khoa"
+              className="rounded-full bg-amber-600/90 px-3.5 py-2 text-sm font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-amber-700"
+            >
+              🏆 Xếp hạng
+            </button>
           )}
           {onToggleLofi && (
             <button
