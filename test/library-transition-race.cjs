@@ -248,7 +248,17 @@ async function runBrowserRaceAndLifecycleSmoke() {
         window.__bkhn.navigateLibraryPreset(id);
       }
     }, presetIds);
-    await page.waitForTimeout(350);
+    await page.waitForFunction(
+      () =>
+        Boolean(
+          window.__bkhnLibraryPerf &&
+            typeof window.__bkhnLibraryPerf.geometries === 'number' &&
+            window.__bkhnLibraryPerf.floor === 10,
+        ),
+      null,
+      { timeout: 15000 },
+    );
+    await page.waitForTimeout(200);
     const baselinePerf = await page.evaluate(() => ({ ...window.__bkhnLibraryPerf }));
 
     // Rapidly cycle through all 11 presets 3 times (33 floor switches) and verify zero geometry/texture growth!
@@ -259,7 +269,17 @@ async function runBrowserRaceAndLifecycleSmoke() {
         }
       }
     }, presetIds);
-    await page.waitForTimeout(300);
+    await page.waitForFunction(
+      () =>
+        Boolean(
+          window.__bkhnLibraryPerf &&
+            typeof window.__bkhnLibraryPerf.geometries === 'number' &&
+            window.__bkhnLibraryPerf.floor === 10,
+        ),
+      null,
+      { timeout: 15000 },
+    );
+    await page.waitForTimeout(200);
     const afterCyclesPerf = await page.evaluate(() => ({
       perf: { ...window.__bkhnLibraryPerf },
       nav: window.__bkhn.getLibraryNavState(),
