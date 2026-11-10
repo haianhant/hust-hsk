@@ -14,27 +14,29 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
   const h7 = 7 * floorHeight; // 22.4 m (cánh trái + trụ góc tròn 7 tầng)
   const h8 = 8 * floorHeight; // 25.6 m (khối tháp phải 8 tầng mang biển B1 xanh dương)
   const h5 = 5 * floorHeight; // 16.0 m (khối giật cấp phía trước 5 tầng)
-  const baseRedH = 2 * floorHeight; // 6.4 m (2 tầng đế ốp gạch đỏ nâu #9E3A26)
-  const B1_RED_BRICK = '#9E3A26';
-  const B1_WHITE = '#F5F7FA';
+  const basePlinthH = 2 * floorHeight; // 6.4 m (2 tầng đế sơn trắng sáng đồng bộ toàn tòa B1)
+  const B1_PLINTH_WHITE = '#F8FAFC';
+  const B1_WHITE = '#FFFFFF';
 
+  // Xoay 180° (Math.PI) để mặt tiền sảnh tròn (Rotunda), bồn cỏ bán nguyệt và biển "B1"
+  // hướng về phía Bắc (-Z, nhìn ra trục đường chính Cổng Trần Đại Nghĩa và nhóm sinh viên trước sảnh)
   return (
-    <group position={[center.x, 0, center.z]}>
-      {/* ============ 1. CÁNH TRÁI 7 TẦNG (XẾP CHÉO CHỮ V, TẦNG 1-2 ĐỎ NÂU, TẦNG 3-7 TRẮNG) ============ */}
+    <group position={[center.x, 0, center.z]} rotation-y={Math.PI}>
+      {/* ============ 1. CÁNH TRÁI 7 TẦNG (XẾP CHÉO CHỮ V, TOÀN KHỐI SƠN TRẮNG SÁNG) ============ */}
       <group position={[-5.4, 0, -1.2]} rotation-y={0.28}>
-        {/* Tầng 1-2 ốp đỏ nâu đặc trưng (b1-soict-01.jpg) */}
-        <mesh position={[0, baseRedH / 2, 0]} castShadow receiveShadow>
-          <boxGeometry args={[9.4, baseRedH, 5.6]} />
-          <meshStandardMaterial color={B1_RED_BRICK} roughness={0.82} />
+        {/* Tầng 1-2 khối đế sơn trắng sáng + phào chỉ ngang */}
+        <mesh position={[0, basePlinthH / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[9.4, basePlinthH, 5.6]} />
+          <meshStandardMaterial color={B1_PLINTH_WHITE} roughness={0.8} />
         </mesh>
-        {/* Tầng 3-7 sơn trắng kem sáng */}
-        <mesh position={[0, (baseRedH + h7) / 2, 0]} castShadow receiveShadow>
-          <boxGeometry args={[9.3, h7 - baseRedH, 5.5]} />
-          <meshStandardMaterial color={B1_WHITE} roughness={0.84} />
+        {/* Tầng 3-7 sơn trắng tinh khiết */}
+        <mesh position={[0, (basePlinthH + h7) / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[9.3, h7 - basePlinthH, 5.5]} />
+          <meshStandardMaterial color={B1_WHITE} roughness={0.82} />
         </mesh>
         <mesh position={[0, h7 + 0.22, 0]} castShadow>
           <boxGeometry args={[9.6, 0.44, 5.8]} />
-          <meshStandardMaterial color="#CBD5E1" roughness={0.8} />
+          <meshStandardMaterial color="#E2E8F0" roughness={0.78} />
         </mesh>
         {[0, 1, 2, 3, 4, 5, 6].map((fl) =>
           [-3.2, -1.1, 1.1, 3.2].map((wx, idx) => {
@@ -56,27 +58,27 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
 
       {/* ============ 2. CÁNH PHẢI 8 TẦNG GIẬT CẤP XUỐNG 5 TẦNG + BIỂN CHỮ "B1" XANH DƯƠNG ============ */}
       <group position={[4.6, 0, -1.5]} rotation-y={-0.22}>
-        {/* Khối cao 8 tầng phía sau */}
+        {/* Khối cao 8 tầng phía sau màu trắng */}
         <mesh position={[0, h8 / 2, -0.6]} castShadow receiveShadow>
           <boxGeometry args={[10.2, h8, 5.4]} />
-          <meshStandardMaterial color={B1_WHITE} roughness={0.84} />
+          <meshStandardMaterial color={B1_WHITE} roughness={0.82} />
         </mesh>
         <mesh position={[0, h8 + 0.22, -0.6]} castShadow>
           <boxGeometry args={[10.5, 0.44, 5.7]} />
-          <meshStandardMaterial color="#CBD5E1" roughness={0.8} />
+          <meshStandardMaterial color="#E2E8F0" roughness={0.78} />
         </mesh>
-        {/* Khối giật cấp 5 tầng nhô ra phía trước (tầng 1-2 ốp đỏ nâu, tầng 3-5 trắng) */}
-        <mesh position={[0.4, baseRedH / 2, 2.2]} castShadow receiveShadow>
-          <boxGeometry args={[8.8, baseRedH, 3.8]} />
-          <meshStandardMaterial color={B1_RED_BRICK} roughness={0.82} />
+        {/* Khối giật cấp 5 tầng nhô ra phía trước sơn trắng đồng bộ */}
+        <mesh position={[0.4, basePlinthH / 2, 2.2]} castShadow receiveShadow>
+          <boxGeometry args={[8.8, basePlinthH, 3.8]} />
+          <meshStandardMaterial color={B1_PLINTH_WHITE} roughness={0.8} />
         </mesh>
-        <mesh position={[0.4, (baseRedH + h5) / 2, 2.2]} castShadow receiveShadow>
-          <boxGeometry args={[8.7, h5 - baseRedH, 3.7]} />
-          <meshStandardMaterial color={B1_WHITE} roughness={0.84} />
+        <mesh position={[0.4, (basePlinthH + h5) / 2, 2.2]} castShadow receiveShadow>
+          <boxGeometry args={[8.7, h5 - basePlinthH, 3.7]} />
+          <meshStandardMaterial color={B1_WHITE} roughness={0.82} />
         </mesh>
         <mesh position={[0.4, h5 + 0.2, 2.2]} castShadow>
           <boxGeometry args={[9.0, 0.4, 4.0]} />
-          <meshStandardMaterial color="#CBD5E1" roughness={0.8} />
+          <meshStandardMaterial color="#E2E8F0" roughness={0.78} />
         </mesh>
         {/* Cửa sổ mặt trước khối 5 tầng */}
         {[0, 1, 2, 3, 4].map((fl) =>
@@ -121,7 +123,7 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
             ctx.clearRect(0, 0, w, h);
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.font = '900 122px Arial, sans-serif';
+            ctx.font = '700 120px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
             ctx.lineWidth = 6;
             ctx.strokeStyle = '#FFFFFF';
             ctx.strokeText('B1', w / 2, h / 2);
@@ -138,7 +140,7 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
         {/* Trụ góc bo tròn 7 tầng màu trắng */}
         <mesh position={[0, h7 / 2, 0]} castShadow receiveShadow>
           <cylinderGeometry args={[3.15, 3.15, h7, 24]} />
-          <meshStandardMaterial color={B1_WHITE} roughness={0.82} />
+          <meshStandardMaterial color={B1_WHITE} roughness={0.8} />
         </mesh>
         {/* Các dải kính cong ngang theo từng tầng trên trụ góc tròn */}
         {[2, 3, 4, 5, 6].map((fl) => (
@@ -156,12 +158,12 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
         ))}
         <mesh position={[0, h7 + 0.24, 0]} castShadow>
           <cylinderGeometry args={[3.35, 3.35, 0.48, 24]} />
-          <meshStandardMaterial color="#CBD5E1" roughness={0.8} />
+          <meshStandardMaterial color="#E2E8F0" roughness={0.78} />
         </mesh>
 
         {/* Khối sảnh tròn (Rotunda) 3 tầng nhô ra phía trước tại góc giao (b1-soict-01.jpg, b1-soict-02.jpg) */}
         <group position={[0, 0, 2.8]}>
-          {/* Tầng 1: Sảnh kính cong + hàng cột trụ tròn + mái đón (canopy) đua rộng */}
+          {/* Tầng 1: Sảnh kính cong + hàng cột trụ tròn trắng + mái đón (canopy) đua rộng */}
           <mesh position={[0, 1.7, 0]} castShadow>
             <cylinderGeometry args={[2.9, 2.9, 3.4, 24]} />
             <meshStandardMaterial color="#1E2D3B" roughness={0.25} metalness={0.35} />
@@ -173,27 +175,27 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
               castShadow
             >
               <cylinderGeometry args={[0.18, 0.18, 3.4, 14]} />
-              <meshStandardMaterial color="#E2E8F0" roughness={0.75} />
+              <meshStandardMaterial color={B1_WHITE} roughness={0.75} />
             </mesh>
           ))}
-          {/* Mái đón sảnh cong ốp alu bạc-trắng */}
+          {/* Mái đón sảnh cong ốp alu trắng sáng */}
           <mesh position={[0, 3.45, 0.55]} castShadow>
             <cylinderGeometry args={[3.9, 3.9, 0.36, 24]} />
-            <meshStandardMaterial color="#E2E8F0" roughness={0.6} metalness={0.25} />
+            <meshStandardMaterial color={B1_WHITE} roughness={0.6} metalness={0.2} />
           </mesh>
-          {/* Tầng 2 của khối sảnh tròn: ốp màu đỏ nâu đặc trưng (b1-soict-02.jpg) */}
+          {/* Tầng 2 của khối sảnh tròn: sơn trắng sáng đồng bộ toàn tòa B1 */}
           <mesh position={[0, 4.9, 0]} castShadow receiveShadow>
             <cylinderGeometry args={[3.3, 3.3, 2.8, 24]} />
-            <meshStandardMaterial color={B1_RED_BRICK} roughness={0.82} />
+            <meshStandardMaterial color={B1_PLINTH_WHITE} roughness={0.8} />
           </mesh>
           {/* Tầng 3 của khối sảnh tròn: sơn trắng + dải cửa sổ + lan can sân thượng */}
           <mesh position={[0, 7.7, 0]} castShadow receiveShadow>
             <cylinderGeometry args={[3.3, 3.3, 2.8, 24]} />
-            <meshStandardMaterial color={B1_WHITE} roughness={0.84} />
+            <meshStandardMaterial color={B1_WHITE} roughness={0.82} />
           </mesh>
           <mesh position={[0, 9.25, 0]} castShadow>
             <cylinderGeometry args={[3.48, 3.48, 0.35, 24]} />
-            <meshStandardMaterial color="#CBD5E1" roughness={0.8} />
+            <meshStandardMaterial color="#E2E8F0" roughness={0.78} />
           </mesh>
         </group>
       </group>
@@ -202,7 +204,7 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
       <group position={[-0.2, 0, 5.4]}>
         <mesh position={[0, 0.16, 0]} receiveShadow>
           <cylinderGeometry args={[3.2, 3.3, 0.32, 24]} />
-          <meshStandardMaterial color="#94A3B8" roughness={0.88} />
+          <meshStandardMaterial color="#CBD5E1" roughness={0.85} />
         </mesh>
         <mesh position={[0, 0.33, 0]} receiveShadow>
           <cylinderGeometry args={[2.9, 2.9, 0.05, 24]} />
@@ -217,22 +219,22 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
       </group>
 
       <LabelPlane
-        textureKey="soict-b1-sign"
+        textureKey="soict-b1-sign-white-blue"
         canvasW={512}
         canvasH={128}
         draw={(ctx, w, hCanvas) => {
-          ctx.fillStyle = '#9E3A26';
+          ctx.fillStyle = '#1D4E9E';
           ctx.fillRect(0, 0, w, hCanvas);
-          ctx.strokeStyle = '#F8FAFC';
+          ctx.strokeStyle = '#FFFFFF';
           ctx.lineWidth = 6;
           ctx.strokeRect(8, 8, w - 16, hCanvas - 16);
           ctx.fillStyle = '#FFFFFF';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.font = '900 32px Arial, sans-serif';
+          ctx.font = '700 30px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
           ctx.fillText('NHÀ B1 · TRƯỜNG CNTT & TT (SoICT)', w / 2, hCanvas * 0.4);
-          ctx.fillStyle = '#FDE68A';
-          ctx.font = '700 22px Arial, sans-serif';
+          ctx.fillStyle = '#E0F2FE';
+          ctx.font = '600 20px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
           ctx.fillText('SCHOOL OF INFORMATION AND COMMUNICATIONS TECHNOLOGY', w / 2, hCanvas * 0.75);
         }}
         size={[4.4, 0.92]}

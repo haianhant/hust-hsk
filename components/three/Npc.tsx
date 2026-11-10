@@ -19,21 +19,23 @@ import { useFrame } from '@react-three/fiber';
 import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import { HumanFigure, type FigureJoints } from './StudentAvatar';
+import { CANVAS_VN_FONT, wrapVietnameseCanvasContext } from './TextPlate';
 
 function useNameTexture(name: string): THREE.CanvasTexture {
   const texture = useMemo(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
+    const rawCtx = canvas.getContext('2d');
+    if (rawCtx) {
+      const ctx = wrapVietnameseCanvasContext(rawCtx);
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       const r = 16;
       ctx.beginPath();
       ctx.roundRect(4, 4, 248, 56, r);
       ctx.fill();
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 32px Arial, sans-serif';
+      ctx.font = `700 30px ${CANVAS_VN_FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(name, 128, 34);

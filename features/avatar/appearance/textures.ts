@@ -10,6 +10,7 @@ import {
   makeHairStrandTexture,
   makeSoftShadowTexture,
 } from '../../../components/three/materials';
+import { CANVAS_VN_FONT } from '../../../components/three/TextPlate';
 import { WHITE } from './presets';
 
 // Shared singleton textures for all human figures (Player + NPCs + AmbientLife)
@@ -166,7 +167,7 @@ export function useStudentIdTexture(): THREE.CanvasTexture {
       ctx.fillStyle = '#1E3A8A';
       ctx.fillRect(0, 166, 128, 26);
       ctx.fillStyle = '#FACC15';
-      ctx.font = 'bold 14px Arial, sans-serif';
+      ctx.font = `700 14px ${CANVAS_VN_FONT}`;
       ctx.fillText('SINH VIÊN BK', 64, 184);
     }
     const tex = new THREE.CanvasTexture(canvas);

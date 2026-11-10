@@ -361,8 +361,9 @@ export default function LibraryLobby({
     if (multiFloor.groupA.visible !== showBlockA) multiFloor.groupA.visible = showBlockA;
     if (multiFloor.groupB.visible !== showBlockB) multiFloor.groupB.visible = showBlockB;
     if (multiFloor.groupD.visible !== showBlockD) multiFloor.groupD.visible = showBlockD;
-    if (floor1AnchorsRef.current && floor1AnchorsRef.current.visible !== showFloor1) {
-      floor1AnchorsRef.current.visible = showFloor1;
+    // Giữ hiển thị bàn đọc, ghế ngồi và tượng GS. Tạ Quang Bửu ở Tầng 1 xuyên suốt giếng trời thông tầng Block A (T1–T5)
+    if (floor1AnchorsRef.current && floor1AnchorsRef.current.visible !== showBlockA) {
+      floor1AnchorsRef.current.visible = showBlockA;
     }
     if (floor6InteractiveRef.current && floor6InteractiveRef.current.visible !== (flr === 6)) {
       floor6InteractiveRef.current.visible = flr === 6;

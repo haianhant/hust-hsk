@@ -106,6 +106,7 @@ import StudentAvatar, {
   computeSeatedPoseTargets,
   type FigureJoints,
 } from './StudentAvatar';
+import { CANVAS_VN_FONT, wrapVietnameseCanvasContext } from './TextPlate';
 
 function usePlayerNameplateTexture(name: string): THREE.CanvasTexture {
   const display = (name || 'Sinh viên').trim() || 'Sinh viên';
@@ -113,8 +114,9 @@ function usePlayerNameplateTexture(name: string): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 80;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
+    const rawCtx = canvas.getContext('2d');
+    if (rawCtx) {
+      const ctx = wrapVietnameseCanvasContext(rawCtx);
       ctx.clearRect(0, 0, 512, 80);
       // Pill nền tối mờ sang trọng + viền vàng mảnh
       ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
@@ -129,11 +131,11 @@ function usePlayerNameplateTexture(name: string): THREE.CanvasTexture {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       let fontSize = 32;
-      ctx.font = `700 ${fontSize}px system-ui, -apple-system, Arial, sans-serif`;
+      ctx.font = `700 ${fontSize}px ${CANVAS_VN_FONT}`;
       const textW = ctx.measureText(display).width;
       if (textW > 440) {
         fontSize = Math.max(18, Math.floor((fontSize * 440) / textW));
-        ctx.font = `700 ${fontSize}px system-ui, -apple-system, Arial, sans-serif`;
+        ctx.font = `700 ${fontSize}px ${CANVAS_VN_FONT}`;
       }
       ctx.fillText(display, 256, 42);
     }
@@ -900,6 +902,12 @@ export default function Player() {
       // 'bkhn:classroom' { inClassroom }.
       enterClassroom: () => {
         seatActionsRef.current.forceClearSeat();
+        keysRef.current.clear();
+        playerInput.move.x = 0;
+        playerInput.move.y = 0;
+        playerInput.run = false;
+        moveBlendRef.current = 0;
+        playerState.moving = false;
         // Xe không vào phòng học: nếu đang lái thì để xe ngoài sân, người
         // vào phòng ở trạng thái đi bộ (xe vẫn gọi lại được sau khi ra).
         if (ridingRef.current) {
@@ -911,6 +919,7 @@ export default function Player() {
         }
         playerState.inClassroom = true;
         posRef.current = { ...CLASSROOM.spawn };
+        playerState.pos = { ...CLASSROOM.spawn };
         // Hướng nhìn = -(sin yaw, cos yaw): yaw = 0 → nhìn về -Z (bắc, về
         // phía bảng đen). yaw = π là SAI (nhìn về +Z, tường nam).
         yawRef.current = 0;
@@ -927,10 +936,17 @@ export default function Player() {
         window.dispatchEvent(new CustomEvent('bkhn:classroom', { detail: { inClassroom: true } }));
       },
       exitClassroom: () => {
+        keysRef.current.clear();
+        playerInput.move.x = 0;
+        playerInput.move.y = 0;
+        playerInput.run = false;
+        moveBlendRef.current = 0;
+        playerState.moving = false;
         playerState.inClassroom = false;
         // Ra khỏi phòng về ngay cửa phòng học (chân bậc tam cấp C1),
         // quay mặt về bắc (yaw = 0) nhìn về quảng trường C1.
         posRef.current = { x: CLASSROOM_DOOR.pos.x, z: CLASSROOM_DOOR.pos.z + 2.5 };
+        playerState.pos = { ...posRef.current };
         yawRef.current = 0;
         playerState.cameraYaw = 0;
         pitchRef.current = 0.18;
@@ -941,6 +957,12 @@ export default function Player() {
       isInClassroom: () => playerState.inClassroom,
       enterLibraryLobby: () => {
         seatActionsRef.current.forceClearSeat();
+        keysRef.current.clear();
+        playerInput.move.x = 0;
+        playerInput.move.y = 0;
+        playerInput.run = false;
+        moveBlendRef.current = 0;
+        playerState.moving = false;
         if (ridingRef.current) {
           ridingRef.current = false;
           bikeSpeedRef.current = 0;
@@ -955,6 +977,7 @@ export default function Player() {
         posRef.current = { ...LIBRARY_LOBBY.spawn };
         playerState.pos = { ...LIBRARY_LOBBY.spawn };
         facingRef.current = Math.PI;
+        playerState.facing = Math.PI;
         yawRef.current = 0; // nhìn thẳng về bắc (-Z), hướng tượng GS. Tạ Quang Bửu & tường nhị phân 0/1
         playerState.cameraYaw = 0;
         pitchRef.current = 0.2;
@@ -973,6 +996,12 @@ export default function Player() {
       exitLibraryLobby: () => {
         libraryNavigationController.cancelInFlightTransition();
         seatActionsRef.current.forceClearSeat();
+        keysRef.current.clear();
+        playerInput.move.x = 0;
+        playerInput.move.y = 0;
+        playerInput.run = false;
+        moveBlendRef.current = 0;
+        playerState.moving = false;
         playerState.inLibraryLobby = false;
         playerState.libraryFloor = 1;
         playerState.libraryY = 0;
@@ -980,6 +1009,7 @@ export default function Player() {
         posRef.current = { x: LIBRARY_DOOR.pos.x, z: 20.5 };
         playerState.pos = { ...posRef.current };
         facingRef.current = Math.PI;
+        playerState.facing = Math.PI;
         yawRef.current = 0;
         playerState.cameraYaw = 0;
         pitchRef.current = 0.18;
@@ -1227,6 +1257,9 @@ export default function Player() {
       playerInput.move.x = x;
       playerInput.move.y = y;
       playerInput.run = k.has('ShiftLeft') || k.has('ShiftRight');
+      if (x === 0 && y === 0) {
+        playerState.moving = false;
+      }
     };
     // Đợt 3 mục 7: đang gõ trong ô nhập liệu (input pinyin của QuestPanel,
     // textarea/select/contentEditable) thì phím thuộc về ô đó — không
@@ -1263,13 +1296,21 @@ export default function Player() {
       keysRef.current.clear();
       syncMove();
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        keysRef.current.clear();
+        syncMove();
+      }
+    };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
 
