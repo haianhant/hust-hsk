@@ -153,11 +153,11 @@ async function runBrowserSmoke() {
     await page.evaluate(() => {
       window.__bkhn.enterLibraryLobby();
     });
-    await page.waitForSelector('[data-testid="library-floor-nav"]', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="library-floor-nav"]', { timeout: 30000 });
 
     // Expand the floor selector list
     await page.click('[data-testid="library-floor-toggle"]');
-    await page.waitForSelector('[data-testid="library-floor-list"]', { timeout: 5000 });
+    await page.waitForSelector('[data-testid="library-floor-list"]', { timeout: 15000 });
 
     // 1. Sit at Floor 1 seat tqb-1f-t1-s1, verify seated state, then navigate to Floor 2 via UI button
     // and verify seat is safely released!

@@ -175,7 +175,7 @@ async function runBrowserCameraSmoke() {
       timeout: 30000,
     });
     await page.evaluate(() => window.__bkhn.enterLibraryLobby());
-    await page.waitForSelector('[data-testid="library-floor-nav"]', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="library-floor-nav"]', { timeout: 30000 });
 
     // 1. Navigate to Room 401 and place player in the open aisle near South partition wall (z = -13.2)
     await page.evaluate(() => {

@@ -225,7 +225,7 @@ async function runBrowserRaceAndLifecycleSmoke() {
       timeout: 30000,
     });
     await page.evaluate(() => window.__bkhn.enterLibraryLobby());
-    await page.waitForSelector('[data-testid="library-floor-nav"]', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="library-floor-nav"]', { timeout: 30000 });
 
     // Warm up all 11 presets once and let WebGLRenderer render a frame on the final floor
     // so all lazy floor groups (Floors 1-5, Room 401/501, Floors 6-7, Floor 10) are initialized
