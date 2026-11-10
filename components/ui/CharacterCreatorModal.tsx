@@ -327,7 +327,7 @@ export default function CharacterCreatorModal({
       data-testid="character-creator-modal"
       className={
         mode === 'entry'
-          ? 'w-full max-w-4xl rounded-3xl border border-white/40 bg-[#FAF6F0]/95 p-4 text-[#2B2B2B] shadow-2xl backdrop-blur-md sm:p-6'
+          ? 'w-full max-w-5xl rounded-3xl border border-white/40 bg-[#FAF6F0]/95 p-4 text-[#2B2B2B] shadow-2xl backdrop-blur-md sm:p-6'
           : 'fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 backdrop-blur-xs sm:p-5'
       }
     >
@@ -335,7 +335,7 @@ export default function CharacterCreatorModal({
         className={
           mode === 'entry'
             ? 'w-full'
-            : 'max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-white/30 bg-[#FAF6F0] p-4 text-[#2B2B2B] shadow-2xl sm:p-6'
+            : 'max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-white/30 bg-[#FAF6F0] p-4 text-[#2B2B2B] shadow-2xl sm:p-6'
         }
       >
         {/* Header */}
@@ -492,10 +492,11 @@ export default function CharacterCreatorModal({
           {/* Cột Phải: Tùy chọn thông tin, giới tính, kiểu tóc, đồng phục, phụ kiện (7 cột) */}
           <div className="flex flex-col justify-between space-y-3.5 lg:col-span-7">
             {/* 1. Tên hiển thị trên đầu & MSSV */}
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <label className="block">
-                <span className="text-xs font-bold text-[#1E293B]">
-                  Tên hiển thị trên đầu <span className="font-normal text-slate-500">(trống = &quot;Sinh viên&quot;)</span>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-12">
+              <label className="flex flex-col justify-between sm:col-span-7">
+                <span className="flex items-baseline justify-between gap-1.5 whitespace-nowrap text-xs font-bold text-[#1E293B]">
+                  <span>Tên hiển thị trên đầu</span>
+                  <span className="text-[11px] font-normal text-slate-500">(trống = &quot;Sinh viên&quot;)</span>
                 </span>
                 <input
                   id="identity-name"
@@ -513,9 +514,9 @@ export default function CharacterCreatorModal({
                   className="mt-1 w-full rounded-xl border border-black/20 bg-white px-3 py-2 text-sm text-[#1E293B] focus:border-[#B5121B] focus:outline-none"
                 />
               </label>
-              <label className="block">
-                <span className="text-xs font-bold text-[#1E293B]">
-                  MSSV (8 chữ số HUST)
+              <label className="flex flex-col justify-between sm:col-span-5">
+                <span className="block whitespace-nowrap text-xs font-bold text-[#1E293B]">
+                  MSSV <span className="text-[11px] font-normal text-slate-500">(8 chữ số HUST)</span>
                 </span>
                 <input
                   id="identity-mssv"
