@@ -22,6 +22,7 @@ import {
   computeNaturalGaitTargets,
   type FigureJoints,
 } from './StudentAvatar';
+import { CANVAS_VN_FONT, wrapVietnameseCanvasContext } from './TextPlate';
 import {
   computeCanonicalLibraryElevation,
   getBlockForFloor,
@@ -58,8 +59,9 @@ function useNameTagTexture(label: string): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
+    const rawCtx = canvas.getContext('2d');
+    if (rawCtx) {
+      const ctx = wrapVietnameseCanvasContext(rawCtx);
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.beginPath();
       ctx.roundRect(4, 4, 504, 56, 16);
@@ -69,10 +71,10 @@ function useNameTagTexture(label: string): THREE.CanvasTexture {
       ctx.textBaseline = 'middle';
       // Co chữ vừa khung nếu tên dài (tối đa 30 ký tự + " (12345678)").
       let size = 32;
-      ctx.font = `bold ${size}px Arial, sans-serif`;
+      ctx.font = `700 ${size}px ${CANVAS_VN_FONT}`;
       const w = ctx.measureText(label).width;
       if (w > 470) size = Math.max(18, Math.floor((size * 470) / w));
-      ctx.font = `bold ${size}px Arial, sans-serif`;
+      ctx.font = `700 ${size}px ${CANVAS_VN_FONT}`;
       ctx.fillText(label, 256, 34);
     }
     const t = new THREE.CanvasTexture(canvas);
@@ -149,6 +151,7 @@ function RemotePlayerView({
 }) {
   const groupRef = useRef<THREE.Group>(null!);
   const figureRef = useRef<THREE.Group>(null!);
+  const bikeGroupRef = useRef<THREE.Group>(null!);
   const joints = useFigureJoints();
   const initFloor = sanitizeLibraryFloor(player.libraryFloor ?? 1);
   const initY =
@@ -161,31 +164,36 @@ function RemotePlayerView({
         ).y
       : 0;
   const cur = useRef({ x: player.x, y: initY, z: player.z, facing: player.facing });
+  const lastTargetRef = useRef({ x: player.x, z: player.z, movedAt: performance.now() });
   const prevFloorRef = useRef<number>(initFloor);
   const phase = useRef(0);
   const label = `${player.name} (${player.mssv})`;
   const tagTex = useNameTagTexture(label);
 
   useEffect(() => {
+    const latest = multiplayer.getRemotePlayer(player.id) ?? player;
+    cur.current.x = latest.x;
+    cur.current.z = latest.z;
+    cur.current.facing = latest.facing;
+    remoteRenderPos.set(player.id, {
+      x: latest.x,
+      z: latest.z,
+      facing: latest.facing,
+    });
     return () => {
       remoteRenderPos.delete(player.id);
     };
-  }, [player.id]);
+  }, [player.id, scene]);
 
   useFrame((_, delta) => {
-    // Kẹp delta ở 0,5 s/khung: khung chậm (điện thoại yếu, SwiftShader
-    // khi test ~0,4 fps) vẫn bắt kịp vị trí thật — kẹp 0,1 s cũ làm
-    // người chơi khác bò 0,45 m/khung, mất ~40 s mới đuổi kịp sau
-    // teleport. Nhảy cóc > 8 m vẫn snap ngay (dưới), nên không sợ vọt.
     const dt = Math.min(delta, 0.5);
     const target = multiplayer.getRemotePlayer(player.id) ?? player;
-    // Nội suy vị trí về target (kẹp tốc độ theo trạng thái); nhảy cóc
-    // nếu lệch > 8 m (vd vừa dịch chuyển nhanh / mới vào).
-    // TỐC ĐỘ TỐI THIỂU 4,5 m/s kể cả khi target đứng yên ('idle' có cap
-    // 0 trong bảng): người khác teleport/dịch chuyển nhanh rồi đứng yên
-    // thì avatar vẫn phải đuổi kịp chỗ mới — cap 0 cũ làm figure đóng
-    // băng vĩnh viễn ở chỗ cũ cho tới khi người đó đi tiếp (đã gặp:
-    // tag hiện ở spawn trong khi dữ liệu đã ở (-70,14)).
+    const nowMs = performance.now();
+    if (
+      Math.hypot(target.x - lastTargetRef.current.x, target.z - lastTargetRef.current.z) > 0.005
+    ) {
+      lastTargetRef.current = { x: target.x, z: target.z, movedAt: nowMs };
+    }
     const dx = target.x - cur.current.x;
     const dz = target.z - cur.current.z;
     const dist = Math.hypot(dx, dz);
@@ -202,6 +210,8 @@ function RemotePlayerView({
 
     const g = groupRef.current;
     if (!g) return;
+    let renderX = cur.current.x;
+    const renderZ = cur.current.z;
     if (scene === 'library') {
       const remoteFloor = sanitizeLibraryFloor(target.libraryFloor ?? 1);
       const sameBlock =
@@ -223,21 +233,41 @@ function RemotePlayerView({
       } else {
         cur.current.y += (elev.y - cur.current.y) * Math.min(1, dt * 12);
       }
+      // Khi 2 người chơi cùng đứng trùng một điểm trong Thư viện (vd vừa bước qua cửa vào spawn (0, 2.4)),
+      // tách nhẹ vị trí hiển thị hình ảnh sang bên cạnh 0.62m để cả hai luôn nhìn thấy nhau rõ ràng.
+      if (
+        remoteFloor === playerState.libraryFloor &&
+        Math.hypot(cur.current.x - playerState.pos.x, cur.current.z - playerState.pos.z) < 0.35
+      ) {
+        const sideSign = (player.id.charCodeAt(0) + player.id.charCodeAt(player.id.length - 1)) % 2 === 0 ? 1 : -1;
+        renderX = cur.current.x + sideSign * 0.62;
+      }
     } else {
       if (!g.visible) g.visible = true;
       cur.current.y = target.state === 'riding' ? 0.12 : 0;
     }
-    g.position.set(cur.current.x, cur.current.y, cur.current.z);
+    g.position.set(renderX, cur.current.y, renderZ);
     if (figureRef.current) {
       figureRef.current.rotation.y = cur.current.facing;
     }
+    if (bikeGroupRef.current) {
+      bikeGroupRef.current.visible = target.state === 'riding' && scene === 'campus';
+    }
     remoteRenderPos.set(player.id, { x: cur.current.x, z: cur.current.z, facing: cur.current.facing });
+
+    // Nếu người chơi khác đã dừng lại tại đích hơn 650ms mà gói 'idle' cuối bị trễ, tự động chuyển về tư thế đứng tự nhiên
+    const effectiveState: RemoteState =
+      (target.state === 'walking' || target.state === 'running') &&
+      dist < 0.02 &&
+      nowMs - lastTargetRef.current.movedAt > 650
+        ? 'idle'
+        : target.state;
 
     const j = joints;
     const set = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'z', v: number) => {
       if (ref.current) ref.current.rotation[axis] = v;
     };
-    if (target.state === 'riding') {
+    if (effectiveState === 'riding' && scene === 'campus') {
       // Tư thế ngồi lái (cùng số với Player): hông -1,25/-1,35, gối
       // 1,15/1,25, vai -0,95, khuỷu -0,55.
       set(j.legL, 'x', -1.25);
@@ -252,8 +282,8 @@ function RemotePlayerView({
       set(j.elbowR, 'x', -0.55);
       set(j.body, 'x', 0.08);
       set(j.body, 'z', 0);
-    } else if (target.state === 'walking' || target.state === 'running') {
-      const isRun = target.state === 'running';
+    } else if (effectiveState === 'walking' || effectiveState === 'running') {
+      const isRun = effectiveState === 'running';
       const speed = isRun ? 10.5 : 7.5;
       const swing = isRun ? 0.62 : 0.5;
       phase.current += dt * speed;
@@ -322,13 +352,15 @@ function RemotePlayerView({
           backpackColors={{ pack: '#2A2E33', packLight: '#3A3E44', packZip: '#1A1A1A' }}
           joints={joints}
         />
-        {player.state === 'riding' && <SimpleBike color="#166534" />}
+        <group ref={bikeGroupRef} visible={player.state === 'riding' && scene === 'campus'}>
+          <SimpleBike color="#166534" />
+        </group>
       </group>
       {/* Billboard ngoài nhóm xoay — chữ luôn đọc xuôi (như Npc.tsx). */}
       <Billboard position={[0, 1.95, 0]}>
         <mesh>
           <planeGeometry args={[1.6, 0.2]} />
-          <meshStandardMaterial map={tagTex} transparent roughness={0.8} side={THREE.DoubleSide} />
+          <meshStandardMaterial map={tagTex} transparent depthWrite={false} roughness={0.8} side={THREE.DoubleSide} />
         </mesh>
       </Billboard>
     </group>
@@ -336,7 +368,7 @@ function RemotePlayerView({
 }
 
 function playerSignature(p: RemotePlayer): string {
-  return `${p.id}:${p.name}:${p.mssv}:${p.scene ?? 'campus'}:${p.libraryFloor ?? 1}:${p.seatedSeatId ?? ''}:${p.gender ?? ''}:${p.outfit ?? ''}:${p.hairStyle ?? ''}:${p.skirt ?? ''}:${p.glasses ?? ''}:${p.backpack ?? ''}`;
+  return `${p.id}:${p.name}:${p.mssv}:${p.state}:${p.scene ?? 'campus'}:${p.libraryFloor ?? 1}:${p.seatedSeatId ?? ''}:${p.gender ?? ''}:${p.outfit ?? ''}:${p.hairStyle ?? ''}:${p.skirt ?? ''}:${p.glasses ?? ''}:${p.backpack ?? ''}`;
 }
 
 function filterPlayersForScene(
@@ -345,7 +377,7 @@ function filterPlayersForScene(
   scene: MultiplayerSceneId,
 ): RemotePlayer[] {
   return players.filter((p) => {
-    if (seatedIds.has(p.id) || p.seatedSeatId) return false;
+    if (seatedIds.has(p.id)) return false;
     const pScene = p.scene ?? 'campus';
     return pScene === scene;
   });
@@ -357,33 +389,24 @@ export interface RemotePlayersProps {
 
 export default function RemotePlayers({ scene = 'campus' }: RemotePlayersProps) {
   const [, force] = useReducer((x: number) => x + 1, 0);
-  const playersRef = useRef<RemotePlayer[]>([]);
   const sigRef = useRef<string>('');
+
+  const snapNow = multiplayer.snapshot;
+  const seatedIdsNow = new Set(snapNow.seats.map((s) => s.occupantId));
+  const visiblePlayers = filterPlayersForScene(snapNow.players, seatedIdsNow, scene);
+  sigRef.current = `${scene}|${visiblePlayers.map(playerSignature).join('|')}`;
 
   useEffect(() => {
     const unsub = multiplayer.subscribe((snap) => {
       const seatedIds = new Set(snap.seats.map((s) => s.occupantId));
       const next = filterPlayersForScene(snap.players, seatedIds, scene);
       const nextSig = `${scene}|${next.map(playerSignature).join('|')}`;
-      const same = sigRef.current === nextSig;
-      playersRef.current = next;
-      sigRef.current = nextSig;
-      if (!same) force();
+      if (sigRef.current !== nextSig) {
+        sigRef.current = nextSig;
+        force();
+      }
     });
-    const initSeatedIds = new Set(multiplayer.snapshot.seats.map((s) => s.occupantId));
-    playersRef.current = filterPlayersForScene(
-      multiplayer.snapshot.players,
-      initSeatedIds,
-      scene,
-    );
-    sigRef.current = `${scene}|${playersRef.current.map(playerSignature).join('|')}`;
-    // Vẽ ngay những người ĐÃ ở trong phòng khi scene mount: welcome có
-    // thể tới trước khi CampusScene tải xong (chunk dynamic + SwiftShader
-    // chậm) — nếu chỉ trông vào emit thì không còn sự kiện nào kích hoạt
-    // re-render nữa và người đó không bao giờ hiện (đã gặp: B vào sau,
-    // thấy A trong snapshot nhưng không thấy avatar của A).
     force();
-    // Hook debug cho test: vị trí render thực tế của người chơi khác.
     (window as unknown as { __bkhnMpRender?: () => Record<string, { x: number; z: number; facing: number }> }).__bkhnMpRender = () =>
       Object.fromEntries(remoteRenderPos);
     return unsub;
@@ -391,8 +414,8 @@ export default function RemotePlayers({ scene = 'campus' }: RemotePlayersProps) 
 
   return (
     <group>
-      {playersRef.current.map((p) => (
-        <RemotePlayerView key={p.id} player={p} scene={scene} />
+      {visiblePlayers.map((p) => (
+        <RemotePlayerView key={`${scene}:${p.id}`} player={p} scene={scene} />
       ))}
     </group>
   );

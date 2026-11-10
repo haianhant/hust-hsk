@@ -140,14 +140,15 @@ export const MONUMENT = {
 
 export const TRAN_DAI_NGHIA_GATE = { center: { x: 92, z: -6 } } as const;
 
-/** Nhà để xe sinh viên D3 - D5 (nằm ngay bên tay trái / phía Nam +Z khi đi từ Cổng Trần Đại Nghĩa vào).
+/** Nhà để xe sinh viên D3 - D5 (nằm ngay bên tay trái / phía Nam +Z khi đi từ Cổng Trần Đại Nghĩa vào,
+ *  kéo dài dọc theo chiều sâu trục Bắc–Nam cạnh cụm giảng đường D3 - D5).
  *  Đối chiếu ảnh thật: tham-khao/Nha-de-xe-D3-D5/images.jpg ("ĐIỂM TRÔNG GIỮ XE D3 - D5"). */
 export const D3_D5_PARKING_GARAGE = {
-  center: { x: 76, z: 7.5 },
-  size: { x: 18, z: 9.5 },
+  center: { x: 81, z: 19.5 },
+  size: { x: 13, z: 34 },
   height: 4.2,
   signZ: 2.2,
-  box: { minX: 67, maxX: 85, minZ: 2.75, maxZ: 12.25 },
+  box: { minX: 74.5, maxX: 87.5, minZ: 2.5, maxZ: 36.5 },
 } as const;
 
 /** Trục đường & bãi đỗ xe ô tô của các thầy cô giảng viên cạnh tòa C7
@@ -487,55 +488,55 @@ export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
     box: { minX: 29, maxX: 47, minZ: 59.25, maxZ: 66.75 },
   },
 
-  // Cụm D3 – D5 – D3-5 & D7 phía Đông Thư viện Tạ Quang Bửu (ngay sau Nhà để xe D3 - D5)
+  // Cụm D3 – D5 – D3-5 & D7 phía Đông Thư viện Tạ Quang Bửu (nằm giữa Thư viện và Nhà để xe D3 - D5)
   {
     code: 'D3',
     subtitle: 'VIỆN TOÁN ỨNG DỤNG & TIN HỌC',
-    x: 64,
-    z: 21,
+    x: 61,
+    z: 14,
     w: 14,
-    d: 7,
-    h: 10.5,
-    face: 's',
-    tone: 3,
-    box: { minX: 57, maxX: 71, minZ: 17.5, maxZ: 24.5 },
+    d: 6.6,
+    h: 10.8,
+    face: 'n',
+    tone: 0,
+    box: { minX: 54, maxX: 68, minZ: 10.7, maxZ: 17.3 },
   },
   {
     code: 'D5',
     subtitle: 'GIẢNG ĐƯỜNG D5',
-    x: 64,
-    z: 34,
+    x: 61,
+    z: 29,
     w: 14,
-    d: 7,
-    h: 10.5,
+    d: 6.6,
+    h: 10.8,
     face: 'n',
     tone: 0,
-    box: { minX: 57, maxX: 71, minZ: 30.5, maxZ: 37.5 },
+    box: { minX: 54, maxX: 68, minZ: 25.7, maxZ: 32.3 },
   },
   {
     code: 'D3-5',
     subtitle: 'KHỐI GIẢNG ĐƯỜNG D3-5',
-    x: 75,
-    z: 27.5,
-    w: 6.5,
-    d: 20,
-    h: 10.5,
+    x: 70.5,
+    z: 21.5,
+    w: 5.6,
+    d: 21.6,
+    h: 10.8,
     face: 'w',
     tone: 1,
-    box: { minX: 71.75, maxX: 78.25, minZ: 17.5, maxZ: 37.5 },
+    box: { minX: 67.7, maxX: 73.3, minZ: 10.7, maxZ: 32.3 },
   },
   {
     code: 'D7',
     subtitle: 'GIẢNG ĐƯỜNG D7',
-    x: 60,
-    z: 50,
+    x: 61,
+    z: 45,
     w: 15,
-    d: 7,
-    h: 10.5,
+    d: 6.8,
+    h: 10.8,
     face: 'n',
     tone: 2,
     rotY: Math.PI / 4,
-    box: { minX: 53, maxX: 67, minZ: 44, maxZ: 56 },
+    box: { minX: 54, maxX: 68, minZ: 39, maxZ: 51 },
   },
 ];
 

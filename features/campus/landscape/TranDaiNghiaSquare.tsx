@@ -122,33 +122,26 @@ function drawTranDaiNghiaStoneWallText(
 ) {
   ctx.clearRect(0, 0, w, h);
 
-  // Đổ bóng chân chữ 3D xuống nền đá
+  // Đổ bóng chân chữ 3D xuống nền đá (không dùng strokeText lệch gây bóng mờ kép trên dấu tiếng Việt)
   ctx.save();
-  ctx.shadowColor = 'rgba(20, 18, 12, 0.55)';
-  ctx.shadowBlur = 6;
-  ctx.shadowOffsetX = 3;
-  ctx.shadowOffsetY = 5;
+  ctx.shadowColor = 'rgba(20, 18, 12, 0.42)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 4;
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Dòng 1: ĐẠI HỌC BÁCH KHOA HÀ NỘI (chữ in hoa đậm màu đen than #1C211E)
-  ctx.fillStyle = '#1C211E';
-  ctx.font = '900 72px Arial, Helvetica, sans-serif';
-  ctx.fillText('ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, h * 0.4);
+  // Dòng 1: ĐẠI HỌC BÁCH KHOA HÀ NỘI (chữ in hoa đậm màu đen than #181C1A)
+  ctx.fillStyle = '#181C1A';
+  ctx.font = '700 96px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
+  ctx.fillText('ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, h * 0.39);
 
   // Dòng 2: HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY (chữ in hoa thanh mảnh)
-  ctx.font = '600 35px Arial, Helvetica, sans-serif';
-  ctx.fillText('HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY', w / 2, h * 0.72);
+  ctx.fillStyle = '#222825';
+  ctx.font = '600 46px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
+  ctx.fillText('HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY', w / 2, h * 0.74);
   ctx.restore();
-
-  // Viền highlight nhẹ mặt trên chữ kim loại sơn tĩnh điện
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
-  ctx.lineWidth = 1.5;
-  ctx.font = '900 72px Arial, Helvetica, sans-serif';
-  ctx.strokeText('ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2 - 1, h * 0.4 - 1);
 }
 
 const SHRUB_CLUSTERS: Array<{

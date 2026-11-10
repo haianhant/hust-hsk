@@ -182,3 +182,36 @@ test('(6) nearestZone, nearestRoadPoint, findFreeSpotNear, and getFastTravelDest
   assert.equal(getFastTravelDestination('spawn')?.z, -6);
   assert.equal(getFastTravelDestination('non-existent'), undefined);
 });
+
+test('(7) D3-D5 parking garage extended depth and D3-D5-D7 cluster next to Library do not overlap', () => {
+  const { D3_D5_PARKING_GARAGE, LECTURE_BUILDINGS, LIBRARY, CAMPUS_SHADE_TREES } = campusFacade;
+
+  // D3-D5 parking garage extends deep southward (>= 32m depth along +Z)
+  assert.ok(D3_D5_PARKING_GARAGE.size.z >= 32, 'D3-D5 parking garage depth should be >= 32m');
+  assert.ok(D3_D5_PARKING_GARAGE.box.maxZ >= 35, 'D3-D5 parking garage maxZ should reach >= 35');
+
+  const d3 = LECTURE_BUILDINGS.find((b) => b.code === 'D3');
+  const d5 = LECTURE_BUILDINGS.find((b) => b.code === 'D5');
+  const d35 = LECTURE_BUILDINGS.find((b) => b.code === 'D3-5');
+  const d7 = LECTURE_BUILDINGS.find((b) => b.code === 'D7');
+  assert.ok(d3 && d5 && d35 && d7, 'D3, D5, D3-5, D7 must all be defined');
+
+  // Cluster lies cleanly East of Library Plaza and West of D3-D5 Parking Garage
+  for (const b of [d3, d5, d35, d7]) {
+    assert.ok(b.box.minX > LIBRARY.plaza.maxX, `${b.code} must be East of Library Plaza`);
+    assert.ok(
+      b.box.maxX < D3_D5_PARKING_GARAGE.box.minX,
+      `${b.code} must be West of D3-D5 Parking Garage`,
+    );
+  }
+
+  // No shade tree trunk falls inside D3-D5 parking garage footprint
+  for (const tree of CAMPUS_SHADE_TREES) {
+    const insideGarage =
+      tree.x >= D3_D5_PARKING_GARAGE.box.minX &&
+      tree.x <= D3_D5_PARKING_GARAGE.box.maxX &&
+      tree.z >= D3_D5_PARKING_GARAGE.box.minZ &&
+      tree.z <= D3_D5_PARKING_GARAGE.box.maxZ;
+    assert.equal(insideGarage, false, `Tree at (${tree.x}, ${tree.z}) must not clip D3-D5 garage`);
+  }
+});

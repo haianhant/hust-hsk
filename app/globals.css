@@ -11,7 +11,7 @@ body,
 }
 
 body {
-  font-family: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Be Vietnam Pro', 'Segoe UI', Roboto, 'Noto Sans', 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif;
   background: #eef2e6;
   color: #1c2b1f;
   -webkit-tap-highlight-color: transparent;

@@ -1,0 +1,5 @@
+- nhà để xe D3-5 kéo dài dọc xuống dưới hơn nữa về chiều sâu.
+- Cụm tòa D3-4-7 cạnh thư viện cần xem lại
+- Tòa B1 quay sai hướng, xem lại thư mục tòa B1, màu sắc tòa là màu trắng
+- Font chữ hiện tại đang bị lỗi, chữ đại học bách khoa hà nội ngay cổng trần đại nghĩa, điểm trông xe lỗi font chữ điểm, ... xem lại về font chữ
+- Hay bị không nhìn thấy người chơi khác khi đi vào thư viện, hoặc nhìn thấy người chơi khác nhưng trạng thái đang không chính xác với họ hiện tại

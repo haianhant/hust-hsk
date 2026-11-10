@@ -17,6 +17,7 @@ import {
   computeSeatedPoseTargets,
   type FigureJoints,
 } from '../../../components/three/StudentAvatar';
+import { CANVAS_VN_FONT, wrapVietnameseCanvasContext } from '../../../components/three/TextPlate';
 import {
   multiplayer,
   type MultiplayerSnapshot,
@@ -115,8 +116,9 @@ function useStudyBadgeTexture(
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 116;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
+    const rawCtx = canvas.getContext('2d');
+    if (rawCtx) {
+      const ctx = wrapVietnameseCanvasContext(rawCtx);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Nền thẻ tối bán trong suốt + viền mảnh
@@ -136,23 +138,23 @@ function useStudyBadgeTexture(
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       let size1 = 27;
-      ctx.font = `bold ${size1}px Arial, sans-serif`;
-      const headerText = `${line1} · 🔒 Đã có người ngồi`;
+      ctx.font = `700 ${size1}px ${CANVAS_VN_FONT}`;
+      const headerText = `${line1} · Đã có người ngồi`;
       const w1 = ctx.measureText(headerText).width;
       if (w1 > 468) {
         size1 = Math.max(17, Math.floor((size1 * 468) / w1));
-        ctx.font = `bold ${size1}px Arial, sans-serif`;
+        ctx.font = `700 ${size1}px ${CANVAS_VN_FONT}`;
       }
       ctx.fillText(headerText, 256, 38);
 
       // Dòng 2: Trạng thái tự học (Pomodoro / Giải lao / Môn học)
       ctx.fillStyle = accentColor;
       let size2 = 24;
-      ctx.font = `bold ${size2}px Arial, sans-serif`;
+      ctx.font = `700 ${size2}px ${CANVAS_VN_FONT}`;
       const w2 = ctx.measureText(line2).width;
       if (w2 > 468) {
         size2 = Math.max(16, Math.floor((size2 * 468) / w2));
-        ctx.font = `bold ${size2}px Arial, sans-serif`;
+        ctx.font = `700 ${size2}px ${CANVAS_VN_FONT}`;
       }
       ctx.fillText(line2, 256, 78);
     }
@@ -317,7 +319,7 @@ export function RemoteStudySeats({ onSelectOccupiedSeat }: RemoteStudySeatsProps
   }, []);
 
   const remoteLobbySeats = useMemo(() => {
-    if (activeFloor !== 1) return [];
+    if (activeFloor < 1 || activeFloor > 5) return [];
     return snap.seats.filter(
       (occ) =>
         occ.studyRoomId === 'library-lobby' &&
@@ -326,7 +328,7 @@ export function RemoteStudySeats({ onSelectOccupiedSeat }: RemoteStudySeatsProps
   }, [activeFloor, snap.seats, snap.selfId]);
 
   useEffect(() => {
-    if (activeFloor !== 1) {
+    if (activeFloor < 1 || activeFloor > 5) {
       remoteSeatedRenderMap.clear();
     }
   }, [activeFloor]);

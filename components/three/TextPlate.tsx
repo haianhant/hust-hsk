@@ -9,7 +9,102 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 
-const cache = new Map<string, THREE.CanvasTexture>();
+/**
+ * Chuỗi font ưu tiên hỗ trợ đầy đủ 100% dấu tiếng Việt (Latin Extended Additional U+1EA0–U+1EF9:
+ * Ể, Ạ, Ọ, Ộ, Ữ, Ử, Ự, Ắ, Ặ, Đ...) ở cả nét thường (400) và nét đậm (700).
+ * Tránh dùng weight 900 trên Arial/Helvetica vì trình duyệt sẽ ánh xạ sang Arial Black / Helvetica Black
+ * vốn thiếu bảng mã tiếng Việt mở rộng trên nhiều hệ điều hành, gây lỗi nhảy font ở các chữ "ĐIỂM", "ĐẠI HỌC", "HÀ NỘI".
+ */
+export const CANVAS_VN_FONT =
+  '"Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", "DejaVu Sans", "Liberation Sans", Arial, sans-serif';
+
+export function normalizeCanvasFont(font: string): string {
+  if (!font) return `700 24px ${CANVAS_VN_FONT}`;
+  // Chuẩn hóa font-weight 800/900/black về 700 (bold) để tránh fallback sang Arial Black thiếu dấu tiếng Việt
+  let normalized = font.replace(/\b(900|800|black|heavy)\b/gi, '700');
+  // Thay thế các họ font dễ lỗi tiếng Việt bằng CANVAS_VN_FONT
+  normalized = normalized.replace(
+    /(Arial\s*,\s*Helvetica\s*,\s*sans-serif|system-ui\s*,\s*-apple-system\s*,\s*Arial\s*,\s*sans-serif|Arial\s*,\s*sans-serif|Segoe UI\s*,\s*sans-serif|sans-serif)\s*$/i,
+    CANVAS_VN_FONT,
+  );
+  return normalized;
+}
+
+export function wrapVietnameseCanvasContext(
+  ctx: CanvasRenderingContext2D,
+): CanvasRenderingContext2D {
+  const marked = ctx as CanvasRenderingContext2D & { __vnWrapped?: boolean };
+  if (marked.__vnWrapped) return ctx;
+  marked.__vnWrapped = true;
+
+  const proto = Object.getPrototypeOf(ctx);
+  const fontDesc =
+    Object.getOwnPropertyDescriptor(proto, 'font') ||
+    Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'font');
+
+  if (fontDesc && fontDesc.set && fontDesc.get) {
+    Object.defineProperty(ctx, 'font', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return fontDesc.get!.call(ctx);
+      },
+      set(val: string) {
+        fontDesc.set!.call(ctx, normalizeCanvasFont(String(val)));
+      },
+    });
+  }
+
+  const origFillText = ctx.fillText.bind(ctx);
+  ctx.fillText = (text: string, x: number, y: number, maxWidth?: number) => {
+    const clean = typeof text === 'string' ? text.normalize('NFC') : String(text);
+    if (maxWidth !== undefined) origFillText(clean, x, y, maxWidth);
+    else origFillText(clean, x, y);
+  };
+
+  const origStrokeText = ctx.strokeText.bind(ctx);
+  ctx.strokeText = (text: string, x: number, y: number, maxWidth?: number) => {
+    const clean = typeof text === 'string' ? text.normalize('NFC') : String(text);
+    if (maxWidth !== undefined) origStrokeText(clean, x, y, maxWidth);
+    else origStrokeText(clean, x, y);
+  };
+
+  const origMeasureText = ctx.measureText.bind(ctx);
+  ctx.measureText = (text: string) => {
+    const clean = typeof text === 'string' ? text.normalize('NFC') : String(text);
+    return origMeasureText(clean);
+  };
+
+  return ctx;
+}
+
+interface CachedTextEntry {
+  tex: THREE.CanvasTexture;
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  w: number;
+  h: number;
+  draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void;
+}
+
+const cache = new Map<string, CachedTextEntry>();
+let fontsReadyHooked = false;
+
+function ensureFontsReadyRefresh() {
+  if (fontsReadyHooked || typeof document === 'undefined' || !('fonts' in document)) return;
+  fontsReadyHooked = true;
+  document.fonts.ready
+    .then(() => {
+      cache.forEach((entry) => {
+        entry.ctx.clearRect(0, 0, entry.w, entry.h);
+        entry.draw(entry.ctx, entry.w, entry.h);
+        entry.tex.needsUpdate = true;
+      });
+    })
+    .catch(() => {
+      // Ignore font loading errors in offline/headless environments
+    });
+}
 
 function getTexture(
   key: string,
@@ -18,17 +113,19 @@ function getTexture(
   draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void,
 ): THREE.CanvasTexture {
   const hit = cache.get(key);
-  if (hit) return hit;
+  if (hit) return hit.tex;
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+  const rawCtx = canvas.getContext('2d');
+  if (!rawCtx) throw new Error('Canvas 2D không khả dụng');
+  const ctx = wrapVietnameseCanvasContext(rawCtx);
   draw(ctx, w, h);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  cache.set(key, tex);
+  cache.set(key, { tex, canvas, ctx, w, h, draw });
+  ensureFontsReadyRefresh();
   return tex;
 }
 
@@ -48,10 +145,11 @@ function star(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) 
 
 function fitFont(ctx: CanvasRenderingContext2D, text: string, weight: number, px: number, maxW: number) {
   let size = px;
-  ctx.font = `${weight} ${size}px Arial, sans-serif`;
+  const safeWeight = weight >= 700 ? 700 : weight;
+  ctx.font = `${safeWeight} ${size}px ${CANVAS_VN_FONT}`;
   while (ctx.measureText(text).width > maxW && size > 10) {
     size -= 2;
-    ctx.font = `${weight} ${size}px Arial, sans-serif`;
+    ctx.font = `${safeWeight} ${size}px ${CANVAS_VN_FONT}`;
   }
   return size;
 }
@@ -269,7 +367,14 @@ export function LabelPlane({
   return (
     <mesh position={position} rotation={rotation}>
       <planeGeometry args={size} />
-      <meshStandardMaterial map={tex} transparent={transparent} roughness={0.8} side={THREE.DoubleSide} />
+      <meshStandardMaterial
+        map={tex}
+        transparent={transparent}
+        depthWrite={!transparent}
+        alphaTest={transparent ? 0.04 : 0}
+        roughness={0.8}
+        side={THREE.DoubleSide}
+      />
     </mesh>
   );
 }

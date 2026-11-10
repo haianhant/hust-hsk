@@ -1232,11 +1232,14 @@ export class MultiplayerClient {
       }
       switch (msg.type) {
         case 'welcome': {
+          const hadAuthenticatedOnThisSocket = this.selfId !== null;
           this.selfId = typeof msg.id === 'string' ? msg.id : null;
           this.roomId = typeof msg.roomId === 'string' ? msg.roomId : null;
           this.count = typeof msg.count === 'number' ? msg.count : 0;
           const prevPlayers = new Map(this.players);
-          this.players.clear();
+          if (!hadAuthenticatedOnThisSocket) {
+            this.players.clear();
+          }
           const list = Array.isArray(msg.players) ? msg.players : [];
           for (const p of list) {
             const rp = toRemotePlayer(p);
@@ -1245,12 +1248,18 @@ export class MultiplayerClient {
               if (existing) {
                 const rawFacing = (p as Record<string, unknown>)?.facing;
                 const hasTel = decodeMoveTelemetry(rawFacing).hasTelemetry;
-                if (hasTel || rp.outfit !== undefined) {
+                if (hasTel) {
                   Object.assign(existing, rp);
                 } else {
                   existing.name = rp.name;
                   existing.mssv = rp.mssv;
                   existing.color = rp.color;
+                  if (rp.gender !== undefined) existing.gender = rp.gender;
+                  if (rp.outfit !== undefined) existing.outfit = rp.outfit;
+                  if (rp.hairStyle !== undefined) existing.hairStyle = rp.hairStyle;
+                  if (rp.skirt !== undefined) existing.skirt = rp.skirt;
+                  if (rp.glasses !== undefined) existing.glasses = rp.glasses;
+                  if (rp.backpack !== undefined) existing.backpack = rp.backpack;
                 }
                 this.players.set(existing.id, existing);
                 this.syncLegacyTelemetrySeat(existing);
@@ -1259,6 +1268,9 @@ export class MultiplayerClient {
                 this.syncLegacyTelemetrySeat(rp);
               }
             }
+          }
+          if (this.selfId) {
+            this.players.delete(this.selfId);
           }
           this.setStatus('online', null);
           this.flushLocalMoveTelemetry();
@@ -1354,6 +1366,13 @@ export class MultiplayerClient {
               }
             }
             this.seats.set(occ.seatId, occ);
+            const seatedPeer = this.players.get(occ.occupantId);
+            if (seatedPeer) {
+              seatedPeer.seatedSeatId = occ.seatId;
+              seatedPeer.scene = 'library';
+              seatedPeer.libraryFloor = 1;
+              seatedPeer.state = 'idle';
+            }
             if (msgRevision !== null) {
               this.studyRevision = Math.max(this.studyRevision, msgRevision);
             }
@@ -1393,6 +1412,13 @@ export class MultiplayerClient {
             this.seatClaimState === 'confirmed'
           ) {
             this.seats.set(occ.seatId, occ);
+            const seatedPeer = this.players.get(occ.occupantId);
+            if (seatedPeer) {
+              seatedPeer.seatedSeatId = occ.seatId;
+              seatedPeer.scene = 'library';
+              seatedPeer.libraryFloor = 1;
+              seatedPeer.state = 'idle';
+            }
             if (msgRevision !== null) {
               this.studyRevision = Math.max(this.studyRevision, msgRevision);
             }
@@ -1428,6 +1454,13 @@ export class MultiplayerClient {
               }
             }
             this.seats.set(occ.seatId, occ);
+            const seatedPeer = this.players.get(occ.occupantId);
+            if (seatedPeer) {
+              seatedPeer.seatedSeatId = occ.seatId;
+              seatedPeer.scene = 'library';
+              seatedPeer.libraryFloor = 1;
+              seatedPeer.state = 'idle';
+            }
             if (msgRevision !== null) {
               this.studyRevision = Math.max(this.studyRevision, msgRevision);
             }
@@ -1535,6 +1568,10 @@ export class MultiplayerClient {
             const pres = this.presences.get(occupantId);
             if (pres && (!seatId || pres.seatId === seatId)) {
               this.presences.set(occupantId, { ...pres, seatId: null });
+            }
+            const releasedPeer = this.players.get(occupantId);
+            if (releasedPeer && (!seatId || releasedPeer.seatedSeatId === seatId)) {
+              releasedPeer.seatedSeatId = null;
             }
           }
           if (typeof msg.revision === 'number') {
@@ -1684,12 +1721,18 @@ export class MultiplayerClient {
                 : undefined;
             const hasTel = decodeMoveTelemetry(rawFacing).hasTelemetry;
             if (prev) {
-              if (hasTel || rp.outfit !== undefined) {
+              if (hasTel) {
                 Object.assign(prev, rp);
               } else {
                 prev.name = rp.name;
                 prev.mssv = rp.mssv;
                 prev.color = rp.color;
+                if (rp.gender !== undefined) prev.gender = rp.gender;
+                if (rp.outfit !== undefined) prev.outfit = rp.outfit;
+                if (rp.hairStyle !== undefined) prev.hairStyle = rp.hairStyle;
+                if (rp.skirt !== undefined) prev.skirt = rp.skirt;
+                if (rp.glasses !== undefined) prev.glasses = rp.glasses;
+                if (rp.backpack !== undefined) prev.backpack = rp.backpack;
               }
               this.syncLegacyTelemetrySeat(prev);
             } else {
@@ -1775,8 +1818,12 @@ export class MultiplayerClient {
           if (typeof msg.id !== 'string') break;
           const p = this.players.get(msg.id);
           if (!p) break;
+          let metaChanged = false;
           if (typeof msg.state === 'string' && isRemoteState(msg.state)) {
-            p.state = msg.state;
+            if (p.state !== msg.state) {
+              p.state = msg.state;
+              metaChanged = true;
+            }
           }
           const dec = decodeMoveTelemetry(msg.facing);
           if (dec.hasTelemetry) {
@@ -1793,7 +1840,6 @@ export class MultiplayerClient {
               p.x = rawX;
               p.z = rawZ;
             }
-            let metaChanged = false;
             if (p.scene !== dec.scene) {
               p.scene = dec.scene;
               metaChanged = true;
@@ -1835,13 +1881,21 @@ export class MultiplayerClient {
             if (typeof msg.x === 'number') p.x = msg.x;
             if (typeof msg.z === 'number') p.z = msg.z;
             if (typeof msg.facing === 'number') p.facing = msg.facing;
+            if (metaChanged) {
+              this.emit();
+            }
           }
           break;
         }
         case 'state': {
           if (typeof msg.id !== 'string') break;
           const p = this.players.get(msg.id);
-          if (p && typeof msg.state === 'string' && isRemoteState(msg.state)) p.state = msg.state;
+          if (p && typeof msg.state === 'string' && isRemoteState(msg.state)) {
+            if (p.state !== msg.state) {
+              p.state = msg.state;
+              this.emit();
+            }
+          }
           break;
         }
         case 'count': {

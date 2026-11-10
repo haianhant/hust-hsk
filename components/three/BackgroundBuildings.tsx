@@ -118,8 +118,8 @@ function LectureSkybridges() {
     { x: -5.5, z: -51.5, w: 2.2, d: 4.8, y: 3.6 },
     { x: -18.5, z: -40.5, w: 2.2, d: 4.8, y: 3.6 },
     { x: -5.5, z: -40.5, w: 2.2, d: 4.8, y: 3.6 },
-    // Cầu nối giữa D3 (z=21) ↔ D5 (z=34)
-    { x: 58, z: 27.5, w: 2.2, d: 6.2, y: 3.5 },
+    // Cầu nối giữa D3 (z=14) ↔ D5 (z=29)
+    { x: 56.5, z: 21.5, w: 2.2, d: 8.6, y: 3.6 },
     // Cầu nối giữa D6 (z=38) ↔ D8 (z=54)
     { x: -46, z: 46, w: 2.4, d: 8.6, y: 3.4 },
   ];
@@ -277,7 +277,7 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
             ctx.fillStyle = '#FFFFFF';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.font = '900 58px Arial, sans-serif';
+            ctx.font = '700 56px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
             ctx.fillText(`NHÀ ${b.code}`, w / 2, h / 2 + 2);
           }}
           size={[2.1, 0.75]}
@@ -285,6 +285,62 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
           transparent={false}
         />
       </group>
+
+      {/* Mặt sau: dải gờ tầng + hệ cửa sổ thông gió giúp tòa nhà nhìn từ mọi phía đều có chiều sâu kiến trúc */}
+      <group position={[-faceOffset[0], 0, -faceOffset[2]]} rotation-y={faceRotY + Math.PI}>
+        {[1, 2].map((fl) => (
+          <mesh key={`back-ledge-${fl}`} position={[0, fl * floorH - 0.06, 0.03]}>
+            <boxGeometry args={[along - 0.4, 0.14, 0.08]} />
+            <meshStandardMaterial color={WINDOW_FRAME} roughness={0.86} />
+          </mesh>
+        ))}
+        {wins.map((wn, i) => {
+          const glow = isNight && wn.lit;
+          return (
+            <group key={`back-win-${i}`} position={[wn.u, wn.y, 0.02]}>
+              <mesh position={[0, 0, -0.01]}>
+                <planeGeometry args={[1.36, 1.14]} />
+                <meshStandardMaterial color={WINDOW_FRAME} roughness={0.85} />
+              </mesh>
+              <mesh position={[0, 0, 0.01]}>
+                <planeGeometry args={[1.18, 0.96]} />
+                <meshStandardMaterial
+                  color={glow ? '#FFE59E' : WINDOW_TONE}
+                  emissive={glow ? '#FFB84D' : '#000000'}
+                  emissiveIntensity={glow ? 0.65 : 0}
+                  roughness={0.35}
+                  metalness={0.2}
+                />
+              </mesh>
+            </group>
+          );
+        })}
+      </group>
+
+      {/* Biển phụ gắn đầu hồi Tây cho cụm D3 – D5 – D7 hướng về phía sân Thư viện Tạ Quang Bửu */}
+      {(b.code === 'D3' || b.code === 'D5' || b.code === 'D7') && (
+        <LabelPlane
+          textureKey={`bldg-sign-west-${b.code}`}
+          canvasW={384}
+          canvasH={128}
+          draw={(ctx, w, h) => {
+            ctx.fillStyle = '#B81D24';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#F5C518';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(6, 6, w - 12, h - 12);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '700 56px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
+            ctx.fillText(`NHÀ ${b.code}`, w / 2, h / 2 + 2);
+          }}
+          size={[1.95, 0.7]}
+          position={[-b.w / 2 - 0.06, b.h - 0.75, 0]}
+          rotation={[0, -Math.PI / 2, 0]}
+          transparent={false}
+        />
+      )}
     </group>
   );
 }
@@ -367,13 +423,13 @@ function CampusSignpost({ x, z, rotationY = 0 }: { x: number; z: number; rotatio
           ctx.lineWidth = 6;
           ctx.strokeRect(8, 8, w - 16, h - 16);
           ctx.fillStyle = '#FFD166';
-          ctx.font = '900 28px Arial, sans-serif';
+          ctx.font = '700 27px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
           ctx.fillText('SƠ ĐỒ CHỈ DẪN HUST', 24, 42);
           ctx.fillStyle = '#FFFFFF';
-          ctx.font = '700 26px Arial, sans-serif';
-          ctx.fillText('⬆ Nhà C1 · Cầu đỏ C9', 24, 92);
-          ctx.fillText('➡ Thư viện TQB · Hồ Tiền', 24, 138);
-          ctx.fillText('⬅ Cổng Parabol (Giải Phóng)', 24, 184);
+          ctx.font = '700 25px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
+          ctx.fillText('▲ Nhà C1 · Cầu đỏ C9', 24, 92);
+          ctx.fillText('▶ Thư viện TQB · Hồ Tiền', 24, 138);
+          ctx.fillText('◀ Cổng Parabol (Giải Phóng)', 24, 184);
         }}
         size={[1.48, 0.62]}
         position={[0, 2.1, 0.042]}

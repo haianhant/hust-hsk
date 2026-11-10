@@ -105,7 +105,17 @@ export function useMultiplayerBridge(entered: boolean): MultiplayerSnapshot {
 
     tick();
     const id = setInterval(tick, 100);
-    return () => clearInterval(id);
+    window.addEventListener('bkhn:library-lobby', tick);
+    window.addEventListener('bkhn:library-floor', tick);
+    window.addEventListener('bkhn:classroom', tick);
+    window.addEventListener('bkhn:outfit', tick);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('bkhn:library-lobby', tick);
+      window.removeEventListener('bkhn:library-floor', tick);
+      window.removeEventListener('bkhn:classroom', tick);
+      window.removeEventListener('bkhn:outfit', tick);
+    };
   }, [entered]);
 
   return mpSnap;

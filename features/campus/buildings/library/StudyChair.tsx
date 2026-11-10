@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
+import { CANVAS_VN_FONT, wrapVietnameseCanvasContext } from '../../../../components/three/TextPlate';
 import type { StudySeatDefinition } from '../../../../shared/contracts/study';
 
 export type ChairVisualState =
@@ -43,8 +44,9 @@ function useChairStatusBadgeTexture(
     const canvas = document.createElement('canvas');
     canvas.width = 448;
     canvas.height = 68;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
+    const rawCtx = canvas.getContext('2d');
+    if (rawCtx) {
+      const ctx = wrapVietnameseCanvasContext(rawCtx);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = 'rgba(15, 23, 42, 0.84)';
       ctx.beginPath();
@@ -61,11 +63,11 @@ function useChairStatusBadgeTexture(
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       let size = 25;
-      ctx.font = `bold ${size}px Arial, sans-serif`;
+      ctx.font = `700 ${size}px ${CANVAS_VN_FONT}`;
       const w = ctx.measureText(text).width;
       if (w > 412) {
         size = Math.max(16, Math.floor((size * 412) / w));
-        ctx.font = `bold ${size}px Arial, sans-serif`;
+        ctx.font = `700 ${size}px ${CANVAS_VN_FONT}`;
       }
       ctx.fillText(text, 224, 35);
     }

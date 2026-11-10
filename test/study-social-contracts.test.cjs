@@ -1655,6 +1655,113 @@ test('(28) Reconnect reconciliation when local player is already standing while 
   );
 });
 
+test('(29) Library multiplayer state stability across join/welcome updates and seat claim/release', () => {
+  const h = createTestMultiplayerHarness();
+  h.client.connect('sess-self', 'Sinh viên A', '20226001');
+  const ws = h.sockets[0];
+  ws.serverOpen('p-self', 'hsk-1');
+
+  // Generate an authentic library floor 4 telemetry facing value via sendMove
+  h.client.sendMove(-5.2, 1.4, 1.2, 'walking', {
+    scene: 'library',
+    libraryFloor: 4,
+    seatedSeatId: null,
+    appearance: {
+      gender: 'female',
+      outfit: 'windbreaker',
+      hairStyle: 'ponytail',
+      skirt: true,
+      glasses: true,
+      backpack: true,
+    },
+  });
+  const libTelemetryFacing = ws.sent[ws.sent.length - 1].facing;
+
+  // Remote player B joins and sends library floor 4 telemetry
+  ws.serverSend({
+    type: 'join',
+    player: {
+      id: 'p-peer-b',
+      name: 'Trần Thị B',
+      mssv: '20226002',
+      color: '#2563EB',
+      x: 95.5,
+      z: -6,
+      facing: 0,
+      state: 'idle',
+      gender: 'female',
+      outfit: 'windbreaker',
+    },
+  });
+
+  ws.serverSend({
+    type: 'move',
+    id: 'p-peer-b',
+    x: -5.2,
+    z: 1.4,
+    facing: libTelemetryFacing,
+    state: 'walking',
+  });
+
+  let peerB = h.client.getSnapshot().players.find((p) => p.id === 'p-peer-b');
+  assert.ok(peerB);
+  assert.equal(peerB.scene, 'library');
+  assert.equal(peerB.libraryFloor, 4);
+  assert.equal(peerB.state, 'walking');
+  assert.ok(Math.abs(peerB.x - -5.2) < 0.15);
+
+  // Now server broadcasts a `join` (e.g. appearance/reconnect) for p-peer-b WITHOUT telemetry in `facing`
+  ws.serverSend({
+    type: 'join',
+    player: {
+      id: 'p-peer-b',
+      name: 'Trần Thị B (SoICT)',
+      mssv: '20226002',
+      color: '#2563EB',
+      x: 95.5,
+      z: -6,
+      facing: -Math.PI / 2,
+      state: 'idle',
+      gender: 'female',
+      outfit: 'sweater-cream',
+    },
+  });
+
+  peerB = h.client.getSnapshot().players.find((p) => p.id === 'p-peer-b');
+  assert.ok(peerB);
+  assert.equal(peerB.name, 'Trần Thị B (SoICT)');
+  assert.equal(peerB.outfit, 'sweater-cream');
+  assert.equal(peerB.scene, 'library', 'Non-telemetry join must not reset library scene to campus');
+  assert.equal(peerB.libraryFloor, 4, 'Non-telemetry join must not reset libraryFloor to 1');
+  assert.ok(Math.abs(peerB.x - -5.2) < 0.15, 'Non-telemetry join must not reset x to campus spawn');
+
+  // Seat claim & release immediately sync peerB.seatedSeatId
+  ws.serverSend({
+    type: 'study:seat-claimed',
+    revision: 5,
+    occupancy: {
+      seatId: 'tqb-1f-t1-s2',
+      studyRoomId: 'library-lobby',
+      occupantId: 'p-peer-b',
+      occupantName: 'Trần Thị B (SoICT)',
+      occupiedAtMs: h.getNow(),
+    },
+  });
+  peerB = h.client.getSnapshot().players.find((p) => p.id === 'p-peer-b');
+  assert.equal(peerB.seatedSeatId, 'tqb-1f-t1-s2');
+  assert.equal(peerB.state, 'idle');
+
+  ws.serverSend({
+    type: 'study:seat-released',
+    revision: 6,
+    seatId: 'tqb-1f-t1-s2',
+    occupantId: 'p-peer-b',
+    reason: 'manual',
+  });
+  peerB = h.client.getSnapshot().players.find((p) => p.id === 'p-peer-b');
+  assert.equal(peerB.seatedSeatId, null, 'study:seat-released must immediately clear seatedSeatId');
+});
+
 
 
 

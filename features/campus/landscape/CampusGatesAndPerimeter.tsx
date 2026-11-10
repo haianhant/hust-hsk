@@ -76,7 +76,7 @@ export function ParabolBusStop() {
         <meshStandardMaterial color="#C87D4B" roughness={0.8} />
       </mesh>
       <LabelPlane
-        textureKey="parabol-bus-sign"
+        textureKey="parabol-bus-sign-v2"
         canvasW={512}
         canvasH={256}
         draw={(ctx, w, h) => {
@@ -85,15 +85,28 @@ export function ParabolBusStop() {
           ctx.strokeStyle = '#FFFFFF';
           ctx.lineWidth = 6;
           ctx.strokeRect(8, 8, w - 16, h - 16);
+          // Biểu tượng xe buýt vector bên trái tiêu đề (tránh lỗi emoji trên Canvas)
           ctx.fillStyle = '#FFD166';
-          ctx.font = '900 32px Arial, sans-serif';
-          ctx.fillText('🚌 ĐIỂM DỪNG XE BUÝT BÁCH KHOA', 20, 48);
+          ctx.beginPath();
+          ctx.roundRect(22, 26, 32, 28, 5);
+          ctx.fill();
+          ctx.fillStyle = '#1D4ED8';
+          ctx.fillRect(26, 30, 24, 11);
           ctx.fillStyle = '#FFFFFF';
-          ctx.font = '700 24px Arial, sans-serif';
-          ctx.fillText('Tuyến: 03A · 21A · 21B · 25 · 26 · 28 · 32 · E08', 20, 102);
-          ctx.fillText('Điểm dừng: Cổng Parabol (Đường Giải Phóng)', 20, 152);
+          ctx.beginPath();
+          ctx.arc(30, 56, 4, 0, Math.PI * 2);
+          ctx.arc(46, 56, 4, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#FFD166';
+          ctx.font = '700 28px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
+          ctx.fillText('ĐIỂM DỪNG XE BUÝT BÁCH KHOA', 64, 48);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '700 23px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
+          ctx.fillText('Tuyến: 03A · 21A · 21B · 25 · 26 · 28 · 32 · E08', 22, 104);
+          ctx.fillText('Điểm dừng: Cổng Parabol (Đường Giải Phóng)', 22, 154);
           ctx.fillStyle = '#93C5FD';
-          ctx.fillText('公交车站 · HUST PARABOL GATE BUS STOP', 20, 206);
+          ctx.fillText('公交车站 · HUST PARABOL GATE BUS STOP', 22, 206);
         }}
         size={[2.6, 1.25]}
         position={[0, 1.45, -0.78]}
