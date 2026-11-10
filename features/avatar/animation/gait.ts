@@ -170,6 +170,60 @@ export function computeSeatedPoseTargets(t: number) {
 }
 
 /**
+ * Hàm bao vào/ra mượt mà theo đường cong raised-cosine (đạo hàm bằng 0 ở cả hai đầu)
+ * giúp nhân vật chuyển từ tư thế đứng/ngồi sang hành động tương tác và thu tay về êm ái,
+ * không bao giờ bị giật cục khi bắt đầu hoặc kết thúc hoạt ảnh.
+ */
+export function computeEmoteEnvelope(
+  elapsedSec: number,
+  durationSec: number,
+  attackSec = 0.34,
+  releaseSec = 0.44,
+): number {
+  if (elapsedSec <= 0) return 0;
+  if (elapsedSec < attackSec) {
+    const u = Math.max(0, Math.min(1, elapsedSec / attackSec));
+    return 0.5 - 0.5 * Math.cos(Math.PI * u);
+  }
+  const rem = durationSec - elapsedSec;
+  if (rem <= 0) return 0;
+  if (rem < releaseSec) {
+    const u = Math.max(0, Math.min(1, rem / releaseSec));
+    return 0.5 - 0.5 * Math.cos(Math.PI * u);
+  }
+  return 1;
+}
+
+function blendPoseToNeutral(
+  raw: EmotePoseTargets,
+  neutral: EmotePoseTargets,
+  env: number,
+): EmotePoseTargets {
+  const mix = (a: number, b: number) => b + (a - b) * env;
+  return {
+    legLTarget: mix(raw.legLTarget, neutral.legLTarget),
+    legRTarget: mix(raw.legRTarget, neutral.legRTarget),
+    legLZTarget: mix(raw.legLZTarget, neutral.legLZTarget),
+    legRZTarget: mix(raw.legRZTarget, neutral.legRZTarget),
+    kneeLTarget: mix(raw.kneeLTarget, neutral.kneeLTarget),
+    kneeRTarget: mix(raw.kneeRTarget, neutral.kneeRTarget),
+    footLTarget: mix(raw.footLTarget, neutral.footLTarget),
+    footRTarget: mix(raw.footRTarget, neutral.footRTarget),
+    armLTarget: mix(raw.armLTarget, neutral.armLTarget),
+    armRTarget: mix(raw.armRTarget, neutral.armRTarget),
+    armLZTarget: mix(raw.armLZTarget, neutral.armLZTarget),
+    armRZTarget: mix(raw.armRZTarget, neutral.armRZTarget),
+    elbowLTarget: mix(raw.elbowLTarget, neutral.elbowLTarget),
+    elbowRTarget: mix(raw.elbowRTarget, neutral.elbowRTarget),
+    bodyLeanTarget: mix(raw.bodyLeanTarget, neutral.bodyLeanTarget),
+    bodyRollTarget: mix(raw.bodyRollTarget, neutral.bodyRollTarget),
+    bodyYawTarget: mix(raw.bodyYawTarget, neutral.bodyYawTarget),
+    bodyBobTarget: mix(raw.bodyBobTarget, neutral.bodyBobTarget),
+    jumpYOffset: mix(raw.jumpYOffset, neutral.jumpYOffset),
+  };
+}
+
+/**
  * Tính góc khớp cho 6 hoạt ảnh hành động tương tác (Emotes):
  * - `wave`: Vẫy tay chào hỏi thân thiện
  * - `dance`: Nhảy nhót vũ đạo trẻ trung
@@ -183,7 +237,11 @@ export function computeEmotePoseTargets(
   elapsedSec: number,
   seated = false,
 ): EmotePoseTargets {
-  const baseLegs = seated
+  const def = EMOTE_DEFINITIONS.find((d) => d.id === emote);
+  const durationSec = (def?.durationMs ?? 3000) / 1000;
+  const env = computeEmoteEnvelope(elapsedSec, durationSec);
+
+  const neutral: EmotePoseTargets = seated
     ? {
         legLTarget: -1.48,
         legRTarget: -1.48,
@@ -193,6 +251,17 @@ export function computeEmotePoseTargets(
         kneeRTarget: 1.45,
         footLTarget: 0.03,
         footRTarget: 0.03,
+        armLTarget: -0.6,
+        armRTarget: -0.58,
+        armLZTarget: 0,
+        armRZTarget: 0,
+        elbowLTarget: -0.86,
+        elbowRTarget: -0.9,
+        bodyLeanTarget: 0.07,
+        bodyRollTarget: 0,
+        bodyYawTarget: 0,
+        bodyBobTarget: 0,
+        jumpYOffset: 0,
       }
     : {
         legLTarget: 0,
@@ -203,134 +272,171 @@ export function computeEmotePoseTargets(
         kneeRTarget: 0.05,
         footLTarget: 0,
         footRTarget: 0,
-      };
-
-  switch (emote) {
-    case 'wave': {
-      const w = Math.sin(elapsedSec * 10.5);
-      return {
-        ...baseLegs,
-        armLTarget: seated ? -0.58 : 0.08,
-        armRTarget: -2.42 + Math.cos(elapsedSec * 5.2) * 0.08,
-        armLZTarget: 0.05,
-        armRZTarget: -0.36 + w * 0.32,
-        elbowLTarget: seated ? -0.82 : -0.26,
-        elbowRTarget: -0.52 + w * 0.25,
-        bodyLeanTarget: seated ? 0.04 : -0.03,
-        bodyRollTarget: w * 0.065,
-        bodyYawTarget: Math.sin(elapsedSec * 5.2) * 0.09,
-        bodyBobTarget: Math.abs(w) * 0.022,
-        jumpYOffset: 0,
-      };
-    }
-    case 'dance': {
-      const beat = elapsedSec * 7.2;
-      const sinB = Math.sin(beat);
-      const cosB = Math.cos(beat);
-      const hop = Math.abs(Math.sin(beat * 2));
-      const leftStep = Math.max(0, sinB);
-      const rightStep = Math.max(0, -sinB);
-      return {
-        legLTarget: seated ? -1.48 : -0.58 * leftStep + 0.14 * rightStep,
-        legRTarget: seated ? -1.48 : -0.58 * rightStep + 0.14 * leftStep,
-        legLZTarget: seated ? 0 : 0.16 * leftStep,
-        legRZTarget: seated ? 0 : -0.16 * rightStep,
-        kneeLTarget: seated ? 1.45 : 0.12 + 0.92 * leftStep,
-        kneeRTarget: seated ? 1.45 : 0.12 + 0.92 * rightStep,
-        footLTarget: seated ? 0.03 : -0.22 * leftStep,
-        footRTarget: seated ? 0.03 : -0.22 * rightStep,
-        armLTarget: -1.75 + sinB * 0.78,
-        armRTarget: -1.75 - sinB * 0.78,
-        armLZTarget: 0.36 + cosB * 0.24,
-        armRZTarget: -0.36 + cosB * 0.24,
-        elbowLTarget: -0.68 - Math.max(0, cosB) * 0.45,
-        elbowRTarget: -0.68 - Math.max(0, -cosB) * 0.45,
-        bodyLeanTarget: Math.sin(beat * 2) * 0.06,
-        bodyRollTarget: sinB * 0.11,
-        bodyYawTarget: cosB * 0.26,
-        bodyBobTarget: hop * 0.045,
-        jumpYOffset: seated ? 0 : hop * 0.14,
-      };
-    }
-    case 'cheer': {
-      const pulse = elapsedSec * 6.8;
-      const jumpWave = Math.max(0, Math.sin(pulse));
-      const pump = Math.sin(pulse * 2);
-      return {
-        legLTarget: seated ? -1.48 : -0.24 * jumpWave,
-        legRTarget: seated ? -1.48 : -0.24 * jumpWave,
-        legLZTarget: seated ? 0 : 0.18 * jumpWave,
-        legRZTarget: seated ? 0 : -0.18 * jumpWave,
-        kneeLTarget: seated ? 1.45 : 0.08 + 0.46 * jumpWave,
-        kneeRTarget: seated ? 1.45 : 0.08 + 0.46 * jumpWave,
-        footLTarget: seated ? 0.03 : -0.18 * jumpWave,
-        footRTarget: seated ? 0.03 : -0.18 * jumpWave,
-        armLTarget: -2.68 + pump * 0.22,
-        armRTarget: -2.68 - pump * 0.22,
-        armLZTarget: 0.44 + jumpWave * 0.12,
-        armRZTarget: -0.44 - jumpWave * 0.12,
-        elbowLTarget: -0.28,
-        elbowRTarget: -0.28,
-        bodyLeanTarget: -0.06 * jumpWave,
-        bodyRollTarget: Math.sin(pulse) * 0.05,
-        bodyYawTarget: Math.cos(pulse) * 0.08,
-        bodyBobTarget: jumpWave * 0.035,
-        jumpYOffset: seated ? 0 : Math.pow(jumpWave, 1.2) * 0.24,
-      };
-    }
-    case 'bow': {
-      const bowEnv = Math.abs(Math.sin(elapsedSec * 2.2));
-      const smoothBow = Math.pow(bowEnv, 0.75);
-      return {
-        ...baseLegs,
-        armLTarget: -0.52 * smoothBow,
-        armRTarget: -0.52 * smoothBow,
-        armLZTarget: -0.24 * smoothBow,
-        armRZTarget: 0.24 * smoothBow,
-        elbowLTarget: -0.24 - 0.92 * smoothBow,
-        elbowRTarget: -0.24 - 0.92 * smoothBow,
-        bodyLeanTarget: (seated ? 0.07 : 0) + 0.58 * smoothBow,
+        armLTarget: 0.06,
+        armRTarget: -0.03,
+        armLZTarget: 0,
+        armRZTarget: 0,
+        elbowLTarget: -0.24,
+        elbowRTarget: -0.32,
+        bodyLeanTarget: 0,
         bodyRollTarget: 0,
         bodyYawTarget: 0,
-        bodyBobTarget: -0.03 * smoothBow,
+        bodyBobTarget: 0,
         jumpYOffset: 0,
       };
+
+  const baseLegs = {
+    legLTarget: neutral.legLTarget,
+    legRTarget: neutral.legRTarget,
+    legLZTarget: 0,
+    legRZTarget: 0,
+    kneeLTarget: neutral.kneeLTarget,
+    kneeRTarget: neutral.kneeRTarget,
+    footLTarget: neutral.footLTarget,
+    footRTarget: neutral.footRTarget,
+  };
+
+  let raw: EmotePoseTargets;
+  switch (emote) {
+    case 'wave': {
+      const w = Math.sin(elapsedSec * 8.6);
+      const wSlow = Math.sin(elapsedSec * 4.3);
+      raw = {
+        ...baseLegs,
+        armLTarget: seated ? -0.58 : 0.08 + wSlow * 0.03,
+        armRTarget: -2.28 + Math.cos(elapsedSec * 4.3) * 0.05,
+        armLZTarget: 0.04,
+        armRZTarget: -0.32 + w * 0.26,
+        elbowLTarget: seated ? -0.82 : -0.26,
+        elbowRTarget: -0.46 + Math.cos(elapsedSec * 8.6) * 0.14,
+        bodyLeanTarget: seated ? 0.04 : -0.02,
+        bodyRollTarget: w * 0.042,
+        bodyYawTarget: wSlow * 0.065,
+        bodyBobTarget: (0.5 - 0.5 * Math.cos(elapsedSec * 8.6)) * 0.006,
+        jumpYOffset: 0,
+      };
+      break;
+    }
+    case 'dance': {
+      // Nhịp groove C∞ mượt mà (không dùng Math.abs sắc cạnh gây khựng khớp)
+      const beat = elapsedSec * 6.2;
+      const sinB = Math.sin(beat);
+      const cosB = Math.cos(beat);
+      const bounce = 0.5 - 0.5 * Math.cos(beat * 2);
+      const leftWeight = 0.5 + 0.5 * sinB;
+      const rightWeight = 0.5 - 0.5 * sinB;
+      raw = {
+        legLTarget: seated ? -1.48 : -0.32 * leftWeight + 0.06 * rightWeight,
+        legRTarget: seated ? -1.48 : -0.32 * rightWeight + 0.06 * leftWeight,
+        legLZTarget: seated ? 0 : 0.09 * leftWeight,
+        legRZTarget: seated ? 0 : -0.09 * rightWeight,
+        kneeLTarget: seated ? 1.45 : 0.08 + 0.46 * leftWeight + 0.12 * bounce,
+        kneeRTarget: seated ? 1.45 : 0.08 + 0.46 * rightWeight + 0.12 * bounce,
+        footLTarget: seated ? 0.03 : -0.14 * leftWeight,
+        footRTarget: seated ? 0.03 : -0.14 * rightWeight,
+        armLTarget: -1.52 + sinB * 0.58,
+        armRTarget: -1.52 - sinB * 0.58,
+        armLZTarget: 0.26 + cosB * 0.16,
+        armRZTarget: -0.26 + cosB * 0.16,
+        elbowLTarget: -0.72 - 0.28 * leftWeight,
+        elbowRTarget: -0.72 - 0.28 * rightWeight,
+        bodyLeanTarget: (bounce - 0.5) * 0.045,
+        bodyRollTarget: sinB * 0.075,
+        bodyYawTarget: cosB * 0.18,
+        bodyBobTarget: bounce * 0.007,
+        jumpYOffset: seated ? 0 : bounce * 0.055,
+      };
+      break;
+    }
+    case 'cheer': {
+      const pulse = elapsedSec * 5.8;
+      const jumpWave = 0.5 - 0.5 * Math.cos(pulse);
+      const pump = Math.sin(pulse * 2);
+      raw = {
+        legLTarget: seated ? -1.48 : -0.18 * jumpWave,
+        legRTarget: seated ? -1.48 : -0.18 * jumpWave,
+        legLZTarget: seated ? 0 : 0.12 * jumpWave,
+        legRZTarget: seated ? 0 : -0.12 * jumpWave,
+        kneeLTarget: seated ? 1.45 : 0.08 + 0.34 * jumpWave,
+        kneeRTarget: seated ? 1.45 : 0.08 + 0.34 * jumpWave,
+        footLTarget: seated ? 0.03 : -0.14 * jumpWave,
+        footRTarget: seated ? 0.03 : -0.14 * jumpWave,
+        armLTarget: -2.56 + pump * 0.18,
+        armRTarget: -2.56 - pump * 0.18,
+        armLZTarget: 0.36 + jumpWave * 0.1,
+        armRZTarget: -0.36 - jumpWave * 0.1,
+        elbowLTarget: -0.28,
+        elbowRTarget: -0.28,
+        bodyLeanTarget: -0.045 * jumpWave,
+        bodyRollTarget: Math.sin(pulse) * 0.038,
+        bodyYawTarget: Math.cos(pulse) * 0.06,
+        bodyBobTarget: jumpWave * 0.006,
+        jumpYOffset: seated ? 0 : Math.pow(jumpWave, 1.35) * 0.15,
+      };
+      break;
+    }
+    case 'bow': {
+      // Đường cong cúi chào mượt: cúi xuống -> giữ nhẹ -> nâng người lên
+      const u = Math.max(0, Math.min(1, elapsedSec / durationSec));
+      const smoothBow = Math.pow(Math.sin(u * Math.PI), 0.85);
+      raw = {
+        ...baseLegs,
+        kneeLTarget: seated ? 1.45 : 0.05 + 0.06 * smoothBow,
+        kneeRTarget: seated ? 1.45 : 0.05 + 0.06 * smoothBow,
+        armLTarget: -0.44 * smoothBow,
+        armRTarget: -0.44 * smoothBow,
+        armLZTarget: -0.22 * smoothBow,
+        armRZTarget: 0.22 * smoothBow,
+        elbowLTarget: -0.24 - 0.82 * smoothBow,
+        elbowRTarget: -0.24 - 0.82 * smoothBow,
+        bodyLeanTarget: (seated ? 0.07 : 0) + 0.48 * smoothBow,
+        bodyRollTarget: 0,
+        bodyYawTarget: 0,
+        bodyBobTarget: 0,
+        jumpYOffset: 0,
+      };
+      break;
     }
     case 'clap': {
-      const clapOsc = Math.abs(Math.sin(elapsedSec * 11.5));
-      const bounce = Math.sin(elapsedSec * 5.75);
-      return {
+      // Dao động vỗ tay C∞ mượt không có đỉnh nhọn
+      const clapWave = 0.5 - 0.5 * Math.cos(elapsedSec * 14.5);
+      const bounce = Math.sin(elapsedSec * 4.8);
+      raw = {
         ...baseLegs,
-        armLTarget: -1.12 + bounce * 0.05,
-        armRTarget: -1.12 - bounce * 0.05,
-        armLZTarget: -0.35 + clapOsc * 0.25,
-        armRZTarget: 0.35 - clapOsc * 0.25,
-        elbowLTarget: -1.18,
-        elbowRTarget: -1.18,
-        bodyLeanTarget: seated ? 0.06 : 0.03,
-        bodyRollTarget: bounce * 0.045,
-        bodyYawTarget: bounce * 0.07,
-        bodyBobTarget: (1 - clapOsc) * 0.018,
+        armLTarget: -1.06 + bounce * 0.04,
+        armRTarget: -1.06 - bounce * 0.04,
+        armLZTarget: -0.36 + clapWave * 0.21,
+        armRZTarget: 0.36 - clapWave * 0.21,
+        elbowLTarget: -1.14 - (1 - clapWave) * 0.06,
+        elbowRTarget: -1.14 - (1 - clapWave) * 0.06,
+        bodyLeanTarget: seated ? 0.06 : 0.025,
+        bodyRollTarget: bounce * 0.036,
+        bodyYawTarget: bounce * 0.055,
+        bodyBobTarget: clapWave * 0.005,
         jumpYOffset: 0,
       };
+      break;
     }
     case 'stretch': {
-      const env = Math.min(1, elapsedSec / 0.45);
-      const sway = Math.sin(elapsedSec * 2.6);
-      return {
+      const sway = Math.sin(elapsedSec * 2.4);
+      const breath = 0.5 - 0.5 * Math.cos(elapsedSec * 2.4);
+      raw = {
         ...baseLegs,
-        armLTarget: -2.82 * env + (1 - env) * (seated ? -0.6 : 0.05),
-        armRTarget: -2.82 * env + (1 - env) * (seated ? -0.6 : -0.03),
-        armLZTarget: 0.16 * env + sway * 0.12,
-        armRZTarget: -0.16 * env + sway * 0.12,
+        armLTarget: -2.68,
+        armRTarget: -2.68,
+        armLZTarget: 0.15 + sway * 0.09,
+        armRZTarget: -0.15 + sway * 0.09,
         elbowLTarget: -0.22,
         elbowRTarget: -0.22,
-        bodyLeanTarget: (seated ? 0.05 : 0) - 0.16 * env,
-        bodyRollTarget: sway * 0.11 * env,
-        bodyYawTarget: Math.cos(elapsedSec * 2.6) * 0.14 * env,
-        bodyBobTarget: 0.025 * env,
+        bodyLeanTarget: (seated ? 0.05 : 0) - 0.13 * (0.65 + 0.35 * breath),
+        bodyRollTarget: sway * 0.078,
+        bodyYawTarget: Math.cos(elapsedSec * 2.4) * 0.095,
+        bodyBobTarget: breath * 0.006,
         jumpYOffset: 0,
       };
+      break;
     }
   }
+
+  return blendPoseToNeutral(raw, neutral, env);
 }

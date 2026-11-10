@@ -17,48 +17,33 @@ import {
   type FigureVariant,
 } from '../appearance/presets';
 
-export function Torso({
-  variant,
+export const WAIST_PIVOT_Y = 0.835;
+
+/**
+ * Khối cầu nối Hông – Đùi (Pelvis Bridge) và Chân váy xếp ly chữ A (Pleated Skirt):
+ * Neo cố định theo khung xương hông/chân (ngoài nhóm xoay `joints.body`) để khi nhân vật
+ * cúi chào, vươn vai, nhảy nhót hoặc nghiêng người thì phần hông và chân váy luôn gắn liền
+ * với đùi, tuyệt đối không bị tách rời thân trên và thân dưới.
+ */
+export function PelvisBase({
   gender = 'male',
-  shirt,
-  shirtDark,
-  upperYokeColor,
   pants,
   skirtColor,
-  hustTex,
-  hustCrimsonTex,
-  idTex,
   fabricTex,
-  lanyard,
 }: {
-  variant: FigureVariant;
   gender?: AvatarGender;
-  shirt: string;
-  shirtDark: string;
-  upperYokeColor?: string;
   pants: string;
   skirtColor?: string;
-  hustTex: THREE.CanvasTexture;
-  hustCrimsonTex: THREE.CanvasTexture;
-  idTex: THREE.CanvasTexture;
   fabricTex: THREE.CanvasTexture;
-  lanyard?: boolean;
 }) {
   const isFemale = gender === 'female';
-  const torsoScaleX = isFemale ? 0.92 : 1.02;
-  const waistScaleX = isFemale ? 0.85 : 1.0;
   const hipScaleX = isFemale ? 0.98 : 1.0;
-  const isWindbreaker = variant === 'windbreaker';
-  const isBomber = variant === 'bomber';
-  const isSport = variant === 'sport';
-  const topColor = shirt;
-  const pipingColor = upperYokeColor ?? WINDBREAKER_WHITE;
   const pelvisTone = skirtColor ?? pants;
 
   return (
     <group>
       {/* KHỐI CẦU NỐI HÔNG – ĐÙI (Pelvis Bridge) phủ kín từ y=0.76..0.88 để nối liền đáy thân với 2 khớp đùi */}
-      <mesh position={[0, 0.84, 0]} scale={[hipScaleX, 0.62, 0.74]} castShadow>
+      <mesh position={[0, 0.835, 0]} scale={[hipScaleX, 0.64, 0.74]} castShadow>
         <sphereGeometry args={[0.202, 18, 14]} />
         <meshStandardMaterial color={pelvisTone} map={fabricTex} roughness={0.86} />
       </mesh>
@@ -99,6 +84,53 @@ export function Torso({
           })}
         </group>
       )}
+    </group>
+  );
+}
+
+export function Torso({
+  variant,
+  gender = 'male',
+  shirt,
+  shirtDark,
+  upperYokeColor,
+  hustTex,
+  hustCrimsonTex,
+  idTex,
+  fabricTex,
+  lanyard,
+}: {
+  variant: FigureVariant;
+  gender?: AvatarGender;
+  shirt: string;
+  shirtDark: string;
+  upperYokeColor?: string;
+  pants?: string;
+  skirtColor?: string;
+  hustTex: THREE.CanvasTexture;
+  hustCrimsonTex: THREE.CanvasTexture;
+  idTex: THREE.CanvasTexture;
+  fabricTex: THREE.CanvasTexture;
+  lanyard?: boolean;
+}) {
+  const isFemale = gender === 'female';
+  const torsoScaleX = isFemale ? 0.92 : 1.02;
+  const waistScaleX = isFemale ? 0.85 : 1.0;
+  const hipScaleX = isFemale ? 0.98 : 1.0;
+  const isWindbreaker = variant === 'windbreaker';
+  const isBomber = variant === 'bomber';
+  const isSport = variant === 'sport';
+  const topColor = shirt;
+  const pipingColor = upperYokeColor ?? WINDBREAKER_WHITE;
+
+  return (
+    <group>
+      {/* KHỚP CẦU EO (Waist Ball-Joint Cap) đặt đúng tâm xoay WAIST_PIVOT_Y (y = 0.835)
+          để khi thân trên cúi/nghiêng/xoay ở mọi góc đều nối khít hoàn toàn với PelvisBase */}
+      <mesh position={[0, WAIST_PIVOT_Y + 0.008, 0]} scale={[hipScaleX * 0.97, 0.56, 0.7]} castShadow>
+        <sphereGeometry args={[0.196, 18, 14]} />
+        <meshStandardMaterial color={shirtDark} map={fabricTex} roughness={0.85} />
+      </mesh>
 
       {/* Phần bụng & eo (y = 0.84..1.10) */}
       <mesh position={[0, 0.97, 0]} scale={[waistScaleX, 1, 0.71]} castShadow>

@@ -281,8 +281,11 @@ function RemotePlayerView({
         : target.state;
 
     const j = joints;
+    const poseEase = Math.min(1, dt * 14);
     const set = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'y' | 'z', v: number) => {
-      if (ref.current) ref.current.rotation[axis] = v;
+      if (ref.current) {
+        ref.current.rotation[axis] += (v - ref.current.rotation[axis]) * poseEase;
+      }
     };
     const snap = multiplayer.snapshot;
     const remoteEmote = snap.emotes[player.id];
@@ -357,6 +360,9 @@ function RemotePlayerView({
       set(j.body, 'x', emotePose.bodyLeanTarget);
       set(j.body, 'y', emotePose.bodyYawTarget);
       set(j.body, 'z', emotePose.bodyRollTarget);
+      if (j.body.current) {
+        j.body.current.position.y += (emotePose.bodyBobTarget - j.body.current.position.y) * poseEase;
+      }
       g.position.y = cur.current.y + emotePose.jumpYOffset;
     } else {
       // Đứng yên: thở nhẹ, tay hơi gập (như NPC).
@@ -375,11 +381,12 @@ function RemotePlayerView({
       set(j.armR, 'z', 0);
       set(j.elbowL, 'x', -0.28);
       set(j.elbowR, 'x', -0.36);
+      set(j.body, 'x', 0);
+      set(j.body, 'y', 0);
+      set(j.body, 'z', Math.sin(t * 0.9) * 0.008);
       if (j.body.current) {
         j.body.current.scale.y = 1 + Math.sin(t * 1.4) * 0.008;
-        j.body.current.rotation.x = 0;
-        j.body.current.rotation.y = 0;
-        j.body.current.rotation.z = Math.sin(t * 0.9) * 0.008;
+        j.body.current.position.y += (0 - j.body.current.position.y) * poseEase;
       }
     }
 

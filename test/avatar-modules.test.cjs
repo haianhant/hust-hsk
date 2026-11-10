@@ -175,4 +175,32 @@ describe('PR4 — Avatar Appearance Presets & Uniform Contracts', () => {
       assert.equal(landmarksFacade[fnName], buildingsBarrel[fnName]);
     }
   });
+
+  test('Waist pivot rig and smooth C-infinity emote envelopes prevent upper/lower body separation', () => {
+    const torsoMod = require('../features/avatar/rig/Torso.tsx');
+    const { computeEmotePoseTargets, computeEmoteEnvelope, EMOTE_DEFINITIONS } = gaitMod;
+
+    assert.equal(torsoMod.WAIST_PIVOT_Y, 0.835);
+    assert.equal(typeof torsoMod.PelvisBase, 'function');
+    assert.equal(typeof torsoMod.Torso, 'function');
+    assert.equal(EMOTE_DEFINITIONS.length, 6);
+
+    // Envelope starts and ends at 0 and reaches 1 in the middle
+    for (const def of EMOTE_DEFINITIONS) {
+      const emoteId = def.id;
+      const durSec = def.durationMs / 1000;
+      assert.equal(computeEmoteEnvelope(0, durSec), 0);
+      assert.equal(computeEmoteEnvelope(durSec, durSec), 0);
+      assert.equal(computeEmoteEnvelope(durSec * 0.5, durSec), 1);
+
+      // Across the entire emote timeline, vertical bodyBobTarget stays <= 0.008m so spine never detaches from pelvis
+      for (let t = 0; t <= durSec; t += 0.05) {
+        const pose = computeEmotePoseTargets(emoteId, t, false);
+        assert.ok(
+          Math.abs(pose.bodyBobTarget) <= 0.008,
+          `${emoteId} at t=${t.toFixed(2)}s has excessive bodyBobTarget=${pose.bodyBobTarget}`,
+        );
+      }
+    }
+  });
 });

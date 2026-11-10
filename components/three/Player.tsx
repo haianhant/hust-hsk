@@ -306,20 +306,33 @@ export default function Player() {
     const targets = seatedNow
       ? computeSeatedPoseTargets(0)
       : computeNaturalGaitTargets(0, WALK_SWING, 0, 0, false);
-    if (legLRef.current) legLRef.current.rotation.x = targets.legLTarget;
-    if (legRRef.current) legRRef.current.rotation.x = targets.legRTarget;
+    if (legLRef.current) {
+      legLRef.current.rotation.x = targets.legLTarget;
+      legLRef.current.rotation.z = 0;
+    }
+    if (legRRef.current) {
+      legRRef.current.rotation.x = targets.legRTarget;
+      legRRef.current.rotation.z = 0;
+    }
     if (kneeLRef.current) kneeLRef.current.rotation.x = targets.kneeLTarget;
     if (kneeRRef.current) kneeRRef.current.rotation.x = targets.kneeRTarget;
     if (footLRef.current) footLRef.current.rotation.x = targets.footLTarget;
     if (footRRef.current) footRRef.current.rotation.x = targets.footRTarget;
-    if (armLRef.current) armLRef.current.rotation.x = targets.armLTarget;
-    if (armRRef.current) armRRef.current.rotation.x = targets.armRTarget;
+    if (armLRef.current) {
+      armLRef.current.rotation.x = targets.armLTarget;
+      armLRef.current.rotation.z = 0;
+    }
+    if (armRRef.current) {
+      armRRef.current.rotation.x = targets.armRTarget;
+      armRRef.current.rotation.z = 0;
+    }
     if (elbowLRef.current) elbowLRef.current.rotation.x = targets.elbowLTarget;
     if (elbowRRef.current) elbowRRef.current.rotation.x = targets.elbowRTarget;
     if (bodyRef.current) {
       bodyRef.current.position.y = targets.bodyBobTarget;
-      bodyRef.current.rotation.z = targets.bodyRollTarget;
       bodyRef.current.rotation.x = targets.bodyLeanTarget;
+      bodyRef.current.rotation.y = 0;
+      bodyRef.current.rotation.z = targets.bodyRollTarget;
     }
     if (groupRef.current) {
       const baseLibY = playerState.inLibraryLobby ? playerState.libraryY : 0;
@@ -458,6 +471,7 @@ export default function Player() {
   );
   const walkPhaseRef = useRef(0);
   const moveBlendRef = useRef(0); // 0 = idle, 1 = đi/chạy hết cỡ (nội suy mềm)
+  const emoteJumpYRef = useRef(0);
   const prevHitRef = useRef<string | null>(null);
   const lastResetRef = useRef(playerInput.resetToken);
   // --- Xe máy (đợt 3 giai đoạn 4): Player là nguồn thật duy nhất ghi bikeState.
@@ -1824,7 +1838,7 @@ export default function Player() {
       }
     }
 
-    const poseEase = playerState.activeEmote ? Math.min(1, frameStepSec * 18) : ease;
+    const poseEase = playerState.activeEmote ? Math.min(1, frameStepSec * 14) : ease;
     const lerp = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'y' | 'z', target: number) => {
       if (ref.current) {
         ref.current.rotation[axis] += (target - ref.current.rotation[axis]) * poseEase;
@@ -1848,8 +1862,10 @@ export default function Player() {
     lerp(bodyRef, 'y', bodyYawTarget);
     lerp(bodyRef, 'z', bodyRollTarget);
     if (bodyRef.current) {
-      bodyRef.current.position.y += (bodyBobTarget - bodyRef.current.position.y) * ease;
+      bodyRef.current.position.y += (bodyBobTarget - bodyRef.current.position.y) * poseEase;
     }
+    emoteJumpYRef.current += (emoteJumpYOffset - emoteJumpYRef.current) * poseEase;
+    const smoothEmoteJumpY = emoteJumpYRef.current;
 
     let groundY = 0;
     if (playerState.inLibraryLobby && !seatedNow) {
@@ -1880,14 +1896,14 @@ export default function Player() {
 
     groupRef.current.position.set(
       posRef.current.x,
-      groundY + (seatedNow ? SEATED_GROUP_Y_OFFSET : emoteJumpYOffset),
+      groundY + (seatedNow ? SEATED_GROUP_Y_OFFSET : smoothEmoteJumpY),
       posRef.current.z,
     );
     groupRef.current.rotation.y = facingRef.current;
     if (nameplateGroupRef.current) {
       nameplateGroupRef.current.position.set(
         posRef.current.x,
-        (ridingRef.current ? 2.05 : seatedNow ? 1.62 : 1.95) + groundY + emoteJumpYOffset * 0.5,
+        (ridingRef.current ? 2.05 : seatedNow ? 1.62 : 1.95) + groundY + smoothEmoteJumpY * 0.5,
         posRef.current.z,
       );
     }

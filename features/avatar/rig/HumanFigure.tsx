@@ -24,7 +24,7 @@ import {
 } from '../appearance/textures';
 import { Head } from './Head';
 import { ArmSide, LegSide } from './Limbs';
-import { Torso } from './Torso';
+import { PelvisBase, Torso, WAIST_PIVOT_Y } from './Torso';
 
 /** Hình người đầy đủ, dùng chung cho người chơi + NPC + Multiplayer + AmbientLife. */
 export function HumanFigure(props: FigureProps) {
@@ -107,53 +107,66 @@ export function HumanFigure(props: FigureProps) {
         kneeRef={joints?.kneeR}
         footRef={joints?.footR}
       />
-      <group ref={joints?.body}>
-        <Torso
-          variant={variant}
-          gender={gender}
-          shirt={shirt}
-          shirtDark={shirtDark}
-          upperYokeColor={upperYokeColor}
-          pants={pants}
-          skirtColor={effectiveSkirtColor}
-          hustTex={hustTex}
-          hustCrimsonTex={hustCrimsonTex}
-          idTex={idTex}
-          fabricTex={fabricTex}
-          lanyard={lanyard}
-        />
-        <ArmSide
-          side={1}
-          shoulderX={shoulderX}
-          armScale={armScale}
-          variant={variant}
-          shirt={shirt}
-          shirtDark={shirtDark}
-          upperYokeColor={upperYokeColor}
-          sleeveColor={sleeveColor}
-          fabricTex={fabricTex}
-          sleeveBadgeTex={sleeveBadgeTex}
-          wristwatch={wristwatch}
-          shoulderRef={joints?.armL}
-          elbowRef={joints?.elbowL}
-        />
-        <ArmSide
-          side={-1}
-          shoulderX={shoulderX}
-          armScale={armScale}
-          variant={variant}
-          shirt={shirt}
-          shirtDark={shirtDark}
-          upperYokeColor={upperYokeColor}
-          sleeveColor={sleeveColor}
-          fabricTex={fabricTex}
-          sleeveBadgeTex={sleeveBadgeTex}
-          wristwatch={wristwatch}
-          shoulderRef={joints?.armR}
-          elbowRef={joints?.elbowR}
-        />
-        <Head gender={gender} hairStyle={hairStyle} glasses={glasses} cap={cap} />
-        {backpack && showBackpack && <Backpack colors={packColors} />}
+      <PelvisBase
+        gender={gender}
+        pants={pants}
+        skirtColor={effectiveSkirtColor}
+        fabricTex={fabricTex}
+      />
+      {/* Đặt tâm xoay của `joints.body` đúng tại khớp eo (WAIST_PIVOT_Y = 0.835m)
+          thay vì tại mặt đất (y = 0) để khi cúi chào, nhảy nhót, vươn vai hoặc nghiêng
+          người thì thân trên xoay quanh eo và luôn gắn liền với phần hông/chân. */}
+      <group position={[0, WAIST_PIVOT_Y, 0]}>
+        <group ref={joints?.body}>
+          <group position={[0, -WAIST_PIVOT_Y, 0]}>
+            <Torso
+              variant={variant}
+              gender={gender}
+              shirt={shirt}
+              shirtDark={shirtDark}
+              upperYokeColor={upperYokeColor}
+              pants={pants}
+              skirtColor={effectiveSkirtColor}
+              hustTex={hustTex}
+              hustCrimsonTex={hustCrimsonTex}
+              idTex={idTex}
+              fabricTex={fabricTex}
+              lanyard={lanyard}
+            />
+            <ArmSide
+              side={1}
+              shoulderX={shoulderX}
+              armScale={armScale}
+              variant={variant}
+              shirt={shirt}
+              shirtDark={shirtDark}
+              upperYokeColor={upperYokeColor}
+              sleeveColor={sleeveColor}
+              fabricTex={fabricTex}
+              sleeveBadgeTex={sleeveBadgeTex}
+              wristwatch={wristwatch}
+              shoulderRef={joints?.armL}
+              elbowRef={joints?.elbowL}
+            />
+            <ArmSide
+              side={-1}
+              shoulderX={shoulderX}
+              armScale={armScale}
+              variant={variant}
+              shirt={shirt}
+              shirtDark={shirtDark}
+              upperYokeColor={upperYokeColor}
+              sleeveColor={sleeveColor}
+              fabricTex={fabricTex}
+              sleeveBadgeTex={sleeveBadgeTex}
+              wristwatch={wristwatch}
+              shoulderRef={joints?.armR}
+              elbowRef={joints?.elbowR}
+            />
+            <Head gender={gender} hairStyle={hairStyle} glasses={glasses} cap={cap} />
+            {backpack && showBackpack && <Backpack colors={packColors} />}
+          </group>
+        </group>
       </group>
     </group>
   );

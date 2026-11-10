@@ -7,7 +7,15 @@
 
 import * as THREE from 'three';
 import { buildRoom401, type Room401Controller } from './buildRoom401';
-import { canvasTex, lin, mulberry32, optimizeStaticLibraryGroup } from './procedural-helpers';
+import {
+  canvasTex,
+  lin,
+  makeLibraryStuccoWallTex,
+  makeLibraryUpholsteryTex,
+  makeLibraryWoodGrainTex,
+  mulberry32,
+  optimizeStaticLibraryGroup,
+} from './procedural-helpers';
 import {
   createLibraryLocation,
   evaluateCurvedStairAt,
@@ -529,31 +537,92 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     return mk(g, m, 0, y, 0);
   };
 
-  // Vật liệu
-  const M_WALL = mat(0xf4f0e8, 0.82);
-  const M_WALL2 = mat(0xebe5d9, 0.85);
-  const M_COL = mat(0xf7f4ee, 0.72);
-  const M_CEIL = mat(0xf6f3ec, 0.9);
-  const M_TRIM = mat(0xd8d1c3, 0.75);
-  const M_PARA = mat(0xf5f1e9, 0.78);
-  const M_WOOD_D = mat(0x3e2415, 0.45, 0.08);
-  const M_WOOD_M = mat(0x8c5a32, 0.52, 0.06);
-  const M_WOOD_L = mat(0xc99b68, 0.55, 0.05);
-  const M_CHR = mat(0xcfd4da, 0.22, 0.88);
-  const M_STL = mat(0x8c939c, 0.3, 0.82);
-  const M_DRK = mat(0x23262b, 0.4, 0.75);
-  const M_RED = mat(0x8e2420, 0.48);
+  // Vật liệu PBR thủ tục (vân gỗ sồi/óc chó, vải nỉ ghế, đá cẩm thạch & tường vữa mịn)
+  const woodLightPbr = makeLibraryWoodGrainTex('#cfa270', '#a97845', 2, 2, 101);
+  const woodMedPbr = makeLibraryWoodGrainTex('#8f5d34', '#633c1c', 2, 2, 202);
+  const woodDarkPbr = makeLibraryWoodGrainTex('#422717', '#29160b', 2, 2, 303);
+  const redFabricPbr = makeLibraryUpholsteryTex('#942622', '#6e1916', 3, 3);
+  const charFabricPbr = makeLibraryUpholsteryTex('#2d3138', '#1d2025', 3, 3);
+  const stuccoWallPbr = makeLibraryStuccoWallTex('#f5f1e8', '#e2dacb', 8, 4, 404);
+  const stuccoColPbr = makeLibraryStuccoWallTex('#faf7f0', '#e6dfd1', 4, 6, 505);
+
+  const M_WALL = new THREE.MeshStandardMaterial({
+    color: 0xf6f2ea,
+    map: stuccoWallPbr.map,
+    bumpMap: stuccoWallPbr.bumpMap,
+    bumpScale: 0.004,
+    roughness: 0.78,
+  });
+  const M_WALL2 = mat(0xebe5d9, 0.82);
+  const M_COL = new THREE.MeshStandardMaterial({
+    color: 0xfaf7f2,
+    map: stuccoColPbr.map,
+    bumpMap: stuccoColPbr.bumpMap,
+    bumpScale: 0.004,
+    roughness: 0.62,
+    metalness: 0.04,
+  });
+  const M_CEIL = mat(0xf6f3ec, 0.88);
+  const M_TRIM = mat(0xd8d1c3, 0.65, 0.06);
+  const M_PARA = mat(0xf5f1e9, 0.72, 0.04);
+  const M_WOOD_D = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: woodDarkPbr.map,
+    bumpMap: woodDarkPbr.bumpMap,
+    bumpScale: 0.008,
+    roughness: 0.38,
+    metalness: 0.08,
+  });
+  const M_WOOD_M = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: woodMedPbr.map,
+    bumpMap: woodMedPbr.bumpMap,
+    bumpScale: 0.008,
+    roughness: 0.44,
+    metalness: 0.06,
+  });
+  const M_WOOD_L = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: woodLightPbr.map,
+    bumpMap: woodLightPbr.bumpMap,
+    bumpScale: 0.007,
+    roughness: 0.42,
+    metalness: 0.06,
+  });
+  const M_CHR = mat(0xd4dae0, 0.18, 0.9);
+  const M_STL = mat(0x949ba4, 0.26, 0.85);
+  const M_DRK = mat(0x23262b, 0.36, 0.78);
+  const M_RED = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: redFabricPbr.map,
+    bumpMap: redFabricPbr.bumpMap,
+    bumpScale: 0.006,
+    roughness: 0.56,
+  });
   const M_HUST = mat(0xa61c1c, 0.42);
-  const M_CHAR = mat(0x2a2d32, 0.55);
-  const M_GLS = new THREE.MeshStandardMaterial({ color: 0xcfe7f5, transparent: true, opacity: 0.34, roughness: 0.1, metalness: 0.12 });
-  const M_MIR = mat(0x9bb0c4, 0.12, 0.92);
+  const M_CHAR = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: charFabricPbr.map,
+    bumpMap: charFabricPbr.bumpMap,
+    bumpScale: 0.006,
+    roughness: 0.52,
+  });
+  const M_GLS = new THREE.MeshStandardMaterial({ color: 0xcfe7f5, transparent: true, opacity: 0.36, roughness: 0.08, metalness: 0.18 });
+  const M_MIR = mat(0x9bb0c4, 0.1, 0.94);
   const M_LGT = new THREE.MeshBasicMaterial({ color: 0xfff8e7 });
   const M_LED = new THREE.MeshBasicMaterial({ color: 0xffe6b0 });
   const M_SCR = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
-  const M_LEAF = mat(0x2f6b34, 0.65);
-  const M_POT = mat(0x4a3423, 0.7);
-  const M_GOLD = mat(0xd4a937, 0.3, 0.82);
-  const M_BRZ = mat(0x8c6239, 0.38, 0.75);
+  const M_LEAF = mat(0x2f6b34, 0.62);
+  const M_POT = mat(0x4a3423, 0.68);
+  const M_GOLD = mat(0xd4a937, 0.24, 0.86);
+  const M_BRZ = mat(0x8c6239, 0.34, 0.78);
+  const M_LAMP_SHADE = new THREE.MeshStandardMaterial({
+    color: 0x15803d,
+    emissive: 0x14532d,
+    emissiveIntensity: 0.45,
+    roughness: 0.28,
+    metalness: 0.12,
+  });
 
   const tileTex = (bg: string, gr: string, a: string, b: string, rep: number) =>
     canvasTex(
@@ -683,14 +752,36 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     c.restore();
   });
 
-  // Sàn tầng 1: gạch trắng + sân vận động đỏ + ngôi sao 16 cánh ở tâm
-  const M_FLR_W = new THREE.MeshStandardMaterial({ map: whiteTex, roughness: 0.25, metalness: 0.08 });
-  const M_FLR_R = new THREE.MeshStandardMaterial({ map: redTex, roughness: 0.28, metalness: 0.08 });
-  const M_STAR = new THREE.MeshStandardMaterial({ map: starTex, roughness: 0.22, metalness: 0.1 });
+  // Sàn tầng 1: gạch cẩm thạch trắng bóng + sân vận động đá đỏ + ngôi sao 16 cánh viền đồng ở tâm
+  const M_FLR_W = new THREE.MeshStandardMaterial({
+    map: whiteTex,
+    bumpMap: whiteTex,
+    bumpScale: 0.003,
+    roughness: 0.19,
+    metalness: 0.12,
+  });
+  const M_FLR_R = new THREE.MeshStandardMaterial({
+    map: redTex,
+    bumpMap: redTex,
+    bumpScale: 0.003,
+    roughness: 0.22,
+    metalness: 0.1,
+  });
+  const M_STAR = new THREE.MeshStandardMaterial({
+    map: starTex,
+    bumpMap: starTex,
+    bumpScale: 0.004,
+    roughness: 0.16,
+    metalness: 0.16,
+  });
   mk(new THREE.PlaneGeometry(XW * 2, ZF - ZB), M_FLR_W, 0, 0, (ZF + ZB) / 2, -Math.PI / 2);
   stadFlat(FR + 1.6, 0.006, M_TRIM);
   stadFlat(FR + 1.35, 0.01, M_FLR_R);
   mk(new THREE.CircleGeometry(5.6, 64), M_STAR, 0, 0.015, 0, -Math.PI / 2);
+  // Viền đồng mạ vàng bao quanh hoa văn Ngôi sao 16 cánh trung tâm Đại sảnh
+  const starRimGeo = new THREE.RingGeometry(5.54, 5.68, 64);
+  starRimGeo.rotateX(-Math.PI / 2);
+  mk(starRimGeo, M_GOLD, 0, 0.018, 0);
 
   // Sàn các tầng 2–5 + Lan can thông tầng (Tầng 2 khoét thêm 2 ô thông tầng cầu thang xoắn đôi Đông/Tây)
   const ST_R0 = 7.55;
@@ -784,7 +875,7 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     }
   }
 
-  // Trần tầng 5 + Tranh vòm Mặt trời thông tầng
+  // Trần tầng 5 + Tranh vòm Mặt trời thông tầng + Đèn chùm pha lê thông tầng Đại sảnh
   box(XW * 2, 0.35, ZF - ZB, M_CEIL, 0, H + 0.17, (ZF + ZB) / 2);
   stadRing(FR, FR + 0.55, H - 0.55, H + 0.02, M_WALL);
   stadRing(FR - 0.05, FR + 0.05, H - 0.56, H - 0.48, M_LED);
@@ -798,7 +889,41 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   sunG.scale(1.95, 1, 0.92);
   mk(sunG, new THREE.MeshBasicMaterial({ map: sunTex }), 0, 0.01, 0, 0, 0, 0, ovalG);
 
-  // 8 cột thông tầng lớn
+  // Đèn chùm vòng đồng & pha lê phát sáng treo dưới vòm Mặt trời thông tầng
+  {
+    const chandG = G(world, 0, H - 1.55, 0);
+    const outerTorus = new THREE.TorusGeometry(3.6, 0.075, 12, 48);
+    outerTorus.rotateX(Math.PI / 2);
+    outerTorus.scale(1.55, 1, 0.92);
+    mk(outerTorus, M_GOLD, 0, 0, 0, 0, 0, 0, chandG);
+
+    const glowTorus = new THREE.TorusGeometry(3.48, 0.055, 10, 48);
+    glowTorus.rotateX(Math.PI / 2);
+    glowTorus.scale(1.55, 1, 0.92);
+    mk(glowTorus, M_LED, 0, -0.08, 0, 0, 0, 0, chandG);
+
+    const innerTorus = new THREE.TorusGeometry(2.1, 0.06, 10, 36);
+    innerTorus.rotateX(Math.PI / 2);
+    innerTorus.scale(1.45, 1, 0.92);
+    mk(innerTorus, M_GOLD, 0, -0.55, 0, 0, 0, 0, chandG);
+
+    const innerGlow = new THREE.TorusGeometry(2.02, 0.045, 8, 36);
+    innerGlow.rotateX(Math.PI / 2);
+    innerGlow.scale(1.45, 1, 0.92);
+    mk(innerGlow, M_LGT, 0, -0.61, 0, 0, 0, 0, chandG);
+
+    for (let i = 0; i < 12; i++) {
+      const ang = (i / 12) * Math.PI * 2;
+      const rx = Math.cos(ang) * 3.6 * 1.55;
+      const rz = Math.sin(ang) * 3.6 * 0.92;
+      if (i % 3 === 0) {
+        cyl(0.018, 0.018, 1.55, 8, M_GOLD, rx, 0.775, rz, 0, 0, 0, chandG);
+      }
+      cyl(0.065, 0.035, 0.28, 10, M_LGT, rx, -0.22, rz, 0, 0, 0, chandG);
+    }
+  }
+
+  // 8 cột thông tầng lớn có chân đế đá, vòng đai đồng theo tầng và đầu cột loe
   const COLS: Array<[number, number]> = [
     [-L - FR * 0.98, 0],
     [L + FR * 0.98, 0],
@@ -811,7 +936,13 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   ];
   for (const [cx, cz] of COLS) {
     cyl(0.42, 0.42, H, 24, M_COL, cx, H / 2, cz);
-    cyl(0.5, 0.52, 0.18, 24, M_TRIM, cx, 0.09, cz);
+    cyl(0.56, 0.6, 0.22, 24, M_WOOD_D, cx, 0.11, cz);
+    cyl(0.48, 0.52, 0.18, 24, M_TRIM, cx, 0.28, cz);
+    cyl(0.46, 0.46, 0.06, 24, M_GOLD, cx, 0.4, cz);
+    cyl(0.58, 0.43, 0.34, 24, M_TRIM, cx, H - 0.18, cz);
+    for (let f = 1; f < NF; f++) {
+      cyl(0.45, 0.45, 0.055, 20, M_GOLD, cx, f * FH + 0.02, cz);
+    }
   }
 
   // Đèn âm trần InstancedMesh cho 5 tầng (loại trừ vùng giếng trời & ô thông tầng cầu thang xoắn ở T1)
@@ -1175,6 +1306,12 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
   defineProp('table4', () => {
     pBox(1.5, 0.05, 0.85, M_WOOD_L, 0, 0.74, 0);
     pBox(1.46, 0.03, 0.81, M_WOOD_D, 0, 0.71, 0);
+    // Đèn bàn đọc sách cổ điển chụp xanh ngọc bích + chân đồng ở giữa bàn & 2 cuốn sách mở
+    pCyl(0.08, 0.095, 0.025, 10, M_GOLD, 0, 0.778, 0);
+    pCyl(0.016, 0.016, 0.24, 8, M_GOLD, 0, 0.89, 0);
+    pBox(0.28, 0.075, 0.14, M_LAMP_SHADE, 0, 1.01, 0);
+    pBox(0.22, 0.024, 0.16, mat(0x1f4e79, 0.55), -0.38, 0.777, -0.18, 0, 0.12, 0);
+    pBox(0.2, 0.022, 0.15, mat(0xfdfbf7, 0.7), 0.36, 0.776, 0.16, 0, -0.15, 0);
     for (const [lx, lz] of [
       [-0.68, -0.36],
       [0.68, -0.36],
@@ -1198,6 +1335,9 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     pCyl(0.62, 0.62, 0.05, 18, M_WOOD_D, 0, 0.74, 0);
     pCyl(0.06, 0.06, 0.7, 10, M_DRK, 0, 0.36, 0);
     pCyl(0.34, 0.36, 0.03, 14, M_DRK, 0, 0.02, 0);
+    pCyl(0.07, 0.085, 0.022, 10, M_GOLD, 0, 0.776, 0);
+    pCyl(0.015, 0.015, 0.2, 8, M_GOLD, 0, 0.875, 0);
+    pCyl(0.11, 0.15, 0.09, 12, M_LAMP_SHADE, 0, 0.98, 0);
     for (let i = 0; i < 4; i++) {
       const a = (i * Math.PI) / 2 + Math.PI / 4;
       const xf = compose(Math.cos(a) * 0.82, 0, Math.sin(a) * 0.82, 0, -a - Math.PI / 2, 0);

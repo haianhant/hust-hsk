@@ -34,6 +34,7 @@ import {
   type LibraryFloor,
 } from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
+import { makeGraniteStoneTexture } from './materials';
 import { LabelPlane } from './TextPlate';
 
 export interface LibraryLobbyProps {
@@ -223,6 +224,7 @@ export default function LibraryLobby({
   onObjectClick,
 }: LibraryLobbyProps) {
   const binaryWall = useMemo(() => makeBinaryWallTextures(), []);
+  const granitePbr = useMemo(() => makeGraniteStoneTexture(2, 2), []);
 
   // Khởi tạo 3 phân khu kiến trúc đa tầng của Thư viện Tạ Quang Bửu (Tầng 1–5, Tầng 6–7, Sân thượng Tầng 10)
   // Các tầng trên (Tầng 2–5 nội thất hành lang/phòng đọc, Khối B Tầng 6–7, Khối D Tầng 10)
@@ -256,6 +258,7 @@ export default function LibraryLobby({
   const floor1AnchorsRef = useRef<THREE.Group>(null);
   const floor6InteractiveRef = useRef<THREE.Group>(null);
   const floor10InteractiveRef = useRef<THREE.Group>(null);
+  const floorFillLightRef = useRef<THREE.PointLight>(null);
   const debugOverlayRef = useRef<THREE.Group>(null);
   const debugFloorRenderedRef = useRef<LibraryFloor | null>(null);
   const perfStatsRef = useRef({ lastFrameDeltaMs: 0, maxFrameDeltaMs: 0 });
@@ -313,6 +316,8 @@ export default function LibraryLobby({
     return () => {
       binaryWall.map.dispose();
       binaryWall.emissiveMap.dispose();
+      granitePbr.map.dispose();
+      granitePbr.bumpMap.dispose();
       multiFloor.disposeBlockB();
       disposeObject3D(multiFloor.groupA);
       disposeObject3D(multiFloor.groupB);
@@ -321,7 +326,7 @@ export default function LibraryLobby({
         disposeObject3D(debugOverlayRef.current);
       }
     };
-  }, [binaryWall, multiFloor]);
+  }, [binaryWall, granitePbr, multiFloor]);
 
   useFrame((state, rawDelta) => {
     const dtMs = rawDelta * 1000;
@@ -409,6 +414,16 @@ export default function LibraryLobby({
     } else if (showBlockD) {
       multiFloor.ensureBlockD().update(dt, state.clock.elapsedTime);
     }
+
+    if (floorFillLightRef.current) {
+      const targetLightY = showBlockD
+        ? 35.2
+        : showBlockB
+          ? playerState.libraryY + 3.6
+          : Math.max(16.2, playerState.libraryY + 3.8);
+      floorFillLightRef.current.position.y +=
+        (targetLightY - floorFillLightRef.current.position.y) * Math.min(1, dt * 8);
+    }
   });
 
   const clickObj = (id: string) => (e: { stopPropagation: () => void }) => {
@@ -433,8 +448,17 @@ export default function LibraryLobby({
 
   return (
     <group>
-      {/* Hệ thống ánh sáng ấm áp cho Đại sảnh thông tầng & các tầng đọc sách (1 đèn điểm trung tâm tối ưu shader) */}
-      <pointLight position={[0, 7.5, 0]} color="#FFEBC2" intensity={1.9} distance={42} decay={1.1} />
+      {/* Hệ thống ánh sáng ấm áp đa tầng cho Đại sảnh thông tầng, đèn chùm giếng trời & các tầng đọc sách */}
+      <pointLight position={[0, 7.5, 0]} color="#FFEBC2" intensity={1.95} distance={44} decay={1.08} />
+      <pointLight
+        ref={floorFillLightRef}
+        position={[0, 16.5, 0]}
+        color="#FFF2D6"
+        intensity={1.65}
+        distance={48}
+        decay={1.05}
+      />
+      <pointLight position={[0, 3.2, -1.55]} color="#FFF0C4" intensity={1.25} distance={9.5} decay={1.35} />
 
       {/* =====================================================================
           3 PHÂN KHU KIẾN TRÚC ĐA TẦNG THƯ VIỆN TẠ QUANG BỬU (TẦNG 1–10)
@@ -476,7 +500,14 @@ export default function LibraryLobby({
           {/* Bậc đá nguyên khối đen xám dưới chân bệ */}
           <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
             <boxGeometry args={[1.45, 0.16, 1.25]} />
-            <meshStandardMaterial color="#2A2B2E" roughness={0.5} metalness={0.15} />
+            <meshStandardMaterial
+              color="#2A2B2E"
+              map={granitePbr.map}
+              bumpMap={granitePbr.bumpMap}
+              bumpScale={0.01}
+              roughness={0.42}
+              metalness={0.18}
+            />
           </mesh>
           {/* Bệ gỗ gụ cao 1,35 m có phào chỉ trên/dưới */}
           <mesh position={[0, 0.82, 0]} castShadow receiveShadow>

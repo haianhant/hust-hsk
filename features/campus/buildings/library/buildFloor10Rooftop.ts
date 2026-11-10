@@ -8,7 +8,13 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { canvasTex, mulberry32, optimizeStaticLibraryGroup } from './procedural-helpers';
+import {
+  canvasTex,
+  makeLibraryUpholsteryTex,
+  makeLibraryWoodGrainTex,
+  mulberry32,
+  optimizeStaticLibraryGroup,
+} from './procedural-helpers';
 import {
   createLibraryLocation,
   queryLibraryGround,
@@ -92,17 +98,46 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
     p: THREE.Object3D = world,
   ) => mk((gCache[`c_${rt}_${rb}_${h}_${s}`] ??= new THREE.CylinderGeometry(rt, rb, h, s)), m, x, y, z, rx, ry, rz, p);
 
-  const M_STONE = mat(0x2e3440, 0.82);
-  const M_PARA = mat(0xd8dee9, 0.72);
-  const M_WOOD_D = mat(0x4a2f1d, 0.55);
-  const M_WOOD_M = mat(0x7c5032, 0.52);
-  const M_WOOD_L = mat(0xb88655, 0.5);
-  const M_LAWN = mat(0x2d5a36, 0.92);
-  const M_LEAF = mat(0x255230, 0.78);
-  const M_CHR = mat(0xcfd6df, 0.22, 0.88);
-  const M_DRK = mat(0x1b1f26, 0.38, 0.72);
-  const M_GOLD = mat(0xd4af37, 0.28, 0.82);
-  const M_FABRIC = mat(0xece6d8, 0.75);
+  const r10WoodDark = makeLibraryWoodGrainTex('#4a2f1d', '#2d1b10', 2, 2, 801);
+  const r10WoodMed = makeLibraryWoodGrainTex('#7c5032', '#54331d', 3, 2, 802);
+  const r10WoodLight = makeLibraryWoodGrainTex('#b88655', '#8c6036', 2, 2, 803);
+  const r10Fabric = makeLibraryUpholsteryTex('#ece6d8', '#cfc6b4', 3, 3);
+
+  const M_STONE = mat(0x2e3440, 0.78);
+  const M_PARA = mat(0xd8dee9, 0.68);
+  const M_WOOD_D = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: r10WoodDark.map,
+    bumpMap: r10WoodDark.bumpMap,
+    bumpScale: 0.008,
+    roughness: 0.48,
+  });
+  const M_WOOD_M = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: r10WoodMed.map,
+    bumpMap: r10WoodMed.bumpMap,
+    bumpScale: 0.008,
+    roughness: 0.46,
+  });
+  const M_WOOD_L = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: r10WoodLight.map,
+    bumpMap: r10WoodLight.bumpMap,
+    bumpScale: 0.007,
+    roughness: 0.44,
+  });
+  const M_LAWN = mat(0x2d5a36, 0.9);
+  const M_LEAF = mat(0x255230, 0.76);
+  const M_CHR = mat(0xcfd6df, 0.2, 0.88);
+  const M_DRK = mat(0x1b1f26, 0.36, 0.74);
+  const M_GOLD = mat(0xd4af37, 0.26, 0.84);
+  const M_FABRIC = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: r10Fabric.map,
+    bumpMap: r10Fabric.bumpMap,
+    bumpScale: 0.006,
+    roughness: 0.68,
+  });
   const M_GLS = new THREE.MeshStandardMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.3, roughness: 0.1, metalness: 0.1 });
   const M_LED = new THREE.MeshBasicMaterial({ color: 0xffd584 });
 

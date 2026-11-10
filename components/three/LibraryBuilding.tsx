@@ -373,29 +373,186 @@ function drawOneLoveSlogan(ctx: CanvasRenderingContext2D, w: number, h: number) 
   ctx.fillText('ONE LOVE. ONE FUTURE.', w / 2, h / 2);
 }
 
-// --- Hộp kính / hộp trắng dùng chung (có phản chiếu IBL & sáng đèn phòng đọc ban đêm) ----
-function GlassBox({ p, s }: { p: [number, number, number]; s: [number, number, number] }) {
+// --- Texture kính cửa sổ 4 ô khung nhôm & phản chiếu bầu trời + rèm sáo ngang ---
+function makeLibraryWindowTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const size = 256;
+  const cMap = document.createElement('canvas');
+  cMap.width = size;
+  cMap.height = size;
+  const ctx = cMap.getContext('2d')!;
+
+  const cBump = document.createElement('canvas');
+  cBump.width = size;
+  cBump.height = size;
+  const ctxB = cBump.getContext('2d')!;
+
+  // Nền kính xanh đá đậm có gradient phản chiếu bầu trời
+  const grad = ctx.createLinearGradient(0, 0, size * 0.35, size);
+  grad.addColorStop(0, '#3C546E');
+  grad.addColorStop(0.38, '#2B3E52');
+  grad.addColorStop(0.72, '#1F2E3D');
+  grad.addColorStop(1, '#293B4E');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  ctxB.fillStyle = '#505050';
+  ctxB.fillRect(0, 0, size, size);
+
+  // Vệt phản chiếu chéo nhẹ trên mặt kính
+  ctx.fillStyle = 'rgba(210, 232, 255, 0.11)';
+  ctx.beginPath();
+  ctx.moveTo(24, 0);
+  ctx.lineTo(88, 0);
+  ctx.lineTo(20, size);
+  ctx.lineTo(0, size);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(210, 232, 255, 0.07)';
+  ctx.beginPath();
+  ctx.moveTo(148, 0);
+  ctx.lineTo(192, 0);
+  ctx.lineTo(118, size);
+  ctx.lineTo(78, size);
+  ctx.closePath();
+  ctx.fill();
+
+  // Rèm sáo ngang mờ phía trên ô cửa
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.12)';
+  for (let y = 14; y < 74; y += 9) {
+    ctx.fillRect(12, y, size - 24, 4);
+  }
+
+  // Khung nhôm bao ngoài + đố đứng giữa + đố ngang (transom)
+  ctx.strokeStyle = '#6D7A88';
+  ctx.lineWidth = 12;
+  ctx.strokeRect(6, 6, size - 12, size - 12);
+
+  ctx.fillStyle = '#73808E';
+  ctx.fillRect(size / 2 - 5, 6, 10, size - 12);
+  ctx.fillRect(6, Math.round(size * 0.34) - 4, size - 12, 8);
+
+  // Bump map nổi cho khung nhôm
+  ctxB.strokeStyle = '#E0E0E0';
+  ctxB.lineWidth = 12;
+  ctxB.strokeRect(6, 6, size - 12, size - 12);
+  ctxB.fillStyle = '#D8D8D8';
+  ctxB.fillRect(size / 2 - 5, 6, 10, size - 12);
+  ctxB.fillRect(6, Math.round(size * 0.34) - 4, size - 12, 8);
+
+  const map = new THREE.CanvasTexture(cMap);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 4;
+
+  const bumpMap = new THREE.CanvasTexture(cBump);
+  bumpMap.anisotropy = 4;
+
+  return { map, bumpMap };
+}
+
+// --- Texture gạch lát đỏ-nâu lối đi chính sân trước Thư viện ------------------
+function makeRedPaverTexture(): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const size = 256;
+  const cMap = document.createElement('canvas');
+  cMap.width = size;
+  cMap.height = size;
+  const ctx = cMap.getContext('2d')!;
+
+  const cBump = document.createElement('canvas');
+  cBump.width = size;
+  cBump.height = size;
+  const ctxB = cBump.getContext('2d')!;
+
+  ctx.fillStyle = '#8A4A32';
+  ctx.fillRect(0, 0, size, size);
+  ctxB.fillStyle = '#909090';
+  ctxB.fillRect(0, 0, size, size);
+
+  const rows = 8;
+  const cols = 4;
+  const bh = size / rows;
+  const bw = size / cols;
+  let seed = 20061010;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+
+  for (let r = 0; r < rows; r++) {
+    const offset = (r % 2) * (bw * 0.5);
+    for (let c = -1; c <= cols; c++) {
+      const x = c * bw + offset;
+      const y = r * bh;
+      const delta = Math.round((rnd() - 0.5) * 18);
+      ctx.fillStyle = `rgb(${138 + delta}, ${74 + Math.round(delta * 0.6)}, ${50 + Math.round(delta * 0.5)})`;
+      ctx.fillRect(x + 2, y + 2, bw - 4, bh - 4);
+      ctx.strokeStyle = 'rgba(48, 24, 16, 0.55)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, bw - 2, bh - 2);
+
+      ctxB.fillStyle = '#C8C8C8';
+      ctxB.fillRect(x + 2, y + 2, bw - 4, bh - 4);
+      ctxB.strokeStyle = '#383838';
+      ctxB.lineWidth = 2;
+      ctxB.strokeRect(x + 1, y + 1, bw - 2, bh - 2);
+    }
+  }
+
+  const map = new THREE.CanvasTexture(cMap);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(6, 3);
+  map.anisotropy = 4;
+
+  const bumpMap = new THREE.CanvasTexture(cBump);
+  bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.repeat.set(6, 3);
+  bumpMap.anisotropy = 4;
+
+  return { map, bumpMap };
+}
+
+// --- Hộp kính / hộp trắng dùng chung (có phản chiếu IBL & vật liệu PBR dùng chung) ----
+function GlassBox({
+  p,
+  s,
+  mat,
+}: {
+  p: [number, number, number];
+  s: [number, number, number];
+  mat?: THREE.MeshStandardMaterial;
+}) {
   return (
-    <mesh position={p}>
+    <mesh position={p} material={mat}>
       <boxGeometry args={s} />
-      <meshStandardMaterial
-        color={LIB_GLASS}
-        emissive={LIB_GLASS}
-        emissiveIntensity={0.45}
-        roughness={0.18}
-        metalness={0.32}
-      />
+      {!mat && (
+        <meshStandardMaterial
+          color={LIB_GLASS}
+          emissive={LIB_GLASS}
+          emissiveIntensity={0.45}
+          roughness={0.18}
+          metalness={0.32}
+        />
+      )}
     </mesh>
   );
 }
 
-function WhiteBox({ p, s, shadow = false }: {
-  p: [number, number, number]; s: [number, number, number]; shadow?: boolean;
+function WhiteBox({
+  p,
+  s,
+  shadow = false,
+  mat,
+}: {
+  p: [number, number, number];
+  s: [number, number, number];
+  shadow?: boolean;
+  mat?: THREE.MeshStandardMaterial;
 }) {
   return (
-    <mesh position={p} castShadow={shadow} receiveShadow>
+    <mesh position={p} castShadow={shadow} receiveShadow material={mat}>
       <boxGeometry args={s} />
-      <meshStandardMaterial color={LIB_WHITE} roughness={0.86} />
+      {!mat && <meshStandardMaterial color={LIB_WHITE} roughness={0.86} />}
     </mesh>
   );
 }
@@ -404,6 +561,33 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
   const isNight = timeOfDay === 'night' || timeOfDay === 'sunset';
   const concretePbr = useMemo(() => makeWeatheredConcreteTexture(4, 8), []);
   const granitePbr = useMemo(() => makeGraniteStoneTexture(4, 4), []);
+  const windowPbr = useMemo(() => makeLibraryWindowTexture(), []);
+  const paverPbr = useMemo(() => makeRedPaverTexture(), []);
+  const glassMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: '#D8E6F5',
+        map: windowPbr.map,
+        bumpMap: windowPbr.bumpMap,
+        bumpScale: 0.015,
+        emissive: new THREE.Color(LIB_GLASS),
+        emissiveIntensity: 0.36,
+        roughness: 0.16,
+        metalness: 0.38,
+      }),
+    [windowPbr],
+  );
+  const whiteWallMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: LIB_WHITE,
+        map: concretePbr.map,
+        bumpMap: concretePbr.bumpMap,
+        bumpScale: 0.01,
+        roughness: 0.84,
+      }),
+    [concretePbr],
+  );
   const clockR = LIBRARY.clock.radius; // 1,3 m — giữ đúng hằng số (đợt 4)
   const clock = LIBRARY.clock; // (38, 7,3, 23,9), mặt bắc
 
@@ -462,8 +646,14 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       concretePbr.bumpMap.dispose();
       granitePbr.map.dispose();
       granitePbr.bumpMap.dispose();
+      windowPbr.map.dispose();
+      windowPbr.bumpMap.dispose();
+      paverPbr.map.dispose();
+      paverPbr.bumpMap.dispose();
+      glassMat.dispose();
+      whiteWallMat.dispose();
     },
-    [clockTex, concretePbr, granitePbr],
+    [clockTex, concretePbr, granitePbr, windowPbr, paverPbr, glassMat, whiteWallMat],
   );
 
   // Lam khối đế: 13 thanh/cụm, cách nhau 0,25 m, dày 0,14 m
@@ -545,8 +735,20 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       </mesh>
 
       {/* Dải kính đứng tối, hẹp, lõm vào giữa khối giữa và cánh bên phải ảnh (x = 30.35):
-          z 28,5..29,9, chạy suốt chiều cao y 0,6..31,0 (khớp thu-vien-mat-tien-01.jpg). */}
-      <GlassBox p={[30.35, (PLINTH + WING_TOP) / 2, 29.2]} s={[1.3, WING_TOP - PLINTH, 1.4]} />
+          z 28,5..29,9, chạy suốt chiều cao y 0,6..31,0 + đố nhôm đứng & dải spandrel từng tầng (khớp thu-vien-cao-nhin-cheo-01.jpg). */}
+      <GlassBox p={[30.35, (PLINTH + WING_TOP) / 2, 29.2]} s={[1.3, WING_TOP - PLINTH, 1.4]} mat={glassMat} />
+      {[30.0, 30.7].map((mx) => (
+        <mesh key={`lib-core-mull-v-${mx}`} position={[mx, (PLINTH + WING_TOP) / 2, 28.48]}>
+          <boxGeometry args={[0.05, WING_TOP - PLINTH, 0.06]} />
+          <meshStandardMaterial color="#707D8B" roughness={0.35} metalness={0.55} />
+        </mesh>
+      ))}
+      {Array.from({ length: 9 }).map((_, f) => (
+        <mesh key={`lib-core-spandrel-${f}`} position={[30.35, PLINTH + (f + 1) * FH - 0.12, 28.48]}>
+          <boxGeometry args={[1.32, 0.24, 0.06]} />
+          <meshStandardMaterial color={LIB_BLUE} roughness={0.65} metalness={0.25} />
+        </mesh>
+      ))}
 
       {/* --- Mặt BẮC (mặt chính, z = 28 khối giữa / z = 30 hai cánh) --- */}
       {/* Khối giữa, tầng 4..8 (5 hàng lộ trên khối đế): 7 nhóm/hàng trên bề rộng 14 m */}
@@ -554,19 +756,19 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
         <group key={`lib-c-n-${f}`}>
           {centerGroupX.map((x) => (
             <group key={`lib-c-n-${f}-${x}`}>
-              <GlassBox p={[x, bandY(f), 27.94]} s={[1.45, 1.5, 0.08]} />
-              <WhiteBox p={[x, bandY(f), 27.92]} s={[0.09, 1.5, 0.1]} />
+              <GlassBox p={[x, bandY(f), 27.94]} s={[1.45, 1.5, 0.08]} mat={glassMat} />
+              <WhiteBox p={[x, bandY(f), 27.92]} s={[0.09, 1.5, 0.1]} mat={whiteWallMat} />
             </group>
           ))}
         </group>
       ))}
       {/* Khối giữa, tầng trên cùng (f=9): Hàng cột tròn thông tầng (colonnade loggia)
           gồm 7 cột trụ tròn màu xám bạc tạo 8 khoang kính lùi sâu + dải diềm xanh dương đậm phía trên */}
-      <GlassBox p={[38, 30.45, 28.08]} s={[12.6, 2.65, 0.1]} />
+      <GlassBox p={[38, 30.45, 28.08]} s={[12.6, 2.65, 0.1]} mat={glassMat} />
       {topColX.map((x) => (
         <mesh key={`lib-top-col-${x}`} position={[x, 30.45, 27.92]} castShadow>
           <cylinderGeometry args={[0.17, 0.17, 2.7, 16]} />
-          <meshStandardMaterial color={COLUMN_GREY} roughness={0.65} metalness={0.2} />
+          <meshStandardMaterial color={COLUMN_GREY} roughness={0.5} metalness={0.32} />
         </mesh>
       ))}
       <mesh position={[38, 32.2, 27.94]}>
@@ -576,33 +778,33 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       {/* Hai cánh, mặt bắc: dải kính ngang từng tầng + 3 đố chia 4 nhóm cửa mỗi cánh. */}
       {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((f) => (
         <group key={`lib-w-n-${f}`}>
-          <GlassBox p={[28.25, bandY(f), 29.94]} s={[4.9, 1.5, 0.08]} />
-          <GlassBox p={[47.75, bandY(f), 29.94]} s={[4.9, 1.5, 0.08]} />
+          <GlassBox p={[28.25, bandY(f), 29.94]} s={[4.9, 1.5, 0.08]} mat={glassMat} />
+          <GlassBox p={[47.75, bandY(f), 29.94]} s={[4.9, 1.5, 0.08]} mat={glassMat} />
           {[27.0, 28.25, 29.5].map((x) => (
-            <WhiteBox key={`lib-w-n-mull-${f}-${x}`} p={[x, bandY(f), 29.92]} s={[0.08, 1.5, 0.1]} />
+            <WhiteBox key={`lib-w-n-mull-${f}-${x}`} p={[x, bandY(f), 29.92]} s={[0.08, 1.5, 0.1]} mat={whiteWallMat} />
           ))}
           {[46.5, 47.75, 49.0].map((x) => (
-            <WhiteBox key={`lib-w-n-mull-e-${f}-${x}`} p={[x, bandY(f), 29.92]} s={[0.08, 1.5, 0.1]} />
+            <WhiteBox key={`lib-w-n-mull-e-${f}-${x}`} p={[x, bandY(f), 29.92]} s={[0.08, 1.5, 0.1]} mat={whiteWallMat} />
           ))}
         </group>
       ))}
-      <GlassBox p={[28.25, 30.2, 29.94]} s={[4.9, 1.2, 0.08]} />
-      <GlassBox p={[47.75, 30.2, 29.94]} s={[4.9, 1.2, 0.08]} />
+      <GlassBox p={[28.25, 30.2, 29.94]} s={[4.9, 1.2, 0.08]} mat={glassMat} />
+      <GlassBox p={[47.75, 30.2, 29.94]} s={[4.9, 1.2, 0.08]} mat={glassMat} />
       {[27.0, 28.25, 29.5].map((x) => (
-        <WhiteBox key={`lib-w-n9-mull-${x}`} p={[x, 30.2, 29.92]} s={[0.08, 1.2, 0.1]} />
+        <WhiteBox key={`lib-w-n9-mull-${x}`} p={[x, 30.2, 29.92]} s={[0.08, 1.2, 0.1]} mat={whiteWallMat} />
       ))}
       {[46.5, 47.75, 49.0].map((x) => (
-        <WhiteBox key={`lib-w-n9-mull-e-${x}`} p={[x, 30.2, 29.92]} s={[0.08, 1.2, 0.1]} />
+        <WhiteBox key={`lib-w-n9-mull-e-${x}`} p={[x, 30.2, 29.92]} s={[0.08, 1.2, 0.1]} mat={whiteWallMat} />
       ))}
 
       {/* --- Mặt NAM (mặt sau, z = 43) — dải kính ngang --- */}
       {Array.from({ length: 10 }).map((_, f) => (
-        <GlassBox key={`lib-s-${f}`} p={[38, bandY(f), 43.06]} s={[13.2, 1.5, 0.08]} />
+        <GlassBox key={`lib-s-${f}`} p={[38, bandY(f), 43.06]} s={[13.2, 1.5, 0.08]} mat={glassMat} />
       ))}
       {Array.from({ length: 10 }).map((_, f) => (
         <group key={`lib-sw-${f}`}>
-          <GlassBox p={[28.25, f === 9 ? 30.2 : bandY(f), 43.06]} s={[4.9, f === 9 ? 1.2 : 1.5, 0.08]} />
-          <GlassBox p={[47.75, f === 9 ? 30.2 : bandY(f), 43.06]} s={[4.9, f === 9 ? 1.2 : 1.5, 0.08]} />
+          <GlassBox p={[28.25, f === 9 ? 30.2 : bandY(f), 43.06]} s={[4.9, f === 9 ? 1.2 : 1.5, 0.08]} mat={glassMat} />
+          <GlassBox p={[47.75, f === 9 ? 30.2 : bandY(f), 43.06]} s={[4.9, f === 9 ? 1.2 : 1.5, 0.08]} mat={glassMat} />
         </group>
       ))}
       {/* Dải xanh dương dưới diềm mái khối giữa, mặt nam (đối xứng mặt bắc). */}
@@ -614,15 +816,15 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       {/* --- Mặt TÂY (nhìn từ hồ, x = 25,5) và mặt ĐÔNG (x = 50,5) --- */}
       {Array.from({ length: 10 }).map((_, f) => (
         <group key={`lib-side-${f}`}>
-          <GlassBox p={[25.44, f === 9 ? 30.2 : bandY(f), 36.5]} s={[0.08, f === 9 ? 1.2 : 1.5, 11]} />
-          <GlassBox p={[50.56, f === 9 ? 30.2 : bandY(f), 36.5]} s={[0.08, f === 9 ? 1.2 : 1.5, 11]} />
+          <GlassBox p={[25.44, f === 9 ? 30.2 : bandY(f), 36.5]} s={[0.08, f === 9 ? 1.2 : 1.5, 11]} mat={glassMat} />
+          <GlassBox p={[50.56, f === 9 ? 30.2 : bandY(f), 36.5]} s={[0.08, f === 9 ? 1.2 : 1.5, 11]} mat={glassMat} />
         </group>
       ))}
 
       {/* ============ MÁI PHẲNG + DIỀM ĐUA RỘNG + CẤU TRÚC TRÊN MÁI ============ */}
       {/* Mái hai cánh đua rộng ra hai đầu tạo dáng chữ T mở ở đỉnh (theo thu-vien-mat-tien-01.jpg). */}
-      <WhiteBox p={[28.1, 31.2, 36.5]} s={[6.8, 0.4, 13.8]} shadow />
-      <WhiteBox p={[47.9, 31.2, 36.5]} s={[6.8, 0.4, 13.8]} shadow />
+      <WhiteBox p={[28.1, 31.2, 36.5]} s={[6.8, 0.4, 13.8]} shadow mat={whiteWallMat} />
+      <WhiteBox p={[47.9, 31.2, 36.5]} s={[6.8, 0.4, 13.8]} shadow mat={whiteWallMat} />
       {/* Mái khối giữa (diềm nhô 0,4 m) — mặt trên xám nhạt. */}
       <mesh position={[38, 32.8, 35.5]} castShadow receiveShadow>
         <boxGeometry args={[14.8, 0.4, 15.8]} />
@@ -660,34 +862,42 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
 
       {/* ============ KHỐI ĐẾ MẶT TRƯỚC (x 31..45 = 14 m, z 24..30, y 6..11,3) ============ */}
       {/* Hai trụ bên tầng trệt (tây/đông) — giữa là sảnh lõm vào. */}
-      <WhiteBox p={[32.2, 3.3, 27]} s={[2.4, 5.4, 6]} shadow />
-      <WhiteBox p={[43.8, 3.3, 27]} s={[2.4, 5.4, 6]} shadow />
+      <WhiteBox p={[32.2, 3.3, 27]} s={[2.4, 5.4, 6]} shadow mat={whiteWallMat} />
+      <WhiteBox p={[43.8, 3.3, 27]} s={[2.4, 5.4, 6]} shadow mat={whiteWallMat} />
       {/* Tầng trên khối đế (y 6..11,3): tường trước mang 2 cụm lam + đồng hồ + biển tên vàng 2 dòng. */}
-      <WhiteBox p={[38, 8.65, 27]} s={[14, 5.3, 6]} shadow />
+      <WhiteBox p={[38, 8.65, 27]} s={[14, 5.3, 6]} shadow mat={whiteWallMat} />
 
-      {/* --- 2 cụm lam ngang lớn màu xám, hai bên đồng hồ --- */}
+      {/* --- 2 cụm lam ngang lớn màu xám, hai bên đồng hồ (có hệ kính lùi sâu & đố nhôm đứng phía sau) --- */}
       {[33.8, 42.2].map((x) => (
-        <mesh key={`lib-lam-back-${x}`} position={[x, 7.65, 24.03]}>
-          <boxGeometry args={[4.6, 3.1, 0.06]} />
-          <meshStandardMaterial color={LAM_BACK} roughness={0.9} />
-        </mesh>
+        <group key={`lib-lam-back-${x}`}>
+          <mesh position={[x, 7.65, 24.03]}>
+            <boxGeometry args={[4.6, 3.1, 0.06]} />
+            <meshStandardMaterial color="#314152" roughness={0.32} metalness={0.35} />
+          </mesh>
+          {[-1.15, 0, 1.15].map((dx) => (
+            <mesh key={`lib-lam-mull-${x}-${dx}`} position={[x + dx, 7.65, 24.08]}>
+              <boxGeometry args={[0.07, 3.05, 0.05]} />
+              <meshStandardMaterial color="#7B8794" roughness={0.4} metalness={0.45} />
+            </mesh>
+          ))}
+        </group>
       ))}
       {[33.8, 42.2].map((xc) =>
         slatY.map((y) => (
           <mesh key={`lib-slat-${xc}-${y}`} position={[xc, y, 24.2]} rotation-x={-0.45} castShadow>
             <boxGeometry args={[4.45, 0.14, 0.07]} />
-            <meshStandardMaterial color={SLAT} roughness={0.85} />
+            <meshStandardMaterial color={SLAT} roughness={0.62} metalness={0.22} />
           </mesh>
         )),
       )}
       {/* Khung trắng quanh mỗi cụm lam (đứng 2 bên + ngang trên/dưới). */}
       {[31.45, 36.15, 39.85, 44.55].map((x) => (
-        <WhiteBox key={`lib-lam-frame-v-${x}`} p={[x, 7.65, 24.05]} s={[0.14, 3.1, 0.08]} />
+        <WhiteBox key={`lib-lam-frame-v-${x}`} p={[x, 7.65, 24.05]} s={[0.14, 3.1, 0.08]} mat={whiteWallMat} />
       ))}
       {[33.8, 42.2].map((x) => (
         <group key={`lib-lam-frame-h-${x}`}>
-          <WhiteBox p={[x, 6.05, 24.05]} s={[4.7, 0.14, 0.08]} />
-          <WhiteBox p={[x, 9.25, 24.05]} s={[4.7, 0.14, 0.08]} />
+          <WhiteBox p={[x, 6.05, 24.05]} s={[4.7, 0.14, 0.08]} mat={whiteWallMat} />
+          <WhiteBox p={[x, 9.25, 24.05]} s={[4.7, 0.14, 0.08]} mat={whiteWallMat} />
         </group>
       ))}
 
@@ -825,33 +1035,67 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
         <boxGeometry args={[14, 0.08, 0.3]} />
         <meshBasicMaterial color="#DDDCD7" />
       </mesh>
-      {/* 6 cột TRÒN lớn màu xám bạc (r = 0,28 m) đỡ mái hiên sảnh theo thu-vien-mat-tien-01.jpg:
+      {/* 8 đèn âm trần LED ấm áp dưới mái hiên sảnh */}
+      {[20.3, 23.1].map((lz) =>
+        [33.8, 36.6, 39.4, 42.2].map((lx) => (
+          <mesh key={`lib-porch-downlight-${lx}-${lz}`} position={[lx, 5.51, lz]} rotation-x={Math.PI / 2}>
+            <circleGeometry args={[0.14, 16]} />
+            <meshBasicMaterial color={isNight ? '#FFE599' : '#FFF8E7'} />
+          </mesh>
+        )),
+      )}
+      <pointLight
+        position={[38, 5.1, 22.0]}
+        color="#FFEAC2"
+        intensity={isNight ? 1.45 : 0.75}
+        distance={14}
+        decay={1.25}
+      />
+
+      {/* 6 cột TRÒN lớn bọc tấm nhôm xám bạc (r = 0,28 m) có chân đế đá granite, vòng mạch nối & đầu cột theo thu-vien-mat-tien-01.jpg:
           4 cột hàng ngoài (z = 19,5) + 2 cột hàng trong (z = 22,8). */}
-      {frontPorchColX.map((x) => (
-        <mesh key={`lib-col-front-${x}`} position={[x, 3.3, 19.5]} castShadow>
-          <cylinderGeometry args={[0.28, 0.28, 5.4, 20]} />
-          <meshStandardMaterial
-            color={COLUMN_GREY}
-            map={concretePbr.map}
-            bumpMap={concretePbr.bumpMap}
-            bumpScale={0.01}
-            roughness={0.72}
-            metalness={0.15}
-          />
-        </mesh>
-      ))}
-      {innerPorchColX.map((x) => (
-        <mesh key={`lib-col-inner-${x}`} position={[x, 3.3, 22.8]} castShadow>
-          <cylinderGeometry args={[0.28, 0.28, 5.4, 20]} />
-          <meshStandardMaterial
-            color={COLUMN_GREY}
-            map={concretePbr.map}
-            bumpMap={concretePbr.bumpMap}
-            bumpScale={0.01}
-            roughness={0.72}
-            metalness={0.15}
-          />
-        </mesh>
+      {[
+        ...frontPorchColX.map((x) => ({ x, z: 19.5, key: `front-${x}` })),
+        ...innerPorchColX.map((x) => ({ x, z: 22.8, key: `inner-${x}` })),
+      ].map(({ x, z, key }) => (
+        <group key={`lib-col-${key}`} position={[x, 0, z]}>
+          {/* Thân cột bọc nhôm xám bạc */}
+          <mesh position={[0, 3.3, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.28, 0.28, 5.4, 24]} />
+            <meshStandardMaterial
+              color={COLUMN_GREY}
+              map={concretePbr.map}
+              bumpMap={concretePbr.bumpMap}
+              bumpScale={0.008}
+              roughness={0.48}
+              metalness={0.32}
+            />
+          </mesh>
+          {/* Đế cột đá granite xám đậm */}
+          <mesh position={[0, 0.81, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.33, 0.35, 0.42, 24]} />
+            <meshStandardMaterial
+              color="#4A525A"
+              map={granitePbr.map}
+              bumpMap={granitePbr.bumpMap}
+              bumpScale={0.01}
+              roughness={0.55}
+              metalness={0.22}
+            />
+          </mesh>
+          {/* Đầu cột đỡ mái hiên */}
+          <mesh position={[0, 5.44, 0]}>
+            <cylinderGeometry args={[0.35, 0.3, 0.22, 24]} />
+            <meshStandardMaterial color="#7B848E" roughness={0.45} metalness={0.35} />
+          </mesh>
+          {/* Vòng ron tấm ốp nhôm ngang thân cột */}
+          {[1.85, 2.95, 4.05, 5.0].map((ry) => (
+            <mesh key={`col-ring-${ry}`} position={[0, ry, 0]} rotation-x={Math.PI / 2}>
+              <torusGeometry args={[0.284, 0.009, 8, 24]} />
+              <meshStandardMaterial color="#58616B" roughness={0.4} metalness={0.45} />
+            </mesh>
+          ))}
+        </group>
       ))}
       <mesh position={[38, 3.3, 27.3]}>
         <boxGeometry args={[9.2, 5.4, 1.4]} />
@@ -870,21 +1114,21 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       </mesh>
       {/* 2 cánh cửa kính trung tâm tự động trượt mở sang hai bên khi người chơi tới gần */}
       <group ref={leftDoorRef} position={[37.1, 2.6, 26.5]}>
-        <GlassBox p={[0, 0, 0]} s={[1.6, 4.0, 0.06]} />
+        <GlassBox p={[0, 0, 0]} s={[1.6, 4.0, 0.06]} mat={glassMat} />
         <mesh position={[0.68, -0.1, -0.045]}>
           <boxGeometry args={[0.04, 0.72, 0.04]} />
           <meshStandardMaterial color="#D8DCE2" roughness={0.25} metalness={0.78} />
         </mesh>
       </group>
       <group ref={rightDoorRef} position={[38.9, 2.6, 26.5]}>
-        <GlassBox p={[0, 0, 0]} s={[1.6, 4.0, 0.06]} />
+        <GlassBox p={[0, 0, 0]} s={[1.6, 4.0, 0.06]} mat={glassMat} />
         <mesh position={[-0.68, -0.1, -0.045]}>
           <boxGeometry args={[0.04, 0.72, 0.04]} />
           <meshStandardMaterial color="#D8DCE2" roughness={0.25} metalness={0.78} />
         </mesh>
       </group>
       {[35.1, 40.9].map((x) => (
-        <GlassBox key={`lib-door-side-${x}`} p={[x, 2.6, 26.5]} s={[2.1, 4.0, 0.06]} />
+        <GlassBox key={`lib-door-side-${x}`} p={[x, 2.6, 26.5]} s={[2.1, 4.0, 0.06]} mat={glassMat} />
       ))}
       {/* Hệ khung cổng xanh dương đậm (#1E5AA8) bao quanh cửa kính sảnh chính */}
       {[34.0, 36.2, 38.0, 39.8, 42.0].map((x) => (
@@ -898,6 +1142,27 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
           <boxGeometry args={[8.16, 0.15, 0.1]} />
           <meshStandardMaterial color={LIB_BLUE} roughness={0.82} />
         </mesh>
+      ))}
+      {/* 2 bảng standee xanh dương chào mừng đặt hai bên cửa kính sảnh chính (theo thu-vien-mat-tien-01.jpg) */}
+      {[35.8, 40.2].map((sx) => (
+        <group key={`lib-standee-${sx}`} position={[sx, 0.6, 25.85]}>
+          <mesh position={[0, 0.03, 0]}>
+            <boxGeometry args={[0.56, 0.06, 0.36]} />
+            <meshStandardMaterial color="#4A525A" roughness={0.45} metalness={0.5} />
+          </mesh>
+          <mesh position={[0, 0.78, 0]} castShadow>
+            <boxGeometry args={[0.58, 1.38, 0.04]} />
+            <meshStandardMaterial color={LIB_BLUE} roughness={0.45} metalness={0.15} />
+          </mesh>
+          <mesh position={[0, 1.24, -0.025]}>
+            <boxGeometry args={[0.46, 0.24, 0.01]} />
+            <meshStandardMaterial color="#F8FAFC" roughness={0.4} />
+          </mesh>
+          <mesh position={[0, 0.76, -0.025]}>
+            <boxGeometry args={[0.46, 0.56, 0.01]} />
+            <meshStandardMaterial color="#38BDF8" roughness={0.45} />
+          </mesh>
+        </group>
       ))}
       {/* Bậc tiếp cận rộng (4 bậc đá granite rộng 14 m) + bậc bên 2 đầu */}
       {[
@@ -933,7 +1198,13 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       {/* ============ TIỀN CẢNH PHÍA BẮC — sân trước mới (z 10..19) ============ */}
       <mesh rotation-x={-Math.PI / 2} position={[28.5, 0.035, 14]} receiveShadow>
         <planeGeometry args={[9, 4]} />
-        <meshStandardMaterial color={WALK_RED} roughness={0.92} />
+        <meshStandardMaterial
+          color="#FFFFFF"
+          map={paverPbr.map}
+          bumpMap={paverPbr.bumpMap}
+          bumpScale={0.012}
+          roughness={0.86}
+        />
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position={[39.5, 0.035, 14]} receiveShadow>
         <planeGeometry args={[13, 4]} />
@@ -980,6 +1251,17 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
           <meshStandardMaterial color={BIN_GREEN} roughness={0.8} />
         </mesh>
       ))}
+      <mesh position={[38, 0.06, 14]} receiveShadow>
+        <boxGeometry args={[5.92, 0.12, 1.48]} />
+        <meshStandardMaterial
+          color="#2A2D32"
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.62}
+          metalness={0.18}
+        />
+      </mesh>
       <mesh position={[38, 0.25, 14]} castShadow receiveShadow>
         <boxGeometry args={[5.6, 0.5, 1.2]} />
         <meshStandardMaterial
@@ -987,9 +1269,17 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
           map={granitePbr.map}
           bumpMap={granitePbr.bumpMap}
           bumpScale={0.01}
-          roughness={0.75}
+          roughness={0.55}
+          metalness={0.18}
         />
       </mesh>
+      {/* 4 đèn hắt sáng chân chữ HUST (uplights) đặt trên gờ đá phía Bắc bệ chữ */}
+      {[35.9, 37.3, 38.7, 40.1].map((ux) => (
+        <mesh key={`hust-uplight-${ux}`} position={[ux, 0.13, 13.33]}>
+          <cylinderGeometry args={[0.06, 0.07, 0.04, 12]} />
+          <meshBasicMaterial color={isNight ? '#FFE08A' : '#CBD5E1'} />
+        </mesh>
+      ))}
       {/* Dòng chữ trắng "ONE LOVE. ONE FUTURE." trên mặt trước bệ đá đen chữ HUST (thu-vien-mat-tien-chu-hust-01.jpg) */}
       <LabelPlane
         textureKey="hust-plinth-one-love"

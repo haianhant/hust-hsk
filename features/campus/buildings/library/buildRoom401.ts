@@ -7,7 +7,15 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { canvasTex, lin, mulberry32, optimizeStaticLibraryGroup } from './procedural-helpers';
+import {
+  canvasTex,
+  lin,
+  makeLibraryStuccoWallTex,
+  makeLibraryUpholsteryTex,
+  makeLibraryWoodGrainTex,
+  mulberry32,
+  optimizeStaticLibraryGroup,
+} from './procedural-helpers';
 import {
   ROOM_401_DIMS,
   createLibraryLocation,
@@ -114,16 +122,62 @@ export function buildRoom401(
     return g;
   };
 
-  const mWall = M(0xf0ece0, 0.85);
-  const mCeiling = M(0xf7f5ef, 0.9);
-  const mCol = M(0xe5e0d2, 0.75);
-  const mBaseboard = M(0xc8bfa8, 0.6);
-  const mWoodLight = M(0xd8b888, 0.55, 0.05);
-  const mWoodMed = M(0xb8895a, 0.6, 0.05);
-  const mWoodDark = M(0x6e4726, 0.65, 0.05);
-  const mDivider = M(0xe8d9b8, 0.65);
-  const mChairBlue = M(0x1f5fa8, 0.55, 0.05);
-  const mChairRed = M(0xb83228, 0.55, 0.05);
+  const r4WallPbr = makeLibraryStuccoWallTex('#f2eee3', '#e2dbc9', 6, 3, 601);
+  const r4WoodLight = makeLibraryWoodGrainTex('#dbb98a', '#b68a54', 2, 2, 602);
+  const r4WoodMed = makeLibraryWoodGrainTex('#ba8a5a', '#8c5e34', 2, 2, 603);
+  const r4WoodDark = makeLibraryWoodGrainTex('#6e4726', '#462a13', 2, 2, 604);
+  const r4BlueFabric = makeLibraryUpholsteryTex('#1f5fa8', '#144175', 3, 3);
+  const r4RedFabric = makeLibraryUpholsteryTex('#b83228', '#852019', 3, 3);
+
+  const mWall = new THREE.MeshStandardMaterial({
+    color: 0xf4f0e6,
+    map: r4WallPbr.map,
+    bumpMap: r4WallPbr.bumpMap,
+    bumpScale: 0.004,
+    roughness: 0.8,
+  });
+  const mCeiling = M(0xf7f5ef, 0.88);
+  const mCol = M(0xe5e0d2, 0.72);
+  const mBaseboard = M(0xc8bfa8, 0.58);
+  const mWoodLight = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: r4WoodLight.map,
+    bumpMap: r4WoodLight.bumpMap,
+    bumpScale: 0.007,
+    roughness: 0.44,
+    metalness: 0.05,
+  });
+  const mWoodMed = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: r4WoodMed.map,
+    bumpMap: r4WoodMed.bumpMap,
+    bumpScale: 0.007,
+    roughness: 0.48,
+    metalness: 0.05,
+  });
+  const mWoodDark = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: r4WoodDark.map,
+    bumpMap: r4WoodDark.bumpMap,
+    bumpScale: 0.008,
+    roughness: 0.45,
+    metalness: 0.06,
+  });
+  const mDivider = M(0xe8d9b8, 0.62);
+  const mChairBlue = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: r4BlueFabric.map,
+    bumpMap: r4BlueFabric.bumpMap,
+    bumpScale: 0.006,
+    roughness: 0.54,
+  });
+  const mChairRed = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: r4RedFabric.map,
+    bumpMap: r4RedFabric.bumpMap,
+    bumpScale: 0.006,
+    roughness: 0.54,
+  });
   const mMetal = M(0x3a3e44, 0.4, 0.7);
   const mChrome = M(0xc8cdd2, 0.25, 0.85);
   const mBlack = M(0x1a1c20, 0.4, 0.3);

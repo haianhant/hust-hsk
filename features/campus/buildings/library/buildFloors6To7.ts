@@ -6,7 +6,14 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { canvasTex, mulberry32, optimizeStaticLibraryGroup } from './procedural-helpers';
+import {
+  canvasTex,
+  makeLibraryStuccoWallTex,
+  makeLibraryUpholsteryTex,
+  makeLibraryWoodGrainTex,
+  mulberry32,
+  optimizeStaticLibraryGroup,
+} from './procedural-helpers';
 import {
   BLOCK_B_DIMS,
   createLibraryLocation,
@@ -183,17 +190,70 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
   const stadRing = (r0: number, r1: number, y0: number, y1: number, m: THREE.Material, seg = 140) =>
     ribbon(Array.from({ length: seg + 1 }, (_, i) => stadAt(i / seg, r0)), r0, r1, y0, y1, m);
 
-  // Vật liệu
-  const M_WALL = mat(0xf4f1ea, 0.8);
-  const M_CEIL = mat(0xf7f5ef, 0.88);
-  const M_COL = mat(0xfaf8f2, 0.68);
-  const M_TRIM = mat(0xd8d0c0, 0.72);
-  const M_WOOD_D = mat(0x3b2314, 0.44, 0.08);
-  const M_WOOD_M = mat(0x9b6b3e, 0.5, 0.06);
-  const M_WOOD_L = mat(0xd8b482, 0.48, 0.05);
-  const M_NAVY = mat(0x1b3058, 0.82);
-  const M_MUSTARD = mat(0xd49a2a, 0.65);
-  const M_RED_CH = mat(0xb82924, 0.52);
+  // Vật liệu PBR thủ tục cho Tầng 6–7 (Không gian Sáng tạo & Lounge)
+  const bWallPbr = makeLibraryStuccoWallTex('#f6f3ec', '#e5dfd2', 6, 3, 701);
+  const bWoodDark = makeLibraryWoodGrainTex('#3b2314', '#24140a', 2, 2, 702);
+  const bWoodMed = makeLibraryWoodGrainTex('#9b6b3e', '#6f4824', 2, 2, 703);
+  const bWoodLight = makeLibraryWoodGrainTex('#d8b482', '#b38952', 2, 2, 704);
+  const bNavyFabric = makeLibraryUpholsteryTex('#1b3058', '#11203d', 4, 4);
+  const bMustardFabric = makeLibraryUpholsteryTex('#d49a2a', '#a67418', 3, 3);
+  const bRedFabric = makeLibraryUpholsteryTex('#b82924', '#871b17', 3, 3);
+
+  const M_WALL = new THREE.MeshStandardMaterial({
+    color: 0xf6f3ec,
+    map: bWallPbr.map,
+    bumpMap: bWallPbr.bumpMap,
+    bumpScale: 0.004,
+    roughness: 0.76,
+  });
+  const M_CEIL = mat(0xf7f5ef, 0.86);
+  const M_COL = mat(0xfaf8f2, 0.62, 0.04);
+  const M_TRIM = mat(0xd8d0c0, 0.68, 0.05);
+  const M_WOOD_D = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: bWoodDark.map,
+    bumpMap: bWoodDark.bumpMap,
+    bumpScale: 0.008,
+    roughness: 0.38,
+    metalness: 0.08,
+  });
+  const M_WOOD_M = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: bWoodMed.map,
+    bumpMap: bWoodMed.bumpMap,
+    bumpScale: 0.007,
+    roughness: 0.44,
+    metalness: 0.06,
+  });
+  const M_WOOD_L = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: bWoodLight.map,
+    bumpMap: bWoodLight.bumpMap,
+    bumpScale: 0.007,
+    roughness: 0.42,
+    metalness: 0.05,
+  });
+  const M_NAVY = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: bNavyFabric.map,
+    bumpMap: bNavyFabric.bumpMap,
+    bumpScale: 0.006,
+    roughness: 0.72,
+  });
+  const M_MUSTARD = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: bMustardFabric.map,
+    bumpMap: bMustardFabric.bumpMap,
+    bumpScale: 0.006,
+    roughness: 0.58,
+  });
+  const M_RED_CH = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: bRedFabric.map,
+    bumpMap: bRedFabric.bumpMap,
+    bumpScale: 0.006,
+    roughness: 0.52,
+  });
   const M_CHR = mat(0xd2d7dd, 0.2, 0.88);
   const M_DRK = mat(0x1f2328, 0.38, 0.72);
   const M_PIANO_BLK = mat(0x0c0d10, 0.12, 0.35);
