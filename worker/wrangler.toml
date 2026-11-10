@@ -1,7 +1,8 @@
 name = "hust-hsk-rooms"
-main = "dist/worker.js"
+main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
 [durable_objects]
 bindings = [

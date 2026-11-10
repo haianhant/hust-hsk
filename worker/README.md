@@ -54,23 +54,16 @@ class riêng (`HskRoom`), không dùng chung Worker chùa.
 - Kết nối lại với cùng sessionId thay thế socket cũ — không bao giờ
   trùng avatar.
 
-## Deploy (từ VM)
+## Deploy Tự động (GitHub Actions CI/CD) & Thủ công
+
+- **Tự động (CI/CD trên nhánh `main`):**
+  Mỗi khi push lên nhánh `main` và vượt qua đủ 7 cổng kiểm thử trong [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), bước `Deploy Cloudflare Worker (hust-hsk-rooms)` sẽ tự động đóng gói `src/index.ts` và deploy thẳng lên Cloudflare bằng `CLOUDFLARE_API_TOKEN` trong GitHub Actions Secrets, sau đó kiểm tra `GET /health`.
+- **Thủ công (từ máy local / VM):**
 
 ```bash
-# 1. Cài deps lần đầu (typescript + workers-types)
-cd ~/workspace/bach-khoa-han-ngu/worker && npm install
-# 2. Typecheck + bundle
+cd worker
 npx tsc --noEmit
-~/workspace/chua-online/worker/node_modules/.bin/esbuild src/index.ts \
-  --bundle --format=esm --outfile=dist/worker.js --target=es2022
-# 3. Upload — LẦN ĐẦU có migration v1 (tạo class HskRoom);
-#    upload lại phải thêm --no-migration (gửi lại migration lỗi 10074)
-python3 ~/workspace/custom-connectors/custom.cloudflare/bin/cloudflare_api.py upload \
-  --account 692d45feec834c9219a6e331393bbc5c --name hust-hsk-rooms \
-  --file dist/worker.js --binding-name HSK_ROOM --class-name HskRoom
-# 4. Bật workers.dev subdomain
-python3 ~/workspace/custom-connectors/custom.cloudflare/bin/cloudflare_api.py enable-subdomain \
-  --account 692d45feec834c9219a6e331393bbc5c --name hust-hsk-rooms
+CLOUDFLARE_ACCOUNT_ID=692d45feec834c9219a6e331393bbc5c npx wrangler@3 deploy
 ```
 
 URL live: `https://hust-hsk-rooms.hunganhz179.workers.dev`
