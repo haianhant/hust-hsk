@@ -1442,6 +1442,25 @@ export class HskRoom {
       return;
     }
 
+    if (msg.type === 'piano:note') {
+      const midi = Math.round(Number(msg.midi) || 0);
+      if (midi < 21 || midi > 108) return;
+      const rawVel = Number(msg.velocity);
+      const velocity = Number.isFinite(rawVel) ? Math.min(1, Math.max(0.05, rawVel)) : 0.82;
+      session.lastUpdate = now;
+      this.broadcast(
+        {
+          type: 'piano:note',
+          id: sessionId,
+          midi,
+          velocity,
+          t: now,
+        },
+        sessionId,
+      );
+      return;
+    }
+
     if (msg.type === 'study:progress') {
       if (rawStr.length > MAX_STUDY_WS_PAYLOAD_BYTES) return;
       const deltaSeconds = Number(msg.deltaSeconds) || 0;

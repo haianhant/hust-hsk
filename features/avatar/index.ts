@@ -27,10 +27,15 @@ export { Head } from './rig/Head';
 export { default as StudentAvatar, HumanFigure } from './rig/HumanFigure';
 export {
   EMOTE_DEFINITIONS,
+  LYING_GROUP_Y_OFFSET,
   SEATED_GROUP_Y_OFFSET,
   computeEmotePoseTargets,
+  computeLyingPoseTargets,
   computeNaturalGaitTargets,
+  computePianoPoseTargets,
   computeSeatedPoseTargets,
+  isLyingSeatId,
+  isPianoBenchSeatId,
   type EmoteDefinition,
   type EmotePoseTargets,
 } from './animation/gait';

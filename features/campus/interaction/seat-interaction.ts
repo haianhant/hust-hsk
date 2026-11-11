@@ -127,50 +127,21 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
       });
 
       if (p.prop === 'table4') {
-        // 2 opposing seats on the -Z and +Z sides of the 4-seat study table
-        const sNorth = toWorld(0, -0.58);
-        const sSouth = toWorld(0, 0.58);
-        all.push(
-          {
-            seatId: `tqb-${floor}f-${p.id}-s1`,
-            studyRoomId: 'library-lobby',
-            tableId: p.id,
-            label: `${p.name} · Ghế 1`,
-            x: sNorth.x,
-            z: sNorth.z,
-            facing: Number(p.ry.toFixed(4)),
-            floor,
-            y: baseY,
-            networked: false,
-          },
-          {
-            seatId: `tqb-${floor}f-${p.id}-s2`,
-            studyRoomId: 'library-lobby',
-            tableId: p.id,
-            label: `${p.name} · Ghế 2`,
-            x: sSouth.x,
-            z: sSouth.z,
-            facing: Number((p.ry + Math.PI).toFixed(4)),
-            floor,
-            y: baseY,
-            networked: false,
-          },
-        );
-      } else if (p.prop === 'round4') {
-        // 4 seats around the round discussion table
-        const dirs: Array<[number, number, number, string]> = [
-          [0, -0.68, 0, 'Bắc'],
-          [0, 0.68, Math.PI, 'Nam'],
-          [-0.68, 0, Math.PI / 2, 'Tây'],
-          [0.68, 0, -Math.PI / 2, 'Đông'],
+        // 4 chairs around the 4-seat study table matching buildFloors1To5.ts:
+        // [-0.42, -0.56, 0], [0.42, -0.56, 0], [-0.42, 0.56, Math.PI], [0.42, 0.56, Math.PI]
+        const chairSpots: ReadonlyArray<[number, number, number, string]> = [
+          [-0.42, -0.56, 0, 'Ghế 1 (Tây-Bắc)'],
+          [-0.42, 0.56, Math.PI, 'Ghế 2 (Tây-Nam)'],
+          [0.42, -0.56, 0, 'Ghế 3 (Đông-Bắc)'],
+          [0.42, 0.56, Math.PI, 'Ghế 4 (Đông-Nam)'],
         ];
-        dirs.forEach(([lx, lz, faceOffset, sideLabel], idx) => {
+        chairSpots.forEach(([lx, lz, faceOffset, sideLabel], idx) => {
           const pt = toWorld(lx, lz);
           all.push({
             seatId: `tqb-${floor}f-${p.id}-s${idx + 1}`,
             studyRoomId: 'library-lobby',
             tableId: p.id,
-            label: `${p.name} · Ghế ${sideLabel}`,
+            label: `${p.name} · ${sideLabel}`,
             x: pt.x,
             z: pt.z,
             facing: Number((p.ry + faceOffset).toFixed(4)),
@@ -179,8 +150,71 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
             networked: false,
           });
         });
+      } else if (p.prop === 'round4') {
+        // 4 diagonal chairs around the round discussion table matching buildFloors1To5.ts:
+        // a = (i * Math.PI) / 2 + Math.PI / 4, r = 0.82, chair ry = -a - Math.PI / 2
+        const sideLabels = ['Đông-Nam', 'Tây-Nam', 'Tây-Bắc', 'Đông-Bắc'] as const;
+        for (let i = 0; i < 4; i++) {
+          const a = (i * Math.PI) / 2 + Math.PI / 4;
+          const pt = toWorld(Math.cos(a) * 0.82, Math.sin(a) * 0.82);
+          all.push({
+            seatId: `tqb-${floor}f-${p.id}-s${i + 1}`,
+            studyRoomId: 'library-lobby',
+            tableId: p.id,
+            label: `${p.name} · Ghế ${sideLabels[i]}`,
+            x: pt.x,
+            z: pt.z,
+            facing: Number((p.ry - a - Math.PI / 2).toFixed(4)),
+            floor,
+            y: baseY,
+            networked: false,
+          });
+        }
       } else if (p.prop === 'sofa') {
-        const pt = toWorld(0, 0.08);
+        // Center, left, and right cushion spots on the 1.85m sofa
+        const ptCenter = toWorld(0, 0.04);
+        const ptLeft = toWorld(-0.48, 0.04);
+        const ptRight = toWorld(0.48, 0.04);
+        all.push(
+          {
+            seatId: `tqb-${floor}f-${p.id}`,
+            studyRoomId: 'library-lobby',
+            tableId: p.id,
+            label: p.name,
+            x: ptCenter.x,
+            z: ptCenter.z,
+            facing: Number(p.ry.toFixed(4)),
+            floor,
+            y: baseY,
+            networked: false,
+          },
+          {
+            seatId: `tqb-${floor}f-${p.id}-l`,
+            studyRoomId: 'library-lobby',
+            tableId: p.id,
+            label: `${p.name} (Trái)`,
+            x: ptLeft.x,
+            z: ptLeft.z,
+            facing: Number(p.ry.toFixed(4)),
+            floor,
+            y: baseY,
+            networked: false,
+          },
+          {
+            seatId: `tqb-${floor}f-${p.id}-r`,
+            studyRoomId: 'library-lobby',
+            tableId: p.id,
+            label: `${p.name} (Phải)`,
+            x: ptRight.x,
+            z: ptRight.z,
+            facing: Number(p.ry.toFixed(4)),
+            floor,
+            y: baseY,
+            networked: false,
+          },
+        );
+      } else if (p.prop === 'armchair') {
+        const pt = toWorld(0, 0.04);
         all.push({
           seatId: `tqb-${floor}f-${p.id}`,
           studyRoomId: 'library-lobby',
@@ -193,24 +227,11 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
           y: baseY,
           networked: false,
         });
-      } else if (p.prop === 'armchair') {
-        all.push({
-          seatId: `tqb-${floor}f-${p.id}`,
-          studyRoomId: 'library-lobby',
-          tableId: p.id,
-          label: p.name,
-          x: Number(p.x.toFixed(3)),
-          z: Number(p.z.toFixed(3)),
-          facing: Number(p.ry.toFixed(4)),
-          floor,
-          y: baseY,
-          networked: false,
-        });
       }
     }
   }
 
-  // 3. Floors 4 & 5 Reading Rooms (401/501, 418/525, 419/526, 402/509, 411/518)
+  // 3. Floors 4 & 5 Reading Rooms (401/501, 418/525, 419/526, 402/509, 404/511, 411/518)
   for (const floor of [4, 5] as const) {
     const baseY = getFloorBaseElevation(floor);
     const r401Label = floor === 4 ? '401' : '501';
@@ -218,20 +239,28 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
     const r411Label = floor === 4 ? '411' : '518';
     const r419Label = floor === 4 ? '419' : '526';
     const r402Label = floor === 4 ? '402' : '509';
+    const r404Label = floor === 4 ? '404' : '511';
     const r4 = ROOM_401_DIMS;
     const R4Z = BLOCK_A_DIMS.R4Z;
 
-    // Room 401 / 501 — 12 large reading tables (4 seats each)
+    // Room 401 / 501 — 12 large reading tables (6 chairs each on West & East sides matching buildRoom401.ts)
+    const chairX = r4.TW / 2 + 0.18;
+    const slotD = r4.TD / 3;
+    const bayZ0 = -r4.TD / 2 + 0.5 * slotD;
+    const bayZ1 = 0;
+    const bayZ2 = -r4.TD / 2 + 2.5 * slotD;
     let tIdx = 1;
     for (const tx of r4.TX) {
       for (const tzLocal of r4.TZ_LOCAL) {
         const tz = R4Z + tzLocal;
         const tableId = `f${floor}-r${r401Label}-table-${tIdx++}`;
         const seatOffsets: Array<[number, number, number, string]> = [
-          [-0.65, -1.05, 0, 'Bắc-Tây'],
-          [0.65, -1.05, 0, 'Bắc-Đông'],
-          [-0.65, 1.05, Math.PI, 'Nam-Tây'],
-          [0.65, 1.05, Math.PI, 'Nam-Đông'],
+          [-chairX, bayZ0, Math.PI / 2, 'Tây-Bắc'],
+          [chairX, bayZ0, -Math.PI / 2, 'Đông-Bắc'],
+          [-chairX, bayZ2, Math.PI / 2, 'Tây-Nam'],
+          [chairX, bayZ2, -Math.PI / 2, 'Đông-Nam'],
+          [-chairX, bayZ1, Math.PI / 2, 'Tây-Giữa'],
+          [chairX, bayZ1, -Math.PI / 2, 'Đông-Giữa'],
         ];
         seatOffsets.forEach(([ox, oz, facing, suffix], sIdx) => {
           all.push({
@@ -241,7 +270,7 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
             label: `Bàn đọc P.${r401Label} #${tIdx - 1} (${suffix})`,
             x: Number((tx + ox).toFixed(3)),
             z: Number((tz + oz).toFixed(3)),
-            facing,
+            facing: Number(facing.toFixed(4)),
             floor,
             y: baseY,
             networked: false,
@@ -250,23 +279,44 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
       }
     }
 
-    // Room 401 / 501 — PC lookup counter seats
-    [1.8, 4.8, 7.8, 10.8].forEach((pcX, idx) => {
+    // Room 401 / 501 — L-shaped PC lookup counter seats matching buildRoom401.ts
+    const cBackZ = R4Z - r4.HD + r4.WT / 2 + r4.COMP_CD / 2 + 0.03;
+    const cBackX0 = -0.3;
+    const cBackX1 = cBackX0 + r4.COMP_W;
+    for (let i = 0; i < 10; i++) {
+      const pcX = cBackX0 + 0.72 + (i * (r4.COMP_W - 1.44)) / 9;
       all.push({
-        seatId: `tqb-f${floor}-r${r401Label}-pc-${idx + 1}`,
+        seatId: `tqb-f${floor}-r${r401Label}-pc-${i + 1}`,
         studyRoomId: 'library-lobby',
         tableId: `f${floor}-r${r401Label}-comp-back`,
-        label: `Máy tính tra cứu P.${r401Label} #${idx + 1}`,
-        x: pcX,
-        z: -33.25,
+        label: `Máy tính tra cứu P.${r401Label} #${i + 1}`,
+        x: Number(pcX.toFixed(3)),
+        z: Number((cBackZ + 0.39).toFixed(3)),
         facing: Math.PI,
         floor,
         y: baseY,
         networked: false,
       });
-    });
+    }
+    const cRightX = r4.HW - r4.WT / 2 - r4.COMP_CD / 2 - 0.03;
+    const cRightZ0 = R4Z - r4.HD + r4.WT / 2 + r4.COMP_CD;
+    for (let i = 0; i < 8; i++) {
+      const pcZ = cRightZ0 + 0.72 + (i * (r4.COMP_R - 1.44)) / 7;
+      all.push({
+        seatId: `tqb-f${floor}-r${r401Label}-pc-${11 + i}`,
+        studyRoomId: 'library-lobby',
+        tableId: `f${floor}-r${r401Label}-comp-right`,
+        label: `Máy tính tra cứu P.${r401Label} #${11 + i}`,
+        x: Number((cRightX - 0.39).toFixed(3)),
+        z: Number(pcZ.toFixed(3)),
+        facing: Number((Math.PI / 2).toFixed(4)),
+        floor,
+        y: baseY,
+        networked: false,
+      });
+    }
 
-    // Helper for 2-sided rectangular reading room tables
+    // Helper for 6-chair rectangular reading room tables (`r4LongTbl`: cx ∈ [0, -0.82, 0.82], cz = ±0.64)
     const addRoomTables = (
       roomCode: string,
       xs: readonly number[],
@@ -276,32 +326,28 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
       for (const tx of xs) {
         for (const tz of zs) {
           const tid = `f${floor}-r${roomCode}-table-${idx++}`;
-          all.push(
-            {
-              seatId: `tqb-${tid}-s1`,
+          const spots: ReadonlyArray<[number, number, number, string]> = [
+            [0, -0.64, 0, 'Bắc-Giữa'],
+            [0, 0.64, Math.PI, 'Nam-Giữa'],
+            [-0.82, -0.64, 0, 'Bắc-Tây'],
+            [-0.82, 0.64, Math.PI, 'Nam-Tây'],
+            [0.82, -0.64, 0, 'Bắc-Đông'],
+            [0.82, 0.64, Math.PI, 'Nam-Đông'],
+          ];
+          spots.forEach(([ox, oz, facing, sideLabel], sIdx) => {
+            all.push({
+              seatId: `tqb-${tid}-s${sIdx + 1}`,
               studyRoomId: 'library-lobby',
               tableId: tid,
-              label: `Bàn đọc P.${roomCode} #${idx - 1} (Bắc)`,
-              x: tx,
-              z: Number((tz - 0.65).toFixed(3)),
-              facing: 0,
+              label: `Bàn đọc P.${roomCode} #${idx - 1} (${sideLabel})`,
+              x: Number((tx + ox).toFixed(3)),
+              z: Number((tz + oz).toFixed(3)),
+              facing,
               floor,
               y: baseY,
               networked: false,
-            },
-            {
-              seatId: `tqb-${tid}-s2`,
-              studyRoomId: 'library-lobby',
-              tableId: tid,
-              label: `Bàn đọc P.${roomCode} #${idx - 1} (Nam)`,
-              x: tx,
-              z: Number((tz + 0.65).toFixed(3)),
-              facing: Math.PI,
-              floor,
-              y: baseY,
-              networked: false,
-            },
-          );
+            });
+          });
         }
       }
     };
@@ -310,6 +356,42 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
     addRoomTables(r419Label, [24.2, 31.2], [-9.5, -5.0, 0.0, 5.0, 9.5]);
     addRoomTables(r402Label, [-30.5, -24.2], [1.5, 5.2, 8.9]);
     addRoomTables(r411Label, [-11.5, -3.2, 3.2, 11.5], [16.5, 20.2, 24.0]);
+
+    // Room 404 / 511 (`fill404` round tables & sofas in West Wing North section)
+    [-9.5, -3.5].forEach((tz, rIdx) => {
+      const roundRy = 0.2;
+      const cosR = Math.cos(roundRy);
+      const sinR = Math.sin(roundRy);
+      for (let i = 0; i < 4; i++) {
+        const a = (i * Math.PI) / 2 + Math.PI / 4;
+        const lx = Math.cos(a) * 0.82;
+        const lz = Math.sin(a) * 0.82;
+        all.push({
+          seatId: `tqb-f${floor}-r${r404Label}-round-${rIdx + 1}-s${i + 1}`,
+          studyRoomId: 'library-lobby',
+          tableId: `f${floor}-r${r404Label}-round-${rIdx + 1}`,
+          label: `Bàn tròn P.${r404Label} #${rIdx + 1} · Ghế ${i + 1}`,
+          x: Number((-22.2 + lx * cosR + lz * sinR).toFixed(3)),
+          z: Number((tz - lx * sinR + lz * cosR).toFixed(3)),
+          facing: Number((roundRy - a - Math.PI / 2).toFixed(4)),
+          floor,
+          y: baseY,
+          networked: false,
+        });
+      }
+      all.push({
+        seatId: `tqb-f${floor}-r${r404Label}-sofa-${rIdx + 1}`,
+        studyRoomId: 'library-lobby',
+        tableId: `f${floor}-r${r404Label}-sofa-${rIdx + 1}`,
+        label: `Sofa P.${r404Label} #${rIdx + 1}`,
+        x: -24.46,
+        z: tz,
+        facing: Number((Math.PI / 2).toFixed(4)),
+        floor,
+        y: baseY,
+        networked: false,
+      });
+    });
   }
 
   // 4. Floor 6 (Block B Creative Space & Lounge)
@@ -337,14 +419,14 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
     });
   });
 
-  // Grand Piano Bench on Floor 6 (y = 0.6)
+  // Grand Piano Bench on Floor 6 (y = 0.6, local [0, 0, -0.98] inside PIANO at [-6.6, 3.6, ry=0.38])
   all.push({
     seatId: 'tqb-6f-piano-bench',
     studyRoomId: 'library-lobby',
     tableId: 'f6-grand-piano',
     label: 'Tầng 6 · Ghế Đàn Đại dương cầm Grand Piano',
-    x: -6.95,
-    z: 2.68,
+    x: -6.963,
+    z: 2.69,
     facing: 0.38,
     floor: 6,
     y: BLOCK_B_DIMS.PY,
@@ -361,35 +443,29 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
     const cos = Math.cos(ry);
     const sin = Math.sin(ry);
     const tid = `f7-mezz-table-${i + 1}`;
-    all.push(
-      {
-        seatId: `tqb-7f-table-${i + 1}-s1`,
+    const chairSpots: ReadonlyArray<[number, number, number, string]> = [
+      [-0.42, -0.55, 0, 'Trong-Tây'],
+      [-0.42, 0.55, Math.PI, 'Ngoài-Tây'],
+      [0.42, -0.55, 0, 'Trong-Đông'],
+      [0.42, 0.55, Math.PI, 'Ngoài-Đông'],
+    ];
+    chairSpots.forEach(([lx, lz, faceOffset, sideLabel], sIdx) => {
+      all.push({
+        seatId: `tqb-7f-table-${i + 1}-s${sIdx + 1}`,
         studyRoomId: 'library-lobby',
         tableId: tid,
-        label: `Bàn học Tầng lửng T7 #${i + 1} (Trong)`,
-        x: Number((p.x - 0.55 * sin).toFixed(3)),
-        z: Number((p.z - 0.55 * cos).toFixed(3)),
-        facing: Number(ry.toFixed(4)),
+        label: `Bàn học Tầng lửng T7 #${i + 1} (${sideLabel})`,
+        x: Number((p.x + lx * cos + lz * sin).toFixed(3)),
+        z: Number((p.z - lx * sin + lz * cos).toFixed(3)),
+        facing: Number((ry + faceOffset).toFixed(4)),
         floor: 7,
         y: BLOCK_B_DIMS.MZ,
         networked: false,
-      },
-      {
-        seatId: `tqb-7f-table-${i + 1}-s2`,
-        studyRoomId: 'library-lobby',
-        tableId: tid,
-        label: `Bàn học Tầng lửng T7 #${i + 1} (Ngoài)`,
-        x: Number((p.x + 0.55 * sin).toFixed(3)),
-        z: Number((p.z + 0.55 * cos).toFixed(3)),
-        facing: Number((ry + Math.PI).toFixed(4)),
-        floor: 7,
-        y: BLOCK_B_DIMS.MZ,
-        networked: false,
-      },
-    );
+      });
+    });
   }
 
-  // 6. Floor 10 (Block D Rooftop Pergola tables, Sun loungers & Beanbags)
+  // 6. Floor 10 (Block D Rooftop Pergola tables, Plush Daybeds with Colorful Pillows, Sun loungers & Beanbags)
   const pgZ = BLOCK_D_DIMS.PG.tableZ; // 4.8
   BLOCK_D_DIMS.PG.tableXs.forEach((tx, idx) => {
     const tid = `f10-pergola-table-${idx + 1}`;
@@ -421,13 +497,29 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
     );
   });
 
-  // Floor 10 Sun loungers on West lawn
+  // Floor 10 Plush Rooftop Daybeds with Colorful Soft Pillows (Giường nệm & gối mềm đa sắc màu)
+  [-17.2, -14.2, -11.2].forEach((bx, idx) => {
+    all.push({
+      seatId: `tqb-10f-bed-${idx + 1}`,
+      studyRoomId: 'library-lobby',
+      tableId: `f10-bed-${idx + 1}`,
+      label: `Giường nệm & Gối mềm Sân thượng T10 #${idx + 1}`,
+      x: bx,
+      z: -4.8,
+      facing: 0,
+      floor: 10,
+      y: 0.05,
+      networked: false,
+    });
+  });
+
+  // Floor 10 Sun loungers on West lawn (also with colorful soft pillows & lying posture)
   [-17.2, -14.2, -11.2].forEach((lx, idx) => {
     all.push({
       seatId: `tqb-10f-lounger-${idx + 1}`,
       studyRoomId: 'library-lobby',
       tableId: `f10-lounger-${idx + 1}`,
-      label: `Ghế thư giãn Thảm cỏ Sân thượng T10 #${idx + 1}`,
+      label: `Ghế nằm thư giãn & Gối mềm Sân thượng T10 #${idx + 1}`,
       x: lx,
       z: 3.4,
       facing: 0.15,
@@ -439,9 +531,9 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
 
   // Floor 10 Beanbags
   const f10Beanbags: ReadonlyArray<[number, number, string]> = [
-    [-16.5, -4.2, 'Ghế lười Beanbag Cam T10'],
-    [-14.2, -5.1, 'Ghế lười Beanbag Xanh T10'],
-    [-11.8, -4.0, 'Ghế lười Beanbag Đỏ T10'],
+    [-16.8, -1.9, 'Ghế lười Beanbag Cam T10'],
+    [-14.2, -1.9, 'Ghế lười Beanbag Xanh T10'],
+    [-11.6, -1.9, 'Ghế lười Beanbag Đỏ T10'],
   ];
   f10Beanbags.forEach(([bx, bz, label], idx) => {
     all.push({
@@ -565,16 +657,12 @@ export function computeSafeStandUpPosition(
     },
   ];
 
-  // Additional step-back & lateral candidates for composite table/sofa/armchair props on Floors 1–10
+  // Step-back & lateral candidates behind/beside the chair first
   for (const dist of [0.85, 1.05, 1.25, 1.45]) {
     candidates.push(
       {
         x: +(seat.x - fwdX * dist).toFixed(3),
         z: +(seat.z - fwdZ * dist).toFixed(3),
-      },
-      {
-        x: +(seat.x + fwdX * dist).toFixed(3),
-        z: +(seat.z + fwdZ * dist).toFixed(3),
       },
       {
         x: +(seat.x - rightX * dist).toFixed(3),
@@ -589,6 +677,13 @@ export function computeSafeStandUpPosition(
 
   if (fallbackOrigin) {
     candidates.push({ x: fallbackOrigin.x, z: fallbackOrigin.z });
+  }
+
+  for (const dist of [0.85, 1.05, 1.25, 1.45]) {
+    candidates.push({
+      x: +(seat.x + fwdX * dist).toFixed(3),
+      z: +(seat.z + fwdZ * dist).toFixed(3),
+    });
   }
 
   for (const cand of candidates) {
@@ -713,7 +808,9 @@ export function validateSeatSelection(
   }
 
   const distance = Math.hypot(playerPos.x - seat.x, playerPos.z - seat.z);
-  if (distance > maxRadius) {
+  const effectiveMaxRadius =
+    seat.seatId === 'tqb-6f-piano-bench' ? Math.max(maxRadius, 3.2) : maxRadius;
+  if (distance > effectiveMaxRadius) {
     return {
       ok: false,
       reason: 'too-far',

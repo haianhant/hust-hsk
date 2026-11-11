@@ -19,11 +19,19 @@ import * as THREE from 'three';
 import {
   EMOTE_DEFINITIONS,
   HumanFigure,
+  LYING_GROUP_Y_OFFSET,
   OUTFIT_PRESETS,
+  SEATED_GROUP_Y_OFFSET,
   computeEmotePoseTargets,
+  computeLyingPoseTargets,
   computeNaturalGaitTargets,
+  computePianoPoseTargets,
+  computeSeatedPoseTargets,
+  isLyingSeatId,
+  isPianoBenchSeatId,
   type FigureJoints,
 } from './StudentAvatar';
+import { findNearestLibrarySeat } from '../../features/campus/interaction';
 import {
   CANVAS_VN_FONT,
   drawSpeechBubbleCanvas,
@@ -227,8 +235,10 @@ function RemotePlayerView({
 
     const g = groupRef.current;
     if (!g) return;
+    const isRemoteSeated = scene === 'library' && Boolean(target.seatedSeatId);
+    let effectiveSeatId: string | null = target.seatedSeatId ?? null;
     let renderX = cur.current.x;
-    const renderZ = cur.current.z;
+    let renderZ = cur.current.z;
     if (scene === 'library') {
       const remoteFloor = sanitizeLibraryFloor(target.libraryFloor ?? 1);
       const sameBlock =
@@ -236,28 +246,57 @@ function RemotePlayerView({
       if (g.visible !== sameBlock) {
         g.visible = sameBlock;
       }
-      const elev = computeCanonicalLibraryElevation(
-        cur.current.x,
-        cur.current.z,
-        remoteFloor,
-        prevFloorRef.current !== remoteFloor
-          ? getFloorBaseElevation(remoteFloor)
-          : cur.current.y,
-      );
-      if (prevFloorRef.current !== remoteFloor || Math.abs(elev.y - cur.current.y) > 3.5) {
-        cur.current.y = elev.y;
+      if (isRemoteSeated) {
+        const matched = findNearestLibrarySeat(
+          { x: target.x, z: target.z },
+          0.95,
+          remoteFloor,
+        );
+        const matchedSeat = matched?.seat;
+        if (matchedSeat) {
+          cur.current.x = matchedSeat.x;
+          cur.current.z = matchedSeat.z;
+          cur.current.facing = matchedSeat.facing;
+          renderX = matchedSeat.x;
+          renderZ = matchedSeat.z;
+          effectiveSeatId = matchedSeat.seatId;
+        }
+        const isLying = isLyingSeatId(effectiveSeatId);
+        const seatBaseY =
+          matchedSeat?.y !== undefined
+            ? matchedSeat.y
+            : computeCanonicalLibraryElevation(
+                cur.current.x,
+                cur.current.z,
+                remoteFloor,
+                getFloorBaseElevation(remoteFloor),
+              ).y;
+        cur.current.y = seatBaseY + (isLying ? LYING_GROUP_Y_OFFSET : SEATED_GROUP_Y_OFFSET);
         prevFloorRef.current = remoteFloor;
       } else {
-        cur.current.y += (elev.y - cur.current.y) * Math.min(1, dt * 12);
-      }
-      // Khi 2 người chơi cùng đứng trùng một điểm trong Thư viện (vd vừa bước qua cửa vào spawn (0, 2.4)),
-      // tách nhẹ vị trí hiển thị hình ảnh sang bên cạnh 0.62m để cả hai luôn nhìn thấy nhau rõ ràng.
-      if (
-        remoteFloor === playerState.libraryFloor &&
-        Math.hypot(cur.current.x - playerState.pos.x, cur.current.z - playerState.pos.z) < 0.35
-      ) {
-        const sideSign = (player.id.charCodeAt(0) + player.id.charCodeAt(player.id.length - 1)) % 2 === 0 ? 1 : -1;
-        renderX = cur.current.x + sideSign * 0.62;
+        const elev = computeCanonicalLibraryElevation(
+          cur.current.x,
+          cur.current.z,
+          remoteFloor,
+          prevFloorRef.current !== remoteFloor
+            ? getFloorBaseElevation(remoteFloor)
+            : cur.current.y,
+        );
+        if (prevFloorRef.current !== remoteFloor || Math.abs(elev.y - cur.current.y) > 3.5) {
+          cur.current.y = elev.y;
+          prevFloorRef.current = remoteFloor;
+        } else {
+          cur.current.y += (elev.y - cur.current.y) * Math.min(1, dt * 12);
+        }
+        // Khi 2 người chơi cùng đứng trùng một điểm trong Thư viện (vd vừa bước qua cửa vào spawn (0, 2.4)),
+        // tách nhẹ vị trí hiển thị hình ảnh sang bên cạnh 0.62m để cả hai luôn nhìn thấy nhau rõ ràng.
+        if (
+          remoteFloor === playerState.libraryFloor &&
+          Math.hypot(cur.current.x - playerState.pos.x, cur.current.z - playerState.pos.z) < 0.35
+        ) {
+          const sideSign = (player.id.charCodeAt(0) + player.id.charCodeAt(player.id.length - 1)) % 2 === 0 ? 1 : -1;
+          renderX = cur.current.x + sideSign * 0.62;
+        }
       }
     } else {
       if (!g.visible) g.visible = true;
@@ -324,9 +363,9 @@ function RemotePlayerView({
       set(j.body, 'x', 0.08);
       set(j.body, 'y', 0);
       set(j.body, 'z', 0);
-    } else if (isEmoting && remoteEmote) {
+    } else if (isEmoting && remoteEmote && !(isRemoteSeated && isLyingSeatId(effectiveSeatId))) {
       const elapsedSec = Math.max(0, (wallNow - remoteEmote.startedAtMs) / 1000);
-      const emotePose = computeEmotePoseTargets(remoteEmote.emote, elapsedSec, false);
+      const emotePose = computeEmotePoseTargets(remoteEmote.emote, elapsedSec, isRemoteSeated);
       set(j.legL, 'x', emotePose.legLTarget);
       set(j.legR, 'x', emotePose.legRTarget);
       set(j.legL, 'z', emotePose.legLZTarget);
@@ -347,7 +386,81 @@ function RemotePlayerView({
       if (j.body.current) {
         j.body.current.position.y += (emotePose.bodyBobTarget - j.body.current.position.y) * poseEase;
       }
-      g.position.y = cur.current.y + emotePose.jumpYOffset;
+      if (!isRemoteSeated) {
+        g.position.y = cur.current.y + emotePose.jumpYOffset;
+      }
+    } else if (isRemoteSeated) {
+      const t = performance.now() / 1000;
+      if (isLyingSeatId(effectiveSeatId)) {
+        const lyingPose = computeLyingPoseTargets(t);
+        set(j.legL, 'x', lyingPose.legLTarget);
+        set(j.legR, 'x', lyingPose.legRTarget);
+        set(j.legL, 'z', 0);
+        set(j.legR, 'z', 0);
+        set(j.kneeL, 'x', lyingPose.kneeLTarget);
+        set(j.kneeR, 'x', lyingPose.kneeRTarget);
+        set(j.footL, 'x', lyingPose.footLTarget);
+        set(j.footR, 'x', lyingPose.footRTarget);
+        set(j.armL, 'x', lyingPose.armLTarget);
+        set(j.armR, 'x', lyingPose.armRTarget);
+        set(j.armL, 'z', 0);
+        set(j.armR, 'z', 0);
+        set(j.elbowL, 'x', lyingPose.elbowLTarget);
+        set(j.elbowR, 'x', lyingPose.elbowRTarget);
+        set(j.body, 'x', lyingPose.bodyLeanTarget);
+        set(j.body, 'y', 0);
+        set(j.body, 'z', lyingPose.bodyRollTarget);
+        if (j.body.current) {
+          j.body.current.position.y += (lyingPose.bodyBobTarget - j.body.current.position.y) * poseEase;
+        }
+      } else if (isPianoBenchSeatId(effectiveSeatId)) {
+        const pianoPose = computePianoPoseTargets(
+          t,
+          multiplayer.isPlayerPlayingPiano(player.id),
+        );
+        set(j.legL, 'x', pianoPose.legLTarget);
+        set(j.legR, 'x', pianoPose.legRTarget);
+        set(j.legL, 'z', 0);
+        set(j.legR, 'z', 0);
+        set(j.kneeL, 'x', pianoPose.kneeLTarget);
+        set(j.kneeR, 'x', pianoPose.kneeRTarget);
+        set(j.footL, 'x', pianoPose.footLTarget);
+        set(j.footR, 'x', pianoPose.footRTarget);
+        set(j.armL, 'x', pianoPose.armLTarget);
+        set(j.armR, 'x', pianoPose.armRTarget);
+        set(j.armL, 'z', pianoPose.armLZTarget);
+        set(j.armR, 'z', pianoPose.armRZTarget);
+        set(j.elbowL, 'x', pianoPose.elbowLTarget);
+        set(j.elbowR, 'x', pianoPose.elbowRTarget);
+        set(j.body, 'x', pianoPose.bodyLeanTarget);
+        set(j.body, 'y', 0);
+        set(j.body, 'z', pianoPose.bodyRollTarget);
+        if (j.body.current) {
+          j.body.current.position.y += (pianoPose.bodyBobTarget - j.body.current.position.y) * poseEase;
+        }
+      } else {
+        const seatedPose = computeSeatedPoseTargets(t);
+        set(j.legL, 'x', seatedPose.legLTarget);
+        set(j.legR, 'x', seatedPose.legRTarget);
+        set(j.legL, 'z', 0);
+        set(j.legR, 'z', 0);
+        set(j.kneeL, 'x', seatedPose.kneeLTarget);
+        set(j.kneeR, 'x', seatedPose.kneeRTarget);
+        set(j.footL, 'x', seatedPose.footLTarget);
+        set(j.footR, 'x', seatedPose.footRTarget);
+        set(j.armL, 'x', seatedPose.armLTarget);
+        set(j.armR, 'x', seatedPose.armRTarget);
+        set(j.armL, 'z', 0);
+        set(j.armR, 'z', 0);
+        set(j.elbowL, 'x', seatedPose.elbowLTarget);
+        set(j.elbowR, 'x', seatedPose.elbowRTarget);
+        set(j.body, 'x', seatedPose.bodyLeanTarget);
+        set(j.body, 'y', 0);
+        set(j.body, 'z', seatedPose.bodyRollTarget);
+        if (j.body.current) {
+          j.body.current.position.y += (seatedPose.bodyBobTarget - j.body.current.position.y) * poseEase;
+        }
+      }
     } else if (effectiveState === 'walking' || effectiveState === 'running') {
       const isRun = effectiveState === 'running';
       const speed = isRun ? 10.5 : 7.5;
@@ -452,7 +565,7 @@ function RemotePlayerView({
           glasses={player.glasses ?? false}
           lanyard
           wristwatch
-          backpack={player.backpack ?? true}
+          backpack={(player.backpack ?? true) && !Boolean(player.seatedSeatId)}
           backpackColors={{ pack: '#2A2E33', packLight: '#3A3E44', packZip: '#1A1A1A' }}
           joints={joints}
         />

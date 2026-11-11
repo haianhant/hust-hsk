@@ -183,6 +183,12 @@ export interface ClientEmoteMessage {
   emote: AvatarEmoteId;
 }
 
+export interface ClientPianoNoteMessage {
+  type: 'piano:note';
+  midi: number;
+  velocity?: number;
+}
+
 export type ClientToServerMessage =
   | ClientJoinMessage
   | ClientMoveMessage
@@ -191,6 +197,7 @@ export type ClientToServerMessage =
   | ClientPingMessage
   | ClientChatMessage
   | ClientEmoteMessage
+  | ClientPianoNoteMessage
   | StudyClientToServerMessage;
 
 export interface ServerWelcomeMessage {
@@ -267,6 +274,14 @@ export interface ServerEmoteMessage {
   t: number;
 }
 
+export interface ServerPianoNoteMessage {
+  type: 'piano:note';
+  id: string;
+  midi: number;
+  velocity: number;
+  t: number;
+}
+
 export type ServerToClientMessage =
   | ServerWelcomeMessage
   | ServerJoinMessage
@@ -280,6 +295,7 @@ export type ServerToClientMessage =
   | ServerPongMessage
   | ServerChatMessage
   | ServerEmoteMessage
+  | ServerPianoNoteMessage
   | StudyServerToClientMessage;
 
 // --- Pure Validation & Sanitization Helpers --------------------------------
@@ -443,7 +459,7 @@ export function clampMoveStep(
 const TAU = Math.PI * 2;
 const TELEMETRY_RADIX_X = 2641; // [-96.0 .. +168.0] in 0.1m steps
 const TELEMETRY_RADIX_Z = 1841; // [-76.0 .. +108.0] in 0.1m steps
-const TELEMETRY_RADIX_SCENE = 15; // 0=campus, 1..8=library floors, 9=classroom, 10..13=seated
+const TELEMETRY_RADIX_SCENE = 24; // 0=campus, 1..8=lib floors, 9=classroom, 10..13=1F seats, 14..21=seated floors, 22=piano, 23=lying 10F
 const TELEMETRY_RADIX_APP = 961; // 0=none, 1..960 = 2(gender)*10(outfit)*6(hair)*8(flags)
 
 const TELEMETRY_LIBRARY_FLOORS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 10] as const;
@@ -514,12 +530,22 @@ function encodeSceneCode(
 ): number {
   if (scene === 'classroom') return 9;
   if (scene === 'library') {
+    const flrIdx = TELEMETRY_LIBRARY_FLOORS.indexOf(libraryFloor ?? 1);
+    const validFlrIdx = flrIdx >= 0 ? flrIdx : 0;
     if (seatedSeatId) {
       const seatIdx = TELEMETRY_SEAT_IDS.indexOf(seatedSeatId);
       if (seatIdx >= 0) return 10 + seatIdx;
+      if (seatedSeatId === 'tqb-6f-piano-bench') return 22;
+      if (
+        seatedSeatId.startsWith('tqb-10f-bed-') ||
+        seatedSeatId.startsWith('tqb-10f-lounger-') ||
+        seatedSeatId === 'lying-floor-10'
+      ) {
+        return 23;
+      }
+      return 14 + validFlrIdx;
     }
-    const flrIdx = TELEMETRY_LIBRARY_FLOORS.indexOf(libraryFloor ?? 1);
-    return flrIdx >= 0 ? 1 + flrIdx : 1;
+    return 1 + validFlrIdx;
   }
   return 0;
 }
@@ -537,6 +563,28 @@ function decodeSceneCode(code: number): {
       scene: 'library',
       libraryFloor: 1,
       seatedSeatId: TELEMETRY_SEAT_IDS[code - 10] ?? null,
+    };
+  }
+  if (code >= 14 && code <= 21) {
+    const flr = TELEMETRY_LIBRARY_FLOORS[code - 14] ?? 1;
+    return {
+      scene: 'library',
+      libraryFloor: flr,
+      seatedSeatId: `seated-floor-${flr}`,
+    };
+  }
+  if (code === 22) {
+    return {
+      scene: 'library',
+      libraryFloor: 6,
+      seatedSeatId: 'tqb-6f-piano-bench',
+    };
+  }
+  if (code === 23) {
+    return {
+      scene: 'library',
+      libraryFloor: 10,
+      seatedSeatId: 'lying-floor-10',
     };
   }
   if (code >= 1 && code <= 8) {

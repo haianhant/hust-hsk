@@ -295,15 +295,15 @@ export function buildRoom401(
 
   const makeChair = (mat: THREE.Material) => {
     const g = new THREE.Group();
-    bx(g, 0.312, 0.033, 0.3, mat, 0, 0.288, 0);
-    bx(g, 0.3, 0.27, 0.027, mat, 0, 0.45, -0.138, -0.08);
+    bx(g, 0.42, 0.04, 0.4, mat, 0, 0.44, 0);
+    bx(g, 0.4, 0.36, 0.035, mat, 0, 0.64, -0.185, 0.08);
     for (const [lx, lz] of [
-      [-0.132, -0.126],
-      [0.132, -0.126],
-      [-0.132, 0.126],
-      [0.132, 0.126],
+      [-0.17, -0.16],
+      [0.17, -0.16],
+      [-0.17, 0.16],
+      [0.17, 0.16],
     ]) {
-      cy(g, 0.012, 0.012, 0.288, 6, mChrome, lx, 0.144, lz);
+      cy(g, 0.016, 0.016, 0.44, 6, mChrome, lx, 0.22, lz);
     }
     return g;
   };
@@ -460,13 +460,8 @@ export function buildRoom401(
       const useRed = (idx + s) % 5 === 0;
       const cL = makeChair(useRed ? mChairRed : mChairBlue);
       const cR = makeChair((idx + s) % 4 === 1 ? mChairRed : mChairBlue);
-      add(tg, cL, -TW / 2 - 0.168, 0, cz, 0, Math.PI / 2 + (((idx * 3 + s) % 3) - 1) * 0.05);
-      add(tg, cR, TW / 2 + 0.168, 0, cz, 0, -Math.PI / 2 + (((idx * 5 + s) % 3) - 1) * 0.05);
-
-      const cL2 = makeChair((idx + s) % 3 === 0 ? mChairRed : mChairBlue);
-      const cR2 = makeChair(mChairBlue);
-      add(tg, cL2, -TW / 2 + 0.21, 0, cz + 0.21, 0, Math.PI / 2);
-      add(tg, cR2, TW / 2 - 0.21, 0, cz - 0.21, 0, -Math.PI / 2);
+      add(tg, cL, -TW / 2 - 0.18, 0, cz, 0, Math.PI / 2);
+      add(tg, cR, TW / 2 + 0.18, 0, cz, 0, -Math.PI / 2);
 
       const seed = idx * 17 + s * 7;
       if (seed % 2 === 0) {
