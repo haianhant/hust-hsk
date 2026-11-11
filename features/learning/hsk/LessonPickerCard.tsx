@@ -51,13 +51,23 @@ export default function LessonPickerCard({
       data-testid="lesson-picker"
       className="w-full max-w-md rounded-2xl border border-[#1c2b1f]/15 bg-white p-4 text-left shadow-lg"
     >
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-[#1c2b1f]">Chọn bài học</h2>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-extrabold tracking-wider text-[#B5121B] uppercase">
+            GIẢNG ĐƯỜNG TÒA C7 · ĐHBK HÀ NỘI
+          </div>
+          <h2 className="text-lg font-extrabold text-[#1c2b1f]">
+            🎓 Chọn bài học HSK tại Tòa C7
+          </h2>
+          <p className="text-xs text-[#475569]">
+            Chọn một bài để bắt đầu học tương tác trực tiếp trên bảng đen Giảng đường C7.
+          </p>
+        </div>
         <button
           type="button"
           aria-label="Đóng chọn bài"
           onClick={onClose}
-          className="rounded-full bg-black/10 px-2 py-0.5 font-bold text-[#1c2b1f]"
+          className="rounded-full bg-black/10 px-2.5 py-0.5 font-bold text-[#1c2b1f]"
         >
           ✕
         </button>

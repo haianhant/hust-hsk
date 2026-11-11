@@ -63,7 +63,7 @@ export default function Landmarks({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay
       <C9Building timeOfDay={timeOfDay} />
       <WhiteRock />
       <C1Fountain />
-      <TranDaiNghiaSquare />
+      <TranDaiNghiaSquare isNight={isNight} />
       <C2Building isNight={isNight} />
       <DaiCoVietGate />
       {/* Cây + ghế dọc đường tình yêu (không dùng để che lỗi hình khối). */}

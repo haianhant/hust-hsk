@@ -58,12 +58,14 @@ function drawRoomSign(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.strokeStyle = '#8A6B48';
   ctx.lineWidth = 6;
   ctx.strokeRect(6, 6, w - 12, h - 12);
-  ctx.fillStyle = '#3A2E12';
+  ctx.fillStyle = '#7F1D1D';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '700 34px Arial, sans-serif';
-  ctx.fillText('Phòng học mô phỏng phục vụ học tập', w / 2, h * 0.32);
-  ctx.fillText('— chưa có tư liệu nội thất thật —', w / 2, h * 0.7);
+  ctx.font = '800 32px "Be Vietnam Pro", Arial, sans-serif';
+  ctx.fillText('GIẢNG ĐƯỜNG HÁN NGỮ HSK · TÒA NHÀ C7', w / 2, h * 0.34);
+  ctx.fillStyle = '#3A2E12';
+  ctx.font = '600 26px "Be Vietnam Pro", Arial, sans-serif';
+  ctx.fillText('Đại học Bách Khoa Hà Nội — Học HSK theo từng bài', w / 2, h * 0.72);
 }
 
 function Desk({ x, z, id, onObjectClick }: { x: number; z: number; id: string; onObjectClick: (id: string) => void }) {

@@ -4,7 +4,8 @@
 // Module ID: feature.campus.interaction
 // ---------------------------------------------------------------------------
 
-import { CLASSROOM, CLASSROOM_DOOR, LIBRARY_DOOR, LIBRARY_LOBBY } from '../world-data';
+import { C7_DOOR, CLASSROOM, CLASSROOM_DOOR, LIBRARY_DOOR, LIBRARY_LOBBY } from '../world-data';
+import { findNearestCheckinLandmark } from '../checkin/campus-passport';
 import { findNearestLibrarySeat, SEAT_INTERACT_RADIUS } from './seat-interaction';
 
 export const TOAST_MS = 2500;
@@ -13,7 +14,7 @@ export const MINH_POS = { x: -72, z: -8.5 };
 export const MINH_RADIUS = 2.5;
 
 export type BkhnHook = {
-  enterClassroom: () => void;
+  enterClassroom: (origin?: 'c7' | 'c1') => void;
   exitClassroom: () => void;
   enterLibraryLobby?: () => void;
   exitLibraryLobby?: () => void;
@@ -243,6 +244,16 @@ export function findNearestInteractable(
     }
     if (dist(LIBRARY_DOOR.pos.x, LIBRARY_DOOR.pos.z) <= LIBRARY_DOOR.triggerRadius) {
       return { id: 'library-door', label: 'E — Vào sảnh Thư viện Tạ Quang Bửu' };
+    }
+    if (dist(C7_DOOR.pos.x, C7_DOOR.pos.z) <= C7_DOOR.triggerRadius) {
+      return { id: 'c7-door', label: 'E — Vào Giảng đường Tòa C7 (Học HSK theo bài)' };
+    }
+    const nearCheckin = findNearestCheckinLandmark(pos);
+    if (nearCheckin) {
+      return {
+        id: `checkin:${nearCheckin.id}`,
+        label: nearCheckin.promptLabel,
+      };
     }
     return null;
   }

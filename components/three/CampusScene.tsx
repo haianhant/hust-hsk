@@ -20,6 +20,7 @@ import BackgroundBuildings from './BackgroundBuildings';
 import CampusExpansion from './CampusExpansion';
 import AmbientLife from './AmbientLife';
 import Motorbike from './Motorbike';
+import CampusCheckinMarkers from '../../features/campus/checkin/CampusCheckinMarkers';
 import { makeSkyEnvEquirectTexture, makeSunHaloTexture } from './materials';
 import { libraryNavigationController } from '../../lib/campus';
 import { playerState, type TimeOfDay } from '../../lib/playerState';
@@ -435,6 +436,8 @@ export default function CampusScene({
           <MinhNpc />
           {/* Xe máy cá nhân (đợt 3 giai đoạn 4) — chỉ ngoài sân, không vào phòng học. */}
           <Motorbike />
+          {/* Hệ thống trụ Check-in & Giới thiệu EdTech 9 công trình biểu tượng ĐHBK Hà Nội */}
+          <CampusCheckinMarkers isNight={timeOfDay === 'night'} />
         </>
       )}
       <RemotePlayers

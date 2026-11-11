@@ -1,15 +1,15 @@
 'use client';
 
 // ---------------------------------------------------------------------------
-// features/learning/hsk/EntryScreen.tsx — Pre-campus 3D Character Creator,
-// Lesson Picker & Smart Suggestion entry screen.
+// features/learning/hsk/EntryScreen.tsx — Màn hình tạo nhân vật 3D trước khi
+// bước vào khuôn viên ĐHBK Hà Nội.
+// (Theo kiến trúc EdTech mới: Trang chủ không còn chọn bài học; việc chọn bài
+// và học HSK theo bài diễn ra chuyên biệt tại Giảng đường Tòa C7).
 // ---------------------------------------------------------------------------
 
 import CharacterCreatorModal from '../../../components/ui/CharacterCreatorModal';
 import type { CharacterProfile, Identity } from '../../../lib/identity';
-import type { NextSuggestion } from '../../../lib/learn/suggest';
 import type { Progress } from '../../../lib/learn/types';
-import LessonPickerCard from './LessonPickerCard';
 
 export type HandbookTab =
   | 'lesson'
@@ -27,14 +27,7 @@ export interface EntryScreenProps {
   identityName: string;
   identityMssv: string;
   progress: Progress | null;
-  lessonsOpen: boolean;
-  questActive: boolean;
-  activeQuestId: string | null;
-  suggestion: NextSuggestion;
-  onSetLessonsOpen: (open: boolean) => void;
   onEnter: (resumeQuest: boolean, submittedProfile?: CharacterProfile) => void;
-  onStartQuest: (questId: string) => void;
-  onOpenHandbook: (tab: HandbookTab) => void;
 }
 
 export function EntryScreen({
@@ -43,79 +36,30 @@ export function EntryScreen({
   identityName,
   identityMssv,
   progress,
-  lessonsOpen,
-  questActive,
-  activeQuestId,
-  suggestion,
-  onSetLessonsOpen,
   onEnter,
-  onStartQuest,
-  onOpenHandbook,
 }: EntryScreenProps) {
   const hasSave =
     !!progress &&
-    (progress.points > 0 || !!progress.questState || Object.keys(progress.completedQuests ?? {}).length > 0);
+    (progress.points > 0 ||
+      !!progress.questState ||
+      Object.keys(progress.completedQuests ?? {}).length > 0);
 
   return (
-    <main className="flex min-h-dvh w-full flex-col items-center justify-center gap-4 overflow-y-auto bg-[#eef2e6] px-4 py-6 text-center">
+    <main className="flex min-h-dvh w-full flex-col items-center justify-center gap-3 overflow-y-auto bg-[#eef2e6] px-4 py-6 text-center">
       <CharacterCreatorModal
         mode="entry"
         initialProfile={characterProfile}
         initialNameInput={savedIdentity ? identityName : ''}
         initialMssvInput={savedIdentity ? identityMssv : ''}
         hasSave={hasSave}
-        onConfirm={(nextProfile, resumeQuest) => onEnter(!!resumeQuest, nextProfile)}
-        onChooseLesson={() => onSetLessonsOpen(true)}
+        onConfirm={(nextProfile) => onEnter(false, nextProfile)}
       />
-      {lessonsOpen && (
-        <LessonPickerCard
-          activeQuestId={questActive ? activeQuestId : null}
-          completedQuests={progress?.completedQuests ?? {}}
-          onPick={(questId) => {
-            onSetLessonsOpen(false);
-            onEnter(true);
-            onStartQuest(questId);
-          }}
-          onClose={() => onSetLessonsOpen(false)}
-        />
-      )}
-      {hasSave && (
-        <p className="text-sm text-[#1c2b1f]/60">
-          Đã lưu trên thiết bị này: {progress?.points ?? 0} điểm
-          {progress?.streak ? ` · chuỗi ${progress.streak.count} ngày` : ''}.
-        </p>
-      )}
-      {hasSave && (
-        <div className="max-w-xl rounded-2xl border border-[#1c5c3a]/20 bg-white/70 px-5 py-3 text-left">
-          <p className="text-base font-semibold text-[#1c5c3a]">💡 {suggestion.text}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {suggestion.action === 'calendar' && (
-              <button
-                type="button"
-                onClick={() => {
-                  onEnter(true);
-                  onOpenHandbook('calendar');
-                }}
-                className="rounded-full bg-[#2E7D32] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#256B29]"
-              >
-                Mở lịch ôn
-              </button>
-            )}
-            {(suggestion.action === 'resume' || suggestion.action === 'start') && suggestion.questId && (
-              <button
-                type="button"
-                onClick={() => {
-                  onEnter(true);
-                  onStartQuest(suggestion.questId as string);
-                }}
-                className="rounded-full bg-[#A54432] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#8A3828]"
-              >
-                Học ngay →
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      <div className="max-w-2xl rounded-2xl border border-[#B5121B]/20 bg-white/75 px-5 py-2.5 text-xs text-[#334155] shadow-sm">
+        <strong className="text-[#B5121B]">✨ Mỗi tòa nhà một tính năng EdTech:</strong> Ghé{' '}
+        <strong>Tòa C7</strong> để chọn &amp; học HSK theo bài · Vào{' '}
+        <strong>Thư viện Tạ Quang Bửu</strong> để tự học Pomodoro, đánh đàn Piano Tầng 6 &amp; ngắm
+        cảnh Tầng 10 · Check-in 9 công trình biểu tượng để sưu tầm trọn bộ Sổ tay Bách Khoa!
+      </div>
     </main>
   );
 }

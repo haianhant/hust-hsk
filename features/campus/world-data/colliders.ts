@@ -34,16 +34,18 @@ export type NamedCollider = {
   box: AABB;
 };
 
-// Cây xanh sân trước Thư viện (2 cây bóng mát đối xứng + 2 hàng cau vua) và cây rìa khuôn viên
+// Cây xanh sân trước Thư viện (2 cây bóng mát đối xứng + 2 hàng cau vua mở rộng tầm nhìn sảnh) và cây rìa khuôn viên
 export const LIBRARY_TREES: Vec2[] = [
-  { x: 30.5, z: 14.5 },
-  { x: 45.5, z: 14.5 },
-  { x: 26.5, z: 11 },
-  { x: 26.5, z: 15 },
-  { x: 26.5, z: 19 },
-  { x: 49.5, z: 11 },
-  { x: 49.5, z: 15 },
-  { x: 49.5, z: 19 },
+  { x: 29.5, z: 13.8 },
+  { x: 46.8, z: 13.8 },
+  { x: 26.2, z: 10.8 },
+  { x: 26.2, z: 14.8 },
+  { x: 26.2, z: 18.8 },
+  { x: 28.0, z: 22.8 },
+  { x: 51.4, z: 10.8 },
+  { x: 51.4, z: 14.8 },
+  { x: 51.4, z: 18.8 },
+  { x: 48.2, z: 22.8 },
 ];
 
 export const CAMPUS_SHADE_TREES: Vec2[] = [
@@ -68,13 +70,13 @@ export const CAMPUS_SHADE_TREES: Vec2[] = [
   { x: -92, z: -46 },
   { x: -92, z: 62 },
   { x: -92, z: 74 },
-  // 4 cây lớn hai bên Cổng Parabol & 2 cây sân sau Thư viện
+  // 4 cây lớn hai bên Cổng Parabol & 2 cây sân sau Thư viện (lùi về z = 54,5 phía sau khối tháp mở rộng)
   { x: -93.5, z: -12 },
   { x: -93.5, z: 0 },
   { x: -82.5, z: -13.5 },
   { x: -82.5, z: 1.5 },
-  { x: 30, z: 52 },
-  { x: 49, z: 52 },
+  { x: 30, z: 54.5 },
+  { x: 49, z: 54.5 },
 ];
 
 export const BUILDING_COLLIDERS: NamedCollider[] = [
@@ -83,18 +85,16 @@ export const BUILDING_COLLIDERS: NamedCollider[] = [
   { name: 'Bậc tam cấp C1', box: C1.steps },
   { name: 'Bệ chữ I LOVE BK', box: I_LOVE_BK.plinth },
   { name: 'Khối đá trắng', box: WHITE_ROCK.box },
-  { name: 'Thư viện Tạ Quang Bửu (tháp)', box: { minX: 25.5, maxX: 50.5, minZ: 29.5, maxZ: 43.5 } },
-  { name: 'Thư viện Tạ Quang Bửu (khối đế)', box: { minX: 31.0, maxX: 45.0, minZ: 23.5, maxZ: 30.5 } },
-  // Khối đế hai cánh, thành bậc tam cấp và cột sảnh Thư viện — chặn đi xuyên qua hông cầu thang/cột sảnh,
-  // chỉ mở lối chính diện x = 31.2..44.8 để bước lên bậc tam cấp (có nâng độ cao Y mượt trên bậc & hiên sảnh).
-  { name: 'Cánh tây khối đế Thư viện', box: { minX: 25.4, maxX: 31.0, minZ: 18.8, maxZ: 29.8 } },
-  { name: 'Cánh đông khối đế Thư viện', box: { minX: 45.0, maxX: 50.6, minZ: 18.8, maxZ: 29.8 } },
-  { name: 'Thành bậc tam cấp Thư viện (tây)', box: { minX: 30.2, maxX: 31.1, minZ: 16.8, maxZ: 19.2 } },
-  { name: 'Thành bậc tam cấp Thư viện (đông)', box: { minX: 44.9, maxX: 45.8, minZ: 16.8, maxZ: 19.2 } },
-  { name: 'Cột sảnh Thư viện (tây-bắc)', box: { minX: 31.05, maxX: 31.95, minZ: 19.05, maxZ: 19.95 } },
-  { name: 'Cột sảnh Thư viện (đông-bắc)', box: { minX: 44.05, maxX: 44.95, minZ: 19.05, maxZ: 19.95 } },
-  { name: 'Cột sảnh Thư viện (tây-nam)', box: { minX: 31.05, maxX: 31.95, minZ: 22.35, maxZ: 23.25 } },
-  { name: 'Cột sảnh Thư viện (đông-nam)', box: { minX: 44.05, maxX: 44.95, minZ: 22.35, maxZ: 23.25 } },
+  { name: 'Thư viện Tạ Quang Bửu (tháp)', box: { minX: 25.6, maxX: 52.0, minZ: 28.8, maxZ: 50.0 } },
+  { name: 'Thư viện Tạ Quang Bửu (khối đế)', box: { minX: 29.8, maxX: 46.2, minZ: 23.5, maxZ: 30.5 } },
+  // Thành bậc tam cấp và cột sảnh tròn Thư viện — mở lối chính diện x = 30.0..46.0 để bước lên bậc tam cấp
+  // và để thoáng sân hai bên khối sảnh 6 cột cho hàng cau vua (khớp ảnh thu-vien-cao-nhin-cheo-01.jpg).
+  { name: 'Thành bậc tam cấp Thư viện (tây)', box: { minX: 28.9, maxX: 29.8, minZ: 16.8, maxZ: 19.4 } },
+  { name: 'Thành bậc tam cấp Thư viện (đông)', box: { minX: 46.2, maxX: 47.1, minZ: 16.8, maxZ: 19.4 } },
+  { name: 'Cột sảnh Thư viện (tây-bắc)', box: { minX: 30.15, maxX: 31.05, minZ: 19.2, maxZ: 20.1 } },
+  { name: 'Cột sảnh Thư viện (đông-bắc)', box: { minX: 44.95, maxX: 45.85, minZ: 19.2, maxZ: 20.1 } },
+  { name: 'Cột sảnh Thư viện (tây-nam)', box: { minX: 30.15, maxX: 31.05, minZ: 22.35, maxZ: 23.25 } },
+  { name: 'Cột sảnh Thư viện (đông-nam)', box: { minX: 44.95, maxX: 45.85, minZ: 22.35, maxZ: 23.25 } },
   { name: 'Bệ chữ HUST', box: HUST_SIGN.plinth },
   { name: 'C9', box: { minX: -85, maxX: -65, minZ: -23, maxZ: -11 } },
   { name: 'Cầu thang C9', box: C9.stairs.box },
@@ -233,4 +233,6 @@ export const NPC_CIRCLES: { pos: Vec2; radius: number; name?: string }[] = [
   { pos: { x: -27.38, z: 34.0 }, radius: 0.45, name: 'Sinh viên (NPC)' },
   { pos: { x: 22.18, z: 24.0 }, radius: 0.45, name: 'Sinh viên (NPC)' },
   { pos: { x: -27.38, z: 66.0 }, radius: 0.45, name: 'Sinh viên (NPC)' },
+  // Bác bảo vệ Bách Khoa đứng trực gác cạnh phòng bảo vệ Cổng Trần Đại Nghĩa
+  { pos: { x: 91.65, z: -12.25 }, radius: 0.45, name: 'Bác bảo vệ Bách Khoa' },
 ];

@@ -50,11 +50,24 @@ import {
 import { multiplayer } from '../lib/multiplayer';
 import { lofiAudio } from '../lib/lofiAudio';
 import { getEarnedGlobalBadgeIds, GLOBAL_BADGES } from '../lib/learn/badges';
-import { getNextSuggestion } from '../lib/learn/suggest';
+import type { PassportMainSection } from '../components/learn/CampusPassportHandbook';
 import type { QuestAnswer } from '../components/learn/QuestPanel';
 import CharacterCreatorModal from '../components/ui/CharacterCreatorModal';
 import { LibraryFloorNav } from '../components/ui/LibraryFloorNav';
 import type { HomeworkState } from '../components/three/Classroom';
+import BuildingEdTechModal from '../features/campus/checkin/BuildingEdTechModal';
+import {
+  createEmptyPassportState,
+  getCampusLandmarkById,
+  getPassportSummary,
+  loadCampusPassport,
+  recordLandmarkCheckIn,
+  recordLandmarkFeatureCollected,
+  recordLandmarkQuizSolved,
+  saveCampusPassport,
+  type CampusLandmarkSpec,
+  type CampusPassportState,
+} from '../features/campus/checkin/campus-passport';
 import {
   createInitialSeatingState,
   evaluateReclaimOutcome,
@@ -75,7 +88,6 @@ import {
   EntryScreen,
   LearningOverlayModal,
   LessonPickerCard,
-  OBJECTIVES,
   type HandbookTab,
   type LearningPanelType,
   type ReviewSessionState,
@@ -132,6 +144,9 @@ export default function HomePage() {
   // hiện nút "?" để mở lại; màn hình vào (entry screen) không dùng state này.
   const [helpOpen, setHelpOpen] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [passport, setPassport] = useState<CampusPassportState>(() => createEmptyPassportState());
+  const [passportSection, setPassportSection] = useState<PassportMainSection>('checkin');
+  const [activeEdTechLandmarkId, setActiveEdTechLandmarkId] = useState<string | null>(null);
   const [panel, setPanel] = useState<LearningPanelType>(null);
   const [handbookTab, setHandbookTab] = useState<HandbookTab>('lesson');
   // Phiên ôn nhanh (Bước 8): mở từ Lịch ôn / Sổ lỗi trong sổ tay.
@@ -167,6 +182,7 @@ export default function HomePage() {
   const mpSnap = useMultiplayerBridge(entered);
 
   useEffect(() => {
+    setPassport(loadCampusPassport());
     const saved = loadIdentity();
     const savedChar = loadCharacterProfile() ?? {
       ...DEFAULT_CHARACTER_PROFILE,
@@ -731,12 +747,13 @@ export default function HomePage() {
     if (viewMode === 'top') setHelpOpen(false);
   }, [viewMode]);
 
-  // Khi panel học, menu chọn bài, bảng thông tin sảnh thư viện, bảng Tự học, bảng Xếp hạng hoặc modal nhân vật mở: khóa di chuyển.
+  // Khi panel học, menu chọn bài, thẻ EdTech công trình, bảng thông tin sảnh thư viện, bảng Tự học, bảng Xếp hạng hoặc modal nhân vật mở: khóa di chuyển.
   useEffect(() => {
     playerState.uiLocked =
       panel !== null ||
       lessonsOpen ||
       leaderboardOpen ||
+      activeEdTechLandmarkId !== null ||
       lobbyModal !== null ||
       outfitOpen ||
       study.studyPanelOpen ||
@@ -748,6 +765,7 @@ export default function HomePage() {
     panel,
     lessonsOpen,
     leaderboardOpen,
+    activeEdTechLandmarkId,
     lobbyModal,
     outfitOpen,
     study.studyPanelOpen,
@@ -810,25 +828,33 @@ export default function HomePage() {
     };
   }, []);
 
-  // --- Bắt đầu / chơi lại quest (mặc định tuyến bài 10 nhóm 1) ----------------
-  const startQuest = useCallback((questId: string = FIRST_LESSON_QUEST.id) => {
-    const p = progressRef.current;
-    if (!p) return;
-    const def = getQuestDef(questId) ?? (getQuestDef('first-lesson') as QuestDef);
-    setRecallResults([]);
-    setReReviewIds(null);
-    setReReviewResults([]);
-    setNotebookOpen(false);
-    setHomework('desk');
-    setActionDone(false);
-    setRewardAlreadyGiven(!!p.completedQuests?.[def.quest.id]);
-    badgesBeforeQuestRef.current = getEarnedGlobalBadgeIds(p);
-    setProgress({
-      ...p,
-      questState: { questId: def.quest.id, stepIndex: 0, done: false },
-    });
-    setPanel('quest');
-  }, []);
+  // --- Bắt đầu / chơi lại bài HSK tại Giảng đường Tòa C7 -----------------------
+  const startQuest = useCallback(
+    (questId: string = FIRST_LESSON_QUEST.id, startInsideClassroom = true) => {
+      const p = progressRef.current;
+      if (!p) return;
+      const def = getQuestDef(questId) ?? (getQuestDef('first-lesson') as QuestDef);
+      const doorIdx = def.steps.findIndex((s) => s.kind === 'goto');
+      const initialStepIndex =
+        startInsideClassroom && doorIdx >= 0 && doorIdx + 1 < def.steps.length
+          ? doorIdx + 1
+          : 0;
+      setRecallResults([]);
+      setReReviewIds(null);
+      setReReviewResults([]);
+      setNotebookOpen(false);
+      setHomework('desk');
+      setActionDone(false);
+      setRewardAlreadyGiven(!!p.completedQuests?.[def.quest.id]);
+      badgesBeforeQuestRef.current = getEarnedGlobalBadgeIds(p);
+      setProgress({
+        ...p,
+        questState: { questId: def.quest.id, stepIndex: initialStepIndex, done: false },
+      });
+      setPanel('quest');
+    },
+    [],
+  );
 
   // --- Gặp từ: đánh dấu encountered khi vào bước có lexemeId -------------------
   useEffect(() => {
@@ -947,7 +973,11 @@ export default function HomePage() {
     setProgress((prev) => {
       if (!prev || !prev.questState) return prev;
       const def = getQuestDef(prev.questState.questId) ?? (getQuestDef('first-lesson') as QuestDef);
-      const nextIdx = prev.questState.stepIndex + 1;
+      let nextIdx = prev.questState.stepIndex + 1;
+      // Bỏ qua bước kiểm tra cuối 5 từ (kind === 'review') theo thiết kế học bài mới tại Tòa C7
+      while (nextIdx < def.steps.length && def.steps[nextIdx]?.kind === 'review') {
+        nextIdx += 1;
+      }
       if (nextIdx >= def.steps.length) return prev;
       return { ...prev, questState: { ...prev.questState, stepIndex: nextIdx } };
     });
@@ -1041,17 +1071,52 @@ export default function HomePage() {
     [handleObjectAction, handleSitAtSeat, showToast, speakText, step?.kind],
   );
 
-  // --- Vào / ra phòng học & Sảnh Thư viện (fade) -----------------------------------
-  const enterClassroomFade = useCallback(() => {
-    setFade(true);
-    window.setTimeout(() => {
-      getHook()?.enterClassroom();
-      setInClassroom(true);
-      setFade(false);
-    }, 350);
-  }, []);
+  // --- Check-in & Thu thập Tính năng Sáng tạo tại 9 tòa nhà ĐHBK Hà Nội -------
+  const stampLandmarkCheckin = useCallback(
+    (landmarkId: string, alsoCollectFeature = false) => {
+      setPassport((prev) => {
+        let res = recordLandmarkCheckIn(prev, landmarkId);
+        let next = res.next;
+        if (alsoCollectFeature) {
+          next = recordLandmarkFeatureCollected(next, landmarkId).next;
+        }
+        if (next !== prev) {
+          saveCampusPassport(next);
+        }
+        if (res.isFirstTime) {
+          const lm = getCampusLandmarkById(landmarkId);
+          setProgress((p) => (p ? { ...p, points: (p.points ?? 0) + 10 } : p));
+          if (lm) {
+            showToast(`📍 Check-in thành công: ${lm.shortName} (+10 điểm Khám phá Bách Khoa!)`);
+          }
+        }
+        return next;
+      });
+    },
+    [showToast],
+  );
+
+  // --- Vào / ra Giảng đường Tòa C7 & Sảnh Thư viện (fade) -----------------------
+  const enterClassroomFade = useCallback(
+    (origin: 'c7' | 'c1' = 'c7', openLessonPickerAfterEnter = false) => {
+      if (origin === 'c7') {
+        stampLandmarkCheckin('c7', true);
+      }
+      setFade(true);
+      window.setTimeout(() => {
+        getHook()?.enterClassroom(origin);
+        setInClassroom(true);
+        setFade(false);
+        if (openLessonPickerAfterEnter) {
+          setLessonsOpen(true);
+        }
+      }, 350);
+    },
+    [stampLandmarkCheckin],
+  );
 
   const exitClassroomFade = useCallback(() => {
+    setLessonsOpen(false);
     setFade(true);
     window.setTimeout(() => {
       getHook()?.exitClassroom();
@@ -1061,13 +1126,14 @@ export default function HomePage() {
   }, []);
 
   const enterLibraryLobbyFade = useCallback(() => {
+    stampLandmarkCheckin('library', true);
     setFade(true);
     window.setTimeout(() => {
       getHook()?.enterLibraryLobby?.();
       setInLibraryLobby(true);
       setFade(false);
     }, 350);
-  }, []);
+  }, [stampLandmarkCheckin]);
 
   const exitLibraryLobbyFade = useCallback(() => {
     setLobbyModal(null);
@@ -1160,12 +1226,21 @@ export default function HomePage() {
     showToast('Đã thoát buổi học — tiến độ vẫn được lưu, vào lớp lại để học tiếp.');
   }, [inClassroom, exitClassroomFade, showToast]);
 
-  const pickLesson = useCallback((questId: string) => {
-    setLessonsOpen(false);
-    if (inClassroom) exitClassroomFade();
-    if (questActive && questState?.questId === questId) return;
-    startQuest(questId);
-  }, [inClassroom, exitClassroomFade, questActive, questState?.questId, startQuest]);
+  const pickLesson = useCallback(
+    (questId: string) => {
+      setLessonsOpen(false);
+      setActiveEdTechLandmarkId(null);
+      if (!inClassroom) {
+        enterClassroomFade('c7', false);
+      }
+      if (questActive && questState?.questId === questId && stepIndex >= 2) {
+        setPanel('quest');
+        return;
+      }
+      startQuest(questId, true);
+    },
+    [inClassroom, enterClassroomFade, questActive, questState?.questId, stepIndex, startQuest],
+  );
 
   const goToMenu = useCallback(() => {
     setPanel(null);
@@ -1233,24 +1308,41 @@ export default function HomePage() {
       return;
     }
     if (id === 'npc-minh') {
-      if (!questActive && !questDoneBefore) {
-        startQuest();
-      } else if (questActive && step?.id === 'greet-minh') {
-        setPanel('quest');
-      }
+      stampLandmarkCheckin('parabol-gate', false);
+      setActiveEdTechLandmarkId('parabol-gate');
+      speakText('欢迎来到河内百科大学！');
+      showToast('👋 Minh: Chào mừng bạn! Muốn học HSK theo bài thì ghé Tòa C7 nhé!');
       return;
     }
     if (id === 'classroom-door') {
       if (questActive && step?.id === 'goto-door') {
-        enterClassroomFade();
+        enterClassroomFade('c1', false);
         window.setTimeout(() => advance(), 400);
       } else if (anyQuestDone || questActive) {
-        enterClassroomFade();
+        enterClassroomFade('c1', false);
+      }
+      return;
+    }
+    if (id === 'c7-door') {
+      const hasOngoingC7Lesson = questActive && stepIndex >= 2;
+      enterClassroomFade('c7', !hasOngoingC7Lesson);
+      if (hasOngoingC7Lesson) {
+        window.setTimeout(() => setPanel('quest'), 400);
       }
       return;
     }
     if (id === 'library-door') {
       enterLibraryLobbyFade();
+      return;
+    }
+    if (id.startsWith('checkin:')) {
+      const lmId = id.slice('checkin:'.length);
+      stampLandmarkCheckin(lmId, false);
+      setActiveEdTechLandmarkId(lmId);
+      const lm = getCampusLandmarkById(lmId);
+      if (lm?.vocab[0]) {
+        speakText(lm.vocab[0].hanzi);
+      }
       return;
     }
     if (id === 'seat-stand-up') {
@@ -1314,8 +1406,9 @@ export default function HomePage() {
     questActive,
     questDoneBefore,
     anyQuestDone,
+    stepIndex,
     step?.id,
-    startQuest,
+    stampLandmarkCheckin,
     enterClassroomFade,
     enterLibraryLobbyFade,
     advance,
@@ -1464,8 +1557,74 @@ export default function HomePage() {
 
   const openHandbook = useCallback((tab: HandbookTab) => {
     setHandbookTab(tab);
+    if (tab === 'due' || tab === 'calendar' || tab === 'errors' || tab === 'search') {
+      setPassportSection('hsk');
+    } else {
+      setPassportSection('checkin');
+    }
     setPanel('handbook');
   }, []);
+
+  const handleActivateCreativeFeature = useCallback(
+    (lm: CampusLandmarkSpec) => {
+      setPassport((prev) => {
+        const res = recordLandmarkFeatureCollected(prev, lm.id);
+        if (res.next !== prev) {
+          saveCampusPassport(res.next);
+        }
+        if (res.isNewFeature) {
+          setProgress((p) => (p ? { ...p, points: (p.points ?? 0) + 5 } : p));
+          showToast(`✨ Đã sưu tầm tính năng sáng tạo của ${lm.shortName} (+5 điểm)!`);
+        }
+        return res.next;
+      });
+      if (lm.creativeActionKind === 'enter-c7-hsk') {
+        setActiveEdTechLandmarkId(null);
+        const hasOngoingC7Lesson = questActive && stepIndex >= 2;
+        enterClassroomFade('c7', !hasOngoingC7Lesson);
+        if (hasOngoingC7Lesson) {
+          window.setTimeout(() => setPanel('quest'), 400);
+        }
+      } else if (lm.creativeActionKind === 'enter-library') {
+        setActiveEdTechLandmarkId(null);
+        enterLibraryLobbyFade();
+      } else if (lm.creativeActionKind === 'toggle-lofi') {
+        if (!lofiPlaying) {
+          handleToggleLofi();
+        }
+      }
+    },
+    [
+      questActive,
+      stepIndex,
+      enterClassroomFade,
+      enterLibraryLobbyFade,
+      lofiPlaying,
+      handleToggleLofi,
+      showToast,
+    ],
+  );
+
+  const handleSolveLandmarkQuiz = useCallback(
+    (lm: CampusLandmarkSpec) => {
+      setPassport((prev) => {
+        const res = recordLandmarkQuizSolved(prev, lm.id);
+        if (res.next !== prev) {
+          saveCampusPassport(res.next);
+        }
+        if (res.isFirstSolve) {
+          setProgress((p) =>
+            p ? { ...p, points: (p.points ?? 0) + lm.quiz.rewardPoints } : p,
+          );
+          showToast(
+            `🎉 Giải đúng câu đố EdTech ${lm.shortName} — nhận +${lm.quiz.rewardPoints} điểm!`,
+          );
+        }
+        return res.next;
+      });
+    },
+    [showToast],
+  );
 
   const handleReviewNow = useCallback(() => {
     const wrong = recallResults.filter((r) => !r.correct).map((r) => r.lexemeId);
@@ -1546,8 +1705,11 @@ export default function HomePage() {
     }));
   }, [progress, step?.kind, currentQuest?.rewardPoints]);
 
-  const suggestion = useMemo(() => getNextSuggestion(progress), [progress]);
-  const objectiveText = questActive && step ? OBJECTIVES[step.id] ?? currentQuest.title : null;
+  const passportSummary = useMemo(() => getPassportSummary(passport), [passport]);
+  const activeEdTechLandmark = useMemo(
+    () => (activeEdTechLandmarkId ? getCampusLandmarkById(activeEdTechLandmarkId) ?? null : null),
+    [activeEdTechLandmarkId],
+  );
 
   // --- Màn mở đầu (Trình tạo Nhân vật 3D trước khi vào trường) ---------------
   if (!entered) {
@@ -1558,20 +1720,13 @@ export default function HomePage() {
         identityName={identityName}
         identityMssv={identityMssv}
         progress={progress}
-        lessonsOpen={lessonsOpen}
-        questActive={questActive}
-        activeQuestId={questState?.questId ?? null}
-        suggestion={suggestion}
-        onSetLessonsOpen={setLessonsOpen}
         onEnter={tryEnter}
-        onStartQuest={startQuest}
-        onOpenHandbook={openHandbook}
       />
     );
   }
 
   const currentZoneLabel = inClassroom
-    ? 'Phòng học mô phỏng'
+    ? 'Giảng đường HSK · Tòa C7'
     : inLibraryLobby
       ? 'Sảnh Thư viện Tạ Quang Bửu'
       : zone;
@@ -1652,12 +1807,14 @@ export default function HomePage() {
             lofiPlaying={lofiPlaying}
             soundOn={soundOn}
             speechRate={speechRate}
-            objectiveText={objectiveText}
+            objectiveText={null}
             interactLabel={interactLabel}
             fastTravelOpen={fastTravelOpen}
             traveling={traveling}
             helpOpen={helpOpen}
             toast={toast}
+            checkedInCount={passportSummary.checkedInCount}
+            totalLandmarks={passportSummary.totalLandmarks}
             pomodoro={study.session.pomodoro}
             focusPolicy={study.focusPolicy}
             onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
@@ -1777,9 +1934,29 @@ export default function HomePage() {
         />
       )}
 
+      {/* Cửa sổ Check-in & Trải nghiệm EdTech riêng của từng Tòa nhà Bách Khoa */}
+      {activeEdTechLandmark && entered && (
+        <BuildingEdTechModal
+          landmark={activeEdTechLandmark}
+          passport={passport}
+          playerName={characterProfile.name}
+          onClose={() => setActiveEdTechLandmarkId(null)}
+          onSpeakChinese={speakText}
+          onActivateCreativeFeature={handleActivateCreativeFeature}
+          onSolveQuiz={handleSolveLandmarkQuiz}
+          onOpenPassportHandbook={() => {
+            setActiveEdTechLandmarkId(null);
+            setPassportSection('features');
+            setPanel('handbook');
+          }}
+        />
+      )}
+
       {/* Panel học / sổ tay / kết quả (DOM overlay, khóa di chuyển khi mở). */}
       <LearningOverlayModal
         panel={panel}
+        passport={passport}
+        passportSection={passportSection}
         progress={progress}
         reReviewIds={reReviewIds}
         step={step}
@@ -1814,9 +1991,17 @@ export default function HomePage() {
         onReviewSessionAnswer={handleReviewSessionAnswer}
         onExitLesson={exitLesson}
         onFastTravel={doFastTravel}
+        onInspectLandmark={(landmarkId) => {
+          setPanel(null);
+          setActiveEdTechLandmarkId(landmarkId);
+        }}
+        onPickAnotherLesson={() => {
+          setPanel(null);
+          setLessonsOpen(true);
+        }}
         onReviewNow={handleReviewNow}
         onCompleteQuest={completeQuest}
-        onStartQuest={startQuest}
+        onStartQuest={(qId) => startQuest(qId, true)}
       />
     </main>
   );

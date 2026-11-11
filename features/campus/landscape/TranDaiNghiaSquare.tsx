@@ -13,7 +13,8 @@
 // Module ID: building.tran-dai-nghia-gate
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { TRAN_DAI_NGHIA_GATE } from '../world-data';
 import { LabelPlane } from '../../../components/three/TextPlate';
@@ -164,7 +165,248 @@ const SHRUB_CLUSTERS: Array<{
   { dz: 2.22, dx: 0.52, r: 0.35, h: 0.41, color: '#3B8732' },
 ];
 
-export function TranDaiNghiaSquare() {
+function drawGuardHousePlate(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+) {
+  ctx.fillStyle = '#1E3A8A';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#FACC15';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(8, 8, w - 16, h - 16);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '700 44px "Be Vietnam Pro", "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PHÒNG BẢO VỆ', w / 2, h * 0.42);
+  ctx.fillStyle = '#FDE047';
+  ctx.font = '600 26px "Be Vietnam Pro", "Segoe UI", sans-serif';
+  ctx.fillText('ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, h * 0.76);
+}
+
+/**
+ * Bác bảo vệ Bách Khoa thân thiện đứng gác cạnh Phòng bảo vệ Cổng Trần Đại Nghĩa:
+ * Áo sơ mi bảo vệ xanh da trời nhạt, cầu vai & cà vạt xanh tím than, băng tay đỏ "BẢO VỆ",
+ * mũ kê-pi bảo vệ có sao vàng, bộ đàm bên hông và động tác gật đầu / vẫy chào sinh viên.
+ */
+function HustSecurityGuard({ position }: { position: [number, number, number] }) {
+  const torsoRef = useRef<THREE.Group>(null);
+  const headRef = useRef<THREE.Group>(null);
+  const rightArmRef = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (torsoRef.current) {
+      torsoRef.current.position.y = 0.88 + Math.sin(t * 2.1) * 0.012;
+      torsoRef.current.rotation.y = Math.sin(t * 0.75) * 0.08;
+    }
+    if (headRef.current) {
+      headRef.current.rotation.y = Math.sin(t * 0.9) * 0.16;
+      headRef.current.rotation.x = Math.sin(t * 1.8) * 0.04;
+    }
+    if (rightArmRef.current) {
+      // Định kỳ giơ tay vẫy chào sinh viên qua cổng
+      const waveCycle = t % 6.5;
+      if (waveCycle < 2.2) {
+        const env = Math.sin((waveCycle / 2.2) * Math.PI);
+        rightArmRef.current.rotation.x = -0.85 * env;
+        rightArmRef.current.rotation.z = -0.35 * env - Math.sin(t * 8.5) * 0.16 * env;
+      } else {
+        rightArmRef.current.rotation.x = Math.sin(t * 1.6) * 0.05;
+        rightArmRef.current.rotation.z = -0.08;
+      }
+    }
+  });
+
+  return (
+    <group position={position} rotation={[0, Math.PI * 0.32, 0]}>
+      {/* Bóng đổ nhẹ dưới chân */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.048, 0]}>
+        <circleGeometry args={[0.32, 18]} />
+        <meshBasicMaterial color="#0F172A" transparent opacity={0.28} depthWrite={false} />
+      </mesh>
+
+      {/* Giày da đen & hai ống quần âu xanh tím than */}
+      {[-0.105, 0.105].map((lx, idx) => (
+        <group key={`guard-leg-${idx}`} position={[lx, 0, 0]}>
+          <mesh position={[0, 0.06, 0.035]} castShadow>
+            <boxGeometry args={[0.12, 0.11, 0.24]} />
+            <meshStandardMaterial color="#111827" roughness={0.45} />
+          </mesh>
+          <mesh position={[0, 0.48, 0]} castShadow>
+            <cylinderGeometry args={[0.085, 0.075, 0.76, 10]} />
+            <meshStandardMaterial color="#1E293B" roughness={0.82} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Hông quần + thắt lưng da đen khóa bạc + bộ đàm bảo vệ */}
+      <mesh position={[0, 0.86, 0]} castShadow>
+        <boxGeometry args={[0.38, 0.14, 0.24]} />
+        <meshStandardMaterial color="#1E293B" roughness={0.82} />
+      </mesh>
+      <mesh position={[0, 0.91, 0]}>
+        <boxGeometry args={[0.395, 0.05, 0.255]} />
+        <meshStandardMaterial color="#0F172A" roughness={0.45} />
+      </mesh>
+      <mesh position={[0, 0.91, 0.132]}>
+        <boxGeometry args={[0.065, 0.045, 0.015]} />
+        <meshStandardMaterial color="#E2E8F0" metalness={0.7} roughness={0.3} />
+      </mesh>
+      {/* Bộ đàm đeo hông trái */}
+      <group position={[-0.21, 0.88, 0.03]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.05, 0.12, 0.06]} />
+          <meshStandardMaterial color="#111827" roughness={0.5} />
+        </mesh>
+        <mesh position={[0, 0.1, 0.01]}>
+          <cylinderGeometry args={[0.006, 0.008, 0.1, 6]} />
+          <meshStandardMaterial color="#0F172A" roughness={0.4} />
+        </mesh>
+        <mesh position={[0.026, 0.04, 0.015]}>
+          <sphereGeometry args={[0.008, 6, 6]} />
+          <meshStandardMaterial color="#4ADE80" emissive="#22C55E" emissiveIntensity={1.6} />
+        </mesh>
+      </group>
+
+      {/* Thân trên đồng phục bảo vệ Bách Khoa */}
+      <group ref={torsoRef} position={[0, 0.88, 0]}>
+        {/* Áo sơ mi xanh da trời bảo vệ */}
+        <mesh position={[0, 0.28, 0]} castShadow>
+          <boxGeometry args={[0.41, 0.48, 0.25]} />
+          <meshStandardMaterial color="#7CC0EE" roughness={0.76} />
+        </mesh>
+        {/* Cổ áo sơ mi & cà vạt xanh tím than */}
+        <mesh position={[0, 0.52, 0.02]}>
+          <cylinderGeometry args={[0.095, 0.11, 0.06, 10]} />
+          <meshStandardMaterial color="#BAE6FD" roughness={0.7} />
+        </mesh>
+        <mesh position={[0, 0.31, 0.13]}>
+          <boxGeometry args={[0.055, 0.34, 0.016]} />
+          <meshStandardMaterial color="#1E3A8A" roughness={0.65} />
+        </mesh>
+        {/* Cầu vai xanh tím than viền vàng */}
+        {[-0.16, 0.16].map((sx, idx) => (
+          <mesh key={`guard-epaulet-${idx}`} position={[sx, 0.525, 0]}>
+            <boxGeometry args={[0.12, 0.025, 0.11]} />
+            <meshStandardMaterial color="#1E3A8A" roughness={0.6} />
+          </mesh>
+        ))}
+        {/* Bảng tên vàng & túi ngực trái */}
+        <mesh position={[-0.11, 0.39, 0.13]}>
+          <boxGeometry args={[0.09, 0.032, 0.012]} />
+          <meshStandardMaterial color="#FACC15" metalness={0.55} roughness={0.35} />
+        </mesh>
+        <mesh position={[0.11, 0.36, 0.128]}>
+          <boxGeometry args={[0.085, 0.095, 0.01]} />
+          <meshStandardMaterial color="#60A5FA" roughness={0.78} />
+        </mesh>
+
+        {/* Tay trái (đeo băng đỏ "BẢO VỆ") */}
+        <group position={[0.255, 0.46, 0]} rotation={[0.08, 0, 0.08]}>
+          <mesh position={[0, -0.09, 0]} castShadow>
+            <cylinderGeometry args={[0.068, 0.062, 0.2, 10]} />
+            <meshStandardMaterial color="#7CC0EE" roughness={0.76} />
+          </mesh>
+          {/* Băng đỏ sao vàng trực cổng */}
+          <mesh position={[0, -0.1, 0]}>
+            <cylinderGeometry args={[0.071, 0.068, 0.075, 12]} />
+            <meshStandardMaterial color="#DC2626" roughness={0.6} />
+          </mesh>
+          <mesh position={[0, -0.29, 0.01]} castShadow>
+            <cylinderGeometry args={[0.052, 0.045, 0.24, 10]} />
+            <meshStandardMaterial color="#F1C29B" roughness={0.78} />
+          </mesh>
+        </group>
+
+        {/* Tay phải (vẫy chào sinh viên) */}
+        <group ref={rightArmRef} position={[-0.255, 0.46, 0]} rotation={[0, 0, -0.08]}>
+          <mesh position={[0, -0.09, 0]} castShadow>
+            <cylinderGeometry args={[0.068, 0.062, 0.2, 10]} />
+            <meshStandardMaterial color="#7CC0EE" roughness={0.76} />
+          </mesh>
+          <mesh position={[0, -0.29, 0.01]} castShadow>
+            <cylinderGeometry args={[0.052, 0.045, 0.24, 10]} />
+            <meshStandardMaterial color="#F1C29B" roughness={0.78} />
+          </mesh>
+        </group>
+
+        {/* Đầu & mũ kê-pi bác bảo vệ hiền hậu */}
+        <group ref={headRef} position={[0, 0.56, 0]}>
+          {/* Cổ */}
+          <mesh position={[0, 0.03, 0]}>
+            <cylinderGeometry args={[0.065, 0.072, 0.09, 10]} />
+            <meshStandardMaterial color="#F1C29B" roughness={0.78} />
+          </mesh>
+          {/* Khuôn mặt */}
+          <mesh position={[0, 0.16, 0]} castShadow>
+            <sphereGeometry args={[0.135, 16, 14]} />
+            <meshStandardMaterial color="#F1C29B" roughness={0.76} />
+          </mesh>
+          {/* Tóc mai điểm bạc hai bên thái dương & gáy */}
+          <mesh position={[0, 0.17, -0.035]}>
+            <sphereGeometry args={[0.132, 14, 12]} />
+            <meshStandardMaterial color="#475569" roughness={0.88} />
+          </mesh>
+          {/* Đôi mắt & chân mày bạc phúc hậu */}
+          {[-0.046, 0.046].map((ex, idx) => (
+            <group key={`guard-eye-${idx}`}>
+              <mesh position={[ex, 0.175, 0.124]}>
+                <sphereGeometry args={[0.015, 8, 8]} />
+                <meshStandardMaterial color="#1E293B" roughness={0.4} />
+              </mesh>
+              <mesh position={[ex, 0.202, 0.122]} rotation={[0, 0, idx === 0 ? 0.08 : -0.08]}>
+                <boxGeometry args={[0.042, 0.011, 0.012]} />
+                <meshStandardMaterial color="#475569" roughness={0.85} />
+              </mesh>
+            </group>
+          ))}
+          {/* Nụ cười hiền */}
+          <mesh position={[0, 0.118, 0.125]}>
+            <boxGeometry args={[0.056, 0.012, 0.012]} />
+            <meshStandardMaterial color="#9A3412" roughness={0.7} />
+          </mesh>
+
+          {/* Mũ kê-pi bảo vệ xanh tím than + lưỡi trai đen + huy hiệu sao vàng */}
+          <group position={[0, 0.255, 0]}>
+            {/* Đai mũ */}
+            <mesh position={[0, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.138, 0.135, 0.055, 16]} />
+              <meshStandardMaterial color="#172554" roughness={0.62} />
+            </mesh>
+            {/* Chóp mũ kê-pi loe nhẹ */}
+            <mesh position={[0, 0.048, -0.008]} rotation={[-0.08, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.168, 0.138, 0.052, 18]} />
+              <meshStandardMaterial color="#1E3A8A" roughness={0.65} />
+            </mesh>
+            {/* Lưỡi trai đen bóng phía trước */}
+            <mesh position={[0, -0.018, 0.105]} rotation={[0.22, 0, 0]}>
+              <cylinderGeometry args={[0.115, 0.125, 0.014, 14, 1, false, -Math.PI * 0.45, Math.PI * 0.9]} />
+              <meshStandardMaterial color="#0F172A" roughness={0.28} metalness={0.3} />
+            </mesh>
+            {/* Dây mũ vàng & huy hiệu tròn đỏ-vàng chính giữa */}
+            <mesh position={[0, -0.01, 0.134]}>
+              <boxGeometry args={[0.13, 0.012, 0.012]} />
+              <meshStandardMaterial color="#FACC15" metalness={0.6} roughness={0.35} />
+            </mesh>
+            <mesh position={[0, 0.025, 0.142]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.024, 0.024, 0.012, 12]} />
+              <meshStandardMaterial
+                color="#DC2626"
+                emissive="#FACC15"
+                emissiveIntensity={0.35}
+                roughness={0.4}
+              />
+            </mesh>
+          </group>
+        </group>
+      </group>
+    </group>
+  );
+}
+
+export function TranDaiNghiaSquare({ isNight = false }: { isNight?: boolean }) {
   const { x, z } = TRAN_DAI_NGHIA_GATE.center; // (92, -6)
   const stoneTextures = useMemo(() => makeSplitLimestoneTextures(), []);
 
@@ -230,7 +472,9 @@ export function TranDaiNghiaSquare() {
           <meshStandardMaterial color="#3B2D20" roughness={0.95} />
         </mesh>
 
-        {/* Khối tường chính ốp đá chẻ vàng kem (rộng 5.45m × cao 2.38m × dày 0.68m) */}
+        {/* Khối tường chính ốp đá chẻ vàng kem (rộng 5.45m × cao 2.38m × dày 0.68m) —
+            ban đêm được 3 đèn pha ngoài cổng rọi sáng rực vàng ấm để nổi bật dòng chữ
+            "ĐẠI HỌC BÁCH KHOA HÀ NỘI" */}
         <mesh position={[-0.12, 1.38, 0]} castShadow receiveShadow>
           <boxGeometry args={[0.68, 2.38, 5.45]} />
           <meshStandardMaterial
@@ -238,13 +482,21 @@ export function TranDaiNghiaSquare() {
             map={stoneTextures.map}
             bumpMap={stoneTextures.bumpMap}
             bumpScale={0.028}
+            emissive={isNight ? '#FFE6AD' : '#000000'}
+            emissiveMap={stoneTextures.map}
+            emissiveIntensity={isNight ? 0.98 : 0}
             roughness={0.86}
           />
         </mesh>
         {/* Mũ tường đá phẳng trên đỉnh (coping stone) */}
         <mesh position={[-0.12, 2.6, 0]} castShadow receiveShadow>
           <boxGeometry args={[0.74, 0.08, 5.55]} />
-          <meshStandardMaterial color="#E5D2AA" roughness={0.82} />
+          <meshStandardMaterial
+            color="#E5D2AA"
+            emissive={isNight ? '#FFDFA0' : '#000000'}
+            emissiveIntensity={isNight ? 0.45 : 0}
+            roughness={0.82}
+          />
         </mesh>
 
         {/* Dòng chữ nổi "ĐẠI HỌC BÁCH KHOA HÀ NỘI / HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY"
@@ -269,6 +521,15 @@ export function TranDaiNghiaSquare() {
           position={[-0.485, 1.62, 0]}
           rotation={[0, -Math.PI / 2, 0]}
           transparent
+        />
+
+        {/* Đèn pha thực (PointLight luôn mount để tránh recompile shader) chiếu rực mặt Đông biển đá khi trời tối */}
+        <pointLight
+          position={[1.45, 1.48, 0]}
+          color="#FFE39E"
+          intensity={isNight ? 4.2 : 0}
+          distance={12}
+          decay={1.7}
         />
 
         {/* Hàng cây bụi xanh tươi trồng dọc chân tường biển hiệu */}
@@ -299,18 +560,31 @@ export function TranDaiNghiaSquare() {
             </mesh>
             {/* Hộp đầu đèn pha xanh đậm ngửa lên chiếu vào mặt biển đá */}
             <mesh position={[-0.02, 0.34, 0]} rotation={[0, 0, 0.35]} castShadow>
-              <boxGeometry args={[0.14, 0.1, 0.16]} />
+              <boxGeometry args={[0.16, 0.11, 0.18]} />
               <meshStandardMaterial color="#1B4D3E" roughness={0.45} metalness={0.35} />
             </mesh>
-            {/* Mặt kính đèn phát sáng nhẹ */}
-            <mesh position={[-0.08, 0.37, 0]} rotation={[0, 0, 0.35]}>
-              <boxGeometry args={[0.02, 0.07, 0.12]} />
+            {/* Mặt kính đèn phát sáng rực rỡ khi trời tối */}
+            <mesh position={[-0.09, 0.37, 0]} rotation={[0, 0, 0.35]}>
+              <boxGeometry args={[0.025, 0.085, 0.14]} />
               <meshStandardMaterial
                 color="#FFFBEB"
                 emissive="#FFE599"
-                emissiveIntensity={0.85}
+                emissiveIntensity={isNight ? 3.4 : 0.65}
               />
             </mesh>
+            {/* Luồng sáng nón (volumetric beam) hướng lên mặt chữ ĐẠI HỌC BÁCH KHOA HÀ NỘI vào ban đêm */}
+            {isNight && (
+              <mesh position={[-0.36, 0.98, 0]} rotation={[0, 0, -0.42]}>
+                <coneGeometry args={[0.72, 1.48, 16, 1, true]} />
+                <meshBasicMaterial
+                  color="#FFE7A3"
+                  transparent
+                  opacity={0.22}
+                  side={THREE.DoubleSide}
+                  depthWrite={false}
+                />
+              </mesh>
+            )}
           </group>
         ))}
       </group>
@@ -346,7 +620,7 @@ export function TranDaiNghiaSquare() {
         </group>
       ))}
 
-      {/* ============ 4. TRỤ CỔNG ĐÁ CHẺ, HÀNG RÀO SẮT & NHÀ BẢO VỆ BÊN PHẢI (PHÍA BẮC) ============ */}
+      {/* ============ 4. TRỤ CỔNG ĐÁ CHẺ, HÀNG RÀO SẮT, NHÀ BẢO VỆ SÁNG ĐÈN & BÁC BẢO VỆ ============ */}
       {/* Hai trụ cổng lớn ốp đá vàng kem đồng bộ bên phải lối vào (cong-tran-dai-nghia-goc-nghien.png) */}
       {[-7.6, -11.0].map((pz, idx) => (
         <group key={`tdn-north-pillar-${idx}`} position={[0.1, 0, pz]}>
@@ -379,7 +653,8 @@ export function TranDaiNghiaSquare() {
         </mesh>
       </group>
 
-      {/* Nhà bảo vệ 1 tầng mái bằng màu trắng xám nằm ngay sau trụ cổng phải (cong-tran-dai-nghia-goc-nghien.png) */}
+      {/* Nhà bảo vệ 1 tầng mái bằng màu trắng xám nằm ngay sau trụ cổng phải —
+          sáng đèn ấm áp bên trong & dưới mái hiên khi trời tối */}
       <group position={[-1.0, 0, -9.4]}>
         {/* Thân nhà bảo vệ */}
         <mesh position={[0, 1.55, 0]} castShadow receiveShadow>
@@ -391,16 +666,99 @@ export function TranDaiNghiaSquare() {
           <boxGeometry args={[3.95, 0.38, 3.95]} />
           <meshStandardMaterial color="#CBD5E1" roughness={0.78} />
         </mesh>
-        {/* Cửa sổ kính khung nhôm đen mặt hướng về làn đường cổng và mặt Đông */}
-        <mesh position={[0, 1.65, 1.72]}>
-          <boxGeometry args={[1.8, 1.15, 0.05]} />
-          <meshStandardMaterial color="#1E293B" roughness={0.3} metalness={0.4} />
+        {/* Biển tên PHÒNG BẢO VỆ trên mặt Nam hướng ra làn cổng */}
+        <LabelPlane
+          textureKey="tdn-guardhouse-sign"
+          canvasW={512}
+          canvasH={160}
+          draw={drawGuardHousePlate}
+          size={[1.35, 0.42]}
+          position={[0.35, 2.62, 1.725]}
+        />
+        {/* Cửa ra vào phòng bảo vệ (nửa trên lắp kính phát sáng ấm ban đêm) */}
+        <mesh position={[-1.08, 1.08, 1.715]}>
+          <boxGeometry args={[0.82, 2.08, 0.04]} />
+          <meshStandardMaterial color="#334155" roughness={0.55} />
         </mesh>
-        <mesh position={[1.72, 1.65, 0]}>
-          <boxGeometry args={[0.05, 1.15, 1.6]} />
-          <meshStandardMaterial color="#1E293B" roughness={0.3} metalness={0.4} />
+        <mesh position={[-1.08, 1.52, 1.74]}>
+          <boxGeometry args={[0.62, 0.88, 0.02]} />
+          <meshStandardMaterial
+            color={isNight ? '#FFF1B8' : '#38BDF8'}
+            emissive={isNight ? '#FFC65C' : '#000000'}
+            emissiveIntensity={isNight ? 1.55 : 0}
+            roughness={0.28}
+          />
         </mesh>
+
+        {/* Cửa sổ kính khung nhôm mặt Nam (hướng về làn đường cổng) — sáng đèn vàng ấm khi trời tối */}
+        <mesh position={[0.42, 1.65, 1.715]}>
+          <boxGeometry args={[1.76, 1.22, 0.04]} />
+          <meshStandardMaterial color="#334155" roughness={0.45} metalness={0.35} />
+        </mesh>
+        <mesh position={[0.42, 1.65, 1.74]}>
+          <boxGeometry args={[1.62, 1.08, 0.02]} />
+          <meshStandardMaterial
+            color={isNight ? '#FFF3C4' : '#1E293B'}
+            emissive={isNight ? '#FFC452' : '#000000'}
+            emissiveIntensity={isNight ? 1.75 : 0}
+            roughness={0.25}
+          />
+        </mesh>
+        {/* Đố chia khung cửa sổ mặt Nam */}
+        <mesh position={[0.42, 1.65, 1.755]}>
+          <boxGeometry args={[0.04, 1.1, 0.015]} />
+          <meshStandardMaterial color="#334155" roughness={0.5} />
+        </mesh>
+
+        {/* Cửa sổ kính mặt Đông (nhìn ra đường Trần Đại Nghĩa) — sáng đèn vàng ấm khi trời tối */}
+        <mesh position={[1.715, 1.65, 0]}>
+          <boxGeometry args={[0.04, 1.22, 1.68]} />
+          <meshStandardMaterial color="#334155" roughness={0.45} metalness={0.35} />
+        </mesh>
+        <mesh position={[1.74, 1.65, 0]}>
+          <boxGeometry args={[0.02, 1.08, 1.54]} />
+          <meshStandardMaterial
+            color={isNight ? '#FFF3C4' : '#1E293B'}
+            emissive={isNight ? '#FFC452' : '#000000'}
+            emissiveIntensity={isNight ? 1.75 : 0}
+            roughness={0.25}
+          />
+        </mesh>
+
+        {/* Đèn ốp trần hiên phòng bảo vệ + PointLight rọi sáng lối gác & Bác bảo vệ ban đêm */}
+        <mesh position={[0.15, 3.06, 1.84]}>
+          <boxGeometry args={[0.68, 0.06, 0.2]} />
+          <meshStandardMaterial
+            color="#FFFBEB"
+            emissive="#FFE299"
+            emissiveIntensity={isNight ? 2.9 : 0.15}
+          />
+        </mesh>
+        <mesh position={[1.84, 3.06, 0]}>
+          <boxGeometry args={[0.2, 0.06, 0.68]} />
+          <meshStandardMaterial
+            color="#FFFBEB"
+            emissive="#FFE299"
+            emissiveIntensity={isNight ? 2.6 : 0.15}
+          />
+        </mesh>
+        <pointLight
+          position={[0.55, 2.85, 2.45]}
+          color="#FFE29A"
+          intensity={isNight ? 3.2 : 0}
+          distance={9.5}
+          decay={1.75}
+        />
       </group>
+
+      {/* Bác bảo vệ Bách Khoa đứng gác cạnh phòng bảo vệ phía Bắc Cổng Trần Đại Nghĩa */}
+      <HustSecurityGuard
+        position={[
+          TRAN_DAI_NGHIA_GATE.guardPos.x - x,
+          0,
+          TRAN_DAI_NGHIA_GATE.guardPos.z - z,
+        ]}
+      />
 
       {/* ============ 5. TRỤ CỔNG ĐÁ & QUẦY BẢO VỆ BÊN TRÁI (PHÍA NAM) ============ */}
       <group position={[0.1, 0, 6.2]}>
@@ -431,7 +789,21 @@ export function TranDaiNghiaSquare() {
         </mesh>
         <mesh position={[0, 1.4, -0.96]}>
           <boxGeometry args={[1.2, 0.95, 0.04]} />
-          <meshStandardMaterial color="#38BDF8" roughness={0.25} />
+          <meshStandardMaterial
+            color={isNight ? '#FFF1B8' : '#38BDF8'}
+            emissive={isNight ? '#FFC452' : '#000000'}
+            emissiveIntensity={isNight ? 1.5 : 0}
+            roughness={0.25}
+          />
+        </mesh>
+        <mesh position={[1.06, 1.4, 0]}>
+          <boxGeometry args={[0.04, 0.95, 1.1]} />
+          <meshStandardMaterial
+            color={isNight ? '#FFF1B8' : '#38BDF8'}
+            emissive={isNight ? '#FFC452' : '#000000'}
+            emissiveIntensity={isNight ? 1.5 : 0}
+            roughness={0.25}
+          />
         </mesh>
       </group>
     </group>

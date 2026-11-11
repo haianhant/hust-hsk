@@ -50,18 +50,18 @@ export const I_LOVE_BK = {
 } as const;
 
 export const LIBRARY = {
-  center: { x: 38, z: 36.5 },
-  size: { x: 26, z: 13.5 }, // Mở rộng mặt tiền tháp 3 nhịp lên 26 m (cộng mái đua hai cánh đạt ~27.6 m) theo 5 ảnh tham-khao/thu-vien/
+  center: { x: 38.8, z: 38.5 },
+  size: { x: 26.4, z: 23.2 }, // Mở rộng quy mô đồ sộ Thư viện Tạ Quang Bửu (~37.000 m²): mặt tiền 26,4 m (mái đua ~28,2 m) × chiều sâu 23,2 m
   floors: 10, // xác nhận: HUST, ~37.000 m²
-  floorHeight: 3.2,
-  /** đồng hồ ở mặt BẮC của scene (−Z), NGAY TRÊN mái hiên lối vào mới (mái y 6,0) —
-   *  dưới mái đế (y 10,7). Bán kính 1,3 m. */
-  clock: { x: 38, y: 7.3, z: 23.9, radius: 1.3 },
-  plaza: { minX: 23, maxX: 52.5, minZ: 10, maxZ: 56 }, // Mở rộng sân gạch đỏ-nâu ôm trọn 2 cánh mới của Thư viện
+  floorHeight: 3.25,
+  /** Đồng hồ tròn đặt chính giữa mặt đứng khối đế phía Bắc (−Z), thẳng hàng trên hàng cột sảnh trước (z = 19,28),
+   *  KHÔNG có mái đua phía trước che khuất tầm nhìn từ dưới sân lên (theo ảnh 1308122022.jpg & untitled137.png). */
+  clock: { x: 38, y: 7.9, z: 19.28, radius: 1.35 },
+  plaza: { minX: 23, maxX: 53.2, minZ: 9.5, maxZ: 57.5 }, // Mở rộng sân gạch đỏ-nâu ôm trọn khối tháp & hai cánh phòng đọc khối đế
   /** Tiền cảnh phía bắc (theo tham-khao/thu-vien/): lối đi đỏ + sân xám + chữ HUST. */
   forecourt: {
     walk: { minX: 24, maxX: 33, minZ: 12, maxZ: 16 },
-    grayYard: { minX: 31, maxX: 47, minZ: 12, maxZ: 16 },
+    grayYard: { minX: 30, maxX: 48, minZ: 12, maxZ: 16 },
     hust: { x: 38, z: 14 },
   },
 } as const;
@@ -138,7 +138,11 @@ export const MONUMENT = {
   sign: { x: 74, z: -14, box: { minX: 73, maxX: 75, minZ: -15, maxZ: -13 } },
 } as const;
 
-export const TRAN_DAI_NGHIA_GATE = { center: { x: 92, z: -6 } } as const;
+export const TRAN_DAI_NGHIA_GATE = {
+  center: { x: 92, z: -6 },
+  /** Vị trí Bác bảo vệ Bách Khoa đứng gác cạnh phòng bảo vệ phía Bắc Cổng Trần Đại Nghĩa */
+  guardPos: { x: 91.65, z: -12.25 },
+} as const;
 
 /** Nhà để xe sinh viên D3 - D5 (nằm ngay bên tay trái / phía Nam +Z khi đi từ Cổng Trần Đại Nghĩa vào,
  *  kéo dài dọc theo chiều sâu trục Bắc–Nam cạnh cụm giảng đường D3 - D5).
@@ -579,6 +583,12 @@ export const CLASSROOM_DOOR = {
   triggerRadius: 2.5,
 } as const;
 
+/** Cửa chính Giảng đường Hán ngữ HSK tại Tòa C7 (sảnh chính nhánh giữa chữ E, mặt Nam) */
+export const C7_DOOR = {
+  pos: { x: 46, z: -36.5 },
+  triggerRadius: 3.6,
+} as const;
+
 export const CLASSROOM = {
   bounds: { minX: -4.1, maxX: 4.1, minZ: -2.6, maxZ: 2.6 },
   // Spawn dời vào sâu hơn (z=1 thay vì z=2 theo bản phác đầu) để camera thứ
@@ -605,9 +615,9 @@ export const CLASSROOM = {
 //   - Sàn đá hoa văn rẻ quạt (nâu đỏ đất nung, kem sáng, xám đá) và thông tầng lửng.
 
 export const LIBRARY_DOOR = {
-  /** Dưới mái hiên sảnh chính phía bắc Thư viện (ngoài collider khối đế minZ 23,5) */
-  pos: { x: 38, z: 22.8 },
-  triggerRadius: 3.6,
+  /** Dưới sảnh cột tròn phía Bắc Thư viện Tạ Quang Bửu (ngoài collider vách kính khối đế minZ 23,5) */
+  pos: { x: 38, z: 22.4 },
+  triggerRadius: 3.8,
 } as const;
 
 export const LIBRARY_LOBBY = {

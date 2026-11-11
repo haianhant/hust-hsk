@@ -351,7 +351,7 @@ export default function CharacterCreatorModal({
             </h1>
             <p className="mt-0.5 text-xs text-[#475569] sm:text-sm">
               {mode === 'entry'
-                ? 'Tùy chỉnh diện mạo, đồng phục áo khoác gió / bomber HUST và xem thử dáng đi trước khi bước qua cổng Trần Đại Nghĩa.'
+                ? 'Tùy chỉnh diện mạo, đồng phục HUST trước khi vào trường. Mỗi tòa nhà có một tính năng riêng: đến Tòa C7 để chọn & học bài HSK, vào Thư viện Tạ Quang Bửu để tự học Pomodoro & chơi Piano!'
                 : 'Thay đổi tên hiển thị, giới tính, kiểu tóc và đồng phục Bách khoa ngay trong sân trường.'}
             </p>
           </div>
@@ -688,28 +688,8 @@ export default function CharacterCreatorModal({
               </p>
             )}
 
-            {/* Nút xác nhận */}
+            {/* Nút xác nhận (Trang chủ không còn nút Chọn bài / Tiếp tục học — học bài HSK diễn ra tại Tòa C7) */}
             <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-              {mode === 'entry' && onChooseLesson && (
-                <button
-                  id="choose-lesson"
-                  type="button"
-                  onClick={onChooseLesson}
-                  className="rounded-full border-2 border-[#1c5c3a] px-5 py-2.5 text-sm font-bold text-[#1c5c3a] transition hover:bg-[#1c5c3a]/10"
-                >
-                  Chọn bài
-                </button>
-              )}
-              {mode === 'entry' && hasSave && (
-                <button
-                  id="continue-learning"
-                  type="button"
-                  onClick={() => handleSubmit(true)}
-                  className="rounded-full bg-[#1c5c3a] px-6 py-2.5 text-sm font-extrabold text-white shadow-md transition hover:bg-[#16492e]"
-                >
-                  Tiếp tục học
-                </button>
-              )}
               {mode === 'modal' && onClose && (
                 <button
                   type="button"

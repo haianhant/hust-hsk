@@ -284,7 +284,7 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
         </group>
       ))}
 
-      {/* Mái hiên sảnh chính ở nhánh giữa & Biển hiệu C7 */}
+      {/* Mái hiên sảnh chính ở nhánh giữa, Cửa kính Giảng đường HSK & Biển hiệu C7 */}
       <mesh position={[0, 3.65, size.z / 2 + 0.9]} castShadow>
         <boxGeometry args={[5.8, 0.34, 1.8]} />
         <meshStandardMaterial color="#E2E8F0" roughness={0.78} />
@@ -295,6 +295,56 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
           <meshStandardMaterial color="#94A3B8" roughness={0.7} metalness={0.2} />
         </mesh>
       ))}
+      {/* Thảm sảnh & Cửa kính đôi dẫn vào Giảng đường Học HSK Tòa C7 */}
+      <mesh position={[0, 0.04, size.z / 2 + 0.95]} receiveShadow>
+        <boxGeometry args={[5.2, 0.08, 1.85]} />
+        <meshStandardMaterial color="#94A3B8" roughness={0.85} />
+      </mesh>
+      <mesh position={[0, 1.38, size.z / 2 + 0.06]}>
+        <boxGeometry args={[3.1, 2.68, 0.06]} />
+        <meshStandardMaterial color="#0F172A" roughness={0.4} metalness={0.5} />
+      </mesh>
+      {[-0.72, 0.72].map((dx, idx) => (
+        <group key={`c7-hsk-door-${idx}`}>
+          <mesh position={[dx, 1.36, size.z / 2 + 0.095]}>
+            <boxGeometry args={[1.34, 2.48, 0.025]} />
+            <meshStandardMaterial
+              color={isNight ? '#FFEAB3' : '#38BDF8'}
+              emissive={isNight ? '#FFB84D' : '#0284C7'}
+              emissiveIntensity={isNight ? 1.1 : 0.25}
+              roughness={0.22}
+              metalness={0.35}
+            />
+          </mesh>
+          {/* Tay nắm inox dọc cửa giảng đường */}
+          <mesh position={[idx === 0 ? -0.14 : 0.14, 1.25, size.z / 2 + 0.13]}>
+            <cylinderGeometry args={[0.018, 0.018, 0.52, 8]} />
+            <meshStandardMaterial color="#F8FAFC" metalness={0.8} roughness={0.2} />
+          </mesh>
+        </group>
+      ))}
+      <LabelPlane
+        textureKey="c7-hsk-hub-banner"
+        canvasW={640}
+        canvasH={140}
+        draw={(ctx, w, h) => {
+          ctx.fillStyle = '#991B1B';
+          ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#FACC15';
+          ctx.lineWidth = 6;
+          ctx.strokeRect(6, 6, w - 12, h - 12);
+          ctx.fillStyle = '#FDE047';
+          ctx.font = '800 30px "Be Vietnam Pro", "Segoe UI", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🎓 TRUNG TÂM HỌC HÁN NGỮ HSK THEO BÀI', w / 2, h * 0.38);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '600 22px "Be Vietnam Pro", "Segoe UI", sans-serif';
+          ctx.fillText('Bấm [E] trước sảnh để vào lớp & chọn bài học', w / 2, h * 0.75);
+        }}
+        size={[3.9, 0.82]}
+        position={[0, 3.12, size.z / 2 + 0.12]}
+      />
 
       {/* Chữ nổi "C7" màu xám bạc gắn trên cao mặt đứng nhánh phải (c7-goc-nghieng.jpg) */}
       <LabelPlane

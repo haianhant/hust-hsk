@@ -449,115 +449,142 @@ function drawStar2D(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: nu
 }
 
 function drawHustEmblem(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // Biểu trưng dọc ĐHBK Hà Nội chuẩn trên mảng tường đặc bên phải tháp hoa gió (c1-mat-tien-01.jpg):
-  // Chia dọc 2 nửa Đỏ (#D91E26, sao vàng góc trên trái) & Trắng kem (#FAF8F2, chữ "ĐẠI HỌC" đỏ bên phải),
-  // chính giữa là compa + trang sách mở trắng + nửa bánh răng vàng, đáy là dải băng vàng chữ "BÁCH KHOA" đỏ.
+  // Vẽ dự phòng chuẩn Logo chính thức ĐHBK Hà Nội (nền đỏ cờ đồng nhất viền trắng/vàng,
+  // compa + sách mở trắng + bánh răng vàng ở giữa, chữ ĐẠI HỌC BÁCH KHOA HÀ NỘI bên dưới)
+  // trong lúc chờ ảnh chính thức `/images/hust-logo.png` tải xong.
   ctx.clearRect(0, 0, w, h);
+  const pad = Math.round(w * 0.035);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#C8102E';
+  ctx.fillRect(pad, pad, w - pad * 2, h - pad * 2);
 
-  // Nền chia đôi dọc: nửa trái Đỏ cờ, nửa phải Trắng ngà
-  ctx.fillStyle = '#D91E26';
-  ctx.fillRect(0, 0, w * 0.5, h * 0.84);
-  ctx.fillStyle = '#FAF8F2';
-  ctx.fillRect(w * 0.5, 0, w * 0.5, h * 0.84);
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = Math.max(4, Math.round(w * 0.014));
+  ctx.strokeRect(pad * 2, pad * 2, w - pad * 4, h - pad * 4);
 
-  // Dải băng vàng chân biểu trưng (h: 0.84..1.0)
-  ctx.fillStyle = '#F5C518';
-  ctx.fillRect(0, h * 0.84, w, h * 0.16);
+  // Sao vàng 5 cánh phía trên
+  ctx.fillStyle = '#FFD200';
+  drawStar2D(ctx, w * 0.5, h * 0.14, w * 0.085);
 
-  // Viền khung kim loại vàng đồng bao ngoài
-  ctx.strokeStyle = '#C8962E';
-  ctx.lineWidth = 10;
-  ctx.strokeRect(5, 5, w - 10, h - 10);
-
-  // Ngôi sao vàng 5 cánh ở phần trên nửa nền đỏ bên trái
-  ctx.fillStyle = '#F5C518';
-  drawStar2D(ctx, w * 0.25, h * 0.16, 54);
-
-  // Chữ "ĐẠI HỌC" màu đỏ đậm ở nửa trắng bên phải
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#C81E24';
-  ctx.font = '900 40px Arial, sans-serif';
-  ctx.fillText('ĐẠI', w * 0.75, h * 0.13);
-  ctx.fillText('HỌC', w * 0.75, h * 0.19);
-
-  // Nửa bánh răng vàng ở phần dưới trung tâm (tâm tại w*0.5, h*0.64)
+  // Nửa bánh răng vàng phía dưới tâm
   const gx = w * 0.5;
-  const gy = h * 0.64;
-  const grOuter = w * 0.34;
-  const grInner = w * 0.25;
-  ctx.fillStyle = '#F5C518';
-  ctx.strokeStyle = '#9A6B12';
-  ctx.lineWidth = 4;
+  const gy = h * 0.45;
+  const grOuter = w * 0.28;
+  const grInner = w * 0.2;
+  ctx.fillStyle = '#FFD200';
   for (let i = 0; i < 9; i++) {
-    const a0 = (Math.PI * i) / 8.5 + 0.04;
-    const a1 = a0 + 0.22;
+    const a0 = (Math.PI * i) / 8.5 + 0.05;
+    const a1 = a0 + 0.21;
     ctx.beginPath();
     ctx.arc(gx, gy, grOuter, a0, a1);
-    ctx.arc(gx, gy, grInner * 0.85, a1, a0, true);
+    ctx.arc(gx, gy, grInner * 0.84, a1, a0, true);
     ctx.closePath();
     ctx.fill();
-    ctx.stroke();
   }
   ctx.beginPath();
   ctx.arc(gx, gy, grInner, 0, Math.PI, false);
-  ctx.lineTo(gx - grInner, gy);
+  ctx.arc(gx, gy, grInner * 0.58, Math.PI, 0, true);
   ctx.closePath();
   ctx.fill();
-  ctx.stroke();
 
-  // Lòng trong bánh răng
-  ctx.fillStyle = '#D91E26';
-  ctx.beginPath();
-  ctx.arc(gx, gy, grInner * 0.56, 0, Math.PI, false);
-  ctx.fillStyle = '#FAF8F2';
-  ctx.fill();
-
-  // Compa vàng (chân compa mở hình chữ A từ đỉnh h*0.29 xuống h*0.68)
-  ctx.strokeStyle = '#F5C518';
-  ctx.lineWidth = 14;
+  // Compa vàng
+  ctx.strokeStyle = '#FFD200';
+  ctx.lineWidth = Math.max(8, Math.round(w * 0.032));
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(w * 0.5, h * 0.30);
-  ctx.lineTo(w * 0.31, h * 0.67);
-  ctx.moveTo(w * 0.5, h * 0.30);
-  ctx.lineTo(w * 0.69, h * 0.67);
-  ctx.stroke();
-  // Khớp đỉnh compa & thanh ngang compa
-  ctx.fillStyle = '#F5C518';
-  ctx.beginPath();
-  ctx.arc(w * 0.5, h * 0.29, 14, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.moveTo(w * 0.38, h * 0.49);
-  ctx.lineTo(w * 0.62, h * 0.49);
+  ctx.moveTo(w * 0.5, h * 0.23);
+  ctx.lineTo(w * 0.33, h * 0.5);
+  ctx.moveTo(w * 0.5, h * 0.23);
+  ctx.lineTo(w * 0.67, h * 0.5);
   ctx.stroke();
 
-  // Trang sách mở trắng viền vàng đặt ngang qua tâm biểu trưng (h: 0.53..0.66)
+  // Trang sách mở trắng ở tâm
   ctx.fillStyle = '#FFFFFF';
-  ctx.strokeStyle = '#B8860B';
-  ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.moveTo(w * 0.14, h * 0.54);
-  ctx.quadraticCurveTo(w * 0.32, h * 0.51, w * 0.5, h * 0.56);
-  ctx.quadraticCurveTo(w * 0.68, h * 0.51, w * 0.86, h * 0.54);
-  ctx.lineTo(w * 0.86, h * 0.66);
-  ctx.quadraticCurveTo(w * 0.68, h * 0.63, w * 0.5, h * 0.68);
-  ctx.quadraticCurveTo(w * 0.32, h * 0.63, w * 0.14, h * 0.66);
+  ctx.moveTo(w * 0.2, h * 0.38);
+  ctx.quadraticCurveTo(w * 0.35, h * 0.35, w * 0.5, h * 0.4);
+  ctx.quadraticCurveTo(w * 0.65, h * 0.35, w * 0.8, h * 0.38);
+  ctx.lineTo(w * 0.8, h * 0.48);
+  ctx.quadraticCurveTo(w * 0.65, h * 0.45, w * 0.5, h * 0.5);
+  ctx.quadraticCurveTo(w * 0.35, h * 0.45, w * 0.2, h * 0.48);
   ctx.closePath();
   ctx.fill();
-  ctx.stroke();
-  // Gáy sách giữa
-  ctx.beginPath();
-  ctx.moveTo(w * 0.5, h * 0.56);
-  ctx.lineTo(w * 0.5, h * 0.68);
-  ctx.stroke();
 
-  // Chữ "BÁCH KHOA" đỏ đậm trên dải băng vàng phía dưới
-  ctx.fillStyle = '#C81E24';
-  ctx.font = '900 54px Arial, sans-serif';
-  ctx.fillText('BÁCH KHOA', w * 0.5, h * 0.92);
+  // Dòng chữ ĐẠI HỌC BÁCH KHOA HÀ NỘI trắng bên dưới
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `700 ${Math.round(w * 0.085)}px "Be Vietnam Pro", Arial, sans-serif`;
+  ctx.fillText('ĐẠI HỌC', w * 0.5, h * 0.69);
+  ctx.font = `700 ${Math.round(w * 0.108)}px "Be Vietnam Pro", Arial, sans-serif`;
+  ctx.fillText('BÁCH KHOA', w * 0.5, h * 0.79);
+  ctx.font = `700 ${Math.round(w * 0.088)}px "Be Vietnam Pro", Arial, sans-serif`;
+  ctx.fillText('HÀ NỘI', w * 0.5, h * 0.885);
+}
+
+/**
+ * Bảng Logo chính thức ĐHBK Hà Nội trên mảng tường đặc Tòa C1 — tải trực tiếp ảnh chuẩn
+ * `/images/hust-logo.png` (Wikimedia Logo_Đại_học_Bách_Khoa_Hà_Nội, tỉ lệ chuẩn 2:3 = 512×768)
+ * kèm bản vẽ dự phòng tức thời cho môi trường SSR/kiểm thử.
+ */
+function HustOfficialLogoPlaque({
+  position,
+  size,
+  isNight,
+}: {
+  position: [number, number, number];
+  size: [number, number];
+  isNight: boolean;
+}) {
+  const logoTex = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 768;
+    const ctx = canvas.getContext('2d');
+    if (ctx) drawHustEmblem(ctx, 512, 768);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+
+    if (typeof window !== 'undefined' && typeof Image !== 'undefined') {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        if (!ctx) return;
+        ctx.clearRect(0, 0, 512, 768);
+        ctx.drawImage(img, 0, 0, 512, 768);
+        tex.needsUpdate = true;
+      };
+      img.src = '/images/hust-logo.png';
+    }
+    return tex;
+  }, []);
+
+  useEffect(() => () => logoTex.dispose(), [logoTex]);
+
+  return (
+    <group position={position}>
+      {/* Tấm đế nổi gắn logo lên mặt tường C1 (lệch >= 0.03m chống z-fighting) */}
+      <mesh position={[0, 0, -0.025]} castShadow>
+        <boxGeometry args={[size[0] + 0.14, size[1] + 0.14, 0.04]} />
+        <meshStandardMaterial color="#E2E8F0" roughness={0.65} metalness={0.2} />
+      </mesh>
+      <mesh>
+        <planeGeometry args={size} />
+        <meshStandardMaterial
+          map={logoTex}
+          transparent
+          alphaTest={0.05}
+          emissive={isNight ? '#FFEED6' : '#FFFFFF'}
+          emissiveMap={logoTex}
+          emissiveIntensity={isNight ? 0.55 : 0.08}
+          roughness={0.48}
+          metalness={0.08}
+        />
+      </mesh>
+    </group>
+  );
 }
 
 function drawVnFlag(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -932,14 +959,11 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         />
       </group>
 
-      {/* Biểu trưng dọc đỏ/vàng trên dải tường đặc + chữ "C1" vàng cam ấm */}
-      <LabelPlane
-        textureKey="hust-emblem-v"
-        canvasW={420}
-        canvasH={1024}
-        draw={drawHustEmblem}
-        size={[2.7, 6.6]}
-        position={[-50.1, 7.8, SOUTH_Z + 0.08]}
+      {/* Logo chính thức ĐHBK Hà Nội (/images/hust-logo.png, tỉ lệ 2:3) trên mảng tường đặc + chữ "C1" */}
+      <HustOfficialLogoPlaque
+        size={[3.5, 5.25]}
+        position={[-50.1, 8.35, SOUTH_Z + 0.09]}
+        isNight={isNight}
       />
       <LabelPlane
         textureKey="c1-label"
