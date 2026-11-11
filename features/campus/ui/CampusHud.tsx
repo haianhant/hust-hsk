@@ -7,7 +7,6 @@
 // steering controls, Joystick, help overlay, and toast notification).
 // ---------------------------------------------------------------------------
 
-import QuestObjective from '../../../components/learn/QuestObjective';
 import CampusChat from '../../../components/ui/CampusChat';
 import Joystick from '../../../components/ui/Joystick';
 import Minimap from '../../../components/ui/Minimap';
@@ -103,6 +102,8 @@ export interface CampusHudProps {
   traveling: boolean;
   helpOpen: boolean;
   toast: string | null;
+  checkedInCount?: number;
+  totalLandmarks?: number;
   pomodoro?: PomodoroState;
   focusPolicy?: FocusRuntimePolicy;
   onOpenStudyPanel?: () => void;
@@ -150,10 +151,11 @@ export function CampusHud({
   lofiPlaying = false,
   soundOn,
   speechRate,
-  objectiveText,
   interactLabel,
   helpOpen,
   toast,
+  checkedInCount = 0,
+  totalLandmarks = 9,
   pomodoro,
   focusPolicy,
   onOpenStudyPanel,
@@ -182,18 +184,28 @@ export function CampusHud({
 
   return (
     <div className="pointer-events-none absolute inset-0">
-      {/* Góc trên-trái: tên khu + điểm. */}
+      {/* Góc trên-trái: tên khu + điểm + tiến độ Check-in 9 tòa. */}
       <div className="absolute left-3 top-3 flex flex-col gap-2">
         <div className="w-fit rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm">
           {inClassroom
-            ? 'Phòng học mô phỏng'
+            ? '🎓 Giảng đường HSK · Tòa C7'
             : inLibraryLobby
               ? 'Sảnh Thư viện Tạ Quang Bửu'
               : zone}
         </div>
-        <div className="w-fit rounded-full bg-[#A54432]/90 px-4 py-1.5 text-sm font-bold text-white backdrop-blur-sm">
-          ⭐ {progress?.points ?? 0} điểm
-          {progress?.streak && progress.streak.count > 0 ? ` · 🔥 ${progress.streak.count} ngày` : ''}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-fit rounded-full bg-[#A54432]/90 px-4 py-1.5 text-sm font-bold text-white backdrop-blur-sm">
+            ⭐ {progress?.points ?? 0} điểm
+            {progress?.streak && progress.streak.count > 0 ? ` · 🔥 ${progress.streak.count} ngày` : ''}
+          </div>
+          <button
+            id="hud-checkin-badge"
+            type="button"
+            onClick={() => onOpenHandbook('lesson')}
+            className="pointer-events-auto w-fit rounded-full border border-amber-300/45 bg-slate-900/80 px-3.5 py-1.5 text-xs font-bold text-amber-200 shadow-md backdrop-blur-sm transition hover:bg-slate-800"
+          >
+            📍 Check-in {checkedInCount}/{totalLandmarks} tòa
+          </button>
         </div>
         {/* Đợt 5 multiplayer — phòng + số người THẬT trong phòng; mất
             kết nối thì ghi rõ đang chơi một mình, không báo số giả. */}
@@ -289,21 +301,21 @@ export function CampusHud({
             </button>
           </div>
         )}
-        {/* Nút mở lại panel nhiệm vụ khi đã đóng (đặt ở cột trái trên để
-            không chồng hộp hướng dẫn ở giữa dưới trên desktop). */}
-        {questActive && panel === null && (
+        {/* Chỉ khi đang ở TRONG Giảng đường Tòa C7 mới hiện nút mở lại bài HSK đang học */}
+        {inClassroom && questActive && panel === null && (
           <button
-            id="reopen-quest"
+            id="reopen-c7-lesson"
             type="button"
             onClick={() => onSetPanel('quest')}
             className="pointer-events-auto w-fit rounded-full bg-[#A54432] px-4 py-2 text-sm font-bold text-white shadow-lg transition hover:bg-[#8A3828]"
           >
-            🎯 Nhiệm vụ
+            📖 Tiếp tục bài HSK đang mở
           </button>
         )}
       </div>
 
-      {/* Góc trên-phải: minimap + nút ngày/đêm, nhạc lofi, sổ tay, âm thanh, tốc độ, đổi bài. */}
+      {/* Góc trên-phải: minimap + tự học, xếp hạng, nhạc lofi, ngày/đêm, trang phục, sổ tay Check-in.
+          (Các nút Chọn bài / Loa / Tốc độ đọc chỉ xuất hiện khi ở trong Giảng đường Tòa C7). */}
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2 sm:flex-row-reverse sm:items-start">
         {!inClassroom && !inLibraryLobby && !hideNav && <Minimap />}
         <div className="pointer-events-auto flex max-w-[calc(100vw-240px)] flex-wrap justify-end gap-2">
@@ -380,53 +392,44 @@ export function CampusHud({
             </button>
           )}
           <button
-            id="change-lesson"
-            type="button"
-            onClick={onOpenLessons}
-            className="rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
-          >
-            📚 Đổi bài
-          </button>
-          <button
             id="open-handbook"
             type="button"
             onClick={() => onOpenHandbook('lesson')}
-            className="rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
+            className="rounded-full bg-black/55 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/75"
           >
-            📖 Sổ tay
+            🗺️ Sổ tay
           </button>
-          <button
-            id="toggle-sound"
-            type="button"
-            onClick={onToggleSound}
-            aria-label={soundOn ? 'Tắt lời đọc' : 'Bật lời đọc'}
-            className="rounded-full bg-black/50 px-3 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
-          >
-            {soundOn ? '🔊' : '🔇'}
-          </button>
-          <button
-            id="speech-rate"
-            type="button"
-            onClick={onCycleRate}
-            aria-label="Đổi tốc độ đọc"
-            className="rounded-full bg-black/50 px-3 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
-          >
-            {speechRate.toFixed(1)}×
-          </button>
+          {inClassroom && (
+            <>
+              <button
+                id="c7-open-lessons"
+                type="button"
+                onClick={onOpenLessons}
+                className="rounded-full bg-[#B5121B]/95 px-4 py-2 text-sm font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-[#8F1418]"
+              >
+                📚 Chọn bài HSK
+              </button>
+              <button
+                id="c7-toggle-sound"
+                type="button"
+                onClick={onToggleSound}
+                aria-label={soundOn ? 'Tắt lời đọc' : 'Bật lời đọc'}
+                className="rounded-full bg-black/55 px-3 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/75"
+              >
+                {soundOn ? '🔊' : '🔇'}
+              </button>
+              <button
+                id="c7-speech-rate"
+                type="button"
+                onClick={onCycleRate}
+                aria-label="Đổi tốc độ đọc"
+                className="rounded-full bg-black/55 px-3 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/75"
+              >
+                {speechRate.toFixed(1)}×
+              </button>
+            </>
+          )}
         </div>
-      </div>
-
-      {/* Chip mục tiêu hiện tại. F5a — trong phòng học thì dời sang góc
-          trên-phải (dưới hàng nút), để khỏi che tiêu đề bảng đen ở giữa
-          trên; ngoài sân vẫn giữ giữa trên như cũ. */}
-      <div
-        className={
-          inClassroom
-            ? 'absolute right-3 top-[5.5rem] flex justify-end'
-            : 'absolute left-1/2 top-16 flex -translate-x-1/2 justify-center sm:top-3 sm:mt-12'
-        }
-      >
-        <QuestObjective text={objectiveText} />
       </div>
 
       {/* Gợi ý tương tác "E — ..." (chỉ khi trong tầm): TO, GIỮA màn hình
@@ -496,7 +499,7 @@ export function CampusHud({
             }}
             className="pointer-events-auto relative z-30 rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
           >
-            🚪 Ra khỏi phòng
+            🚪 Rời Tòa C7
           </button>
         )}
         {seated && onStandUp && (

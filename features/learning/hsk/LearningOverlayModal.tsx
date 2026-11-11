@@ -2,14 +2,17 @@
 
 // ---------------------------------------------------------------------------
 // features/learning/hsk/LearningOverlayModal.tsx — Bottom-sheet / modal
-// overlay for active Quest steps, Re-review, ResultPanel, Handbook, and
-// ReviewSession.
+// overlay cho bài học HSK tại Tòa C7, ResultPanel, Sổ tay Khám phá & Check-in
+// Bách Khoa (CampusPassportHandbook), và ReviewSession.
 // ---------------------------------------------------------------------------
 
-import Handbook from '../../../components/learn/Handbook';
+import CampusPassportHandbook, {
+  type PassportMainSection,
+} from '../../../components/learn/CampusPassportHandbook';
 import QuestPanel, { type QuestAnswer } from '../../../components/learn/QuestPanel';
 import ResultPanel from '../../../components/learn/ResultPanel';
 import ReviewSession from '../../../components/learn/ReviewSession';
+import type { CampusPassportState } from '../../campus/checkin/campus-passport';
 import type { QuestStep } from '../../../lib/learn/quest-data';
 import type { Lexeme, Progress, Quest } from '../../../lib/learn/types';
 import type { HandbookTab } from './EntryScreen';
@@ -24,6 +27,8 @@ export interface ReviewSessionState {
 
 export interface LearningOverlayModalProps {
   panel: LearningPanelType;
+  passport: CampusPassportState;
+  passportSection?: PassportMainSection;
   progress: Progress | null;
   reReviewIds: string[] | null;
   step: QuestStep | undefined;
@@ -58,6 +63,8 @@ export interface LearningOverlayModalProps {
   onReviewSessionAnswer: (lexemeId: string, correct: boolean) => void;
   onExitLesson: () => void;
   onFastTravel: (destId: string) => void;
+  onInspectLandmark: (landmarkId: string) => void;
+  onPickAnotherLesson?: () => void;
   onReviewNow: () => void;
   onCompleteQuest: () => void;
   onStartQuest: (questId: string) => void;
@@ -65,6 +72,8 @@ export interface LearningOverlayModalProps {
 
 export function LearningOverlayModal({
   panel,
+  passport,
+  passportSection = 'checkin',
   progress,
   reReviewIds,
   step,
@@ -99,14 +108,21 @@ export function LearningOverlayModal({
   onReviewSessionAnswer,
   onExitLesson,
   onFastTravel,
+  onInspectLandmark,
+  onPickAnotherLesson,
   onReviewNow,
   onCompleteQuest,
   onStartQuest,
 }: LearningOverlayModalProps) {
   if (panel === null || !progress) return null;
 
+  const widthClass =
+    panel === 'handbook' ? 'sm:w-[min(94vw,760px)]' : 'sm:w-[min(94vw,560px)]';
+
   return (
-    <div className="absolute inset-x-0 bottom-0 z-20 max-h-[80dvh] overflow-y-auto rounded-t-2xl bg-[#FDF8EE] p-4 shadow-2xl sm:inset-x-auto sm:bottom-6 sm:left-1/2 sm:w-[560px] sm:-translate-x-1/2 sm:rounded-2xl sm:p-5">
+    <div
+      className={`absolute inset-x-0 bottom-0 z-20 max-h-[85dvh] overflow-y-auto rounded-t-2xl bg-[#FDF8EE] p-4 shadow-2xl sm:inset-x-auto sm:bottom-6 sm:left-1/2 ${widthClass} sm:-translate-x-1/2 sm:rounded-2xl sm:p-5`}
+    >
       {panel === 'quest' && reReviewIds && step?.kind === 'result' && (
         <QuestPanel
           step={{ id: 're-review', kind: 'review', lexemeIds: reReviewIds }}
@@ -165,14 +181,15 @@ export function LearningOverlayModal({
           globalBadges={resultGlobalBadges}
           onReviewNow={onReviewNow}
           onContinue={onCompleteQuest}
+          onPickAnotherLesson={onPickAnotherLesson}
         />
       )}
       {panel === 'quest' && !step && (
         <div className="text-center">
           <p className="mb-3 text-base text-[#2B2B2B]/80">
             {currentQuestDone
-              ? `Bạn đã hoàn thành “${currentQuest.title}”. Chơi lại để ôn ${currentQuest.lexemeIds.length} từ nhé — thưởng hoàn thành chỉ nhận một lần.`
-              : `Hãy gặp Minh ở cổng Parabol để bắt đầu “${currentQuest.title}”.`}
+              ? `Bạn đã hoàn thành “${currentQuest.title}” tại Giảng đường Tòa C7.`
+              : `Chào mừng tới Giảng đường HSK Tòa C7 — bắt đầu bài “${currentQuest.title}”.`}
           </p>
           <button
             type="button"
@@ -182,12 +199,14 @@ export function LearningOverlayModal({
             }}
             className="w-full rounded-full bg-[#A54432] px-6 py-3 text-base font-bold text-white transition hover:bg-[#8A3828]"
           >
-            {currentQuestDone ? 'Chơi lại buổi học' : 'Bắt đầu học'}
+            {currentQuestDone ? 'Học lại bài này' : 'Bắt đầu bài học'}
           </button>
         </div>
       )}
       {panel === 'handbook' && (
-        <Handbook
+        <CampusPassportHandbook
+          passport={passport}
+          initialSection={passportSection}
           progress={progress}
           lexemes={currentLessonLexemes}
           allLexemes={allLexemes}
@@ -195,7 +214,9 @@ export function LearningOverlayModal({
           soundOn={soundOn}
           onImport={(p) => onSetProgress(p)}
           onClose={() => onSetPanel(null)}
-          defaultTab={handbookTab}
+          defaultHandbookTab={handbookTab}
+          onFastTravel={onFastTravel}
+          onInspectLandmark={onInspectLandmark}
           onStartReview={(ids, mode, title) => {
             onSetReviewSession({ ids, mode, title });
             onSetPanel('review');

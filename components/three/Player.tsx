@@ -47,6 +47,7 @@ import {
   BIKE_PARK,
   BIKE_RADIUS,
   BUILDING_COLLIDERS,
+  C7_DOOR,
   CLASSROOM,
   CLASSROOM_DOOR,
   FAST_TRAVEL_DESTINATIONS,
@@ -817,6 +818,7 @@ export default function Player() {
   // window.__bkhn = { getPos, teleport(x, z, yaw?), topView() } — dùng để chụp
   // ảnh từ trên cao và đặt avatar đúng đầu mỗi chặng kiểm tra trong Playwright.
   const viewModeRef = useRef<'follow' | 'top'>(playerState.viewMode ?? 'follow');
+  const classroomOriginRef = useRef<'c7' | 'c1'>('c7');
   useEffect(() => {
     const hook = {
       getPos: () => ({ ...posRef.current }),
@@ -978,7 +980,16 @@ export default function Player() {
       // Bước 5 — vào/ra phòng học mô phỏng: đổi mode + teleport về spawn
       // tương ứng. Fade do page.tsx xử lý; page đồng bộ qua sự kiện
       // 'bkhn:classroom' { inClassroom }.
-      enterClassroom: () => {
+      enterClassroom: (origin?: 'c7' | 'c1') => {
+        if (origin === 'c7' || origin === 'c1') {
+          classroomOriginRef.current = origin;
+        } else {
+          const distToC1Door = Math.hypot(
+            posRef.current.x - CLASSROOM_DOOR.pos.x,
+            posRef.current.z - CLASSROOM_DOOR.pos.z,
+          );
+          classroomOriginRef.current = distToC1Door <= 12 ? 'c1' : 'c7';
+        }
         seatActionsRef.current.forceClearSeat();
         keysRef.current.clear();
         playerInput.move.x = 0;
@@ -1021,14 +1032,17 @@ export default function Player() {
         moveBlendRef.current = 0;
         playerState.moving = false;
         playerState.inClassroom = false;
-        // Ra khỏi phòng về ngay cửa phòng học (chân bậc tam cấp C1),
-        // quay mặt về bắc (yaw = 0) nhìn về quảng trường C1.
-        posRef.current = { x: CLASSROOM_DOOR.pos.x, z: CLASSROOM_DOOR.pos.z + 2.5 };
+        const exitDoor =
+          classroomOriginRef.current === 'c1'
+            ? { x: CLASSROOM_DOOR.pos.x, z: CLASSROOM_DOOR.pos.z + 2.5 }
+            : { x: C7_DOOR.pos.x, z: C7_DOOR.pos.z + 2.2 };
+        posRef.current = resolveCollisions(exitDoor, AVATAR.radius).pos;
         playerState.pos = { ...posRef.current };
         yawRef.current = 0;
         playerState.cameraYaw = 0;
         pitchRef.current = 0.18;
         playerState.cameraPitch = 0.18;
+        distRef.current = 7;
         viewModeRef.current = 'follow';
         window.dispatchEvent(new CustomEvent('bkhn:classroom', { detail: { inClassroom: false } }));
       },

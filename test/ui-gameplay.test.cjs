@@ -798,4 +798,84 @@ test('PR9 Review Fix 5 — Reclaim Failure After Reconnect stands avatar up safe
   });
 });
 
+test('yeucau3 — C7 HSK Classroom Door, 9 EdTech Check-in Landmarks & Campus Passport state transitions', () => {
+  const { C7_DOOR, FAST_TRAVEL_DESTINATIONS, resolveCollisions } = require('../features/campus/world-data/index.ts');
+  const {
+    CAMPUS_LANDMARKS,
+    createEmptyPassportState,
+    recordLandmarkCheckIn,
+    recordLandmarkFeatureCollected,
+    recordLandmarkQuizSolved,
+    getPassportSummary,
+  } = require('../features/campus/checkin/campus-passport.ts');
+
+  assert.equal(CAMPUS_LANDMARKS.length, 9);
+
+  // 1. C7_DOOR is collision-free and triggers c7-door prompt outdoors
+  const c7Resolved = resolveCollisions(C7_DOOR.pos, AVATAR.radius);
+  assert.equal(c7Resolved.hit, null);
+  const c7Prompt = findNearestInteractable({
+    pos: C7_DOOR.pos,
+    inClassroom: false,
+    inLibraryLobby: false,
+    bikeRiding: false,
+    bikeSpeed: 0,
+    bikePos: { x: -70, z: -1.5 },
+    questActive: false,
+    questDoneBefore: false,
+    anyQuestDone: false,
+  });
+  assert.deepEqual(c7Prompt, {
+    id: 'c7-door',
+    label: 'E — Vào Giảng đường Tòa C7 (Học HSK theo bài)',
+  });
+
+  // 2. Every Fast Travel destination (including new c7, b1, ktx) is collision-free
+  for (const dest of FAST_TRAVEL_DESTINATIONS) {
+    const r = resolveCollisions({ x: dest.x, z: dest.z }, AVATAR.radius);
+    assert.equal(r.hit, null, `Fast travel ${dest.id} should not collide`);
+  }
+
+  // 3. Standing near Bác bảo vệ at Cổng Trần Đại Nghĩa triggers checkin:tdn-gate
+  const guardApproach = { x: 92.5, z: -11.5 };
+  assert.equal(resolveCollisions(guardApproach, AVATAR.radius).hit, null);
+  const guardPrompt = findNearestInteractable({
+    pos: guardApproach,
+    inClassroom: false,
+    inLibraryLobby: false,
+    bikeRiding: false,
+    bikeSpeed: 0,
+    bikePos: { x: -70, z: -1.5 },
+    questActive: false,
+    questDoneBefore: false,
+    anyQuestDone: false,
+  });
+  assert.deepEqual(guardPrompt, {
+    id: 'checkin:tdn-gate',
+    label: 'E — Trò chuyện & Check-in cùng Bác bảo vệ Bách Khoa',
+  });
+
+  // 4. Passport state progression is idempotent and reaches 100% across all 9 landmarks
+  let state = createEmptyPassportState();
+  assert.equal(getPassportSummary(state).completionPercent, 0);
+
+  const firstC7 = recordLandmarkCheckIn(state, 'c7', '2026-11-11T10:00:00.000Z');
+  assert.equal(firstC7.isFirstTime, true);
+  const dupC7 = recordLandmarkCheckIn(firstC7.next, 'c7', '2026-11-11T11:00:00.000Z');
+  assert.equal(dupC7.isFirstTime, false);
+  assert.equal(dupC7.next.checkedInAt.c7, '2026-11-11T10:00:00.000Z');
+
+  for (const lm of CAMPUS_LANDMARKS) {
+    state = recordLandmarkCheckIn(state, lm.id).next;
+    state = recordLandmarkFeatureCollected(state, lm.id).next;
+    state = recordLandmarkQuizSolved(state, lm.id).next;
+  }
+  const summary = getPassportSummary(state);
+  assert.equal(summary.checkedInCount, 9);
+  assert.equal(summary.featuresCount, 9);
+  assert.equal(summary.quizSolvedCount, 9);
+  assert.equal(summary.completionPercent, 100);
+});
+
+
 

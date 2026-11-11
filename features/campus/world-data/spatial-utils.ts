@@ -139,10 +139,10 @@ export function pushOutOfCircle(
  * nhân vật bước LÊN trên mặt bậc thang thay vì đi xuyên qua bậc thang.
  */
 export function getCampusGroundElevation(x: number, z: number): number {
-  // Bậc tam cấp & hiên sảnh chính Thư viện Tạ Quang Bửu (x: 31.0..45.0, z: 16.8..23.6)
-  if (x >= 31.0 && x <= 45.0 && z >= 16.8 && z <= 23.6) {
-    if (z >= 19.0) return 0.6;
-    const t = Math.max(0, Math.min(1, (z - 16.8) / (19.0 - 16.8)));
+  // Bậc tam cấp & hiên sảnh chính Thư viện Tạ Quang Bửu mở rộng (x: 29.8..46.2, z: 16.8..23.6)
+  if (x >= 29.8 && x <= 46.2 && z >= 16.8 && z <= 23.6) {
+    if (z >= 19.2) return 0.6;
+    const t = Math.max(0, Math.min(1, (z - 16.8) / (19.2 - 16.8)));
     return t * 0.6;
   }
   return 0;

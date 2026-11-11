@@ -68,7 +68,7 @@ export const CAMPUS_MAP_BUILDINGS: CampusMapBuildingSpec[] = [
   { code: 'C5', label: 'Nhà C5 (Vật liệu - Dệt may)', box: { minX: -23, maxX: -1, minZ: -49.25, maxZ: -42.75 }, kind: 'lecture' },
   { code: 'C10', label: 'Nhà C10 (Cơ khí - VLKT - Môi trường)', box: { minX: -23, maxX: -1, minZ: -38.25, maxZ: -31.75 }, kind: 'lecture' },
   { code: 'C6', label: 'Nhà C6 (Cơ khí động lực)', box: C6_BUILDING.box, kind: 'main' },
-  { code: 'C7', label: 'Nhà C7 (Nhiệt lạnh & ĐH)', box: C7_BUILDING.box, kind: 'main' },
+  { code: 'C7', label: 'Nhà C7 (Học HSK)', box: C7_BUILDING.box, kind: 'main' },
   { code: 'C8', label: 'Nhà C8', box: C8_BUILDING.box, kind: 'main' },
   // Khu D & Thư viện - Hồ Tiền (Nam trục đường chính)
   { code: 'D2', label: 'Nhà D2', box: { minX: -54, maxX: -38, minZ: 20.75, maxZ: 27.25 }, kind: 'lecture' },
@@ -78,7 +78,7 @@ export const CAMPUS_MAP_BUILDINGS: CampusMapBuildingSpec[] = [
   { code: 'D6', label: 'Nhà D6', box: { minX: -55, maxX: -37, minZ: 34.25, maxZ: 41.75 }, kind: 'lecture' },
   { code: 'D8', label: 'Nhà D8', box: { minX: -55, maxX: -37, minZ: 50.25, maxZ: 57.75 }, kind: 'lecture' },
   { code: 'VDZ', label: 'Nhà Bắc Hồ Tiền (VDZ)', box: VDZ_CENTER.box, kind: 'main' },
-  { code: 'Thư Viện', label: 'Thư viện Tạ Quang Bửu', box: { minX: 25.5, maxX: 50.5, minZ: 23.5, maxZ: 43.5 }, kind: 'main' },
+  { code: 'Thư Viện', label: 'Thư viện Tạ Quang Bửu', box: { minX: 25.6, maxX: 52.0, minZ: 19.4, maxZ: 50.0 }, kind: 'main' },
   { code: 'D9', label: 'Nhà D9', box: { minX: 29, maxX: 47, minZ: 59.25, maxZ: 66.75 }, kind: 'lecture' },
   { code: 'Nhà xe D3-D5', label: 'Nhà để xe D3 - D5', box: D3_D5_PARKING_GARAGE.box, kind: 'lecture' },
   { code: 'D3', label: 'Nhà D3 (Toán - Tin)', box: { minX: 54, maxX: 68, minZ: 10.7, maxZ: 17.3 }, kind: 'lecture' },
