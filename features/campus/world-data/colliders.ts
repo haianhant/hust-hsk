@@ -1,16 +1,19 @@
 // ---------------------------------------------------------------------------
 // features/campus/world-data/colliders.ts — Danh sách hộp va chạm 2D (AABB)
 // cho người đi bộ, phòng học, sảnh thư viện và vật cản hình tròn cho xe máy.
+// Đối chiếu chuẩn theo Bản đồ Số https://hustmap.com/.
 // ---------------------------------------------------------------------------
 
 import type { AABB, Vec2 } from './bounds';
 import {
+  ALUMNI_HOUSE,
   C1,
+  C15_BUILDING,
+  C1_FOUNTAIN,
   C2_BUILDING,
   C6_BUILDING,
   C7_BUILDING,
   C7_FACULTY_PARKING,
-  C8_BUILDING,
   C9,
   D3_D5_PARKING_GARAGE,
   D4_BUILDING,
@@ -49,12 +52,12 @@ export const LIBRARY_TREES: Vec2[] = [
 ];
 
 export const CAMPUS_SHADE_TREES: Vec2[] = [
-  { x: -28, z: -62 },
+  { x: -28, z: -64 },
   { x: -28, z: -48 },
   { x: 4, z: -62 },
   { x: 4, z: -46 },
-  { x: 18, z: -60 },
-  { x: 18, z: -42 },
+  { x: 16, z: -60 },
+  { x: 16, z: -42 },
   { x: 70, z: -62 },
   { x: 80, z: -62 },
   { x: 88, z: -52 },
@@ -70,7 +73,7 @@ export const CAMPUS_SHADE_TREES: Vec2[] = [
   { x: -92, z: -46 },
   { x: -92, z: 62 },
   { x: -92, z: 74 },
-  // 4 cây lớn hai bên Cổng Parabol & 2 cây sân sau Thư viện (lùi về z = 54,5 phía sau khối tháp mở rộng)
+  // 4 cây lớn hai bên Cổng Parabol & 2 cây sân sau Thư viện
   { x: -93.5, z: -12 },
   { x: -93.5, z: 0 },
   { x: -82.5, z: -13.5 },
@@ -84,11 +87,10 @@ export const BUILDING_COLLIDERS: NamedCollider[] = [
   { name: 'Tháp hoa gió đầu hồi C1', box: { minX: -34.2, maxX: -32.2, minZ: -58.5, maxZ: -53.5 } },
   { name: 'Bậc tam cấp C1', box: C1.steps },
   { name: 'Bệ chữ I LOVE BK', box: I_LOVE_BK.plinth },
+  { name: 'Đài phun nước Bách Khoa', box: C1_FOUNTAIN.box },
   { name: 'Khối đá trắng', box: WHITE_ROCK.box },
   { name: 'Thư viện Tạ Quang Bửu (tháp)', box: { minX: 25.6, maxX: 52.0, minZ: 28.8, maxZ: 50.0 } },
   { name: 'Thư viện Tạ Quang Bửu (khối đế)', box: { minX: 29.8, maxX: 46.2, minZ: 23.5, maxZ: 30.5 } },
-  // Thành bậc tam cấp và cột sảnh tròn Thư viện — mở lối chính diện x = 30.0..46.0 để bước lên bậc tam cấp
-  // và để thoáng sân hai bên khối sảnh 6 cột cho hàng cau vua (khớp ảnh thu-vien-cao-nhin-cheo-01.jpg).
   { name: 'Thành bậc tam cấp Thư viện (tây)', box: { minX: 28.9, maxX: 29.8, minZ: 16.8, maxZ: 19.4 } },
   { name: 'Thành bậc tam cấp Thư viện (đông)', box: { minX: 46.2, maxX: 47.1, minZ: 16.8, maxZ: 19.4 } },
   { name: 'Cột sảnh Thư viện (tây-bắc)', box: { minX: 30.15, maxX: 31.05, minZ: 19.2, maxZ: 20.1 } },
@@ -124,30 +126,35 @@ export const BUILDING_COLLIDERS: NamedCollider[] = [
   { name: 'Ghế đường tình yêu', box: { minX: -38.95, maxX: -37.05, minZ: -10.95, maxZ: -10.25 } },
   { name: 'Ghế đường tình yêu', box: { minX: -22.95, maxX: -21.05, minZ: -10.95, maxZ: -10.25 } },
   { name: 'Ghế đường tình yêu', box: { minX: 15.05, maxX: 16.95, minZ: -10.95, maxZ: -10.25 } },
-  // Các công trình mở rộng toàn trường theo Bản đồ Bách Khoa (khuon-vien-truong.png)
+  // Các công trình toàn khuôn viên theo chuẩn https://hustmap.com/
   { name: 'Nhà C2', box: C2_BUILDING.box },
   { name: 'Tòa nhà C6', box: C6_BUILDING.box },
+  { name: 'Tòa nhà C15', box: C15_BUILDING.box },
   { name: 'Tòa nhà C7', box: C7_BUILDING.box },
-  { name: 'Tòa nhà C8', box: C8_BUILDING.box },
-  { name: 'Nhà D4 (Viện Ngoại ngữ)', box: D4_BUILDING.box },
+  { name: 'Nhà D4 (Trường Ngoại ngữ)', box: D4_BUILDING.box },
   ...LECTURE_BUILDINGS.map((b) => ({ name: `Nhà ${b.code}`, box: b.box })),
   { name: 'Trung tâm Việt – Đức', box: VDZ_CENTER.box },
+  { name: 'Nhà Cựu sinh viên (Digital Hub)', box: ALUMNI_HOUSE.box },
   { name: 'Nhà B1 (SoICT)', box: SOICT_B1.box },
-  { name: 'Tòa A17', box: EAST_CAMPUS_BLOCKS.a17.box },
-  { name: 'Tòa H1', box: EAST_CAMPUS_BLOCKS.h1.box },
-  { name: 'Tòa H3', box: EAST_CAMPUS_BLOCKS.h3.box },
+  { name: 'Nhà ăn A1-5', box: EAST_CAMPUS_BLOCKS.a15.box },
+  { name: 'Nhà A17', box: EAST_CAMPUS_BLOCKS.a17.box },
+  { name: 'Nhà E', box: EAST_CAMPUS_BLOCKS.nhaE.box },
   { name: 'Nhà T', box: EAST_CAMPUS_BLOCKS.nhaT.box },
-  { name: 'Nhà thi đấu TC', box: SPORTS_COMPLEX.stadiumBox },
   { name: 'Bể bơi Bách Khoa', box: SPORTS_COMPLEX.poolBox },
-  { name: 'KTX Lào', box: SPORTS_COMPLEX.ktxLaoBox },
+  { name: 'Nhà thi đấu Bách Khoa', box: SPORTS_COMPLEX.stadiumBox },
+  { name: 'Nhà TC', box: SPORTS_COMPLEX.nhaTcBox },
+  { name: 'KTX A3', box: SPORTS_COMPLEX.ktxA3Box },
+  { name: 'KTX A2', box: SPORTS_COMPLEX.ktxA2Box },
   { name: 'KTX B6', box: DORM_COMPLEX.b6Box },
   { name: 'KTX B7', box: DORM_COMPLEX.b7Box },
   { name: 'KTX B7bis', box: DORM_COMPLEX.b7bisBox },
   { name: 'KTX B8 (VP Hội Sinh viên)', box: DORM_COMPLEX.b8Box },
   { name: 'KTX B5', box: DORM_COMPLEX.b5Box },
+  { name: 'Căng tin B5-9', box: DORM_COMPLEX.b59CanteenBox },
   { name: 'KTX B9', box: DORM_COMPLEX.b9Box },
+  { name: 'TT Phục vụ Tổng hợp Bách Khoa', box: DORM_COMPLEX.serviceBox },
   { name: 'KTX B13', box: DORM_COMPLEX.b13Box },
-  { name: 'Căng-tin SV', box: DORM_COMPLEX.canteenBox },
+  { name: 'Trung tâm ĐTTH & Trạm Y tế', box: DORM_COMPLEX.canteenBox },
   { name: 'KTX B3', box: DORM_COMPLEX.b3Box },
   { name: 'KTX B10', box: DORM_COMPLEX.b10Box },
   { name: 'KTX B4', box: DORM_COMPLEX.b4Box },

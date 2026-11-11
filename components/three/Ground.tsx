@@ -13,7 +13,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { C1, LIBRARY, LOVE_ROAD_TREES, ROADS, type Vec2 } from '../../lib/campus';
+import { C1, LIBRARY, LOVE_ROAD_TREES, NGA_5_PLAZA, ROADS, type Vec2 } from '../../lib/campus';
 import {
   createSeededRandom,
   makeAsphaltTexture,
@@ -41,6 +41,7 @@ type Rect = { minX: number; maxX: number; minZ: number; maxZ: number };
 
 const PLAZAS: Array<{ rect: Rect; color: string; kind: 'c1' | 'lib' | 'tdn' }> = [
   { rect: C1.plaza, color: C1_PLAZA_COLOR, kind: 'c1' },
+  { rect: NGA_5_PLAZA.rect, color: C1_PLAZA_COLOR, kind: 'c1' },
   { rect: LIBRARY.plaza, color: LIB_PLAZA_COLOR, kind: 'lib' },
 ];
 
@@ -398,25 +399,22 @@ export default function Ground() {
 
       {/* Các tuyến phố bên ngoài rìa Đông (Trần Đại Nghĩa, Tạ Quang Bửu, Lê Thanh Nghị) và sân trước cầu thang C9 (y = 0,012). */}
       {[
-        { cx: 95.5, cz: -20, w: 6.0, d: 108 }, // Phố Trần Đại Nghĩa phía ngoài cổng trường
-        { cx: 126, cz: -38, w: 5.5, d: 64 }, // Phố Tạ Quang Bửu chia đôi Khu KTX Bách Khoa
-        { cx: 120, cz: 62, w: 56, d: 5.5 }, // Phố Lê Thanh Nghị khu Thể chất & SVĐ
-        { cx: -61.5, cz: -17, w: 7.0, d: 9.0 }, // Khoảng sân lát đá nối trục C1 vào chân cầu thang đỏ tòa C9
+        { cx: 95.5, cz: -18, w: 6.0, d: 112, rotY: 0 }, // Phố Trần Đại Nghĩa phía ngoài cổng trường
+        { cx: 127.8, cz: -18, w: 5.2, d: 108, rotY: 0 }, // Phố Tạ Quang Bửu chia đôi Khu KTX Bách Khoa & B1 / A1-5 – A17
+        { cx: 120, cz: 58, w: 58, d: 5.2, rotY: 0.62 }, // Phố Lê Thanh Nghị chéo Tây-Nam → Đông-Bắc tách Khu Thể thao & SVĐ
+        { cx: -61.5, cz: -17, w: 7.0, d: 9.0, rotY: 0 }, // Khoảng sân lát đá nối trục C1 vào chân cầu thang đỏ tòa C9
       ].map((p, idx) => (
-        <mesh
-          key={`sub-walkway-${idx}`}
-          rotation-x={-Math.PI / 2}
-          position={[p.cx, 0.012, p.cz]}
-          receiveShadow
-        >
-          <planeGeometry args={[p.w, p.d]} />
-          <meshStandardMaterial
-            color="#D2CEC4"
-            map={textures.c1Stone}
-            roughness={0.9}
-            metalness={0}
-          />
-        </mesh>
+        <group key={`sub-walkway-${idx}`} position={[p.cx, 0.012, p.cz]} rotation-y={p.rotY}>
+          <mesh rotation-x={-Math.PI / 2} receiveShadow>
+            <planeGeometry args={[p.w, p.d]} />
+            <meshStandardMaterial
+              color="#D2CEC4"
+              map={textures.c1Stone}
+              roughness={0.9}
+              metalness={0}
+            />
+          </mesh>
+        </group>
       ))}
 
       {/* Sàn quảng trường: C1 đá rửa, Thư viện gạch đất nung có bumpMap,

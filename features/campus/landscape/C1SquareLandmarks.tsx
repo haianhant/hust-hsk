@@ -462,7 +462,7 @@ export function C1Fountain() {
     sprayRef.current.rotation.y = t * 0.6;
   });
 
-  // Đặt ở C1_FOUNTAIN.center (-78, -36.5), phía bắc Khối đá trắng (-78, -31), hoàn toàn ngoài đường đi và chặng leg2
+  // Đặt chính tâm trục đối xứng Quảng trường C1 (-58, -31.2) giữa I ❤ BK và Khối đá trắng theo đúng https://hustmap.com/
   return (
     <group position={[C1_FOUNTAIN.center.x, 0, C1_FOUNTAIN.center.z]}>
       {/* Thành bể đá hình chữ nhật vát góc 4.8 × 2.6 m */}

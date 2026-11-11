@@ -538,7 +538,7 @@ export function makeFootballFieldTexture(): THREE.CanvasTexture {
     ctx.fillRect(fx + i * sw, fy, sw + 1, fh);
   }
 
-  // Vạch vôi trắng chuẩn sân bóng đá (như hình vẽ trên khuon-vien-truong.png)
+  // Vạch vôi trắng chuẩn sân bóng đá SVĐ Bách Khoa
   ctx.strokeStyle = '#FFFFFF';
   ctx.lineWidth = 6;
   ctx.strokeRect(fx + 16, fy + 16, fw - 32, fh - 32);

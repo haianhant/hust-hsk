@@ -8,9 +8,10 @@
 //   - features/campus/landscape/CampusGatesAndPerimeter.tsx
 // ---------------------------------------------------------------------------
 
-import { C6_BUILDING, C8_BUILDING } from '../../lib/campus';
+import { C15_BUILDING, C6_BUILDING } from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
 import {
+  AlumniHouseBuilding,
   C6AndC8Block,
   C7ComplexBuilding,
   C7FacultyParkingLane,
@@ -39,6 +40,7 @@ import {
 } from '../../features/campus/landscape/CampusGatesAndPerimeter';
 
 export {
+  AlumniHouseBuilding,
   C6AndC8Block,
   C7ComplexBuilding,
   C7FacultyParkingLane,
@@ -67,10 +69,10 @@ export default function CampusExpansion({
 
   return (
     <group>
-      {/* Cụm 3 tòa C6 – C7 – C8 sát đường Trần Đại Nghĩa */}
+      {/* Cụm 3 tòa C6 – C7 – C15 sát phía Tây phố Trần Đại Nghĩa (chuẩn https://hustmap.com/) */}
       <C6AndC8Block
         code="C6"
-        subtitle="VIỆN CƠ KHÍ ĐỘNG LỰC"
+        subtitle="NHÀ C6"
         center={C6_BUILDING.center}
         size={C6_BUILDING.size}
         floors={C6_BUILDING.floors}
@@ -79,12 +81,12 @@ export default function CampusExpansion({
       />
       <C7ComplexBuilding isNight={isNight} />
       <C6AndC8Block
-        code="C8"
-        subtitle="KHỐI GIẢNG ĐƯỜNG & THÍ NGHIỆM C8"
-        center={C8_BUILDING.center}
-        size={C8_BUILDING.size}
-        floors={C8_BUILDING.floors}
-        floorHeight={C8_BUILDING.floorHeight}
+        code="C15"
+        subtitle="NHÀ C15"
+        center={C15_BUILDING.center}
+        size={C15_BUILDING.size}
+        floors={C15_BUILDING.floors}
+        floorHeight={C15_BUILDING.floorHeight}
         isNight={isNight}
       />
 
@@ -94,10 +96,11 @@ export default function CampusExpansion({
       {/* Bên phải Cổng Trần Đại Nghĩa (-Z): Trục đường & làn đỗ xe ô tô giảng viên cạnh tòa C7 */}
       <C7FacultyParkingLane isNight={isNight} />
 
-      {/* Nhà Bắc Hồ Tiền (VDZ) */}
+      {/* Cụm công viên bờ Bắc Hồ Tiền: Trung tâm Việt – Đức (VDZ) & Nhà Cựu sinh viên (HUST Digital Hub) */}
       <VietDucCenterBuilding isNight={isNight} />
+      <AlumniHouseBuilding isNight={isNight} />
 
-      {/* Phân khu phía Đông đường Trần Đại Nghĩa: KTX B3–B13, Nhà B1 (SoICT), A17/H1/H3/Nhà T, Khu Thể thao & SVĐ */}
+      {/* Phân khu phía Đông đường Trần Đại Nghĩa: KTX B3–B13, Nhà B1 (SoICT), A1-5/A17/Nhà E/Nhà T, Khu Thể thao & SVĐ */}
       <HustDormitoryZone isNight={isNight} />
       <SoictB1Building isNight={isNight} />
       <EastCampusBlocks isNight={isNight} />

@@ -383,19 +383,119 @@ export function HustDormitoryZone({ isNight }: { isNight: boolean }) {
         ))}
       </group>
 
-      {/* Nhà ăn KTX & bàn ghế dù che ngoài trời */}
-      <group position={[d.canteenCenter.x, 0, d.canteenCenter.z]}>
-        <mesh position={[0, 2.3, 0]} castShadow receiveShadow>
-          <boxGeometry args={[d.canteenSize.x, 4.6, d.canteenSize.z]} />
+      {/* Sân bóng rổ KTX nằm giữa nhà B7 và B7bis (đúng vị trí Sân bóng rổ trên https://hustmap.com/) */}
+      <group position={[d.basketballCenter.x, 0, d.basketballCenter.z]}>
+        <mesh rotation-x={-Math.PI / 2} position={[0, 0.022, 0]} receiveShadow>
+          <planeGeometry args={[d.basketballSize.x, d.basketballSize.z]} />
+          <meshStandardMaterial color="#C85A32" roughness={0.86} />
+        </mesh>
+        <mesh rotation-x={-Math.PI / 2} position={[0, 0.026, 0]}>
+          <ringGeometry args={[0.92, 1.04, 24]} />
+          <meshStandardMaterial color="#FFFFFF" />
+        </mesh>
+        <mesh rotation-x={-Math.PI / 2} position={[0, 0.026, 0]}>
+          <planeGeometry args={[0.1, d.basketballSize.z - 0.5]} />
+          <meshStandardMaterial color="#FFFFFF" />
+        </mesh>
+        {[-d.basketballSize.x / 2 + 0.35, d.basketballSize.x / 2 - 0.35].map((hx, hIdx) => (
+          <group key={`ktx-hoop-${hIdx}`} position={[hx, 0, 0]}>
+            <mesh position={[0, 1.55, 0]} castShadow>
+              <cylinderGeometry args={[0.045, 0.055, 3.1, 8]} />
+              <meshStandardMaterial color="#334155" roughness={0.5} metalness={0.5} />
+            </mesh>
+            <mesh position={[hIdx === 0 ? 0.22 : -0.22, 2.85, 0]} castShadow>
+              <boxGeometry args={[0.06, 0.72, 1.08]} />
+              <meshStandardMaterial color="#F8FAFC" roughness={0.4} />
+            </mesh>
+            <mesh
+              position={[hIdx === 0 ? 0.42 : -0.42, 2.65, 0]}
+              rotation={[Math.PI / 2, 0, 0]}
+            >
+              <torusGeometry args={[0.18, 0.022, 8, 16]} />
+              <meshStandardMaterial color="#EA580C" roughness={0.4} />
+            </mesh>
+          </group>
+        ))}
+      </group>
+
+      {/* Căng tin B5-9 nằm giữa KTX B5 và KTX B9 (theo đúng https://hustmap.com/) */}
+      <group position={[d.b59CanteenCenter.x, 0, d.b59CanteenCenter.z]}>
+        <mesh position={[0, 2.2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[d.b59CanteenSize.x, 4.4, d.b59CanteenSize.z]} />
           <meshStandardMaterial color="#FAF6EE" roughness={0.86} />
         </mesh>
-        <mesh position={[0, 4.75, 0]} castShadow>
-          <boxGeometry args={[d.canteenSize.x + 0.6, 0.35, d.canteenSize.z + 0.6]} />
+        <mesh position={[0, 4.55, 0]} castShadow>
+          <boxGeometry args={[d.b59CanteenSize.x + 0.5, 0.32, d.b59CanteenSize.z + 0.5]} />
           <meshStandardMaterial color="#C87D4B" roughness={0.78} />
         </mesh>
         <LabelPlane
-          textureKey="dorm-canteen-sign"
+          textureKey="dorm-b59-canteen-sign"
           canvasW={512}
+          canvasH={112}
+          draw={(ctx, w, h) => {
+            ctx.fillStyle = '#991B1B';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FFD166';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(6, 6, w - 12, h - 12);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '800 34px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('CĂNG TIN B5-9 · 食堂', w / 2, h / 2);
+          }}
+          size={[3.9, 0.82]}
+          position={[-d.b59CanteenSize.x / 2 - 0.05, 3.6, 0]}
+          rotation={[0, -Math.PI / 2, 0]}
+          transparent={false}
+        />
+      </group>
+
+      {/* Trung tâm Phục vụ Tổng hợp Bách Khoa ở phía Nam sân bóng KTX (theo https://hustmap.com/) */}
+      <group position={[d.serviceCenter.x, 0, d.serviceCenter.z]}>
+        <mesh position={[0, 3.3, 0]} castShadow receiveShadow>
+          <boxGeometry args={[d.serviceSize.x, 6.6, d.serviceSize.z]} />
+          <meshStandardMaterial color="#F2ECE1" roughness={0.86} />
+        </mesh>
+        <mesh position={[0, 6.8, 0]} castShadow>
+          <boxGeometry args={[d.serviceSize.x + 0.45, 0.38, d.serviceSize.z + 0.45]} />
+          <meshStandardMaterial color="#2B547E" roughness={0.78} />
+        </mesh>
+        <LabelPlane
+          textureKey="dorm-service-center-sign"
+          canvasW={512}
+          canvasH={112}
+          draw={(ctx, w, h) => {
+            ctx.fillStyle = '#1E3A5F';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(6, 6, w - 12, h - 12);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '800 30px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('TT PHỤC VỤ TỔNG HỢP BK', w / 2, h / 2);
+          }}
+          size={[4.0, 0.82]}
+          position={[0, 5.65, d.serviceSize.z / 2 + 0.06]}
+          transparent={false}
+        />
+      </group>
+
+      {/* Trung tâm ĐTTH & Trạm Y tế Bách Khoa giữa KTX B13 và KTX B3 (theo https://hustmap.com/) */}
+      <group position={[d.canteenCenter.x, 0, d.canteenCenter.z]}>
+        <mesh position={[0, 3.1, 0]} castShadow receiveShadow>
+          <boxGeometry args={[d.canteenSize.x, 6.2, d.canteenSize.z]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.85} />
+        </mesh>
+        <mesh position={[0, 6.38, 0]} castShadow>
+          <boxGeometry args={[d.canteenSize.x + 0.5, 0.36, d.canteenSize.z + 0.5]} />
+          <meshStandardMaterial color="#1C5C3A" roughness={0.78} />
+        </mesh>
+        <LabelPlane
+          textureKey="dorm-medical-center-sign"
+          canvasW={576}
           canvasH={112}
           draw={(ctx, w, h) => {
             ctx.fillStyle = '#1C5C3A';
@@ -406,11 +506,11 @@ export function HustDormitoryZone({ isNight }: { isNight: boolean }) {
             ctx.fillStyle = '#FFFFFF';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.font = '900 36px Arial, sans-serif';
-            ctx.fillText('NHÀ ĂN KTX BÁCH KHOA · 食堂', w / 2, h / 2);
+            ctx.font = '800 30px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('✚ TRUNG TÂM ĐTTH & TRẠM Y TẾ BK', w / 2, h / 2);
           }}
-          size={[4.4, 0.88]}
-          position={[0, 3.85, d.canteenSize.z / 2 + 0.06]}
+          size={[4.8, 0.88]}
+          position={[0, 5.2, d.canteenSize.z / 2 + 0.06]}
           transparent={false}
         />
       </group>

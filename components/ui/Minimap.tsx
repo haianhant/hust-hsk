@@ -70,7 +70,7 @@ function renderCampusMap(
     LAKE.halfL * 2 * project.s,
   );
 
-  // Đường (polyline) + các trục đường phố chính theo khuon-vien-truong.png
+  // Đường nội bộ (polyline) + các trục đường phố chính theo chuẩn https://hustmap.com/
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   for (const road of ROADS) {
@@ -83,24 +83,26 @@ function renderCampusMap(
     ctx.lineWidth = Math.max(1.8, road.width * project.s * 0.62);
     ctx.stroke();
   }
-  // Vẽ thêm Đường Trần Đại Nghĩa (x=90), Đường Tạ Quang Bửu (x=126) và Đường Lê Thanh Nghị trên bản đồ
+  // Vẽ thêm Phố Trần Đại Nghĩa, Phố Tạ Quang Bửu và Phố Lê Thanh Nghị đúng hướng tuyến trên https://hustmap.com/
   const extraStreets: Array<Array<{ x: number; z: number }>> = [
     [
-      { x: 90, z: -74 },
-      { x: 90, z: 32 },
-      { x: 64, z: 68 },
+      { x: 91, z: -75 },
+      { x: 91, z: 36 },
+      { x: 70, z: 72 },
     ],
     [
-      { x: 90, z: -6 },
-      { x: 158, z: -6 },
+      { x: 91, z: -6 },
+      { x: 128, z: -6 },
     ],
     [
-      { x: 126, z: -68 },
-      { x: 126, z: -6 },
+      { x: 128, z: -74 },
+      { x: 128, z: 36 },
     ],
     [
-      { x: 94, z: 62 },
-      { x: 156, z: 62 },
+      { x: 94, z: 75 },
+      { x: 120, z: 58 },
+      { x: 141, z: 43 },
+      { x: 165, z: 43 },
     ],
   ];
   for (const st of extraStreets) {
@@ -115,9 +117,9 @@ function renderCampusMap(
   }
 
   // Các tòa nhà trong toàn khuôn viên (CAMPUS_MAP_BUILDINGS + BUILDING_COLLIDERS)
-  ctx.font = detailed ? '700 10px system-ui, sans-serif' : '700 8.5px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const placedLabels: Array<{ minX: number; maxX: number; minY: number; maxY: number }> = [];
 
   for (const b of CAMPUS_MAP_BUILDINGS) {
     const x = project.x(b.box.minX);
@@ -146,9 +148,30 @@ function renderCampusMap(
     ctx.fillRect(x, y, w, h);
     ctx.strokeRect(x, y, w, h);
 
-    if (detailed || (w >= 8 && h >= 5)) {
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(b.code, x + w / 2, y + h / 2);
+    if (detailed || (w >= 11 && h >= 6)) {
+      const fontPx = detailed ? (w < 18 || h < 9 ? 8 : 9.5) : 8;
+      ctx.font = `700 ${fontPx}px system-ui, sans-serif`;
+      const tw = ctx.measureText(b.code).width;
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      const box = {
+        minX: cx - tw / 2 - 1,
+        maxX: cx + tw / 2 + 1,
+        minY: cy - fontPx / 2,
+        maxY: cy + fontPx / 2,
+      };
+      const overlaps = placedLabels.some(
+        (prev) =>
+          box.minX < prev.maxX &&
+          box.maxX > prev.minX &&
+          box.minY < prev.maxY &&
+          box.maxY > prev.minY,
+      );
+      if (!overlaps) {
+        placedLabels.push(box);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(b.code, cx, cy);
+      }
     }
   }
 
@@ -254,7 +277,7 @@ export default function Minimap(_props?: { onFastTravel?: (destId: string) => vo
       if (fullCanvas) {
         const fctx = fullCanvas.getContext('2d');
         if (fctx) {
-          renderCampusMap(fctx, 420, 24, heading, true);
+          renderCampusMap(fctx, 480, 26, heading, true);
         }
       }
     };
@@ -301,7 +324,7 @@ export default function Minimap(_props?: { onFastTravel?: (destId: string) => vo
                   🗺️ SƠ ĐỒ TỔNG THỂ ĐẠI HỌC BÁCH KHOA HÀ NỘI · 河内百科大学全景图
                 </h2>
                 <p className="text-xs text-white/70">
-                  C1 · C2 · C9 · C3–C10 · D2–D9 · Thư viện TQB · Hồ Tiền · B1 SoICT · Nhà thi đấu · KTX B3–B13 · Cổng B8
+                  C1 · C2 · C9 · C3–C10 · C6–C7–C15 · D2A–D9 · Thư viện TQB · Hồ Tiền · B1 SoICT · Nhà thi đấu & Nhà TC · KTX B3–B13
                 </p>
               </div>
               <button
@@ -316,9 +339,9 @@ export default function Minimap(_props?: { onFastTravel?: (destId: string) => vo
             <div className="flex flex-col items-center justify-center">
               <canvas
                 ref={fullCanvasRef}
-                width={420}
-                height={420}
-                className="h-[340px] w-[340px] shrink-0 rounded-xl border border-white/20 sm:h-[400px] sm:w-[400px]"
+                width={480}
+                height={480}
+                className="h-[340px] w-[340px] shrink-0 rounded-xl border border-white/20 sm:h-[440px] sm:w-[440px]"
               />
             </div>
           </div>

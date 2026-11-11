@@ -108,15 +108,14 @@ function D4ForeignLanguagesBuilding({ isNight }: { isNight: boolean }) {
   );
 }
 
-// Cầu nối trên cao có mái che (Covered Skybridges) nối liên hoàn 4 dãy C3 ↔ C4 ↔ C5 ↔ C10 và D3 ↔ D5
+// Hành lang cầu nối có mái che (Covered Connectors) nối liên hoàn C3-4 ↔ C4-5 ↔ C5-10, D3 ↔ D5 và D6 ↔ D8
 function LectureSkybridges() {
   const bridges: Array<{ x: number; z: number; w: number; d: number; y: number }> = [
-    // Cầu nối dọc Bắc–Nam giữa C3 (-68) ↔ C4 (-57) ↔ C5 (-46) ↔ C10 (-35)
-    { x: -18.5, z: -62.5, w: 2.2, d: 4.8, y: 3.6 },
-    { x: -5.5, z: -62.5, w: 2.2, d: 4.8, y: 3.6 },
-    { x: -18.5, z: -51.5, w: 2.2, d: 4.8, y: 3.6 },
+    // Hành lang nối đầu Tây (C3-4, C4-5, C5-10) & cầu nối đầu Đông giữa C3 (-68) ↔ C4 (-57) ↔ C5 (-46) ↔ C10 (-35)
+    { x: -20.5, z: -62.5, w: 3.4, d: 4.8, y: 3.6 },
+    { x: -20.5, z: -51.5, w: 3.4, d: 4.8, y: 3.6 },
     { x: -5.5, z: -51.5, w: 2.2, d: 4.8, y: 3.6 },
-    { x: -18.5, z: -40.5, w: 2.2, d: 4.8, y: 3.6 },
+    { x: -20.5, z: -40.5, w: 3.4, d: 4.8, y: 3.6 },
     { x: -5.5, z: -40.5, w: 2.2, d: 4.8, y: 3.6 },
     // Cầu nối giữa D3 (z=14) ↔ D5 (z=29)
     { x: 56.5, z: 21.5, w: 2.2, d: 8.6, y: 3.6 },
@@ -462,10 +461,10 @@ function BikeParkingShed() {
         <boxGeometry args={[9.6, 0.12, 4.6]} />
         <meshStandardMaterial color="#2E6B9E" roughness={0.65} metalness={0.25} />
       </mesh>
-      {/* Biển "NHÀ ĐỂ XE SINH VIÊN" */}
+      {/* Biển "ĐIỂM TRÔNG GIỮ XE D4-6-8" chuẩn https://hustmap.com/ */}
       <LabelPlane
-        textureKey="bike-shed-sign"
-        canvasW={512}
+        textureKey="bike-shed-sign-d468"
+        canvasW={576}
         canvasH={96}
         draw={(ctx, w, h) => {
           ctx.fillStyle = '#1C5C3A';
@@ -476,10 +475,10 @@ function BikeParkingShed() {
           ctx.fillStyle = '#FFFFFF';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.font = '900 38px Arial, sans-serif';
-          ctx.fillText('NHÀ ĐỂ XE SINH VIÊN · 停车场', w / 2, h / 2);
+          ctx.font = '800 34px "Be Vietnam Pro", Arial, sans-serif';
+          ctx.fillText('ĐIỂM TRÔNG GIỮ XE D4-6-8 · 停车场', w / 2, h / 2);
         }}
-        size={[3.2, 0.6]}
+        size={[3.8, 0.62]}
         position={[0, 2.35, -2.32]}
         rotation={[0, Math.PI, 0]}
         transparent={false}

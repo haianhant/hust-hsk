@@ -13,7 +13,7 @@ Trước khi thay đổi bất kỳ phân hệ nào, hãy đọc tài liệu đ�
 - **Hệ tọa độ, `BOUNDS` & Va chạm 2D:** [`docs/architecture/world-coordinate-system.md`](./docs/architecture/world-coordinate-system.md)
 - **Giao thức Multiplayer & Durable Object Hibernation:** [`docs/architecture/multiplayer.md`](./docs/architecture/multiplayer.md)
 - **Hệ thống Tương tác, Xe máy & Fast Travel:** [`docs/architecture/interaction-system.md`](./docs/architecture/interaction-system.md)
-- **Đặc tả Tòa nhà & Cảnh quan (`building.*`, `landscape.*`):** [`docs/world/buildings/README.md`](./docs/world/buildings/README.md) và tư liệu ảnh thật tại [`tham-khao/README.md`](./tham-khao/README.md)
+- **Đặc tả Tòa nhà & Cảnh quan (`building.*`, `landscape.*`) & Bản đồ Chuẩn [`https://hustmap.com/`](https://hustmap.com/):** [`docs/world/buildings/README.md`](./docs/world/buildings/README.md), bản đồ số [`https://hustmap.com/`](https://hustmap.com/) (Source of Truth quy hoạch khuôn viên — bỏ `khuon-vien-truong.png`, chỉ làm gọn trong khuôn viên ĐHBK Hà Nội, không mở rộng sang khu ngoài trường) và tư liệu ảnh thật tại [`tham-khao/README.md`](./tham-khao/README.md)
 - **Đặc tả Nhân vật & 10 Bộ Đồng phục HUST (`avatar.*`):** [`docs/world/avatar/rig-and-animation.md`](./docs/world/avatar/rig-and-animation.md), [`docs/world/avatar/outfits.md`](./docs/world/avatar/outfits.md)
 - **Engine Học HSK 3–4 & Định hướng Pomodoro/Study Rooms:** [`docs/features/hsk-learning.md`](./docs/features/hsk-learning.md), [`docs/features/study-pomodoro.md`](./docs/features/study-pomodoro.md)
 - **Cổng Kiểm thử Bắt buộc:** [`docs/testing/verification-gates.md`](./docs/testing/verification-gates.md)
@@ -30,8 +30,9 @@ Trước khi thay đổi bất kỳ phân hệ nào, hãy đọc tài liệu đ�
    - `lib/learn/*` và `content/*` tuyệt đối không phụ thuộc vào `three` hay `components/three/*`.
 3. **Trạng thái 60 FPS Mutable vs. Trạng thái React UI:**
    - Không gọi `React.setState` mỗi frame trong `useFrame`; sử dụng [`lib/playerState.ts`](./lib/playerState.ts) theo quy định tại [ADR-0004](./docs/adr/0004-mutable-frame-state-vs-react-ui-state.md).
-4. **Độ Chính xác Kiến trúc ĐHBK Hà Nội & Quản lý Bộ nhớ WebGL:**
-   - Đối chiếu hình khối, hướng mặt tiền (Thư viện hướng Bắc `-Z`, C1 mái 9 sóng + gạch hoa gió đục lỗ, C7 chữ E 9 tầng, C9 cầu thang đỏ mặt Đông, Hồ Tiền chữ nhật) với [`docs/world/buildings/`](./docs/world/buildings/README.md) và [`tham-khao/`](./tham-khao/README.md).
+4. **Độ Chính xác Kiến trúc ĐHBK Hà Nội (`https://hustmap.com/` Source of Truth) & Quản lý Bộ nhớ WebGL:**
+   - Lấy **[`https://hustmap.com/`](https://hustmap.com/)** làm **Source of Truth** của bản đồ khuôn viên kết hợp [`docs/world/buildings/`](./docs/world/buildings/README.md) và [`tham-khao/`](./tham-khao/README.md) (tuyệt đối không dùng sơ đồ cũ `khuon-vien-truong.png`). Chỉ hoàn thiện đúng phạm vi khuôn viên ĐHBK Hà Nội trong `BOUNDS`, không làm quá rộng sang các trường/khu tập thể lân cận.
+   - Đối chiếu chuẩn hình khối & hướng mặt tiền: Thư viện hướng Bắc `-Z`, C1 mái 9 sóng + gạch hoa gió đục lỗ, C7 chữ E 9 tầng chạy dọc Bắc–Nam với 3 cánh hướng Tây (`-X`) đã thay thế nhà C8 cũ, C9 cầu thang đỏ mặt Đông, Hồ Tiền chữ nhật.
    - Tuân thủ phân lớp chống Z-fighting và gọi `.dispose()` cho mọi `BufferGeometry`, `Material`, `CanvasTexture` trong `useEffect` cleanup.
 5. **Bảo toàn Tương thích Ngược:**
    - Khi tách module, phải giữ nguyên các re-export facade tại đường dẫn cũ cho tới khi toàn bộ người gọi đã chuyển sang đường dẫn mới.
