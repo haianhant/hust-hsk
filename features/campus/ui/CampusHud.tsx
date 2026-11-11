@@ -54,7 +54,7 @@ function StudyHudButton({
       data-testid="open-study-panel"
       type="button"
       onClick={onOpenStudyPanel}
-      className={`rounded-full px-4 py-2 text-sm font-bold text-white shadow-lg backdrop-blur-sm transition ${
+      className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm transition sm:text-[13px] ${
         hasActivePomodoro
           ? 'bg-[#A54432] hover:bg-[#8A3828]'
           : 'bg-[#1c5c3a]/90 hover:bg-[#16492e]'
@@ -283,24 +283,6 @@ export function CampusHud({
             🛵 {bikeSpeed.toFixed(1)} m/s · tối đa 14
           </div>
         )}
-        {/* Chip thiếu giọng tiếng Trung — gọn, cho đóng; nằm trong cột trạng
-            thái góc trái trên nên không che mặt tiền hay chiếm bầu trời.
-            Sau khi đóng, noVoiceDismissedRef chặn hiện lại trong phiên;
-            trạng thái âm thanh vẫn giữ trong settings.soundOn (nút 🔊/🔇
-            góc trên-phải). */}
-        {noVoice && (
-          <div className="pointer-events-auto flex w-fit max-w-[190px] items-center gap-1.5 rounded-full bg-[#FFF3CD]/95 px-3 py-1.5 text-xs font-semibold text-[#6B4E00] shadow-lg backdrop-blur-sm sm:max-w-[360px] sm:whitespace-nowrap">
-            <span className="leading-snug">🔇 Chưa có giọng tiếng Trung — học bằng chữ</span>
-            <button
-              type="button"
-              onClick={onDismissNoVoice}
-              className="shrink-0 rounded-full px-1 font-bold hover:bg-black/10"
-              aria-label="Đóng thông báo"
-            >
-              ✕
-            </button>
-          </div>
-        )}
         {/* Chỉ khi đang ở TRONG Giảng đường Tòa C7 mới hiện nút mở lại bài HSK đang học */}
         {inClassroom && questActive && panel === null && (
           <button
@@ -318,7 +300,7 @@ export function CampusHud({
           (Các nút Chọn bài / Loa / Tốc độ đọc chỉ xuất hiện khi ở trong Giảng đường Tòa C7). */}
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2 sm:flex-row-reverse sm:items-start">
         {!inClassroom && !inLibraryLobby && !hideNav && <Minimap />}
-        <div className="pointer-events-auto flex max-w-[calc(100vw-240px)] flex-wrap justify-end gap-2">
+        <div className="pointer-events-auto flex max-w-[calc(100vw-260px)] flex-wrap justify-end gap-1.5">
           {onOpenStudyPanel && (
             <StudyHudButton
               pomodoro={pomodoro}
@@ -333,7 +315,7 @@ export function CampusHud({
               type="button"
               onClick={onOpenLeaderboard}
               title="Bảng xếp hạng giờ học Bách khoa"
-              className="rounded-full bg-amber-600/90 px-3.5 py-2 text-sm font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-amber-700"
+              className="whitespace-nowrap rounded-full bg-amber-600/90 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-amber-700 sm:text-[13px]"
             >
               🏆 Xếp hạng
             </button>
@@ -345,7 +327,7 @@ export function CampusHud({
               type="button"
               onClick={onToggleLofi}
               aria-label={lofiPlaying ? 'Tắt nhạc Lofi Chill' : 'Bật nhạc Lofi Chill học tập'}
-              className={`rounded-full px-3.5 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition ${
+              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-lg backdrop-blur-sm transition sm:text-[13px] ${
                 lofiPlaying
                   ? 'bg-amber-600/95 ring-1 ring-amber-300/60 hover:bg-amber-700'
                   : 'bg-black/50 hover:bg-black/70'
@@ -366,7 +348,7 @@ export function CampusHud({
                   ? 'Đang tự động theo giờ thực ngoài đời — bấm để chuyển thủ công'
                   : 'Đang chỉnh giờ thủ công — bấm để xoay vòng hoặc quay về Tự động'
               }
-              className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold tabular-nums text-white backdrop-blur-sm transition hover:bg-black/70"
+              className="whitespace-nowrap rounded-full bg-black/50 px-3 py-1.5 text-xs font-semibold tabular-nums text-white backdrop-blur-sm transition hover:bg-black/70 sm:text-[13px]"
             >
               {timeOfDay === 'day' ? '☀️ Ngày' : timeOfDay === 'sunset' ? '🌇 Hoàng hôn' : '🌙 Đêm'}
               {realClockText ? (
@@ -386,7 +368,7 @@ export function CampusHud({
               type="button"
               onClick={onToggleOutfit}
               aria-label="Nhân vật và trang phục"
-              className="rounded-full bg-black/50 px-3.5 py-2 text-sm font-semibold tabular-nums text-white backdrop-blur-sm transition hover:bg-black/70"
+              className="whitespace-nowrap rounded-full bg-black/50 px-3 py-1.5 text-xs font-semibold tabular-nums text-white backdrop-blur-sm transition hover:bg-black/70 sm:text-[13px]"
             >
               👕 Nhân vật &amp; trang phục
             </button>
@@ -395,7 +377,7 @@ export function CampusHud({
             id="open-handbook"
             type="button"
             onClick={() => onOpenHandbook('lesson')}
-            className="rounded-full bg-black/55 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/75"
+            className="whitespace-nowrap rounded-full bg-black/55 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
           >
             🗺️ Sổ tay
           </button>

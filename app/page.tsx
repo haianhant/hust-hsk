@@ -35,7 +35,7 @@ import {
   saveProgress,
   todayKey,
 } from '../lib/learn/store';
-import { hasChineseVoice, speak, stopSpeaking } from '../lib/learn/speech';
+import { speak, stopSpeaking } from '../lib/learn/speech';
 import {
   DEFAULT_CHARACTER_PROFILE,
   getReconnectToken,
@@ -663,7 +663,25 @@ export default function HomePage() {
   // --- Nạp + lưu tiến độ (localStorage, không tài khoản) ----------------------
   useEffect(() => {
     try {
-      const p = loadProgress(window.localStorage);
+      let p = loadProgress(window.localStorage);
+      // Nếu dữ liệu cũ trong localStorage đang dừng ở bước 'review' ("Kiểm tra cuối 5 từ"),
+      // tự động chuyển qua bước tiếp theo ('result') để không bao giờ hiện popup Kiểm tra cuối.
+      if (p.questState && !p.questState.done) {
+        const def = getQuestDef(p.questState.questId) ?? (getQuestDef('first-lesson') as QuestDef);
+        let idx = p.questState.stepIndex;
+        while (idx < def.steps.length && def.steps[idx]?.kind === 'review') {
+          idx += 1;
+        }
+        if (idx !== p.questState.stepIndex) {
+          p = {
+            ...p,
+            questState: {
+              ...p.questState,
+              stepIndex: Math.min(idx, Math.max(0, def.steps.length - 1)),
+            },
+          };
+        }
+      }
       progressRef.current = p;
       badgesBeforeQuestRef.current = getEarnedGlobalBadgeIds(p);
       setProgress(p);
@@ -693,8 +711,8 @@ export default function HomePage() {
         stopSpeaking();
         speak(text, {
           rate: speechRate,
-          onError: (e) => {
-            if (e === 'no-voice' && !noVoiceDismissedRef.current) setNoVoice(true);
+          onError: () => {
+            // Không hiển thị chip cảnh báo thiếu giọng tiếng Trung trên HUD
           },
         });
       } catch {
@@ -703,16 +721,6 @@ export default function HomePage() {
     },
     [soundOn, speechRate],
   );
-
-  // Kiểm tra giọng zh-CN sau khi vào trường (chỉ phát sau tương tác).
-  useEffect(() => {
-    if (!entered) return;
-    try {
-      if (!hasChineseVoice() && !noVoiceDismissedRef.current) setNoVoice(true);
-    } catch {
-      // hasChineseVoice lỗi: không chặn học.
-    }
-  }, [entered]);
 
   // Khu hiện tại + chế độ camera: đọc playerState.zone/viewMode mỗi 200 ms.
   useEffect(() => {
@@ -875,10 +883,16 @@ export default function HomePage() {
     if (step.kind === 'choose-goal') speakText(step.zh);
   }, [entered, step?.id, speakText]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Chỉ tự động mở bảng câu hỏi khi người chơi ĐANG ở trong Giảng đường Tòa C7 (inClassroom)
+  // và tuyệt đối bỏ qua bước 'review' ("Kiểm tra cuối 5 từ").
   useEffect(() => {
-    if (!entered || !step || step.kind === 'goto') return;
+    if (!entered || !inClassroom || !step || step.kind === 'goto') return;
+    if (step.kind === 'review') {
+      advance();
+      return;
+    }
     setPanel('quest');
-  }, [entered, step?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [entered, inClassroom, step?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Vật tương tác gần nhất (poll 200 ms) ------------------------------------
   useEffect(() => {

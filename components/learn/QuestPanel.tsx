@@ -174,6 +174,15 @@ export default function QuestPanel(props: QuestPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step.id]);
 
+  // Nếu bước hiện tại là 'review' ("Kiểm tra cuối 5 từ") và không phải vòng ôn lỗi riêng,
+  // tự động bỏ qua ngay lập tức.
+  useEffect(() => {
+    if (step.kind === 'review' && !props.reReviewOnly) {
+      props.onAdvance();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step.id, step.kind, props.reReviewOnly]);
+
   const record = (correct: boolean, lexemeId: string | undefined, activity: ActivityType) => {
     const firstTry = !wrongAttemptRef.current;
     if (!correct) wrongAttemptRef.current = true;
@@ -684,8 +693,12 @@ export default function QuestPanel(props: QuestPanelProps) {
     );
   }
 
-  // --- review: kiểm tra cuối 5 từ (tự nhớ) + vòng ôn lại ngay (F2a) --------
+  // --- review: Đã bỏ phần "Kiểm tra cuối — câu 1/5 · Tự nhớ, không nhìn đáp án trước" ---
+  // Chỉ giữ vòng ôn lại từ vừa sai (reReviewOnly) nếu người chơi chủ động bấm "Ôn lỗi ngay".
   if (step.kind === 'review') {
+    if (!props.reReviewOnly) {
+      return null;
+    }
     if (reviewDone) {
       return (
         <div className="w-full">

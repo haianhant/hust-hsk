@@ -147,14 +147,14 @@ export function StudyPanel({
       >
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-stone-200 bg-[#A54432] px-5 py-3.5 text-white">
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-extrabold tracking-tight">
                 🍅 Tự học Bách khoa (Study MVP)
               </h2>
               <span
                 data-testid="study-session-status-badge"
-                className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold ${
                   session.active
                     ? 'bg-emerald-400/25 text-emerald-100 ring-1 ring-emerald-200/40'
                     : 'bg-white/15 text-white/90'
@@ -168,7 +168,7 @@ export function StudyPanel({
               {activeSeatId && (
                 <span
                   data-testid="study-panel-seat-badge"
-                  className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-300/25 px-2.5 py-0.5 text-[11px] font-bold text-amber-100 ring-1 ring-amber-200/40"
+                  className="ml-2 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-300/25 px-2.5 py-0.5 text-[11px] font-bold text-amber-100 ring-1 ring-amber-200/40"
                 >
                   🪑 Đang ngồi tại: {activeSeatLabel ?? activeSeatId}
                   {!isOnline ? ' · Ngoại tuyến' : ''}
@@ -176,13 +176,13 @@ export function StudyPanel({
               )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {onOpenLeaderboard && (
               <button
                 type="button"
                 data-testid="study-panel-open-leaderboard"
                 onClick={onOpenLeaderboard}
-                className="rounded-full bg-amber-400/95 px-3 py-1.5 text-xs font-extrabold text-amber-950 shadow transition hover:bg-amber-300"
+                className="shrink-0 whitespace-nowrap rounded-full bg-amber-400/95 px-3 py-1.5 text-xs font-extrabold text-amber-950 shadow transition hover:bg-amber-300"
               >
                 🏆 Bảng xếp hạng
               </button>
@@ -192,7 +192,7 @@ export function StudyPanel({
                 type="button"
                 data-testid="study-panel-stand-up"
                 onClick={onStandUp}
-                className="rounded-full bg-amber-500/90 px-3 py-1.5 text-xs font-bold text-white shadow transition hover:bg-amber-600"
+                className="shrink-0 whitespace-nowrap rounded-full bg-amber-500/90 px-3 py-1.5 text-xs font-bold text-white shadow transition hover:bg-amber-600"
               >
                 🚶 Đứng dậy
               </button>
@@ -202,7 +202,7 @@ export function StudyPanel({
               data-testid="close-study-panel"
               onClick={onClose}
               aria-label="Đóng bảng Tự học"
-              className="rounded-full bg-white/15 px-3 py-1.5 text-sm font-bold text-white transition hover:bg-white/25"
+              className="shrink-0 whitespace-nowrap rounded-full bg-white/15 px-3 py-1.5 text-sm font-bold text-white transition hover:bg-white/25"
             >
               ✕ Đóng
             </button>
