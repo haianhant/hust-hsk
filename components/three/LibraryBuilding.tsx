@@ -1184,7 +1184,149 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
         ))}
       </group>
 
-      {/* ============ 9. SÂN SAU PHÍA NAM (z = 54.5) ============ */}
+      {/* ============ 9. GÓC ĐÔNG-BẮC VỈA HÈ BO TRÒN, BIỂN "CẤM DỪNG ĐỖ" & HÔNG PHẢI (PHÍA TÂY) THƯ VIỆN ============
+          Đối chiếu 1:1 ảnh thực tế:
+          - `tham-khao/NEW/từ cuối 2 nhánh đường nhìn chếch trái sang thư viện.jpg`
+          - `tham-khao/NEW/bên phải thư viện.jpg` */}
+      {/* Bó vỉa bê tông bo tròn góc Đông-Bắc sân Thư viện (x = 24..53.2, z = 6.8..22.8) + nắp cống thoát nước */}
+      <mesh position={[38.0, 0.055, 6.88]} receiveShadow>
+        <boxGeometry args={[26.6, 0.09, 0.24]} />
+        <meshStandardMaterial color="#CBD5E1" roughness={0.86} />
+      </mesh>
+      <mesh position={[53.12, 0.055, 15.2]} receiveShadow>
+        <boxGeometry args={[0.24, 0.09, 14.8]} />
+        <meshStandardMaterial color="#CBD5E1" roughness={0.86} />
+      </mesh>
+      <mesh position={[51.9, 0.045, 8.1]} receiveShadow>
+        <cylinderGeometry args={[1.32, 1.32, 0.07, 24]} />
+        <meshStandardMaterial color="#C88275" roughness={0.88} />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2} position={[52.3, 0.025, 6.15]}>
+        <planeGeometry args={[0.72, 0.46]} />
+        <meshStandardMaterial color="#475569" roughness={0.7} metalness={0.45} />
+      </mesh>
+
+      {/* Hai cây bóng mát tán xanh rậm rạp góc Đông-Bắc sân Thư viện + bồn vườn cỏ viền bê tông */}
+      <LibTree x={48.6} z={9.4} trunkH={2.1} canopyR={2.05} canopyY={3.25} />
+      <LibTree x={43.6} z={9.5} trunkH={2.15} canopyR={1.95} canopyY={3.3} />
+
+      {/* Vạch giảm tốc màu vàng qua trục x = 56.2 (bên trái sân Thư viện) & trục đại lộ chính z = -6 */}
+      {[-0.4, -0.2, 0, 0.2, 0.4].map((d, idx) => (
+        <group key={`lib-corner-speedbump-${idx}`}>
+          <mesh rotation-x={-Math.PI / 2} position={[56.2, 0.026, 6.4 + d]}>
+            <planeGeometry args={[4.6, 0.09]} />
+            <meshStandardMaterial color="#EAB308" roughness={0.84} />
+          </mesh>
+          <mesh rotation-x={-Math.PI / 2} position={[48.6 + d, 0.026, -5.8]}>
+            <planeGeometry args={[0.09, 7.4]} />
+            <meshStandardMaterial color="#EAB308" roughness={0.84} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Biển báo di động màu đỏ "CẤM DỪNG ĐỖ" chân đế bê tông tròn đặt ngay góc bo Đông-Bắc sân Thư viện */}
+      <group position={[52.75, 0, 6.85]} rotation-y={Math.atan2(3.4, -11.3)}>
+        <mesh position={[0, 0.035, 0]} receiveShadow>
+          <cylinderGeometry args={[0.24, 0.26, 0.07, 20]} />
+          <meshStandardMaterial color="#A8A29E" roughness={0.9} />
+        </mesh>
+        <mesh position={[0, 0.56, 0]} castShadow>
+          <cylinderGeometry args={[0.022, 0.024, 1.05, 10]} />
+          <meshStandardMaterial color="#F1F5F9" roughness={0.45} metalness={0.35} />
+        </mesh>
+        <mesh position={[0, 1.04, 0]} castShadow>
+          <boxGeometry args={[0.72, 0.5, 0.04]} />
+          <meshStandardMaterial color="#B91C1C" roughness={0.55} />
+        </mesh>
+        <LabelPlane
+          textureKey="lib-no-stopping-red-sign"
+          canvasW={512}
+          canvasH={360}
+          draw={(ctx, w, h) => {
+            ctx.fillStyle = '#B91C1C';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(8, 8, w - 16, h - 16);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '700 24px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, 54);
+            ctx.font = '900 58px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('CẤM DỪNG ĐỖ', w / 2, 146);
+            ctx.font = '700 26px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('CÁC LOẠI PHƯƠNG TIỆN', w / 2, 232);
+            ctx.fillText('DƯỚI LÒNG ĐƯỜNG & TRÊN VỈA HÈ', w / 2, 286);
+          }}
+          size={[0.69, 0.47]}
+          position={[0, 1.04, 0.028]}
+          transparent={false}
+        />
+      </group>
+
+      {/* BÊN PHẢI THƯ VIỆN (HÔNG TÂY, x ≈ 22..30 — khớp `bên phải thư viện.jpg`):
+          1) Chân đế ốp đá granite đen bóng dọc tường Tây khối đế
+          2) Dàn 8 cục nóng điều hòa trắng xếp dọc trong khe kỹ thuật Tây (x = 29.55, z = 28.25)
+          3) Bậc cầu thang gạch nâu đỏ có lan can inox lên cửa phụ Tây (x = 28.9, z = 27.3)
+          4) Quảng trường đường dạo lát đá xám rẻ quạt kèm bồn cây tường trắng bên phải lối đi */}
+      <mesh position={[29.74, 0.52, 23.2]} receiveShadow>
+        <boxGeometry args={[0.28, 1.04, 7.6]} />
+        <meshStandardMaterial color="#181C22" roughness={0.32} metalness={0.25} />
+      </mesh>
+      <mesh position={[25.02, 0.52, 39.25]} receiveShadow>
+        <boxGeometry args={[0.24, 1.04, 21.5]} />
+        <meshStandardMaterial color="#181C22" roughness={0.32} metalness={0.25} />
+      </mesh>
+      <mesh position={[27.42, 0.52, 28.56]} receiveShadow>
+        <boxGeometry args={[4.85, 1.04, 0.24]} />
+        <meshStandardMaterial color="#181C22" roughness={0.32} metalness={0.25} />
+      </mesh>
+      {Array.from({ length: 8 }, (_, i) => 4.4 + i * 2.15).map((acy, idx) => (
+        <group key={`lib-west-ac-stack-${idx}`} position={[29.55, acy, 28.25]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.42, 0.68, 0.92]} />
+            <meshStandardMaterial color="#E2E8F0" roughness={0.62} />
+          </mesh>
+          <mesh position={[-0.22, 0, -0.15]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.22, 0.22, 0.02, 14]} />
+            <meshStandardMaterial color="#334155" roughness={0.7} />
+          </mesh>
+        </group>
+      ))}
+      <group position={[28.95, 0, 27.35]}>
+        {[0, 1, 2, 3, 4].map((st) => (
+          <mesh
+            key={`lib-west-brick-step-${st}`}
+            position={[0.18 * st, 0.09 + st * 0.16, 0]}
+            receiveShadow
+          >
+            <boxGeometry args={[0.26, 0.16, 1.55]} />
+            <meshStandardMaterial color="#6D3B32" roughness={0.85} />
+          </mesh>
+        ))}
+        <mesh position={[0.38, 0.92, -0.74]} rotation={[0, 0, 0.68]}>
+          <boxGeometry args={[1.25, 0.04, 0.04]} />
+          <meshStandardMaterial color="#CBD5E1" roughness={0.3} metalness={0.8} />
+        </mesh>
+        <mesh position={[0.38, 0.92, 0.74]} rotation={[0, 0, 0.68]}>
+          <boxGeometry args={[1.25, 0.04, 0.04]} />
+          <meshStandardMaterial color="#CBD5E1" roughness={0.3} metalness={0.8} />
+        </mesh>
+      </group>
+      {/* Dải vỉa hè rộng lát đá xám bên Tây đường nội bộ x = 24 */}
+      <mesh position={[22.1, 0.032, 34.5]} receiveShadow>
+        <boxGeometry args={[2.5, 0.064, 30.0]} />
+        <meshStandardMaterial
+          color="#9CA3AF"
+          map={granitePbr.map}
+          bumpMap={granitePbr.bumpMap}
+          bumpScale={0.01}
+          roughness={0.88}
+        />
+      </mesh>
+
+      {/* ============ 10. SÂN SAU PHÍA NAM (z = 54.5) ============ */}
       <mesh rotation-x={-Math.PI / 2} position={[30, 0.03, 54.5]} receiveShadow>
         <circleGeometry args={[2.8, 32]} />
         <meshStandardMaterial color={LEAF} roughness={1} />

@@ -16,8 +16,9 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { TRAN_DAI_NGHIA_GATE } from '../world-data';
+import { TDN_DIVIDED_MEDIAN, TDN_MEDIAN_TREES, TRAN_DAI_NGHIA_GATE } from '../world-data';
 import { LabelPlane } from '../../../components/three/TextPlate';
+import { ImprovedTree } from '../../../components/three/Trees';
 import { createSeededRandom } from '../../../components/three/materials';
 
 /**
@@ -589,11 +590,99 @@ export function TranDaiNghiaSquare({ isNight = false }: { isNight?: boolean }) {
         ))}
       </group>
 
-      {/* ============ 3. TRỤ KIỂM SOÁT VÉ/THẺ TỰ ĐỘNG & BARIE HAI LÀN XE ============ */}
-      {/* Hai cụm tủ kiểm soát vé/barie đặt sát hai đầu tường đá (z = -3.35 và z = +3.35) */}
+      {/* ============ 3. HAI BIỂN THÔNG BÁO ĐỎ TRƯỚC TƯỜNG ĐÁ, BIỂN CẤM Ô TÔ & GỜ GIẢM TỐC VÀNG ============ */}
+      {/* Biển đỏ bên trái (+Z = 1.15, nhìn từ đường Trần Đại Nghĩa vào): Hướng dẫn ô tô đi Cổng Parabol & Cổng A1 Đại Cồ Việt */}
+      <group position={[0.78, 0, 1.15]}>
+        <mesh position={[0, 0.025, 0]} receiveShadow>
+          <cylinderGeometry args={[0.19, 0.21, 0.04, 16]} />
+          <meshStandardMaterial color="#9CA3AF" roughness={0.85} />
+        </mesh>
+        <mesh position={[0, 0.56, 0]} castShadow>
+          <cylinderGeometry args={[0.022, 0.024, 1.08, 10]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.4} metalness={0.35} />
+        </mesh>
+        <mesh position={[0, 0.96, 0]} castShadow>
+          <boxGeometry args={[0.04, 0.62, 0.88]} />
+          <meshStandardMaterial color="#DC2626" roughness={0.55} />
+        </mesh>
+        <LabelPlane
+          textureKey="tdn-red-notice-left"
+          canvasW={512}
+          canvasH={360}
+          draw={(ctx, w, h) => {
+            ctx.fillStyle = '#DC2626';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(8, 8, w - 16, h - 16);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '700 28px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, 54);
+            ctx.font = '800 33px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('CÁN BỘ, KHÁCH ĐI Ô TÔ', w / 2, 118);
+            ctx.fillText('VÀO ĐẠI HỌC XIN MỜI ĐI', w / 2, 172);
+            ctx.fillText('CỔNG PARABOL VÀ', w / 2, 228);
+            ctx.fillText('CỔNG A1 ĐẠI CỒ VIỆT', w / 2, 284);
+          }}
+          size={[0.85, 0.59]}
+          position={[0.028, 0.96, 0]}
+          rotation={[0, Math.PI / 2, 0]}
+          transparent={false}
+        />
+      </group>
+
+      {/* Biển đỏ-trắng bên phải (-Z = -1.15): Nội quy Cổng Trần Đại Nghĩa */}
+      <group position={[0.78, 0, -1.15]}>
+        <mesh position={[0, 0.025, 0]} receiveShadow>
+          <cylinderGeometry args={[0.19, 0.21, 0.04, 16]} />
+          <meshStandardMaterial color="#9CA3AF" roughness={0.85} />
+        </mesh>
+        <mesh position={[0, 0.58, 0]} castShadow>
+          <cylinderGeometry args={[0.022, 0.024, 1.12, 10]} />
+          <meshStandardMaterial color="#F8FAFC" roughness={0.4} metalness={0.35} />
+        </mesh>
+        <mesh position={[0, 1.02, 0]} castShadow>
+          <boxGeometry args={[0.04, 0.64, 0.92]} />
+          <meshStandardMaterial color="#E2E8F0" roughness={0.55} />
+        </mesh>
+        <LabelPlane
+          textureKey="tdn-red-notice-right"
+          canvasW={540}
+          canvasH={360}
+          draw={(ctx, w, h) => {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, w, 86);
+            ctx.fillStyle = '#DC2626';
+            ctx.fillRect(0, 86, w, h - 86);
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(4, 4, w - 8, h - 8);
+            ctx.fillStyle = '#DC2626';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '800 32px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('CỔNG TRẦN ĐẠI NGHĨA', w / 2, 45);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'left';
+            ctx.font = '700 22px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('• KHÔNG NHẬN BƯU PHẨM, TÀI LIỆU', 28, 134);
+            ctx.fillText('• KHÁCH LIÊN HỆ CÔNG TÁC MỜI CỔNG A1', 28, 192);
+            ctx.fillText('• KHÔNG NHẬN GỬI Ô TÔ', 28, 250);
+            ctx.fillStyle = '#FDE047';
+            ctx.fillText('• CẤM TỤ TẬP, BÁN HÀNG RONG', 28, 306);
+          }}
+          size={[0.89, 0.61]}
+          position={[0.028, 1.02, 0]}
+          rotation={[0, Math.PI / 2, 0]}
+          transparent={false}
+        />
+      </group>
+
+      {/* Hai cụm tủ kiểm soát vé/barie + biển tròn "Cấm ô tô" đặt hai bên tường đá (khớp Cổng trần đại nghĩa và 2 trục đường.jpg) */}
       {[-3.38, 3.38].map((bz, idx) => (
         <group key={`tdn-barrier-booth-${idx}`} position={[0.05, 0, bz]}>
-          {/* Thân tủ kiểm soát inox xám bạc + dải phản quang đỏ trắng */}
           <mesh position={[0, 0.58, 0]} castShadow receiveShadow>
             <boxGeometry args={[0.42, 1.16, 0.42]} />
             <meshStandardMaterial color="#CBD5E1" roughness={0.45} metalness={0.55} />
@@ -602,20 +691,75 @@ export function TranDaiNghiaSquare({ isNight = false }: { isNight?: boolean }) {
             <boxGeometry args={[0.02, 0.72, 0.28]} />
             <meshStandardMaterial color="#B91C1C" roughness={0.5} />
           </mesh>
-          {/* Biển tròn viền đỏ gắn trên trụ trắng cạnh lối xe */}
-          <group position={[0.55, 0, idx === 0 ? 0.22 : -0.22]}>
-            <mesh position={[0, 0.75, 0]} castShadow>
-              <cylinderGeometry args={[0.025, 0.025, 1.5, 8]} />
+          {/* Biển tròn "Cấm ô tô" (bên phải cắm trên chóp nón giao thông cam-trắng đúng ảnh thật) */}
+          <group position={[0.82, 0, idx === 0 ? -0.48 : -0.18]}>
+            {idx === 0 && (
+              <group>
+                <mesh position={[0, 0.02, 0]}>
+                  <boxGeometry args={[0.38, 0.04, 0.38]} />
+                  <meshStandardMaterial color="#EA580C" roughness={0.7} />
+                </mesh>
+                <mesh position={[0, 0.26, 0]} castShadow>
+                  <coneGeometry args={[0.15, 0.48, 14]} />
+                  <meshStandardMaterial color="#EA580C" roughness={0.6} />
+                </mesh>
+                <mesh position={[0, 0.28, 0]}>
+                  <cylinderGeometry args={[0.075, 0.105, 0.12, 14]} />
+                  <meshStandardMaterial color="#F8FAFC" roughness={0.5} />
+                </mesh>
+              </group>
+            )}
+            <mesh position={[0, 0.72, 0]} castShadow>
+              <cylinderGeometry args={[0.022, 0.024, 1.38, 8]} />
               <meshStandardMaterial color="#F8FAFC" roughness={0.4} />
             </mesh>
-            <mesh position={[0, 1.55, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[0.22, 0.22, 0.03, 20]} />
-              <meshStandardMaterial color="#DC2626" roughness={0.5} />
+            <mesh position={[0, 1.42, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.25, 0.25, 0.035, 24]} />
+              <meshStandardMaterial color="#CBD5E1" roughness={0.5} metalness={0.35} />
             </mesh>
-            <mesh position={[0.02, 1.55, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[0.16, 0.16, 0.032, 20]} />
-              <meshStandardMaterial color="#FFFFFF" roughness={0.5} />
-            </mesh>
+            <LabelPlane
+              textureKey="tdn-no-car-sign"
+              canvasW={256}
+              canvasH={256}
+              draw={(ctx, w, h) => {
+                ctx.clearRect(0, 0, w, h);
+                ctx.beginPath();
+                ctx.arc(w / 2, h / 2, 118, 0, Math.PI * 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fill();
+                ctx.lineWidth = 24;
+                ctx.strokeStyle = '#DC2626';
+                ctx.stroke();
+                // Hình ô tô con màu đen chính giữa
+                ctx.fillStyle = '#111827';
+                ctx.fillRect(68, 126, 120, 34);
+                ctx.beginPath();
+                ctx.moveTo(84, 126);
+                ctx.lineTo(100, 96);
+                ctx.lineTo(156, 96);
+                ctx.lineTo(172, 126);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(104, 103, 48, 19);
+                ctx.fillStyle = '#111827';
+                ctx.beginPath();
+                ctx.arc(90, 164, 13, 0, Math.PI * 2);
+                ctx.arc(166, 164, 13, 0, Math.PI * 2);
+                ctx.fill();
+                // Gạch chéo đỏ cấm ô tô
+                ctx.strokeStyle = '#DC2626';
+                ctx.lineWidth = 20;
+                ctx.beginPath();
+                ctx.moveTo(58, 58);
+                ctx.lineTo(198, 198);
+                ctx.stroke();
+              }}
+              size={[0.48, 0.48]}
+              position={[0.025, 1.42, 0]}
+              rotation={[0, Math.PI / 2, 0]}
+              transparent
+            />
           </group>
         </group>
       ))}
@@ -806,6 +950,200 @@ export function TranDaiNghiaSquare({ isNight = false }: { isNight?: boolean }) {
           />
         </mesh>
       </group>
+
+      {/* Cánh cổng sắt màu xám xanh bên phải trụ đá Bắc (khớp Cổng trần đại nghĩa và 2 trục đường.jpg) */}
+      <group position={[0.25, 0, -12.35]}>
+        <mesh position={[0, 1.15, 0]} castShadow>
+          <boxGeometry args={[0.08, 2.25, 1.85]} />
+          <meshStandardMaterial color="#7B8794" roughness={0.5} metalness={0.55} />
+        </mesh>
+        {[-0.65, -0.22, 0.22, 0.65].map((gz, gIdx) => (
+          <mesh key={`tdn-iron-gate-bar-${gIdx}`} position={[0.05, 1.95, gz]}>
+            <boxGeometry args={[0.03, 0.42, 0.04]} />
+            <meshStandardMaterial color="#CBD5E1" roughness={0.45} metalness={0.6} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* ============ 6. ĐẠI LỘ ĐÔI 2 NHÁNH 1 CHIỀU & DẢI PHÂN CÁCH CÂY XANH BÓ VỈA TRẮNG ============ */}
+      {/* Vạch giảm tốc màu vàng qua làn đi vào ngay sau cổng & qua cả 2 làn gần điểm nhập làn */}
+      {[-2.2, -29.2].map((bx, bIdx) =>
+        [-0.36, -0.18, 0, 0.18, 0.36].map((dx, sIdx) => (
+          <group key={`tdn-speedbump-${bIdx}-${sIdx}`}>
+            <mesh rotation-x={-Math.PI / 2} position={[bx + dx, 0.026, -4.4]}>
+              <planeGeometry args={[0.09, 4.3]} />
+              <meshStandardMaterial color="#EAB308" roughness={0.82} />
+            </mesh>
+            {bIdx === 1 && (
+              <mesh rotation-x={-Math.PI / 2} position={[bx + dx, 0.026, 4.4]}>
+                <planeGeometry args={[0.09, 4.3]} />
+                <meshStandardMaterial color="#EAB308" roughness={0.82} />
+              </mesh>
+            )}
+          </group>
+        )),
+      )}
+
+      {/* Vạch đứt vàng phân luồng trên nhánh đi vào (z = -10.4 -> dz = -4.4) + nắp cống gang thực tế */}
+      {[-7.5, -11.5, -15.5, -19.5, -23.5].map((lx, idx) => (
+        <mesh key={`tdn-inbound-dash-${idx}`} rotation-x={-Math.PI / 2} position={[lx, 0.025, -4.7]}>
+          <planeGeometry args={[1.9, 0.12]} />
+          <meshStandardMaterial color="#D4AF37" roughness={0.85} />
+        </mesh>
+      ))}
+      {[
+        { mx: -9.8, mz: -4.15 },
+        { mx: -34.2, mz: -2.4 },
+      ].map((mh, idx) => (
+        <group key={`tdn-manhole-${idx}`} position={[mh.mx, 0.024, mh.mz]}>
+          <mesh rotation-x={-Math.PI / 2}>
+            <planeGeometry args={[0.92, 0.92]} />
+            <meshStandardMaterial color="#6B7280" roughness={0.88} />
+          </mesh>
+          <mesh rotation-x={-Math.PI / 2} position={[0, 0.003, 0]}>
+            <circleGeometry args={[0.36, 20]} />
+            <meshStandardMaterial color="#374151" roughness={0.65} metalness={0.45} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Dải phân cách trồng cây xanh có bó vỉa bê tông sơn trắng & 2 mũi đảo bán nguyệt ở 2 đầu
+          (TDN_DIVIDED_MEDIAN: world x = 59.8..90.4, z = -6.0 => local x = -16.9, width = 30.6, z = 0) */}
+      <group position={[TDN_DIVIDED_MEDIAN.center.x - x, 0, TDN_DIVIDED_MEDIAN.center.z - z]}>
+        {/* Khối bó vỉa bê tông sơn trắng chạy suốt chiều dài 28.0m + 2 đầu bán nguyệt (tổng 30.6m) */}
+        <mesh position={[0, 0.11, 0]} castShadow receiveShadow>
+          <boxGeometry args={[TDN_DIVIDED_MEDIAN.size.x - 2.6, 0.22, TDN_DIVIDED_MEDIAN.size.z]} />
+          <meshStandardMaterial color="#F1F5F9" roughness={0.82} />
+        </mesh>
+        {[-(TDN_DIVIDED_MEDIAN.size.x - 2.6) / 2, (TDN_DIVIDED_MEDIAN.size.x - 2.6) / 2].map(
+          (endX, eIdx) => (
+            <group key={`median-nose-${eIdx}`} position={[endX, 0, 0]}>
+              <mesh position={[0, 0.11, 0]} castShadow receiveShadow>
+                <cylinderGeometry
+                  args={[
+                    TDN_DIVIDED_MEDIAN.size.z / 2,
+                    TDN_DIVIDED_MEDIAN.size.z / 2,
+                    0.22,
+                    24,
+                  ]}
+                />
+                <meshStandardMaterial color="#F1F5F9" roughness={0.82} />
+              </mesh>
+              <mesh position={[0, 0.225, 0]} receiveShadow>
+                <cylinderGeometry
+                  args={[
+                    TDN_DIVIDED_MEDIAN.size.z / 2 - 0.18,
+                    TDN_DIVIDED_MEDIAN.size.z / 2 - 0.18,
+                    0.02,
+                    24,
+                  ]}
+                />
+                <meshStandardMaterial color="#4B5E38" roughness={0.95} />
+              </mesh>
+            </group>
+          ),
+        )}
+        {/* Lòng đất & thảm cỏ dải phân cách (thụt vào 0.18m tạo thành bó vỉa trắng dày rõ nét) */}
+        <mesh position={[0, 0.225, 0]} receiveShadow>
+          <boxGeometry
+            args={[TDN_DIVIDED_MEDIAN.size.x - 2.6, 0.02, TDN_DIVIDED_MEDIAN.size.z - 0.36]}
+          />
+          <meshStandardMaterial color="#4B5E38" roughness={0.95} />
+        </mesh>
+
+        {/* Chuỗi cây bụi cắt tỉa xanh mát xen kẽ dọc dải phân cách */}
+        {Array.from({ length: 19 }, (_, i) => -13.5 + i * 1.5).map((sx, sIdx) => (
+          <group key={`median-shrub-${sIdx}`} position={[sx, 0.34, (sIdx % 2 === 0 ? 1 : -1) * 0.32]}>
+            <mesh castShadow receiveShadow scale={[1.15, 0.68, 0.92]}>
+              <dodecahedronGeometry args={[0.38, 1]} />
+              <meshStandardMaterial
+                color={sIdx % 3 === 0 ? '#36692F' : sIdx % 3 === 1 ? '#457F3B' : '#2D5A27'}
+                roughness={0.9}
+              />
+            </mesh>
+          </group>
+        ))}
+
+        {/* 4 cột đèn công viên 2 chao cầu trắng sơn xanh lá đậm dọc dải phân cách (trục đường bên trái...jpg) */}
+        {[-9.6, -3.6, 2.4, 8.4].map((lx, lIdx) => (
+          <group key={`median-park-lamp-${lIdx}`} position={[lx, 0.22, 0]}>
+            <mesh position={[0, 1.55, 0]} castShadow>
+              <cylinderGeometry args={[0.045, 0.068, 3.1, 10]} />
+              <meshStandardMaterial color="#1B4332" roughness={0.5} metalness={0.45} />
+            </mesh>
+            <mesh position={[0, 2.98, 0]}>
+              <boxGeometry args={[0.06, 0.06, 0.92]} />
+              <meshStandardMaterial color="#1B4332" roughness={0.5} metalness={0.45} />
+            </mesh>
+            {[-0.44, 0.44].map((gz, gIdx) => (
+              <mesh key={`globe-${gIdx}`} position={[0, 3.14, gz]}>
+                <sphereGeometry args={[0.17, 14, 12]} />
+                <meshStandardMaterial
+                  color="#F8FAFC"
+                  emissive="#FFE8A3"
+                  emissiveIntensity={isNight ? 1.85 : 0.22}
+                  roughness={0.28}
+                />
+              </mesh>
+            ))}
+          </group>
+        ))}
+
+        {/* Biển báo "Cấm đi ngược chiều" gắn cột sọc đỏ-trắng ở đầu Tây (nhìn về phía Tây sau nhập làn)
+            và đầu Đông (ngăn xe đi nhầm làn ra) + trụ biển ở mũi đảo Tây (trục đường chính tiếp theo...jpg) */}
+        {[
+          { px: -14.5, pz: -0.68, rotY: -Math.PI / 2 },
+          { px: 14.3, pz: 0.68, rotY: Math.PI / 2 },
+        ].map((sg, sIdx) => (
+          <group key={`median-no-entry-${sIdx}`} position={[sg.px, 0.22, sg.pz]} rotation-y={sg.rotY}>
+            {[0.22, 0.66, 1.1, 1.54].map((py, pIdx) => (
+              <mesh key={`pole-seg-${pIdx}`} position={[0, py, 0]} castShadow>
+                <cylinderGeometry args={[0.026, 0.028, 0.44, 8]} />
+                <meshStandardMaterial
+                  color={pIdx % 2 === 0 ? '#DC2626' : '#F8FAFC'}
+                  roughness={0.5}
+                />
+              </mesh>
+            ))}
+            <mesh position={[0, 1.86, 0]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.26, 0.26, 0.036, 24]} />
+              <meshStandardMaterial color="#CBD5E1" roughness={0.55} metalness={0.35} />
+            </mesh>
+            <LabelPlane
+              textureKey="tdn-no-entry-sign"
+              canvasW={256}
+              canvasH={256}
+              draw={(ctx, w, h) => {
+                ctx.clearRect(0, 0, w, h);
+                ctx.beginPath();
+                ctx.arc(w / 2, h / 2, 118, 0, Math.PI * 2);
+                ctx.fillStyle = '#DC2626';
+                ctx.fill();
+                ctx.lineWidth = 10;
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.stroke();
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(46, 106, 164, 44);
+              }}
+              size={[0.5, 0.5]}
+              position={[0, 1.86, 0.026]}
+              transparent
+            />
+          </group>
+        ))}
+      </group>
+
+      {/* 5 Cây bóng mát cổ thụ trồng thẳng hàng dọc giữa dải phân cách đôi (TDN_MEDIAN_TREES) */}
+      {TDN_MEDIAN_TREES.map((tree, idx) => (
+        <ImprovedTree
+          key={`tdn-median-tree-${idx}`}
+          x={tree.x - x}
+          z={tree.z - z}
+          trunkH={3.1 + (idx % 2) * 0.22}
+          canopyR={2.05 + (idx % 3) * 0.14}
+          canopyY={4.25 + (idx % 2) * 0.2}
+        />
+      ))}
     </group>
   );
 }

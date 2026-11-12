@@ -366,3 +366,53 @@ test('(9) Complete main campus plazas, 9 parking areas & C7 ramps, C10b, C-conne
     );
   }
 });
+
+test('(10) yeucau4 — Divided 2-branch Trần Đại Nghĩa boulevard, merge junction, Trường Vật liệu (SMSE), C7 & D3-D5-D7-D9 alignment', () => {
+  const {
+    TDN_DIVIDED_MEDIAN,
+    TDN_MEDIAN_TREES,
+    SCHOOL_OF_MATERIALS,
+    C7_BUILDING,
+    LECTURE_BUILDINGS,
+    LIBRARY,
+    ALUMNI_HOUSE,
+    ROADS,
+    CAMPUS_MAP_BUILDINGS,
+    AVATAR,
+    resolveCollisions,
+  } = campusFacade;
+
+  // 1. Divided median splits North inbound lane (z = -10.4) and South outbound lane (z = -1.6)
+  assert.equal(TDN_DIVIDED_MEDIAN.center.z, -6.0);
+  assert.equal(TDN_MEDIAN_TREES.length, 5);
+  const inboundLane = ROADS.find((r) => r.name.includes('Chiều đi vào'));
+  const outboundLane = ROADS.find((r) => r.name.includes('Chiều đi ra'));
+  const mergedBoulevard = ROADS.find((r) => r.name.includes('Đại lộ chính sau nhập làn'));
+  assert.ok(inboundLane && outboundLane && mergedBoulevard);
+  assert.ok(inboundLane.points[0].z < TDN_DIVIDED_MEDIAN.box.minZ, 'Inbound lane must run North of median');
+  assert.ok(outboundLane.points[2].z > TDN_DIVIDED_MEDIAN.box.maxZ, 'Outbound lane must run South of median');
+  assert.ok(mergedBoulevard.width >= 8.0, 'Merged boulevard must be wider than each one-way branch');
+
+  // 2. Both lanes are completely collision-free for walking/riding and merge right where C7 & D3 end
+  const d3 = LECTURE_BUILDINGS.find((b) => b.code === 'D3');
+  const d9 = LECTURE_BUILDINGS.find((b) => b.code === 'D9');
+  assert.ok(d3 && d9);
+  assert.equal(C7_BUILDING.box.minX, d3.box.minX, 'C7 and D3 West edges must terminate aligned at the merge');
+  assert.equal(resolveCollisions({ x: 75, z: -10.4 }, AVATAR.radius).hit, null);
+  assert.equal(resolveCollisions({ x: 75, z: -1.6 }, AVATAR.radius).hit, null);
+  assert.equal(resolveCollisions({ x: 56.2, z: -6.0 }, AVATAR.radius).hit, null);
+
+  // 3. Turning right (-Z) at x = 56.2 passes cleanly between Trường Vật liệu (West) and Tòa C7 (East)
+  assert.ok(SCHOOL_OF_MATERIALS.box.maxX < 56.2 && 56.2 < C7_BUILDING.box.minX);
+  assert.equal(resolveCollisions({ x: 56.2, z: -22.0 }, AVATAR.radius).hit, null);
+  assert.ok(CAMPUS_MAP_BUILDINGS.some((b) => b.code === 'SMSE'));
+
+  // 4. Turning left (+Z) at x = 56.2 passes cleanly between Library/D9 (West) and D3/D5/D7 (East)
+  assert.ok(LIBRARY.plaza.maxX < 56.2 && 56.2 < d3.box.minX);
+  assert.ok(d9.box.maxX < 56.2);
+  assert.equal(resolveCollisions({ x: 56.2, z: 25.0 }, AVATAR.radius).hit, null);
+  assert.equal(resolveCollisions({ x: 56.2, z: 60.5 }, AVATAR.radius).hit, null);
+
+  // 5. Alumni House faces the merged boulevard North of Tien Lake
+  assert.ok(ALUMNI_HOUSE.floors === 2 && ALUMNI_HOUSE.size.x > 9.5);
+});
