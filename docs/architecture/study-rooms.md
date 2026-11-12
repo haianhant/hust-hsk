@@ -2,7 +2,7 @@
 
 ## 1. Phạm vi & Quyết định Kiến trúc (`Instance-Scoped Seat Ownership`)
 
-Hệ thống Multiplayer của **Bách khoa Hán ngữ 3D** gồm 5 phòng độc lập (`hsk-1`, `hsk-2`, `hsk-3`, `hsk-4`, `hsk-5`), mỗi phòng có sức chứa tối đa `15` sinh viên và được quản lý bởi một thực thể Cloudflare Durable Object [`HskRoom`](../../worker/src/room.ts) riêng biệt.
+Hệ thống Multiplayer của **HUSTVerse — Bách Khoa 3D** gồm 5 kênh độc lập (hiển thị `Kênh BK 1..5`, mã wire `hsk-1`, `hsk-2`, `hsk-3`, `hsk-4`, `hsk-5`), mỗi kênh có sức chứa tối đa `15` sinh viên và được quản lý bởi một thực thể Cloudflare Durable Object [`HskRoom`](../../worker/src/room.ts) riêng biệt.
 
 ### Quyền sở hữu ghế theo từng phòng (`Per-Room Instance Scope`)
 - Quyền giữ chỗ ghế (`SeatOccupancy`) có **thẩm quyền tuyệt đối trong phạm vi từng phòng `HskRoom` (`hsk-1`..`hsk-5`)**, không khóa chéo toàn cục giữa 5 phòng:

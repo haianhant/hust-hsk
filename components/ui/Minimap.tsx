@@ -520,7 +520,7 @@ export default function Minimap(_props?: { onFastTravel?: (destId: string) => vo
             <div className="mb-2.5 flex items-start justify-between gap-2">
               <div>
                 <h2 className="text-base font-bold text-[#FDE047]">
-                  🗺️ SƠ ĐỒ ĐẠI HỌC BÁCH KHOA HÀ NỘI (CHUẨN HUSTMAP) · 河内百科大学全景图
+                  🗺️ BẢN ĐỒ HUSTVERSE — ĐẠI HỌC BÁCH KHOA HÀ NỘI (CHUẨN HUSTMAP)
                 </h2>
                 <p className="text-xs text-white/75">
                   QT. C1 · Ngã 5 · QT. Trần Đại Nghĩa · C1–C15 · D2A–D9 · Thư viện TQB · Hồ Tiền · 9 Bãi gửi xe & Hầm xe C7 · B1 · KTX & SVĐ

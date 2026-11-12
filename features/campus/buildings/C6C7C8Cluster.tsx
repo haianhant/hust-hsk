@@ -141,7 +141,13 @@ export function C6AndC8Block({
   );
 }
 
-export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
+export function C7ComplexBuilding({
+  isNight,
+  hskMode = false,
+}: {
+  isNight: boolean;
+  hskMode?: boolean;
+}) {
   const { center, size, floors, floorHeight } = C7_BUILDING;
   const totalH = floors * floorHeight; // 9 tầng × 3.1m = 27.9m (khớp c7-flycam-toan-canh.jpg & tham-khao/NEW/)
   // Mặt bằng chữ E chạy dọc Bắc–Nam theo đúng https://hustmap.com/ & tham-khao/NEW/:
@@ -690,11 +696,11 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
         </group>
       ))}
       <LabelPlane
-        textureKey="c7-hsk-hub-banner"
+        textureKey={hskMode ? 'c7-hsk-hub-banner' : 'c7-core-lecture-banner'}
         canvasW={640}
         canvasH={140}
         draw={(ctx, w, h) => {
-          ctx.fillStyle = '#991B1B';
+          ctx.fillStyle = hskMode ? '#991B1B' : '#1E3A8A';
           ctx.fillRect(0, 0, w, h);
           ctx.strokeStyle = '#FACC15';
           ctx.lineWidth = 6;
@@ -703,10 +709,22 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
           ctx.font = '800 30px "Be Vietnam Pro", "Segoe UI", sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText('🎓 TRUNG TÂM HỌC HÁN NGỮ HSK THEO BÀI', w / 2, h * 0.38);
+          ctx.fillText(
+            hskMode
+              ? '🎓 TRUNG TÂM HỌC HÁN NGỮ HSK THEO BÀI'
+              : '🏛️ GIẢNG ĐƯỜNG TRUNG TÂM TÒA C7',
+            w / 2,
+            h * 0.38,
+          );
           ctx.fillStyle = '#FFFFFF';
           ctx.font = '600 22px "Be Vietnam Pro", "Segoe UI", sans-serif';
-          ctx.fillText('Bấm [E] trước sảnh để vào lớp & chọn bài học', w / 2, h * 0.75);
+          ctx.fillText(
+            hskMode
+              ? 'Bấm [E] trước sảnh để vào lớp & chọn bài học'
+              : 'Bấm [E] trước sảnh để bật Chế độ HSK & vào giảng đường',
+            w / 2,
+            h * 0.75,
+          );
         }}
         size={[3.9, 0.82]}
         position={[-size.x / 2 - 0.12, 3.12, 0]}

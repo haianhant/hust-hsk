@@ -15,6 +15,8 @@ export interface BuildingEdTechModalProps {
   landmark: CampusLandmarkSpec;
   passport: CampusPassportState;
   playerName: string;
+  hskMode?: boolean;
+  onEnableHskMode?: () => void;
   onClose: () => void;
   onSpeakChinese: (text: string) => void;
   onActivateCreativeFeature: (landmark: CampusLandmarkSpec) => void;
@@ -33,6 +35,8 @@ export default function BuildingEdTechModal({
   landmark,
   passport,
   playerName,
+  hskMode = false,
+  onEnableHskMode,
   onClose,
   onSpeakChinese,
   onActivateCreativeFeature,
@@ -42,18 +46,28 @@ export default function BuildingEdTechModal({
   const checkedTime = passport.checkedInAt[landmark.id];
   const featureDone = !!passport.featuresCollected[landmark.id];
   const quizAlreadySolved = !!passport.quizSolved[landmark.id];
+  const activeQuiz = hskMode ? landmark.quiz : landmark.campusQuiz;
+  const activeCreativeTitle = hskMode
+    ? landmark.creativeFeatureTitle
+    : (landmark.coreCreativeTitle ?? landmark.creativeFeatureTitle);
+  const activeCreativeDesc = hskMode
+    ? landmark.creativeFeatureDesc
+    : (landmark.coreCreativeDesc ?? landmark.creativeFeatureDesc);
+  const activeCreativeActionLabel = hskMode
+    ? landmark.creativeActionLabel
+    : (landmark.coreCreativeActionLabel ?? landmark.creativeActionLabel);
 
   const [selectedOpt, setSelectedOpt] = useState<number | null>(
-    quizAlreadySolved ? landmark.quiz.correctIndex : null,
+    quizAlreadySolved ? activeQuiz.correctIndex : null,
   );
   const [creativeBanner, setCreativeBanner] = useState<string | null>(null);
   const [selectedDishIdx, setSelectedDishIdx] = useState<number>(0);
 
-  const isCorrect = selectedOpt === landmark.quiz.correctIndex;
+  const isCorrect = selectedOpt === activeQuiz.correctIndex;
 
   const handleSelectOption = (idx: number) => {
     setSelectedOpt(idx);
-    if (idx === landmark.quiz.correctIndex && !quizAlreadySolved) {
+    if (idx === activeQuiz.correctIndex && !quizAlreadySolved) {
       onSolveQuiz(landmark);
     }
   };
@@ -63,45 +77,53 @@ export default function BuildingEdTechModal({
 
     switch (landmark.creativeActionKind) {
       case 'student-card-check':
-        onSpeakChinese('保安大叔，您好！这是我的学生证。');
+        if (hskMode) onSpeakChinese('保安大叔，您好！这是我的学生证。');
         setCreativeBanner(
-          `👮 Bác bảo vệ Bách Khoa mỉm cười: "Chào ${playerName || 'em'}! Thẻ sinh viên hợp lệ rồi nhé — chúc em một ngày học tập thật tốt! (祝你学习进步！)"`,
+          hskMode
+            ? `👮 Bác bảo vệ Bách Khoa mỉm cười: "Chào ${playerName || 'em'}! Thẻ sinh viên hợp lệ rồi nhé — chúc em một ngày học tập thật tốt! (祝你学习进步！)"`
+            : `👮 Bác bảo vệ Bách Khoa mỉm cười: "Chào ${playerName || 'em'}! Thẻ sinh viên Bách Khoa hợp lệ rồi nhé — chúc em một ngày học tập & khám phá trường thật vui!"`,
         );
         break;
       case 'architectural-lens':
-        onSpeakChinese('欢迎来到河内百科大学！');
+        if (hskMode) onSpeakChinese('欢迎来到河内百科大学！');
         setCreativeBanner(
           '📐 Phương trình vòm Cổng Parabol (KTS Nguyễn Tiến Thuận, 1965): y = 12,5 × [1 − (x / 4)²] — đỉnh vòm cao 12,5 m, khẩu độ chân vòm 8,0 m!',
         );
         break;
       case 'heritage-pledge':
-        onSpeakChinese('我是百科学生，我很骄傲！');
+        if (hskMode) onSpeakChinese('我是百科学生，我很骄傲！');
         setCreativeBanner(
           '🎖️ Đã thắp sáng Huy hiệu Truyền thống 15/10/1956: Bánh răng công nghiệp – Compa kỹ thuật – Trang sách tri thức mở rộng!',
         );
         break;
       case 'soict-tech-decode':
-        onSpeakChinese('我对人工智能和编程很感兴趣！');
+        if (hskMode) onSpeakChinese('我对人工智能和编程很感兴趣！');
         setCreativeBanner(
-          '💻 [SoICT AI Lab] Đã giải mã bộ từ khóa kỹ sư CNTT: 人工智能 (AI) · 编程 (Coding) · 算法 (Thuật toán) · 软件工程师 (Kỹ sư phần mềm)!',
+          hskMode
+            ? '💻 [SoICT AI Lab] Đã giải mã bộ từ khóa kỹ sư CNTT: 人工智能 (AI) · 编程 (Coding) · 算法 (Thuật toán) · 软件工程师 (Kỹ sư phần mềm)!'
+            : '💻 [SoICT AI Lab] Đã kích hoạt bảng mạch kỹ sư CNTT Bách Khoa: Trí tuệ nhân tạo (AI) · Lập trình hệ thống · Khoa học dữ liệu · Kỹ thuật phần mềm!',
         );
         break;
       case 'c9-sentence-sprint':
-        onSpeakChinese('我和同学一起去C9大楼上课！');
+        if (hskMode) onSpeakChinese('我和同学一起去C9大楼上课！');
         setCreativeBanner(
-          '⚡ Ghép câu thành công: "我和同学一起去C9大楼上课！" (Mình cùng bạn học lên tòa C9 học đại cương!) — Đã lưu dấu ấn Cầu thang Đỏ!',
+          hskMode
+            ? '⚡ Ghép câu thành công: "我和同学一起去C9大楼上课！" (Mình cùng bạn học lên tòa C9 học đại cương!) — Đã lưu dấu ấn Cầu thang Đỏ!'
+            : '📸 Đã lưu dấu ấn Kỷ yếu Cầu thang Đỏ Nhà C9 — tọa độ gắn liền với những tiết Giải tích & Vật lý đại cương của bao thế hệ sinh viên BK!',
         );
         break;
       case 'dorm-canteen-order': {
         const dish = CANTEEN_DISHES[selectedDishIdx] ?? CANTEEN_DISHES[0];
-        onSpeakChinese(`阿姨，我要一份${dish.hanzi}，谢谢！`);
+        if (hskMode) onSpeakChinese(`阿姨，我要一份${dish.hanzi}，谢谢！`);
         setCreativeBanner(
-          `🍜 Cô nhà ăn KTX B9: "Có ngay một phần ${dish.vi} (${dish.hanzi} - ${dish.pinyin}) nóng hổi cho sinh viên Bách Khoa đây!"`,
+          hskMode
+            ? `🍜 Cô nhà ăn KTX B9: "Có ngay một phần ${dish.vi} (${dish.hanzi} - ${dish.pinyin}) nóng hổi cho sinh viên Bách Khoa đây!"`
+            : `🍜 Cô nhà ăn KTX B9: "Có ngay một phần ${dish.vi} nóng hổi chuẩn vị sinh viên nội trú Bách Khoa đây!"`,
         );
         break;
       }
       case 'toggle-lofi':
-        onSpeakChinese('今天天气很好，我们在湖边散步吧。');
+        if (hskMode) onSpeakChinese('今天天气很好，我们在湖边散步吧。');
         setCreativeBanner(
           '🎵 Đã kích hoạt không gian âm nhạc Lofi Chill bên bờ Hồ Tiền lộng gió!',
         );
@@ -194,10 +216,10 @@ export default function BuildingEdTechModal({
               </span>
             </div>
             <div className="mt-1 text-base font-bold text-white">
-              {landmark.creativeFeatureTitle}
+              {activeCreativeTitle}
             </div>
             <p className="mt-1 text-xs leading-relaxed text-slate-200/90">
-              {landmark.creativeFeatureDesc}
+              {activeCreativeDesc}
             </p>
 
             {/* Tùy chọn món ăn nhanh riêng cho Căng-tin KTX */}
@@ -214,7 +236,7 @@ export default function BuildingEdTechModal({
                         : 'border-white/15 bg-slate-900/60 text-slate-300 hover:bg-slate-800'
                     }`}
                   >
-                    {dish.hanzi} ({dish.vi})
+                    {hskMode ? `${dish.hanzi} (${dish.vi})` : dish.vi}
                   </button>
                 ))}
               </div>
@@ -227,7 +249,7 @@ export default function BuildingEdTechModal({
                 onClick={handleCreativeClick}
                 className="rounded-xl bg-gradient-to-r from-red-600 to-amber-600 px-4 py-2 text-sm font-bold text-white shadow-lg hover:from-red-500 hover:to-amber-500"
               >
-                {landmark.creativeActionLabel}
+                {activeCreativeActionLabel}
               </button>
               <button
                 type="button"
@@ -245,58 +267,82 @@ export default function BuildingEdTechModal({
             )}
           </section>
 
-          {/* 3. Thẻ Từ vựng Hán ngữ Chuyên đề gắn với Công trình */}
-          <section>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-bold tracking-wider text-sky-300 uppercase">
-                🗣️ Từ vựng Hán ngữ Thực tế tại {landmark.shortName} (Bấm để nghe phát âm)
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {landmark.vocab.map((w) => (
-                <button
-                  key={w.hanzi}
-                  type="button"
-                  onClick={() => onSpeakChinese(w.example ? `${w.hanzi}。${w.example}` : w.hanzi)}
-                  className="group flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-slate-800/75 p-3 text-left transition hover:border-sky-400/50 hover:bg-slate-800"
-                >
-                  <div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-lg font-extrabold text-white">{w.hanzi}</span>
-                      <span className="text-xs font-medium text-sky-300">{w.pinyin}</span>
+          {/* 3. Thẻ Từ vựng Hán ngữ Chuyên đề gắn với Công trình (chỉ hiện khi bật Chế độ HSK) */}
+          {hskMode ? (
+            <section>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-bold tracking-wider text-sky-300 uppercase">
+                  🗣️ Từ vựng Hán ngữ Thực tế tại {landmark.shortName} (Bấm để nghe phát âm)
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {landmark.vocab.map((w) => (
+                  <button
+                    key={w.hanzi}
+                    type="button"
+                    onClick={() => onSpeakChinese(w.example ? `${w.hanzi}。${w.example}` : w.hanzi)}
+                    className="group flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-slate-800/75 p-3 text-left transition hover:border-sky-400/50 hover:bg-slate-800"
+                  >
+                    <div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-lg font-extrabold text-white">{w.hanzi}</span>
+                        <span className="text-xs font-medium text-sky-300">{w.pinyin}</span>
+                      </div>
+                      <div className="text-xs font-semibold text-amber-200">{w.vi}</div>
+                      {w.example && (
+                        <div className="mt-1 text-[11px] text-slate-400">{w.example}</div>
+                      )}
                     </div>
-                    <div className="text-xs font-semibold text-amber-200">{w.vi}</div>
-                    {w.example && (
-                      <div className="mt-1 text-[11px] text-slate-400">{w.example}</div>
-                    )}
-                  </div>
-                  <span className="rounded-lg bg-sky-500/15 px-2 py-1 text-xs text-sky-300 group-hover:bg-sky-500/30">
-                    🔊
-                  </span>
+                    <span className="rounded-lg bg-sky-500/15 px-2 py-1 text-xs text-sky-300 group-hover:bg-sky-500/30">
+                      🔊
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : (
+            onEnableHskMode && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-slate-800/50 px-3.5 py-2.5 text-xs text-slate-300">
+                <span>
+                  🇨🇳 Công trình này có đính kèm bộ từ vựng tiếng Trung chuyên đề trong{' '}
+                  <strong>Chế độ HSK</strong>.
+                </span>
+                <button
+                  type="button"
+                  data-testid="building-enable-hsk-mode"
+                  onClick={() => {
+                    onEnableHskMode();
+                    setSelectedOpt(quizAlreadySolved ? landmark.quiz.correctIndex : null);
+                  }}
+                  className="rounded-lg border border-amber-400/40 bg-amber-500/20 px-3 py-1 font-bold text-amber-200 transition hover:bg-amber-500/30"
+                >
+                  Bật Chế độ HSK
                 </button>
-              ))}
-            </div>
-          </section>
+              </div>
+            )
+          )}
 
-          {/* 4. Câu đố EdTech gắn kết Kiến trúc Bách Khoa & Hán ngữ */}
+          {/* 4. Câu đố Kiến trúc Bách Khoa (hoặc Câu đố EdTech HSK khi bật Chế độ HSK) */}
           <section className="rounded-xl border border-indigo-400/30 bg-indigo-950/35 p-3.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold tracking-wider text-indigo-300 uppercase">
-                🧠 Thử thách EdTech Bách Khoa (+{landmark.quiz.rewardPoints} điểm)
+                {hskMode
+                  ? `🧠 Thử thách EdTech Bách Khoa (+${activeQuiz.rewardPoints} điểm)`
+                  : `🧠 Câu đố Kiến trúc & Lịch sử Bách Khoa (+${activeQuiz.rewardPoints} điểm)`}
               </span>
               {quizAlreadySolved && (
                 <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold text-emerald-300">
-                  ✓ Đã nhận +{landmark.quiz.rewardPoints} điểm
+                  ✓ Đã nhận +{activeQuiz.rewardPoints} điểm
                 </span>
               )}
             </div>
             <p className="mt-1.5 text-sm font-semibold text-white">
-              {landmark.quiz.question}
+              {activeQuiz.question}
             </p>
             <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {landmark.quiz.options.map((opt, idx) => {
+              {activeQuiz.options.map((opt, idx) => {
                 const chosen = selectedOpt === idx;
-                const right = idx === landmark.quiz.correctIndex;
+                const right = idx === activeQuiz.correctIndex;
                 let cls =
                   'border-white/15 bg-slate-900/75 text-slate-200 hover:border-indigo-400/60 hover:bg-slate-800';
                 if (selectedOpt !== null) {
@@ -327,7 +373,7 @@ export default function BuildingEdTechModal({
                 }`}
               >
                 {isCorrect ? '🎉 Chính xác! ' : '💡 Gợi ý: '}
-                {landmark.quiz.explanation}
+                {activeQuiz.explanation}
               </div>
             )}
           </section>

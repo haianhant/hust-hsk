@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useState } from 'react';
+import { formatCampusChannelLabel } from '../../../lib/gameModes';
 import {
   multiplayer,
   type MultiplayerSceneId,
@@ -128,7 +129,7 @@ export function MultiplayerStatusChip({ snapshot }: { snapshot: MultiplayerSnaps
       className="w-fit rounded-full bg-black/50 px-4 py-1.5 text-sm font-semibold text-white backdrop-blur-sm"
     >
       {snapshot.status === 'online'
-        ? `👥 Phòng ${snapshot.roomId ?? '—'} · ${snapshot.count} người`
+        ? `👥 ${formatCampusChannelLabel(snapshot.roomId)} · ${snapshot.count} người`
         : snapshot.status === 'connecting'
           ? '👥 Đang kết nối…'
           : '👥 Chơi một mình (mất kết nối)'}

@@ -13,9 +13,11 @@ import { LabelPlane } from '../../../components/three/TextPlate';
 function CheckinMarkerPedestal({
   landmark,
   isNight,
+  hskMode = false,
 }: {
   landmark: CampusLandmarkSpec;
   isNight: boolean;
+  hskMode?: boolean;
 }) {
   const ringRef = useRef<THREE.Mesh>(null);
   const floatRef = useRef<THREE.Group>(null);
@@ -73,7 +75,7 @@ function CheckinMarkerPedestal({
         <Billboard position={[0, 0.74, 0]} follow>
           <group ref={floatRef} position={[0, 0, 0]}>
             <LabelPlane
-              textureKey={`campus-checkin-badge-${landmark.id}`}
+              textureKey={`campus-checkin-badge-${landmark.id}-${hskMode ? 'hsk' : 'core'}`}
               canvasW={512}
               canvasH={192}
               draw={(ctx, w, h) => {
@@ -96,7 +98,11 @@ function CheckinMarkerPedestal({
 
                 ctx.fillStyle = '#FFFFFF';
                 ctx.font = '600 24px "Be Vietnam Pro", "Segoe UI", sans-serif';
-                ctx.fillText('Bấm [E] Khám phá & Học từ vựng', w / 2, h * 0.71);
+                ctx.fillText(
+                  hskMode ? 'Bấm [E] Khám phá & Học từ vựng' : 'Bấm [E] Khám phá & Check-in',
+                  w / 2,
+                  h * 0.71,
+                );
               }}
               size={[1.45, 0.54]}
               position={[0, 0, 0]}
@@ -109,11 +115,17 @@ function CheckinMarkerPedestal({
   );
 }
 
-export default function CampusCheckinMarkers({ isNight = false }: { isNight?: boolean }) {
+export default function CampusCheckinMarkers({
+  isNight = false,
+  hskMode = false,
+}: {
+  isNight?: boolean;
+  hskMode?: boolean;
+}) {
   return (
     <group name="campus-edtech-checkin-markers">
       {CAMPUS_LANDMARKS.map((lm) => (
-        <CheckinMarkerPedestal key={lm.id} landmark={lm} isNight={isNight} />
+        <CheckinMarkerPedestal key={lm.id} landmark={lm} isNight={isNight} hskMode={hskMode} />
       ))}
     </group>
   );

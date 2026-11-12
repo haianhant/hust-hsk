@@ -62,10 +62,16 @@ export interface CampusLandmarkSpec {
   historyYear: string;
   historySummary: string;
   architecturalHighlight: string;
-  /** 4 thẻ từ vựng Hán ngữ chuyên đề gắn liền với công trình */
+  /** 4 thẻ từ vựng Hán ngữ chuyên đề gắn liền với công trình (hiển thị khi bật Chế độ HSK) */
   vocab: [BuildingVocabCard, BuildingVocabCard, BuildingVocabCard, BuildingVocabCard];
-  /** Thử thách EdTech ngắn gọn kết nối hiểu biết Bách Khoa & Hán ngữ */
+  /** Thử thách EdTech kết nối hiểu biết Bách Khoa & Hán ngữ (hiển thị khi bật Chế độ HSK) */
   quiz: BuildingEdTechQuiz;
+  /** Nhãn & câu đố thuần Kiến trúc – Lịch sử Bách Khoa (hiển thị mặc định khi tắt Chế độ HSK) */
+  coreShortName?: string;
+  coreCreativeTitle?: string;
+  coreCreativeDesc?: string;
+  coreCreativeActionLabel?: string;
+  campusQuiz: BuildingEdTechQuiz;
 }
 
 export const CAMPUS_PASSPORT_STORAGE_KEY = 'bkhn_campus_passport_v1';
@@ -121,6 +127,24 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
       explanation: 'Tòa C7 có mặt bằng chữ E chạy dọc Bắc–Nam với 3 cánh hướng Tây, là "教学楼" (jiàoxuélóu — tòa giảng đường) trung tâm của trường.',
       rewardPoints: 15,
     },
+    coreShortName: 'Tòa C7',
+    coreCreativeTitle: 'Tổ hợp Giảng đường Chữ E & Chế độ Học HSK Tùy chọn',
+    coreCreativeDesc:
+      'Tòa giảng đường trung tâm 9 tầng của ĐHBK Hà Nội. Bạn có thể bấm nút bên dưới để bật Chế độ HSK và bước vào phòng học tương tác 3D tại Tòa C7 bất cứ lúc nào.',
+    coreCreativeActionLabel: '🏫 Bật Chế độ HSK & Vào Giảng đường Tòa C7',
+    campusQuiz: {
+      question: 'Tòa giảng đường trung tâm C7 (cao 9 tầng sát phố Trần Đại Nghĩa) có hình dáng mặt bằng chữ gì?',
+      options: [
+        'Hình chữ E (3 cánh vươn về phía Tây ôm 2 sân cây xanh)',
+        'Hình tròn đồng tâm',
+        'Hình tam giác đều',
+        'Hình chữ H đối xứng Đông–Tây',
+      ],
+      correctIndex: 0,
+      explanation:
+        'Tòa C7 có mặt bằng chữ E chạy dọc trục Bắc–Nam với thân lưng dọc phố Trần Đại Nghĩa và 3 cánh vươn về phía Tây tạo 2 sân cây xanh thoáng mát.',
+      rewardPoints: 15,
+    },
   },
   {
     id: 'library',
@@ -161,6 +185,20 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
       ],
       correctIndex: 0,
       explanation: '"自习" (zìxí — tự học) là hoạt động quen thuộc nhất của sinh viên Bách Khoa mỗi mùa thi tại Thư viện Tạ Quang Bửu.',
+      rewardPoints: 15,
+    },
+    campusQuiz: {
+      question:
+        'Thư viện Tạ Quang Bửu cao bao nhiêu tầng và mang tên vị Giáo sư giữ cương vị gì đầu tiên của ĐHBK Hà Nội?',
+      options: [
+        'Cao 10 tầng — Hiệu trưởng đầu tiên của ĐHBK Hà Nội',
+        'Cao 4 tầng — Kiến trúc sư thiết kế Cổng Parabol',
+        'Cao 6 tầng — Chủ nhiệm Khoa CNTT đầu tiên',
+        'Cao 15 tầng — Giám đốc Khu Ký túc xá Bách Khoa',
+      ],
+      correctIndex: 0,
+      explanation:
+        'Thư viện Tạ Quang Bửu cao 10 tầng, mang tên GS. Tạ Quang Bửu (1910–1986) — nhà khoa học lớn và Hiệu trưởng đầu tiên của Đại học Bách khoa Hà Nội.',
       rewardPoints: 15,
     },
   },
@@ -205,6 +243,20 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
       explanation: 'Mái C1 nổi tiếng với đúng 9 gợn sóng bê tông vỏ mỏng và tấm "校徽" (xiàohuī — huy hiệu trường) đỏ sao vàng.',
       rewardPoints: 15,
     },
+    campusQuiz: {
+      question:
+        'Mái bê tông vỏ mỏng sảnh chính Tòa C1 lịch sử (gắn với lễ khai giảng khóa 1 năm 1956) có đúng bao nhiêu gợn sóng?',
+      options: [
+        'Đúng 9 gợn sóng nông',
+        'Đúng 5 gợn sóng nhọn',
+        'Đúng 12 gợn sóng cao',
+        'Mái ngói dốc phẳng không gợn sóng',
+      ],
+      correctIndex: 0,
+      explanation:
+        'Mái sảnh chính Tòa C1 nổi tiếng với kết cấu vỏ mỏng bê tông đúng 9 gợn sóng nông kết hợp tháp cầu thang gạch hoa gió đục lỗ và biểu trưng đỏ sao vàng.',
+      rewardPoints: 15,
+    },
   },
   {
     id: 'tdn-gate',
@@ -245,6 +297,24 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
       ],
       correctIndex: 0,
       explanation: '"学生证" (xuéshengzhèng) là thẻ sinh viên — vật bất ly thân khi qua cổng trường và vào thư viện Bách Khoa!',
+      rewardPoints: 15,
+    },
+    coreCreativeTitle: 'Xuất trình Thẻ Sinh Viên & Chào hỏi Bác Bảo Vệ',
+    coreCreativeDesc:
+      'Đóng dấu xác thực Thẻ Sinh Viên điện tử Bách Khoa và gửi lời chào thân thiện tới Bác bảo vệ trực gác tại Cổng Trần Đại Nghĩa.',
+    coreCreativeActionLabel: '🪪 Xuất trình Thẻ Sinh Viên & Chào Bác Bảo Vệ',
+    campusQuiz: {
+      question:
+        'Cổng Trần Đại Nghĩa nằm ở phía nào của khuôn viên chính và kết nối trực tiếp sang phân khu nào của trường?',
+      options: [
+        'Phía Đông — kết nối sang Khu Ký túc xá B3–B13, Tòa B1 & Khu Thể thao',
+        'Phía Tây — mở thẳng ra đường Giải Phóng',
+        'Phía Bắc — mở thẳng ra công viên Thống Nhất',
+        'Phía Tây-Nam — giáp Chùa Liên Phái',
+      ],
+      correctIndex: 0,
+      explanation:
+        'Cổng Trần Đại Nghĩa ở biên phía Đông kết nối trực tiếp cụm giảng đường C7 – D3–D5 với Khu Ký túc xá B3–B13, Tòa B1 (SoICT) và Sân vận động Bách Khoa.',
       rewardPoints: 15,
     },
   },
@@ -289,6 +359,23 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
       explanation: 'Cổng Parabol là dải băng bê tông phẳng uốn đường cong parabol (không phải ống tròn), luôn "欢迎" (huānyíng — chào mừng) các thế hệ sinh viên!',
       rewardPoints: 15,
     },
+    coreCreativeDesc:
+      'Khám phá phương trình toán học của dải băng bê tông vòm Parabol nổi tiếng (cao 12,5 m) do KTS Nguyễn Tiến Thuận thiết kế năm 1965.',
+    coreCreativeActionLabel: '📐 Giải mã Phương trình Đường cong Vòm Parabol',
+    campusQuiz: {
+      question:
+        'Cổng Parabol biểu tượng bên đường Giải Phóng được thiết kế vào năm 1965 bởi kiến trúc sư nào và có kết cấu hình học gì?',
+      options: [
+        'KTS Nguyễn Tiến Thuận — dải băng bê tông phẳng uốn Parabol cao 12,5 m',
+        'Ống thép tròn uốn nửa đường tròn cao 6 m',
+        'Cổng tam quan gỗ lợp ngói cổ truyền',
+        'Khối cầu inox đặt trên bệ đá',
+      ],
+      correctIndex: 0,
+      explanation:
+        'Cổng Parabol do KTS Nguyễn Tiến Thuận thiết kế năm 1965 là dải băng bê tông phẳng uốn đường cong parabol cao 12,5 m với chân chôn trực tiếp xuống đất và 6 huy hiệu tròn nổi.',
+      rewardPoints: 15,
+    },
   },
   {
     id: 'b1-soict',
@@ -329,6 +416,24 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
       ],
       correctIndex: 0,
       explanation: '"人工智能" (réngōng = nhân công/nhân tạo, zhìnéng = trí năng/trí tuệ) là từ vựng công nghệ cực kỳ phổ biến hiện nay.',
+      rewardPoints: 15,
+    },
+    coreCreativeTitle: 'Phòng Lab Công nghệ AI & Dữ liệu SoICT',
+    coreCreativeDesc:
+      'Kích hoạt bảng mạch công nghệ số tại Trường Công nghệ Thông tin và Truyền thông (SoICT) — cái nôi kỹ sư phần mềm & AI hàng đầu.',
+    coreCreativeActionLabel: '🤖 Kích hoạt Bảng mạch AI & Công nghệ tại Lab B1',
+    campusQuiz: {
+      question:
+        'Tòa nhà B1 (Trường CNTT & Truyền thông — SoICT) có điểm nhấn kiến trúc đặc trưng nào ở mặt tiền hướng Bắc?',
+      options: [
+        'Khối sảnh tròn Rotunda sơn trắng, thảm cỏ bán nguyệt & biển "B1" xanh dương',
+        'Mái bê tông 9 gợn sóng và gạch hoa gió',
+        'Cầu thang sắt zic-zac sơn đỏ ngoài trời',
+        'Tháp đồng hồ 10 tầng ốp gạch nâu',
+      ],
+      correctIndex: 0,
+      explanation:
+        'Tòa B1 cao 8 tầng sơn trắng thanh lịch, nổi bật với khối sảnh tròn rotunda hướng Bắc nhìn ra trục đường chính cùng thảm cỏ bán nguyệt và biển chữ "B1" xanh dương.',
       rewardPoints: 15,
     },
   },
@@ -373,6 +478,23 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
       explanation: '"散步" (sànbù — tản bộ / đi dạo) quanh bờ Hồ Tiền là trải nghiệm thư giãn tuyệt vời nhất ở Bách Khoa.',
       rewardPoints: 15,
     },
+    coreCreativeTitle: 'Không gian Gió Mát Lofi Chill Ven Hồ Tiền',
+    coreCreativeDesc:
+      'Bật giai điệu Lofi Chill thư giãn ngắm hoa sen hồng nở dưới bóng liễu rủ bên bờ Hồ Tiền lộng gió.',
+    campusQuiz: {
+      question:
+        'Hồ Tiền nằm ở phía Nam trục đường chính của ĐHBK Hà Nội có quy mô mặt nước và cảnh quan đặc trưng như thế nào?',
+      options: [
+        'Hình chữ nhật (~45 m × 88 m) kè đá, phủ hoa sen hồng và hàng liễu rủ ven bờ',
+        'Hồ bán nguyệt nhỏ nằm trên tầng thượng Tòa C1',
+        'Bể bơi thi đấu trong nhà có mái vòm thép',
+        'Kênh nước chạy dọc phố Giải Phóng',
+      ],
+      correctIndex: 0,
+      explanation:
+        'Hồ Tiền rộng gần 4.000 m² theo trục Bắc–Nam, bao quanh bởi kè đá, đèn sân vườn, hàng liễu rủ và những khoảng hoa sen/súng hồng nở rộ.',
+      rewardPoints: 15,
+    },
   },
   {
     id: 'c9',
@@ -415,6 +537,24 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
       explanation: '"楼梯" (lóutī) là cầu thang bộ (phân biệt với "电梯" diàntī là thang máy trong Thư viện Tạ Quang Bửu!).',
       rewardPoints: 15,
     },
+    coreCreativeTitle: 'Góc Check-in Cầu thang Đỏ & Dấu ấn Môn Đại cương',
+    coreCreativeDesc:
+      'Lưu giữ dấu ấn kỷ yếu tại cầu thang bộ zic-zac lan can đỏ huyền thoại mặt Đông Nhà C9 — nơi gắn liền với Giải tích & Vật lý đại cương.',
+    coreCreativeActionLabel: '📸 Lưu Dấu ấn Kỷ yếu Cầu thang Đỏ Nhà C9',
+    campusQuiz: {
+      question:
+        'Điểm nhấn kiến trúc check-in nổi tiếng nhất ở mặt Đông tòa giảng đường đại cương C9 là gì?',
+      options: [
+        'Cầu thang bộ ngoài trời gấp khúc zic-zac 4 vế với lan can kim loại đỏ',
+        'Sảnh tròn rotunda ốp kính xanh',
+        'Tháp chuông đồng hồ đặt trên mái ngói',
+        'Đài phun nước hình bông sen trước cửa',
+      ],
+      correctIndex: 0,
+      explanation:
+        'Cầu thang bộ ngoài trời gấp khúc zic-zac gắn mặt Đông với lan can sơn đỏ nổi bật trên nền tường trắng kem là góc chụp ảnh kỷ yếu kinh điển của sinh viên Bách Khoa.',
+      rewardPoints: 15,
+    },
   },
   {
     id: 'dorm-ktx',
@@ -455,6 +595,24 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
       ],
       correctIndex: 0,
       explanation: '"食堂" (shítáng) là nhà ăn / căng-tin trường học, gắn liền với đời sống "宿舍" (sùshè — ký túc xá).',
+      rewardPoints: 15,
+    },
+    coreCreativeTitle: 'Đời sống Nội trú & Thưởng thức Bữa cơm Căng-tin B9',
+    coreCreativeDesc:
+      'Trải nghiệm không khí khu nội trú B8–B9, Văn phòng Hội Sinh viên và chọn món cơm sinh viên nóng hổi tại Căng-tin KTX.',
+    coreCreativeActionLabel: '🍜 Chọn Món ăn Sinh viên tại Căng-tin KTX B9',
+    campusQuiz: {
+      question:
+        'Khu nội trú sinh viên phía Đông phố Trần Đại Nghĩa của ĐHBK Hà Nội quy tụ cụm dãy nhà và tiện ích nào?',
+      options: [
+        'Cụm Ký túc xá B3–B13, Văn phòng Hội Sinh viên (B8–B9), Căng-tin & Sân thể thao KTX',
+        'Chỉ gồm một tòa tháp đơn lẻ nằm cạnh Hồ Tiền',
+        'Nằm bên trong tầng hầm Tòa C7',
+        'Nằm sát đường Giải Phóng cạnh Cổng Parabol',
+      ],
+      correctIndex: 0,
+      explanation:
+        'Phân khu Ký túc xá Bách Khoa quy tụ các dãy nhà B3–B13 sơn vàng ấm cùng tòa KTX mới cao tầng, cổng gạch Hội Sinh viên, căng-tin B5-9 và sân bóng đá – bóng rổ sôi động.',
       rewardPoints: 15,
     },
   },

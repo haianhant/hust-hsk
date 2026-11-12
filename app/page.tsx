@@ -1,18 +1,15 @@
 'use client';
 
 // ---------------------------------------------------------------------------
-// app/page.tsx — Composition root cho ứng dụng Bách khoa Hán ngữ 3D.
-// - Điều phối trạng thái tiến độ HSK (localStorage), nhân vật & multiplayer,
-//   chuyển cảnh Ngoài sân / Phòng học C1 / Sảnh Thư viện Tạ Quang Bửu, và
-//   kết nối các module:
-//   + features/learning/hsk (EntryScreen, LessonPickerCard, LearningOverlayModal, OBJECTIVES)
-//   + features/campus/ui (CampusHud)
-//   + features/campus/interaction (LibraryLobbyModal, findNearestInteractable, getHook)
-//   + features/social/multiplayer (useMultiplayerBridge)
+// app/page.tsx — Composition root cho ứng dụng HUSTVerse — Bách Khoa 3D.
+// - Điều phối không gian mô phỏng 3D ĐHBK Hà Nội, nhân vật & multiplayer,
+//   Tự học Pomodoro Cloud (Thư viện Tạ Quang Bửu 10 tầng), Sổ tay Khám phá 9
+//   tòa nhà, và Chế độ Học tiếng Trung (HSK Mode) có thể bật/tắt tùy chọn.
 // ---------------------------------------------------------------------------
 
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { loadGameModes, saveGameModes } from '../lib/gameModes';
 import { bikeState, playerState, type TimeOfDay } from '../lib/playerState';
 import { CLASSROOM, FAST_TRAVEL_DESTINATIONS, SPAWN, nearestZone } from '../lib/campus';
 import { ALL_HSK3_LEXEMES as LEXEMES, HSK3_LESSON_LEXEMES } from '../content/hsk3-index';
@@ -146,6 +143,9 @@ export default function HomePage() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [passport, setPassport] = useState<CampusPassportState>(() => createEmptyPassportState());
   const [passportSection, setPassportSection] = useState<PassportMainSection>('checkin');
+  const [hskMode, setHskMode] = useState<boolean>(false);
+  const hskModeRef = useRef<boolean>(false);
+  hskModeRef.current = hskMode;
   const [activeEdTechLandmarkId, setActiveEdTechLandmarkId] = useState<string | null>(null);
   const [panel, setPanel] = useState<LearningPanelType>(null);
   const [handbookTab, setHandbookTab] = useState<HandbookTab>('lesson');
@@ -182,6 +182,10 @@ export default function HomePage() {
   const mpSnap = useMultiplayerBridge(entered);
 
   useEffect(() => {
+    const savedModes = loadGameModes();
+    setHskMode(savedModes.hskMode);
+    playerState.hskMode = savedModes.hskMode;
+    hskModeRef.current = savedModes.hskMode;
     setPassport(loadCampusPassport());
     const saved = loadIdentity();
     const savedChar = loadCharacterProfile() ?? {
@@ -706,7 +710,7 @@ export default function HomePage() {
 
   const speakText = useCallback(
     (text: string) => {
-      if (!soundOn) return;
+      if (!soundOn || !hskModeRef.current) return;
       try {
         stopSpeaking();
         speak(text, {
@@ -931,6 +935,7 @@ export default function HomePage() {
         questDoneBefore,
         anyQuestDone,
         stepId: step?.id,
+        hskMode,
       });
       interactableRef.current = found?.id ?? null;
       setInteractLabel(found?.label ?? null);
@@ -939,7 +944,7 @@ export default function HomePage() {
       );
     }, 200);
     return () => clearInterval(id);
-  }, [entered, inClassroom, inLibraryLobby, questActive, questDoneBefore, anyQuestDone, step?.id, showToast]);
+  }, [entered, inClassroom, inLibraryLobby, questActive, questDoneBefore, anyQuestDone, step?.id, hskMode, showToast]);
 
   // --- Ghi đáp án vào store -----------------------------------------------------
   const handleAnswer = useCallback((a: QuestAnswer) => {
@@ -1030,7 +1035,7 @@ export default function HomePage() {
         return;
       }
       if (id === 'vocab-board') {
-        if (playerState.libraryFloor !== 1) return;
+        if (playerState.libraryFloor !== 1 || !hskModeRef.current) return;
         setLobbyModal('vocab-board');
         speakText('图书馆，科学，技术，借书，阅读');
         return;
@@ -1138,6 +1143,43 @@ export default function HomePage() {
       setFade(false);
     }, 350);
   }, []);
+
+  const handleToggleHskMode = useCallback(
+    (forceEnabled?: boolean, silent = false) => {
+      const nextEnabled =
+        typeof forceEnabled === 'boolean' ? forceEnabled : !hskModeRef.current;
+      hskModeRef.current = nextEnabled;
+      playerState.hskMode = nextEnabled;
+      setHskMode(nextEnabled);
+      saveGameModes({ version: 1, hskMode: nextEnabled });
+
+      if (!nextEnabled) {
+        try {
+          stopSpeaking();
+        } catch {
+          // ignore
+        }
+        setLessonsOpen(false);
+        setPassportSection((sec) => (sec === 'hsk' ? 'checkin' : sec));
+        setLobbyModal((m) => (m === 'vocab-board' ? null : m));
+        setPanel((cur) =>
+          cur === 'quest' || cur === 'result' || cur === 'review' ? null : cur,
+        );
+        if (playerState.inClassroom) {
+          exitClassroomFade();
+        }
+      }
+
+      if (!silent) {
+        showToast(
+          nextEnabled
+            ? '🇨🇳 Đã bật Chế độ Học tiếng Trung (HSK) — ghé Tòa C7 hoặc Sổ tay để luyện bài!'
+            : '🎮 Đã tắt Chế độ HSK — trải nghiệm thuần không gian Bách Khoa 3D.',
+        );
+      }
+    },
+    [exitClassroomFade, showToast],
+  );
 
   const enterLibraryLobbyFade = useCallback(() => {
     stampLandmarkCheckin('library', true);
@@ -1300,6 +1342,7 @@ export default function HomePage() {
       questDoneBefore,
       anyQuestDone,
       stepId: step?.id,
+      hskMode: hskModeRef.current,
     });
     interactableRef.current = liveFound?.id ?? interactableRef.current;
     const id = liveFound?.id ?? interactableRef.current;
@@ -1338,6 +1381,10 @@ export default function HomePage() {
       return;
     }
     if (id === 'c7-door') {
+      if (!hskModeRef.current) {
+        handleToggleHskMode(true, true);
+        showToast('🇨🇳 Đã bật Chế độ HSK — chào mừng vào Giảng đường Tòa C7!');
+      }
       const hasOngoingC7Lesson = questActive && stepIndex >= 2;
       enterClassroomFade('c7', !hasOngoingC7Lesson);
       if (hasOngoingC7Lesson) {
@@ -1429,6 +1476,7 @@ export default function HomePage() {
     handleObjectAction,
     handleSitAtSeat,
     handleStandUp,
+    handleToggleHskMode,
     showToast,
     speakText,
   ]);
@@ -1571,7 +1619,10 @@ export default function HomePage() {
 
   const openHandbook = useCallback((tab: HandbookTab) => {
     setHandbookTab(tab);
-    if (tab === 'due' || tab === 'calendar' || tab === 'errors' || tab === 'search') {
+    if (
+      hskModeRef.current &&
+      (tab === 'due' || tab === 'calendar' || tab === 'errors' || tab === 'search')
+    ) {
       setPassportSection('hsk');
     } else {
       setPassportSection('checkin');
@@ -1593,6 +1644,10 @@ export default function HomePage() {
         return res.next;
       });
       if (lm.creativeActionKind === 'enter-c7-hsk') {
+        if (!hskModeRef.current) {
+          handleToggleHskMode(true, true);
+          showToast('🇨🇳 Đã bật Chế độ HSK — chào mừng vào Giảng đường Tòa C7!');
+        }
         setActiveEdTechLandmarkId(null);
         const hasOngoingC7Lesson = questActive && stepIndex >= 2;
         enterClassroomFade('c7', !hasOngoingC7Lesson);
@@ -1615,6 +1670,7 @@ export default function HomePage() {
       enterLibraryLobbyFade,
       lofiPlaying,
       handleToggleLofi,
+      handleToggleHskMode,
       showToast,
     ],
   );
@@ -1734,6 +1790,8 @@ export default function HomePage() {
         identityName={identityName}
         identityMssv={identityMssv}
         progress={progress}
+        hskMode={hskMode}
+        onToggleHskMode={() => handleToggleHskMode(undefined, true)}
         onEnter={tryEnter}
       />
     );
@@ -1785,6 +1843,7 @@ export default function HomePage() {
               activeSeatId={seatedSeatId}
               nearestSeatId={nearestSeatId}
               timeOfDay={timeOfDay}
+              hskMode={hskMode}
               notebookOpen={notebookOpen}
               homework={homework}
               onObjectClick={handleObjectClick}
@@ -1829,8 +1888,10 @@ export default function HomePage() {
             toast={toast}
             checkedInCount={passportSummary.checkedInCount}
             totalLandmarks={passportSummary.totalLandmarks}
+            hskMode={hskMode}
             pomodoro={study.session.pomodoro}
             focusPolicy={study.focusPolicy}
+            onToggleHskMode={() => handleToggleHskMode()}
             onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
             onOpenLeaderboard={() => setLeaderboardOpen(true)}
             onStandUp={handleStandUp}
@@ -1943,17 +2004,20 @@ export default function HomePage() {
       {lobbyModal && inLibraryLobby && (
         <LibraryLobbyModal
           topic={lobbyModal}
+          hskMode={hskMode}
           onSpeak={speakText}
           onClose={() => setLobbyModal(null)}
         />
       )}
 
-      {/* Cửa sổ Check-in & Trải nghiệm EdTech riêng của từng Tòa nhà Bách Khoa */}
+      {/* Cửa sổ Check-in & Trải nghiệm riêng của từng Tòa nhà Bách Khoa */}
       {activeEdTechLandmark && entered && (
         <BuildingEdTechModal
           landmark={activeEdTechLandmark}
           passport={passport}
           playerName={characterProfile.name}
+          hskMode={hskMode}
+          onEnableHskMode={() => handleToggleHskMode(true)}
           onClose={() => setActiveEdTechLandmarkId(null)}
           onSpeakChinese={speakText}
           onActivateCreativeFeature={handleActivateCreativeFeature}
@@ -1983,6 +2047,7 @@ export default function HomePage() {
         currentLessonLexemes={currentLessonLexemes}
         actionDone={actionDone}
         soundOn={soundOn}
+        hskMode={hskMode}
         encounteredLexemes={encounteredLexemes}
         recallResults={recallResults}
         recallDetail={recallDetail}
@@ -1993,6 +2058,7 @@ export default function HomePage() {
         handbookTab={handbookTab}
         reviewSession={reviewSession}
         onSetPanel={setPanel}
+        onToggleHskMode={() => handleToggleHskMode()}
         onSetReReviewIds={setReReviewIds}
         onSetReviewSession={setReviewSession}
         onSetProgress={setProgress}

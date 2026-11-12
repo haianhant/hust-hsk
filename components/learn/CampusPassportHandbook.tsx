@@ -23,8 +23,10 @@ export interface CampusPassportHandbookProps {
   lexemes: Lexeme[];
   allLexemes: Lexeme[];
   soundOn: boolean;
+  hskMode?: boolean;
   defaultHandbookTab?: HandbookTab;
   initialSection?: PassportMainSection;
+  onToggleHskMode?: () => void;
   onSpeak: (text: string) => void;
   onImport: (p: Progress) => void;
   onClose: () => void;
@@ -39,8 +41,10 @@ export default function CampusPassportHandbook({
   lexemes,
   allLexemes,
   soundOn,
+  hskMode = false,
   defaultHandbookTab = 'lesson',
   initialSection = 'checkin',
+  onToggleHskMode,
   onSpeak,
   onImport,
   onClose,
@@ -48,11 +52,13 @@ export default function CampusPassportHandbook({
   onInspectLandmark,
   onStartReview,
 }: CampusPassportHandbookProps) {
-  const [section, setSection] = useState<PassportMainSection>(initialSection);
+  const [section, setSection] = useState<PassportMainSection>(
+    !hskMode && initialSection === 'hsk' ? 'checkin' : initialSection,
+  );
 
   useEffect(() => {
-    setSection(initialSection);
-  }, [initialSection]);
+    setSection(!hskMode && initialSection === 'hsk' ? 'checkin' : initialSection);
+  }, [initialSection, hskMode]);
 
   const summary = getPassportSummary(passport);
 
@@ -62,10 +68,10 @@ export default function CampusPassportHandbook({
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2 border-b border-black/10 pb-3">
         <div>
           <div className="text-[11px] font-extrabold tracking-widest text-[#B5121B] uppercase">
-            SỔ TAY SINH VIÊN ĐHBK HÀ NỘI · EDTECH PASSPORT
+            HUSTVERSE PASSPORT · SỔ TAY KHÁM PHÁ ĐẠI HỌC BÁCH KHOA HÀ NỘI
           </div>
           <h2 className="text-xl font-extrabold text-[#1E293B]">
-            🗺️ Hành trình Khám phá &amp; Thu thập Tính năng Bách Khoa
+            🗺️ Hành trình Khám phá &amp; Sưu tầm Dấu ấn Bách Khoa
           </h2>
         </div>
         <button
@@ -88,7 +94,7 @@ export default function CampusPassportHandbook({
             ✨ Tính năng sáng tạo: {summary.featuresCount}/{summary.totalLandmarks}
           </span>
           <span className="text-[#15803D]">
-            🧠 Câu đố EdTech: {summary.quizSolvedCount}/{summary.totalLandmarks}
+            🧠 Câu đố Bách Khoa: {summary.quizSolvedCount}/{summary.totalLandmarks}
           </span>
         </div>
         <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-black/10">
@@ -98,13 +104,23 @@ export default function CampusPassportHandbook({
           />
         </div>
         <p className="mt-1.5 text-[11px] text-[#475569]">
-          Mỗi tòa nhà tại ĐHBK Hà Nội sở hữu một tính năng riêng: học HSK theo bài tại{' '}
-          <strong>Tòa C7</strong>, tự học Pomodoro &amp; đàn Piano tại{' '}
-          <strong>Thư viện Tạ Quang Bửu</strong>, và check-in khám phá lịch sử – từ vựng khắp khuôn viên!
+          {hskMode ? (
+            <>
+              Khám phá kiến trúc ĐHBK Hà Nội kết hợp <strong>Chế độ HSK</strong>: học theo bài tại{' '}
+              <strong>Tòa C7</strong>, tự học Pomodoro &amp; đàn Piano tại{' '}
+              <strong>Thư viện Tạ Quang Bửu</strong> và check-in 9 công trình biểu tượng!
+            </>
+          ) : (
+            <>
+              Dạo quanh khuôn viên ĐHBK Hà Nội, check-in 9 công trình biểu tượng, tự học Pomodoro
+              &amp; chơi Đại dương cầm tại <strong>Thư viện Tạ Quang Bửu 10 tầng</strong>. Bạn có
+              thể bật thêm <strong>Chế độ HSK</strong> bất cứ lúc nào!
+            </>
+          )}
         </p>
       </div>
 
-      {/* 3 Tab chính */}
+      {/* Thanh Tab chính */}
       <div className="mb-3 flex flex-wrap gap-1.5">
         <button
           type="button"
@@ -130,18 +146,34 @@ export default function CampusPassportHandbook({
         >
           ✨ Bộ sưu tập Tính năng ({summary.featuresCount}/{summary.totalLandmarks})
         </button>
-        <button
-          type="button"
-          data-testid="passport-tab-hsk"
-          onClick={() => setSection('hsk')}
-          className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold transition ${
-            section === 'hsk'
-              ? 'bg-[#1C5C3A] text-white shadow'
-              : 'bg-black/8 text-[#334155] hover:bg-black/15'
-          }`}
-        >
-          📚 Kho Từ vựng &amp; Ôn tập HSK
-        </button>
+        {hskMode ? (
+          <button
+            type="button"
+            data-testid="passport-tab-hsk"
+            onClick={() => setSection('hsk')}
+            className={`rounded-full px-3.5 py-1.5 text-xs font-extrabold transition ${
+              section === 'hsk'
+                ? 'bg-[#1C5C3A] text-white shadow'
+                : 'bg-black/8 text-[#334155] hover:bg-black/15'
+            }`}
+          >
+            📚 Kho Từ vựng &amp; Ôn tập HSK
+          </button>
+        ) : (
+          onToggleHskMode && (
+            <button
+              type="button"
+              data-testid="passport-enable-hsk"
+              onClick={() => {
+                onToggleHskMode();
+                setSection('hsk');
+              }}
+              className="rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-extrabold text-slate-700 transition hover:bg-slate-100"
+            >
+              + 🇨🇳 Bật Chế độ Học HSK
+            </button>
+          )
+        )}
       </div>
 
       {/* TAB 1: BẢN ĐỒ DẤU ẤN CHECK-IN CÁC TÒA NHÀ */}
@@ -173,7 +205,7 @@ export default function CampusPassportHandbook({
                           {lm.code} · {lm.historyYear}
                         </div>
                         <div className="text-sm font-extrabold text-slate-900">
-                          {lm.shortName}
+                          {hskMode ? lm.shortName : (lm.coreShortName ?? lm.shortName)}
                         </div>
                       </div>
                     </div>
@@ -192,20 +224,22 @@ export default function CampusPassportHandbook({
                     {lm.historySummary}
                   </p>
 
-                  {/* 4 từ vựng mini */}
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {lm.vocab.map((v) => (
-                      <button
-                        key={v.hanzi}
-                        type="button"
-                        onClick={() => onSpeak(v.hanzi)}
-                        title={`${v.pinyin} — ${v.vi} (Bấm để nghe)`}
-                        className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 hover:border-red-300 hover:bg-red-50"
-                      >
-                        {v.hanzi} <span className="text-[10px] text-slate-500">{v.vi}</span>
-                      </button>
-                    ))}
-                  </div>
+                  {/* 4 từ vựng mini (chỉ hiển thị khi bật Chế độ HSK) */}
+                  {hskMode && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {lm.vocab.map((v) => (
+                        <button
+                          key={v.hanzi}
+                          type="button"
+                          onClick={() => onSpeak(v.hanzi)}
+                          title={`${v.pinyin} — ${v.vi} (Bấm để nghe)`}
+                          className="rounded-md border border-slate-200 bg-slate-100/90 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 hover:border-red-300 hover:bg-red-50"
+                        >
+                          {v.hanzi} <span className="text-[10px] text-slate-500">{v.vi}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-1.5 border-t border-slate-200/80 pt-2.5">
@@ -265,7 +299,7 @@ export default function CampusPassportHandbook({
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-lg">{lm.icon}</span>
                     <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[10px] font-extrabold text-amber-300">
-                      {lm.shortName}
+                      {hskMode ? lm.shortName : (lm.coreShortName ?? lm.shortName)}
                     </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
@@ -278,10 +312,14 @@ export default function CampusPassportHandbook({
                     </span>
                   </div>
                   <div className="text-sm font-extrabold text-slate-900">
-                    {lm.creativeFeatureTitle}
+                    {hskMode
+                      ? lm.creativeFeatureTitle
+                      : (lm.coreCreativeTitle ?? lm.creativeFeatureTitle)}
                   </div>
                   <p className="text-xs leading-relaxed text-slate-600">
-                    {lm.creativeFeatureDesc}
+                    {hskMode
+                      ? lm.creativeFeatureDesc
+                      : (lm.coreCreativeDesc ?? lm.creativeFeatureDesc)}
                   </p>
                 </div>
 
@@ -312,8 +350,8 @@ export default function CampusPassportHandbook({
         </div>
       )}
 
-      {/* TAB 3: KHO TỪ VỰNG & LỊCH ÔN HSK (TÍCH HỢP HANDBOOK CŨ) */}
-      {section === 'hsk' && (
+      {/* TAB 3: KHO TỪ VỰNG & LỊCH ÔN HSK (TÍCH HỢP HANDBOOK CŨ — KHI BẬT CHẾ ĐỘ HSK) */}
+      {hskMode && section === 'hsk' && (
         <div className="pt-1">
           <Handbook
             progress={progress}

@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Bách khoa Hán ngữ 3D — HUST HSK',
+  title: 'HUSTVerse — Bách Khoa 3D | Không gian Mô phỏng & Game Tương tác ĐHBK Hà Nội',
   description:
-    'Học tiếng Trung trong khuôn viên Đại học Bách khoa Hà Nội được tái hiện 3D: đi dạo campus, ghé nhà C1, Thư viện Tạ Quang Bửu và Hồ Tiền, mang tiếng Trung vào từng câu chuyện. Dự án học tập độc lập, không phải website chính thức của Đại học.',
+    'Khám phá khuôn viên Đại học Bách khoa Hà Nội trong không gian 3D tương tác: tùy chỉnh nhân vật & 10 bộ đồng phục BK, lái xe dạo trường, check-in 9 công trình biểu tượng, tự học tại Thư viện Tạ Quang Bửu 10 tầng, giao lưu trực tuyến và bật/tắt Chế độ Học tiếng Trung (HSK) tùy chọn.',
 };
 
 export const viewport: Viewport = {

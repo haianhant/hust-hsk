@@ -95,6 +95,8 @@ export interface InteractableDetectionInput {
   seatId?: string | null;
   occupiedByOtherSeatIds?: ReadonlySet<string>;
   pendingSeatId?: string | null;
+  /** Mặc định `true` khi bỏ trống để tương thích ngược bộ unit test HSK; `app/page.tsx` truyền tường minh trạng thái `hskMode`. */
+  hskMode?: boolean;
 }
 
 export interface DetectedInteractable {
@@ -150,6 +152,7 @@ export function findNearestInteractable(
     seated = false,
     occupiedByOtherSeatIds,
     pendingSeatId = null,
+    hskMode = true,
   } = input;
   const dist = (x: number, z: number) => Math.hypot(pos.x - x, pos.z - z);
 
@@ -199,7 +202,7 @@ export function findNearestInteractable(
       if (dist(LIBRARY_LOBBY.statue.x, LIBRARY_LOBBY.statue.z) <= 2.6) {
         return { id: 'lobby-statue', label: 'E — Tìm hiểu Tượng GS. Tạ Quang Bửu' };
       }
-      if (dist(LIBRARY_LOBBY.vocabBoard.x, LIBRARY_LOBBY.vocabBoard.z) <= 2.4) {
+      if (hskMode && dist(LIBRARY_LOBBY.vocabBoard.x, LIBRARY_LOBBY.vocabBoard.z) <= 2.4) {
         return { id: 'lobby-vocab-board', label: 'E — Xem bảng từ vựng Thư viện' };
       }
       if (dist(LIBRARY_LOBBY.infoDesk.x, LIBRARY_LOBBY.infoDesk.z) <= 2.4) {
@@ -230,29 +233,39 @@ export function findNearestInteractable(
   }
 
   if (!inClassroom) {
-    if (!questActive && !questDoneBefore && dist(MINH_POS.x, MINH_POS.z) <= MINH_RADIUS) {
-      return { id: 'npc-minh', label: 'E — Nói chuyện với Minh' };
-    }
-    if (questActive && stepId === 'greet-minh' && dist(MINH_POS.x, MINH_POS.z) <= MINH_RADIUS) {
-      return { id: 'npc-minh', label: 'E — Nói chuyện với Minh' };
-    }
-    if (
-      ((questActive && stepId === 'goto-door') || anyQuestDone) &&
-      dist(CLASSROOM_DOOR.pos.x, CLASSROOM_DOOR.pos.z) <= CLASSROOM_DOOR.triggerRadius
-    ) {
-      return { id: 'classroom-door', label: 'E — Vào phòng học' };
+    if (hskMode) {
+      if (!questActive && !questDoneBefore && dist(MINH_POS.x, MINH_POS.z) <= MINH_RADIUS) {
+        return { id: 'npc-minh', label: 'E — Nói chuyện với Minh' };
+      }
+      if (questActive && stepId === 'greet-minh' && dist(MINH_POS.x, MINH_POS.z) <= MINH_RADIUS) {
+        return { id: 'npc-minh', label: 'E — Nói chuyện với Minh' };
+      }
+      if (
+        ((questActive && stepId === 'goto-door') || anyQuestDone) &&
+        dist(CLASSROOM_DOOR.pos.x, CLASSROOM_DOOR.pos.z) <= CLASSROOM_DOOR.triggerRadius
+      ) {
+        return { id: 'classroom-door', label: 'E — Vào phòng học' };
+      }
     }
     if (dist(LIBRARY_DOOR.pos.x, LIBRARY_DOOR.pos.z) <= LIBRARY_DOOR.triggerRadius) {
       return { id: 'library-door', label: 'E — Vào sảnh Thư viện Tạ Quang Bửu' };
     }
     if (dist(C7_DOOR.pos.x, C7_DOOR.pos.z) <= C7_DOOR.triggerRadius) {
-      return { id: 'c7-door', label: 'E — Vào Giảng đường Tòa C7 (Học HSK theo bài)' };
+      return {
+        id: 'c7-door',
+        label: hskMode
+          ? 'E — Vào Giảng đường Tòa C7 (Học HSK theo bài)'
+          : 'E — Bật Chế độ HSK & Vào Giảng đường Tòa C7',
+      };
     }
     const nearCheckin = findNearestCheckinLandmark(pos);
     if (nearCheckin) {
       return {
         id: `checkin:${nearCheckin.id}`,
-        label: nearCheckin.promptLabel,
+        label:
+          !hskMode && nearCheckin.id === 'c7'
+            ? 'E — Khám phá & Check-in Tòa C7'
+            : nearCheckin.promptLabel,
       };
     }
     return null;

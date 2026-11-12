@@ -506,7 +506,7 @@ export class MultiplayerClient {
       senderId: 'npc-minh',
       senderName: 'Bạn học Minh (HUST)',
       senderColor: '#DA1E26',
-      text: '你好！Chào mừng bạn đến khuôn viên Bách khoa 3D! Bạn có thể nhắn tin giao lưu hoặc bấm biểu tượng cảm xúc (1–6) nhé! 👋',
+      text: 'Chào mừng bạn đến HUSTVerse — Bách Khoa 3D! Cùng lái xe dạo sân trường, check-in 9 tòa biểu tượng, vào Thư viện TQB hoặc bấm biểu cảm (1–6) giao lưu nhé! 👋',
       atMs: Date.now(),
       isCompanion: true,
     },
@@ -1419,6 +1419,51 @@ export class MultiplayerClient {
 
   private buildCompanionReply(userText: string): string {
     const lower = userText.toLowerCase();
+    const isHsk = !!playerState.hskMode;
+
+    if (!isHsk) {
+      if (
+        lower.includes('chào') ||
+        lower.includes('hello') ||
+        lower.includes('hi ') ||
+        lower === 'hi'
+      ) {
+        return 'Chào bạn nha! Hôm nay cùng lái xe dạo quanh Hồ Tiền hoặc lên Thư viện Tạ Quang Bửu ngồi học cùng nhau nhé! 👋🛵';
+      }
+      if (
+        lower.includes('học') ||
+        lower.includes('pomodoro') ||
+        lower.includes('thi') ||
+        lower.includes('mệt') ||
+        lower.includes('cố lên')
+      ) {
+        return 'Sinh viên Bách khoa luôn kiên trì! Vào Thư viện Tạ Quang Bửu lại gần bàn bấm phím E để ngồi và bật đồng hồ Pomodoro + nhạc Lofi Chill nhé! 🍅🎵';
+      }
+      if (
+        lower.includes('thư viện') ||
+        lower.includes('tqb') ||
+        lower.includes('thang máy') ||
+        lower.includes('tầng')
+      ) {
+        return '🏛️ Thư viện Tạ Quang Bửu có thang máy đi từ Tầng 1 lên Tầng 6 chơi Đại dương cầm và Tầng 10 ngắm sao toàn trường — tới cửa thang máy bấm E là chọn tầng được ngay!';
+      }
+      if (lower.includes('hsk') || lower.includes('tiếng trung')) {
+        return '🇨🇳 Nếu muốn luyện tiếng Trung theo bài, bạn chỉ cần bấm nút "HSK: Tắt -> Bật" ở góc trên bên phải rồi ghé Giảng đường Tòa C7 nhé!';
+      }
+      if (lower.includes('nhảy') || lower.includes('vui') || lower.includes('hồ tiền')) {
+        return 'Bấm các nút Hành động (1–6) để nhảy nhót, vẫy tay hoặc hoan hô giữa sân trường Bách khoa nhé! 💃🙌';
+      }
+      const campusPool = [
+        'Mình vừa dạo một vòng từ Quảng trường C1 sang Hồ Tiền mát lắm, bạn thử check-in đủ 9 công trình biểu tượng trong Sổ tay nhé! 🗺️',
+        'Bạn nhớ bật đài Lofi Chill ở góc phải trên để vừa dạo sân trường vừa nghe giai điệu piano thật êm nhé! 🎧',
+        'Ở Tầng 6 Thư viện Tạ Quang Bửu có cây Đại dương cầm đánh phát nhạc thật cho cả phòng cùng nghe đó, lên thử nha! 🎹',
+        'Nếu mỏi lưng sau 1 phiên Pomodoro thì bấm Hành động "🙆 Vươn vai" hoặc "💃 Nhảy nhót" thư giãn chút nha!',
+      ];
+      const campusPick = campusPool[this.companionReplyCounter % campusPool.length];
+      this.companionReplyCounter += 1;
+      return campusPick;
+    }
+
     if (
       lower.includes('你好') ||
       lower.includes('chào') ||

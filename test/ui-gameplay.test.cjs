@@ -877,5 +877,139 @@ test('yeucau3 — C7 HSK Classroom Door, 9 EdTech Check-in Landmarks & Campus Pa
   assert.equal(summary.completionPercent, 100);
 });
 
+test('HUSTVerse Pluggable Modes — gameModes storage, channel formatting & hskMode=false interaction separation', () => {
+  const {
+    GAME_MODES_STORAGE_KEY,
+    DEFAULT_GAME_MODES,
+    loadGameModes,
+    saveGameModes,
+    setHskModeEnabled,
+    toggleHskModeState,
+    formatCampusChannelLabel,
+  } = require('../lib/gameModes.ts');
+  const {
+    C7_DOOR,
+    CLASSROOM_DOOR,
+    LIBRARY_DOOR,
+    LIBRARY_LOBBY,
+  } = require('../features/campus/world-data/index.ts');
+  const { CAMPUS_LANDMARKS } = require('../features/campus/checkin/campus-passport.ts');
+
+  // 1. Default mode is HSK OFF (pure HUSTVerse 3D simulation)
+  assert.equal(DEFAULT_GAME_MODES.hskMode, false);
+
+  const mem = new Map();
+  const fakeStorage = {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+  };
+
+  assert.deepEqual(loadGameModes(fakeStorage), { version: 1, hskMode: false });
+
+  // Malformed JSON falls back safely to default OFF
+  fakeStorage.setItem(GAME_MODES_STORAGE_KEY, '{broken-json');
+  assert.deepEqual(loadGameModes(fakeStorage), { version: 1, hskMode: false });
+
+  // Round-trip save & toggle
+  const enabled = toggleHskModeState(DEFAULT_GAME_MODES);
+  assert.equal(enabled.hskMode, true);
+  saveGameModes(enabled, fakeStorage);
+  assert.deepEqual(loadGameModes(fakeStorage), { version: 1, hskMode: true });
+
+  const disabled = setHskModeEnabled(enabled, false);
+  saveGameModes(disabled, fakeStorage);
+  assert.deepEqual(loadGameModes(fakeStorage), { version: 1, hskMode: false });
+
+  // 2. Friendly Vietnamese channel labels for HUD while preserving wire room IDs
+  assert.equal(formatCampusChannelLabel('hsk-1'), 'Kênh BK 1');
+  assert.equal(formatCampusChannelLabel('hsk-3'), 'Kênh BK 3');
+  assert.equal(formatCampusChannelLabel(null), 'Kênh BK');
+
+  // 3. Every landmark has a valid pure-Vietnamese campusQuiz for HSK Mode OFF
+  for (const lm of CAMPUS_LANDMARKS) {
+    assert.ok(lm.campusQuiz, `Landmark ${lm.id} must define campusQuiz`);
+    assert.equal(lm.campusQuiz.options.length, 4);
+    assert.ok(lm.campusQuiz.question.length > 10);
+    assert.ok(lm.campusQuiz.rewardPoints > 0);
+  }
+
+  // 4. Interaction prompts cleanly separate HSK triggers when hskMode === false
+  const baseInput = {
+    inClassroom: false,
+    inLibraryLobby: false,
+    bikeRiding: false,
+    bikeSpeed: 0,
+    bikePos: { x: 0, z: 0 },
+    questActive: false,
+    questDoneBefore: false,
+    anyQuestDone: true,
+  };
+
+  // Near Minh: suppressed when hskMode=false, shown when hskMode=true
+  assert.equal(
+    findNearestInteractable({ ...baseInput, pos: MINH_POS, hskMode: false }),
+    null,
+  );
+  assert.equal(
+    findNearestInteractable({ ...baseInput, pos: MINH_POS, hskMode: true })?.id,
+    'npc-minh',
+  );
+
+  // Near C1 classroom door: suppressed when hskMode=false, shown when hskMode=true
+  assert.equal(
+    findNearestInteractable({ ...baseInput, pos: CLASSROOM_DOOR.pos, hskMode: false }),
+    null,
+  );
+  assert.equal(
+    findNearestInteractable({ ...baseInput, pos: CLASSROOM_DOOR.pos, hskMode: true })?.id,
+    'classroom-door',
+  );
+
+  // Near Library 1F vocab board: suppressed when hskMode=false, statue still works!
+  assert.equal(
+    findNearestInteractable({
+      ...baseInput,
+      inLibraryLobby: true,
+      libraryFloor: 1,
+      pos: LIBRARY_LOBBY.vocabBoard,
+      hskMode: false,
+    }),
+    null,
+  );
+  assert.equal(
+    findNearestInteractable({
+      ...baseInput,
+      inLibraryLobby: true,
+      libraryFloor: 1,
+      pos: LIBRARY_LOBBY.statue,
+      hskMode: false,
+    })?.id,
+    'lobby-statue',
+  );
+
+  // Near Library outdoor door: always active in both modes
+  assert.equal(
+    findNearestInteractable({ ...baseInput, pos: LIBRARY_DOOR.pos, hskMode: false })?.id,
+    'library-door',
+  );
+
+  // Near C7 door: offers opt-in HSK prompt when hskMode=false
+  assert.deepEqual(
+    findNearestInteractable({ ...baseInput, pos: C7_DOOR.pos, hskMode: false }),
+    {
+      id: 'c7-door',
+      label: 'E — Bật Chế độ HSK & Vào Giảng đường Tòa C7',
+    },
+  );
+  // Near C7 check-in pedestal: pure campus check-in label when hskMode=false
+  assert.deepEqual(
+    findNearestInteractable({ ...baseInput, pos: { x: 57.6, z: -27.2 }, hskMode: false }),
+    {
+      id: 'checkin:c7',
+      label: 'E — Khám phá & Check-in Tòa C7',
+    },
+  );
+});
+
 
 

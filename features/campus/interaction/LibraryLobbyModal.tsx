@@ -8,12 +8,14 @@ export type LibraryLobbyModalTopic = 'statue' | 'vocab-board' | 'info-desk';
 
 export interface LibraryLobbyModalProps {
   topic: LibraryLobbyModalTopic;
+  hskMode?: boolean;
   onClose: () => void;
   onSpeak: (text: string) => void;
 }
 
 export default function LibraryLobbyModal({
   topic,
+  hskMode = true,
   onClose,
   onSpeak,
 }: LibraryLobbyModalProps) {
@@ -52,19 +54,21 @@ export default function LibraryLobbyModal({
               <strong>bức tường gỗ khắc họa tiết nhị phân 0/1 và diềm hồi văn phát sáng vàng ấm</strong> — biểu
               tượng cho sự giao thoa giữa truyền thống văn hiến và khoa học công nghệ hiện đại của Bách khoa.
             </p>
-            <div className="rounded-xl border border-[#C9A227]/40 bg-[#FFF8E6] p-3">
-              <p className="font-bold text-[#A54432]">谢光宝教授图书馆 (Xiè Guāngbǎo Jiàoshòu Túshūguǎn)</p>
-              <p className="text-xs text-[#2B2B2B]/75">
-                Thư viện Giáo sư Tạ Quang Bửu · 科学先驱 (Kēxué xiānqū — Người tiên phong khoa học)
-              </p>
-              <button
-                type="button"
-                onClick={() => onSpeak('谢光宝教授是河内百科大学的第一任校长')}
-                className="mt-2 rounded-full bg-[#1c5c3a] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#16492e]"
-              >
-                🔊 Nghe câu giới thiệu tiếng Trung
-              </button>
-            </div>
+            {hskMode && (
+              <div className="rounded-xl border border-[#C9A227]/40 bg-[#FFF8E6] p-3">
+                <p className="font-bold text-[#A54432]">谢光宝教授图书馆 (Xiè Guāngbǎo Jiàoshòu Túshūguǎn)</p>
+                <p className="text-xs text-[#2B2B2B]/75">
+                  Thư viện Giáo sư Tạ Quang Bửu · 科学先驱 (Kēxué xiānqū — Người tiên phong khoa học)
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onSpeak('谢光宝教授是河内百科大学的第一任校长')}
+                  className="mt-2 rounded-full bg-[#1c5c3a] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#16492e]"
+                >
+                  🔊 Nghe câu giới thiệu tiếng Trung
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -102,24 +106,26 @@ export default function LibraryLobbyModal({
           <div className="space-y-3 text-sm leading-relaxed text-[#2B2B2B]">
             <p>
               Chào mừng bạn đến với <strong>Quầy thông tin &amp; Mượn trả sách tầng 1</strong>. Sinh viên Bách khoa sử
-              dụng thẻ sinh viên (学生证 xuéshengzhèng) để qua cổng từ và mượn giáo trình tại các phòng đọc chuyên
-              ngành từ tầng 3 đến tầng 9.
+              dụng thẻ sinh viên{hskMode ? ' (学生证 xuéshengzhèng)' : ''} để qua cổng từ, mượn giáo trình và sử dụng
+              các phòng đọc tự học từ tầng 1 đến tầng 10.
             </p>
-            <div className="rounded-xl border border-[#1c5c3a]/30 bg-white p-3">
-              <p className="font-bold text-[#1c5c3a]">
-                “你好！我想在谢光宝图书馆借一本汉娜词典。”
-              </p>
-              <p className="mt-1 text-xs text-[#2B2B2B]/75">
-                Xin chào! Tôi muốn mượn một cuốn từ điển tại Thư viện Tạ Quang Bửu.
-              </p>
-              <button
-                type="button"
-                onClick={() => onSpeak('你好，我想在图书馆借书')}
-                className="mt-2 rounded-full bg-[#A54432] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#8A3828]"
-              >
-                🔊 Nghe hội thoại mẫu
-              </button>
-            </div>
+            {hskMode && (
+              <div className="rounded-xl border border-[#1c5c3a]/30 bg-white p-3">
+                <p className="font-bold text-[#1c5c3a]">
+                  “你好！我想在谢光宝图书馆借一本汉娜词典。”
+                </p>
+                <p className="mt-1 text-xs text-[#2B2B2B]/75">
+                  Xin chào! Tôi muốn mượn một cuốn từ điển tại Thư viện Tạ Quang Bửu.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onSpeak('你好，我想在图书馆借书')}
+                  className="mt-2 rounded-full bg-[#A54432] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#8A3828]"
+                >
+                  🔊 Nghe hội thoại mẫu
+                </button>
+              </div>
+            )}
           </div>
         )}
 

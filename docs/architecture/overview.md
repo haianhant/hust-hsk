@@ -2,7 +2,7 @@
 
 ## 1. Bức tranh Tổng thể (High-Level Topology)
 
-**Bách khoa Hán ngữ 3D (`hust-hsk`)** được thiết kế theo mô hình **Static WebGL Client + Serverless Realtime Edge**, gồm 3 khối thực thi chính dùng chung một tầng hợp đồng dữ liệu (`shared/`):
+**HUSTVerse — Bách Khoa 3D** được thiết kế theo mô hình **Static WebGL Client + Serverless Realtime Edge** kết hợp kiến trúc **Core World + Pluggable Modes (`lib/gameModes.ts`)**, gồm 3 khối thực thi chính dùng chung một tầng hợp đồng dữ liệu (`shared/`):
 
 ```mermaid
 flowchart TB

@@ -68,8 +68,10 @@ export {
 
 export default function CampusExpansion({
   timeOfDay = 'day',
+  hskMode = false,
 }: {
   timeOfDay?: 'day' | 'sunset' | 'night';
+  hskMode?: boolean;
 }) {
   const isNight = (timeOfDay ?? playerState.timeOfDay) !== 'day';
 
@@ -85,7 +87,7 @@ export default function CampusExpansion({
         floorHeight={C6_BUILDING.floorHeight}
         isNight={isNight}
       />
-      <C7ComplexBuilding isNight={isNight} />
+      <C7ComplexBuilding isNight={isNight} hskMode={hskMode} />
       <SchoolOfMaterialsBuilding isNight={isNight} />
       <C6AndC8Block
         code="C15"

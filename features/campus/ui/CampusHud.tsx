@@ -10,6 +10,7 @@
 import CampusChat from '../../../components/ui/CampusChat';
 import Joystick from '../../../components/ui/Joystick';
 import Minimap from '../../../components/ui/Minimap';
+import { formatCampusChannelLabel } from '../../../lib/gameModes';
 import type { Progress } from '../../../lib/learn/types';
 import type { MultiplayerSnapshot } from '../../../lib/multiplayer';
 import { bikeInput, playerInput, type TimeOfDay } from '../../../lib/playerState';
@@ -104,8 +105,10 @@ export interface CampusHudProps {
   toast: string | null;
   checkedInCount?: number;
   totalLandmarks?: number;
+  hskMode?: boolean;
   pomodoro?: PomodoroState;
   focusPolicy?: FocusRuntimePolicy;
+  onToggleHskMode?: () => void;
   onOpenStudyPanel?: () => void;
   onOpenLeaderboard?: () => void;
   onStandUp?: () => void;
@@ -156,8 +159,10 @@ export function CampusHud({
   toast,
   checkedInCount = 0,
   totalLandmarks = 9,
+  hskMode = false,
   pomodoro,
   focusPolicy,
+  onToggleHskMode,
   onOpenStudyPanel,
   onOpenLeaderboard,
   onStandUp,
@@ -218,7 +223,7 @@ export function CampusHud({
           >
             {mpSnap.status === 'online' ? (
               <span>
-                🪑 Bàn đọc Thư viện ({mpSnap.roomId ?? 'online'}): Còn trống{' '}
+                🪑 Bàn đọc Thư viện ({formatCampusChannelLabel(mpSnap.roomId)}): Còn trống{' '}
                 {Math.max(
                   0,
                   4 - mpSnap.seats.filter((s) => s.studyRoomId === 'library-lobby').length,
@@ -381,6 +386,26 @@ export function CampusHud({
           >
             🗺️ Sổ tay
           </button>
+          {onToggleHskMode && (
+            <button
+              id="toggle-hsk-mode"
+              data-testid="toggle-hsk-mode"
+              type="button"
+              onClick={onToggleHskMode}
+              title={
+                hskMode
+                  ? 'Đang bật Chế độ Học tiếng Trung (HSK) — bấm để tắt về thuần mô phỏng Bách Khoa 3D'
+                  : 'Đang tắt Chế độ HSK — bấm để bật thêm Học tiếng Trung tại Tòa C7 & Từ vựng sân trường'
+              }
+              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold shadow-lg backdrop-blur-sm transition sm:text-[13px] ${
+                hskMode
+                  ? 'bg-[#B5121B]/95 text-white ring-1 ring-amber-300/70 hover:bg-[#8F1418]'
+                  : 'border border-white/20 bg-black/55 text-white/90 hover:bg-black/75'
+              }`}
+            >
+              {hskMode ? '🇨🇳 HSK: Bật' : '🇨🇳 HSK: Tắt'}
+            </button>
+          )}
           {inClassroom && (
             <>
               <button
@@ -609,7 +634,7 @@ export function CampusHud({
       )}
 
       {/* Góc dưới-trái: Khung Chat Giao tiếp & Thanh Hoạt ảnh Hành động (Emotes 1–6). */}
-      {!hideMove && <CampusChat />}
+      {!hideMove && <CampusChat hskMode={hskMode} />}
 
       {/* Góc dưới-trái: joystick (chỉ hiện trên thiết bị cảm ứng và khi không ngồi học). */}
       {!hideMove && !seated && (

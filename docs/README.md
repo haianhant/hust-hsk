@@ -1,6 +1,6 @@
-# Tài liệu Kiến trúc & Đặc tả Hệ thống — Bách khoa Hán ngữ 3D (`hust-hsk`)
+# Tài liệu Kiến trúc & Đặc tả Thế giới 3D — HUSTVerse — Bách Khoa 3D
 
-Chào mừng đến với trung tâm tài liệu kỹ thuật của **Bách khoa Hán ngữ 3D (`hust-hsk`)** — nền tảng khuôn viên ảo 3D Đại học Bách khoa Hà Nội tích hợp học tiếng Trung HSK 3–4 và không gian học tập chung (Multiplayer & Virtual Study Campus).
+Chào mừng đến với trung tâm tài liệu kỹ thuật của **HUSTVerse — Bách Khoa 3D** — không gian mô phỏng & game 3D tương tác khuôn viên Đại học Bách khoa Hà Nội (Multiplayer Sandbox, Co-Study Campus & hệ thống Chế độ gắn rời bao gồm `HSK Mode` bật/tắt tùy ý).
 
 Bộ tài liệu này được thiết kế làm **nguồn sự thật kỹ thuật (Technical Ground Truth)** cho cả kỹ sư phát triển và các AI Agents.
 
@@ -30,9 +30,10 @@ Bộ tài liệu này được thiết kế làm **nguồn sự thật kỹ thu�
 - [Hệ Khung xương & Chuyển động Nhân vật (`docs/world/avatar/rig-and-animation.md`)](./world/avatar/rig-and-animation.md) — `avatar.rig`, `avatar.animation`, `avatar.nameplate`.
 - [Hệ thống 10 Bộ Đồng phục HUST (`docs/world/avatar/outfits.md`)](./world/avatar/outfits.md) — `avatar.outfit.windbreaker`, `avatar.outfit.bomber`, `avatar.outfit.polo`, `avatar.outfit.hoodie`, `avatar.outfit.tshirt`, `avatar.outfit.shirt`, `avatar.outfit.sweater`, `avatar.accessory.skirt`.
 
-### Đặc tả Tính năng Học tập & Không gian Học chung (`docs/features/`)
-- [Hệ thống Học HSK 3–4 & SRS (`docs/features/hsk-learning.md`)](./features/hsk-learning.md) — `feature.learning.hsk` (1.057 từ, 50 nhiệm vụ, lịch ôn tập ngắt quãng SRS, sổ lỗi, huy hiệu).
-- [Kiến trúc Pomodoro & Study Rooms (`docs/features/study-pomodoro.md`)](./features/study-pomodoro.md) — `feature.study.pomodoro`, `feature.social.study-rooms` (Định hướng kiến trúc cho `PR6`).
+### Đặc tả Chế độ Chơi, Tự học & Học tập (`docs/features/`)
+- **Hệ thống Chế độ Gắn rời (`lib/gameModes.ts`)** — `feature.modes.hsk-toggle` (Lớp Lõi Khám phá & Tương tác Bách Khoa 3D luôn bật; `HSK Mode` mặc định TẮT cho người mới và bật/tắt lưu bền vững qua `localStorage`).
+- [Chế độ Học HSK 3–4 & SRS (`docs/features/hsk-learning.md`)](./features/hsk-learning.md) — `feature.learning.hsk` (1.057 từ, 50 nhiệm vụ, lịch ôn tập ngắt quãng SRS, sổ lỗi, huy hiệu — kích hoạt khi bật `HSK Mode`).
+- [Kiến trúc Pomodoro & Study Rooms (`docs/features/study-pomodoro.md`)](./features/study-pomodoro.md) — `feature.study.pomodoro`, `feature.social.study-rooms` (`Co-Study Mode` tại Thư viện Tạ Quang Bửu).
 
 ### Quyết định Kiến trúc (`docs/adr/`)
 - [ADR-0001: Kiến trúc Modular Monolith & Shared Contracts](./adr/0001-modular-monolith-and-shared-contracts.md)
@@ -72,6 +73,7 @@ Bộ tài liệu này được thiết kế làm **nguồn sự thật kỹ thu�
 | `avatar.outfit.polo` | Áo Polo đỏ HUST cổ viền trắng | `components/three/StudentAvatar.tsx` | [outfits.md](./world/avatar/outfits.md) | Production |
 | `avatar.outfit.hoodie` | Áo Hoodie đỏ Bách khoa & Sweater Kem | `components/three/StudentAvatar.tsx` | [outfits.md](./world/avatar/outfits.md) | Production |
 | `avatar.accessory.skirt` | Chân váy xếp ly chữ A (Nữ) | `components/three/StudentAvatar.tsx`, `lib/identity.ts` | [outfits.md](./world/avatar/outfits.md) | Production |
+| `feature.modes.hsk-toggle` | Quản lý Chế độ gắn rời (`HSK Mode` ON/OFF, mặc định OFF) | `lib/gameModes.ts`, `lib/playerState.ts` | [vision.md](./product/vision.md) | Production |
 | `feature.learning.hsk` | Engine học HSK 3–4 (1.057 từ, 50 quest, SRS) | `lib/learn/*`, `content/*`, `components/learn/*` | [hsk-learning.md](./features/hsk-learning.md) | Production |
 | `feature.social.multiplayer` | Đồng bộ vị trí & ngoại hình qua WebSocket DO | `shared/contracts/multiplayer.ts`, `lib/multiplayer.ts`, `worker/src/room.ts` | [multiplayer.md](./architecture/multiplayer.md) | Production (`PR1`) |
 | `feature.study.pomodoro` | Đồng hồ Pomodoro, Focus Mode, Study Session & Study Rooms | `shared/contracts/study.ts`, `features/study/*`, `features/social/rooms/*`, `features/social/presence/*` | [study-pomodoro.md](./features/study-pomodoro.md) | Production (`PR6`) |

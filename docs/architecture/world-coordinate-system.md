@@ -2,7 +2,7 @@
 
 ## 1. Quy ước Trục Tọa độ & Đơn vị Chuẩn
 
-Toàn bộ không gian 3D của **Bách khoa Hán ngữ 3D** sử dụng hệ tọa độ Đề-các bàn tay phải của Three.js với đơn vị **1 đơn vị = 1 mét (m)**:
+Toàn bộ không gian 3D của **HUSTVerse — Bách Khoa 3D** sử dụng hệ tọa độ Đề-các bàn tay phải của Three.js với đơn vị **1 đơn vị = 1 mét (m)**:
 
 - **Trục `X` (Đông – Tây):**
   - `-X` = Phía **Tây** (giáp đường Giải Phóng — nơi đặt Cổng Parabol tại `x = -88`).

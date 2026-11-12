@@ -1,6 +1,6 @@
-# AI Agent Guidelines — Bách khoa Hán ngữ 3D (`hust-hsk`)
+# AI Agent Guidelines — HUSTVerse — Bách Khoa 3D
 
-Tài liệu hướng dẫn ngắn gọn dành cho các AI Coding Agents làm việc trên repository `hust-hsk`.
+Tài liệu hướng dẫn ngắn gọn dành cho các AI Coding Agents làm việc trên dự án **HUSTVerse — Bách Khoa 3D** (không gian mô phỏng & game 3D tương tác ĐHBK Hà Nội với kiến trúc Core World + Pluggable Modes, trong đó `HSK Mode` tách riêng có thể bật/tắt).
 **Nguồn tài liệu kiến trúc trung tâm:** [`docs/README.md`](./docs/README.md).
 
 ---

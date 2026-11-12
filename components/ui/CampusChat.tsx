@@ -15,14 +15,22 @@ import {
 } from '../../lib/multiplayer';
 import { playerState } from '../../lib/playerState';
 
-const QUICK_PHRASES: readonly { label: string; text: string }[] = [
+const CAMPUS_QUICK_PHRASES: readonly { label: string; text: string }[] = [
+  { label: '👋 Chào cả nhà!', text: 'Chào các bạn sinh viên Bách Khoa nha! 👋' },
+  { label: '🛵 Dạo Hồ Tiền', text: 'Có ai rảnh lái xe dạo một vòng Hồ Tiền & Quảng trường C1 không? 🛵' },
+  { label: '🍅 Lên Thư viện TQB', text: 'Cùng vào Thư viện Tạ Quang Bửu bật Pomodoro học bài nhé! 🍅' },
+  { label: '💃 Nhảy chút!', text: 'Học xong 1 hiệp Pomodoro rồi, nhảy nhót thư giãn chút nào! 💃' },
+] as const;
+
+const HSK_QUICK_PHRASES: readonly { label: string; text: string }[] = [
   { label: '👋 你好！', text: '你好！Chào các bạn nha!' },
   { label: '📚 一起学习', text: '一起学习吧！Cùng vào Thư viện TQB ôn HSK nhé!' },
   { label: '💪 加油！', text: '加油！Chúc mọi người học tập hiệu quả!' },
   { label: '💃 Nhảy chút!', text: 'Học xong 1 hiệp Pomodoro rồi, nhảy nhót thư giãn chút nào! 💃' },
 ] as const;
 
-export default function CampusChat() {
+export default function CampusChat({ hskMode = false }: { hskMode?: boolean }) {
+  const activeQuickPhrases = hskMode ? HSK_QUICK_PHRASES : CAMPUS_QUICK_PHRASES;
   const [chatOpen, setChatOpen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
   );
@@ -122,7 +130,11 @@ export default function CampusChat() {
                   type="button"
                   data-testid={`emote-btn-${em.id}`}
                   onClick={() => handleEmoteClick(em.id)}
-                  title={`${em.labelVi} (${em.labelZh}) — Phím ${em.keyHint}`}
+                  title={
+                    hskMode
+                      ? `${em.labelVi} (${em.labelZh}) — Phím ${em.keyHint}`
+                      : `${em.labelVi} — Phím ${em.keyHint}`
+                  }
                   className={`flex items-center gap-1 rounded-xl px-2 py-1 text-xs font-medium transition ${
                     isActive
                       ? 'bg-amber-500 font-bold text-slate-950 shadow-md ring-2 ring-amber-200'
@@ -192,9 +204,9 @@ export default function CampusChat() {
             ))}
           </div>
 
-          {/* Gợi ý câu giao tiếp HSK nhanh */}
+          {/* Gợi ý câu giao tiếp nhanh */}
           <div className="flex gap-1 overflow-x-auto border-t border-white/10 bg-slate-900/50 px-2.5 py-1.5">
-            {QUICK_PHRASES.map((qp) => (
+            {activeQuickPhrases.map((qp) => (
               <button
                 key={qp.label}
                 type="button"

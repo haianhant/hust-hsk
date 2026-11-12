@@ -1,6 +1,6 @@
-# Bách khoa Hán ngữ 3D (`hust-hsk`) — Project Rules
+# HUSTVerse — Bách Khoa 3D — Project Rules
 
-> **Tài liệu Kiến trúc Trung tâm:** Xem bản đồ toàn bộ tài liệu kỹ thuật, danh mục Module IDs (`building.*`, `avatar.*`, `feature.*`) và ADRs tại **[`docs/README.md`](./docs/README.md)** (cùng hướng dẫn tóm tắt tại **[`AGENTS.md`](./AGENTS.md)**).
+> **Định hướng Sản phẩm & Tài liệu Trung tâm:** Dự án định vị là **không gian mô phỏng & game 3D tương tác Đại học Bách khoa Hà Nội (`HUSTVerse — Bách Khoa 3D`)**, trong đó phần học tiếng Trung được tách thành **`HSK Mode` riêng có thể bật/tắt** (`lib/gameModes.ts`, mặc định `OFF` cho người chơi mới). Xem bản đồ toàn bộ tài liệu kỹ thuật, danh mục Module IDs (`building.*`, `avatar.*`, `feature.*`) và ADRs tại **[`docs/README.md`](./docs/README.md)** (cùng hướng dẫn tóm tắt tại **[`AGENTS.md`](./AGENTS.md)**).
 
 ## 1. Kiến trúc & Nguồn sự thật duy nhất (Single Source of Truth)
 - **Hằng số Thế giới & Hợp đồng Chia sẻ ([`shared/constants/world.ts`](./shared/constants/world.ts), [`shared/contracts/multiplayer.ts`](./shared/contracts/multiplayer.ts), [`lib/campus.ts`](./lib/campus.ts)):**

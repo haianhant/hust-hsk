@@ -342,16 +342,16 @@ export default function CharacterCreatorModal({
         <div className="mb-4 flex items-start justify-between gap-3 border-b border-black/10 pb-3">
           <div>
             <p className="text-xs font-extrabold tracking-widest text-[#B5121B] uppercase">
-              ĐẠI HỌC BÁCH KHOA HÀ NỘI · 河内百科大学
+              HUSTVERSE · ĐẠI HỌC BÁCH KHOA HÀ NỘI
             </p>
             <h1 className="mt-0.5 text-xl font-extrabold text-[#1E293B] sm:text-2xl">
               {mode === 'entry'
-                ? 'Bách khoa Hán ngữ 3D — Tạo nhân vật sinh viên'
+                ? 'HUSTVerse — Bách Khoa 3D'
                 : '👕 Nhân vật & Đồng phục Sinh viên HUST'}
             </h1>
             <p className="mt-0.5 text-xs text-[#475569] sm:text-sm">
               {mode === 'entry'
-                ? 'Tùy chỉnh diện mạo, đồng phục HUST trước khi vào trường. Mỗi tòa nhà có một tính năng riêng: đến Tòa C7 để chọn & học bài HSK, vào Thư viện Tạ Quang Bửu để tự học Pomodoro & chơi Piano!'
+                ? 'Không gian mô phỏng & game 3D tương tác khuôn viên ĐHBK Hà Nội — tùy chỉnh nhân vật & đồng phục BK, lái xe dạo trường, check-in 9 công trình, ngồi học Thư viện Tạ Quang Bửu 10 tầng và giao lưu trực tuyến!'
                 : 'Thay đổi tên hiển thị, giới tính, kiểu tóc và đồng phục Bách khoa ngay trong sân trường.'}
             </p>
           </div>

@@ -113,6 +113,8 @@ export const playerState = {
   },
   /** Giai đoạn 2 — chế độ thời gian ngày / hoàng hôn / đêm. */
   timeOfDay: 'day' as TimeOfDay,
+  /** HUSTVerse Pluggable Mode — Chế độ Học tiếng Trung HSK (mặc định: false / tắt). */
+  hskMode: false,
   /** Việc 2 — Hệ thống nhân vật & đồng phục sinh viên Bách khoa. */
   avatarName: 'Sinh viên',
   avatarGender: 'male' as AvatarGender,

@@ -31,6 +31,7 @@ export interface CampusSceneProps {
   activeSeatId?: string | null;
   nearestSeatId?: string | null;
   timeOfDay?: TimeOfDay;
+  hskMode?: boolean;
   notebookOpen?: boolean;
   homework?: HomeworkState;
   onObjectClick?: (id: string) => void;
@@ -317,6 +318,7 @@ export default function CampusScene({
   activeSeatId = null,
   nearestSeatId = null,
   timeOfDay = 'day',
+  hskMode = false,
   notebookOpen = false,
   homework = 'desk',
   onObjectClick,
@@ -410,7 +412,7 @@ export default function CampusScene({
                 <Ground />
                 <Landmarks timeOfDay={timeOfDay} />
                 <BackgroundBuildings timeOfDay={timeOfDay} />
-                <CampusExpansion timeOfDay={timeOfDay} />
+                <CampusExpansion timeOfDay={timeOfDay} hskMode={hskMode} />
               </group>
             </>
           )}
@@ -429,7 +431,7 @@ export default function CampusScene({
               Đã gắn ở đây — luồng tích hợp KHÔNG gắn lần 2. */}
           <BackgroundBuildings timeOfDay={timeOfDay} />
           {/* Mở rộng toàn bộ khuôn viên ĐHBK Hà Nội theo Bản đồ Số chuẩn https://hustmap.com/. */}
-          <CampusExpansion timeOfDay={timeOfDay} />
+          <CampusExpansion timeOfDay={timeOfDay} hskMode={hskMode} />
           {/* Quần thể sinh viên NPC đi dạo & sinh hoạt trong sân trường. */}
           <AmbientLife />
           {/* NPC bạn đồng hành Minh đứng gần cổng Parabol, gần spawn. */}
@@ -437,7 +439,7 @@ export default function CampusScene({
           {/* Xe máy cá nhân (đợt 3 giai đoạn 4) — chỉ ngoài sân, không vào phòng học. */}
           <Motorbike />
           {/* Hệ thống trụ Check-in & Giới thiệu EdTech 9 công trình biểu tượng ĐHBK Hà Nội */}
-          <CampusCheckinMarkers isNight={timeOfDay === 'night'} />
+          <CampusCheckinMarkers isNight={timeOfDay === 'night'} hskMode={hskMode} />
         </>
       )}
       <RemotePlayers

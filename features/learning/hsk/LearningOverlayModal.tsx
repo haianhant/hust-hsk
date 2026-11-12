@@ -41,6 +41,7 @@ export interface LearningOverlayModalProps {
   currentLessonLexemes: Lexeme[];
   actionDone: boolean;
   soundOn: boolean;
+  hskMode?: boolean;
   encounteredLexemes: Lexeme[];
   recallResults: { lexemeId: string; correct: boolean }[];
   recallDetail: { lexeme: Lexeme; correct: boolean }[];
@@ -51,6 +52,7 @@ export interface LearningOverlayModalProps {
   handbookTab: HandbookTab;
   reviewSession: ReviewSessionState | null;
   onSetPanel: (panel: LearningPanelType) => void;
+  onToggleHskMode?: () => void;
   onSetReReviewIds: (ids: string[] | null) => void;
   onSetReviewSession: (session: ReviewSessionState | null) => void;
   onSetProgress: (progress: Progress) => void;
@@ -86,6 +88,7 @@ export function LearningOverlayModal({
   currentLessonLexemes,
   actionDone,
   soundOn,
+  hskMode = false,
   encounteredLexemes,
   recallResults,
   recallDetail,
@@ -96,6 +99,7 @@ export function LearningOverlayModal({
   handbookTab,
   reviewSession,
   onSetPanel,
+  onToggleHskMode,
   onSetReReviewIds,
   onSetReviewSession,
   onSetProgress,
@@ -212,6 +216,8 @@ export function LearningOverlayModal({
           allLexemes={allLexemes}
           onSpeak={onSpeak}
           soundOn={soundOn}
+          hskMode={hskMode}
+          onToggleHskMode={onToggleHskMode}
           onImport={(p) => onSetProgress(p)}
           onClose={() => onSetPanel(null)}
           defaultHandbookTab={handbookTab}
