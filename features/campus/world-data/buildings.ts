@@ -158,73 +158,91 @@ export const TRAN_DAI_NGHIA_GATE = {
   guardPos: { x: 91.65, z: -12.25 },
 } as const;
 
-/** Nhà để xe sinh viên D3 - D5 (nằm ngay bên tay trái / phía Nam +Z khi đi từ Cổng Trần Đại Nghĩa vào,
- *  kéo dài dọc theo chiều sâu trục Bắc–Nam cạnh cụm giảng đường D3 - D5).
- *  Đối chiếu ảnh thật: tham-khao/Nha-de-xe-D3-D5/images.jpg ("ĐIỂM TRÔNG GIỮ XE D3 - D5") & https://hustmap.com/. */
-export const D3_D5_PARKING_GARAGE = {
-  center: { x: 81, z: 19.5 },
-  size: { x: 13, z: 34 },
-  height: 4.2,
-  signZ: 2.2,
-  box: { minX: 74.5, maxX: 87.5, minZ: 2.5, maxZ: 36.5 },
+/** Dải phân cách trồng cây xanh có bó vỉa sơn trắng chia 2 nhánh đường 1 chiều đi vào (-Z, bên C7)
+ *  và 1 chiều đi ra (+Z, bên D3) từ Cổng Trần Đại Nghĩa tới điểm nhập làn (x = 59.8, kết thúc C7 & D3).
+ *  Đối chiếu trực tiếp bộ ảnh thực tế tham-khao/NEW/ ("Cổng trần đại nghĩa và 2 trục đường.jpg"). */
+export const TDN_DIVIDED_MEDIAN = {
+  center: { x: 75.1, z: -6.0 },
+  size: { x: 30.6, z: 2.6 },
+  box: { minX: 59.8, maxX: 90.4, minZ: -7.3, maxZ: -4.7 },
 } as const;
 
-/** Trục đường & bãi đỗ xe ô tô của các thầy cô giảng viên cạnh tòa C7 ("Bãi xe C7" dọc phố Trần Đại Nghĩa
- *  trên https://hustmap.com/, nằm ngay bên tay phải / phía Bắc -Z khi đi từ Cổng Trần Đại Nghĩa vào). */
+/** Hàng cây cổ thụ trồng giữa dải phân cách đôi Cổng Trần Đại Nghĩa */
+export const TDN_MEDIAN_TREES: Vec2[] = [
+  { x: 62.5, z: -6.0 },
+  { x: 68.5, z: -6.0 },
+  { x: 74.5, z: -6.0 },
+  { x: 80.5, z: -6.0 },
+  { x: 86.5, z: -6.0 },
+];
+
+/** Nhà để xe sinh viên D3 - D5 (nằm bên tay trái / phía Nam +Z gần Cổng Trần Đại Nghĩa,
+ *  kéo dài dọc theo chiều sâu trục Bắc–Nam ngay phía Đông cụm giảng đường D3 - D5).
+ *  Đối chiếu ảnh thật: tham-khao/Nha-de-xe-D3-D5/images.jpg ("ĐIỂM TRÔNG GIỮ XE D3 - D5") & https://hustmap.com/. */
+export const D3_D5_PARKING_GARAGE = {
+  center: { x: 84.4, z: 20.5 },
+  size: { x: 11.8, z: 34 },
+  height: 4.2,
+  signZ: 3.2,
+  box: { minX: 78.5, maxX: 90.3, minZ: 3.5, maxZ: 37.5 },
+} as const;
+
+/** Dải đỗ xe ô tô của cán bộ giảng viên dọc tuyến đường rẽ phải phía Tây Tòa C7 / Bắc Trường Vật liệu
+ *  (khớp ảnh thực tế "Từ cuối 2 nhánh bên nhìn sang bên phải, chỗ tòa C7.jpg" & https://hustmap.com/). */
 export const C7_FACULTY_PARKING = {
-  roadX: 66,
-  minZ: -52,
-  maxZ: -6,
+  roadX: 56.2,
+  minZ: -58,
+  maxZ: -32,
   cars: [
     {
       id: 'c7-car-1',
-      x: 71.5,
-      z: -20.5,
-      yaw: -Math.PI / 2,
-      color: '#0F172A',
+      x: 49.2,
+      z: -34.5,
+      yaw: 0,
+      color: '#991B1B',
       kind: 'sedan' as const,
       plate: '30A-682.19',
-      box: { minX: 69.3, maxX: 73.7, minZ: -21.5, maxZ: -19.5 },
+      box: { minX: 48.2, maxX: 50.2, minZ: -36.8, maxZ: -32.2 },
     },
     {
       id: 'c7-car-2',
-      x: 71.5,
-      z: -26.0,
-      yaw: -Math.PI / 2,
+      x: 49.2,
+      z: -40.2,
+      yaw: 0,
       color: '#F8FAFC',
       kind: 'suv' as const,
       plate: '30H-915.42',
-      box: { minX: 69.2, maxX: 73.8, minZ: -27.05, maxZ: -24.95 },
+      box: { minX: 48.15, maxX: 50.25, minZ: -42.55, maxZ: -37.85 },
     },
     {
       id: 'c7-car-3',
-      x: 71.5,
-      z: -31.5,
-      yaw: -Math.PI / 2,
+      x: 49.2,
+      z: -45.8,
+      yaw: 0,
       color: '#94A3B8',
       kind: 'sedan' as const,
       plate: '29A-403.88',
-      box: { minX: 69.3, maxX: 73.7, minZ: -32.5, maxZ: -30.5 },
+      box: { minX: 48.2, maxX: 50.2, minZ: -48.1, maxZ: -43.5 },
     },
     {
       id: 'c7-car-4',
-      x: 71.5,
-      z: -37.0,
-      yaw: -Math.PI / 2,
-      color: '#991B1B',
+      x: 49.2,
+      z: -51.4,
+      yaw: 0,
+      color: '#0F172A',
       kind: 'sedan' as const,
       plate: '30G-771.05',
-      box: { minX: 69.3, maxX: 73.7, minZ: -38.0, maxZ: -36.0 },
+      box: { minX: 48.2, maxX: 50.2, minZ: -53.7, maxZ: -49.1 },
     },
     {
       id: 'c7-car-5',
-      x: 71.5,
-      z: -42.5,
-      yaw: -Math.PI / 2,
-      color: '#1E3A8A',
+      x: 52.6,
+      z: -38.0,
+      yaw: Math.PI,
+      color: '#F8FAFC',
       kind: 'suv' as const,
       plate: '30K-558.26',
-      box: { minX: 69.2, maxX: 73.8, minZ: -43.55, maxZ: -41.45 },
+      box: { minX: 51.55, maxX: 53.65, minZ: -40.35, maxZ: -35.65 },
     },
   ],
 } as const;
@@ -242,51 +260,62 @@ export const C2_BUILDING = {
 //    - Phía Bắc C7 là Nhà C6 và chếch Đông-Bắc sát Trần Đại Nghĩa là Nhà C15.
 //    - Tổ hợp C7 cao 9 tầng hình chữ E với thân lưng dọc phía Đông (+X) và 3 cánh vươn về phía Tây (-X) tạo 2 sân cây xanh.
 export const C6_BUILDING = {
-  center: { x: 44, z: -64 },
-  size: { x: 18, z: 7.0 },
+  center: { x: 66, z: -63 },
+  size: { x: 22, z: 7.0 },
   floors: 5,
   floorHeight: 3.2,
-  box: { minX: 35, maxX: 53, minZ: -67.5, maxZ: -60.5 },
+  box: { minX: 55, maxX: 77, minZ: -66.5, maxZ: -59.5 },
 } as const;
 
 export const C15_BUILDING = {
-  center: { x: 59, z: -59.5 },
-  size: { x: 5.6, z: 12.0 },
+  center: { x: 88.8, z: -61.0 },
+  size: { x: 4.8, z: 11.6 },
   floors: 3,
   floorHeight: 3.2,
-  box: { minX: 56.2, maxX: 61.8, minZ: -65.5, maxZ: -53.5 },
+  box: { minX: 86.4, maxX: 91.2, minZ: -66.8, maxZ: -55.2 },
 } as const;
 
 export const C7_BUILDING = {
-  center: { x: 46, z: -36 },
-  size: { x: 24, z: 34 },
+  center: { x: 73.5, z: -32.8 },
+  size: { x: 28, z: 38 },
   floors: 9,
   floorHeight: 3.1,
-  box: { minX: 34, maxX: 58, minZ: -53, maxZ: -19 },
+  box: { minX: 59.5, maxX: 87.5, minZ: -51.8, maxZ: -13.8 },
+} as const;
+
+/** Tòa nhà Trường Vật liệu (SMSE — School of Materials Science and Engineering):
+ *  Nằm đối diện phía Tây Tòa C7 qua trục đường rẽ phải từ cuối 2 nhánh đường Cổng Trần Đại Nghĩa
+ *  (khớp ảnh thực tế `tham-khao/NEW/trường vật liệu.jpg` & `Từ cuối 2 nhánh bên nhìn sang bên phải, chỗ tòa C7.jpg`). */
+export const SCHOOL_OF_MATERIALS = {
+  center: { x: 45.4, z: -22.0 },
+  size: { x: 11.2, z: 17.0 },
+  floors: 4,
+  floorHeight: 3.4,
+  box: { minX: 39.8, maxX: 51.0, minZ: -30.5, maxZ: -13.5 },
 } as const;
 
 /** Hai ram dốc Lối vào & Lối ra Hầm Gửi xe Tòa C7 (trùng khớp lớp `garages` trên https://hustmap.com/):
- *  - `exitRamp` (id: 2): Khe Tây-Bắc giữa mặt Nam nhà C6 và mặt Bắc nhà C7.
- *  - `entryRamp` (id: 1): Đầu Tây-Nam mặt Nam nhà C7. */
+ *  - `exitRamp` (id: 2): Khe giữa mặt Nam nhà C6 và mặt Bắc nhà C7.
+ *  - `entryRamp` (id: 1): Cánh Đông-Bắc dẫn xuống hầm gửi xe C7. */
 export const C7_UNDERGROUND_RAMPS = {
   exitRamp: {
     label: 'Lối ra Hầm Gửi xe C7',
-    center: { x: 42.0, z: -56.6 },
+    center: { x: 63.5, z: -55.8 },
     size: { x: 8.8, z: 3.4 },
-    box: { minX: 37.6, maxX: 46.4, minZ: -58.3, maxZ: -54.9 },
+    box: { minX: 59.1, maxX: 67.9, minZ: -57.5, maxZ: -54.1 },
   },
   entryRamp: {
     label: 'Lối vào Hầm Gửi xe C7',
-    center: { x: 42.0, z: -15.4 },
+    center: { x: 77.5, z: -55.2 },
     size: { x: 8.8, z: 3.4 },
-    box: { minX: 37.6, maxX: 46.4, minZ: -17.1, maxZ: -13.7 },
+    box: { minX: 73.1, maxX: 81.9, minZ: -56.9, maxZ: -53.5 },
   },
 } as const;
 
-// 3. Cụm 3 công trình công viên bờ Bắc Hồ Tiền tách rời theo đúng https://hustmap.com/:
+// 3. Cụm 3 công trình công viên bờ Bắc Hồ Tiền tách rời theo đúng https://hustmap.com/ & tham-khao/NEW/tòa cựu sinh viên bách khoa.jpg:
 //    - Phía Tây: Trung tâm Hợp tác Việt – Đức (VDZ, 4 tầng)
 //    - Chính giữa: Không gian số HUST Digital Hub (2 tầng)
-//    - Phía Đông-Nam (sát góc Đông-Bắc Hồ Tiền): Nhà Cựu sinh viên Bách Khoa (2 tầng)
+//    - Phía Đông-Nam (sát góc Đông-Bắc Hồ Tiền, mặt tiền nhìn ra trục chính sau nhập làn): Tòa nhà Cựu sinh viên Bách Khoa (2 tầng)
 export const VDZ_CENTER = {
   center: { x: -7.2, z: -0.3 },
   size: { x: 8.4, z: 3.2 },
@@ -304,11 +333,11 @@ export const HUST_DIGITAL_HUB = {
 } as const;
 
 export const ALUMNI_HOUSE = {
-  center: { x: 15.7, z: 0.2 },
-  size: { x: 7.0, z: 2.8 },
+  center: { x: 15.3, z: 0.9 },
+  size: { x: 10.2, z: 3.4 },
   floors: 2,
-  floorHeight: 3.2,
-  box: { minX: 12.2, maxX: 19.2, minZ: -1.2, maxZ: 1.6 },
+  floorHeight: 3.3,
+  box: { minX: 10.2, maxX: 20.4, minZ: -0.8, maxZ: 2.6 },
 } as const;
 
 // 4. Nhà B1 (Trường Công nghệ Thông tin & Truyền thông — SoICT): tòa nhà góc cong giật cấp 7–8 tầng
@@ -486,9 +515,9 @@ export const CAMPUS_PARKING_LOTS = {
   },
   /** Sân đỗ xe máy phụ trong lòng cụm chữ U [D3 – D5 – D3-5] (fid: 126) */
   d3d5Courtyard: {
-    center: { x: 62.6, z: 21.5 },
+    center: { x: 66.5, z: 15.2 },
     size: { x: 7.6, z: 5.6 },
-    box: { minX: 58.8, maxX: 66.4, minZ: 18.7, maxZ: 24.3 },
+    box: { minX: 62.7, maxX: 70.3, minZ: 12.4, maxZ: 18.0 },
   },
 } as const;
 
@@ -703,69 +732,70 @@ export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
     box: { minX: -55, maxX: -37, minZ: 49.9, maxZ: 58.1 },
   },
 
-  // Nhà D9 ngay phía Nam Thư viện Tạ Quang Bửu (cạnh Điểm trông giữ xe D7 - D9)
+  // Nhà D9 ngay phía Nam Thư viện Tạ Quang Bửu (5 tầng sơn trắng, cạnh Điểm trông giữ xe D7 - D9)
   {
     code: 'D9',
     subtitle: 'GIẢNG ĐƯỜNG D9',
-    x: 38,
+    x: 41,
     z: 63,
-    w: 18,
+    w: 22,
     d: 7.5,
-    h: 10.8,
+    h: 15.5,
     face: 'n',
-    tone: 1,
-    box: { minX: 29, maxX: 47, minZ: 59.25, maxZ: 66.75 },
+    tone: 0,
+    box: { minX: 30, maxX: 52, minZ: 59.25, maxZ: 66.75 },
   },
 
-  // Cụm D3 – D5 – D3-5 & D7 phía Đông Thư viện Tạ Quang Bửu (nằm giữa Thư viện và Nhà để xe D3 - D5)
+  // Cụm D3 – D5 – D3-5 & D7 (5 tầng sơn trắng hiện đại theo tham-khao/NEW/):
+  // - D3 chạy sát trục đường nhánh trái chiều đi ra Cổng Trần Đại Nghĩa, kết thúc đúng điểm nhập làn (x = 59.5)
+  // - D5, D3-5, D7 xếp tiếp nối về phía Nam dọc trục rẽ trái (x = 56.2), nằm giữa Thư viện và Nhà để xe D3 - D5
   {
     code: 'D3',
     subtitle: 'GIẢNG ĐƯỜNG D3',
-    x: 61,
-    z: 14,
-    w: 14,
-    d: 6.6,
-    h: 10.8,
+    x: 68.5,
+    z: 6.4,
+    w: 18,
+    d: 6.8,
+    h: 15.5,
     face: 'n',
     tone: 0,
-    box: { minX: 54, maxX: 68, minZ: 10.7, maxZ: 17.3 },
+    box: { minX: 59.5, maxX: 77.5, minZ: 3.0, maxZ: 9.8 },
   },
   {
     code: 'D5',
     subtitle: 'GIẢNG ĐƯỜNG D5',
-    x: 61,
-    z: 29,
-    w: 14,
+    x: 67.0,
+    z: 23.8,
+    w: 15,
     d: 6.6,
-    h: 10.8,
+    h: 15.5,
     face: 'n',
     tone: 0,
-    box: { minX: 54, maxX: 68, minZ: 25.7, maxZ: 32.3 },
+    box: { minX: 59.5, maxX: 74.5, minZ: 20.5, maxZ: 27.1 },
   },
   {
     code: 'D3-5',
     subtitle: 'KHỐI GIẢNG ĐƯỜNG D3-5',
-    x: 70.5,
-    z: 21.5,
-    w: 5.6,
-    d: 21.6,
-    h: 10.8,
+    x: 75.5,
+    z: 18.45,
+    w: 4.0,
+    d: 17.3,
+    h: 15.5,
     face: 'w',
-    tone: 1,
-    box: { minX: 67.7, maxX: 73.3, minZ: 10.7, maxZ: 32.3 },
+    tone: 0,
+    box: { minX: 73.5, maxX: 77.5, minZ: 9.8, maxZ: 27.1 },
   },
   {
     code: 'D7',
     subtitle: 'GIẢNG ĐƯỜNG D7',
-    x: 61,
-    z: 45,
-    w: 15,
+    x: 67.5,
+    z: 41.9,
+    w: 16,
     d: 6.8,
-    h: 10.8,
+    h: 15.5,
     face: 'n',
-    tone: 2,
-    rotY: Math.PI / 4,
-    box: { minX: 54, maxX: 68, minZ: 39, maxZ: 51 },
+    tone: 0,
+    box: { minX: 59.5, maxX: 75.5, minZ: 38.5, maxZ: 45.3 },
   },
 ];
 
@@ -846,7 +876,7 @@ export const C1_BENCHES: Vec2[] = [
 export const LAKE_WILLOWS: Vec2[] = [
   { x: -27.5, z: 18 }, { x: -27.5, z: 54 }, { x: -27.5, z: 80 },
   { x: 22.2, z: 14 }, { x: 22.2, z: 76 },
-  { x: -14, z: 1.5 }, { x: 10, z: 1.5 },
+  { x: -14, z: 1.5 }, { x: 7.6, z: 2.4 },
   { x: -10, z: 94.0 }, { x: 10, z: 94.0 },
 ];
 
@@ -864,7 +894,7 @@ export const CLASSROOM_DOOR = {
 
 /** Cửa chính Giảng đường Hán ngữ HSK tại Tòa C7 (sảnh chính nhánh giữa chữ E hướng Tây -X) */
 export const C7_DOOR = {
-  pos: { x: 32.2, z: -36 },
+  pos: { x: 57.8, z: -32.8 },
   triggerRadius: 3.6,
 } as const;
 

@@ -17,6 +17,7 @@ import {
   C7FacultyParkingLane,
   D3D5ParkingGarage,
   HustDigitalHubBuilding,
+  SchoolOfMaterialsBuilding,
   VietDucCenterBuilding,
 } from '../../features/campus/buildings/C6C7C8Cluster';
 import { CampusParkingAndAnnexes } from '../../features/campus/landscape/CampusParkingAndAnnexes';
@@ -49,6 +50,7 @@ export {
   CampusParkingAndAnnexes,
   D3D5ParkingGarage,
   HustDigitalHubBuilding,
+  SchoolOfMaterialsBuilding,
   VietDucCenterBuilding,
   SoictB1Building,
   EastCampusBlocks,
@@ -84,6 +86,7 @@ export default function CampusExpansion({
         isNight={isNight}
       />
       <C7ComplexBuilding isNight={isNight} />
+      <SchoolOfMaterialsBuilding isNight={isNight} />
       <C6AndC8Block
         code="C15"
         subtitle="NHÀ C15"

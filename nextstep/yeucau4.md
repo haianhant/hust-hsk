@@ -1,0 +1,6 @@
+- Từ cổng Trần Đại Nghĩa đi vào có 2 nhánh đường: 1 chiều đi vào và 1 chiều đi ra, cuối 2 nhánh đường (cũng là kết thúc 2 cụm tòa D3 và C7 2 bên đường) thì lại nhập làn thành 1 đường to.
+- Thư mục tham-khao/NEW có các ảnh mô tả rõ sau khi nhập làn nhìn sang trái, nhìn sang phải sẽ thấy cung đường gì đi đến đâu:
+  - Đi sang phải thì 2 bên là tòa C7 và có ảnh trường vật liệu
+  - Đi sang trái là sang cụm tòa D3,5,7,9
+  - Có cả ảnh chếch trái qua thư viện Tạ Quang Bửu
+- Tham khảo các hình ảnh, ngoài ra thư mục có ảnh 1 phần tòa D3, C7 khi nhìn từ 2 bên đường.

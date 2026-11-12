@@ -10,6 +10,7 @@ import {
   CAMPUS_MAP_PLAZAS,
   LAKE,
   ROADS,
+  TDN_DIVIDED_MEDIAN,
 } from '../../lib/campus';
 import { playerState } from '../../lib/playerState';
 
@@ -148,12 +149,33 @@ function renderCampusMap(
     ctx.lineWidth = Math.max(1.8, road.width * project.s * 0.58);
     ctx.stroke();
   }
+
+  // Dải phân cách cây xanh chia 2 nhánh 1 chiều vào/ra Cổng Trần Đại Nghĩa (yeucau4)
+  {
+    const mx = project.x(TDN_DIVIDED_MEDIAN.box.minX);
+    const my = project.y(TDN_DIVIDED_MEDIAN.box.minZ);
+    const mw = (TDN_DIVIDED_MEDIAN.box.maxX - TDN_DIVIDED_MEDIAN.box.minX) * project.s;
+    const mh = Math.max(2.2, (TDN_DIVIDED_MEDIAN.box.maxZ - TDN_DIVIDED_MEDIAN.box.minZ) * project.s);
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.72)';
+    ctx.strokeStyle = 'rgba(241, 245, 249, 0.92)';
+    ctx.lineWidth = detailed ? 1.1 : 0.7;
+    ctx.fillRect(mx, my, mw, mh);
+    ctx.strokeRect(mx, my, mw, mh);
+    if (detailed) {
+      ctx.fillStyle = 'rgba(254, 240, 138, 0.92)';
+      ctx.font = '700 8px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('← VÀO', project.x(75), project.y(-10.4));
+      ctx.fillText('RA →', project.x(75), project.y(-1.6));
+    }
+  }
   // Vẽ thêm Phố Trần Đại Nghĩa, Phố Tạ Quang Bửu và Phố Lê Thanh Nghị đúng hướng tuyến trên https://hustmap.com/
   const extraStreets: Array<Array<{ x: number; z: number }>> = [
     [
-      { x: 91, z: -75 },
-      { x: 91, z: 36 },
-      { x: 70, z: 72 },
+      { x: 93, z: -75 },
+      { x: 93, z: 46 },
+      { x: 79, z: 76 },
     ],
     [
       { x: 91, z: -6 },

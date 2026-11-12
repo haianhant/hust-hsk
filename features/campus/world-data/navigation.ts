@@ -25,7 +25,7 @@ export type FastTravelDestination = {
 };
 
 export const FAST_TRAVEL_DESTINATIONS: FastTravelDestination[] = [
-  { id: 'c7', name: 'Tòa C7 (Học HSK)', icon: '🎓', desc: 'Giảng đường chữ E · Học HSK theo bài', x: 26.5, z: -36, yaw: -Math.PI / 2, facing: Math.PI / 2 },
+  { id: 'c7', name: 'Tòa C7 (Học HSK)', icon: '🎓', desc: 'Giảng đường chữ E · Học HSK theo bài', x: 54.8, z: -32.8, yaw: -Math.PI / 2, facing: Math.PI / 2 },
   { id: 'library', name: 'Thư viện Tạ Quang Bửu', icon: '📚', desc: 'Tự học Pomodoro · Piano · Sân thượng', x: 38, z: 12.2, yaw: Math.PI, facing: 0 },
   { id: 'c1', name: 'Nhà C1', icon: '🏫', desc: 'Phòng Truyền thống & I ❤ BK', x: -58, z: -43.2, yaw: 0, facing: Math.PI },
   { id: 'b1', name: 'Nhà B1 (SoICT)', icon: '💻', desc: 'Phòng Lab Thuật ngữ CNTT & AI', x: 112, z: 4.5, yaw: Math.PI, facing: 0 },
