@@ -16,8 +16,10 @@ import {
   C7ComplexBuilding,
   C7FacultyParkingLane,
   D3D5ParkingGarage,
+  HustDigitalHubBuilding,
   VietDucCenterBuilding,
 } from '../../features/campus/buildings/C6C7C8Cluster';
+import { CampusParkingAndAnnexes } from '../../features/campus/landscape/CampusParkingAndAnnexes';
 import {
   EastCampusBlocks,
   SoictB1Building,
@@ -44,7 +46,9 @@ export {
   C6AndC8Block,
   C7ComplexBuilding,
   C7FacultyParkingLane,
+  CampusParkingAndAnnexes,
   D3D5ParkingGarage,
+  HustDigitalHubBuilding,
   VietDucCenterBuilding,
   SoictB1Building,
   EastCampusBlocks,
@@ -96,8 +100,12 @@ export default function CampusExpansion({
       {/* Bên phải Cổng Trần Đại Nghĩa (-Z): Trục đường & làn đỗ xe ô tô giảng viên cạnh tòa C7 */}
       <C7FacultyParkingLane isNight={isNight} />
 
-      {/* Cụm công viên bờ Bắc Hồ Tiền: Trung tâm Việt – Đức (VDZ) & Nhà Cựu sinh viên (HUST Digital Hub) */}
+      {/* Hệ thống 9 bãi gửi xe, ram dốc Hầm Gửi xe C7, nhà phụ trợ & tiện ích ven trường theo https://hustmap.com/ */}
+      <CampusParkingAndAnnexes isNight={isNight} />
+
+      {/* Cụm 3 công trình bờ Bắc Hồ Tiền: Trung tâm Việt – Đức (VDZ, 4 tầng) · HUST Digital Hub · Nhà Cựu sinh viên */}
       <VietDucCenterBuilding isNight={isNight} />
+      <HustDigitalHubBuilding isNight={isNight} />
       <AlumniHouseBuilding isNight={isNight} />
 
       {/* Phân khu phía Đông đường Trần Đại Nghĩa: KTX B3–B13, Nhà B1 (SoICT), A1-5/A17/Nhà E/Nhà T, Khu Thể thao & SVĐ */}

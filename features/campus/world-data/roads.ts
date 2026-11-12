@@ -58,6 +58,30 @@ export const ROADS: RoadSpec[] = [
       { x: 66, z: -52 },
     ],
   },
+  {
+    name: 'Lối vào Cổng Đại Cồ Việt – Bãi xe C1/C2',
+    width: 5.6,
+    points: [
+      { x: -58, z: -74 },
+      { x: -58, z: -63.5 },
+    ],
+  },
+  {
+    name: 'Đường nội bộ Bãi xe C1 – Bãi xe C2',
+    width: 4.4,
+    points: [
+      { x: -58, z: -67.2 },
+      { x: -81, z: -67.2 },
+    ],
+  },
+  {
+    name: 'Nhánh chéo Quảng trường ngã 5 – ITIMS',
+    width: 4.6,
+    points: [
+      { x: -38, z: -16 },
+      { x: -31, z: -27 },
+    ],
+  },
 ];
 
 // Hàng cây dọc hai bên trục đường chính Cổng Trần Đại Nghĩa – Cổng Parabol (z = -6).

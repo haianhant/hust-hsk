@@ -34,7 +34,7 @@ export const C1 = {
   floorHeight: 3.6,
   waves: 9, // BẮT BUỘC đếm đủ 9 gợn sóng mái
   waveAmplitude: 0.5, // Bước 3: sóng NÔNG theo ảnh (blockout 1,2 là quá cao)
-  plaza: { minX: -82, maxX: -34, minZ: -46, maxZ: -28 },
+  plaza: { minX: -82, maxX: -34, minZ: -46, maxZ: -25.5 },
   lipaTrees: [
     { x: -72, z: -40 },
     { x: -44, z: -40 },
@@ -126,26 +126,30 @@ export const C1_FOUNTAIN = {
   box: { minX: -60.2, maxX: -55.8, minZ: -32.4, maxZ: -30.0 },
 } as const;
 
-/** Quảng trường ngã 5 (nút giao biểu tượng giữa Quảng trường C1, ITIMS/C10 và trục chính theo https://hustmap.com/). */
+/** Quảng trường ngã 5 (nút giao biểu tượng 5 nhánh giữa Quảng trường C1, Bãi xe C9, ITIMS/C10 và trục chính theo https://hustmap.com/). */
 export const NGA_5_PLAZA = {
   center: { x: -38, z: -16 },
-  rect: { minX: -43, maxX: -33, minZ: -22, maxZ: -11 },
+  rect: { minX: -43.5, maxX: -32.5, minZ: -23.5, maxZ: -11.2 },
+  /** Đảo cỏ tam giác phía Nam nút giao Ngã 5 & bồn tiểu cảnh tròn góc Nam ITIMS */
+  southLawnCenter: { x: -38, z: -12.8 },
+  itimsRoundPlanter: { x: -29.8, z: -26.2, radius: 2.2 },
 } as const;
 
 export const DAI_CO_VIET_GATE = {
   center: { x: -58, z: -73.5 },
+  box: { minX: -63.8, maxX: -52.2, minZ: -74.8, maxZ: -72.2 },
 } as const;
 
-/** Quảng trường Trần Đại Nghĩa (reference-visual §7): sân xanh ngọc + vạch
- *  trắng kiểu mạch điện. Đặt cạnh cổng Trần Đại Nghĩa (phía đông). */
-export const TDN_SQUARE = { minX: 72, maxX: 92, minZ: -18, maxZ: 2 } as const;
+/** Quảng trường Trần Đại Nghĩa: nằm ở phía Tây tòa C2, phía Bắc tòa C9 sát biên đường Giải Phóng
+ *  theo đúng Bản đồ Số https://hustmap.com/ (fid: 291). */
+export const TDN_SQUARE = { minX: -94.6, maxX: -88.5, minZ: -44.2, maxZ: -24.8 } as const;
 
-/** Tượng đài kỷ niệm (reference-visual §5): bia cẩm thạch trắng + chữ khắc đỏ. */
+/** Bia / Tượng kỷ niệm GS. Viện sĩ Trần Đại Nghĩa đặt tại Quảng trường Trần Đại Nghĩa (phía Tây nhà C2). */
 export const MONUMENT = {
-  center: { x: 82, z: -14 },
-  box: { minX: 80.7, maxX: 83.3, minZ: -15.2, maxZ: -12.8 },
-  /** biển đồng vàng nghiêng, đặt ở mép tây quảng trường */
-  sign: { x: 74, z: -14, box: { minX: 73, maxX: 75, minZ: -15, maxZ: -13 } },
+  center: { x: -92.6, z: -34.5 },
+  box: { minX: -93.6, maxX: -91.6, minZ: -35.6, maxZ: -33.4 },
+  /** Biển đồng giới thiệu đặt ở mép Đông quảng trường */
+  sign: { x: -89.4, z: -32.2, box: { minX: -90.0, maxX: -88.8, minZ: -32.8, maxZ: -31.6 } },
 } as const;
 
 export const TRAN_DAI_NGHIA_GATE = {
@@ -228,9 +232,9 @@ export const C7_FACULTY_PARKING = {
 // --- Quy hoạch toàn bộ khuôn viên theo Bản đồ Số https://hustmap.com/ -------
 // 1. Nhà C2: chạy dọc Bắc–Nam ở phía Tây vườn hoa C1, có 2 đầu cánh nhô sang Tây ôm sân Quảng trường Trần Đại Nghĩa.
 export const C2_BUILDING = {
-  center: { x: -86, z: -34 },
-  size: { x: 9.0, z: 16 },
-  box: { minX: -90.8, maxX: -82.25, minZ: -42.0, maxZ: -26.0 },
+  center: { x: -83.6, z: -34.5 },
+  size: { x: 7.5, z: 15.0 },
+  box: { minX: -88.4, maxX: -79.4, minZ: -42.1, maxZ: -26.9 },
 } as const;
 
 // 2. Cụm nhà C6 – C15 – C7 ở khu Đông-Bắc sát phía Tây phố Trần Đại Nghĩa (theo https://hustmap.com/ & tham-khao/c7/):
@@ -261,23 +265,50 @@ export const C7_BUILDING = {
   box: { minX: 34, maxX: 58, minZ: -53, maxZ: -19 },
 } as const;
 
-// 3. Cụm công trình công viên bờ Bắc Hồ Tiền (theo https://hustmap.com/):
-//    - Phía Tây: Trung tâm Hợp tác Việt – Đức (VDZ)
-//    - Phía Đông: Nhà Cựu sinh viên Bách Khoa / HUST Digital Hub
+/** Hai ram dốc Lối vào & Lối ra Hầm Gửi xe Tòa C7 (trùng khớp lớp `garages` trên https://hustmap.com/):
+ *  - `exitRamp` (id: 2): Khe Tây-Bắc giữa mặt Nam nhà C6 và mặt Bắc nhà C7.
+ *  - `entryRamp` (id: 1): Đầu Tây-Nam mặt Nam nhà C7. */
+export const C7_UNDERGROUND_RAMPS = {
+  exitRamp: {
+    label: 'Lối ra Hầm Gửi xe C7',
+    center: { x: 42.0, z: -56.6 },
+    size: { x: 8.8, z: 3.4 },
+    box: { minX: 37.6, maxX: 46.4, minZ: -58.3, maxZ: -54.9 },
+  },
+  entryRamp: {
+    label: 'Lối vào Hầm Gửi xe C7',
+    center: { x: 42.0, z: -15.4 },
+    size: { x: 8.8, z: 3.4 },
+    box: { minX: 37.6, maxX: 46.4, minZ: -17.1, maxZ: -13.7 },
+  },
+} as const;
+
+// 3. Cụm 3 công trình công viên bờ Bắc Hồ Tiền tách rời theo đúng https://hustmap.com/:
+//    - Phía Tây: Trung tâm Hợp tác Việt – Đức (VDZ, 4 tầng)
+//    - Chính giữa: Không gian số HUST Digital Hub (2 tầng)
+//    - Phía Đông-Nam (sát góc Đông-Bắc Hồ Tiền): Nhà Cựu sinh viên Bách Khoa (2 tầng)
 export const VDZ_CENTER = {
-  center: { x: -6.5, z: -0.3 },
+  center: { x: -7.2, z: -0.3 },
   size: { x: 8.4, z: 3.2 },
+  floors: 4,
+  floorHeight: 3.0,
+  box: { minX: -11.4, maxX: -3.0, minZ: -1.9, maxZ: 1.3 },
+} as const;
+
+export const HUST_DIGITAL_HUB = {
+  center: { x: 3.2, z: -0.3 },
+  size: { x: 6.8, z: 2.8 },
   floors: 2,
-  floorHeight: 3.3,
-  box: { minX: -10.7, maxX: -2.3, minZ: -1.9, maxZ: 1.3 },
+  floorHeight: 3.2,
+  box: { minX: -0.2, maxX: 6.6, minZ: -1.7, maxZ: 1.1 },
 } as const;
 
 export const ALUMNI_HOUSE = {
-  center: { x: 3.8, z: -0.3 },
-  size: { x: 7.4, z: 3.0 },
+  center: { x: 15.7, z: 0.2 },
+  size: { x: 7.0, z: 2.8 },
   floors: 2,
   floorHeight: 3.2,
-  box: { minX: 0.1, maxX: 7.5, minZ: -1.8, maxZ: 1.2 },
+  box: { minX: 12.2, maxX: 19.2, minZ: -1.2, maxZ: 1.6 },
 } as const;
 
 // 4. Nhà B1 (Trường Công nghệ Thông tin & Truyền thông — SoICT): tòa nhà góc cong giật cấp 7–8 tầng
@@ -400,8 +431,94 @@ export const PARABOL_BUS_STOP = {
 } as const;
 
 export const BIKE_PARKING_SHED = {
-  center: { x: -58, z: 28.8 },
+  center: { x: -55.0, z: 29.2 },
+  size: { x: 14.8, z: 5.0 },
+  box: { minX: -62.4, maxX: -47.6, minZ: 26.7, maxZ: 31.7 },
 } as const;
+
+/** Hệ thống đầy đủ các bãi đỗ xe ô tô & nhà để xe máy/xe đạp sinh viên trong khuôn viên chính
+ *  (đối chiếu 100% lớp `multipolygons [amenity=parking]` trên https://hustmap.com/). */
+export const CAMPUS_PARKING_LOTS = {
+  /** Bãi xe C1 (fid: 257, 258, 259 — phía Bắc nhà C1, hai bên lối vào Cổng Đại Cồ Việt) */
+  c1West: {
+    center: { x: -72.5, z: -67.2 },
+    size: { x: 14.0, z: 4.8 },
+    box: { minX: -79.5, maxX: -65.5, minZ: -69.6, maxZ: -64.8 },
+  },
+  c1East: {
+    center: { x: -43.5, z: -67.2 },
+    size: { x: 14.0, z: 4.8 },
+    box: { minX: -50.5, maxX: -36.5, minZ: -69.6, maxZ: -64.8 },
+  },
+  c1NorthLane: {
+    center: { x: -43.5, z: -72.4 },
+    size: { x: 14.0, z: 2.8 },
+    box: { minX: -50.5, maxX: -36.5, minZ: -73.8, maxZ: -71.0 },
+  },
+  /** Bãi xe C2 (fid: 238 — nhà xe ô tô có mái che ở góc Tây-Bắc khuôn viên, phía Bắc nhà C2) */
+  c2Carport: {
+    center: { x: -86.2, z: -69.5 },
+    size: { x: 10.4, z: 6.4 },
+    box: { minX: -91.4, maxX: -81.0, minZ: -72.7, maxZ: -66.3 },
+  },
+  /** Bãi xe C9 (fid: 222 — bãi đỗ ô tô mặt đất nằm giữa phía Đông nhà C9 và Quảng trường ngã 5) */
+  c9Lot: {
+    center: { x: -47.8, z: -17.5 },
+    size: { x: 6.8, z: 10.0 },
+    box: { minX: -51.2, maxX: -44.4, minZ: -22.5, maxZ: -12.5 },
+  },
+  /** Nhà xe C5 (fid: 171, 172 — 2 nhà để xe máy/xe đạp có mái che ở sân giữa C4–C5 và sân giữa C5–C10) */
+  c5NorthShed: {
+    center: { x: -12.5, z: -51.5 },
+    size: { x: 8.6, z: 2.8 },
+    box: { minX: -16.8, maxX: -8.2, minZ: -52.9, maxZ: -50.1 },
+  },
+  c5SouthShed: {
+    center: { x: -12.5, z: -40.5 },
+    size: { x: 8.6, z: 2.8 },
+    box: { minX: -16.8, maxX: -8.2, minZ: -41.9, maxZ: -39.1 },
+  },
+  /** Điểm trông giữ xe D7 - D9 (fid: 125 — bãi xe máy sinh viên ngoài trời giữa mặt Nam Thư viện TQB và mặt Bắc nhà D9) */
+  d7d9Lot: {
+    center: { x: 39.5, z: 54.6 },
+    size: { x: 14.4, z: 5.2 },
+    box: { minX: 32.3, maxX: 46.7, minZ: 52.0, maxZ: 57.2 },
+  },
+  /** Sân đỗ xe máy phụ trong lòng cụm chữ U [D3 – D5 – D3-5] (fid: 126) */
+  d3d5Courtyard: {
+    center: { x: 62.6, z: 21.5 },
+    size: { x: 7.6, z: 5.6 },
+    box: { minX: 58.8, maxX: 66.4, minZ: 18.7, maxZ: 24.3 },
+  },
+} as const;
+
+/** Ba khối nhà nối 3 tầng chạm đất C3-4, C4-5, C5-10 liên kết đầu Tây dãy C3 – C4 – C5 – C10 (theo https://hustmap.com/). */
+export const C_CONNECTOR_BUILDINGS = [
+  {
+    code: 'C3-4',
+    subtitle: 'NHÀ NỐI C3-4',
+    center: { x: -20.5, z: -62.5 },
+    size: { x: 4.2, z: 4.6 },
+    h: 10.2,
+    box: { minX: -22.6, maxX: -18.4, minZ: -64.8, maxZ: -60.2 },
+  },
+  {
+    code: 'C4-5',
+    subtitle: 'NHÀ NỐI C4-5',
+    center: { x: -20.5, z: -51.5 },
+    size: { x: 4.2, z: 4.6 },
+    h: 10.2,
+    box: { minX: -22.6, maxX: -18.4, minZ: -53.8, maxZ: -49.2 },
+  },
+  {
+    code: 'C5-10',
+    subtitle: 'NHÀ NỐI C5-10',
+    center: { x: -20.5, z: -40.5 },
+    size: { x: 4.2, z: 4.6 },
+    h: 10.2,
+    box: { minX: -22.6, maxX: -18.4, minZ: -42.8, maxZ: -38.2 },
+  },
+] as const;
 
 export type LectureBuildingFacing = 's' | 'n' | 'e' | 'w';
 
@@ -419,7 +536,7 @@ export type LectureBuildingSpec = {
   box: AABB;
 };
 
-// 8. Các dãy giảng đường Khu C (C1B, C3, C3B, C4B, C4, C5, C10, ITIMS) & Khu D (D2A, D2B, D6, D8, D9, D3, D5, D3-5, D7)
+// 8. Các dãy giảng đường Khu C (C1B, C3, C3B, C4B, C4, C5, C10, C10b, ITIMS) & Khu D (D2A, D2B, D6, D8 11 tầng, D9, D3, D5, D3-5, D7)
 //    Đối chiếu chuẩn https://hustmap.com/:
 export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
   // C1B ở đầu hồi Đông Nhà C1 và C3B ở phía Tây-Bắc Nhà C6
@@ -448,7 +565,7 @@ export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
     box: { minX: 20.25, maxX: 27.75, minZ: -70.0, maxZ: -63.0 },
   },
 
-  // Cụm dãy ngang C3 – C4B – C4 – C5 – C10 – ITIMS từ Bắc xuống Nam (phía Đông Quảng trường C1)
+  // Cụm dãy ngang C3 – C4B – C4 – C5 – C10 – C10b – ITIMS từ Bắc xuống Nam (phía Đông Quảng trường C1)
   {
     code: 'C3',
     subtitle: 'GIẢNG ĐƯỜNG C3',
@@ -510,6 +627,18 @@ export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
     box: { minX: -23, maxX: -1, minZ: -38.25, maxZ: -31.75 },
   },
   {
+    code: 'C10b',
+    subtitle: 'NHÀ C10B',
+    x: 8.5,
+    z: -35,
+    w: 11.0,
+    d: 6.2,
+    h: 12.8,
+    face: 's',
+    tone: 1,
+    box: { minX: 3.0, maxX: 14.0, minZ: -38.1, maxZ: -31.9 },
+  },
+  {
     code: 'ITIMS',
     subtitle: 'VIỆN ĐÀO TẠO QUỐC TẾ VỀ KH VẬT LIỆU',
     x: -27.5,
@@ -548,7 +677,7 @@ export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
     box: { minX: -49.25, maxX: -38.75, minZ: 15.5, maxZ: 24.5 },
   },
 
-  // Cụm D6 – D8 phía Tây Hồ Tiền (phía Nam Điểm trông giữ xe D4-6-8)
+  // Cụm D6 (3 tầng) – D8 (cao ốc 11 tầng theo https://hustmap.com/ building:levels=11) phía Tây Hồ Tiền
   {
     code: 'D6',
     subtitle: 'GIẢNG ĐƯỜNG D6',
@@ -563,15 +692,15 @@ export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
   },
   {
     code: 'D8',
-    subtitle: 'GIẢNG ĐƯỜNG D8',
+    subtitle: 'TÒA NHÀ D8 (11 TẦNG)',
     x: -46,
     z: 54,
     w: 18,
-    d: 7.5,
-    h: 10.2,
+    d: 8.2,
+    h: 30.8,
     face: 'n',
     tone: 2,
-    box: { minX: -55, maxX: -37, minZ: 50.25, maxZ: 57.75 },
+    box: { minX: -55, maxX: -37, minZ: 49.9, maxZ: 58.1 },
   },
 
   // Nhà D9 ngay phía Nam Thư viện Tạ Quang Bửu (cạnh Điểm trông giữ xe D7 - D9)
@@ -643,6 +772,62 @@ export const LECTURE_BUILDINGS: LectureBuildingSpec[] = [
 export const D4_BUILDING = {
   center: { x: -78, z: 44 },
   box: { minX: -87, maxX: -69, minZ: 34, maxZ: 54 },
+} as const;
+
+/** Các khối nhà phụ trợ thuộc trường (building=university) quanh C2, C1–C3 và dãy dịch vụ sinh viên bờ Tây Hồ Tiền
+ *  trên Bản đồ Số https://hustmap.com/ (fid: 237, 224, 93, 266–270). */
+export const CAMPUS_ANNEX_BLOCKS = [
+  {
+    id: 'c2-north-annex',
+    label: 'Khối phụ trợ Bắc C2',
+    center: { x: -86.6, z: -53.0 },
+    size: { x: 5.6, z: 8.0 },
+    h: 6.8,
+    box: { minX: -89.4, maxX: -83.8, minZ: -57.0, maxZ: -49.0 },
+  },
+  {
+    id: 'c2-south-annex',
+    label: 'Khối phụ trợ Nam C2',
+    center: { x: -89.8, z: -20.5 },
+    size: { x: 5.2, z: 5.4 },
+    h: 6.4,
+    box: { minX: -92.4, maxX: -87.2, minZ: -23.2, maxZ: -17.8 },
+  },
+  {
+    id: 'c1-east-annex',
+    label: 'Nhà phụ trợ C1 – C3',
+    center: { x: -27.5, z: -68.0 },
+    size: { x: 6.2, z: 5.2 },
+    h: 6.8,
+    box: { minX: -30.6, maxX: -24.4, minZ: -70.6, maxZ: -65.4 },
+  },
+  {
+    id: 'd468-service-north',
+    label: 'Kiot dịch vụ SV D4-6',
+    center: { x: -35.5, z: 28.0 },
+    size: { x: 5.4, z: 3.8 },
+    h: 4.2,
+    box: { minX: -38.2, maxX: -32.8, minZ: 26.1, maxZ: 29.9 },
+  },
+  {
+    id: 'd468-service-south',
+    label: 'Nhà dịch vụ SV D6-8',
+    center: { x: -32.5, z: 45.5 },
+    size: { x: 4.6, z: 4.6 },
+    h: 4.2,
+    box: { minX: -34.8, maxX: -30.2, minZ: 43.2, maxZ: 47.8 },
+  },
+] as const;
+
+/** Tiện ích giao thông công cộng & sinh viên sát rìa khuôn viên chính theo https://hustmap.com/:
+ *  - Trạm buýt Trần Đại Nghĩa ("Đại học Bách Khoa" · Tuyến 31)
+ *  - Trạm xe đạp công cộng TNGo (75 Trần Đại Nghĩa)
+ *  - Máy bán nước tự động Skyline Vmac (tại Thư viện TQB & Nhà D4) */
+export const CAMPUS_AMENITIES = {
+  tdnBusStop: { x: 93.8, z: -61.5 },
+  tngoStation: { x: 93.8, z: -21.0 },
+  vmacLibrary: { x: 31.2, z: 24.4 },
+  vmacD4: { x: -73.8, z: 39.8 },
 } as const;
 
 // Ghế gỗ dọc bờ Hồ Tiền (quay mặt ra hồ) + ghế quảng trường C1.

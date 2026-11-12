@@ -10,6 +10,7 @@ import {
   C7_BUILDING,
   C7_FACULTY_PARKING,
   D3_D5_PARKING_GARAGE,
+  HUST_DIGITAL_HUB,
   VDZ_CENTER,
 } from '../world-data';
 import { LabelPlane } from '../../../components/three/TextPlate';
@@ -508,11 +509,11 @@ export function VietDucCenterBuilding({ isNight }: { isNight: boolean }) {
         <boxGeometry args={[size.x + 0.4, 0.44, size.z + 0.4]} />
         <meshStandardMaterial color="#3B6E9C" roughness={0.78} />
       </mesh>
-      {[0, 1].map((fl) =>
+      {Array.from({ length: floors }, (_, fl) =>
         [-2.85, -0.95, 0.95, 2.85].map((wx, idx) => (
           <group key={`vdz-win-${fl}-${idx}`}>
-            <mesh position={[wx, fl * floorHeight + 1.6, size.z / 2 + 0.03]}>
-              <planeGeometry args={[1.35, 1.15]} />
+            <mesh position={[wx, fl * floorHeight + 1.55, size.z / 2 + 0.03]}>
+              <planeGeometry args={[1.35, 1.12]} />
               <meshStandardMaterial
                 color={isNight ? '#FFE4A0' : GLASS_MID}
                 emissive={isNight ? '#FFB84D' : '#000000'}
@@ -520,8 +521,8 @@ export function VietDucCenterBuilding({ isNight }: { isNight: boolean }) {
                 roughness={0.35}
               />
             </mesh>
-            <mesh position={[wx, fl * floorHeight + 1.6, -size.z / 2 - 0.03]} rotation-y={Math.PI}>
-              <planeGeometry args={[1.35, 1.15]} />
+            <mesh position={[wx, fl * floorHeight + 1.55, -size.z / 2 - 0.03]} rotation-y={Math.PI}>
+              <planeGeometry args={[1.35, 1.12]} />
               <meshStandardMaterial
                 color={isNight ? '#FFE4A0' : GLASS_MID}
                 emissive={isNight ? '#FFB84D' : '#000000'}
@@ -558,8 +559,90 @@ export function VietDucCenterBuilding({ isNight }: { isNight: boolean }) {
 }
 
 /**
- * Nhà Cựu sinh viên Bách Khoa / Không gian số HUST Digital Hub
- * Nằm ở công viên bờ Bắc Hồ Tiền phía Đông Trung tâm Việt – Đức (VDZ) theo đúng https://hustmap.com/.
+ * Không gian số HUST Digital Hub — khối nhà kính hiện đại nằm giữa Trung tâm Việt – Đức (VDZ)
+ * và Nhà Cựu sinh viên Bách Khoa ở bờ Bắc Hồ Tiền theo đúng Bản đồ Số https://hustmap.com/.
+ */
+export function HustDigitalHubBuilding({ isNight }: { isNight: boolean }) {
+  const { center, size, floors, floorHeight } = HUST_DIGITAL_HUB;
+  const h = floors * floorHeight;
+
+  return (
+    <group position={[center.x, 0, center.z]}>
+      <mesh position={[0, 0.24, 0]} receiveShadow>
+        <boxGeometry args={[size.x + 0.18, 0.48, size.z + 0.18]} />
+        <meshStandardMaterial color="#475569" roughness={0.82} />
+      </mesh>
+      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[size.x, h, size.z]} />
+        <meshStandardMaterial color="#F1F5F9" roughness={0.8} />
+      </mesh>
+      {/* Diềm mái công nghệ màu xanh dương đậm kết hợp chỉ đỏ Bách Khoa */}
+      <mesh position={[0, h + 0.22, 0]} castShadow>
+        <boxGeometry args={[size.x + 0.4, 0.44, size.z + 0.4]} />
+        <meshStandardMaterial color="#0F172A" roughness={0.62} metalness={0.25} />
+      </mesh>
+      <mesh position={[0, h + 0.48, 0]}>
+        <boxGeometry args={[size.x + 0.44, 0.08, size.z + 0.44]} />
+        <meshStandardMaterial color="#DC2626" roughness={0.55} />
+      </mesh>
+      {/* Vách kính lớn 2 tầng mặt Bắc & mặt Nam */}
+      {[0, 1].map((fl) =>
+        [-2.0, 0, 2.0].map((wx, idx) => (
+          <group key={`dhub-win-${fl}-${idx}`}>
+            <mesh position={[wx, fl * floorHeight + 1.55, -size.z / 2 - 0.03]} rotation-y={Math.PI}>
+              <planeGeometry args={[1.62, 1.32]} />
+              <meshStandardMaterial
+                color={isNight ? '#BAE6FD' : '#1E3A5F'}
+                emissive={isNight ? '#38BDF8' : '#000000'}
+                emissiveIntensity={isNight ? 0.72 : 0}
+                roughness={0.22}
+                metalness={0.35}
+              />
+            </mesh>
+            <mesh position={[wx, fl * floorHeight + 1.55, size.z / 2 + 0.03]}>
+              <planeGeometry args={[1.62, 1.32]} />
+              <meshStandardMaterial
+                color={isNight ? '#BAE6FD' : '#1E3A5F'}
+                emissive={isNight ? '#38BDF8' : '#000000'}
+                emissiveIntensity={isNight ? 0.72 : 0}
+                roughness={0.22}
+                metalness={0.35}
+              />
+            </mesh>
+          </group>
+        )),
+      )}
+      <LabelPlane
+        textureKey="hust-digital-hub-sign-only"
+        canvasW={576}
+        canvasH={120}
+        draw={(ctx, w, hCanvas) => {
+          ctx.fillStyle = '#0F172A';
+          ctx.fillRect(0, 0, w, hCanvas);
+          ctx.strokeStyle = '#38BDF8';
+          ctx.lineWidth = 6;
+          ctx.strokeRect(6, 6, w - 12, hCanvas - 12);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '900 32px "Be Vietnam Pro", "Segoe UI", sans-serif';
+          ctx.fillText('HUST DIGITAL HUB', w / 2, hCanvas * 0.4);
+          ctx.fillStyle = '#7DD3FC';
+          ctx.font = '700 20px "Be Vietnam Pro", "Segoe UI", sans-serif';
+          ctx.fillText('KHÔNG GIAN SỐ BÁCH KHOA · 数字中心', w / 2, hCanvas * 0.76);
+        }}
+        size={[3.9, 0.82]}
+        position={[0, h - 0.52, -size.z / 2 - 0.05]}
+        rotation={[0, Math.PI, 0]}
+        transparent={false}
+      />
+    </group>
+  );
+}
+
+/**
+ * Nhà Cựu sinh viên Bách Khoa (tách biệt với HUST Digital Hub, nằm chếch phía Đông-Nam
+ * sát góc Đông-Bắc Hồ Tiền theo đúng https://hustmap.com/).
  */
 export function AlumniHouseBuilding({ isNight }: { isNight: boolean }) {
   const { center, size, floors, floorHeight } = ALUMNI_HOUSE;
@@ -582,10 +665,10 @@ export function AlumniHouseBuilding({ isNight }: { isNight: boolean }) {
       </mesh>
       {/* Khung kính lớn 2 tầng nhìn ra trục đường chính (-Z) và mặt nước Hồ Tiền (+Z) */}
       {[0, 1].map((fl) =>
-        [-2.2, 0, 2.2].map((wx, idx) => (
+        [-2.1, 0, 2.1].map((wx, idx) => (
           <group key={`alumni-win-${fl}-${idx}`}>
             <mesh position={[wx, fl * floorHeight + 1.55, -size.z / 2 - 0.03]} rotation-y={Math.PI}>
-              <planeGeometry args={[1.65, 1.25]} />
+              <planeGeometry args={[1.6, 1.25]} />
               <meshStandardMaterial
                 color={isNight ? '#FFE4A0' : '#2A475E'}
                 emissive={isNight ? '#FFB84D' : '#000000'}
@@ -595,7 +678,7 @@ export function AlumniHouseBuilding({ isNight }: { isNight: boolean }) {
               />
             </mesh>
             <mesh position={[wx, fl * floorHeight + 1.55, size.z / 2 + 0.03]}>
-              <planeGeometry args={[1.65, 1.25]} />
+              <planeGeometry args={[1.6, 1.25]} />
               <meshStandardMaterial
                 color={isNight ? '#FFE4A0' : '#2A475E'}
                 emissive={isNight ? '#FFB84D' : '#000000'}
@@ -608,7 +691,7 @@ export function AlumniHouseBuilding({ isNight }: { isNight: boolean }) {
         )),
       )}
       <LabelPlane
-        textureKey="alumni-digital-hub-sign"
+        textureKey="alumni-house-only-sign"
         canvasW={576}
         canvasH={120}
         draw={(ctx, w, hCanvas) => {
@@ -624,9 +707,9 @@ export function AlumniHouseBuilding({ isNight }: { isNight: boolean }) {
           ctx.fillText('NHÀ CỰU SINH VIÊN BÁCH KHOA', w / 2, hCanvas * 0.38);
           ctx.fillStyle = '#FDE047';
           ctx.font = '700 21px "Be Vietnam Pro", "Segoe UI", sans-serif';
-          ctx.fillText('HUST DIGITAL HUB · 校友之家', w / 2, hCanvas * 0.74);
+          ctx.fillText('HUST ALUMNI HOUSE · 校友之家', w / 2, hCanvas * 0.74);
         }}
-        size={[4.1, 0.85]}
+        size={[4.0, 0.84]}
         position={[0, h - 0.55, -size.z / 2 - 0.05]}
         rotation={[0, Math.PI, 0]}
         transparent={false}
@@ -900,7 +983,7 @@ export function D3D5ParkingGarage() {
 /**
  * Một chiếc ô tô 3D của giảng viên đỗ trên trục đường cạnh tòa C7
  */
-function FacultyParkedCar({
+export function FacultyParkedCar({
   x,
   z,
   yaw,
