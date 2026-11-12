@@ -1,6 +1,6 @@
 # HUSTVerse — Bách Khoa 3D — Project Rules
 
-> **Định hướng Sản phẩm & Tài liệu Trung tâm:** Dự án định vị là **không gian mô phỏng & game 3D tương tác Đại học Bách khoa Hà Nội (`HUSTVerse — Bách Khoa 3D`)**, trong đó phần học tiếng Trung được tách thành **`HSK Mode` riêng có thể bật/tắt** (`lib/gameModes.ts`, mặc định `OFF` cho người chơi mới). Xem bản đồ toàn bộ tài liệu kỹ thuật, danh mục Module IDs (`building.*`, `avatar.*`, `feature.*`) và ADRs tại **[`docs/README.md`](./docs/README.md)** (cùng hướng dẫn tóm tắt tại **[`AGENTS.md`](./AGENTS.md)**).
+> **Định hướng Sản phẩm & Tài liệu Trung tâm:** Dự án định vị là **không gian mô phỏng & game 3D tương tác Đại học Bách khoa Hà Nội (`HUSTVerse — Bách Khoa 3D`)**, triển khai trực tiếp tại **[`https://hustverse.vercel.app/`](https://hustverse.vercel.app/)**, trong đó phần học tiếng Trung được tách thành **`HSK Mode` riêng có thể bật/tắt** (`lib/gameModes.ts`, mặc định `OFF` cho người chơi mới). Xem bản đồ toàn bộ tài liệu kỹ thuật, danh mục Module IDs (`building.*`, `avatar.*`, `feature.*`) và ADRs tại **[`docs/README.md`](./docs/README.md)** (cùng hướng dẫn tóm tắt tại **[`AGENTS.md`](./AGENTS.md)**).
 
 ## 1. Kiến trúc & Nguồn sự thật duy nhất (Single Source of Truth)
 - **Hằng số Thế giới & Hợp đồng Chia sẻ ([`shared/constants/world.ts`](./shared/constants/world.ts), [`shared/contracts/multiplayer.ts`](./shared/contracts/multiplayer.ts), [`lib/campus.ts`](./lib/campus.ts)):**
@@ -47,6 +47,6 @@ Sau mỗi thay đổi về 3D, kiến trúc hoặc logic, phải đảm bảo 6 
 6. `npm run build` — Xuất bản tĩnh Next.js (`out/`) thành công.
 
 ## 5. Quy trình Git & Tự động Commit/Push (Git Policy)
-- **Nhánh chính Production / Go-Live là `main`:** Mọi bản phát hành chính thức và CI/CD go-live (Vercel Production & GitHub Actions) chạy qua nhánh mặc định `main` (đã loại bỏ nhánh `master`).
+- **Nhánh chính Production / Go-Live là `main`:** Mọi bản phát hành chính thức và CI/CD go-live (Vercel Production tại **[`https://hustverse.vercel.app/`](https://hustverse.vercel.app/)** & GitHub Actions) chạy qua nhánh mặc định `main` (đã loại bỏ nhánh `master`).
 - **Tự động `git commit` và `git push` sau khi hoàn thành công việc:** Sau khi hoàn tất yêu cầu và toàn bộ các cổng kiểm thử ở Mục 4 đã PASS (`exit code 0`), **luôn chủ động tạo commit và push thẳng lên nhánh làm việc hiện tại trên remote (`origin`)**.
 - **Bảo vệ nhánh chính:** Không tự ý merge vào `main` hoặc deploy nếu nhiệm vụ yêu cầu làm việc trên nhánh tính năng riêng (`feat/*`), trừ khi người dùng yêu cầu trực tiếp.

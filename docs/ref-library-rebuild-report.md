@@ -189,5 +189,5 @@ thư viện + chuỗi 5 lách bệ HUST), `test/r4-lib-shots.cjs` (6 góc + top-
 - Không deploy. Deploy (khi user chốt): `python3
   ~/workspace/custom-connectors/custom.vercel/bin/vercel_api.py deploy
   --dir ~/workspace/bach-khoa-han-ngu/out --name hust-hsk`, rồi curl kiểm
-  chứng https://hust-hsk.vercel.app/ 200 + đúng title; sau deploy giữ ~3
+  chứng https://hustverse.vercel.app/ 200 + đúng title; sau deploy giữ ~3
   deployment gần nhất. Không đụng hoc-hsk hay chua-online.

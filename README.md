@@ -2,6 +2,8 @@
 
 **Không gian Mô phỏng & Game 3D Tương tác Khuôn viên Đại học Bách khoa Hà Nội (HUST)**
 
+🌐 **Trải nghiệm trực tiếp (Live Web):** **[https://hustverse.vercel.app/](https://hustverse.vercel.app/)**
+
 Bước vào thế giới mở 3D **Đại học Bách khoa Hà Nội** ngay trên trình duyệt: hóa thân thành sinh viên Bách Khoa trong 10 mẫu đồng phục thật, đi bộ hoặc lái xe máy qua các công trình biểu tượng (Cổng Parabol, Quảng trường C1, Cổng Trần Đại Nghĩa 2 làn nhập 1, Tòa C7, Trường Vật liệu SMSE, Cụm D3–D5–D7–D9, Thư viện Tạ Quang Bửu 10 tầng, Hồ Tiền, Nhà Cựu sinh viên, B1 SoICT, Khu KTX & SVĐ), check-in sưu tầm Sổ tay Bách Khoa, ngồi tự học nhóm cùng bạn bè theo thời gian thực (Multiplayer) và bật/tắt linh hoạt các chế độ trải nghiệm.
 
 ---
@@ -22,6 +24,7 @@ Bước vào thế giới mở 3D **Đại học Bách khoa Hà Nội** ngay tr�
 
 ## 🛠️ Công nghệ & Kiến trúc
 
+- **Production Web:** **[`https://hustverse.vercel.app/`](https://hustverse.vercel.app/)** (Vercel Production — tự động xuất bản từ nhánh `main`).
 - **Stack:** Next.js 14 (`output: 'export'`) + React Three Fiber / Three.js (Procedural PBR Canvas Textures, 0 external GLB) + Tailwind CSS + Cloudflare Worker & Durable Object SQLite (`worker/`).
 - **Tài liệu Kiến trúc & Đặc tả Hệ thống:**
   - **[Trung tâm Tài liệu Kiến trúc (`docs/README.md`)](./docs/README.md)**

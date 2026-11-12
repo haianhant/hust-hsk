@@ -1,6 +1,6 @@
 # Trạng thái Hệ thống Hiện tại (`Current Status`)
 
-*Cập nhật lần cuối: 09/11/2026 — Hoàn tất chuỗi tái cấu trúc `PR1` – `PR6`, tính năng `PR7 — Study Experience MVP`, `PR8 — Interactive 3D Library Seating & Study Experience`, `PR9 — Server-Authoritative Seat Occupancy & Live Study Presence`, và nâng cấp khuôn viên & nhân vật theo `nextstep/yeucau1.md` (`feature/tham-khao`).*
+*Cập nhật lần cuối: 13/11/2026 — Định danh chính thức **HUSTVerse — Bách Khoa 3D**, chuyển domain Production sang **[`https://hustverse.vercel.app/`](https://hustverse.vercel.app/)**, tách `HSK Mode` thành chế độ bật/tắt riêng (`lib/gameModes.ts`), và hoàn tất quy hoạch khuôn viên chuẩn `hustmap.com` + ảnh tham khảo thực tế.*
 
 ---
 
@@ -31,4 +31,4 @@
 | **Phương tiện & Dịch chuyển** | 1 xe máy cá nhân (`BIKE_MAX_SPEED = 14 m/s`), 6 điểm Dịch chuyển nhanh (`FAST_TRAVEL_DESTINATIONS`), Bản đồ toàn cảnh. | `npm run test:world`, `node test/fast-travel-check.cjs` | Đã triển khai & kiểm thử |
 | **Nội dung & Engine Học HSK 3–4** | **1.057 từ vựng** (246 từ HSK 3 + 811 từ HSK 4), 29 bài, **50 nhiệm vụ**, lịch ôn SRS, sổ lỗi, 6 huy hiệu toàn cục. | `npm run test:learn` (`45/45` unit tests) | Đã triển khai & kiểm thử |
 | **Multiplayer Realtime & Study Rooms** | 5 phòng (`hsk-1`..`hsk-5`), tối đa 15 người/phòng, đồng bộ vị trí + hướng + trạng thái + 10 bộ đồng phục + giữ chỗ ghế `library-lobby` + `study:presence`, hỗ trợ DO Hibernation đầy đủ. | `npm run test:contracts` (`6/6`), `npm run test:mp` (`22/22`), `node test/pr9-multiplayer-study-smoke.cjs` (`12/12`) | Đã triển khai & kiểm thử |
-| **Build & Xuất bản Tĩnh** | Next.js 14 `output: 'export'` (`out/`), Cloudflare Worker (`worker/`). | `npm run typecheck` + `npm run build` | Đã triển khai & kiểm thử |
+| **Build & Xuất bản Tĩnh** | Next.js 14 `output: 'export'` (`out/`), Vercel Production ([`https://hustverse.vercel.app/`](https://hustverse.vercel.app/)), Cloudflare Worker (`worker/`). | `npm run typecheck` + `npm run build` | Đã triển khai & kiểm thử |

@@ -1,7 +1,7 @@
 # AI Agent Guidelines — HUSTVerse — Bách Khoa 3D
 
 Tài liệu hướng dẫn ngắn gọn dành cho các AI Coding Agents làm việc trên dự án **HUSTVerse — Bách Khoa 3D** (không gian mô phỏng & game 3D tương tác ĐHBK Hà Nội với kiến trúc Core World + Pluggable Modes, trong đó `HSK Mode` tách riêng có thể bật/tắt).
-**Nguồn tài liệu kiến trúc trung tâm:** [`docs/README.md`](./docs/README.md).
+**Website chính thức (Production):** [`https://hustverse.vercel.app/`](https://hustverse.vercel.app/) · **Nguồn tài liệu kiến trúc trung tâm:** [`docs/README.md`](./docs/README.md).
 
 ---
 
@@ -56,7 +56,7 @@ npm run build              # 6. Xuất bản tĩnh Next.js (out/) thành công
 
 ## 4. Quy tắc Git & Tự động Commit/Push (`Git Policy`)
 
-- **Nhánh chính Production / Go-Live là `main`** (Vercel Production & GitHub Actions CI chạy qua nhánh mặc định `main`, đã loại bỏ nhánh `master`).
+- **Nhánh chính Production / Go-Live là `main`** (Vercel Production tại [`https://hustverse.vercel.app/`](https://hustverse.vercel.app/) & GitHub Actions CI chạy qua nhánh mặc định `main`, đã loại bỏ nhánh `master`).
 - **Luôn tự động `git commit` và `git push` lên nhánh hiện tại (`origin`)** ngay sau khi hoàn thành nhiệm vụ và vượt qua toàn bộ các cổng kiểm thử ở Mục 3.
 - Không ghi đè hoặc hoàn tác các thay đổi chưa commit trong working tree.
 - Không tự ý merge vào `main` hoặc deploy khi đang làm việc trên nhánh tính năng (`feat/*`) nếu chưa có yêu cầu từ người dùng.

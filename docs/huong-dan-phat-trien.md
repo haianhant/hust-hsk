@@ -8,7 +8,7 @@
 ## 0. Bối cảnh và cách làm việc
 
 - Repo: `haianhant/hust-hsk`, nhánh `main`. Push lên `main` là Vercel tự deploy
-  (project `hust-hsk`, live https://hust-hsk.vercel.app/).
+  (live https://hustverse.vercel.app/).
 - Stack: Next.js 14 static export + React Three Fiber + Tailwind.
   Build: `npm run build` (ra `out/`). Chạy local: `npm run dev`.
 - **Đọc trước khi sửa:** `PROGRESS.md`, `NEXT_STEPS.md`, `lib/campus.ts`.
