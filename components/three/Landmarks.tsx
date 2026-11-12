@@ -24,7 +24,9 @@ import { makeWoodGrainTexture } from './materials';
 import {
   C1Fountain,
   ILoveBK,
+  Nga5PlazaLandmarks,
   SimpleBench,
+  TranDaiNghiaMemorialPlaza,
   WhiteRock,
   makeRockTexture,
 } from '../../features/campus/landscape/C1SquareLandmarks';
@@ -42,6 +44,8 @@ export {
   makeRockTexture,
   WhiteRock,
   C1Fountain,
+  Nga5PlazaLandmarks,
+  TranDaiNghiaMemorialPlaza,
   TranDaiNghiaSquare,
   drawC2Sign,
   C2Building,
@@ -62,7 +66,9 @@ export default function Landmarks({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay
       <TienLake />
       <C9Building timeOfDay={timeOfDay} />
       <WhiteRock />
-      <C1Fountain />
+      <C1Fountain isNight={isNight} />
+      <Nga5PlazaLandmarks isNight={isNight} />
+      <TranDaiNghiaMemorialPlaza isNight={isNight} />
       <TranDaiNghiaSquare isNight={isNight} />
       <C2Building isNight={isNight} />
       <DaiCoVietGate />

@@ -88,8 +88,8 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
     icon: '🎓',
     accentColor: '#DC2626',
     fastTravelId: 'c7',
-    pos: { x: 41.2, z: -36.2 },
-    markerPos: { x: 41.2, z: -36.8 },
+    pos: { x: 30.2, z: -31.8 },
+    markerPos: { x: 30.8, z: -31.2 },
     triggerRadius: 2.8,
     promptLabel: 'E — Khám phá & Check-in Tòa C7 (Trung tâm Học HSK)',
     creativeFeatureTitle: 'Giảng đường HSK 3D Theo Bài',
@@ -100,9 +100,9 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
     creativeActionLabel: '🏫 Vào Giảng đường Tòa C7 & Chọn bài HSK',
     historyYear: 'Tổ hợp 9 tầng hiện đại',
     historySummary:
-      'Tòa C7 là tổ hợp giảng đường và điều hành trung tâm quy mô lớn bậc nhất ĐHBK Hà Nội với mặt bằng chữ E gồm 3 cánh hướng Nam ôm 2 sân cây xanh thoáng đãng.',
+      'Tòa C7 là tổ hợp giảng đường và điều hành trung tâm quy mô lớn bậc nhất ĐHBK Hà Nội với mặt bằng chữ E chạy dọc trục Bắc–Nam sát phố Trần Đại Nghĩa, gồm 3 cánh hướng Tây ôm 2 sân cây xanh thoáng đãng.',
     architecturalHighlight:
-      'Khối đế 2 tầng lắp vách kính lớn cho giảng đường lớn, 3 cánh 9 tầng sơn trắng hiện đại điểm ô mái ngói đỏ truyền thống trên đỉnh.',
+      'Khối đế 2 tầng lắp vách kính lớn cho giảng đường, 3 cánh 9 tầng sơn trắng hiện đại hướng sang khu C4–C10, điểm ô mái ngói đỏ truyền thống trên đỉnh.',
     vocab: [
       { hanzi: '教学楼', pinyin: 'jiàoxuélóu', vi: 'Tòa giảng đường', example: '我们在C7教学楼上课。' },
       { hanzi: '教室', pinyin: 'jiàoshì', vi: 'Phòng học / Lớp học', example: '请进C7教室学习汉语。' },
@@ -118,7 +118,7 @@ export const CAMPUS_LANDMARKS: readonly CampusLandmarkSpec[] = [
         'Hình chữ L — 宿舍楼 (sùshèlóu)',
       ],
       correctIndex: 0,
-      explanation: 'Tòa C7 có mặt bằng chữ E với 3 cánh hướng Nam, là "教学楼" (jiàoxuélóu — tòa giảng đường) trung tâm của trường.',
+      explanation: 'Tòa C7 có mặt bằng chữ E chạy dọc Bắc–Nam với 3 cánh hướng Tây, là "教学楼" (jiàoxuélóu — tòa giảng đường) trung tâm của trường.',
       rewardPoints: 15,
     },
   },

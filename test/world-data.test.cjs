@@ -161,7 +161,7 @@ test('(6) nearestZone, nearestRoadPoint, findFreeSpotNear, and getFastTravelDest
   assert.equal(nearestZone({ x: 76, z: 7.5 }), 'Nhà để xe D3 - D5');
   assert.equal(nearestZone({ x: -2, z: 48 }), 'Hồ Tiền');
   assert.equal(nearestZone({ x: 38, z: 32 }), 'Thư viện Tạ Quang Bửu');
-  assert.equal(nearestZone({ x: 112, z: 14 }), 'Nhà B1 (Viện CNTT&TT - SoICT)');
+  assert.equal(nearestZone({ x: 112, z: 14 }), 'Nhà B1 (Trường CNTT&TT - SoICT)');
   assert.equal(nearestZone({ x: 132, z: 78 }), 'Sân vận động Bách Khoa');
 
   // nearestRoadPoint projects onto straight East-West main axis z = -6
@@ -213,5 +213,156 @@ test('(7) D3-D5 parking garage extended depth and D3-D5-D7 cluster next to Libra
       tree.z >= D3_D5_PARKING_GARAGE.box.minZ &&
       tree.z <= D3_D5_PARKING_GARAGE.box.maxZ;
     assert.equal(insideGarage, false, `Tree at (${tree.x}, ${tree.z}) must not clip D3-D5 garage`);
+  }
+});
+
+test('(8) hustmap.com Source-of-Truth layout & Scope Boundary invariants', () => {
+  const {
+    BOUNDS,
+    C15_BUILDING,
+    C7_BUILDING,
+    C7_DOOR,
+    C1_FOUNTAIN,
+    ALUMNI_HOUSE,
+    VDZ_CENTER,
+    EAST_CAMPUS_BLOCKS,
+    SPORTS_COMPLEX,
+    LECTURE_BUILDINGS,
+    CAMPUS_MAP_BUILDINGS,
+  } = campusFacade;
+
+  // Demolished C8 and non-HUST H1/H3 are absent; C15, A1-5, A17, Nhà E, Nhà T are present
+  assert.equal('C8_BUILDING' in campusFacade, false);
+  assert.ok(C15_BUILDING.center.x > C7_BUILDING.center.x);
+  assert.equal('h1' in EAST_CAMPUS_BLOCKS, false);
+  assert.equal('h3' in EAST_CAMPUS_BLOCKS, false);
+  assert.ok(EAST_CAMPUS_BLOCKS.a15 && EAST_CAMPUS_BLOCKS.a17 && EAST_CAMPUS_BLOCKS.nhaE && EAST_CAMPUS_BLOCKS.nhaT);
+
+  // C7 runs North-South (size.z > size.x) with West-facing HSK entrance (C7_DOOR west of C7_BUILDING.box.minX)
+  assert.ok(C7_BUILDING.size.z > C7_BUILDING.size.x);
+  assert.ok(C7_DOOR.pos.x < C7_BUILDING.box.minX);
+  assert.equal(C7_DOOR.pos.z, C7_BUILDING.center.z);
+
+  // C1 Fountain centered on C1 symmetry axis (x = -58)
+  assert.equal(C1_FOUNTAIN.center.x, -58);
+
+  // D2A (west) & D2B (east) pair without erroneous third D2 block
+  const d2a = LECTURE_BUILDINGS.find((b) => b.code === 'D2A');
+  const d2b = LECTURE_BUILDINGS.find((b) => b.code === 'D2B');
+  const d2Old = LECTURE_BUILDINGS.find((b) => b.code === 'D2');
+  assert.ok(d2a && d2b && d2a.x < d2b.x);
+  assert.equal(d2Old, undefined);
+
+  // Alumni House (Digital Hub) sits East of VDZ along North bank of Tien Lake
+  assert.ok(ALUMNI_HOUSE.center.x > VDZ_CENTER.center.x);
+
+  // Sports complex aligns NE->SW along Le Thanh Nghi: Pool -> Stadium -> Nha TC, plus KTX A3 & A2
+  assert.ok(SPORTS_COMPLEX.poolCenter.x > SPORTS_COMPLEX.stadiumCenter.x);
+  assert.ok(SPORTS_COMPLEX.stadiumCenter.x > SPORTS_COMPLEX.nhaTcCenter.x);
+  assert.ok(SPORTS_COMPLEX.ktxA3Box && SPORTS_COMPLEX.ktxA2Box);
+
+  // Every mapped campus building stays strictly inside BOUNDS (not expanding outside HUST campus)
+  for (const b of CAMPUS_MAP_BUILDINGS) {
+    assert.ok(
+      b.box.minX >= BOUNDS.minX &&
+        b.box.maxX <= BOUNDS.maxX &&
+        b.box.minZ >= BOUNDS.minZ &&
+        b.box.maxZ <= BOUNDS.maxZ,
+      `${b.code} (${b.label}) must stay inside HUST campus BOUNDS`,
+    );
+  }
+});
+
+test('(9) Complete main campus plazas, 9 parking areas & C7 ramps, C10b, C-connectors, D8 11F, and 3 North Tien Lake buildings', () => {
+  const {
+    BOUNDS,
+    TDN_SQUARE,
+    MONUMENT,
+    C2_BUILDING,
+    C9,
+    NGA_5_PLAZA,
+    VDZ_CENTER,
+    HUST_DIGITAL_HUB,
+    ALUMNI_HOUSE,
+    C_CONNECTOR_BUILDINGS,
+    LECTURE_BUILDINGS,
+    CAMPUS_PARKING_LOTS,
+    C7_UNDERGROUND_RAMPS,
+    CAMPUS_ANNEX_BLOCKS,
+    CAMPUS_AMENITIES,
+    CAMPUS_MAP_PLAZAS,
+    CAMPUS_MAP_BUILDINGS,
+  } = campusFacade;
+
+  // 1. Quảng trường Trần Đại Nghĩa sits cleanly West of C2 and North of C9, with Monument inside it
+  assert.ok(TDN_SQUARE.maxX < C2_BUILDING.box.minX, 'TDN Square must lie West of C2');
+  assert.ok(TDN_SQUARE.maxZ < C9.center.z - C9.size.z / 2, 'TDN Square must lie North of C9');
+  assert.ok(
+    MONUMENT.center.x > TDN_SQUARE.minX &&
+      MONUMENT.center.x < TDN_SQUARE.maxX &&
+      MONUMENT.center.z > TDN_SQUARE.minZ &&
+      MONUMENT.center.z < TDN_SQUARE.maxZ,
+    'Memorial monument must sit inside Quảng trường Trần Đại Nghĩa',
+  );
+
+  // 2. Quảng trường ngã 5 has central 5-way junction + southern island + circular planter
+  assert.ok(NGA_5_PLAZA.southLawnCenter && NGA_5_PLAZA.itimsRoundPlanter);
+  assert.equal(CAMPUS_MAP_PLAZAS.length, 4);
+
+  // 3. North bank of Tien Lake has 3 separated buildings West -> East: VDZ (4F) -> HUST Digital Hub -> Alumni House
+  assert.equal(VDZ_CENTER.floors, 4);
+  assert.ok(VDZ_CENTER.center.x < HUST_DIGITAL_HUB.center.x);
+  assert.ok(HUST_DIGITAL_HUB.center.x < ALUMNI_HOUSE.center.x);
+  assert.ok(VDZ_CENTER.box.maxX < HUST_DIGITAL_HUB.box.minX, 'VDZ and Digital Hub must not overlap');
+  assert.ok(
+    HUST_DIGITAL_HUB.box.maxX < ALUMNI_HOUSE.box.minX,
+    'Digital Hub and Alumni House must not overlap',
+  );
+
+  // 4. C3-4, C4-5, C5-10 connectors + C10b + 11-story D8
+  assert.deepEqual(
+    C_CONNECTOR_BUILDINGS.map((c) => c.code),
+    ['C3-4', 'C4-5', 'C5-10'],
+  );
+  const c10b = LECTURE_BUILDINGS.find((b) => b.code === 'C10b');
+  const d8 = LECTURE_BUILDINGS.find((b) => b.code === 'D8');
+  assert.ok(c10b, 'C10b must exist East of C10');
+  assert.ok(d8 && d8.h >= 28, 'D8 must represent an 11-story lecture building (h >= 28m)');
+
+  // 5. All parking lots & C7 underground garage entry/exit ramps exist inside BOUNDS
+  assert.ok(
+    CAMPUS_PARKING_LOTS.c1West &&
+      CAMPUS_PARKING_LOTS.c1East &&
+      CAMPUS_PARKING_LOTS.c2Carport &&
+      CAMPUS_PARKING_LOTS.c9Lot &&
+      CAMPUS_PARKING_LOTS.c5NorthShed &&
+      CAMPUS_PARKING_LOTS.c5SouthShed &&
+      CAMPUS_PARKING_LOTS.d7d9Lot &&
+      CAMPUS_PARKING_LOTS.d3d5Courtyard,
+  );
+  assert.ok(C7_UNDERGROUND_RAMPS.exitRamp && C7_UNDERGROUND_RAMPS.entryRamp);
+  assert.ok(C7_UNDERGROUND_RAMPS.exitRamp.center.z < C7_UNDERGROUND_RAMPS.entryRamp.center.z);
+  assert.ok(CAMPUS_ANNEX_BLOCKS.length >= 5);
+  assert.ok(
+    CAMPUS_AMENITIES.tdnBusStop &&
+      CAMPUS_AMENITIES.tngoStation &&
+      CAMPUS_AMENITIES.vmacLibrary &&
+      CAMPUS_AMENITIES.vmacD4,
+  );
+
+  const parkingEntries = CAMPUS_MAP_BUILDINGS.filter((b) => b.kind === 'parking');
+  assert.ok(parkingEntries.length >= 10, 'Map must expose all campus parking lots and C7 ramps');
+  assert.ok(
+    CAMPUS_MAP_BUILDINGS.some((b) => b.code === 'Cổng ĐCV' && b.kind === 'gate'),
+    'Cổng Đại Cồ Việt must appear on CAMPUS_MAP_BUILDINGS',
+  );
+  for (const plaza of CAMPUS_MAP_PLAZAS) {
+    assert.ok(
+      plaza.box.minX >= BOUNDS.minX &&
+        plaza.box.maxX <= BOUNDS.maxX &&
+        plaza.box.minZ >= BOUNDS.minZ &&
+        plaza.box.maxZ <= BOUNDS.maxZ,
+      `Plaza ${plaza.id} must stay inside BOUNDS`,
+    );
   }
 });

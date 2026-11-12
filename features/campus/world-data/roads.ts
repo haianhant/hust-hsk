@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // features/campus/world-data/roads.ts — Mạng lưới đường nội bộ (polyline) và
-// hàng cây/ghế dọc Đường Tình Yêu.
+// hàng cây/ghế dọc trục chính theo Bản đồ Số chuẩn https://hustmap.com/.
 // ---------------------------------------------------------------------------
 
 import type { Vec2 } from './bounds';
@@ -11,10 +11,11 @@ export type RoadSpec = {
   width: number;
 };
 
-// Quy hoạch lại mạng lưới đường nội bộ:
-// - Duy nhất 1 trục đường chính thẳng tắp Đông–Tây từ Cổng Trần Đại Nghĩa (x = 92, z = -6)
+// Quy hoạch mạng lưới đường nội bộ khớp https://hustmap.com/:
+// - Trục đường chính thẳng tắp Đông–Tây từ Cổng Trần Đại Nghĩa (x = 92, z = -6)
 //   đi thẳng sang Cổng Parabol (x = -88, z = -6).
-// - Các đường nhánh vuông góc sạch sẽ, không chồng chéo hay cắt chéo nhau.
+// - Các đường nhánh Bắc–Nam kết nối Quảng trường C1, Quảng trường ngã 5,
+//   sảnh Tây Tòa C7 – Thư viện – Hồ Tiền và bãi xe giảng viên C7.
 export const ROADS: RoadSpec[] = [
   {
     name: 'Trục chính Cổng Trần Đại Nghĩa – Cổng Parabol',
@@ -33,19 +34,52 @@ export const ROADS: RoadSpec[] = [
     ],
   },
   {
-    name: 'Đường Thư viện – Hồ Tiền',
+    name: 'Trục Quảng trường ngã 5 – Khu C',
+    width: 5.2,
+    points: [
+      { x: -38, z: -6 },
+      { x: -38, z: -28 },
+    ],
+  },
+  {
+    name: 'Đường nội bộ C7 – Thư viện – Hồ Tiền',
     width: 5.5,
     points: [
+      { x: 24, z: -56 },
       { x: 24, z: -6 },
       { x: 24, z: 54 },
     ],
   },
   {
-    name: 'Trục đường C7 (Đỗ ô tô giảng viên)',
-    width: 6.5,
+    name: 'Trục đường Bãi xe C7 (Đỗ ô tô giảng viên)',
+    width: 6.2,
     points: [
       { x: 66, z: -6 },
-      { x: 66, z: -50 },
+      { x: 66, z: -52 },
+    ],
+  },
+  {
+    name: 'Lối vào Cổng Đại Cồ Việt – Bãi xe C1/C2',
+    width: 5.6,
+    points: [
+      { x: -58, z: -74 },
+      { x: -58, z: -63.5 },
+    ],
+  },
+  {
+    name: 'Đường nội bộ Bãi xe C1 – Bãi xe C2',
+    width: 4.4,
+    points: [
+      { x: -58, z: -67.2 },
+      { x: -81, z: -67.2 },
+    ],
+  },
+  {
+    name: 'Nhánh chéo Quảng trường ngã 5 – ITIMS',
+    width: 4.6,
+    points: [
+      { x: -38, z: -16 },
+      { x: -31, z: -27 },
     ],
   },
 ];

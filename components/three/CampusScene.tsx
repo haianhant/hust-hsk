@@ -428,7 +428,7 @@ export default function CampusScene({
           {/* Khối nhà phụ + cây nền + ghế/đèn rìa campus (đợt sửa lần 2 §4).
               Đã gắn ở đây — luồng tích hợp KHÔNG gắn lần 2. */}
           <BackgroundBuildings timeOfDay={timeOfDay} />
-          {/* Mở rộng toàn bộ khuôn viên Bách khoa theo Bản đồ Bách Khoa (khuon-vien-truong.png). */}
+          {/* Mở rộng toàn bộ khuôn viên ĐHBK Hà Nội theo Bản đồ Số chuẩn https://hustmap.com/. */}
           <CampusExpansion timeOfDay={timeOfDay} />
           {/* Quần thể sinh viên NPC đi dạo & sinh hoạt trong sân trường. */}
           <AmbientLife />

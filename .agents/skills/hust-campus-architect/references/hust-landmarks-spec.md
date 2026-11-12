@@ -1,6 +1,6 @@
 # Thông số Kiến trúc Chuẩn các Công trình ĐHBK Hà Nội (HUST Landmarks Spec)
 
-Bảng tổng hợp thông số hình học, màu sắc và dấu hiệu nhận diện bắt buộc của các công trình trong khuôn viên Bách Khoa Hà Nội, đối chiếu trực tiếp với **Bản đồ Khuôn viên ĐHBK Hà Nội** và **Bộ 37 ảnh thật tại `tham-khao/`**.
+Bảng tổng hợp thông số hình học, màu sắc và dấu hiệu nhận diện bắt buộc của các công trình trong khuôn viên Bách Khoa Hà Nội, đối chiếu trực tiếp với **Bản đồ Số [`https://hustmap.com/`](https://hustmap.com/) (Official Map Source of Truth — chỉ tính trong phạm vi khuôn viên ĐHBK Hà Nội, bỏ sơ đồ cũ `khuon-vien-truong.png`)** và **Bộ ảnh thật tại `tham-khao/`**.
 
 ## 1. Hệ màu chuẩn HUST (`docs/reference-visual.md` & `tham-khao/`)
 | Thành phần | Mã Hex | Ghi chú |
@@ -48,10 +48,10 @@ Bảng tổng hợp thông số hình học, màu sắc và dấu hiệu nhận 
 - **Tâm hiện tại:** `(-38, -8)`, kích thước `18 × 8m`, 4 tầng (`floorHeight = 3.4m`).
 - **Chi tiết:** Cầu thang bộ ngoài trời gấp khúc zic-zac 4 vế gắn liền ở mặt Đông (`x = -29`), mỗi vế khớp đúng chiều cao tầng `3.4m`, chiếu nghỉ đua ra có cột vuông trắng đỡ, lan can kim loại đỏ mảnh (`#E8202A`), khoảng rỗng dưới gầm thang nhìn xuyên được, tầng trệt có cửa gỗ vàng.
 
-### 2.6. Tòa nhà C7 Mới (`tham-khao/c7/` — Dự án SAHEP, Đông-Bắc Campus)
-- **Đặc trưng kiến trúc (`c7-flycam-toan-canh.jpg`, `c7-san-trong-mat-tien.jpg`):**
-  - Tòa nhà lớn sơn **màu trắng** (không phải màu xám của bản vẽ render), tạo hình **chữ E** rõ rệt khi nhìn từ trên cao, cao 9 tầng.
-  - Tầng 1–2 là vách kính cao thoáng làm giảng đường; các tầng trên là lưới cửa sổ khung tối xếp đều đặn; giữa các nhánh chữ E là sân trong trồng cây xanh và bồn cây; trên mái phẳng có cụm thiết bị kỹ thuật và ô mái ngói đỏ điểm xuyết.
+### 2.6. Tòa nhà C7 Mới (`tham-khao/c7/` & `https://hustmap.com/` — Dự án SAHEP, Đông-Bắc Campus)
+- **Đặc trưng kiến trúc (`c7-flycam-toan-canh.jpg`, `c7-san-trong-mat-tien.jpg`, `https://hustmap.com/`):**
+  - Tòa nhà lớn sơn **màu trắng** (không phải màu xám của bản vẽ render), cao 9 tầng, tạo hình **chữ E chạy dọc trục Bắc–Nam** sát phía Tây phố Trần Đại Nghĩa (thay thế hoàn toàn vị trí nhà C7–C8 cũ; không còn nhà C8, phía Bắc là `C6` và `C15`).
+  - Thân lưng chính chạy dọc phía Đông (`+X`, giáp bãi xe C7 & phố Trần Đại Nghĩa), **3 cánh vươn về phía Tây (`-X`)** hướng sang dãy `C4–C5–C10`, tạo 2 sân trong trồng cây xanh và bồn gạch đỏ; tầng 1–2 là vách kính cao thoáng làm giảng đường; trên mái phẳng có cụm thiết bị kỹ thuật và ô mái ngói đỏ điểm xuyết.
 
 ### 2.7. Tòa B1 SoICT & Khu Ký túc xá (`tham-khao/b1-soict/`, `tham-khao/ktx/` — Đông Campus)
 - **Tòa B1 (Viện CNTT-TT SoICT):** Mặt chính có khối sảnh góc cong đặc trưng, tầng trệt ốp gạch/đá đỏ nâu, các tầng trên sơn trắng-xanh với biển chữ `B1` nổi bật trên đỉnh mặt cong, phía trước có sân cỏ và hàng rào.

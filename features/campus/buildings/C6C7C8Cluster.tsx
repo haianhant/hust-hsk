@@ -1,10 +1,18 @@
 // ---------------------------------------------------------------------------
-// features/campus/buildings/C6C7C8Cluster.tsx — Cụm tòa nhà C6 – C7 – C8 &
-// Trung tâm Hợp tác Việt – Đức (VDZ)
-// Module IDs: building.c6-c8, building.c7, building.viet-duc-center
+// features/campus/buildings/C6C7C8Cluster.tsx — Cụm tòa nhà C6 – C7 – C15,
+// Trung tâm Hợp tác Việt – Đức (VDZ) & Nhà Cựu sinh viên (HUST Digital Hub)
+// Đối chiếu chuẩn https://hustmap.com/ & bộ ảnh thật tham-khao/c7/
+// Module IDs: building.c6-c15, building.c7, building.viet-duc-center, building.alumni-house
 // ---------------------------------------------------------------------------
 
-import { C7_BUILDING, C7_FACULTY_PARKING, D3_D5_PARKING_GARAGE, VDZ_CENTER } from '../world-data';
+import {
+  ALUMNI_HOUSE,
+  C7_BUILDING,
+  C7_FACULTY_PARKING,
+  D3_D5_PARKING_GARAGE,
+  HUST_DIGITAL_HUB,
+  VDZ_CENTER,
+} from '../world-data';
 import { LabelPlane } from '../../../components/three/TextPlate';
 
 const WALL_BLUE_LIGHT = '#DCEAF7';
@@ -29,6 +37,16 @@ export function C6AndC8Block({
   isNight: boolean;
 }) {
   const h = floors * floorHeight;
+  const isNorthSouth = size.z > size.x;
+  const span = isNorthSouth ? size.z : size.x;
+  const winCount = Math.max(2, Math.floor((span - 1.4) / 2.8));
+  const winOffsets = Array.from(
+    { length: winCount },
+    (_, i) => -((winCount - 1) * 1.35) + i * 2.7,
+  );
+  const signW = Math.min(span - 1.0, 4.6);
+  const labelText = subtitle.includes(code) ? subtitle : `NHÀ ${code} · ${subtitle}`;
+
   return (
     <group position={[center.x, 0, center.z]}>
       <mesh position={[0, 0.4, 0]} receiveShadow>
@@ -43,28 +61,58 @@ export function C6AndC8Block({
         <boxGeometry args={[size.x + 0.45, 0.5, size.z + 0.45]} />
         <meshStandardMaterial color={HEADER_BLUE} roughness={0.75} />
       </mesh>
-      {/* Cửa sổ mặt Nam & Bắc */}
+      {/* Hệ cửa sổ tự động co giãn theo mặt đứng dài (Đông–Tây cho C6, Bắc–Nam cho C15) */}
       {Array.from({ length: floors }, (_, fl) =>
-        [-7.5, -4.5, -1.5, 1.5, 4.5, 7.5].map((wx, idx) => {
+        winOffsets.map((u, idx) => {
           const glow = isNight && (fl + idx) % 2 === 0;
-          return (
-            <mesh
-              key={`${code}-win-${fl}-${idx}`}
-              position={[wx, fl * floorHeight + 1.65, size.z / 2 + 0.03]}
-            >
-              <planeGeometry args={[1.65, 1.2]} />
-              <meshStandardMaterial
-                color={glow ? '#FFE4A0' : GLASS_MID}
-                emissive={glow ? '#FFB84D' : '#000000'}
-                emissiveIntensity={glow ? 0.65 : 0}
-                roughness={0.32}
-              />
-            </mesh>
+          const y = fl * floorHeight + 1.65;
+          return isNorthSouth ? (
+            <group key={`${code}-win-${fl}-${idx}`}>
+              <mesh position={[-size.x / 2 - 0.03, y, u]} rotation-y={-Math.PI / 2}>
+                <planeGeometry args={[1.55, 1.18]} />
+                <meshStandardMaterial
+                  color={glow ? '#FFE4A0' : GLASS_MID}
+                  emissive={glow ? '#FFB84D' : '#000000'}
+                  emissiveIntensity={glow ? 0.65 : 0}
+                  roughness={0.32}
+                />
+              </mesh>
+              <mesh position={[size.x / 2 + 0.03, y, u]} rotation-y={Math.PI / 2}>
+                <planeGeometry args={[1.55, 1.18]} />
+                <meshStandardMaterial
+                  color={glow ? '#FFE4A0' : GLASS_MID}
+                  emissive={glow ? '#FFB84D' : '#000000'}
+                  emissiveIntensity={glow ? 0.65 : 0}
+                  roughness={0.32}
+                />
+              </mesh>
+            </group>
+          ) : (
+            <group key={`${code}-win-${fl}-${idx}`}>
+              <mesh position={[u, y, size.z / 2 + 0.03]}>
+                <planeGeometry args={[1.65, 1.2]} />
+                <meshStandardMaterial
+                  color={glow ? '#FFE4A0' : GLASS_MID}
+                  emissive={glow ? '#FFB84D' : '#000000'}
+                  emissiveIntensity={glow ? 0.65 : 0}
+                  roughness={0.32}
+                />
+              </mesh>
+              <mesh position={[u, y, -size.z / 2 - 0.03]} rotation-y={Math.PI}>
+                <planeGeometry args={[1.65, 1.2]} />
+                <meshStandardMaterial
+                  color={glow ? '#FFE4A0' : GLASS_MID}
+                  emissive={glow ? '#FFB84D' : '#000000'}
+                  emissiveIntensity={glow ? 0.65 : 0}
+                  roughness={0.32}
+                />
+              </mesh>
+            </group>
           );
         }),
       )}
       <LabelPlane
-        textureKey={`sign-${code}`}
+        textureKey={`sign-${code}-v2`}
         canvasW={512}
         canvasH={112}
         draw={(ctx, w, hCanvas) => {
@@ -76,11 +124,16 @@ export function C6AndC8Block({
           ctx.fillStyle = '#FFFFFF';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.font = '900 36px Arial, sans-serif';
-          ctx.fillText(`NHÀ ${code} · ${subtitle}`, w / 2, hCanvas / 2);
+          ctx.font = '900 34px Arial, sans-serif';
+          ctx.fillText(labelText, w / 2, hCanvas / 2);
         }}
-        size={[4.6, 0.92]}
-        position={[0, h - 0.8, size.z / 2 + 0.06]}
+        size={[signW, 0.92]}
+        position={
+          isNorthSouth
+            ? [-size.x / 2 - 0.06, h - 0.75, 0]
+            : [0, h - 0.8, size.z / 2 + 0.06]
+        }
+        rotation={isNorthSouth ? [0, -Math.PI / 2, 0] : [0, 0, 0]}
         transparent={false}
       />
     </group>
@@ -90,78 +143,92 @@ export function C6AndC8Block({
 export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
   const { center, size, floors, floorHeight } = C7_BUILDING;
   const totalH = floors * floorHeight; // 9 tầng × 3.1m = 27.9m (khớp c7-flycam-toan-canh.jpg)
-  const wingW = 5.4;
-  const wingD = 10.2;
-  const spineD = 5.3;
-  const spineZ = -size.z / 2 + spineD / 2; // -5.1m (trục lưng phía Bắc)
-  const wingZ = size.z / 2 - wingD / 2; // +2.65m (3 nhánh vươn về phía Nam tạo hình chữ E)
-  const wingXs = [-size.x / 2 + wingW / 2, 0, size.x / 2 - wingW / 2]; // [-11.3, 0, +11.3]
-  const courtXs = [-5.65, 5.65]; // 2 sân trong chữ U giữa 3 nhánh
+  // Mặt bằng chữ E chạy dọc Bắc–Nam theo đúng https://hustmap.com/ & tham-khao/c7/c7-flycam-toan-canh.jpg:
+  // - Thân lưng dọc phía Đông (+X, dọc phố Trần Đại Nghĩa & Bãi xe C7)
+  // - 3 cánh song song vươn về phía Tây (-X), kẹp 2 sân cây xanh mở ra đường nội bộ phía Tây
+  const spineW = 6.2;
+  const spineX = size.x / 2 - spineW / 2; // +8.9m (khối lưng phía Đông)
+  const wingLenX = 17.85; // nhúng 0.05m vào khối lưng để khử z-fighting
+  const wingX = -size.x / 2 + wingLenX / 2; // -3.075m (vươn tới đúng biên Tây -size.x/2 = -12m)
+  const wingD = 6.4;
+  const wingZs = [-size.z / 2 + wingD / 2, 0, size.z / 2 - wingD / 2]; // [-13.8, 0, +13.8]
+  const courtZs = [-6.9, 6.9]; // 2 sân trong trồng cây xanh giữa 3 nhánh
 
   return (
     <group position={[center.x, 0, center.z]}>
-      {/* Bệ đá granite xám quanh toàn bộ tổ hợp C7 */}
-      <mesh position={[0, 0.28, 0]} receiveShadow>
-        <boxGeometry args={[size.x + 0.4, 0.56, size.z + 0.4]} />
+      {/* Bệ đá granite xám quanh khối lưng & từng nhánh (để sân trong lát đá & trồng cây tự nhiên) */}
+      <mesh position={[spineX, 0.28, 0]} receiveShadow>
+        <boxGeometry args={[spineW + 0.4, 0.56, size.z + 0.4]} />
         <meshStandardMaterial color="#8E949E" roughness={0.86} />
       </mesh>
 
-      {/* ============ 1. KHỐI LƯNG CHÍNH (REAR SPINE) 9 TẦNG MÀU TRẮNG HIỆN ĐẠI ============ */}
-      <mesh position={[0, totalH / 2, spineZ]} castShadow receiveShadow>
-        <boxGeometry args={[size.x, totalH, spineD]} />
+      {/* ============ 1. KHỐI LƯNG CHÍNH (EAST REAR SPINE) 9 TẦNG DỌC TRẦN ĐẠI NGHĨA ============ */}
+      <mesh position={[spineX, totalH / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[spineW, totalH, size.z]} />
         <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
       </mesh>
+      {/* Vách kính đế tầng 1–2 dọc mặt Đông khối lưng */}
+      <mesh position={[size.x / 2 - 0.22, 3.1, 0]} castShadow>
+        <boxGeometry args={[0.52, 5.5, size.z - 1.2]} />
+        <meshStandardMaterial color="#1E2D3B" roughness={0.25} metalness={0.35} />
+      </mesh>
       {/* Mái phẳng xám nhạt + tường chắn mái (parapet) trên khối lưng */}
-      <mesh position={[0, totalH + 0.22, spineZ]} castShadow>
-        <boxGeometry args={[size.x + 0.3, 0.44, spineD + 0.3]} />
+      <mesh position={[spineX, totalH + 0.22, 0]} castShadow>
+        <boxGeometry args={[spineW + 0.3, 0.44, size.z + 0.3]} />
         <meshStandardMaterial color="#CBD5E1" roughness={0.85} />
       </mesh>
       {/* Dàn máy điều hòa trung tâm (HVAC chillers trắng) & tum thang máy trên mái lưng (c7-flycam-toan-canh.jpg) */}
-      {[-9.5, -6.5, -3.5, 3.5, 6.5, 9.5].map((hx) => (
-        <mesh key={`c7-hvac-${hx}`} position={[hx, totalH + 0.9, spineZ]} castShadow>
-          <boxGeometry args={[2.1, 0.95, 1.8]} />
+      {[-12.5, -8.5, -4.5, 4.5, 8.5, 12.5].map((hz) => (
+        <mesh key={`c7-hvac-${hz}`} position={[spineX, totalH + 0.9, hz]} castShadow>
+          <boxGeometry args={[1.9, 0.95, 2.2]} />
           <meshStandardMaterial color="#E2E8F0" roughness={0.65} metalness={0.2} />
         </mesh>
       ))}
-      <mesh position={[0, totalH + 1.25, spineZ]} castShadow>
-        <boxGeometry args={[3.8, 1.65, 2.8]} />
+      <mesh position={[spineX, totalH + 1.25, 0]} castShadow>
+        <boxGeometry args={[3.0, 1.65, 4.2]} />
         <meshStandardMaterial color="#F1F5F9" roughness={0.8} />
       </mesh>
 
-      {/* ============ 2. BA NHÁNH CHỮ E (3 PARALLEL WINGS) VƯƠN VỀ PHÍA NAM ============ */}
-      {wingXs.map((wx, wIdx) => (
-        <group key={`c7-wing-${wIdx}`} position={[wx, 0, wingZ]}>
+      {/* ============ 2. BA NHÁNH CHỮ E (3 PARALLEL WINGS) VƯƠN VỀ PHÍA TÂY (-X) ============ */}
+      {wingZs.map((wz, wIdx) => (
+        <group key={`c7-wing-${wIdx}`} position={[wingX, 0, wz]}>
+          {/* Chân đế granite từng nhánh */}
+          <mesh position={[0, 0.28, 0]} receiveShadow>
+            <boxGeometry args={[wingLenX + 0.32, 0.56, wingD + 0.32]} />
+            <meshStandardMaterial color="#8E949E" roughness={0.86} />
+          </mesh>
           {/* Thân nhánh 9 tầng sơn trắng sáng */}
           <mesh position={[0, totalH / 2, 0]} castShadow receiveShadow>
-            <boxGeometry args={[wingW, totalH, wingD]} />
+            <boxGeometry args={[wingLenX, totalH, wingD]} />
             <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
           </mesh>
-          {/* Vách kính lớn thông tầng 1–2 (giảng đường & sảnh, cao 6.0m) */}
-          <mesh position={[0, 3.1, 0.04]} castShadow>
-            <boxGeometry args={[wingW + 0.08, 5.6, wingD - 0.5]} />
+          {/* Vách kính lớn thông tầng 1–2 (giảng đường & sảnh, cao 5.6m) */}
+          <mesh position={[0.15, 3.1, 0]} castShadow>
+            <boxGeometry args={[wingLenX - 0.5, 5.6, wingD + 0.08]} />
             <meshStandardMaterial color="#1E2D3B" roughness={0.25} metalness={0.35} />
           </mesh>
-          {/* Khe hành lang / logia đứng âm tường ở chính giữa mặt đứng mỗi nhánh (c7-goc-nghieng.jpg) */}
-          <mesh position={[0, (totalH + 6.2) / 2, wingD / 2 - 0.08]}>
-            <boxGeometry args={[1.35, totalH - 6.6, 0.28]} />
+          {/* Khe hành lang / logia đứng âm tường ở chính giữa đầu hồi Tây mỗi nhánh (c7-goc-nghieng.jpg) */}
+          <mesh position={[-wingLenX / 2 + 0.08, (totalH + 6.2) / 2, 0]}>
+            <boxGeometry args={[0.28, totalH - 6.6, 1.35]} />
             <meshStandardMaterial color="#334155" roughness={0.75} />
           </mesh>
           {/* Gờ phân tầng ngang màu xám trắng và lưới cửa sổ khung tối tầng 3–9 */}
           {[2, 3, 4, 5, 6, 7, 8].map((fl) => (
             <group key={`c7-wing-fl-${wIdx}-${fl}`}>
               <mesh position={[0, fl * floorHeight, 0]}>
-                <boxGeometry args={[wingW + 0.14, 0.14, wingD + 0.14]} />
+                <boxGeometry args={[wingLenX + 0.14, 0.14, wingD + 0.14]} />
                 <meshStandardMaterial color="#E2E8F0" roughness={0.8} />
               </mesh>
-              {/* Cửa sổ 2 bên khe logia ở đầu hồi Nam của mỗi nhánh */}
-              {[-1.7, 1.7].map((dx, dIdx) => {
+              {/* Cửa sổ 2 bên khe logia ở đầu hồi Tây (-X) của mỗi nhánh */}
+              {[-1.85, 1.85].map((dz, dIdx) => {
                 const glow = isNight && (fl + wIdx + dIdx) % 2 === 0;
                 return (
                   <mesh
                     key={`c7-front-win-${wIdx}-${fl}-${dIdx}`}
-                    position={[dx, fl * floorHeight + 1.55, wingD / 2 + 0.03]}
+                    position={[-wingLenX / 2 - 0.03, fl * floorHeight + 1.55, dz]}
+                    rotation-y={-Math.PI / 2}
                   >
-                    <planeGeometry args={[1.35, 1.35]} />
+                    <planeGeometry args={[1.45, 1.35]} />
                     <meshStandardMaterial
                       color={glow ? '#FFE4A0' : '#233445'}
                       emissive={glow ? '#FFB84D' : '#000000'}
@@ -172,16 +239,16 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
                   </mesh>
                 );
               })}
-              {/* Cửa sổ dọc hai mặt bên (Đông & Tây) của nhánh nhìn xuống sân cây xanh */}
-              {[-3.2, 0, 3.2].map((dz, zIdx) => {
-                const glow = isNight && (fl + wIdx + zIdx) % 3 === 0;
+              {/* Cửa sổ dọc hai mặt bên (Bắc & Nam) của nhánh nhìn xuống sân cây xanh */}
+              {[-6.2, -2.1, 2.0, 6.0].map((dx, xIdx) => {
+                const glow = isNight && (fl + wIdx + xIdx) % 3 === 0;
                 return (
-                  <group key={`c7-side-win-${wIdx}-${fl}-${zIdx}`}>
+                  <group key={`c7-side-win-${wIdx}-${fl}-${xIdx}`}>
                     <mesh
-                      position={[-wingW / 2 - 0.03, fl * floorHeight + 1.55, dz]}
-                      rotation-y={-Math.PI / 2}
+                      position={[dx, fl * floorHeight + 1.55, -wingD / 2 - 0.03]}
+                      rotation-y={Math.PI}
                     >
-                      <planeGeometry args={[1.85, 1.32]} />
+                      <planeGeometry args={[2.15, 1.32]} />
                       <meshStandardMaterial
                         color={glow ? '#FFE4A0' : '#233445'}
                         emissive={glow ? '#FFB84D' : '#000000'}
@@ -189,11 +256,8 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
                         roughness={0.28}
                       />
                     </mesh>
-                    <mesh
-                      position={[wingW / 2 + 0.03, fl * floorHeight + 1.55, dz]}
-                      rotation-y={Math.PI / 2}
-                    >
-                      <planeGeometry args={[1.85, 1.32]} />
+                    <mesh position={[dx, fl * floorHeight + 1.55, wingD / 2 + 0.03]}>
+                      <planeGeometry args={[2.15, 1.32]} />
                       <meshStandardMaterial
                         color={glow ? '#FFE4A0' : '#233445'}
                         emissive={glow ? '#FFB84D' : '#000000'}
@@ -206,29 +270,29 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
               })}
             </group>
           ))}
-          {/* Mái phẳng + Ô mái ngói đỏ đặc trưng trên đỉnh mỗi nhánh chữ E (c7-flycam-toan-canh.jpg) */}
+          {/* Mái phẳng + Ô mái ngói đỏ đặc trưng ở phía đầu Tây trên đỉnh mỗi nhánh chữ E (c7-flycam-toan-canh.jpg) */}
           <mesh position={[0, totalH + 0.22, 0]} castShadow>
-            <boxGeometry args={[wingW + 0.3, 0.44, wingD + 0.3]} />
+            <boxGeometry args={[wingLenX + 0.3, 0.44, wingD + 0.3]} />
             <meshStandardMaterial color="#CBD5E1" roughness={0.85} />
           </mesh>
-          <mesh position={[0, totalH + 0.62, 1.6]} castShadow>
-            <boxGeometry args={[wingW - 0.8, 0.45, 4.2]} />
+          <mesh position={[-3.8, totalH + 0.62, 0]} castShadow>
+            <boxGeometry args={[5.8, 0.48, wingD - 0.9]} />
             <meshStandardMaterial color="#C84B31" roughness={0.72} />
           </mesh>
         </group>
       ))}
 
-      {/* Cửa sổ mặt Bắc và mặt sân trong của khối lưng 9 tầng */}
+      {/* Cửa sổ mặt Đông (nhìn ra Trần Đại Nghĩa & Bãi xe C7) và mặt Tây sân trong của khối lưng 9 tầng */}
       {[2, 3, 4, 5, 6, 7, 8].map((fl) =>
-        [-11.5, -8.5, -5.65, -2.8, 0, 2.8, 5.65, 8.5, 11.5].map((sx, sIdx) => {
+        [-14.2, -10.6, -7.0, -3.5, 0, 3.5, 7.0, 10.6, 14.2].map((sz, sIdx) => {
           const glow = isNight && (fl + sIdx) % 2 === 1;
           return (
             <group key={`c7-spine-win-${fl}-${sIdx}`}>
               <mesh
-                position={[sx, fl * floorHeight + 1.55, spineZ - spineD / 2 - 0.03]}
-                rotation-y={Math.PI}
+                position={[size.x / 2 + 0.03, fl * floorHeight + 1.55, sz]}
+                rotation-y={Math.PI / 2}
               >
-                <planeGeometry args={[1.9, 1.32]} />
+                <planeGeometry args={[2.1, 1.32]} />
                 <meshStandardMaterial
                   color={glow ? '#FFE4A0' : '#233445'}
                   emissive={glow ? '#FFB84D' : '#000000'}
@@ -236,9 +300,12 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
                   roughness={0.28}
                 />
               </mesh>
-              {(Math.abs(sx - -5.65) < 2.9 || Math.abs(sx - 5.65) < 2.9) && (
-                <mesh position={[sx, fl * floorHeight + 1.55, spineZ + spineD / 2 + 0.03]}>
-                  <planeGeometry args={[1.8, 1.32]} />
+              {(Math.abs(sz - -6.9) < 3.4 || Math.abs(sz - 6.9) < 3.4) && (
+                <mesh
+                  position={[spineX - spineW / 2 - 0.03, fl * floorHeight + 1.55, sz]}
+                  rotation-y={-Math.PI / 2}
+                >
+                  <planeGeometry args={[2.0, 1.32]} />
                   <meshStandardMaterial
                     color={glow ? '#FFE4A0' : '#233445'}
                     emissive={glow ? '#FFB84D' : '#000000'}
@@ -252,23 +319,23 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
         }),
       )}
 
-      {/* ============ 3. HAI SÂN TRONG TRỒNG CÂY XANH & BỒN GẠCH ĐỎ (c7-mat-trong-san-cay.jpg) ============ */}
-      {courtXs.map((cx, cIdx) => (
-        <group key={`c7-courtyard-${cIdx}`} position={[cx, 0, wingZ]}>
+      {/* ============ 3. HAI SÂN TRONG TRỒNG CÂY XANH MỞ VỀ PHÍA TÂY (-X) (c7-mat-trong-san-cay.jpg) ============ */}
+      {courtZs.map((cz, cIdx) => (
+        <group key={`c7-courtyard-${cIdx}`} position={[-3.2, 0, cz]}>
           {/* Nền sân lát gạch xám sáng */}
           <mesh rotation-x={-Math.PI / 2} position={[0, 0.032, 0]} receiveShadow>
-            <planeGeometry args={[5.8, wingD - 0.4]} />
+            <planeGeometry args={[17.2, 7.0]} />
             <meshStandardMaterial color="#CBD5E1" roughness={0.9} />
           </mesh>
           {/* 2 bồn cây xây gạch đỏ trần (#C47D5B) + thảm cỏ + cây bóng mát trong mỗi sân */}
-          {[-2.1, 2.2].map((pz, pIdx) => (
-            <group key={`c7-planter-${cIdx}-${pIdx}`} position={[0, 0, pz]}>
+          {[-4.2, 2.2].map((px, pIdx) => (
+            <group key={`c7-planter-${cIdx}-${pIdx}`} position={[px, 0, 0]}>
               <mesh position={[0, 0.24, 0]} castShadow receiveShadow>
-                <boxGeometry args={[3.2, 0.48, 2.4]} />
+                <boxGeometry args={[3.4, 0.48, 2.8]} />
                 <meshStandardMaterial color="#C47D5B" roughness={0.88} />
               </mesh>
               <mesh position={[0, 0.49, 0]} receiveShadow>
-                <boxGeometry args={[2.85, 0.04, 2.05]} />
+                <boxGeometry args={[3.05, 0.04, 2.45]} />
                 <meshStandardMaterial color="#4D7C43" roughness={0.95} />
               </mesh>
               <mesh position={[0, 1.65, 0]} castShadow>
@@ -276,7 +343,7 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
                 <meshStandardMaterial color="#5C4430" roughness={0.95} />
               </mesh>
               <mesh position={[0, 3.2, 0]} castShadow>
-                <sphereGeometry args={[1.25, 12, 10]} />
+                <sphereGeometry args={[1.3, 12, 10]} />
                 <meshStandardMaterial color="#3F6E38" roughness={0.9} />
               </mesh>
             </group>
@@ -284,30 +351,39 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
         </group>
       ))}
 
-      {/* Mái hiên sảnh chính ở nhánh giữa, Cửa kính Giảng đường HSK & Biển hiệu C7 */}
-      <mesh position={[0, 3.65, size.z / 2 + 0.9]} castShadow>
-        <boxGeometry args={[5.8, 0.34, 1.8]} />
+      {/* ============ 4. SẢNH CHÍNH HƯỚNG TÂY (-X) Ở NHÁNH GIỮA (z = 0, khớp C7_DOOR = 32.2, -36) ============ */}
+      <mesh position={[-size.x / 2 - 0.95, 3.65, 0]} castShadow>
+        <boxGeometry args={[1.9, 0.34, 5.8]} />
         <meshStandardMaterial color="#E2E8F0" roughness={0.78} />
       </mesh>
-      {[-2.2, 2.2].map((colX) => (
-        <mesh key={`c7-porch-col-${colX}`} position={[colX, 1.82, size.z / 2 + 1.55]} castShadow>
+      {/* Bóng âm trần dưới mái hiên sảnh C7 */}
+      <mesh position={[-size.x / 2 - 0.95, 3.46, 0]}>
+        <boxGeometry args={[1.82, 0.04, 5.65]} />
+        <meshStandardMaterial color="#2E3438" roughness={0.9} />
+      </mesh>
+      {[-2.2, 2.2].map((colZ) => (
+        <mesh
+          key={`c7-porch-col-${colZ}`}
+          position={[-size.x / 2 - 1.6, 1.82, colZ]}
+          castShadow
+        >
           <cylinderGeometry args={[0.2, 0.2, 3.64, 14]} />
           <meshStandardMaterial color="#94A3B8" roughness={0.7} metalness={0.2} />
         </mesh>
       ))}
       {/* Thảm sảnh & Cửa kính đôi dẫn vào Giảng đường Học HSK Tòa C7 */}
-      <mesh position={[0, 0.04, size.z / 2 + 0.95]} receiveShadow>
-        <boxGeometry args={[5.2, 0.08, 1.85]} />
+      <mesh position={[-size.x / 2 - 0.95, 0.04, 0]} receiveShadow>
+        <boxGeometry args={[1.9, 0.08, 5.2]} />
         <meshStandardMaterial color="#94A3B8" roughness={0.85} />
       </mesh>
-      <mesh position={[0, 1.38, size.z / 2 + 0.06]}>
-        <boxGeometry args={[3.1, 2.68, 0.06]} />
+      <mesh position={[-size.x / 2 - 0.06, 1.38, 0]}>
+        <boxGeometry args={[0.06, 2.68, 3.1]} />
         <meshStandardMaterial color="#0F172A" roughness={0.4} metalness={0.5} />
       </mesh>
-      {[-0.72, 0.72].map((dx, idx) => (
+      {[-0.72, 0.72].map((dz, idx) => (
         <group key={`c7-hsk-door-${idx}`}>
-          <mesh position={[dx, 1.36, size.z / 2 + 0.095]}>
-            <boxGeometry args={[1.34, 2.48, 0.025]} />
+          <mesh position={[-size.x / 2 - 0.095, 1.36, dz]}>
+            <boxGeometry args={[0.025, 2.48, 1.34]} />
             <meshStandardMaterial
               color={isNight ? '#FFEAB3' : '#38BDF8'}
               emissive={isNight ? '#FFB84D' : '#0284C7'}
@@ -317,7 +393,7 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
             />
           </mesh>
           {/* Tay nắm inox dọc cửa giảng đường */}
-          <mesh position={[idx === 0 ? -0.14 : 0.14, 1.25, size.z / 2 + 0.13]}>
+          <mesh position={[-size.x / 2 - 0.13, 1.25, idx === 0 ? -0.14 : 0.14]}>
             <cylinderGeometry args={[0.018, 0.018, 0.52, 8]} />
             <meshStandardMaterial color="#F8FAFC" metalness={0.8} roughness={0.2} />
           </mesh>
@@ -343,10 +419,11 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
           ctx.fillText('Bấm [E] trước sảnh để vào lớp & chọn bài học', w / 2, h * 0.75);
         }}
         size={[3.9, 0.82]}
-        position={[0, 3.12, size.z / 2 + 0.12]}
+        position={[-size.x / 2 - 0.12, 3.12, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
       />
 
-      {/* Chữ nổi "C7" màu xám bạc gắn trên cao mặt đứng nhánh phải (c7-goc-nghieng.jpg) */}
+      {/* Chữ nổi "C7" màu xám bạc gắn trên cao đầu hồi Tây nhánh Nam & mặt Đông khối lưng (c7-goc-nghieng.jpg) */}
       <LabelPlane
         textureKey="c7-top-code-sign"
         canvasW={256}
@@ -363,13 +440,33 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
           ctx.fillText('C7', w / 2, h / 2);
         }}
         size={[2.4, 1.5]}
-        position={[wingXs[2] + 1.2, totalH - 1.9, size.z / 2 + 0.06]}
+        position={[-size.x / 2 - 0.06, totalH - 1.9, wingZs[2] + 1.1]}
+        rotation={[0, -Math.PI / 2, 0]}
+      />
+      <LabelPlane
+        textureKey="c7-top-code-sign-east"
+        canvasW={256}
+        canvasH={160}
+        draw={(ctx, w, h) => {
+          ctx.clearRect(0, 0, w, h);
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '900 118px Arial, sans-serif';
+          ctx.lineWidth = 6;
+          ctx.strokeStyle = 'rgba(30, 41, 59, 0.75)';
+          ctx.strokeText('C7', w / 2, h / 2);
+          ctx.fillStyle = '#64748B';
+          ctx.fillText('C7', w / 2, h / 2);
+        }}
+        size={[2.4, 1.5]}
+        position={[size.x / 2 + 0.06, totalH - 1.9, 12.6]}
+        rotation={[0, Math.PI / 2, 0]}
       />
 
       <LabelPlane
-        textureKey="c7-main-sign"
-        canvasW={512}
-        canvasH={128}
+        textureKey="c7-main-sign-v2"
+        canvasW={768}
+        canvasH={160}
         draw={(ctx, w, h) => {
           ctx.fillStyle = '#1E3A5F';
           ctx.fillRect(0, 0, w, h);
@@ -379,14 +476,15 @@ export function C7ComplexBuilding({ isNight }: { isNight: boolean }) {
           ctx.fillStyle = '#FFFFFF';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.font = '900 34px Arial, sans-serif';
-          ctx.fillText('TÒA NHÀ C7 · ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, h * 0.4);
+          ctx.font = '800 31px "Be Vietnam Pro", Arial, sans-serif';
+          ctx.fillText('TÒA NHÀ C7 · ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, h * 0.39);
           ctx.fillStyle = '#93C5FD';
-          ctx.font = '700 23px Arial, sans-serif';
-          ctx.fillText('TỔ HỢP GIẢNG ĐƯỜNG & ĐIỀU HÀNH TRUNG TÂM', w / 2, h * 0.75);
+          ctx.font = '700 22px "Be Vietnam Pro", Arial, sans-serif';
+          ctx.fillText('TỔ HỢP GIẢNG ĐƯỜNG & ĐIỀU HÀNH TRUNG TÂM', w / 2, h * 0.74);
         }}
-        size={[5.2, 1.1]}
-        position={[0, 4.35, size.z / 2 + 0.08]}
+        size={[4.9, 1.02]}
+        position={[-size.x / 2 - 0.08, 4.45, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
         transparent={false}
       />
     </group>
@@ -399,6 +497,10 @@ export function VietDucCenterBuilding({ isNight }: { isNight: boolean }) {
 
   return (
     <group position={[center.x, 0, center.z]}>
+      <mesh position={[0, 0.25, 0]} receiveShadow>
+        <boxGeometry args={[size.x + 0.16, 0.5, size.z + 0.16]} />
+        <meshStandardMaterial color="#8E9BAE" roughness={0.88} />
+      </mesh>
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[size.x, h, size.z]} />
         <meshStandardMaterial color="#E6F0FA" roughness={0.86} />
@@ -407,17 +509,28 @@ export function VietDucCenterBuilding({ isNight }: { isNight: boolean }) {
         <boxGeometry args={[size.x + 0.4, 0.44, size.z + 0.4]} />
         <meshStandardMaterial color="#3B6E9C" roughness={0.78} />
       </mesh>
-      {[0, 1].map((fl) =>
-        [-3.6, -1.2, 1.2, 3.6].map((wx, idx) => (
-          <mesh key={`vdz-win-${fl}-${idx}`} position={[wx, fl * floorHeight + 1.6, size.z / 2 + 0.03]}>
-            <planeGeometry args={[1.5, 1.15]} />
-            <meshStandardMaterial
-              color={isNight ? '#FFE4A0' : GLASS_MID}
-              emissive={isNight ? '#FFB84D' : '#000000'}
-              emissiveIntensity={isNight ? 0.65 : 0}
-              roughness={0.35}
-            />
-          </mesh>
+      {Array.from({ length: floors }, (_, fl) =>
+        [-2.85, -0.95, 0.95, 2.85].map((wx, idx) => (
+          <group key={`vdz-win-${fl}-${idx}`}>
+            <mesh position={[wx, fl * floorHeight + 1.55, size.z / 2 + 0.03]}>
+              <planeGeometry args={[1.35, 1.12]} />
+              <meshStandardMaterial
+                color={isNight ? '#FFE4A0' : GLASS_MID}
+                emissive={isNight ? '#FFB84D' : '#000000'}
+                emissiveIntensity={isNight ? 0.65 : 0}
+                roughness={0.35}
+              />
+            </mesh>
+            <mesh position={[wx, fl * floorHeight + 1.55, -size.z / 2 - 0.03]} rotation-y={Math.PI}>
+              <planeGeometry args={[1.35, 1.12]} />
+              <meshStandardMaterial
+                color={isNight ? '#FFE4A0' : GLASS_MID}
+                emissive={isNight ? '#FFB84D' : '#000000'}
+                emissiveIntensity={isNight ? 0.65 : 0}
+                roughness={0.35}
+              />
+            </mesh>
+          </group>
         )),
       )}
       <LabelPlane
@@ -437,7 +550,168 @@ export function VietDucCenterBuilding({ isNight }: { isNight: boolean }) {
           ctx.fillText('TRUNG TÂM VIỆT - ĐỨC (VDZ)', w / 2, hCanvas / 2);
         }}
         size={[4.0, 0.82]}
-        position={[0, h - 0.55, size.z / 2 + 0.05]}
+        position={[0, h - 0.55, -size.z / 2 - 0.05]}
+        rotation={[0, Math.PI, 0]}
+        transparent={false}
+      />
+    </group>
+  );
+}
+
+/**
+ * Không gian số HUST Digital Hub — khối nhà kính hiện đại nằm giữa Trung tâm Việt – Đức (VDZ)
+ * và Nhà Cựu sinh viên Bách Khoa ở bờ Bắc Hồ Tiền theo đúng Bản đồ Số https://hustmap.com/.
+ */
+export function HustDigitalHubBuilding({ isNight }: { isNight: boolean }) {
+  const { center, size, floors, floorHeight } = HUST_DIGITAL_HUB;
+  const h = floors * floorHeight;
+
+  return (
+    <group position={[center.x, 0, center.z]}>
+      <mesh position={[0, 0.24, 0]} receiveShadow>
+        <boxGeometry args={[size.x + 0.18, 0.48, size.z + 0.18]} />
+        <meshStandardMaterial color="#475569" roughness={0.82} />
+      </mesh>
+      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[size.x, h, size.z]} />
+        <meshStandardMaterial color="#F1F5F9" roughness={0.8} />
+      </mesh>
+      {/* Diềm mái công nghệ màu xanh dương đậm kết hợp chỉ đỏ Bách Khoa */}
+      <mesh position={[0, h + 0.22, 0]} castShadow>
+        <boxGeometry args={[size.x + 0.4, 0.44, size.z + 0.4]} />
+        <meshStandardMaterial color="#0F172A" roughness={0.62} metalness={0.25} />
+      </mesh>
+      <mesh position={[0, h + 0.48, 0]}>
+        <boxGeometry args={[size.x + 0.44, 0.08, size.z + 0.44]} />
+        <meshStandardMaterial color="#DC2626" roughness={0.55} />
+      </mesh>
+      {/* Vách kính lớn 2 tầng mặt Bắc & mặt Nam */}
+      {[0, 1].map((fl) =>
+        [-2.0, 0, 2.0].map((wx, idx) => (
+          <group key={`dhub-win-${fl}-${idx}`}>
+            <mesh position={[wx, fl * floorHeight + 1.55, -size.z / 2 - 0.03]} rotation-y={Math.PI}>
+              <planeGeometry args={[1.62, 1.32]} />
+              <meshStandardMaterial
+                color={isNight ? '#BAE6FD' : '#1E3A5F'}
+                emissive={isNight ? '#38BDF8' : '#000000'}
+                emissiveIntensity={isNight ? 0.72 : 0}
+                roughness={0.22}
+                metalness={0.35}
+              />
+            </mesh>
+            <mesh position={[wx, fl * floorHeight + 1.55, size.z / 2 + 0.03]}>
+              <planeGeometry args={[1.62, 1.32]} />
+              <meshStandardMaterial
+                color={isNight ? '#BAE6FD' : '#1E3A5F'}
+                emissive={isNight ? '#38BDF8' : '#000000'}
+                emissiveIntensity={isNight ? 0.72 : 0}
+                roughness={0.22}
+                metalness={0.35}
+              />
+            </mesh>
+          </group>
+        )),
+      )}
+      <LabelPlane
+        textureKey="hust-digital-hub-sign-only"
+        canvasW={576}
+        canvasH={120}
+        draw={(ctx, w, hCanvas) => {
+          ctx.fillStyle = '#0F172A';
+          ctx.fillRect(0, 0, w, hCanvas);
+          ctx.strokeStyle = '#38BDF8';
+          ctx.lineWidth = 6;
+          ctx.strokeRect(6, 6, w - 12, hCanvas - 12);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '900 32px "Be Vietnam Pro", "Segoe UI", sans-serif';
+          ctx.fillText('HUST DIGITAL HUB', w / 2, hCanvas * 0.4);
+          ctx.fillStyle = '#7DD3FC';
+          ctx.font = '700 20px "Be Vietnam Pro", "Segoe UI", sans-serif';
+          ctx.fillText('KHÔNG GIAN SỐ BÁCH KHOA · 数字中心', w / 2, hCanvas * 0.76);
+        }}
+        size={[3.9, 0.82]}
+        position={[0, h - 0.52, -size.z / 2 - 0.05]}
+        rotation={[0, Math.PI, 0]}
+        transparent={false}
+      />
+    </group>
+  );
+}
+
+/**
+ * Nhà Cựu sinh viên Bách Khoa (tách biệt với HUST Digital Hub, nằm chếch phía Đông-Nam
+ * sát góc Đông-Bắc Hồ Tiền theo đúng https://hustmap.com/).
+ */
+export function AlumniHouseBuilding({ isNight }: { isNight: boolean }) {
+  const { center, size, floors, floorHeight } = ALUMNI_HOUSE;
+  const h = floors * floorHeight;
+
+  return (
+    <group position={[center.x, 0, center.z]}>
+      <mesh position={[0, 0.24, 0]} receiveShadow>
+        <boxGeometry args={[size.x + 0.16, 0.48, size.z + 0.16]} />
+        <meshStandardMaterial color="#8A8178" roughness={0.88} />
+      </mesh>
+      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[size.x, h, size.z]} />
+        <meshStandardMaterial color="#FAF7F2" roughness={0.84} />
+      </mesh>
+      {/* Diềm mái đỏ Bách khoa hiện đại */}
+      <mesh position={[0, h + 0.22, 0]} castShadow>
+        <boxGeometry args={[size.x + 0.42, 0.44, size.z + 0.42]} />
+        <meshStandardMaterial color="#991B1B" roughness={0.74} />
+      </mesh>
+      {/* Khung kính lớn 2 tầng nhìn ra trục đường chính (-Z) và mặt nước Hồ Tiền (+Z) */}
+      {[0, 1].map((fl) =>
+        [-2.1, 0, 2.1].map((wx, idx) => (
+          <group key={`alumni-win-${fl}-${idx}`}>
+            <mesh position={[wx, fl * floorHeight + 1.55, -size.z / 2 - 0.03]} rotation-y={Math.PI}>
+              <planeGeometry args={[1.6, 1.25]} />
+              <meshStandardMaterial
+                color={isNight ? '#FFE4A0' : '#2A475E'}
+                emissive={isNight ? '#FFB84D' : '#000000'}
+                emissiveIntensity={isNight ? 0.7 : 0}
+                roughness={0.28}
+                metalness={0.25}
+              />
+            </mesh>
+            <mesh position={[wx, fl * floorHeight + 1.55, size.z / 2 + 0.03]}>
+              <planeGeometry args={[1.6, 1.25]} />
+              <meshStandardMaterial
+                color={isNight ? '#FFE4A0' : '#2A475E'}
+                emissive={isNight ? '#FFB84D' : '#000000'}
+                emissiveIntensity={isNight ? 0.7 : 0}
+                roughness={0.28}
+                metalness={0.25}
+              />
+            </mesh>
+          </group>
+        )),
+      )}
+      <LabelPlane
+        textureKey="alumni-house-only-sign"
+        canvasW={576}
+        canvasH={120}
+        draw={(ctx, w, hCanvas) => {
+          ctx.fillStyle = '#991B1B';
+          ctx.fillRect(0, 0, w, hCanvas);
+          ctx.strokeStyle = '#FACC15';
+          ctx.lineWidth = 6;
+          ctx.strokeRect(6, 6, w - 12, hCanvas - 12);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '800 28px "Be Vietnam Pro", "Segoe UI", sans-serif';
+          ctx.fillText('NHÀ CỰU SINH VIÊN BÁCH KHOA', w / 2, hCanvas * 0.38);
+          ctx.fillStyle = '#FDE047';
+          ctx.font = '700 21px "Be Vietnam Pro", "Segoe UI", sans-serif';
+          ctx.fillText('HUST ALUMNI HOUSE · 校友之家', w / 2, hCanvas * 0.74);
+        }}
+        size={[4.0, 0.84]}
+        position={[0, h - 0.55, -size.z / 2 - 0.05]}
+        rotation={[0, Math.PI, 0]}
         transparent={false}
       />
     </group>
@@ -709,7 +983,7 @@ export function D3D5ParkingGarage() {
 /**
  * Một chiếc ô tô 3D của giảng viên đỗ trên trục đường cạnh tòa C7
  */
-function FacultyParkedCar({
+export function FacultyParkedCar({
   x,
   z,
   yaw,

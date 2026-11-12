@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { C1_FOUNTAIN, I_LOVE_BK, WHITE_ROCK } from '../world-data';
+import { C1_FOUNTAIN, I_LOVE_BK, MONUMENT, NGA_5_PLAZA, TDN_SQUARE, WHITE_ROCK } from '../world-data';
 import { LabelPlane, drawRockInscription } from '../../../components/three/TextPlate';
 import { makeGraniteStoneTexture } from '../../../components/three/materials';
 
@@ -453,7 +453,7 @@ export function WhiteRock() {
   );
 }
 
-export function C1Fountain() {
+export function C1Fountain({ isNight = false }: { isNight?: boolean }) {
   const sprayRef = useRef<THREE.Group>(null!);
   useFrame((state) => {
     if (!sprayRef.current) return;
@@ -462,34 +462,45 @@ export function C1Fountain() {
     sprayRef.current.rotation.y = t * 0.6;
   });
 
-  // Đặt ở C1_FOUNTAIN.center (-78, -36.5), phía bắc Khối đá trắng (-78, -31), hoàn toàn ngoài đường đi và chặng leg2
+  // Đặt chính tâm trục đối xứng Quảng trường C1 (-58, -31.2) giữa I ❤ BK và Khối đá trắng theo đúng https://hustmap.com/
   return (
     <group position={[C1_FOUNTAIN.center.x, 0, C1_FOUNTAIN.center.z]}>
-      {/* Thành bể đá hình chữ nhật vát góc 4.8 × 2.6 m */}
-      <mesh position={[0, 0.18, 0]} castShadow receiveShadow>
-        <boxGeometry args={[4.8, 0.36, 2.6]} />
-        <meshStandardMaterial color="#B5B2A8" roughness={0.85} />
+      {/* Bậc chân đế granite bao quanh bể phun nước */}
+      <mesh position={[0, 0.05, 0]} receiveShadow>
+        <boxGeometry args={[5.35, 0.1, 3.05]} />
+        <meshStandardMaterial color="#9E9B91" roughness={0.86} />
       </mesh>
-      {/* Lòng nước xanh trong */}
-      <mesh position={[0, 0.31, 0]} receiveShadow>
-        <boxGeometry args={[4.3, 0.12, 2.1]} />
-        <meshStandardMaterial color="#2C6E7A" roughness={0.22} metalness={0.12} />
+      {/* Thành bể đá hình chữ nhật 4.9 × 2.65 m */}
+      <mesh position={[0, 0.22, 0]} castShadow receiveShadow>
+        <boxGeometry args={[4.9, 0.36, 2.65]} />
+        <meshStandardMaterial color="#B5B2A8" roughness={0.82} />
+      </mesh>
+      {/* Lòng nước xanh ngọc trong suốt (phát sáng dịu vào ban đêm) */}
+      <mesh position={[0, 0.35, 0]} receiveShadow>
+        <boxGeometry args={[4.38, 0.12, 2.15]} />
+        <meshStandardMaterial
+          color={isNight ? '#38BDF8' : '#2C6E7A'}
+          emissive={isNight ? '#0284C7' : '#000000'}
+          emissiveIntensity={isNight ? 0.55 : 0}
+          roughness={0.2}
+          metalness={0.14}
+        />
       </mesh>
       {/* Tháp phun nước đá 2 tầng ở giữa bể */}
-      <mesh position={[0, 0.52, 0]} castShadow>
+      <mesh position={[0, 0.56, 0]} castShadow>
         <cylinderGeometry args={[0.38, 0.48, 0.45, 16]} />
         <meshStandardMaterial color="#D8D5CC" roughness={0.75} />
       </mesh>
-      <mesh position={[0, 0.82, 0]} castShadow>
+      <mesh position={[0, 0.86, 0]} castShadow>
         <cylinderGeometry args={[0.72, 0.28, 0.18, 18]} />
         <meshStandardMaterial color="#E5E2D9" roughness={0.7} />
       </mesh>
-      <mesh position={[0, 1.05, 0]} castShadow>
+      <mesh position={[0, 1.09, 0]} castShadow>
         <cylinderGeometry args={[0.14, 0.2, 0.35, 14]} />
         <meshStandardMaterial color="#D8D5CC" roughness={0.75} />
       </mesh>
       {/* Tia nước phun trắng bạc chuyển động */}
-      <group ref={sprayRef} position={[0, 1.22, 0]}>
+      <group ref={sprayRef} position={[0, 1.26, 0]}>
         <mesh position={[0, 0.32, 0]}>
           <coneGeometry args={[0.36, 0.68, 16, 1, true]} />
           <meshStandardMaterial color="#E6F7FF" transparent opacity={0.55} roughness={0.2} side={THREE.DoubleSide} />
@@ -503,10 +514,292 @@ export function C1Fountain() {
               rotation={[0, -ang, 0.48]}
             >
               <cylinderGeometry args={[0.02, 0.04, 0.62, 8]} />
-              <meshStandardMaterial color="#F0FAFF" transparent opacity={0.6} roughness={0.2} />
+              <meshStandardMaterial color="#F0FAFF" transparent opacity={0.62} roughness={0.2} />
             </mesh>
           );
         })}
+      </group>
+    </group>
+  );
+}
+
+/**
+ * Cảnh quan Quảng trường Ngã 5 (Sân Ngã 5 — chuẩn https://hustmap.com/):
+ *  1. Đảo cỏ tam giác bo góc ở phía Nam nút giao 5 nhánh kèm hàng cây bụi & trụ đèn cảnh quan.
+ *  2. Bồn tiểu cảnh tròn đá granite ở góc Tây-Nam Viện ITIMS / đầu Tây Nhà C10.
+ */
+export function Nga5PlazaLandmarks({ isNight = false }: { isNight?: boolean }) {
+  const { curbGeo, grassGeo } = useMemo(() => {
+    const makeTri = (scale: number) => {
+      const s = new THREE.Shape();
+      s.moveTo(-2.7 * scale, -1.35 * scale);
+      s.quadraticCurveTo(0, -1.75 * scale, 2.7 * scale, -1.35 * scale);
+      s.quadraticCurveTo(1.55 * scale, 0.6 * scale, 0, 1.85 * scale);
+      s.quadraticCurveTo(-1.55 * scale, 0.6 * scale, -2.7 * scale, -1.35 * scale);
+      s.closePath();
+      return s;
+    };
+    const cGeo = new THREE.ExtrudeGeometry(makeTri(1.06), { depth: 0.14, bevelEnabled: false });
+    cGeo.rotateX(Math.PI / 2);
+    const gGeo = new THREE.ExtrudeGeometry(makeTri(0.96), { depth: 0.12, bevelEnabled: false });
+    gGeo.rotateX(Math.PI / 2);
+    return { curbGeo: cGeo, grassGeo: gGeo };
+  }, []);
+
+  useEffect(
+    () => () => {
+      curbGeo.dispose();
+      grassGeo.dispose();
+    },
+    [curbGeo, grassGeo],
+  );
+
+  const { southLawnCenter, itimsRoundPlanter } = NGA_5_PLAZA;
+
+  return (
+    <group>
+      {/* 1. Đảo cỏ tam giác bo tròn phía Nam Quảng trường ngã 5 */}
+      <group position={[southLawnCenter.x, 0, southLawnCenter.z]}>
+        <mesh geometry={curbGeo} position={[0, 0.16, 0]} castShadow receiveShadow>
+          <meshStandardMaterial color="#B9B6AA" roughness={0.88} />
+        </mesh>
+        <mesh geometry={grassGeo} position={[0, 0.2, 0]} receiveShadow>
+          <meshStandardMaterial color="#5E8C43" roughness={0.95} />
+        </mesh>
+        {/* Cụm cây bụi & hoa viền đảo tam giác */}
+        {[
+          [-1.55, -0.75],
+          [0, -0.95],
+          [1.55, -0.75],
+          [-0.75, 0.45],
+          [0.75, 0.45],
+        ].map(([sx, sz], idx) => (
+          <mesh key={`nga5-shrub-${idx}`} position={[sx, 0.36, sz]} castShadow>
+            <dodecahedronGeometry args={[0.32, 1]} />
+            <meshStandardMaterial color={idx % 2 === 0 ? '#3E7A34' : '#4D8E3F'} roughness={0.88} />
+          </mesh>
+        ))}
+        {/* Cột đèn chùm 3 bóng cổ điển đặt giữa đảo Ngã 5 + biển tên Quảng trường Ngã 5 */}
+        <mesh position={[0, 1.55, -0.1]} castShadow>
+          <cylinderGeometry args={[0.06, 0.09, 3.1, 10]} />
+          <meshStandardMaterial color="#273038" roughness={0.45} metalness={0.55} />
+        </mesh>
+        {[-0.36, 0, 0.36].map((lx, idx) => (
+          <mesh key={`nga5-globe-${idx}`} position={[lx, 3.18 + (idx === 1 ? 0.16 : 0), -0.1]}>
+            <sphereGeometry args={[0.15, 12, 10]} />
+            <meshStandardMaterial
+              color="#FFFBEB"
+              emissive="#FFE28A"
+              emissiveIntensity={isNight ? 1.85 : 0.25}
+              roughness={0.3}
+            />
+          </mesh>
+        ))}
+        <LabelPlane
+          textureKey="nga5-plaza-plate"
+          canvasW={512}
+          canvasH={128}
+          draw={(ctx, w, h) => {
+            ctx.fillStyle = '#1E3A5F';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FACC15';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(6, 6, w - 12, h - 12);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '800 34px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('QUẢNG TRƯỜNG NGÃ 5', w / 2, h * 0.42);
+            ctx.fillStyle = '#FDE047';
+            ctx.font = '600 22px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('C1 · C9 · ITIMS · C10 · ĐƯỜNG TÌNH YÊU', w / 2, h * 0.76);
+          }}
+          size={[1.45, 0.38]}
+          position={[0, 0.62, 0.95]}
+        />
+      </group>
+
+      {/* 2. Bồn tiểu cảnh tròn góc Tây-Nam Viện ITIMS / đầu Tây Nhà C10 */}
+      <group position={[itimsRoundPlanter.x, 0, itimsRoundPlanter.z]}>
+        <mesh position={[0, 0.14, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[itimsRoundPlanter.radius, itimsRoundPlanter.radius + 0.08, 0.28, 28]} />
+          <meshStandardMaterial color="#B8B4A8" roughness={0.86} />
+        </mesh>
+        <mesh position={[0, 0.29, 0]} receiveShadow>
+          <cylinderGeometry args={[itimsRoundPlanter.radius - 0.18, itimsRoundPlanter.radius - 0.18, 0.04, 28]} />
+          <meshStandardMaterial color="#5A8B41" roughness={0.94} />
+        </mesh>
+        {/* Cây cảnh thiên tuế / cọ lùn ở tâm bồn tròn */}
+        <mesh position={[0, 0.62, 0]} castShadow>
+          <cylinderGeometry args={[0.16, 0.22, 0.65, 10]} />
+          <meshStandardMaterial color="#5C4028" roughness={0.92} />
+        </mesh>
+        <mesh position={[0, 1.15, 0]} castShadow>
+          <dodecahedronGeometry args={[0.78, 1]} />
+          <meshStandardMaterial color="#366E2E" roughness={0.86} />
+        </mesh>
+        {[0, 1, 2, 3, 4, 5].map((k) => {
+          const ang = (k / 6) * Math.PI * 2;
+          return (
+            <mesh
+              key={`itims-flower-${k}`}
+              position={[Math.cos(ang) * 1.35, 0.38, Math.sin(ang) * 1.35]}
+              castShadow
+            >
+              <sphereGeometry args={[0.24, 10, 8]} />
+              <meshStandardMaterial color={k % 2 === 0 ? '#E11D48' : '#FACC15'} roughness={0.8} />
+            </mesh>
+          );
+        })}
+      </group>
+    </group>
+  );
+}
+
+/**
+ * Quảng trường Trần Đại Nghĩa (nằm ở phía Tây nhà C2, phía Bắc nhà C9 sát biên đường Giải Phóng
+ * theo đúng Bản đồ Số https://hustmap.com/ — fid: 291):
+ *  - 4 ô thảm cỏ xanh đối xứng chia lối dạo chữ thập lát đá.
+ *  - Đài tưởng niệm & Bia đá hoa cương GS. Viện sĩ Trần Đại Nghĩa (Hiệu trưởng đầu tiên ĐHBK Hà Nội, 1956)
+ *    quay mặt về hướng Đông (+X) về phía Nhà C2 & Quảng trường C1, kèm bảng đồng giới thiệu.
+ */
+export function TranDaiNghiaMemorialPlaza({ isNight = false }: { isNight?: boolean }) {
+  const cx = (TDN_SQUARE.minX + TDN_SQUARE.maxX) / 2;
+  const cz = (TDN_SQUARE.minZ + TDN_SQUARE.maxZ) / 2;
+
+  return (
+    <group>
+      {/* 4 ô thảm cỏ đối xứng trên nền Quảng trường Trần Đại Nghĩa (y = 0.035..0.09m, không z-fighting với PLAZA_Y = 0.015) */}
+      {[
+        { x: cx, z: cz - 6.2, w: 4.8, d: 5.4 },
+        { x: cx, z: cz + 6.2, w: 4.8, d: 5.4 },
+      ].map((bed, idx) => (
+        <group key={`tdn-sq-lawn-${idx}`} position={[bed.x, 0, bed.z]}>
+          <mesh position={[0, 0.04, 0]} receiveShadow>
+            <boxGeometry args={[bed.w + 0.24, 0.05, bed.d + 0.24]} />
+            <meshStandardMaterial color="#B5B2A8" roughness={0.88} />
+          </mesh>
+          <mesh position={[0, 0.08, 0]} receiveShadow>
+            <boxGeometry args={[bed.w, 0.08, bed.d]} />
+            <meshStandardMaterial color="#588A3F" roughness={0.95} />
+          </mesh>
+          {[-1.5, 1.5].map((dz, sIdx) => (
+            <mesh key={`tdn-sq-bush-${idx}-${sIdx}`} position={[0, 0.28, dz]} castShadow>
+              <dodecahedronGeometry args={[0.34, 1]} />
+              <meshStandardMaterial color="#3B7A31" roughness={0.88} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      {/* Đài tưởng niệm GS. Viện sĩ Trần Đại Nghĩa tại MONUMENT.center (-92.6, -34.5), hướng mặt sang Đông (+X) */}
+      <group position={[MONUMENT.center.x, 0, MONUMENT.center.z]} rotation-y={Math.PI / 2}>
+        {/* Bệ tam cấp đá granite xám sẫm */}
+        <mesh position={[0, 0.12, 0]} castShadow receiveShadow>
+          <boxGeometry args={[2.2, 0.24, 1.8]} />
+          <meshStandardMaterial color="#475569" roughness={0.76} />
+        </mesh>
+        <mesh position={[0, 0.34, 0]} castShadow receiveShadow>
+          <boxGeometry args={[1.72, 0.22, 1.36]} />
+          <meshStandardMaterial color="#334155" roughness={0.72} />
+        </mesh>
+        {/* Thân trụ đá hoa cương đỏ nâu trang nghiêm */}
+        <mesh position={[0, 1.32, 0]} castShadow receiveShadow>
+          <boxGeometry args={[1.18, 1.76, 0.78]} />
+          <meshStandardMaterial color="#5B2323" roughness={0.55} metalness={0.18} />
+        </mesh>
+        {/* Phù điêu / Tượng bán thân đồng vàng đặt trên đỉnh trụ đá */}
+        <mesh position={[0, 2.34, 0]} castShadow>
+          <boxGeometry args={[0.62, 0.28, 0.48]} />
+          <meshStandardMaterial color="#92400E" roughness={0.4} metalness={0.68} />
+        </mesh>
+        <mesh position={[0, 2.66, 0]} castShadow>
+          <cylinderGeometry args={[0.24, 0.3, 0.38, 14]} />
+          <meshStandardMaterial color="#B45309" roughness={0.35} metalness={0.72} />
+        </mesh>
+        <mesh position={[0, 3.02, 0]} castShadow>
+          <sphereGeometry args={[0.19, 16, 14]} />
+          <meshStandardMaterial color="#B45309" roughness={0.34} metalness={0.74} />
+        </mesh>
+
+        {/* Bảng chữ vàng khắc trên thân đài tưởng niệm */}
+        <LabelPlane
+          textureKey="tdn-memorial-stele-plaque"
+          canvasW={512}
+          canvasH={320}
+          draw={(ctx, w, h) => {
+            ctx.fillStyle = '#3F1616';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FACC15';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(10, 10, w - 20, h - 20);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#FDE047';
+            ctx.font = '800 28px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('QUẢNG TRƯỜNG', w / 2, h * 0.22);
+            ctx.font = '900 38px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('GS. VS. TRẦN ĐẠI NGHĨA', w / 2, h * 0.46);
+            ctx.fillStyle = '#F8FAFC';
+            ctx.font = '600 22px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('1913 – 1997', w / 2, h * 0.68);
+            ctx.fillStyle = '#FDE68A';
+            ctx.font = '600 19px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('HIỆU TRƯỞNG ĐẦU TIÊN ĐHBK HÀ NỘI', w / 2, h * 0.84);
+          }}
+          size={[0.98, 0.62]}
+          position={[0, 1.42, 0.415]}
+          transparent={false}
+        />
+
+        {/* Đèn hắt sáng đài tưởng niệm khi trời tối */}
+        <mesh position={[0, 0.48, 0.58]}>
+          <boxGeometry args={[0.38, 0.06, 0.12]} />
+          <meshStandardMaterial
+            color="#FFFBEB"
+            emissive="#FDE047"
+            emissiveIntensity={isNight ? 2.2 : 0.2}
+          />
+        </mesh>
+      </group>
+
+      {/* Biển giới thiệu Quảng trường Trần Đại Nghĩa ở mép Đông quảng trường (MONUMENT.sign) */}
+      <group position={[MONUMENT.sign.x, 0, MONUMENT.sign.z]} rotation-y={Math.PI / 2}>
+        <mesh position={[-0.36, 0.55, 0]} castShadow>
+          <cylinderGeometry args={[0.035, 0.035, 1.1, 8]} />
+          <meshStandardMaterial color="#334155" roughness={0.5} metalness={0.55} />
+        </mesh>
+        <mesh position={[0.36, 0.55, 0]} castShadow>
+          <cylinderGeometry args={[0.035, 0.035, 1.1, 8]} />
+          <meshStandardMaterial color="#334155" roughness={0.5} metalness={0.55} />
+        </mesh>
+        <mesh position={[0, 1.15, 0]} castShadow>
+          <boxGeometry args={[1.05, 0.58, 0.06]} />
+          <meshStandardMaterial color="#1E293B" roughness={0.6} />
+        </mesh>
+        <LabelPlane
+          textureKey="tdn-square-intro-sign"
+          canvasW={512}
+          canvasH={256}
+          draw={(ctx, w, h) => {
+            ctx.fillStyle = '#1E3A5F';
+            ctx.fillRect(0, 0, w, h);
+            ctx.strokeStyle = '#FACC15';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(8, 8, w - 16, h - 16);
+            ctx.fillStyle = '#FDE047';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '800 30px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('QUẢNG TRƯỜNG TRẦN ĐẠI NGHĨA', w / 2, h * 0.34);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '600 22px "Be Vietnam Pro", Arial, sans-serif';
+            ctx.fillText('Khuôn viên Tây Nhà C2 · Bắc Nhà C9', w / 2, h * 0.68);
+          }}
+          size={[0.98, 0.5]}
+          position={[0, 1.15, 0.045]}
+          transparent={false}
+        />
       </group>
     </group>
   );

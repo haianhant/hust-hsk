@@ -103,11 +103,11 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     lanyard: true,
     backpack: true,
   },
-  // 4. Nam sinh viên đi dọc sân trước Tòa C7
+  // 4. Nam sinh viên đi dọc sân phía Tây trước Tòa C7
   {
     id: 'walk-c7',
-    a: [18, -62],
-    b: [18, -28],
+    a: [28.5, -52],
+    b: [28.5, -20],
     speed: 1.6,
     phaseOffset: 0.8,
     variant: 'polo',
@@ -119,11 +119,11 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     lanyard: true,
     backpack: true,
   },
-  // 5. Sinh viên đi dọc lối sân thoáng Khu Ký túc xá Bách Khoa (ngoài hoàn toàn nhà B5–B7)
+  // 5. Sinh viên đi dọc lối sân thoáng Khu Ký túc xá Bách Khoa (giữa dãy B6–B8 và B5–B9)
   {
     id: 'walk-dorm',
-    a: [108, -56],
-    b: [108, -14],
+    a: [112.5, -58],
+    b: [112.5, -16],
     speed: 1.5,
     phaseOffset: 2.3,
     variant: 'hoodie',
@@ -134,11 +134,11 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     lanyard: false,
     backpack: true,
   },
-  // 6. Sinh viên tập chạy bộ ở Sân Bóng rổ / Khu Thể chất Bách Khoa
+  // 6. Sinh viên tập chạy bộ ở Sân bóng rổ Khu Thể thao Bách Khoa
   {
     id: 'walk-sport-1',
-    a: [74, 59],
-    b: [86, 59],
+    a: [129, 64],
+    b: [139, 64],
     speed: 2.4,
     phaseOffset: 1.1,
     variant: 'sport',
@@ -152,8 +152,8 @@ const WALKING_STUDENTS: WalkerSpec[] = [
   // 7. Sinh viên đá bóng trên Sân vận động Bách Khoa
   {
     id: 'walk-sport-2',
-    a: [134, 68],
-    b: [158, 68],
+    a: [120, 80],
+    b: [144, 80],
     speed: 2.5,
     phaseOffset: 4.0,
     variant: 'polo',

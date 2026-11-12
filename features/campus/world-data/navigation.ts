@@ -25,14 +25,14 @@ export type FastTravelDestination = {
 };
 
 export const FAST_TRAVEL_DESTINATIONS: FastTravelDestination[] = [
-  { id: 'c7', name: 'Tòa C7 (Học HSK)', icon: '🎓', desc: 'Giảng đường học HSK theo bài', x: 46, z: -35.8, yaw: 0, facing: Math.PI },
+  { id: 'c7', name: 'Tòa C7 (Học HSK)', icon: '🎓', desc: 'Giảng đường chữ E · Học HSK theo bài', x: 26.5, z: -36, yaw: -Math.PI / 2, facing: Math.PI / 2 },
   { id: 'library', name: 'Thư viện Tạ Quang Bửu', icon: '📚', desc: 'Tự học Pomodoro · Piano · Sân thượng', x: 38, z: 12.2, yaw: Math.PI, facing: 0 },
   { id: 'c1', name: 'Nhà C1', icon: '🏫', desc: 'Phòng Truyền thống & I ❤ BK', x: -58, z: -43.2, yaw: 0, facing: Math.PI },
   { id: 'b1', name: 'Nhà B1 (SoICT)', icon: '💻', desc: 'Phòng Lab Thuật ngữ CNTT & AI', x: 112, z: 4.5, yaw: Math.PI, facing: 0 },
   { id: 'lake', name: 'Hồ Tiền', icon: '🌊', desc: 'Bờ đông ven hồ & nhạc Lofi', x: 24, z: 48, yaw: Math.PI / 2, facing: -Math.PI / 2 },
   { id: 'parabol', name: 'Cổng Parabol', icon: '⛩️', desc: 'Biểu tượng kiến trúc Giải Phóng', x: -88, z: -6, yaw: -Math.PI / 2, facing: Math.PI / 2 },
   { id: 'c9', name: 'Khu C9', icon: '🏢', desc: 'Trước cầu thang đỏ zic-zac', x: -60, z: -17, yaw: Math.PI / 2, facing: -Math.PI / 2 },
-  { id: 'ktx', name: 'Khu KTX B8–B9', icon: '🏘️', desc: 'Đời sống nội trú & Căng-tin SV', x: 112.5, z: -45, yaw: -Math.PI / 2, facing: Math.PI / 2 },
+  { id: 'ktx', name: 'Khu KTX B8–B9', icon: '🏘️', desc: 'Đời sống nội trú & Căng tin B5-9', x: 112.5, z: -45, yaw: -Math.PI / 2, facing: Math.PI / 2 },
   { id: 'spawn', name: 'Điểm bắt đầu', icon: '📍', desc: 'Cổng Trần Đại Nghĩa', x: SPAWN.x, z: SPAWN.z, yaw: Math.PI / 2, facing: -Math.PI / 2 },
 ];
 

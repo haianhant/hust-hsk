@@ -32,7 +32,8 @@ export function C2Building({ isNight = false }: { isNight?: boolean }) {
     [concretePbr],
   );
 
-  // Đặt ở C2_BUILDING.center (-86, 0, -22), trục dài theo hướng Bắc–Nam (size 7.5 × 15 m), mặt chính hướng Đông (+X) ra vườn hoa C1
+  // Đặt ở C2_BUILDING.center (-86, 0, -34), trục dài theo hướng Bắc–Nam, mặt chính hướng Đông (+X)
+  // ra Quảng trường C1 và có 2 cánh phụ phía Tây ôm sân theo đúng Bản đồ Số https://hustmap.com/.
   return (
     <group position={[C2_BUILDING.center.x, 0, C2_BUILDING.center.z]} rotation-y={Math.PI / 2}>
       {/* Khối nhà C2 15 × 7.5 m (sau khi xoay 90°: dọc Bắc–Nam 15 m, ngang Đông–Tây 7.5 m), cao 7.8 m */}
@@ -46,6 +47,25 @@ export function C2Building({ isNight = false }: { isNight?: boolean }) {
           roughness={0.86}
         />
       </mesh>
+      {/* Hai cánh phụ vươn về phía Tây (-Z cục bộ = -X thế giới) tạo mặt bằng hình chữ [ chuẩn https://hustmap.com/ */}
+      {[-5.8, 5.8].map((wx) => (
+        <group key={`c2-west-wing-${wx}`} position={[wx, 0, -4.0]}>
+          <mesh position={[0, 3.8, 0]} castShadow receiveShadow>
+            <boxGeometry args={[3.4, 7.6, 1.6]} />
+            <meshStandardMaterial
+              color="#D9B38C"
+              map={concretePbr.map}
+              bumpMap={concretePbr.bumpMap}
+              bumpScale={0.015}
+              roughness={0.86}
+            />
+          </mesh>
+          <mesh position={[0, 0.45, 0]} receiveShadow>
+            <boxGeometry args={[3.5, 0.9, 1.7]} />
+            <meshStandardMaterial color="#A67F58" roughness={0.9} />
+          </mesh>
+        </group>
+      ))}
       {/* Chân đế sẫm màu */}
       <mesh position={[0, 0.45, 0]} receiveShadow>
         <boxGeometry args={[15.12, 0.9, 7.62]} />

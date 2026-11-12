@@ -24,7 +24,7 @@ Bộ tài liệu này được thiết kế làm **nguồn sự thật kỹ thu�
 - [Danh mục Công trình & Phân khu (`docs/world/buildings/README.md`)](./world/buildings/README.md) — Tổng hợp tọa độ, kích thước và Module ID của toàn bộ công trình ĐHBK Hà Nội.
 - [Tòa C1 & Quảng trường C1 (`docs/world/buildings/c1.md`)](./world/buildings/c1.md) — `building.c1`, `landmark.i-love-bk`, `landmark.white-rock`, `interior.c1-classroom`.
 - [Thư viện Tạ Quang Bửu (`docs/world/buildings/library.md`)](./world/buildings/library.md) — `building.library`, `landmark.hust-sign`, `interior.library-lobby`.
-- [Tổ hợp Tòa C7 & Cụm C6–C8 (`docs/world/buildings/c7.md`)](./world/buildings/c7.md) — `building.c7`, `building.c6`, `building.c8`.
+- [Tổ hợp Tòa C7 & Cụm C6–C15 (`docs/world/buildings/c7.md`)](./world/buildings/c7.md) — `building.c7`, `building.c6`, `building.c15`.
 - [Tòa C9, Cổng Parabol & Hồ Tiền (`docs/world/buildings/c9-parabol-lake.md`)](./world/buildings/c9-parabol-lake.md) — `building.c9`, `building.parabol-gate`, `landscape.tien-lake`.
 - [Khu Đông Campus: B1 SoICT, KTX & Khu Thể chất (`docs/world/buildings/east-campus.md`)](./world/buildings/east-campus.md) — `building.b1-soict`, `building.dorm-complex`, `building.sports-complex`.
 - [Hệ Khung xương & Chuyển động Nhân vật (`docs/world/avatar/rig-and-animation.md`)](./world/avatar/rig-and-animation.md) — `avatar.rig`, `avatar.animation`, `avatar.nameplate`.
@@ -83,7 +83,7 @@ Bộ tài liệu này được thiết kế làm **nguồn sự thật kỹ thu�
 Các tài liệu dưới đây được lưu giữ từ các đợt khảo sát và nghiệm thu trước để đối chiếu lịch sử thiết kế (không xóa để bảo toàn tham chiếu trong comment source code):
 
 - **Khảo sát Khuôn viên & Hình ảnh Tham chiếu:**
-  - `docs/khuon-vien-truong.png` — Sơ đồ tổng mặt bằng Đại học Bách khoa Hà Nội.
+  - Bản đồ số [`https://hustmap.com/`](https://hustmap.com/) — **Source of Truth** bản đồ quy hoạch khuôn viên Đại học Bách khoa Hà Nội (chỉ giới hạn đúng phạm vi khuôn viên trường, đã loại bỏ sơ đồ cũ).
   - [docs/campus-reference.md](./campus-reference.md) — Khảo sát kích thước và vị trí công trình ban đầu.
   - [docs/satellite-and-c9.md](./satellite-and-c9.md) — Đối chiếu vệ tinh Hồ Tiền chữ nhật và cầu thang đỏ C9.
   - [docs/reference-visual.md](./reference-visual.md) — Bảng màu và phân tích thị giác ban đầu.

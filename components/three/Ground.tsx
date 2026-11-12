@@ -13,7 +13,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { C1, LIBRARY, LOVE_ROAD_TREES, ROADS, type Vec2 } from '../../lib/campus';
+import { C1, LIBRARY, LOVE_ROAD_TREES, NGA_5_PLAZA, ROADS, TDN_SQUARE, type Vec2 } from '../../lib/campus';
 import {
   createSeededRandom,
   makeAsphaltTexture,
@@ -41,6 +41,8 @@ type Rect = { minX: number; maxX: number; minZ: number; maxZ: number };
 
 const PLAZAS: Array<{ rect: Rect; color: string; kind: 'c1' | 'lib' | 'tdn' }> = [
   { rect: C1.plaza, color: C1_PLAZA_COLOR, kind: 'c1' },
+  { rect: NGA_5_PLAZA.rect, color: C1_PLAZA_COLOR, kind: 'c1' },
+  { rect: TDN_SQUARE, color: C1_PLAZA_COLOR, kind: 'tdn' },
   { rect: LIBRARY.plaza, color: LIB_PLAZA_COLOR, kind: 'lib' },
 ];
 
@@ -48,20 +50,24 @@ const C1_JOINT_COLOR = '#B2ADA0';
 const C1_JOINT_Y = 0.025;
 const C1_JOINT_W = 0.08;
 const C1_JOINTS_X: Array<{ cz: number; len: number }> = [
-  { cz: -42, len: 48 }, { cz: -38, len: 48 }, { cz: -34, len: 48 }, { cz: -30, len: 48 },
+  { cz: -42, len: 48 }, { cz: -38, len: 48 }, { cz: -34, len: 48 }, { cz: -30, len: 48 }, { cz: -26.5, len: 48 },
 ];
 const C1_JOINTS_Z: Array<{ cx: number; len: number }> = [
-  { cx: -78, len: 18 }, { cx: -74, len: 18 }, { cx: -70, len: 18 },
-  { cx: -66, len: 18 }, { cx: -62, len: 18 }, { cx: -58, len: 18 },
-  { cx: -54, len: 18 }, { cx: -50, len: 18 }, { cx: -46, len: 18 },
-  { cx: -42, len: 18 }, { cx: -38, len: 18 },
+  { cx: -78, len: 20.2 }, { cx: -74, len: 20.2 }, { cx: -70, len: 20.2 },
+  { cx: -66, len: 20.2 }, { cx: -62, len: 20.2 }, { cx: -58, len: 20.2 },
+  { cx: -54, len: 20.2 }, { cx: -50, len: 20.2 }, { cx: -46, len: 20.2 },
+  { cx: -42, len: 20.2 }, { cx: -38, len: 20.2 },
 ];
 
 const GRASS_BED_COLOR = '#6B8F4E';
 const GRASS_BED_EDGE = '#B9B9B0';
-const C1_GRASS_BEDS: Array<{ cx: number; cz: number }> = [
-  { cx: -73, cz: -44 },
-  { cx: -43, cz: -44 },
+const C1_GRASS_BEDS: Array<{ cx: number; cz: number; w: number; d: number }> = [
+  // Cặp ô cỏ phía Bắc sát bậc thềm C1
+  { cx: -73, cz: -44, w: 14, d: 3 },
+  { cx: -43, cz: -44, w: 14, d: 3 },
+  // Cặp ô cỏ phía Nam hai bên Đài phun nước C1 (hoàn thiện 6 mảng cỏ đối xứng chuẩn https://hustmap.com/)
+  { cx: -69.5, cz: -27.5, w: 11, d: 3.1 },
+  { cx: -46.5, cz: -27.5, w: 11, d: 3.1 },
 ];
 
 // Lá vàng Lipa rụng quanh 2 cây cổ thụ sân C1 (reference-visual §2)
@@ -218,11 +224,11 @@ function GrassAndFlowerTufts() {
     const grassTones = ['#5B873B', '#6A9946', '#4E7832', '#75A44F'];
     const flowerTones = ['#FFD54F', '#FFF176', '#FF8A65', '#F48FB1', '#FFFFFF'];
 
-    // 1. Trên 2 bồn cỏ C1 (y = 0,20)
+    // 1. Trên các bồn cỏ Quảng trường C1 (y = 0,20)
     for (const bed of C1_GRASS_BEDS) {
-      for (let i = 0; i < 95; i++) {
-        const x = bed.cx + (rnd() - 0.5) * 13.2;
-        const z = bed.cz + (rnd() - 0.5) * 2.4;
+      for (let i = 0; i < 68; i++) {
+        const x = bed.cx + (rnd() - 0.5) * (bed.w - 0.8);
+        const z = bed.cz + (rnd() - 0.5) * (bed.d - 0.6);
         gList.push({
           x,
           y: 0.19,
@@ -398,25 +404,22 @@ export default function Ground() {
 
       {/* Các tuyến phố bên ngoài rìa Đông (Trần Đại Nghĩa, Tạ Quang Bửu, Lê Thanh Nghị) và sân trước cầu thang C9 (y = 0,012). */}
       {[
-        { cx: 95.5, cz: -20, w: 6.0, d: 108 }, // Phố Trần Đại Nghĩa phía ngoài cổng trường
-        { cx: 126, cz: -38, w: 5.5, d: 64 }, // Phố Tạ Quang Bửu chia đôi Khu KTX Bách Khoa
-        { cx: 120, cz: 62, w: 56, d: 5.5 }, // Phố Lê Thanh Nghị khu Thể chất & SVĐ
-        { cx: -61.5, cz: -17, w: 7.0, d: 9.0 }, // Khoảng sân lát đá nối trục C1 vào chân cầu thang đỏ tòa C9
+        { cx: 95.5, cz: -18, w: 6.0, d: 112, rotY: 0 }, // Phố Trần Đại Nghĩa phía ngoài cổng trường
+        { cx: 127.8, cz: -18, w: 5.2, d: 108, rotY: 0 }, // Phố Tạ Quang Bửu chia đôi Khu KTX Bách Khoa & B1 / A1-5 – A17
+        { cx: 120, cz: 58, w: 58, d: 5.2, rotY: 0.62 }, // Phố Lê Thanh Nghị chéo Tây-Nam → Đông-Bắc tách Khu Thể thao & SVĐ
+        { cx: -61.5, cz: -17, w: 7.0, d: 9.0, rotY: 0 }, // Khoảng sân lát đá nối trục C1 vào chân cầu thang đỏ tòa C9
       ].map((p, idx) => (
-        <mesh
-          key={`sub-walkway-${idx}`}
-          rotation-x={-Math.PI / 2}
-          position={[p.cx, 0.012, p.cz]}
-          receiveShadow
-        >
-          <planeGeometry args={[p.w, p.d]} />
-          <meshStandardMaterial
-            color="#D2CEC4"
-            map={textures.c1Stone}
-            roughness={0.9}
-            metalness={0}
-          />
-        </mesh>
+        <group key={`sub-walkway-${idx}`} position={[p.cx, 0.012, p.cz]} rotation-y={p.rotY}>
+          <mesh rotation-x={-Math.PI / 2} receiveShadow>
+            <planeGeometry args={[p.w, p.d]} />
+            <meshStandardMaterial
+              color="#D2CEC4"
+              map={textures.c1Stone}
+              roughness={0.9}
+              metalness={0}
+            />
+          </mesh>
+        </group>
       ))}
 
       {/* Sàn quảng trường: C1 đá rửa, Thư viện gạch đất nung có bumpMap,
@@ -476,7 +479,7 @@ export default function Ground() {
         <mesh
           key={`c1-joint-z-${i}`}
           rotation-x={-Math.PI / 2}
-          position={[j.cx, C1_JOINT_Y, -37]}
+          position={[j.cx, C1_JOINT_Y, -35.8]}
           receiveShadow
         >
           <planeGeometry args={[C1_JOINT_W, j.len]} />
@@ -497,15 +500,15 @@ export default function Ground() {
         </mesh>
       ))}
 
-      {/* Bồn cỏ hai bên bậc tam cấp C1: viền bê tông + hộp cỏ thấp. */}
+      {/* Các bồn cỏ đối xứng trên Quảng trường C1: viền bê tông + hộp cỏ thấp. */}
       {C1_GRASS_BEDS.map((b, i) => (
         <group key={`c1-bed-${i}`}>
           <mesh position={[b.cx, 0.05, b.cz]} castShadow receiveShadow>
-            <boxGeometry args={[14.2, 0.06, 3.2]} />
+            <boxGeometry args={[b.w + 0.2, 0.06, b.d + 0.2]} />
             <meshStandardMaterial color={GRASS_BED_EDGE} roughness={0.95} metalness={0} />
           </mesh>
           <mesh position={[b.cx, 0.11, b.cz]} castShadow receiveShadow>
-            <boxGeometry args={[14, 0.18, 3]} />
+            <boxGeometry args={[b.w, 0.18, b.d]} />
             <meshStandardMaterial color={GRASS_BED_COLOR} roughness={0.95} metalness={0} />
           </mesh>
         </group>

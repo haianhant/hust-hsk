@@ -15,7 +15,7 @@
 ## 2. Ba Tiêu chí Cốt lõi Đồng thời
 
 1. **Nhận diện Kiến trúc Thực tế (Authentic HUST Architecture):**
-   - Người xem nhận ra ngay Đại học Bách khoa Hà Nội nhờ hình khối, tỉ lệ, mặt đứng, vật liệu và cảnh quan dựa trên bản đồ trường (`docs/khuon-vien-truong.png`) và bộ ảnh chụp thực tế tại `tham-khao/` — không chỉ dựa vào biển tên.
+   - Người xem nhận ra ngay Đại học Bách khoa Hà Nội nhờ hình khối, tỉ lệ, mặt đứng, vật liệu và cảnh quan dựa trên bản đồ số chuẩn [`https://hustmap.com/`](https://hustmap.com/) (giới hạn gọn trong phạm vi khuôn viên ĐHBK Hà Nội, không mở rộng quá rộng ra khu vực ngoài trường) và bộ ảnh chụp thực tế tại `tham-khao/` — không chỉ dựa vào biển tên.
    - Mốc không gian chuẩn: Khuôn viên HUST **trước đợt di dời Cổng Parabol tháng 11/2026** (Cổng Parabol nằm tại biên phía Tây giáp đường Giải Phóng).
 2. **Học tập Thực chất & Bền vững (Zero-Friction, Persistent Learning):**
    - Nội dung từ vựng chính xác (246 từ HSK 3 bài 10–18 và 811 từ HSK 4 bài 1–20).

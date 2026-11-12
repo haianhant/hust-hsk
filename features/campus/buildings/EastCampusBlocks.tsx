@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // features/campus/buildings/EastCampusBlocks.tsx — Nhà B1 (Trường CNTT & TT — SoICT)
-// & Cụm A17, H1, H3 và Nhà T
+// & Cụm Nhà ăn A1-5, Nhà A17, Nhà E và Nhà T theo đúng Bản đồ Số https://hustmap.com/
 // Module IDs: building.b1-soict, building.east-blocks
 // ---------------------------------------------------------------------------
 
@@ -246,47 +246,97 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
 }
 
 export function EastCampusBlocks({ isNight }: { isNight: boolean }) {
-  const { a17, h1, h3, nhaT } = EAST_CAMPUS_BLOCKS;
+  const { a15, a17, nhaE, nhaT } = EAST_CAMPUS_BLOCKS;
   const smallBlocks = [
-    { code: 'A17', center: a17.center, size: a17.size, color: '#DCEAF7', roof: '#3B6E9C', rotY: 0 },
-    { code: 'H1', center: h1.center, size: h1.size, color: '#EDE5D5', roof: '#8C7A6B', rotY: -0.55 },
-    { code: 'H3', center: h3.center, size: h3.size, color: '#EDE5D5', roof: '#8C7A6B', rotY: 0 },
+    {
+      code: 'NHÀ ĂN A1-5',
+      center: a15.center,
+      size: a15.size,
+      h: 7.2,
+      color: '#FAF6EE',
+      roof: '#C87D4B',
+      rotY: 0,
+    },
+    {
+      code: 'NHÀ A17',
+      center: a17.center,
+      size: a17.size,
+      h: 9.8,
+      color: '#DCEAF7',
+      roof: '#3B6E9C',
+      rotY: a17.rotY,
+    },
+    {
+      code: 'NHÀ E',
+      center: nhaE.center,
+      size: nhaE.size,
+      h: 9.2,
+      color: '#EDE5D5',
+      roof: '#8C7A6B',
+      rotY: 0,
+    },
   ];
 
   return (
     <group>
       {smallBlocks.map((b) => (
         <group key={b.code} position={[b.center.x, 0, b.center.z]} rotation-y={b.rotY}>
-          <mesh position={[0, 4.8, 0]} castShadow receiveShadow>
-            <boxGeometry args={[b.size.x, 9.6, b.size.z]} />
+          <mesh position={[0, 0.25, 0]} receiveShadow>
+            <boxGeometry args={[b.size.x + 0.16, 0.5, b.size.z + 0.16]} />
+            <meshStandardMaterial color="#8E949E" roughness={0.88} />
+          </mesh>
+          <mesh position={[0, b.h / 2, 0]} castShadow receiveShadow>
+            <boxGeometry args={[b.size.x, b.h, b.size.z]} />
             <meshStandardMaterial color={b.color} roughness={0.88} />
           </mesh>
-          <mesh position={[0, 9.8, 0]} castShadow>
+          <mesh position={[0, b.h + 0.2, 0]} castShadow>
             <boxGeometry args={[b.size.x + 0.4, 0.4, b.size.z + 0.4]} />
             <meshStandardMaterial color={b.roof} roughness={0.82} />
           </mesh>
+          {[0, 1].map((fl) =>
+            [-b.size.x * 0.28, 0, b.size.x * 0.28].map((wx, idx) => {
+              const glow = isNight && (fl + idx) % 2 === 0;
+              return (
+                <mesh
+                  key={`${b.code}-win-${fl}-${idx}`}
+                  position={[wx, fl * 3.1 + 1.65, b.size.z / 2 + 0.03]}
+                >
+                  <planeGeometry args={[1.35, 1.12]} />
+                  <meshStandardMaterial
+                    color={glow ? '#FFE4A0' : GLASS_DARK}
+                    emissive={glow ? '#FFB84D' : '#000000'}
+                    emissiveIntensity={glow ? 0.65 : 0}
+                    roughness={0.35}
+                  />
+                </mesh>
+              );
+            }),
+          )}
           <LabelPlane
             textureKey={`east-block-${b.code}`}
-            canvasW={256}
+            canvasW={384}
             canvasH={96}
             draw={(ctx, w, h) => {
               ctx.fillStyle = '#1E3A5F';
               ctx.fillRect(0, 0, w, h);
+              ctx.strokeStyle = '#FFD166';
+              ctx.lineWidth = 5;
+              ctx.strokeRect(5, 5, w - 10, h - 10);
               ctx.fillStyle = '#FFFFFF';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              ctx.font = '900 44px Arial, sans-serif';
+              ctx.font = '800 34px "Be Vietnam Pro", Arial, sans-serif';
               ctx.fillText(b.code, w / 2, h / 2);
             }}
-            size={[2.0, 0.72]}
-            position={[0, 8.4, b.size.z / 2 + 0.05]}
+            size={[Math.min(b.size.x - 1.0, 3.2), 0.76]}
+            position={[0, b.h - 0.85, b.size.z / 2 + 0.05]}
             transparent={false}
           />
         </group>
       ))}
 
-      {/* Nhà T lớn nằm chéo ở rìa Đông như trên khuon-vien-truong.png */}
-      <group position={[nhaT.center.x, 0, nhaT.center.z]} rotation-y={-0.32}>
+      {/* Nhà T chạy dọc ở rìa Đông khuôn viên HUST theo đúng Bản đồ Số https://hustmap.com/ */}
+      <group position={[nhaT.center.x, 0, nhaT.center.z]} rotation-y={-0.16}>
         <mesh position={[0, 6.2, 0]} castShadow receiveShadow>
           <boxGeometry args={[nhaT.size.x, 12.4, nhaT.size.z]} />
           <meshStandardMaterial color="#2C4A6F" roughness={0.82} />
