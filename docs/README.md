@@ -2,6 +2,8 @@
 
 Chào mừng đến với trung tâm tài liệu kỹ thuật của **HUSTVerse — Bách Khoa 3D** — không gian mô phỏng & game 3D tương tác khuôn viên Đại học Bách khoa Hà Nội (Multiplayer Sandbox, Co-Study Campus & hệ thống Chế độ gắn rời bao gồm `HSK Mode` bật/tắt tùy ý).
 
+- **🌐 Website chính thức (Production):** **[`https://hustverse.vercel.app/`](https://hustverse.vercel.app/)**
+
 Bộ tài liệu này được thiết kế làm **nguồn sự thật kỹ thuật (Technical Ground Truth)** cho cả kỹ sư phát triển và các AI Agents.
 
 ---

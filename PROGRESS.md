@@ -1,14 +1,16 @@
-# PROGRESS — Bách khoa Hán ngữ 3D
+# PROGRESS — HUSTVerse — Bách Khoa 3D
+
+> **Địa chỉ Web Production chính thức (từ 13/11/2026):** **[https://hustverse.vercel.app/](https://hustverse.vercel.app/)**
 
 ## 05/11/2026 (chiều)
 - Đã đọc toàn bộ file Prompt_Muse_Bach_Khoa_Han_Ngu_3D.md.
-- User chọn tên `hust-hsk` (nhắn "hust-hsk.vercel.app").
-- Kiểm tra tên: `hust-hsk.vercel.app` = 404 DEPLOYMENT_NOT_FOUND; tài khoản Vercel haianhant chưa có project `hust-hsk` (cũng chưa có `bach-khoa-han-ngu`, `hust-hsk-campus`, `bachkhoa-hsk-3d`). Chưa tạo project — chờ chốt tên trước khi deploy.
+- User chọn tên `hust-hsk` (nhắn "hustverse.vercel.app").
+- Kiểm tra tên: `hustverse.vercel.app` = 404 DEPLOYMENT_NOT_FOUND; tài khoản Vercel haianhant chưa có project `hust-hsk` (cũng chưa có `bach-khoa-han-ngu`, `hust-hsk-campus`, `bachkhoa-hsk-3d`). Chưa tạo project — chờ chốt tên trước khi deploy.
 - Tạo cấu trúc repo tại `~/workspace/bach-khoa-han-ngu/` + PROJECT_BRIEF.md này.
 - Bước 1 đang chạy: audit nội dung hoc-hsk + tư liệu campus HUST.
 - **Bước 1 (campus) XONG 05/11 ~17:35:** `docs/campus-reference.md` (230 dòng). Chốt mốc trước di dời cổng Parabol (vị trí gốc Giải Phóng, tính đến hết 03/11/2026); VOV 04/11: di dời vào trong hơn 20 m, dự kiến vài tuần, đến 04/11 11:30 mới rào chắn + chuẩn bị, chưa hoàn tất. Đủ tư liệu blockout: Parabol (~12,5 m cao, 8 m rộng — theo báo chí, chưa có bản vẽ chính thức), C1 (4 tầng, 9 sóng mái, 2 cây Lipa, logo I LOVE BK), thư viện Tạ Quang Bửu (10 tầng, ~37.000 m², đồng hồ trung tâm), Hồ Tiền (~4.000 m², hoa súng + liễu), đường tình yêu (~50 m). Còn thiếu: C9/cầu đỏ (chưa rõ là cầu hay cầu thang, không có ảnh), màu sơn các công trình (không nguồn chữ nào mô tả), hình dạng Hồ Tiền, layout tổng thể (bản đồ ts.hust.edu.vn không trích xuất được bản đồ).
 - **Bước 1 (nội dung) XONG 05/11 ~17:36:** `docs/content-audit.md`. Đã xác minh: **29 bài / 1.057 mục từ, KHỚP HOÀN TOÀN brief** (HSK3 bài 10–18: 246 từ, 36 nhóm; HSK4 thượng bài 1–10: 404 từ, 40 nhóm; HSK4 hạ bài 11–20: 407 từ). Cấu trúc chung: 5 tab, 3 dạng luyện tập (trắc nghiệm 4 câu/bài, điền từ, nghe viết 15 câu/bài), 4 trò chơi (tone/fall/carp/cannon). HSK5 chỉ có thẻ "Sắp ra mắt". HSK3 bài 10 nhóm 1 đếm đúng 9 từ. **Lưu ý:** quyển hạ thiếu nhóm từ/audio track/scene-sync trong bundle công khai (file scene-sync hạ trả 404) — chưa rõ thiếu thật hay tổ chức file khác, cần kiểm tra bằng trình duyệt render trước khi thiết kế 3D dùng audio/nhóm từ của hạ.
-- **Tên dự án CHỐT 05/11 chiều:** user chọn `hust-hsk` (hust-hsk.vercel.app). Chưa tạo project, chưa deploy.
+- **Tên dự án CHỐT 05/11 chiều:** user chọn `hust-hsk` (hustverse.vercel.app). Chưa tạo project, chưa deploy.
 - **Bước 2 XONG 05/11 tối — Blockout 3D chạy được, `npm install && npm run build` thành công, ra `out/` (1,6 MB):**
   - Stack: Next.js 14.2.5 + React 18 + @react-three/fiber 8 + drei 9 + three 0.169 + Tailwind, static export. Chạy local: `npm run dev` hoặc `npx serve out` / `python3 -m http.server --directory out`.
   - File chính: `lib/campus.ts` (source of truth duy nhất: tọa độ, collider, đường đi, chặng kiểm tra, zone), `lib/playerState.ts`, `components/three/CampusScene.tsx`, `Ground.tsx`, `Landmarks.tsx`, `Player.tsx`, `app/page.tsx` (màn mở đầu + HUD + minimap + joystick), `app/layout.tsx`, `components/ui/Minimap.tsx`, `components/ui/Joystick.tsx`.
@@ -33,7 +35,7 @@
   - **Kiểm tra:** `npx tsc --noEmit` OK (0 lỗi). `node test/leg-sim.cjs` **4/4 PASS, hits = {} mọi chặng, spawn OK** — leg1 8,2 s/32,7 m; leg2 14,1 s/56,5 m; leg3 32,2 s/128,9 m; leg4 4,2 s/16,6 m (log: `test/leg-results.json`). Lỗi đã tìm và sửa trong lúc test: leg3 cạ 144 lần vào ghế bờ hồ đông (ghế nằm trên tuyến x = 24) — đã dời ghế/liễu bờ đông sát bờ kè, chạy lại còn 0 va chạm.
   - **Chưa xác minh được:** cảm giác/màu sắc trên bản render thật (chưa chạy build/dev ở bước này do luồng Player song song — cần render kiểm tra ở vòng sau); số tầng C9; vị trí chính xác C9; kích thước sân TDN + họa tiết mạch điện cụ thể; toàn văn lời khắc trên bia tượng đài; vị trí tương đối khối đá ↔ đài phun nước; độ dày chính xác dải băng cổng + đường kính huy hiệu.
 - Chưa deploy (không tạo project Vercel ở Bước 2).
-- **DEPLOY XONG 05/11 tối:** bản blockout Bước 2 đã lên live tại **https://hust-hsk.vercel.app/** (project mới `hust-hsk`, id prj_vZpmA9pfNVbJEag30gwTxPoGizxI, deployment dpl_AfTAwY5ncJTe1zJN56ZPvUxs44Z7 READY, kiểm chứng curl 200 + đúng title; không SSO wall). Không đụng hoc-hsk hay chua-online.
+- **DEPLOY XONG 05/11 tối:** bản blockout Bước 2 đã lên live tại **https://hustverse.vercel.app/** (project mới `hust-hsk`, id prj_vZpmA9pfNVbJEag30gwTxPoGizxI, deployment dpl_AfTAwY5ncJTe1zJN56ZPvUxs44Z7 READY, kiểm chứng curl 200 + đúng title; không SSO wall). Không đụng hoc-hsk hay chua-online.
 
 ## Bước 3 — phần nhân vật (05/11/2026 tối, luồng nhân vật)
 - **File mới:** `components/three/StudentAvatar.tsx` — avatar sinh viên tách riêng khỏi Player; **file sửa:** `components/three/Player.tsx` (chỉ thay phần render nhân vật bằng `<StudentAvatar/>`, thêm đung đưa tay; logic di chuyển/camera/va chạm/E/joystick/test-hook `window.__bkhn` giữ nguyên). Không đụng `lib/campus.ts`, `Landmarks.tsx`, `Ground.tsx`, `CampusScene.tsx`, `Minimap.tsx`. Không deploy, không `npm install`/`npm run build` (tránh xung đột luồng landmark song song).
@@ -81,9 +83,9 @@
 
 ## Bước 3 — DEPLOY bản chi tiết lên live (05/11/2026 tối)
 - Sửa 4 lỗi xong, tự kiểm chứng lại bằng ảnh chụp: hồ phủ lá/hoa 73,2% (top-view đọc là thảm hồng-xanh), chữ "I" đậm có chân đọc rõ, dải kính C1/thư viện sáng lên (tường trắng + kính xám-xanh), nút "?" dời khỏi joystick, hộp hướng dẫn không còn che top-view.
-- Deploy: project `hust-hsk` (prj_vZpmA9pfNVbJEag30gwTxPoGizxI), deployment dpl_2XMAoDxJoK4qJic8BFDvuyjs4QLH READY, kiểm chứng curl https://hust-hsk.vercel.app/ 200 + đúng title. Không đụng hoc-hsk hay chua-online. Hiện live đang là bản Bước 3 chi tiết (ghi đè bản blockout Bước 2).
+- Deploy: project `hust-hsk` (prj_vZpmA9pfNVbJEag30gwTxPoGizxI), deployment dpl_2XMAoDxJoK4qJic8BFDvuyjs4QLH READY, kiểm chứng curl https://hustverse.vercel.app/ 200 + đúng title. Không đụng hoc-hsk hay chua-online. Hiện live đang là bản Bước 3 chi tiết (ghi đè bản blockout Bước 2).
 - Còn tồn tại (ghi để Bước 4+ xử lý khi cần): hoa súng ở tầm mắt hơi giống "kẹo mút hồng" trên cọng; FPS/cảm giác trên điện thoại thật và máy thật chưa đo; mái thư viện tầng 10 chưa kiểm được vì camera cắt mái; tháp hoa gió chưa ra lưới 3×3 rõ; khối đá như tấm phẳng.
-- **Bước 3 — sửa 4 lỗi xong + DEPLOY bản chi tiết lên live (05/11/2026 tối):** hồ phủ lá/hoa 73,2% (đo thật bằng rasterization), chữ "I" đậm có chân đọc rõ, dải kính C1/thư viện sáng lên, nút "?" dời khỏi joystick, hộp hướng dẫn không che top-view. Deploy dpl_2XMAoDxJoK4qJic8BFDvuyjs4QLH READY, curl hust-hsk.vercel.app 200. (Chi tiết xem các mục Bước 3 ở trên; NEXT_STEPS.md cũ chưa cập nhật các mục này — xem mục Bước 4–5 dưới đây về trạng thái mới nhất.)
+- **Bước 3 — sửa 4 lỗi xong + DEPLOY bản chi tiết lên live (05/11/2026 tối):** hồ phủ lá/hoa 73,2% (đo thật bằng rasterization), chữ "I" đậm có chân đọc rõ, dải kính C1/thư viện sáng lên, nút "?" dời khỏi joystick, hộp hướng dẫn không che top-view. Deploy dpl_2XMAoDxJoK4qJic8BFDvuyjs4QLH READY, curl hustverse.vercel.app 200. (Chi tiết xem các mục Bước 3 ở trên; NEXT_STEPS.md cũ chưa cập nhật các mục này — xem mục Bước 4–5 dưới đây về trạng thái mới nhất.)
 
 ## Bước 4–5 — Engine học tập + tuyến "Buổi học đầu tiên" (XONG 05/11/2026 tối, CHƯA deploy — code local + `out/` mới)
 - **Engine lõi (Bước 4):** `lib/learn/types.ts` (Course/Lesson/LessonGroup/Lexeme/LessonVocabulary/Example/Quest/LearningEvent/ReviewState/Progress/CampusObject), `content/hsk3-l10.ts` (đúng 9 từ nhóm 1 HSK3 bài 10, thứ tự nguồn 1..9, id `hsk3-l10-g1-<pinyin>`, ví dụ tự viết `authored` đã rà soát), `lib/learn/pinyin.ts` (normalize, tone→số, checkPinyin mode tone/toneless, checkHanzi), `lib/learn/store.ts` (key `bkhn-progress-v1`, version 1, migration, export/import có validate, lịch ôn 1–3–7–14–30 ngày, điểm 10/5/3/2, thưởng hoàn thành idempotent, streak ngày Asia/Ho_Chi_Minh), `lib/learn/speech.ts` (TTS zh-CN trình duyệt, thiếu giọng → `no-voice` không throw). Test `test/learn.test.cjs` (node:test): **25/25 pass** (21 gốc + 4 mới sau vòng sửa). Tài liệu: `docs/learn-engine.md`.
@@ -93,7 +95,7 @@
 - **Kiểm tra lại sau sửa:** tsc exit 0; build PASS; test engine **25/25 pass** (chạy 3 lần đều đạt); leg-sim 4/4; `test/verify-step4fix.cjs` **24/24 bước PASS, 0 lỗi console/page**; số đo: lượt sai 2 từ 76đ trước thưởng → 126đ sau thưởng; chơi lại 126→148đ, thưởng không cộng lại; tab "Cần ôn (2)", "Đã nhớ vững (0)". Ảnh: `test-shots/step4fix-*.png` (8 ảnh). Ghi chú: `docs/step4-quest-notes.md`, `docs/step4-verify.md`, `docs/step4-fix-notes.md`.
 - **Coordinator tự kiểm chứng cuối:** tsc exit 0; test engine 25/25; leg-sim 4/4; `out/` 1,7 MB mới (15:34); tự xem ảnh `step4fix-01-result.png` (đủ 2 từ ôn + 2 nút trọn vẹn) và `step4fix-06-classroom-board.png` (cả 3 dòng bảng đọc rõ, không bị đầu avatar che).
 - **Còn tồn tại / chưa xác minh:** FPS + cảm giác joystick + gõ pinyin có dấu + giọng zh-CN trên máy/điện thoại thật (chỉ có SwiftShader ~1–2 fps, dispatch event IME tổng hợp, headless không có giọng); điểm gợi ý 5đ ở UI (chỉ có ở unit test, các lượt chơi không bấm Gợi ý); streak nhiều ngày; tháp hoa gió chưa ra lưới 3×3 rõ; khối đá như tấm phẳng; mái thư viện tầng 10 chưa kiểm được (camera cắt mái); nhãn "Cô giáo" hơi bị chip mục tiêu chạm mép trái; màn kết quả lượt đầu panel còn dư cuộn 12 px (2 nút đã trọn vẹn, không cần cuộn).
-- **Chưa deploy Bước 4–5** (cấm trong nhiệm vụ). Bản live tại hust-hsk.vercel.app hiện vẫn là bản Bước 3 chi tiết.
+- **Chưa deploy Bước 4–5** (cấm trong nhiệm vụ). Bản live tại hustverse.vercel.app hiện vẫn là bản Bước 3 chi tiết.
 
 ## Bước 4–5 — Engine học tập + tuyến "Buổi học đầu tiên" (bắt đầu 05/11/2026 tối, user dặn "cứ tự làm tiếp")
 - Chia 2 luồng song song, hợp đồng API chung đã chốt (store key `bkhn-progress-v1`, 9 từ HSK3 bài 10 nhóm 1, điểm 10/5/3/2, thưởng hoàn thành 50đ + huy hiệu idempotent, lịch ôn 1–3–7–14–30 ngày, streak theo ngày Asia/Ho_Chi_Minh, TTS zh-CN trình duyệt).
@@ -103,7 +105,7 @@
 
 ## Bước 4–5 — DEPLOY tuyến học lên live (05/11/2026 tối)
 - Engine học tập + tuyến "Buổi học đầu tiên" xong, kiểm chứng độc lập: test engine 25/25, leg-sim 4/4, verify toàn tuyến 24/24 bước, 0 lỗi console/page; chơi thử 3 lượt (hoàn hảo 160đ, sai cố ý 126đ, chơi lại không cộng lại thưởng); reload giữ tiến độ; IME composition xử lý đúng.
-- Deploy: project `hust-hsk`, deployment dpl_B9VzUcWhXKUrf6ybjuWBr769ETbE READY, curl https://hust-hsk.vercel.app/ 200 + đúng title. Hiện live là bản Bước 4–5 (9 từ HSK3 bài 10 nhóm 1, NPC, sổ tay, SRS 1–3–7–14–30).
+- Deploy: project `hust-hsk`, deployment dpl_B9VzUcWhXKUrf6ybjuWBr769ETbE READY, curl https://hustverse.vercel.app/ 200 + đúng title. Hiện live là bản Bước 4–5 (9 từ HSK3 bài 10 nhóm 1, NPC, sổ tay, SRS 1–3–7–14–30).
 - Tiếp theo: đợt sửa kiến trúc ngoại thất + làm lại nhân vật theo brief user tối 05/11 (docs/architecture-rework-brief.md) — đã giao, làm trên nền Bước 4–5, phải giữ chức năng học tập và chạy lại test engine/leg/verify sau khi sửa.
 
 ## Đợt sửa kiến trúc ngoại thất + làm lại nhân vật — TÍCH HỢP + KIỂM CHỨNG CUỐI (05/11/2026 tối, CHƯA deploy)
@@ -139,7 +141,7 @@
 - Hồ: nước thấp hơn bờ 0,80 m, 9 liễu phân lớp, độ phủ lá giữ 73,19%.
 - Nhân vật làm lại theo kỹ thuật avatar web chùa (trụ thuôn + cầu vai + khuy/nút + giày hộp-mũi-cầu-đế): người chơi hoodie đỏ #D22630 + ba lô đen; Minh đổi sang hoodie navy + mũ lưỡi trai đỏ + quần kaki + ba lô xám (khác hẳn người chơi); biển tên NPC dùng Billboard nên đọc xuôi cả khi nhìn từ sau; bồn cỏ C1Building thêm collider (đi bộ vào bị chặn, đã đo thật).
 - Kiểm chứng: tsc 0, build PASS, test engine 25/25, leg-sim 4/4, verify toàn tuyến 24/24 bước 0 lỗi console/page (chạy lại sau 3 sửa cuối).
-- Deploy: dpl_NpnJJS5wYvVqGWheC6ofYBfvjzpE READY, curl https://hust-hsk.vercel.app/ 200 + đúng title. Đã xóa deployment blockout cũ dpl_AfTA, giữ 3 bản gần nhất.
+- Deploy: dpl_NpnJJS5wYvVqGWheC6ofYBfvjzpE READY, curl https://hustverse.vercel.app/ 200 + đúng title. Đã xóa deployment blockout cũ dpl_AfTA, giữ 3 bản gần nhất.
 - Còn tồn tại: lam thư viện chìm thành mảng tối ở ~50 m; mái tầng 10 thư viện + tháp đầu hồi C1 mặt đông chưa kiểm được từ mặt đất; cửa sổ C9 vẫn dải kính phẳng; hoa sen tầm mắt hơi giống "kẹo mút hồng"; FPS/cảm giác tay cầm/giọng zh-CN trên điện thoại thật chưa kiểm.
 
 ## Sửa UX học tập (06/11/2026, theo yêu cầu user)
@@ -163,7 +165,7 @@
 
 ## Sửa UX học tập — DEPLOY lên live (06/11/2026)
 - Kiểm chứng lại toàn tuyến 24/24 bước, 0 lỗi console/page (chạy lại sau khi cập nhật test theo prompt E mới + sửa layering nút Ra khỏi phòng).
-- Deploy: dpl_BCrv5Hhq READY, curl https://hust-hsk.vercel.app/ 200 + đúng title. Đã xóa deployment Bước 3 cũ dpl_2XMA, giữ 3 bản gần nhất (UX, kiến trúc lần 1, Bước 4–5).
+- Deploy: dpl_BCrv5Hhq READY, curl https://hustverse.vercel.app/ 200 + đúng title. Đã xóa deployment Bước 3 cũ dpl_2XMA, giữ 3 bản gần nhất (UX, kiến trúc lần 1, Bước 4–5).
 - Đợt sửa lần 2 (thư viện + C1/bia đá + nhân vật polo + hồ/cây + camera/HUD) đã giao, làm trên nền bản UX này.
 
 ## Đợt sửa lần 2 — TÍCH HỢP + KIỂM CHỨNG CUỐI (06/11/2026, CHƯA deploy)
@@ -322,7 +324,7 @@
 ## Bước 9 + Bước 10 — TỐI ƯU, KIỂM TRA TỔNG THỂ + DEPLOY PRODUCTION (06/11/2026, dpl_DVAbaGCumK88cnWGXZQzzqAF479M)
 - Bước 9 (phần làm được không cần máy thật, Kiến tự làm — spawn subagent bị từ chối "subagent bootstrap is no longer authorized" từ lượt tích hợp Bước 7, coordinator Bước 7–8 im ~7h sau khi xong việc): kiểm tra lại độc lập trên bản build cuối — tsc exit 0; engine 45/45 pass, 0 fail; build PASS, out/ 2,1 MB (chunk lớn nhất 676 KB three.js + 516 KB page — không phình bất thường, không có gì để cắt mà không cần máy thật đo); verify-step4fix 24/24, 0 lỗi console/page (Kiến chạy lại độc lập). Các kiểm chứng của coordinator trên cùng bản build: leg-sim 4/4, smoke-step6 22/22, step8-check 13/13, play-all-quests 48/48 — tất cả 0 lỗi.
 - Chưa làm được ở Bước 9 (cần điện thoại thật — để user soi): FPS thực tế, cảm giác joystick, giọng zh-CN thật, gõ pinyin + IME thật, màu đỏ áo #D22630 dưới ánh sáng thật.
-- Bước 10: deploy dpl_DVAbaGCumK88cnWGXZQzzqAF479M READY, curl https://hust-hsk.vercel.app/ 200 + đúng title. Đã xóa deployment UX cũ dpl_BCrv, giữ 3 bản gần nhất (production này, vét vết+Bước 6, đợt sửa lần 2).
+- Bước 10: deploy dpl_DVAbaGCumK88cnWGXZQzzqAF479M READY, curl https://hustverse.vercel.app/ 200 + đúng title. Đã xóa deployment UX cũ dpl_BCrv, giữ 3 bản gần nhất (production này, vét vết+Bước 6, đợt sửa lần 2).
 - TOÀN BỘ CÁC BƯỚC ĐÃ XONG (theo chỉ đạo user 06/11 09:41 — làm hết, xong mới soi): vét vết đợt 2, Bước 6 HSK3 (246 từ), Bước 7 HSK4 (811 từ), Bước 8 (lịch ôn/sổ lỗi/huy hiệu/streak/gợi ý/xuất-nhập/migration), Bước 9 (kiểm tra tổng thể phần không cần máy thật), Bước 10 (deploy production). Tổng nội dung: 1.057 từ / 29 bài / 50 quest; HSK 5 vẫn khóa (chưa có nguồn).
 
 ## Đợt 3 (brief docs/round3-brief.md, 06–07/11/2026) — XONG + ĐÃ DEPLOY (dpl_DtjNRdpYb3AQwPjQy3TLtyUpm6mn, 07/11/2026)
@@ -362,7 +364,7 @@ tsc exit 0; build PASS, `out/` (First Load JS 235 kB); engine **45/45**; leg-sim
 - Đối chiếu log/JSON trên đĩa (không tin riêng thông báo bàn giao): `play-all-r3c.log` 48 dòng PASS + dòng tổng "48/48, console 0, page 0" — JSON `play-all-quests.json` 48 quest, ok 48, fail []; `verify-step4fix-r3.log` SUMMARY 24/24, consoleErrors [], pageErrors [] (chạy 20:20 UTC, sau build cuối 20:08); `ride-check.json` 22/22, 99 frame đo thật (ga 0→6,3 m/s, rẽ trái heading 1,57→1,91 + lean −0,08, phanh 12→0,75 m/s); `fast-travel-check.json` 20/20; `pinyin-input.json` 11/11 ("wasd" cả 4 ký tự vào ô, drift 0,000 m).
 - Tự xem ảnh: nhân vật trước/sau/trái — mặt/ngực/mũi giày cùng hướng, balô sau lưng; nhãn "Minh" đọc xuôi (crop phóng to `r3-label-minh-east.png` — ảnh 4 hướng đợt 1 chụp trước lúc sửa nhãn nên vẫn thấy "dniM", không phải lỗi còn tồn); top-down thư viện có chú thích — mặt đồng hồ nhìn về bắc scene (−Z), sảnh mới z 14..20; cây liễu sau sửa hết hẳn "sợi dây" (ảnh trước thấy rõ 8 ống xanh rủ, ảnh sau chỉ còn thân + cụm tán); xe máy đã lên ngồi — tư thế ngồi + tay lên tay lái + camera sau xe, chip tốc độ "0.0 m/s · tối đa 14".
 - Lưu ý: ride-check (19:41 UTC) và fast-travel-check (19:49 UTC) chạy trên bản build trước bản cuối 20:08 UTC; sau 2 lần đó chỉ còn `Trees.tsx` đổi (20:07, sửa cành cây) — không đụng code xe/dịch chuyển. Kiến chạy lại cả 2 test trên đúng bản build cuối trước khi deploy (log `ride-check-r3d.log`, `fast-travel-r3d.log`): **ride-check 22/22, fast-travel-check 20/20, 0 lỗi console/page** — xong mới deploy.
-- **Deploy 07/11/2026 ~06:50:** build lại PASS (First Load JS 235 kB), deploy `dpl_DtjNRdpYb3AQwPjQy3TLtyUpm6mn` READY, curl https://hust-hsk.vercel.app/ 200 + đúng title "Bách khoa Hán ngữ 3D — HUST HSK". Đã xóa deployment đợt 2 cũ `dpl_Fkrhe51EEXJXTiQuqkKo3MFkQWac`, giữ 3 bản gần nhất (đợt 3 này, production trước `dpl_DVAbaGCumK88cnWGXZQzzqAF479M`, polish+Bước 6 `dpl_nfm3n4hf6KzFrjfJLeKdBH4ydpsu`).
+- **Deploy 07/11/2026 ~06:50:** build lại PASS (First Load JS 235 kB), deploy `dpl_DtjNRdpYb3AQwPjQy3TLtyUpm6mn` READY, curl https://hustverse.vercel.app/ 200 + đúng title "Bách khoa Hán ngữ 3D — HUST HSK". Đã xóa deployment đợt 2 cũ `dpl_Fkrhe51EEXJXTiQuqkKo3MFkQWac`, giữ 3 bản gần nhất (đợt 3 này, production trước `dpl_DVAbaGCumK88cnWGXZQzzqAF479M`, polish+Bước 6 `dpl_nfm3n4hf6KzFrjfJLeKdBH4ydpsu`).
 
 ### Sửa test do nhạy ngày giờ (không phải lỗi game)
 - `test/step8-check.cjs`: seed ghi cứng 2026-11-06 là "hôm nay" — chạy ngày 07/11 làm nhóm "hôm nay" quá hạn, phiên ôn quét 3 từ (+30đ) rồi sổ lỗi trống → FAIL 2 bước + timeout. Đã sửa seed thành ngày tương đối theo ICT hiện tại (quá hạn = hôm nay−3, hôm nay = hôm nay, sau = hôm nay+2, hôm qua = hôm nay−1) → **13/13 PASS**.
@@ -398,7 +400,7 @@ Brief: user gửi https://studywithhuster.cyou/ — trang này dựng ĐÚNG ki�
 ### Kiểm chứng tổng trên bản build cuối
 tsc exit 0; build PASS; engine **45/45**; leg-sim **4/4**; verify-step4fix **24/24** (0 lỗi, chạy 04:0x UTC 07/11); walk-to-library-door **PASS** (lộ trình mới 30 m, 7,5 s, 0 chạm; sanity: trước cửa → z 23,1; trên bệ HUST → z 13,0; điểm Đi nhanh ngoài collider); fast-travel-check **20/20** (chuỗi 5 mới: lách tây bằng D tới x 34,2 rồi đi bộ vào tới (34,20, 22,84)); play-all-quests **48/48 PASS, 0 lỗi console/page** (lượt chạy duy nhất, xong ~05:31 UTC 07/11 — log `test-shots/r4-play-all-quests.log` 48 dòng PASS + JSON `test-shots/play-all-quests.json` at 2026-11-07T04:19:40Z, total 48, ok 48, fail []). Test đã cập nhật: `test/walk-to-library-door.cjs`, `test/fast-travel-check.cjs`, `test/r4-lib-shots.cjs`, `test/r4-lib-annotate.py`, `test/r4-lib-retake34.cjs`, `test/r4-lib-roof-shot.cjs`.
 - **Kiểm chứng độc lập của Kiến (07/11, trước deploy):** tự chạy tsc exit 0, engine 45/45; đối chiếu log/JSON trên đĩa — `r4-play-all-quests.log` 48 dòng PASS + JSON 48/48, `r4-verify-step4fix.log` 24/24, fast-travel 20/20, walk-to-door PASS; tự chạy lại leg-sim trên bản cuối: **4/4 PASS** (leg3 C1→Thư viện 132,4 m, 385 chạm bồn cỏ C1 đông có từ trước, vẫn pass; leg4 Thư viện→Hồ 16,6 m); tự xem ảnh — chính diện (chữ HUST đỏ đọc xuôi trên bệ đen, đồng hồ 10:10, 6 cột sảnh, cọ + đèn chùm), cận cảnh (biển "THƯ VIỆN TẠ QUANG BỬU" đọc trọn chữ vàng, đồng hồ + lam xanh + chữ HUST), top-down có chú thích (tấm đứng 21×13, mặt chính → bắc, sân trước z 10..19).
-- **Deploy 07/11/2026 ~12:40:** build lại PASS, deploy `dpl_6DBaBUZeYrWN1RdAQaLHs2zs3tgE` READY, curl https://hust-hsk.vercel.app/ 200 + đúng title. Đã xóa deployment polish+Bước 6 cũ `dpl_nfm3n4hf6KzFrjfJLeKdBH4ydpsu`, giữ 3 bản gần nhất (đợt 4 này, đợt 3 `dpl_DtjNRdpYb3AQwPjQy3TLtyUpm6mn`, production Bước 9–10 `dpl_DVAbaGCumK88cnWGXZQzzqAF479M`).
+- **Deploy 07/11/2026 ~12:40:** build lại PASS, deploy `dpl_6DBaBUZeYrWN1RdAQaLHs2zs3tgE` READY, curl https://hustverse.vercel.app/ 200 + đúng title. Đã xóa deployment polish+Bước 6 cũ `dpl_nfm3n4hf6KzFrjfJLeKdBH4ydpsu`, giữ 3 bản gần nhất (đợt 4 này, đợt 3 `dpl_DtjNRdpYb3AQwPjQy3TLtyUpm6mn`, production Bước 9–10 `dpl_DVAbaGCumK88cnWGXZQzzqAF479M`).
 
 ### Còn tồn / chưa xác minh (đợt 4)
 - Mái/ăng-ten/hộp thang máy chỉ xác minh qua top-down (giới hạn camera follow, xem trên). Biển tên từ vị trí rất gần ngay dưới mái hiên bị che nửa dưới (đọc từ sân trước thì rõ). Mặt bắc hơi tối hơn mặt nam cũ (lum 163 vs 187, đo đợt 3) — chưa đo lại.
@@ -481,3 +483,7 @@ Báo cáo đầy đủ: `docs/round5-multiplayer-report.md`. Yêu cầu user 07/
   - Nâng cấp `WhiteRock` thành tảng đá hoa cương 3D đa diện có độ thuôn vát theo chiều cao và chiều sâu (`steps: 8`), bổ sung 2 tảng đá phụ ôm chân bia và vân đá granite thạch anh/mica rõ nét, giữ phẳng vùng khắc chữ mặt trước.
   - Tinh chỉnh vị trí bảng tên `Billboard` của `"Cô giáo"` (`y = 1.84`) trong `Npc.tsx` để tách biệt hoàn toàn khỏi chip mục tiêu HUD.
 - **Kiểm thử:** `npx tsc --noEmit` (0 lỗi), `node test/learn.test.cjs` (45/45 PASS), `node test/leg-sim.cjs` (4/4 PASS), `node test/mp-protocol.cjs` (11/11 PASS), `npm run build` (PASS).
+
+## Đợt 9 — Chuyển đổi Thương hiệu `HUSTVerse — Bách Khoa 3D`, Tách `HSK Mode` & Cập nhật Domain `https://hustverse.vercel.app/` (13/11/2026 — ĐÃ DEPLOY `main`)
+- **Định danh & Domain mới:** Đổi tên sản phẩm thành **HUSTVerse — Bách Khoa 3D**, cập nhật toàn bộ liên kết web, Canonical/OpenGraph metadata (`app/layout.tsx`, `package.json`, `README.md`, `GEMINI.md`, `AGENTS.md`, `docs/`) sang tên miền chính thức **[`https://hustverse.vercel.app/`](https://hustverse.vercel.app/)**.
+- **Kiến trúc Core World + Pluggable Modes (`lib/gameModes.ts`):** Tách phần học tiếng Trung thành **`HSK Mode` (`Chế độ HSK`)** có nút bật/tắt trực tiếp trên màn hình vào trường và thanh HUD (mặc định `OFF` cho người chơi mới để giữ giao diện game mô phỏng 3D Bách Khoa gọn sạch; bảo toàn 100% kho 1.057 từ vựng HSK 3–4 & SRS khi bật).

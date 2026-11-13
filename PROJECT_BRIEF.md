@@ -1,7 +1,7 @@
-# PROJECT BRIEF — Bách khoa Hán ngữ 3D
+# PROJECT BRIEF — HUSTVerse — Bách Khoa 3D (tiền thân: Bách khoa Hán ngữ 3D)
 
-- **Tên làm việc:** Bách khoa Hán ngữ
-- **Tên dự án Vercel đề xuất (user nhắn 05/11/2026):** `hust-hsk` → `https://hust-hsk.vercel.app/`
+- **Tên sản phẩm chính thức:** HUSTVerse — Bách Khoa 3D
+- **Địa chỉ Web Production chính thức:** `https://hustverse.vercel.app/`
 - **Ngày bắt đầu:** 05/11/2026
 - **Ngôn ngữ sản phẩm:** tiếng Việt; nội dung học: tiếng Trung giản thể + pinyin + nghĩa tiếng Việt
 - **Nguồn học:** https://hoc-hsk.vercel.app/ (website tự dựng của user — CHỈ ĐỌC, không sửa, không deploy đè)
@@ -22,7 +22,7 @@
 - Không sao chép toàn văn bài khóa / dịch toàn văn / copy audio gốc nhà xuất bản. Ví dụ tự viết gắn nhãn `authored`, không trình bày là trích nguyên văn.
 - Không dựng người chơi/điểm giả rồi thể hiện là dữ liệu thật. Không multiplayer, không leaderboard online ở bản đầu.
 - Không dùng tên `hoc-hsk` (project cũ của user, đã xóa theo lệnh 24/10/2026 để user tự làm).
-- Tên `hust-hsk`: kiểm tra 05/11/2026 — `hust-hsk.vercel.app` trả 404 DEPLOYMENT_NOT_FOUND; trong tài khoản Vercel của user chưa có project nào tên `hust-hsk` / `bach-khoa-han-ngu` / `hust-hsk-campus` / `bachkhoa-hsk-3d`. Lưu ý: 404 không chứng minh tên còn trống toàn cục — chỉ chắc chắn khi tạo project/deploy thực tế.
+- Domain Production hiện tại là `https://hustverse.vercel.app/` (trước ngày 13/11/2026 khởi tạo project Vercel và đã nâng cấp sang tên miền chính thức `hustverse.vercel.app`).
 
 ## Lộ trình (theo brief)
 Bước 0 khởi tạo → Bước 1 audit nội dung + tư liệu campus → Bước 2 blockout 3D → Bước 3 landmark → Bước 4 engine học tập → Bước 5 tuyến "Buổi học đầu tiên" → Bước 6 mở rộng HSK 3 → Bước 7 mở rộng HSK 4 → Bước 8 tiến độ/ôn tập → Bước 9 tối ưu/mobile → Bước 10 triển khai/bàn giao.

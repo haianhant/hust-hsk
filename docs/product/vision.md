@@ -2,7 +2,7 @@
 
 ## 1. Định vị Sản phẩm
 
-**HUSTVerse — Bách Khoa 3D** là **không gian mô phỏng & game 3D tương tác trực tuyến** tái hiện khuôn viên **Đại học Bách khoa Hà Nội (HUST)** ngay trên trình duyệt web, được thiết kế theo kiến trúc **Thế giới Lõi + Chế độ Gắn rời (Core World + Pluggable Modes)**:
+**HUSTVerse — Bách Khoa 3D** là **không gian mô phỏng & game 3D tương tác trực tuyến** tái hiện khuôn viên **Đại học Bách khoa Hà Nội (HUST)** ngay trên trình duyệt web (**[`https://hustverse.vercel.app/`](https://hustverse.vercel.app/)**), được thiết kế theo kiến trúc **Thế giới Lõi + Chế độ Gắn rời (Core World + Pluggable Modes)**:
 
 1. **Lớp Lõi — Mô phỏng Khuôn viên & Game Tương tác 3D (Core Campus Sandbox & Social — Luôn bật):**
    - Người chơi hóa thân thành sinh viên Bách Khoa với 10 mẫu đồng phục HUST thực tế, tự do đi bộ hoặc lái xe máy qua các phân khu chuẩn bản đồ số [`https://hustmap.com/`](https://hustmap.com/), check-in sưu tầm **HUSTVerse Passport** tại 9 địa danh biểu tượng, trò chuyện và thể hiện biểu cảm 3D (Emotes) cùng bạn bè thời gian thực trên các kênh Multiplayer (`Kênh BK 1–5`).

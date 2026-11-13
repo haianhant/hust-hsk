@@ -1,6 +1,7 @@
 {
   "name": "hust-hsk",
   "version": "0.1.0",
+  "homepage": "https://hustverse.vercel.app/",
   "private": true,
   "scripts": {
     "dev": "next dev",
