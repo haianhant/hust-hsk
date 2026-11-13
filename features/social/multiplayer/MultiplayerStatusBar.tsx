@@ -126,7 +126,7 @@ export function MultiplayerStatusChip({ snapshot }: { snapshot: MultiplayerSnaps
   return (
     <div
       data-testid="mp-chip"
-      className="w-fit rounded-full bg-black/50 px-4 py-1.5 text-sm font-semibold text-white backdrop-blur-sm"
+      className="w-fit rounded-full bg-black/50 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm sm:px-4 sm:py-1.5 sm:text-sm"
     >
       {snapshot.status === 'online'
         ? `👥 ${formatCampusChannelLabel(snapshot.roomId)} · ${snapshot.count} người`

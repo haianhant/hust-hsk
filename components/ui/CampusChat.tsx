@@ -34,7 +34,9 @@ export default function CampusChat({ hskMode = false }: { hskMode?: boolean }) {
   const [chatOpen, setChatOpen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
   );
-  const [emotesOpen, setEmotesOpen] = useState<boolean>(true);
+  const [emotesOpen, setEmotesOpen] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 640 : true,
+  );
   const [messages, setMessages] = useState<ChatMessageEntry[]>(
     () => multiplayer.snapshot.messages,
   );
@@ -106,10 +108,12 @@ export default function CampusChat({ hskMode = false }: { hskMode?: boolean }) {
   return (
     <div
       data-testid="campus-social-dock"
-      className="pointer-events-auto absolute bottom-36 left-3 z-20 flex max-w-[calc(100vw-24px)] flex-col items-start gap-2 sm:bottom-4 sm:left-3"
+      className={`pointer-events-auto absolute bottom-[8.25rem] left-3 z-20 flex max-w-[calc(100vw-24px)] sm:bottom-4 sm:left-3 sm:flex-col sm:items-start sm:gap-2 ${
+        !chatOpen && !emotesOpen ? 'flex-row items-center gap-1.5' : 'flex-col items-start gap-2'
+      }`}
     >
       {/* Thanh Hoạt ảnh Hành động (Emote Bar) */}
-      <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/15 bg-slate-950/80 px-2.5 py-1.5 text-xs text-white shadow-xl backdrop-blur-md">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/15 bg-slate-950/80 px-2 py-1 text-xs text-white shadow-xl backdrop-blur-md sm:px-2.5 sm:py-1.5">
         <button
           type="button"
           data-testid="emote-bar-toggle"
@@ -157,7 +161,7 @@ export default function CampusChat({ hskMode = false }: { hskMode?: boolean }) {
       {chatOpen ? (
         <div
           data-testid="campus-chat"
-          className="flex w-[310px] flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950/85 text-white shadow-2xl backdrop-blur-md sm:w-[340px]"
+          className="flex w-[min(calc(100vw-24px),310px)] flex-col overflow-hidden rounded-2xl border border-white/15 bg-slate-950/85 text-white shadow-2xl backdrop-blur-md sm:w-[340px]"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 bg-slate-900/80 px-3 py-2">
@@ -257,9 +261,11 @@ export default function CampusChat({ hskMode = false }: { hskMode?: boolean }) {
             setChatOpen(true);
             setUnreadCount(0);
           }}
-          className="flex items-center gap-2 rounded-full border border-white/15 bg-slate-950/85 px-3.5 py-2 text-xs font-bold text-white shadow-xl backdrop-blur-md transition hover:bg-slate-900"
+          className="flex items-center gap-1.5 rounded-2xl border border-white/15 bg-slate-950/85 px-2.5 py-1.5 text-xs font-bold text-white shadow-xl backdrop-blur-md transition hover:bg-slate-900 sm:gap-2 sm:rounded-full sm:px-3.5 sm:py-2"
         >
-          <span>💬 Trò chuyện ({onlineCount})</span>
+          <span>💬</span>
+          <span className="hidden sm:inline">Trò chuyện</span>
+          <span className="text-[11px] font-semibold text-white/85 sm:text-xs">({onlineCount})</span>
           {unreadCount > 0 && (
             <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
               +{unreadCount}

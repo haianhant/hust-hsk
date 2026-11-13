@@ -14,6 +14,7 @@ import {
   SCHOOL_OF_MATERIALS,
   VDZ_CENTER,
 } from '../world-data';
+import { ExtrudedText3D, FramedSignBox3D } from '../../../components/three/Signage3D';
 import { LabelPlane } from '../../../components/three/TextPlate';
 
 const WALL_BLUE_LIGHT = '#DCEAF7';
@@ -211,22 +212,62 @@ export function C7ComplexBuilding({
       {/* ============ 2. BA NHÁNH CHỮ E (3 PARALLEL WINGS) VƯƠN VỀ PHÍA TÂY (-X) ============ */}
       {wingZs.map((wz, wIdx) => (
         <group key={`c7-wing-${wIdx}`} position={[wingX, 0, wz]}>
-          {/* Chân đế granite từng nhánh */}
-          <mesh position={[0, 0.28, 0]} receiveShadow>
-            <boxGeometry args={[wingLenX + 0.32, 0.56, wingD + 0.32]} />
-            <meshStandardMaterial color="#8E949E" roughness={0.86} />
-          </mesh>
-          {/* Thân nhánh 9 tầng sơn trắng sáng */}
-          <mesh position={[0, totalH / 2, 0]} castShadow receiveShadow>
-            <boxGeometry args={[wingLenX, totalH, wingD]} />
-            <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
-          </mesh>
-          {/* Vách kính lớn thông tầng 1–2 (giảng đường & sảnh, cho 2 nhánh Bắc & Giữa; nhánh Nam dựng chi tiết riêng bên dưới) */}
-          {wIdx < 2 && (
-            <mesh position={[0.15, 3.1, 0]} castShadow>
-              <boxGeometry args={[wingLenX - 0.5, 5.6, wingD + 0.08]} />
-              <meshStandardMaterial color="#1E2D3B" roughness={0.25} metalness={0.35} />
-            </mesh>
+          {wIdx < 2 ? (
+            <>
+              {/* Chân đế granite từng nhánh (Bắc & Giữa) */}
+              <mesh position={[0, 0.28, 0]} receiveShadow>
+                <boxGeometry args={[wingLenX + 0.32, 0.56, wingD + 0.32]} />
+                <meshStandardMaterial color="#8E949E" roughness={0.86} />
+              </mesh>
+              {/* Thân nhánh 9 tầng sơn trắng sáng */}
+              <mesh position={[0, totalH / 2, 0]} castShadow receiveShadow>
+                <boxGeometry args={[wingLenX, totalH, wingD]} />
+                <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+              </mesh>
+              {/* Vách kính lớn thông tầng 1–2 (giảng đường & sảnh 2 nhánh Bắc & Giữa) */}
+              <mesh position={[0.15, 3.1, 0]} castShadow>
+                <boxGeometry args={[wingLenX - 0.5, 5.6, wingD + 0.08]} />
+                <meshStandardMaterial color="#1E2D3B" roughness={0.25} metalness={0.35} />
+              </mesh>
+            </>
+          ) : (
+            <>
+              {/* Nhánh Nam (wIdx === 2): Tầng 3–9 liền khối trắng; Tầng 1–2 khoét rỗng khoang Đại sảnh chính
+                  rộng 9.0m (building x = -4.5..+4.5, tức wing local x = -1.275..+7.725) và sâu 4.75m
+                  từ cửa kính mặt tiền Nam (southZ = +19.0) lùi vào bên trong sảnh (building z = +14.25),
+                  để lớp cửa kính mặt tiền nhìn xuyên thấu hoàn toàn vào tường hậu trắng phía sau! */}
+              <mesh position={[0, 5.85 + (totalH - 5.85) / 2, 0]} castShadow receiveShadow>
+                <boxGeometry args={[wingLenX, totalH - 5.85, wingD]} />
+                <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+              </mesh>
+              {/* Khối cánh Tây tầng 1–2 (building x = -14.0..-4.5 -> wing local x = -6.025, w = 9.5m) */}
+              <mesh position={[-6.08, 0.28, 0]} receiveShadow>
+                <boxGeometry args={[9.66, 0.56, wingD + 0.32]} />
+                <meshStandardMaterial color="#8E949E" roughness={0.86} />
+              </mesh>
+              <mesh position={[-6.025, 2.95, 0]} castShadow receiveShadow>
+                <boxGeometry args={[9.5, 5.9, wingD]} />
+                <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+              </mesh>
+              {/* Khối cánh Đông tầng 1–2 nối vào lưng chữ E (building x = +4.5..+7.55 -> wing local x = +9.25, w = 3.05m) */}
+              <mesh position={[9.25, 0.28, 0]} receiveShadow>
+                <boxGeometry args={[3.15, 0.56, wingD + 0.32]} />
+                <meshStandardMaterial color="#8E949E" roughness={0.86} />
+              </mesh>
+              <mesh position={[9.25, 2.95, 0]} castShadow receiveShadow>
+                <boxGeometry args={[3.05, 5.9, wingD]} />
+                <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+              </mesh>
+              {/* Phần thân Bắc phía sau bức tường hậu của đại sảnh (building z = +11.8..+14.25 -> wing local z = -2.375, d = 2.45m) */}
+              <mesh position={[3.225, 0.28, -2.45]} receiveShadow>
+                <boxGeometry args={[9.2, 0.56, 2.6]} />
+                <meshStandardMaterial color="#8E949E" roughness={0.86} />
+              </mesh>
+              <mesh position={[3.225, 2.95, -2.375]} castShadow receiveShadow>
+                <boxGeometry args={[9.1, 5.9, 2.45]} />
+                <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+              </mesh>
+            </>
           )}
           {/* Khe hành lang / logia đứng âm tường ở chính giữa đầu hồi Tây mỗi nhánh */}
           <mesh position={[-wingLenX / 2 + 0.08, (totalH + 6.2) / 2, 0]}>
@@ -385,71 +426,266 @@ export function C7ComplexBuilding({
           </group>
         ))}
 
-        {/* Đại sảnh kính trung tâm mặt Nam + Mái đón kính khung thép đen + Chữ nổi vàng đồng "C7" */}
+        {/* Đại sảnh kính trung tâm mặt Nam tầng 1–2:
+            - Mặt tiền bên ngoài (z = 0): hệ vách kính & cửa kính trượt trong suốt khung nhôm đen (KHÔNG dán chữ lên kính/mặt tiền).
+            - Lòng sảnh sâu 4.65m (z = 0 .. -4.65): sàn đá bóng, trần đèn LED âm trần sáng rõ, cột sảnh trắng.
+            - Tường hậu màu trắng đặt lùi sâu 4.6m phía trong sảnh (z = -4.60): gắn quốc huy/logo đỏ và dòng chữ nổi 3D đỏ
+              "ĐẠI HỌC BÁCH KHOA HÀ NỘI" + "HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY" nhìn xuyên qua cửa kính trượt! */}
         <group position={[0, 0, 0]}>
-          {/* Hốc đại sảnh sáng trắng bên trong + băng rôn đỏ "ĐẠI HỌC BÁCH KHOA HÀ NỘI" ở tường hậu */}
-          <mesh position={[0, 3.05, -0.32]}>
-            <boxGeometry args={[8.4, 5.25, 0.72]} />
+          {/* 1. Sàn đại sảnh lát đá granite trắng xám bóng (cao y = 0.36m khớp đỉnh bậc tam cấp) */}
+          <mesh position={[0, 0.18, -2.38]} receiveShadow>
+            <boxGeometry args={[9.08, 0.36, 4.8]} />
+            <meshStandardMaterial color="#ECEFF3" roughness={0.32} metalness={0.08} />
+          </mesh>
+          {/* Đường viền đá sẫm dẫn hướng chiều sâu lòng sảnh 4.6m */}
+          {[-2.8, 2.8].map((fx, fIdx) => (
+            <mesh key={`c7-lobby-floor-strip-${fIdx}`} position={[fx, 0.366, -2.3]} receiveShadow>
+              <boxGeometry args={[0.16, 0.008, 4.2]} />
+              <meshStandardMaterial color="#94A3B8" roughness={0.4} />
+            </mesh>
+          ))}
+
+          {/* 2. Hai vách bên lòng sảnh (x = ±4.48) + 2 cột trụ tròn trắng bên trong đại sảnh */}
+          {[-4.48, 4.48].map((sx, sIdx) => (
+            <mesh key={`c7-lobby-sidewall-${sIdx}`} position={[sx, 3.08, -2.36]} receiveShadow>
+              <boxGeometry args={[0.1, 5.48, 4.76]} />
+              <meshStandardMaterial
+                color="#F8FAFC"
+                emissive="#F1F5F9"
+                emissiveIntensity={isNight ? 0.35 : 0.22}
+                roughness={0.68}
+              />
+            </mesh>
+          ))}
+          {[-3.15, 3.15].map((cx, cIdx) => (
+            <mesh key={`c7-lobby-inner-col-${cIdx}`} position={[cx, 1.88, -2.15]} castShadow>
+              <cylinderGeometry args={[0.2, 0.2, 3.05, 14]} />
+              <meshStandardMaterial
+                color="#FFFFFF"
+                emissive="#F8FAFC"
+                emissiveIntensity={isNight ? 0.3 : 0.18}
+                roughness={0.55}
+              />
+            </mesh>
+          ))}
+
+          {/* Quầy trực & dãy ghế chờ sinh viên đặt sát vách bên trong sảnh (tăng cảm giác chiều sâu 4.6m) */}
+          <mesh position={[-3.65, 0.78, -3.2]} castShadow>
+            <boxGeometry args={[1.1, 0.84, 1.5]} />
+            <meshStandardMaterial color="#CBD5E1" roughness={0.55} />
+          </mesh>
+          <mesh position={[3.82, 0.62, -2.6]} castShadow>
+            <boxGeometry args={[0.55, 0.48, 2.1]} />
+            <meshStandardMaterial color="#1D4ED8" roughness={0.55} />
+          </mesh>
+
+          {/* 3. Trần sảnh tầng 1 (y = 3.36m) & trần sảnh tầng 2 (y = 5.76m) gắn hệ đèn LED panel trắng sáng */}
+          <mesh position={[0, 3.36, -2.38]}>
+            <boxGeometry args={[8.96, 0.14, 4.72]} />
+            <meshStandardMaterial
+              color="#FFFFFF"
+              emissive="#F8FAFC"
+              emissiveIntensity={isNight ? 0.48 : 0.32}
+              roughness={0.65}
+            />
+          </mesh>
+          {[-1.15, -2.45, -3.75].map((lz, zIdx) =>
+            [-2.4, 0, 2.4].map((lx, xIdx) => (
+              <mesh key={`c7-lobby-led-${zIdx}-${xIdx}`} position={[lx, 3.28, lz]}>
+                <boxGeometry args={[1.05, 0.025, 0.48]} />
+                <meshStandardMaterial
+                  color="#FFFFFF"
+                  emissive={isNight ? '#FEF3C7' : '#FFFFFF'}
+                  emissiveIntensity={isNight ? 1.55 : 1.05}
+                />
+              </mesh>
+            )),
+          )}
+          {/* Trần và tường hậu hành lang thông tầng 2 nhìn qua dải kính trên mái đón */}
+          <mesh position={[0, 5.76, -2.38]}>
+            <boxGeometry args={[8.96, 0.14, 4.72]} />
             <meshStandardMaterial
               color="#F8FAFC"
-              emissive="#FFFBEB"
-              emissiveIntensity={isNight ? 0.75 : 0.38}
+              emissive="#FEF3C7"
+              emissiveIntensity={isNight ? 0.55 : 0.28}
               roughness={0.7}
             />
           </mesh>
-          <LabelPlane
-            textureKey="c7-south-lobby-backdrop"
-            canvasW={512}
-            canvasH={128}
-            draw={(ctx, w, h) => {
-              ctx.fillStyle = '#FFFFFF';
-              ctx.fillRect(0, 0, w, h);
-              ctx.fillStyle = '#B91C1C';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.font = '800 32px "Be Vietnam Pro", Arial, sans-serif';
-              ctx.fillText('ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, h * 0.42);
-              ctx.fillStyle = '#334155';
-              ctx.font = '600 18px "Be Vietnam Pro", Arial, sans-serif';
-              ctx.fillText('HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY', w / 2, h * 0.74);
-            }}
-            size={[4.4, 1.05]}
-            position={[0.4, 1.95, 0.06]}
-            transparent={false}
-          />
-          {/* Hệ đố kính đen mặt đứng đại sảnh tầng 1 & tầng 2 */}
-          {[-4.1, -2.1, 0, 2.1, 4.1].map((mx, mIdx) => (
-            <mesh key={`c7-south-mull-${mIdx}`} position={[mx, 3.05, 0.08]}>
-              <boxGeometry args={[0.1, 5.25, 0.08]} />
-              <meshStandardMaterial color="#111827" roughness={0.35} metalness={0.55} />
-            </mesh>
-          ))}
-          {[0.52, 3.18, 5.62].map((my, mIdx) => (
-            <mesh key={`c7-south-transom-${mIdx}`} position={[0, my, 0.08]}>
-              <boxGeometry args={[8.35, 0.12, 0.09]} />
-              <meshStandardMaterial color="#111827" roughness={0.35} metalness={0.55} />
-            </mesh>
-          ))}
-          <mesh position={[0, 4.4, 0.09]}>
-            <planeGeometry args={[8.1, 2.28]} />
+          <mesh position={[0, 4.58, -4.64]}>
+            <boxGeometry args={[8.96, 2.34, 0.12]} />
             <meshStandardMaterial
-              color="#E2E8F0"
+              color="#F8FAFC"
               emissive="#FFFBEB"
-              emissiveIntensity={isNight ? 0.65 : 0.25}
-              transparent
-              opacity={0.62}
-              roughness={0.18}
+              emissiveIntensity={isNight ? 0.58 : 0.32}
+              roughness={0.65}
             />
           </mesh>
 
+          {/* 4. BỨC TƯỜNG HẬU MÀU TRẮNG ĐẶT LÙI SÂU 4.60M BÊN TRONG ĐẠI SẢNH (z = -4.60)
+              Hai bên trái/phải tường hậu là 2 lối hành lang dẫn sâu vào thang máy & giảng đường */}
+          <mesh position={[0, 1.88, -4.74]}>
+            <boxGeometry args={[9.02, 3.08, 0.1]} />
+            <meshStandardMaterial color="#1E293B" roughness={0.85} />
+          </mesh>
+          <mesh position={[0, 1.88, -4.6]}>
+            <boxGeometry args={[6.95, 3.02, 0.12]} />
+            <meshStandardMaterial
+              color="#FFFFFF"
+              emissive="#FFFFFF"
+              emissiveIntensity={isNight ? 0.68 : 0.45}
+              roughness={0.5}
+            />
+          </mesh>
+          {/* Đèn hắt trần rọi sáng trực tiếp vào bức tường hậu trắng (y = 3.26, z = -4.25) */}
+          <mesh position={[0, 3.27, -4.22]}>
+            <boxGeometry args={[5.8, 0.03, 0.18]} />
+            <meshStandardMaterial
+              color="#FFFFFF"
+              emissive="#FFFFFF"
+              emissiveIntensity={isNight ? 1.8 : 1.25}
+            />
+          </mesh>
+
+          {/* Huy hiệu đỏ sao vàng/bánh răng ĐHBK gắn trên cao bức tường hậu trắng (z = -4.50) */}
+          <group position={[0, 2.74, -4.5]}>
+            <mesh castShadow>
+              <boxGeometry args={[0.38, 0.5, 0.05]} />
+              <meshStandardMaterial
+                color="#C8102E"
+                emissive="#991B1B"
+                emissiveIntensity={isNight ? 0.35 : 0.15}
+                roughness={0.4}
+              />
+            </mesh>
+            <mesh position={[0, 0.04, 0.032]}>
+              <cylinderGeometry args={[0.11, 0.11, 0.02, 16]} />
+              <meshStandardMaterial color="#FACC15" metalness={0.65} roughness={0.28} />
+            </mesh>
+          </group>
+
+          {/* Dòng chữ đỏ 3D "ĐẠI HỌC BÁCH KHOA HÀ NỘI" & dòng chữ tiếng Anh bên dưới gắn trên tường hậu (z = -4.50) */}
+          <ExtrudedText3D
+            text="ĐẠI HỌC BÁCH KHOA HÀ NỘI"
+            size={[5.45, 0.44]}
+            depth={0.07}
+            position={[0, 2.16, -4.5]}
+            frontColor="#C8102E"
+            sideColor="#7F1D1D"
+            metalness={0.28}
+            roughness={0.36}
+            emissive="#B91C1C"
+            emissiveIntensity={isNight ? 0.42 : 0.2}
+          />
+          <ExtrudedText3D
+            text="HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY"
+            size={[4.95, 0.25]}
+            depth={0.045}
+            position={[0, 1.72, -4.51]}
+            frontColor="#B91C1C"
+            sideColor="#7F1D1D"
+            metalness={0.24}
+            roughness={0.4}
+            emissive="#991B1B"
+            emissiveIntensity={isNight ? 0.35 : 0.16}
+          />
+
+          {/* 5. HỆ VÁCH KÍNH & CỬA KÍNH TRƯỢT TRONG SUỐT KHUNG NHÔM ĐEN Ở MẶT TIỀN NGOÀI (z = 0)
+              Hoàn toàn trong suốt nhìn xuyên thấu vào lòng sảnh 4.6m, KHÔNG có tường trắng đặc hay chữ dán ở mặt tiền! */}
+          {/* Đố đứng nhôm đen chính chia 4 khoang (chừa khoang cửa kính trượt trung tâm x = -1.32..+1.32 thông thoáng) */}
+          {[-4.45, -2.75, -1.32, 1.32, 2.75, 4.45].map((mx, mIdx) => (
+            <mesh key={`c7-south-mull-${mIdx}`} position={[mx, 3.08, 0.04]}>
+              <boxGeometry args={[0.09, 5.44, 0.09]} />
+              <meshStandardMaterial color="#111827" roughness={0.35} metalness={0.58} />
+            </mesh>
+          ))}
+          {/* Đố đứng phụ tầng 2 phía trên mái đón */}
+          <mesh position={[0, 4.54, 0.04]}>
+            <boxGeometry args={[0.08, 2.38, 0.08]} />
+            <meshStandardMaterial color="#111827" roughness={0.35} metalness={0.58} />
+          </mesh>
+          {/* Thanh đố ngang nhôm đen (trán cửa trượt y = 2.58, dầm mái đón y = 3.26, đỉnh vách kính y = 5.76) */}
+          {[2.58, 3.26, 5.76].map((my, mIdx) => (
+            <mesh key={`c7-south-transom-${mIdx}`} position={[0, my, 0.04]}>
+              <boxGeometry args={[8.98, 0.1, 0.095]} />
+              <meshStandardMaterial color="#111827" roughness={0.35} metalness={0.58} />
+            </mesh>
+          ))}
+          {/* Chân đế nhôm đen cho 2 khoang kính cố định hai bên (chừa lối đi phẳng ở giữa x = -1.32..+1.32) */}
+          {[-2.88, 2.88].map((sx, sIdx) => (
+            <mesh key={`c7-south-sill-${sIdx}`} position={[sx, 0.41, 0.04]}>
+              <boxGeometry args={[3.12, 0.09, 0.09]} />
+              <meshStandardMaterial color="#111827" roughness={0.35} metalness={0.58} />
+            </mesh>
+          ))}
+          {/* Hai cánh cửa kính trượt tự động ở trung tâm (mở hé nhẹ ở giữa + tay nắm inox mảnh) */}
+          {[-0.78, 0.78].map((dx, dIdx) => (
+            <group key={`c7-sliding-door-${dIdx}`} position={[dx, 1.48, 0.02]}>
+              <mesh position={[0, 1.05, 0]}>
+                <boxGeometry args={[1.06, 0.06, 0.05]} />
+                <meshStandardMaterial color="#0F172A" roughness={0.35} metalness={0.6} />
+              </mesh>
+              <mesh position={[0, -1.06, 0]}>
+                <boxGeometry args={[1.06, 0.06, 0.05]} />
+                <meshStandardMaterial color="#0F172A" roughness={0.35} metalness={0.6} />
+              </mesh>
+              {/* Nẹp đứng mảnh mép trong cánh cửa trượt + tay nắm inox */}
+              <mesh position={[dIdx === 0 ? 0.51 : -0.51, 0, 0]}>
+                <boxGeometry args={[0.04, 2.12, 0.05]} />
+                <meshStandardMaterial color="#1E293B" roughness={0.35} metalness={0.6} />
+              </mesh>
+              <mesh position={[dIdx === 0 ? 0.42 : -0.42, -0.15, 0.045]}>
+                <cylinderGeometry args={[0.014, 0.014, 0.48, 8]} />
+                <meshStandardMaterial color="#E2E8F0" roughness={0.22} metalness={0.85} />
+              </mesh>
+            </group>
+          ))}
+
+          {/* Các tấm kính cường lực trong suốt (depthWrite=false để nhìn xuyên thấu 100% vào tường hậu trắng phía sau!) */}
+          <mesh position={[0, 1.82, 0.03]}>
+            <planeGeometry args={[8.84, 2.82]} />
+            <meshStandardMaterial
+              color="#D8EEF8"
+              transparent
+              opacity={0.18}
+              depthWrite={false}
+              roughness={0.06}
+              metalness={0.22}
+            />
+          </mesh>
+          {/* Kính thông tầng 2 phía trên mái đón (cũng trong suốt nhìn rõ trần sảnh tầng 2) */}
+          <mesh position={[0, 4.52, 0.03]}>
+            <planeGeometry args={[8.84, 2.38]} />
+            <meshStandardMaterial
+              color="#D8EEF8"
+              transparent
+              opacity={0.22}
+              depthWrite={false}
+              roughness={0.08}
+              metalness={0.25}
+            />
+          </mesh>
+          {/* Dải chỉ mờ an toàn mảnh trên các ô kính cố định hai bên (không che khoang cửa giữa) */}
+          {[-3.6, -2.03, 2.03, 3.6].map((gx, gIdx) => (
+            <mesh key={`c7-glass-frost-strip-${gIdx}`} position={[gx, 1.32, 0.038]}>
+              <planeGeometry args={[1.32, 0.11]} />
+              <meshStandardMaterial
+                color="#F1F5F9"
+                transparent
+                opacity={0.26}
+                depthWrite={false}
+                roughness={0.4}
+              />
+            </mesh>
+          ))}
+
           {/* Mái đón kính cường lực khung dầm thép đen đua ra sảnh Nam (y = 3.28m) */}
-          <mesh position={[0, 3.28, 0.82]} castShadow>
-            <boxGeometry args={[9.2, 0.14, 1.68]} />
+          <mesh position={[0, 3.28, 0.84]} castShadow>
+            <boxGeometry args={[9.3, 0.14, 1.72]} />
             <meshStandardMaterial color="#111827" roughness={0.32} metalness={0.65} />
           </mesh>
           {[-4.2, -2.5, -0.8, 0.8, 2.5, 4.2].map((bx, bIdx) => (
-            <mesh key={`canopy-rib-${bIdx}`} position={[bx, 3.19, 0.82]}>
-              <boxGeometry args={[0.09, 0.1, 1.64]} />
+            <mesh key={`canopy-rib-${bIdx}`} position={[bx, 3.19, 0.84]}>
+              <boxGeometry args={[0.09, 0.1, 1.68]} />
               <meshStandardMaterial color="#0F172A" roughness={0.35} metalness={0.6} />
             </mesh>
           ))}
@@ -461,33 +697,24 @@ export function C7ComplexBuilding({
               position={[0, 0.08 + st * 0.12, 0.72 - st * 0.26]}
               receiveShadow
             >
-              <boxGeometry args={[8.8, 0.12, 0.34]} />
+              <boxGeometry args={[8.95, 0.12, 0.34]} />
               <meshStandardMaterial color="#7C8591" roughness={0.85} />
             </mesh>
           ))}
 
-          {/* Chữ nổi 3D vàng đồng "C7" gắn ngay trên trán tường đại sảnh Nam (Một phần tòa C7...jpg) */}
-          <LabelPlane
-            textureKey="c7-south-gold-emblem"
-            canvasW={320}
-            canvasH={200}
-            draw={(ctx, w, h) => {
-              ctx.clearRect(0, 0, w, h);
-              ctx.save();
-              ctx.shadowColor = 'rgba(15, 23, 42, 0.55)';
-              ctx.shadowBlur = 6;
-              ctx.shadowOffsetX = 3;
-              ctx.shadowOffsetY = 5;
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.font = '900 144px "Be Vietnam Pro", Arial, sans-serif';
-              ctx.fillStyle = '#B8974A';
-              ctx.fillText('C7', w / 2, h / 2 + 4);
-              ctx.restore();
-            }}
-            size={[2.35, 1.48]}
-            position={[0, 6.42, 0.12]}
-            transparent
+          {/* Chữ nổi 3D kim loại vàng đồng "C7" có chiều dày khối thật (0.22m) trên trán tường đại sảnh Nam */}
+          <ExtrudedText3D
+            text="C7"
+            size={[2.35, 1.42]}
+            depth={0.22}
+            position={[0, 6.46, 0.13]}
+            frontColor="#D4AF37"
+            frontHighlightColor="#FCE79C"
+            sideColor="#785314"
+            metalness={0.74}
+            roughness={0.26}
+            emissive="#B4831E"
+            emissiveIntensity={isNight ? 0.28 : 0.06}
           />
         </group>
 
@@ -695,18 +922,14 @@ export function C7ComplexBuilding({
           </mesh>
         </group>
       ))}
-      <LabelPlane
-        textureKey={hskMode ? 'c7-hsk-hub-banner' : 'c7-core-lecture-banner'}
+      <FramedSignBox3D
         canvasW={640}
         canvasH={140}
         draw={(ctx, w, h) => {
           ctx.fillStyle = hskMode ? '#991B1B' : '#1E3A8A';
           ctx.fillRect(0, 0, w, h);
-          ctx.strokeStyle = '#FACC15';
-          ctx.lineWidth = 6;
-          ctx.strokeRect(6, 6, w - 12, h - 12);
           ctx.fillStyle = '#FDE047';
-          ctx.font = '800 30px "Be Vietnam Pro", "Segoe UI", sans-serif';
+          ctx.font = '700 30px "Be Vietnam Pro", "Segoe UI", sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(
@@ -727,73 +950,62 @@ export function C7ComplexBuilding({
           );
         }}
         size={[3.9, 0.82]}
-        position={[-size.x / 2 - 0.12, 3.12, 0]}
+        depth={0.1}
+        boxColor={hskMode ? '#7F1D1D' : '#1E3A8A'}
+        frameColor="#FACC15"
+        position={[-size.x / 2 - 0.14, 3.12, 0]}
         rotation={[0, -Math.PI / 2, 0]}
+        isNight={isNight}
       />
 
-      {/* Chữ nổi "C7" màu xám bạc gắn trên cao đầu hồi Tây nhánh Nam & mặt Đông khối lưng */}
-      <LabelPlane
-        textureKey="c7-top-code-sign"
-        canvasW={256}
-        canvasH={160}
-        draw={(ctx, w, h) => {
-          ctx.clearRect(0, 0, w, h);
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.font = '900 118px Arial, sans-serif';
-          ctx.lineWidth = 6;
-          ctx.strokeStyle = 'rgba(30, 41, 59, 0.75)';
-          ctx.strokeText('C7', w / 2, h / 2);
-          ctx.fillStyle = '#64748B';
-          ctx.fillText('C7', w / 2, h / 2);
-        }}
-        size={[2.4, 1.5]}
-        position={[-size.x / 2 - 0.06, totalH - 1.9, wingZs[2] + 1.1]}
+      {/* Chữ nổi 3D kim loại xám bạc "C7" (dày 0.22m) gắn trên cao đầu hồi Tây nhánh Nam & mặt Đông khối lưng */}
+      <ExtrudedText3D
+        text="C7"
+        size={[2.35, 1.42]}
+        depth={0.22}
+        position={[-size.x / 2 - 0.11, totalH - 1.9, wingZs[2] + 1.1]}
         rotation={[0, -Math.PI / 2, 0]}
+        frontColor="#94A3B8"
+        frontHighlightColor="#E2E8F0"
+        sideColor="#334155"
+        metalness={0.68}
+        roughness={0.3}
       />
-      <LabelPlane
-        textureKey="c7-top-code-sign-east"
-        canvasW={256}
-        canvasH={160}
-        draw={(ctx, w, h) => {
-          ctx.clearRect(0, 0, w, h);
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.font = '900 118px Arial, sans-serif';
-          ctx.lineWidth = 6;
-          ctx.strokeStyle = 'rgba(30, 41, 59, 0.75)';
-          ctx.strokeText('C7', w / 2, h / 2);
-          ctx.fillStyle = '#64748B';
-          ctx.fillText('C7', w / 2, h / 2);
-        }}
-        size={[2.4, 1.5]}
-        position={[size.x / 2 + 0.06, totalH - 1.9, 14.2]}
+      <ExtrudedText3D
+        text="C7"
+        size={[2.35, 1.42]}
+        depth={0.22}
+        position={[size.x / 2 + 0.11, totalH - 1.9, 14.2]}
         rotation={[0, Math.PI / 2, 0]}
+        frontColor="#94A3B8"
+        frontHighlightColor="#E2E8F0"
+        sideColor="#334155"
+        metalness={0.68}
+        roughness={0.3}
       />
 
-      <LabelPlane
-        textureKey="c7-main-sign-v2"
+      <FramedSignBox3D
         canvasW={768}
         canvasH={160}
         draw={(ctx, w, h) => {
           ctx.fillStyle = '#1E3A5F';
           ctx.fillRect(0, 0, w, h);
-          ctx.strokeStyle = '#CBD5E1';
-          ctx.lineWidth = 6;
-          ctx.strokeRect(8, 8, w - 16, h - 16);
           ctx.fillStyle = '#FFFFFF';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.font = '800 31px "Be Vietnam Pro", Arial, sans-serif';
+          ctx.font = '700 31px "Be Vietnam Pro", Arial, sans-serif';
           ctx.fillText('TÒA NHÀ C7 · ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, h * 0.39);
           ctx.fillStyle = '#93C5FD';
           ctx.font = '700 22px "Be Vietnam Pro", Arial, sans-serif';
           ctx.fillText('TỔ HỢP GIẢNG ĐƯỜNG & ĐIỀU HÀNH TRUNG TÂM', w / 2, h * 0.74);
         }}
         size={[4.9, 1.02]}
-        position={[-size.x / 2 - 0.08, 4.45, 0]}
+        depth={0.12}
+        boxColor="#0F172A"
+        frameColor="#CBD5E1"
+        position={[-size.x / 2 - 0.12, 4.48, 0]}
         rotation={[0, -Math.PI / 2, 0]}
-        transparent={false}
+        isNight={isNight}
       />
     </group>
   );
@@ -1004,29 +1216,28 @@ export function SchoolOfMaterialsBuilding({ isNight }: { isNight: boolean }) {
           <meshStandardMaterial color="#111827" roughness={0.35} metalness={0.45} />
         </mesh>
 
-        {/* Dòng chữ nổi 3D kim loại vàng đồng "TRƯỜNG VẬT LIỆU" đặt đứng trên đỉnh mái đón đen */}
-        <LabelPlane
-          textureKey="smse-gold-canopy-letters"
-          canvasW={1024}
-          canvasH={160}
-          draw={(ctx, w, h) => {
-            ctx.clearRect(0, 0, w, h);
-            ctx.save();
-            ctx.shadowColor = 'rgba(15, 23, 42, 0.65)';
-            ctx.shadowBlur = 5;
-            ctx.shadowOffsetX = 3;
-            ctx.shadowOffsetY = 4;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.font = '900 88px "Be Vietnam Pro", Arial, sans-serif';
-            ctx.fillStyle = '#C99E3B';
-            ctx.fillText('TRƯỜNG VẬT LIỆU', w / 2, h / 2 + 4);
-            ctx.restore();
-          }}
-          size={[5.8, 0.88]}
-          position={[0.92, 3.74, 0]}
+        {/* Dòng chữ nổi 3D kim loại vàng đồng "TRƯỜNG VẬT LIỆU" (dày khối đặc 0.20m + thanh ray đỡ thép đen)
+            đặt đứng vững chãi trên đỉnh mái đón đen — nhìn nghiêng từ đầu đường vẫn thấy rõ chiều dày 3D thật! */}
+        <ExtrudedText3D
+          text="TRƯỜNG VẬT LIỆU"
+          size={[5.9, 0.78]}
+          depth={0.2}
+          position={[0.88, 3.74, 0]}
           rotation={[0, Math.PI / 2, 0]}
-          transparent
+          frontColor="#D8AE48"
+          frontHighlightColor="#FDF0B2"
+          sideColor="#785314"
+          metalness={0.76}
+          roughness={0.25}
+          emissive="#B4831E"
+          emissiveIntensity={isNight ? 0.3 : 0.08}
+          mountingRail={{
+            yOffset: -0.39,
+            height: 0.06,
+            depth: 0.22,
+            color: '#0F172A',
+            standoffCount: 8,
+          }}
         />
 
         {/* 2 Standee màu xanh dương đậm "SMSE" có mã QR đứng hai bên cửa kính trên thềm đá đen */}
@@ -1466,29 +1677,18 @@ export function AlumniHouseBuilding({ isNight }: { isNight: boolean }) {
         transparent={false}
       />
 
-      {/* CHỮ NỔI TRÊN CỔ MÁI: "TÒA NHÀ CỰU SINH VIÊN BÁCH KHOA" + 5 ĐÈN CẦN RỌI */}
-      <LabelPlane
-        textureKey="alumni-parapet-3d-letters"
-        canvasW={1024}
-        canvasH={128}
-        draw={(ctx, w, hCanvas) => {
-          ctx.clearRect(0, 0, w, hCanvas);
-          ctx.save();
-          ctx.shadowColor = 'rgba(15, 23, 42, 0.45)';
-          ctx.shadowBlur = 4;
-          ctx.shadowOffsetX = 2;
-          ctx.shadowOffsetY = 3;
-          ctx.fillStyle = '#27272A';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.font = '900 50px "Be Vietnam Pro", Arial, sans-serif';
-          ctx.fillText('TÒA NHÀ CỰU SINH VIÊN BÁCH KHOA', w / 2, hCanvas / 2 + 2);
-          ctx.restore();
-        }}
-        size={[7.6, 0.88]}
-        position={[-0.75, h + 0.42, northZ - 0.11]}
+      {/* CHỮ NỔI 3D KHỐI ĐẶC TRÊN CỔ MÁI: "TÒA NHÀ CỰU SINH VIÊN BÁCH KHOA" + 5 ĐÈN CẦN RỌI */}
+      <ExtrudedText3D
+        text="TÒA NHÀ CỰU SINH VIÊN BÁCH KHOA"
+        size={[7.6, 0.68]}
+        depth={0.15}
+        position={[-0.75, h + 0.42, northZ - 0.14]}
         rotation={[0, Math.PI, 0]}
-        transparent
+        frontColor="#27272A"
+        frontHighlightColor="#52525B"
+        sideColor="#09090B"
+        metalness={0.58}
+        roughness={0.36}
       />
       {[-3.8, -2.1, -0.4, 1.3, 3.0].map((lx, idx) => (
         <group key={`alumni-gooseneck-${idx}`} position={[lx, h + 0.84, northZ - 0.24]}>

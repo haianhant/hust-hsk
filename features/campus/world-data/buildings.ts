@@ -34,10 +34,11 @@ export const C1 = {
   floorHeight: 3.6,
   waves: 9, // BẮT BUỘC đếm đủ 9 gợn sóng mái
   waveAmplitude: 0.5, // Bước 3: sóng NÔNG theo ảnh (blockout 1,2 là quá cao)
-  plaza: { minX: -82, maxX: -34, minZ: -46, maxZ: -25.5 },
+  /** Quảng trường C1 mở rộng thoáng đãng (52,0 m × 25,6 m) trải từ sát mặt tiền Nam C1 tới Khối đá trắng & Ngã 5 */
+  plaza: { minX: -83.5, maxX: -31.5, minZ: -49.0, maxZ: -23.4 },
   lipaTrees: [
-    { x: -72, z: -40 },
-    { x: -44, z: -40 },
+    { x: -73.2, z: -40 },
+    { x: -42.8, z: -40 },
   ],
   /** bậc tam cấp trước sảnh (5 bậc đá xám-đen, rộng 12 m) — collider riêng để avatar không đi xuyên bậc */
   steps: { minX: -64, maxX: -52, minZ: -49.5, maxZ: -43.8 },
@@ -119,11 +120,13 @@ export const WHITE_ROCK = {
   box: { minX: -60.1, maxX: -55.9, minZ: -23.0, maxZ: -21.0 },
 } as const;
 
-/** Đài phun nước Bách Khoa — đặt chính tâm trục đối xứng Quảng trường C1 (x = -58)
- *  giữa cụm chữ I ❤ BK (z = -39.5) và Khối đá trắng (z = -22) theo đúng https://hustmap.com/. */
+/** Đài phun nước Bách Khoa cỡ lớn (bể đá granite 9,6 × 5,6 m, chân đế 10,6 × 6,6 m) —
+ *  đặt chính tâm trục đối xứng Quảng trường C1 (x = -58) giữa cụm chữ I ❤ BK (z = -39.5)
+ *  và Khối đá trắng (z = -22) theo đúng https://hustmap.com/. */
 export const C1_FOUNTAIN = {
-  center: { x: -58, z: -31.2 },
-  box: { minX: -60.2, maxX: -55.8, minZ: -32.4, maxZ: -30.0 },
+  center: { x: -58, z: -30.8 },
+  size: { x: 9.6, z: 5.6 },
+  box: { minX: -62.8, maxX: -53.2, minZ: -33.6, maxZ: -28.0 },
 } as const;
 
 /** Quảng trường ngã 5 (nút giao biểu tượng 5 nhánh giữa Quảng trường C1, Bãi xe C9, ITIMS/C10 và trục chính theo https://hustmap.com/). */
@@ -868,7 +871,7 @@ export const LAKE_BENCHES: Vec2[] = [
 ];
 
 export const C1_BENCHES: Vec2[] = [
-  { x: -72, z: -30 }, { x: -44, z: -44 },
+  { x: -73.2, z: -29.8 }, { x: -42.8, z: -44.2 },
 ];
 
 // Liễu rủ quanh Hồ Tiền — đặt NGOÀI bờ kè hình chữ nhật (bờ tây/đông/bắc/nam).

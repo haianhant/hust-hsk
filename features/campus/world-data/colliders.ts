@@ -128,12 +128,12 @@ export const BUILDING_COLLIDERS: NamedCollider[] = [
   { name: 'Ghế bờ hồ', box: { minX: -27.85, maxX: -27.15, minZ: 65.05, maxZ: 66.95 } },
   { name: 'Ghế bờ hồ', box: { minX: 21.95, maxX: 22.65, minZ: 23.05, maxZ: 24.95 } },
   { name: 'Ghế bờ hồ', box: { minX: 21.95, maxX: 22.65, minZ: 71.05, maxZ: 72.95 } },
-  { name: 'Ghế quảng trường C1', box: { minX: -72.95, maxX: -71.05, minZ: -30.35, maxZ: -29.65 } },
-  { name: 'Ghế quảng trường C1', box: { minX: -44.95, maxX: -43.05, minZ: -44.35, maxZ: -43.65 } },
-  { name: 'Bồn cỏ quảng trường C1 (tây)', box: { minX: -80, maxX: -66, minZ: -45.5, maxZ: -42.5 } },
-  { name: 'Bồn cỏ quảng trường C1 (đông)', box: { minX: -50, maxX: -36, minZ: -45.5, maxZ: -42.5 } },
-  { name: 'Bồn cỏ C1Building (tây)', box: { minX: -75, maxX: -64, minZ: -43.15, maxZ: -30.85 } },
-  { name: 'Bồn cỏ C1Building (đông)', box: { minX: -52, maxX: -41, minZ: -43.15, maxZ: -30.85 } },
+  { name: 'Ghế quảng trường C1', box: { minX: -74.15, maxX: -72.25, minZ: -30.15, maxZ: -29.45 } },
+  { name: 'Ghế quảng trường C1', box: { minX: -43.75, maxX: -41.85, minZ: -44.55, maxZ: -43.85 } },
+  { name: 'Bồn cỏ quảng trường C1 (tây)', box: { minX: -80.5, maxX: -68.4, minZ: -47.4, maxZ: -44.6 } },
+  { name: 'Bồn cỏ quảng trường C1 (đông)', box: { minX: -47.6, maxX: -35.5, minZ: -47.4, maxZ: -44.6 } },
+  { name: 'Bồn cỏ C1Building (tây)', box: { minX: -78.0, maxX: -68.4, minZ: -43.15, maxZ: -30.85 } },
+  { name: 'Bồn cỏ C1Building (đông)', box: { minX: -47.6, maxX: -38.0, minZ: -43.15, maxZ: -30.85 } },
   { name: 'Ghế đường tình yêu', box: { minX: -38.95, maxX: -37.05, minZ: -11.25, maxZ: -10.55 } },
   { name: 'Ghế đường tình yêu', box: { minX: -22.95, maxX: -21.05, minZ: -11.25, maxZ: -10.55 } },
   { name: 'Ghế đường tình yêu', box: { minX: 15.05, maxX: 16.95, minZ: -11.25, maxZ: -10.55 } },
@@ -248,9 +248,9 @@ export const NPC_CIRCLES: { pos: Vec2; radius: number; name?: string }[] = [
   { pos: { x: -72, z: -8.5 }, radius: 0.5, name: 'Minh (NPC)' },
   // Sinh viên đứng chờ tại Nhà chờ Xe buýt Cổng Parabol
   { pos: { x: -86.8, z: 7.2 }, radius: 0.42, name: 'Sinh viên (NPC)' },
-  // Nhóm 1: 2 sinh viên đứng trò chuyện tại sân Quảng trường C1
-  { pos: { x: -62.5, z: -34.0 }, radius: 0.42, name: 'Sinh viên (NPC)' },
-  { pos: { x: -61.5, z: -34.0 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  // Nhóm 1: 2 sinh viên đứng trò chuyện tại sân Quảng trường C1 (bên cạnh Đài phun nước lớn)
+  { pos: { x: -65.2, z: -34.8 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  { pos: { x: -64.1, z: -34.8 }, radius: 0.42, name: 'Sinh viên (NPC)' },
   // Nhóm 2: 2 sinh viên trao đổi bài trước sảnh Thư viện Tạ Quang Bửu
   { pos: { x: 43.5, z: 14.5 }, radius: 0.42, name: 'Sinh viên (NPC)' },
   { pos: { x: 42.3, z: 14.5 }, radius: 0.42, name: 'Sinh viên (NPC)' },

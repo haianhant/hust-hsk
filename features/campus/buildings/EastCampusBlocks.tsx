@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { EAST_CAMPUS_BLOCKS, SOICT_B1 } from '../world-data';
+import { ExtrudedText3D } from '../../../components/three/Signage3D';
 import { LabelPlane } from '../../../components/three/TextPlate';
 
 const GLASS_DARK = '#27445C';
@@ -114,24 +115,19 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
             );
           }),
         )}
-        {/* Biển chữ nổi "B1" màu xanh dương đậm (#1D4E9E) trên đỉnh cánh 8 tầng (b1-soict-01.jpg, b1-soict-03.jpg) */}
-        <LabelPlane
-          textureKey="soict-b1-top-blue-code"
-          canvasW={256}
-          canvasH={160}
-          draw={(ctx, w, h) => {
-            ctx.clearRect(0, 0, w, h);
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.font = '700 120px "Be Vietnam Pro", "Segoe UI", Roboto, "Noto Sans", sans-serif';
-            ctx.lineWidth = 6;
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.strokeText('B1', w / 2, h / 2);
-            ctx.fillStyle = '#1D4E9E';
-            ctx.fillText('B1', w / 2, h / 2);
-          }}
-          size={[2.3, 1.45]}
-          position={[-3.2, h8 - 1.5, 2.16]}
+        {/* Biển chữ nổi 3D khối đặc "B1" màu xanh dương đậm (#1D4E9E, dày 0.20m) trên đỉnh cánh 8 tầng (b1-soict-01.jpg) */}
+        <ExtrudedText3D
+          text="B1"
+          size={[2.25, 1.38]}
+          depth={0.2}
+          position={[-3.2, h8 - 1.5, 2.22]}
+          frontColor="#1D4E9E"
+          frontHighlightColor="#3B82F6"
+          sideColor="#0F295C"
+          metalness={0.48}
+          roughness={0.32}
+          emissive="#1E40AF"
+          emissiveIntensity={isNight ? 0.35 : 0.08}
         />
       </group>
 

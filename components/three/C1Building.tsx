@@ -32,7 +32,8 @@ import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { C1, C1_BENCHES } from '../../lib/campus';
 import type { TimeOfDay } from '../../lib/playerState';
-import { LabelPlane, drawC1Label } from './TextPlate';
+import { ExtrudedText3D, FramedSignBox3D } from './Signage3D';
+import { LabelPlane } from './TextPlate';
 import {
   makeGraniteStoneTexture,
   makeWeatheredConcreteTexture,
@@ -708,17 +709,17 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       });
     }
 
-    // --- Sân: bệ sảnh đặc (cao 0,75 m) + lề bồn cỏ --------------------------
+    // --- Sân: bệ sảnh đặc (cao 0,75 m) + 2 bồn cỏ mở rộng khoảng cách tạo Quảng trường C1 rộng 20,8 m ở giữa ---
     stone.push({ w: 12, h: 0.75, d: 4.95, x: CX, y: 0.375, z: -48.775 });
-    for (const bed of [{ cx: -69.5 }, { cx: -46.5 }]) {
-      stone.push({ w: 11.3, h: 0.18, d: 0.15, x: bed.cx, y: 0.09, z: -43.075 });
-      stone.push({ w: 11.3, h: 0.18, d: 0.15, x: bed.cx, y: 0.09, z: -30.925 });
-      stone.push({ w: 0.15, h: 0.18, d: 12.0, x: bed.cx - 5.575, y: 0.09, z: -37 });
-      stone.push({ w: 0.15, h: 0.18, d: 12.0, x: bed.cx + 5.575, y: 0.09, z: -37 });
-      green.push({ w: 11, h: 0.12, d: 12, x: bed.cx, y: 0.06, z: -37 });
+    for (const bed of [{ cx: -73.2 }, { cx: -42.8 }]) {
+      stone.push({ w: 9.9, h: 0.18, d: 0.15, x: bed.cx, y: 0.09, z: -43.075 });
+      stone.push({ w: 9.9, h: 0.18, d: 0.15, x: bed.cx, y: 0.09, z: -30.925 });
+      stone.push({ w: 0.15, h: 0.18, d: 12.0, x: bed.cx - 4.875, y: 0.09, z: -37 });
+      stone.push({ w: 0.15, h: 0.18, d: 12.0, x: bed.cx + 4.875, y: 0.09, z: -37 });
+      green.push({ w: 9.6, h: 0.12, d: 12, x: bed.cx, y: 0.06, z: -37 });
     }
-    // Hoa giấy dọc mép trong hai bồn cỏ (không chắn trục lối vào).
-    for (const fx of [-64.8, -51.2]) {
+    // Hoa giấy dọc mép trong hai bồn cỏ (không chắn trục quảng trường rộng ở giữa).
+    for (const fx of [-68.6, -47.4]) {
       for (let i = 0; i < 7; i++) {
         const fz = -42 + i * 1.5;
         pink.push({ w: 0.24, h: 0.2, d: 0.24, x: fx, y: 0.32, z: fz });
@@ -866,18 +867,25 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         <meshStandardMaterial color={FLOWER_PINK} roughness={1} />
       </mesh>
 
-      {/* Đường lát dẫn vào sảnh (mặt trên y = 0,05, cao hơn sàn quảng
-          trường 0,035 m — không trùng mặt). */}
-      <mesh position={[CX, 0.03, -35.9]} receiveShadow>
-        <boxGeometry args={[8, 0.04, 15.8]} />
+      {/* Trục sân lát đá nghi lễ trung tâm rộng 16,8 m của Quảng trường C1 (mặt trên y = 0,045,
+          ôm trọn Đài phun nước lớn & cụm chữ I ❤ BK, cao hơn sàn quảng trường 0,03 m — không z-fighting). */}
+      <mesh position={[CX, 0.028, -34.2]} receiveShadow>
+        <boxGeometry args={[16.8, 0.034, 20.6]} />
         <meshStandardMaterial
           color={PATH_STONE}
           map={granitePbr.map}
           bumpMap={granitePbr.bumpMap}
           bumpScale={0.008}
-          roughness={0.88}
+          roughness={0.86}
         />
       </mesh>
+      {/* Đường viền đá sáng hai mép trục chính Quảng trường C1 */}
+      {[-8.55, 8.55].map((bx, idx) => (
+        <mesh key={`c1-promenade-border-${idx}`} position={[CX + bx, 0.032, -34.2]} receiveShadow>
+          <boxGeometry args={[0.3, 0.038, 20.6]} />
+          <meshStandardMaterial color="#DFDCD3" roughness={0.82} />
+        </mesh>
+      ))}
 
       {/* Mái 9 vòm nông — đúng 9 nhịp, mỗi vòm cao 0,5 m, vỏ dày 0,28 m. */}
       {Array.from({ length: C1.waves }).map((_, i) => (
@@ -959,45 +967,47 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         />
       </group>
 
-      {/* Logo chính thức ĐHBK Hà Nội (/images/hust-logo.png, tỉ lệ 2:3) trên mảng tường đặc + chữ "C1" */}
+      {/* Logo chính thức ĐHBK Hà Nội (/images/hust-logo.png, tỉ lệ 2:3) trên mảng tường đặc + chữ nổi 3D "C1" */}
       <HustOfficialLogoPlaque
         size={[3.5, 5.25]}
         position={[-50.1, 8.35, SOUTH_Z + 0.09]}
         isNight={isNight}
       />
-      <LabelPlane
-        textureKey="c1-label"
-        canvasW={256}
-        canvasH={256}
-        draw={drawC1Label}
-        size={[1.3, 1.3]}
-        position={[-48.6, 2.0, SOUTH_Z + 0.08]}
+      <ExtrudedText3D
+        text="C1"
+        size={[1.38, 0.96]}
+        depth={0.16}
+        position={[-48.6, 2.02, SOUTH_Z + 0.1]}
+        frontColor="#C86D2D"
+        frontHighlightColor="#F59E0B"
+        sideColor="#6B3410"
+        metalness={0.68}
+        roughness={0.3}
       />
 
-      {/* Mặt Bắc Tòa C1 (nhìn ra Cổng Số 1 Đại Cồ Việt): Dải chữ nổi ĐẠI HỌC BÁCH KHOA HÀ NỘI & mái hiên Bắc */}
-      <LabelPlane
-        textureKey="c1-north-title"
+      {/* Mặt Bắc Tòa C1 (nhìn ra Cổng Số 1 Đại Cồ Việt): Biển hộp 3D ĐẠI HỌC BÁCH KHOA HÀ NỘI & mái hiên Bắc */}
+      <FramedSignBox3D
         canvasW={1024}
         canvasH={160}
         draw={(ctx, w, h) => {
           ctx.fillStyle = '#B81D24';
           ctx.fillRect(0, 0, w, h);
-          ctx.strokeStyle = '#FFD166';
-          ctx.lineWidth = 6;
-          ctx.strokeRect(8, 8, w - 16, h - 16);
           ctx.fillStyle = '#FFFFFF';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.font = '900 44px Arial, sans-serif';
+          ctx.font = '700 44px Arial, sans-serif';
           ctx.fillText('ĐẠI HỌC BÁCH KHOA HÀ NỘI', w / 2, h * 0.38);
           ctx.fillStyle = '#FFD966';
           ctx.font = '700 26px Arial, sans-serif';
           ctx.fillText('HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY · NHÀ C1', w / 2, h * 0.75);
         }}
         size={[13.5, 1.4]}
-        position={[CX, 13.4, NORTH_Z - 0.06]}
+        depth={0.14}
+        boxColor="#7F1D1D"
+        frameColor="#FFD166"
+        position={[CX, 13.4, NORTH_Z - 0.1]}
         rotation={[0, Math.PI, 0]}
-        transparent={false}
+        isNight={isNight}
       />
       <mesh position={[CX, 3.65, NORTH_Z - 0.9]} castShadow>
         <boxGeometry args={[9.2, 0.28, 1.8]} />
@@ -1022,15 +1032,15 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       {/* Sân C1: 2 cây Lipa, đèn sân phát sáng ban đêm, ghế gỗ có vân gỗ, chậu hoa. */}
       <LocalTree x={C1.lipaTrees[0].x} z={C1.lipaTrees[0].z} canopyColor="#5A7D2A" />
       <LocalTree x={C1.lipaTrees[1].x} z={C1.lipaTrees[1].z} canopyColor="#D9A419" />
-      <LocalLamp x={-72.5} z={-30} isNight={isNight} />
-      <LocalLamp x={-40} z={-30} isNight={isNight} />
-      <LocalLamp x={-76} z={-44} isNight={isNight} />
-      <LocalLamp x={-40} z={-44} isNight={isNight} />
+      <LocalLamp x={-76.5} z={-30} isNight={isNight} />
+      <LocalLamp x={-39.5} z={-30} isNight={isNight} />
+      <LocalLamp x={-77.5} z={-44} isNight={isNight} />
+      <LocalLamp x={-38.5} z={-44} isNight={isNight} />
       {C1_BENCHES.map((b, i) => (
         <LocalBench key={`c1-bench-${i}`} x={b.x} z={b.z} woodTex={woodTex} />
       ))}
-      <LocalFlowerPot x={-65} z={-45.5} />
-      <LocalFlowerPot x={-51} z={-45.5} />
+      <LocalFlowerPot x={-67.8} z={-45.5} />
+      <LocalFlowerPot x={-48.2} z={-45.5} />
       <LocalFlowerPot x={-80} z={-51.2} />
       <LocalFlowerPot x={-70} z={-51.2} />
       <LocalFlowerPot x={-40.5} z={-51.2} />

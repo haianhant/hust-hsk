@@ -454,67 +454,178 @@ export function WhiteRock() {
 }
 
 export function C1Fountain({ isNight = false }: { isNight?: boolean }) {
-  const sprayRef = useRef<THREE.Group>(null!);
+  const centerPlumeRef = useRef<THREE.Group>(null!);
+  const outerRingRef = useRef<THREE.Group>(null!);
   useFrame((state) => {
-    if (!sprayRef.current) return;
     const t = state.clock.elapsedTime;
-    sprayRef.current.scale.y = 0.92 + Math.sin(t * 4.2) * 0.08;
-    sprayRef.current.rotation.y = t * 0.6;
+    if (centerPlumeRef.current) {
+      centerPlumeRef.current.scale.y = 0.94 + Math.sin(t * 4.4) * 0.08;
+      centerPlumeRef.current.rotation.y = t * 0.55;
+    }
+    if (outerRingRef.current) {
+      outerRingRef.current.scale.y = 0.95 + Math.cos(t * 3.6) * 0.06;
+    }
   });
 
-  // Đặt chính tâm trục đối xứng Quảng trường C1 (-58, -31.2) giữa I ❤ BK và Khối đá trắng theo đúng https://hustmap.com/
+  const basinW = C1_FOUNTAIN.size.x; // 9.6 m
+  const basinD = C1_FOUNTAIN.size.z; // 5.6 m
+
+  // Đặt chính tâm trục đối xứng Quảng trường C1 (-58, -30.8) giữa I ❤ BK và Khối đá trắng theo đúng https://hustmap.com/
   return (
     <group position={[C1_FOUNTAIN.center.x, 0, C1_FOUNTAIN.center.z]}>
-      {/* Bậc chân đế granite bao quanh bể phun nước */}
-      <mesh position={[0, 0.05, 0]} receiveShadow>
-        <boxGeometry args={[5.35, 0.1, 3.05]} />
-        <meshStandardMaterial color="#9E9B91" roughness={0.86} />
+      {/* Thảm đá hoa cương hai tông màu trải rộng dưới chân đài phun nước (11,0 × 7,0 m) */}
+      <mesh position={[0, 0.036, 0]} receiveShadow>
+        <boxGeometry args={[basinW + 1.4, 0.018, basinD + 1.4]} />
+        <meshStandardMaterial color="#8E8B82" roughness={0.84} />
       </mesh>
-      {/* Thành bể đá hình chữ nhật 4.9 × 2.65 m */}
-      <mesh position={[0, 0.22, 0]} castShadow receiveShadow>
-        <boxGeometry args={[4.9, 0.36, 2.65]} />
-        <meshStandardMaterial color="#B5B2A8" roughness={0.82} />
+      {/* Bậc tam cấp chân đế granite bao quanh bể phun nước cỡ lớn (10,4 × 6,4 m) */}
+      <mesh position={[0, 0.065, 0]} receiveShadow>
+        <boxGeometry args={[basinW + 0.8, 0.13, basinD + 0.8]} />
+        <meshStandardMaterial color="#A39F95" roughness={0.84} />
       </mesh>
-      {/* Lòng nước xanh ngọc trong suốt (phát sáng dịu vào ban đêm) */}
-      <mesh position={[0, 0.35, 0]} receiveShadow>
-        <boxGeometry args={[4.38, 0.12, 2.15]} />
+      {/* Thành bể đá granite dày dặn 9,6 × 5,6 m + gờ đá ngồi bo viền rộng (coping ledge) */}
+      <mesh position={[0, 0.27, 0]} castShadow receiveShadow>
+        <boxGeometry args={[basinW, 0.42, basinD]} />
+        <meshStandardMaterial color="#B8B4AA" roughness={0.78} />
+      </mesh>
+      {/* Gờ viền thành bể đua nhẹ (9,88 × 5,88 m) chia 4 cạnh bao quanh lòng nước */}
+      {[
+        { p: [0, 0.49, -(basinD * 0.5 - 0.18)] as [number, number, number], s: [basinW + 0.28, 0.08, 0.48] as [number, number, number] },
+        { p: [0, 0.49, basinD * 0.5 - 0.18] as [number, number, number], s: [basinW + 0.28, 0.08, 0.48] as [number, number, number] },
+        { p: [-(basinW * 0.5 - 0.18), 0.49, 0] as [number, number, number], s: [0.48, 0.08, basinD - 0.56] as [number, number, number] },
+        { p: [basinW * 0.5 - 0.18, 0.49, 0] as [number, number, number], s: [0.48, 0.08, basinD - 0.56] as [number, number, number] },
+      ].map((rim, rIdx) => (
+        <mesh key={`fountain-coping-${rIdx}`} position={rim.p} castShadow receiveShadow>
+          <boxGeometry args={rim.s} />
+          <meshStandardMaterial color="#D4D1C7" roughness={0.68} />
+        </mesh>
+      ))}
+      {/* 4 trụ đá trang trí ở 4 góc bể lớn */}
+      {[-1, 1].map((sx) =>
+        [-1, 1].map((sz) => (
+          <mesh
+            key={`fountain-pier-${sx}-${sz}`}
+            position={[sx * (basinW * 0.5 - 0.18), 0.34, sz * (basinD * 0.5 - 0.18)]}
+            castShadow
+          >
+            <boxGeometry args={[0.64, 0.48, 0.64]} />
+            <meshStandardMaterial color="#C8C4BA" roughness={0.72} />
+          </mesh>
+        )),
+      )}
+
+      {/* Lòng nước xanh ngọc bích rộng lớn (8,76 × 4,76 m — phát sáng lung linh vào ban đêm) */}
+      <mesh position={[0, 0.43, 0]} receiveShadow>
+        <boxGeometry args={[basinW - 0.84, 0.14, basinD - 0.84]} />
         <meshStandardMaterial
-          color={isNight ? '#38BDF8' : '#2C6E7A'}
-          emissive={isNight ? '#0284C7' : '#000000'}
-          emissiveIntensity={isNight ? 0.55 : 0}
-          roughness={0.2}
-          metalness={0.14}
+          color={isNight ? '#38BDF8' : '#1F7A8C'}
+          emissive={isNight ? '#0284C7' : '#0E4D5C'}
+          emissiveIntensity={isNight ? 0.72 : 0.15}
+          roughness={0.14}
+          metalness={0.22}
         />
       </mesh>
-      {/* Tháp phun nước đá 2 tầng ở giữa bể */}
-      <mesh position={[0, 0.56, 0]} castShadow>
-        <cylinderGeometry args={[0.38, 0.48, 0.45, 16]} />
-        <meshStandardMaterial color="#D8D5CC" roughness={0.75} />
-      </mesh>
-      <mesh position={[0, 0.86, 0]} castShadow>
-        <cylinderGeometry args={[0.72, 0.28, 0.18, 18]} />
-        <meshStandardMaterial color="#E5E2D9" roughness={0.7} />
-      </mesh>
-      <mesh position={[0, 1.09, 0]} castShadow>
-        <cylinderGeometry args={[0.14, 0.2, 0.35, 14]} />
-        <meshStandardMaterial color="#D8D5CC" roughness={0.75} />
-      </mesh>
-      {/* Tia nước phun trắng bạc chuyển động */}
-      <group ref={sprayRef} position={[0, 1.26, 0]}>
-        <mesh position={[0, 0.32, 0]}>
-          <coneGeometry args={[0.36, 0.68, 16, 1, true]} />
-          <meshStandardMaterial color="#E6F7FF" transparent opacity={0.55} roughness={0.2} side={THREE.DoubleSide} />
+      {/* Các vòng gợn sóng nước trắng mảnh quanh chân tia phun */}
+      {[1.15, 2.05, 3.05].map((rr, idx) => (
+        <mesh key={`fountain-ripple-${idx}`} position={[0, 0.506, 0]} rotation-x={-Math.PI / 2}>
+          <ringGeometry args={[rr - 0.05, rr, 36]} />
+          <meshBasicMaterial color="#E0F7FF" transparent opacity={0.34 - idx * 0.07} />
         </mesh>
-        {[0, 1, 2, 3, 4, 5].map((k) => {
-          const ang = (k / 6) * Math.PI * 2;
+      ))}
+
+      {/* Cụm đài đá điêu khắc 3 tầng đồ sộ ở chính tâm bể */}
+      <mesh position={[0, 0.62, 0]} castShadow>
+        <cylinderGeometry args={[1.28, 1.52, 0.36, 24]} />
+        <meshStandardMaterial color="#CFCBC0" roughness={0.72} />
+      </mesh>
+      <mesh position={[0, 0.96, 0]} castShadow>
+        <cylinderGeometry args={[0.62, 0.78, 0.48, 20]} />
+        <meshStandardMaterial color="#DDD9CE" roughness={0.68} />
+      </mesh>
+      {/* Đĩa tràn nước tầng giữa đường kính 2,3 m */}
+      <mesh position={[0, 1.28, 0]} castShadow>
+        <cylinderGeometry args={[1.15, 0.48, 0.24, 24]} />
+        <meshStandardMaterial color="#EAE6DC" roughness={0.62} />
+      </mesh>
+      {/* Màn nước đổ tràn quanh đĩa tầng giữa */}
+      <mesh position={[0, 0.88, 0]}>
+        <cylinderGeometry args={[1.12, 1.2, 0.72, 24, 1, true]} />
+        <meshStandardMaterial
+          color="#E0F7FF"
+          transparent
+          opacity={0.36}
+          roughness={0.15}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* Tháp vòi phun đỉnh trung tâm */}
+      <mesh position={[0, 1.58, 0]} castShadow>
+        <cylinderGeometry args={[0.24, 0.36, 0.44, 18]} />
+        <meshStandardMaterial color="#DFDBD0" roughness={0.65} />
+      </mesh>
+      <mesh position={[0, 1.84, 0]}>
+        <cylinderGeometry args={[0.1, 0.16, 0.14, 14]} />
+        <meshStandardMaterial color="#B45309" metalness={0.72} roughness={0.28} />
+      </mesh>
+
+      {/* Vòng ngoài 12 vòi phun đồng & tia nước cầu vồng hướng từ mép bể vào tâm */}
+      <group ref={outerRingRef} position={[0, 0.52, 0]}>
+        {Array.from({ length: 12 }, (_, k) => {
+          const ang = (k / 12) * Math.PI * 2;
+          const rx = Math.cos(ang) * 3.55;
+          const rz = Math.sin(ang) * 1.88;
+          const inwardYaw = Math.atan2(-rx, -rz);
+          return (
+            <group key={`outer-jet-${k}`} position={[rx, 0, rz]} rotation={[0, inwardYaw, 0]}>
+              {/* Đầu vòi phun đồng + đèn âm nước LED */}
+              <mesh position={[0, 0.02, 0]}>
+                <cylinderGeometry args={[0.055, 0.075, 0.1, 10]} />
+                <meshStandardMaterial
+                  color={isNight ? '#FDE047' : '#B45309'}
+                  emissive={isNight ? '#FACC15' : '#000000'}
+                  emissiveIntensity={isNight ? 1.2 : 0}
+                  metalness={0.65}
+                  roughness={0.3}
+                />
+              </mesh>
+              {/* Tia nước vồng parabol phun cao vào đĩa trung tâm */}
+              <mesh position={[0, 0.56, 0.52]} rotation={[0.68, 0, 0]}>
+                <cylinderGeometry args={[0.024, 0.052, 1.42, 8]} />
+                <meshStandardMaterial color="#F0FAFF" transparent opacity={0.66} roughness={0.16} />
+              </mesh>
+            </group>
+          );
+        })}
+      </group>
+
+      {/* Cột nước trung tâm cao 2,6 m & chùm 8 tia phun tầng 2 xoay nhẹ sinh động */}
+      <group ref={centerPlumeRef} position={[0, 1.9, 0]}>
+        <mesh position={[0, 0.52, 0]}>
+          <coneGeometry args={[0.52, 1.15, 18, 1, true]} />
+          <meshStandardMaterial
+            color="#E6F7FF"
+            emissive={isNight ? '#BAE6FD' : '#000000'}
+            emissiveIntensity={isNight ? 0.55 : 0}
+            transparent
+            opacity={0.62}
+            roughness={0.18}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        <mesh position={[0, 0.44, 0]}>
+          <cylinderGeometry args={[0.1, 0.22, 1.05, 12]} />
+          <meshStandardMaterial color="#FFFFFF" transparent opacity={0.78} roughness={0.15} />
+        </mesh>
+        {Array.from({ length: 8 }, (_, k) => {
+          const ang = (k / 8) * Math.PI * 2;
           return (
             <mesh
-              key={`jet-${k}`}
-              position={[Math.cos(ang) * 0.42, -0.08, Math.sin(ang) * 0.42]}
-              rotation={[0, -ang, 0.48]}
+              key={`upper-jet-${k}`}
+              position={[Math.cos(ang) * 0.58, -0.22, Math.sin(ang) * 0.58]}
+              rotation={[0, -ang, 0.52]}
             >
-              <cylinderGeometry args={[0.02, 0.04, 0.62, 8]} />
-              <meshStandardMaterial color="#F0FAFF" transparent opacity={0.62} roughness={0.2} />
+              <cylinderGeometry args={[0.025, 0.05, 0.88, 8]} />
+              <meshStandardMaterial color="#F0FAFF" transparent opacity={0.68} roughness={0.18} />
             </mesh>
           );
         })}
