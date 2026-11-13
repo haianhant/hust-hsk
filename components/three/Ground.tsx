@@ -50,24 +50,30 @@ const C1_JOINT_COLOR = '#B2ADA0';
 const C1_JOINT_Y = 0.025;
 const C1_JOINT_W = 0.08;
 const C1_JOINTS_X: Array<{ cz: number; len: number }> = [
-  { cz: -42, len: 48 }, { cz: -38, len: 48 }, { cz: -34, len: 48 }, { cz: -30, len: 48 }, { cz: -26.5, len: 48 },
+  { cz: -46, len: 51.6 },
+  { cz: -42, len: 51.6 },
+  { cz: -38, len: 51.6 },
+  { cz: -34, len: 51.6 },
+  { cz: -30, len: 51.6 },
+  { cz: -26, len: 51.6 },
 ];
 const C1_JOINTS_Z: Array<{ cx: number; len: number }> = [
-  { cx: -78, len: 20.2 }, { cx: -74, len: 20.2 }, { cx: -70, len: 20.2 },
-  { cx: -66, len: 20.2 }, { cx: -62, len: 20.2 }, { cx: -58, len: 20.2 },
-  { cx: -54, len: 20.2 }, { cx: -50, len: 20.2 }, { cx: -46, len: 20.2 },
-  { cx: -42, len: 20.2 }, { cx: -38, len: 20.2 },
+  { cx: -82, len: 25.2 }, { cx: -78, len: 25.2 }, { cx: -74, len: 25.2 },
+  { cx: -70, len: 25.2 }, { cx: -66, len: 25.2 }, { cx: -62, len: 25.2 },
+  { cx: -58, len: 25.2 }, { cx: -54, len: 25.2 }, { cx: -50, len: 25.2 },
+  { cx: -46, len: 25.2 }, { cx: -42, len: 25.2 }, { cx: -38, len: 25.2 },
+  { cx: -34, len: 25.2 },
 ];
 
 const GRASS_BED_COLOR = '#6B8F4E';
 const GRASS_BED_EDGE = '#B9B9B0';
 const C1_GRASS_BEDS: Array<{ cx: number; cz: number; w: number; d: number }> = [
-  // Cặp ô cỏ phía Bắc sát bậc thềm C1
-  { cx: -73, cz: -44, w: 14, d: 3 },
-  { cx: -43, cz: -44, w: 14, d: 3 },
-  // Cặp ô cỏ phía Nam hai bên Đài phun nước C1 (hoàn thiện 6 mảng cỏ đối xứng chuẩn https://hustmap.com/)
-  { cx: -69.5, cz: -27.5, w: 11, d: 3.1 },
-  { cx: -46.5, cz: -27.5, w: 11, d: 3.1 },
+  // Cặp ô cỏ phía Bắc hai bên bậc thềm C1 (mở rộng khoảng sân lát đá trung tâm rộng 20,8 m)
+  { cx: -74.45, cz: -46.0, w: 12.1, d: 2.8 },
+  { cx: -41.55, cz: -46.0, w: 12.1, d: 2.8 },
+  // Cặp ô cỏ phía Nam hai bên Đài phun nước lớn C1 (hoàn thiện 6 mảng cỏ đối xứng chuẩn https://hustmap.com/)
+  { cx: -73.2, cz: -26.8, w: 9.6, d: 3.2 },
+  { cx: -42.8, cz: -26.8, w: 9.6, d: 3.2 },
 ];
 
 // Lá vàng Lipa rụng quanh 2 cây cổ thụ sân C1 (reference-visual §2)

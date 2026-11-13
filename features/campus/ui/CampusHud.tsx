@@ -7,9 +7,11 @@
 // steering controls, Joystick, help overlay, and toast notification).
 // ---------------------------------------------------------------------------
 
+import { useState } from 'react';
 import CampusChat from '../../../components/ui/CampusChat';
 import Joystick from '../../../components/ui/Joystick';
 import Minimap from '../../../components/ui/Minimap';
+import { FAST_TRAVEL_DESTINATIONS } from '../../../lib/campus';
 import { formatCampusChannelLabel } from '../../../lib/gameModes';
 import type { Progress } from '../../../lib/learn/types';
 import type { MultiplayerSnapshot } from '../../../lib/multiplayer';
@@ -72,6 +74,56 @@ function StudyHudButton({
       ) : (
         '🍅 Tự học'
       )}
+    </button>
+  );
+}
+
+function MobileStudyMenuItem({
+  pomodoro,
+  onSelect,
+  onReconcileStudyAt,
+}: {
+  pomodoro?: PomodoroState;
+  onSelect: () => void;
+  onReconcileStudyAt?: (nowMs: number) => void;
+}) {
+  const fallbackPomodoro: PomodoroState = pomodoro ?? {
+    version: 1,
+    phase: 'idle',
+    running: false,
+    config: {
+      focusDurationMs: 25 * 60 * 1000,
+      shortBreakDurationMs: 5 * 60 * 1000,
+      longBreakDurationMs: 15 * 60 * 1000,
+      cyclesBeforeLongBreak: 4,
+    },
+    phaseStartedAtMs: null,
+    phaseEndsAtMs: null,
+    pausedRemainingMs: null,
+    completedFocusBlocks: 0,
+    totalFocusedMs: 0,
+  };
+  const { evaluation, displayRemainingMmSs } = usePomodoro(fallbackPomodoro, onReconcileStudyAt);
+  const hasActivePomodoro = evaluation.state.phase !== 'idle';
+
+  return (
+    <button
+      type="button"
+      data-testid="mobile-menu-study"
+      onClick={onSelect}
+      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+    >
+      <span className="flex items-center gap-2">
+        <span className="text-base leading-none">🍅</span>
+        <span>Tự học Pomodoro</span>
+      </span>
+      <span
+        className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+          hasActivePomodoro ? 'bg-[#A54432] text-white font-mono' : 'bg-emerald-600/80 text-white'
+        }`}
+      >
+        {hasActivePomodoro ? displayRemainingMmSs : 'Mở'}
+      </span>
     </button>
   );
 }
@@ -171,6 +223,7 @@ export function CampusHud({
   onDismissNoVoice,
   onSetPanel,
   onSetReReviewIds,
+  onFastTravel,
   onCycleTimeOfDay,
   onToggleLofi,
   onToggleOutfit,
@@ -183,23 +236,40 @@ export function CampusHud({
   onInteract,
   onSetHelpOpen,
 }: CampusHudProps) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileFastTravelExpanded, setMobileFastTravelExpanded] = useState(false);
   const hideNav = focusPolicy?.hideNavigationHud ?? false;
   const hideMove = focusPolicy?.hideMovementControls ?? false;
   const isMinimalHud = focusPolicy?.effectiveLevel === 'minimal-hud';
+  const hasMobileActiveIndicator = Boolean(
+    lofiPlaying || hskMode || (pomodoro && pomodoro.phase !== 'idle'),
+  );
 
   return (
     <div className="pointer-events-none absolute inset-0">
-      {/* Góc trên-trái: tên khu + điểm + tiến độ Check-in 9 tòa. */}
-      <div className="absolute left-3 top-3 flex flex-col gap-2">
-        <div className="w-fit rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm">
+      {/* Lớp nền chạm ngoài để đóng menu 3 gạch trên điện thoại */}
+      {mobileMenuOpen && (
+        <div
+          aria-hidden="true"
+          onClick={() => {
+            setMobileMenuOpen(false);
+            setMobileFastTravelExpanded(false);
+          }}
+          className="pointer-events-auto fixed inset-0 z-30 bg-black/20 sm:hidden"
+        />
+      )}
+
+      {/* Góc trên-trái: tên khu + điểm + tiến độ Check-in 9 tòa (thu gọn gọn gàng trên mobile, giữ nguyên desktop). */}
+      <div className="absolute left-3 top-3 flex max-w-[calc(100vw-80px)] flex-col gap-1.5 sm:max-w-none sm:gap-2">
+        <div className="w-fit max-w-full truncate rounded-full bg-black/50 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm sm:px-4 sm:py-2 sm:text-sm">
           {inClassroom
             ? '🎓 Giảng đường HSK · Tòa C7'
             : inLibraryLobby
               ? 'Sảnh Thư viện Tạ Quang Bửu'
               : zone}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="w-fit rounded-full bg-[#A54432]/90 px-4 py-1.5 text-sm font-bold text-white backdrop-blur-sm">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <div className="w-fit rounded-full bg-[#A54432]/90 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm sm:px-4 sm:py-1.5 sm:text-sm">
             ⭐ {progress?.points ?? 0} điểm
             {progress?.streak && progress.streak.count > 0 ? ` · 🔥 ${progress.streak.count} ngày` : ''}
           </div>
@@ -207,7 +277,7 @@ export function CampusHud({
             id="hud-checkin-badge"
             type="button"
             onClick={() => onOpenHandbook('lesson')}
-            className="pointer-events-auto w-fit rounded-full border border-amber-300/45 bg-slate-900/80 px-3.5 py-1.5 text-xs font-bold text-amber-200 shadow-md backdrop-blur-sm transition hover:bg-slate-800"
+            className="pointer-events-auto hidden w-fit rounded-full border border-amber-300/45 bg-slate-900/80 px-3.5 py-1.5 text-xs font-bold text-amber-200 shadow-md backdrop-blur-sm transition hover:bg-slate-800 sm:inline-flex"
           >
             📍 Check-in {checkedInCount}/{totalLandmarks} tòa
           </button>
@@ -301,11 +371,295 @@ export function CampusHud({
         )}
       </div>
 
-      {/* Góc trên-phải: minimap + tự học, xếp hạng, nhạc lofi, ngày/đêm, trang phục, sổ tay Check-in.
-          (Các nút Chọn bài / Loa / Tốc độ đọc chỉ xuất hiện khi ở trong Giảng đường Tòa C7). */}
-      <div className="absolute right-3 top-3 flex flex-col items-end gap-2 sm:flex-row-reverse sm:items-start">
+      {/* Góc trên-phải:
+          - Desktop (sm: trở lên): giữ nguyên 100% Minimap + hàng nút chức năng.
+          - Điện thoại (< sm): ẩn Minimap góc, gom toàn bộ tùy chọn vào 1 nút Menu 3 gạch (☰) gọn thoáng. */}
+      <div className="absolute right-3 top-3 z-40 flex flex-col items-end gap-2 sm:flex-row-reverse sm:items-start">
         {!inClassroom && !inLibraryLobby && !hideNav && <Minimap />}
-        <div className="pointer-events-auto flex max-w-[calc(100vw-260px)] flex-wrap justify-end gap-1.5">
+
+        {/* Nút Menu 3 gạch (☰) dành riêng cho điện thoại (< sm) */}
+        <div className="pointer-events-auto relative flex flex-col items-end sm:hidden">
+          <button
+            id="mobile-hud-menu-btn"
+            data-testid="mobile-hud-menu-btn"
+            type="button"
+            aria-label={mobileMenuOpen ? 'Đóng menu tùy chọn' : 'Mở menu tùy chọn'}
+            aria-expanded={mobileMenuOpen}
+            onClick={() => {
+              setMobileMenuOpen((v) => {
+                if (v) setMobileFastTravelExpanded(false);
+                return !v;
+              });
+            }}
+            className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-white/20 bg-slate-950/80 text-white shadow-xl backdrop-blur-md transition active:scale-95"
+          >
+            {mobileMenuOpen ? (
+              <span className="text-base font-bold leading-none">✕</span>
+            ) : (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                className="h-5 w-5"
+              >
+                <line x1="4" y1="6.5" x2="20" y2="6.5" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="17.5" x2="20" y2="17.5" />
+              </svg>
+            )}
+            {hasMobileActiveIndicator && !mobileMenuOpen && (
+              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-slate-950" />
+            )}
+          </button>
+
+          {mobileMenuOpen && (
+            <div
+              data-testid="mobile-hud-menu-drawer"
+              className="mt-2 flex max-h-[calc(100dvh-5rem)] w-[min(88vw,292px)] flex-col gap-1 overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/92 p-2 text-white shadow-2xl backdrop-blur-xl"
+            >
+              <div className="px-2.5 py-1 text-[10px] font-bold tracking-wider text-amber-300/90 uppercase">
+                Tiện ích Bách Khoa 3D
+              </div>
+
+              {onOpenStudyPanel && (
+                <MobileStudyMenuItem
+                  pomodoro={pomodoro}
+                  onReconcileStudyAt={onReconcileStudyAt}
+                  onSelect={() => {
+                    setMobileMenuOpen(false);
+                    onOpenStudyPanel();
+                  }}
+                />
+              )}
+
+              {onOpenLeaderboard && (
+                <button
+                  type="button"
+                  data-testid="mobile-menu-leaderboard"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenLeaderboard();
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">🏆</span>
+                    <span>Bảng xếp hạng giờ học</span>
+                  </span>
+                  <span className="text-white/50">›</span>
+                </button>
+              )}
+
+              {onToggleLofi && (
+                <button
+                  type="button"
+                  data-testid="mobile-menu-lofi"
+                  onClick={onToggleLofi}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">{lofiPlaying ? '🎵' : '🎧'}</span>
+                    <span>Nhạc Lofi Chill</span>
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                      lofiPlaying ? 'bg-amber-500 text-slate-950' : 'bg-white/10 text-white/75'
+                    }`}
+                  >
+                    {lofiPlaying ? 'Đang bật' : 'Tắt'}
+                  </span>
+                </button>
+              )}
+
+              {!hideNav && (
+                <button
+                  type="button"
+                  data-testid="mobile-menu-time"
+                  onClick={onCycleTimeOfDay}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">
+                      {timeOfDay === 'day' ? '☀️' : timeOfDay === 'sunset' ? '🌇' : '🌙'}
+                    </span>
+                    <span>Thời gian sân trường</span>
+                  </span>
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-mono text-amber-200">
+                    {timeOfDay === 'day' ? 'Ngày' : timeOfDay === 'sunset' ? 'Hoàng hôn' : 'Đêm'}
+                    {realClockText ? ` · ${realClockText}` : ''}
+                  </span>
+                </button>
+              )}
+
+              {!hideNav && (
+                <button
+                  type="button"
+                  data-testid="mobile-menu-outfit"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onToggleOutfit();
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">👕</span>
+                    <span>Nhân vật &amp; Trang phục</span>
+                  </span>
+                  <span className="text-white/50">›</span>
+                </button>
+              )}
+
+              {!inClassroom && !inLibraryLobby && !hideNav && (
+                <button
+                  type="button"
+                  data-testid="mobile-menu-map"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    window.dispatchEvent(new CustomEvent('hustverse:open-full-map'));
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">🗺️</span>
+                    <span>Bản đồ toàn cảnh Bách Khoa</span>
+                  </span>
+                  <span className="text-white/50">›</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                data-testid="mobile-menu-handbook"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenHandbook('lesson');
+                }}
+                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-base leading-none">📍</span>
+                  <span>Sổ tay &amp; Check-in</span>
+                </span>
+                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-200">
+                  {checkedInCount}/{totalLandmarks} tòa
+                </span>
+              </button>
+
+              {onToggleHskMode && (
+                <button
+                  type="button"
+                  data-testid="mobile-menu-hsk"
+                  onClick={onToggleHskMode}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">🇨🇳</span>
+                    <span>Chế độ HSK</span>
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                      hskMode ? 'bg-[#B5121B] text-white' : 'bg-white/10 text-white/75'
+                    }`}
+                  >
+                    {hskMode ? 'Đang bật' : 'Đang tắt'}
+                  </span>
+                </button>
+              )}
+
+              {!inClassroom && !inLibraryLobby && !hideNav && (
+                <div className="border-t border-white/10 pt-1">
+                  <button
+                    type="button"
+                    data-testid="mobile-menu-fast-travel-toggle"
+                    onClick={() => setMobileFastTravelExpanded((v) => !v)}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-sky-200 transition hover:bg-white/10"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="text-base leading-none">⚡</span>
+                      <span>Dịch chuyển nhanh</span>
+                    </span>
+                    <span className="text-xs text-white/60">
+                      {mobileFastTravelExpanded ? '▴' : '▾'}
+                    </span>
+                  </button>
+                  {mobileFastTravelExpanded && (
+                    <div className="mt-1 grid grid-cols-1 gap-1 px-1 pb-1">
+                      {FAST_TRAVEL_DESTINATIONS.map((dest) => (
+                        <button
+                          key={dest.id}
+                          type="button"
+                          onClick={() => {
+                            setMobileMenuOpen(false);
+                            setMobileFastTravelExpanded(false);
+                            onFastTravel(dest.id);
+                          }}
+                          className="flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5 text-left text-[11px] font-medium text-white/90 transition hover:bg-white/15"
+                        >
+                          <span>{dest.icon}</span>
+                          <span className="truncate">{dest.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {inClassroom && (
+                <div className="flex flex-col gap-1 border-t border-white/10 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onOpenLessons();
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl bg-[#B5121B]/90 px-3 py-2 text-left text-xs font-bold text-white"
+                  >
+                    <span>📚 Chọn bài HSK</span>
+                    <span>›</span>
+                  </button>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={onToggleSound}
+                      className="flex-1 rounded-xl bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white"
+                    >
+                      {soundOn ? '🔊 Bật tiếng' : '🔇 Tắt tiếng'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onCycleRate}
+                      className="flex-1 rounded-xl bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white"
+                    >
+                      Tốc độ {speechRate.toFixed(1)}×
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t border-white/10 pt-1">
+                <button
+                  type="button"
+                  data-testid="mobile-menu-safe-pos"
+                  onClick={() => {
+                    playerInput.resetToken += 1;
+                    setMobileMenuOpen(false);
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white/85 transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">🛟</span>
+                    <span>Về vị trí an toàn</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Cụm nút trên Desktop (sm:flex) — giữ nguyên không đổi */}
+        <div className="pointer-events-auto hidden max-w-[calc(100vw-260px)] flex-wrap justify-end gap-1.5 sm:flex">
           {onOpenStudyPanel && (
             <StudyHudButton
               pomodoro={pomodoro}
@@ -526,7 +880,7 @@ export function CampusHud({
           onClick={() => {
             playerInput.resetToken += 1;
           }}
-          className="pointer-events-auto rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="pointer-events-auto hidden rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-white sm:inline-flex"
         >
           Về vị trí an toàn
         </button>

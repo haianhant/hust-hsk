@@ -416,3 +416,27 @@ test('(10) yeucau4 — Divided 2-branch Trần Đại Nghĩa boulevard, merge ju
   // 5. Alumni House faces the merged boulevard North of Tien Lake
   assert.ok(ALUMNI_HOUSE.floors === 2 && ALUMNI_HOUSE.size.x > 9.5);
 });
+
+test('(11) yeucau5 — Widened C1 Plaza & enlarged Bách Khoa Fountain invariants', () => {
+  const { C1, C1_FOUNTAIN, I_LOVE_BK, WHITE_ROCK, AVATAR, resolveCollisions } = campusFacade;
+
+  // C1 Plaza is widened (>= 51m wide and >= 25m deep)
+  const plazaW = C1.plaza.maxX - C1.plaza.minX;
+  const plazaD = C1.plaza.maxZ - C1.plaza.minZ;
+  assert.ok(plazaW >= 51.0, `Expected C1.plaza width >= 51m, got ${plazaW}`);
+  assert.ok(plazaD >= 25.0, `Expected C1.plaza depth >= 25m, got ${plazaD}`);
+
+  // C1 Fountain is enlarged (>= 9.0m × 5.2m) and centered on C1 symmetry axis x = -58
+  const fountainW = C1_FOUNTAIN.box.maxX - C1_FOUNTAIN.box.minX;
+  const fountainD = C1_FOUNTAIN.box.maxZ - C1_FOUNTAIN.box.minZ;
+  assert.equal(C1_FOUNTAIN.center.x, -58);
+  assert.ok(fountainW >= 9.0, `Expected C1_FOUNTAIN width >= 9.0m, got ${fountainW}`);
+  assert.ok(fountainD >= 5.2, `Expected C1_FOUNTAIN depth >= 5.2m, got ${fountainD}`);
+  assert.ok(C1_FOUNTAIN.box.minZ > I_LOVE_BK.plinth.maxZ + 3.0);
+  assert.ok(C1_FOUNTAIN.box.maxZ < WHITE_ROCK.box.minZ - 3.0);
+
+  // Wide open pedestrian corridors around the fountain are completely collision-free
+  assert.equal(resolveCollisions({ x: -65.5, z: -31.0 }, AVATAR.radius).hit, null);
+  assert.equal(resolveCollisions({ x: -50.5, z: -31.0 }, AVATAR.radius).hit, null);
+  assert.equal(resolveCollisions({ x: -58.0, z: -36.4 }, AVATAR.radius).hit, null);
+});

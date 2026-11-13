@@ -30,6 +30,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { LIBRARY } from '../../lib/campus';
 import { playerState, type TimeOfDay } from '../../lib/playerState';
+import { ExtrudedText3D } from './Signage3D';
 import { LabelPlane, drawClockFace } from './TextPlate';
 import { makeGraniteStoneTexture, makeWeatheredConcreteTexture } from './materials';
 import { ImprovedTree } from './Trees';
@@ -881,16 +882,35 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
         </mesh>
       ))}
 
-      {/* ============ 5. BIỂN CHỮ VÀNG "THƯ VIỆN / TẠ QUANG BỬU" LỘ RÕ 100% TRÊN TRÁN TƯỜNG TRẮNG ============ */}
-      <LabelPlane
-        textureKey="library-name-two-line-v3"
-        canvasW={1024}
-        canvasH={300}
-        draw={drawLibraryNameTwoLine}
-        size={[5.6, 1.62]}
-        position={[32.95, 10.18, 19.26]}
-        rotation={[0, Math.PI, 0]}
-      />
+      {/* ============ 5. BIỂN CHỮ VÀNG ĐỒNG 3D KHỐI ĐẶC "THƯ VIỆN / TẠ QUANG BỬU" TRÊN TRÁN TƯỜNG TRẮNG ============ */}
+      <group position={[32.95, 10.18, 19.21]} rotation={[0, Math.PI, 0]}>
+        <ExtrudedText3D
+          text="THƯ VIỆN"
+          size={[2.65, 0.56]}
+          depth={0.16}
+          position={[-1.3, 0.46, 0]}
+          frontColor="#EAB308"
+          frontHighlightColor="#FEF08A"
+          sideColor="#784B08"
+          metalness={0.74}
+          roughness={0.26}
+          emissive="#CA8A04"
+          emissiveIntensity={isNight ? 0.35 : 0.08}
+        />
+        <ExtrudedText3D
+          text="TẠ QUANG BỬU"
+          size={[5.25, 0.78]}
+          depth={0.18}
+          position={[0, -0.34, 0]}
+          frontColor="#EAB308"
+          frontHighlightColor="#FEF08A"
+          sideColor="#784B08"
+          metalness={0.74}
+          roughness={0.26}
+          emissive="#CA8A04"
+          emissiveIntensity={isNight ? 0.35 : 0.08}
+        />
+      </group>
 
       {/* Diềm mái xanh dương đậm chia 2 nửa trái/phải chuẩn ảnh thu-vien-mat-tien-01.jpg & thu-vien-cao-nhin-cheo-01.jpg */}
       <mesh position={[32.92, 11.6, 23.08]} castShadow>

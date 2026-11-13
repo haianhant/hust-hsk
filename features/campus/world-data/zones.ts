@@ -46,7 +46,7 @@ export const ZONES: ZoneSpec[] = [
   { name: 'Nhà C2 (VP Đoàn - Đảng ủy)', center: { x: -83.6, z: -34.5 }, radius: 9.5 },
   { name: 'Bãi xe C1 – C2', center: { x: -86.2, z: -69.5 }, radius: 7.5 },
   { name: 'Bãi xe C9', center: { x: -47.8, z: -17.5 }, radius: 5.5 },
-  { name: 'Quảng trường C1', center: { x: -58, z: -38 }, radius: 19 },
+  { name: 'Quảng trường C1', center: { x: -58, z: -38.5 }, radius: 20.5 },
   { name: 'Quảng trường ngã 5', center: { x: -38, z: -16 }, radius: 10 },
   { name: 'Cụm Giảng đường C3 – C4 – C5 – C10', center: { x: -12, z: -50 }, radius: 22 },
   { name: 'Tổ hợp Tòa C7 & Cụm C6 – C15', center: { x: 73, z: -34 }, radius: 24 },

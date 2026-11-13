@@ -12,6 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { ImprovedTree } from './Trees';
+import { ExtrudedText3D, FramedSignBox3D } from './Signage3D';
 import { LabelPlane } from './TextPlate';
 import {
   BIKE_PARKING_SHED,
@@ -81,29 +82,28 @@ function D4ForeignLanguagesBuilding({ isNight }: { isNight: boolean }) {
           </mesh>
         )),
       )}
-      <LabelPlane
-        textureKey="bldg-sign-D4-lshape"
+      <FramedSignBox3D
         canvasW={512}
         canvasH={128}
         draw={(ctx, w, h) => {
           ctx.fillStyle = '#B81D24';
           ctx.fillRect(0, 0, w, h);
-          ctx.strokeStyle = '#F5C518';
-          ctx.lineWidth = 7;
-          ctx.strokeRect(6, 6, w - 12, h - 12);
           ctx.fillStyle = '#FFFFFF';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.font = '900 44px Arial, sans-serif';
+          ctx.font = '700 44px Arial, sans-serif';
           ctx.fillText('NHÀ D4 · VIỆN NGOẠI NGỮ', w / 2, h * 0.42);
           ctx.fillStyle = '#FFD166';
           ctx.font = '700 24px Arial, sans-serif';
           ctx.fillText('SCHOOL OF FOREIGN LANGUAGES · 外语学院', w / 2, h * 0.76);
         }}
         size={[4.2, 0.95]}
-        position={[-2.5, 9.2, 0.94]}
+        depth={0.1}
+        boxColor="#7F1D1D"
+        frameColor="#F5C518"
+        position={[-2.5, 9.2, 0.92]}
         rotation={[0, Math.PI, 0]}
-        transparent={false}
+        isNight={isNight}
       />
     </group>
   );
@@ -364,30 +364,19 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
         <boxGeometry args={[endBayW, b.h, b.d]} />
         <meshStandardMaterial color="#F8FAFC" roughness={0.8} />
       </mesh>
-      {/* Chữ nổi 3D màu than đậm "D3" / "D5" / "D7" / "D9" trên mảng tường trắng đầu Tây hướng Bắc (-Z)
+      {/* Chữ nổi 3D khối đặc màu than đậm "D3" / "D5" / "D7" / "D9" (dày 0.16m) trên mảng tường trắng đầu Tây hướng Bắc (-Z)
           (khớp góc trái ảnh `từ cuối 2 nhánh bên nhìn sang bên trái, cụm tòa D3,5,7,9.jpg`) */}
-      <LabelPlane
-        textureKey={`d-cluster-3d-code-${b.code}`}
-        canvasW={256}
-        canvasH={160}
-        draw={(ctx, w, h) => {
-          ctx.clearRect(0, 0, w, h);
-          ctx.save();
-          ctx.shadowColor = 'rgba(15, 23, 42, 0.5)';
-          ctx.shadowBlur = 5;
-          ctx.shadowOffsetX = 3;
-          ctx.shadowOffsetY = 4;
-          ctx.fillStyle = '#26292E';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.font = '900 122px "Be Vietnam Pro", Arial, sans-serif';
-          ctx.fillText(b.code, w / 2, h / 2 + 4);
-          ctx.restore();
-        }}
-        size={[1.65, 1.05]}
-        position={[-b.w / 2 + endBayW * 0.5, 6.45, frontZ - 0.05]}
+      <ExtrudedText3D
+        text={b.code}
+        size={[1.62, 0.98]}
+        depth={0.16}
+        position={[-b.w / 2 + endBayW * 0.5, 6.45, frontZ - 0.09]}
         rotation={[0, Math.PI, 0]}
-        transparent
+        frontColor="#26292E"
+        frontHighlightColor="#475569"
+        sideColor="#0F172A"
+        metalness={0.55}
+        roughness={0.35}
       />
       {/* Cửa sổ khung nhôm trắng + dàn nóng điều hòa gắn dọc mặt Tây (-X, sát trục đường x = 56.2) */}
       {[0, 1, 2, 3, 4].map((fl) =>

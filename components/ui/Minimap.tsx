@@ -409,7 +409,7 @@ export default function Minimap(_props?: { onFastTravel?: (destId: string) => vo
   mapScopeRef.current = mapScope;
   const headingRef = useRef(0);
 
-  // Phím M mở/đóng Bản đồ toàn cảnh Bách khoa
+  // Phím M hoặc sự kiện từ menu 3 gạch trên điện thoại mở/đóng Bản đồ toàn cảnh Bách khoa
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -418,8 +418,13 @@ export default function Minimap(_props?: { onFastTravel?: (destId: string) => vo
         setFullMapOpen((v) => !v);
       }
     };
+    const onOpenFullMap = () => setFullMapOpen(true);
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('hustverse:open-full-map', onOpenFullMap);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('hustverse:open-full-map', onOpenFullMap);
+    };
   }, []);
 
   // Cấu hình độ phân giải sắc nét (HiDPI) & vẽ tức thì khi mở modal hoặc đổi chế độ phóng lớn
@@ -463,7 +468,10 @@ export default function Minimap(_props?: { onFastTravel?: (destId: string) => vo
         lastPos = { ...playerState.pos };
       }
 
-      renderCampusMap(ctx, SIZE, PAD, headingRef.current, false, 'all');
+      // Trên điện thoại (< 640px) bản đồ góc ẩn đi để nhường diện tích màn hình, chỉ vẽ khi mở modal toàn cảnh
+      if (window.innerWidth >= 640) {
+        renderCampusMap(ctx, SIZE, PAD, headingRef.current, false, 'all');
+      }
 
       const fullCanvas = fullCanvasRef.current;
       if (fullCanvas) {
@@ -490,7 +498,8 @@ export default function Minimap(_props?: { onFastTravel?: (destId: string) => vo
       data-testid="minimap"
       className="pointer-events-auto relative flex flex-col items-end gap-1"
     >
-      <div className="relative">
+      {/* Ẩn bản đồ thu nhỏ trên điện thoại (< sm), giữ nguyên 100% trên desktop (sm:block) */}
+      <div className="relative hidden sm:block">
         <canvas
           ref={canvasRef}
           width={SIZE}
