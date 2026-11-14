@@ -1143,3 +1143,138 @@ export const CAMPUS_FOOTBALL_PITCH = {
   kickInteractRadius: 2.35,
   dribbleRadius: 0.95,
 } as const;
+
+// --- HUSTVerse Board Game Club & Phòng Sinh Hoạt Chung KTX (BG1) --------------
+// Đặt ở vịnh trống phía Tây Căng tin KTX B5-9 (giữa KTX B6 và KTX B7), quay mặt Đông
+// ra sân KTX — không phá bỏ hay dịch chuyển công trình KTX hiện có.
+
+export const BOARD_GAME_CLUB = {
+  code: 'CLB',
+  name: 'HUSTVerse Board Game Club',
+  subtitle: 'CLB BOARD GAME KTX · BÓNG ĐÊM KTX',
+  center: { x: 106.0, z: -55.0 },
+  size: { x: 6.4, z: 3.8 },
+  h: 3.4,
+  box: { minX: 102.8, maxX: 109.2, minZ: -56.9, maxZ: -53.1 },
+} as const;
+
+export const BOARD_GAME_CLUB_DOOR = {
+  pos: { x: 109.8, z: -55.0 },
+  triggerRadius: 2.4,
+  exitReturnPos: { x: 110.2, z: -55.0 },
+  exitReturnFacing: Math.PI / 2,
+  exitReturnYaw: -Math.PI / 2,
+} as const;
+
+export type BoardGameTableId = 'table-1' | 'table-2';
+
+export type BoardGameTableSpec = {
+  tableId: BoardGameTableId;
+  label: string;
+  center: Vec2;
+  width: number;
+  depth: number;
+  height: number;
+  box: AABB;
+};
+
+export type BoardGameSeatSpec = {
+  seatId: string;
+  tableId: BoardGameTableId;
+  tableLabel: string;
+  seatIndex: number;
+  label: string;
+  x: number;
+  z: number;
+  facing: number;
+  yaw: number;
+  seatY: number;
+  standPos: Vec2;
+};
+
+export const BOARD_GAME_LOUNGE = {
+  bounds: { minX: -7.0, maxX: 7.0, minZ: -5.2, maxZ: 5.2 },
+  wallBounds: { minX: -7.35, maxX: 7.35, minZ: -5.55, maxZ: 5.55, height: 3.6 },
+  spawn: { x: 0, z: 4.15 },
+  spawnFacing: Math.PI,
+  spawnYaw: 0,
+  exitDoorPos: { x: 0, z: 4.95 },
+  exitTriggerRadius: 1.7,
+  infoBoardPos: { x: 0, z: -4.85 },
+  infoTriggerRadius: 1.9,
+  shelfPos: { x: -5.6, z: -4.65 },
+  counterPos: { x: 5.4, z: -4.45 },
+  spectatorCorner: { x: 5.1, z: 3.2 },
+} as const;
+
+export const BOARD_GAME_TABLES: readonly BoardGameTableSpec[] = [
+  {
+    tableId: 'table-1',
+    label: 'Bàn Tây · Bóng Đêm KTX',
+    center: { x: -3.2, z: -0.4 },
+    width: 2.7,
+    depth: 1.55,
+    height: 0.76,
+    box: { minX: -4.55, maxX: -1.85, minZ: -1.175, maxZ: 0.375 },
+  },
+  {
+    tableId: 'table-2',
+    label: 'Bàn Đông · Bóng Đêm KTX',
+    center: { x: 3.2, z: -0.4 },
+    width: 2.7,
+    depth: 1.55,
+    height: 0.76,
+    box: { minX: 1.85, maxX: 4.55, minZ: -1.175, maxZ: 0.375 },
+  },
+] as const;
+
+function buildBoardGameSeatsForTable(table: BoardGameTableSpec): BoardGameSeatSpec[] {
+  const prefix = table.tableId === 'table-1' ? 'bg-t1' : 'bg-t2';
+  const cx = table.center.x;
+  const cz = table.center.z;
+  const offsets: Array<{
+    dx: number;
+    dz: number;
+    facing: number;
+    yaw: number;
+    standDx: number;
+    standDz: number;
+  }> = [
+    // Bắc: 0, 1, 2 (quay mặt về Nam hướng bàn)
+    { dx: -0.85, dz: -1.25, facing: 0, yaw: Math.PI, standDx: -0.85, standDz: -1.8 },
+    { dx: 0, dz: -1.25, facing: 0, yaw: Math.PI, standDx: 0, standDz: -1.8 },
+    { dx: 0.85, dz: -1.25, facing: 0, yaw: Math.PI, standDx: 0.85, standDz: -1.8 },
+    // Đầu Đông: 3 (quay mặt về Tây hướng bàn)
+    { dx: 1.82, dz: 0, facing: -Math.PI / 2, yaw: Math.PI / 2, standDx: 2.38, standDz: 0 },
+    // Nam: 4, 5, 6 (quay mặt về Bắc hướng bàn)
+    { dx: 0.85, dz: 1.25, facing: Math.PI, yaw: 0, standDx: 0.85, standDz: 1.8 },
+    { dx: 0, dz: 1.25, facing: Math.PI, yaw: 0, standDx: 0, standDz: 1.8 },
+    { dx: -0.85, dz: 1.25, facing: Math.PI, yaw: 0, standDx: -0.85, standDz: 1.8 },
+    // Đầu Tây: 7 (quay mặt về Đông hướng bàn)
+    { dx: -1.82, dz: 0, facing: Math.PI / 2, yaw: -Math.PI / 2, standDx: -2.38, standDz: 0 },
+  ];
+
+  return offsets.map((slot, seatIndex) => ({
+    seatId: `${prefix}-s${seatIndex}`,
+    tableId: table.tableId,
+    tableLabel: table.label,
+    seatIndex,
+    label: `Ghế ${seatIndex + 1} · ${table.tableId === 'table-1' ? 'Bàn 1' : 'Bàn 2'}`,
+    x: cx + slot.dx,
+    z: cz + slot.dz,
+    facing: slot.facing,
+    yaw: slot.yaw,
+    seatY: 0.45,
+    standPos: { x: cx + slot.standDx, z: cz + slot.standDz },
+  }));
+}
+
+export const BOARD_GAME_SEATS: readonly BoardGameSeatSpec[] = [
+  ...buildBoardGameSeatsForTable(BOARD_GAME_TABLES[0]),
+  ...buildBoardGameSeatsForTable(BOARD_GAME_TABLES[1]),
+];
+
+export function getBoardGameSeatById(seatId: string | null | undefined): BoardGameSeatSpec | undefined {
+  if (!seatId) return undefined;
+  return BOARD_GAME_SEATS.find((s) => s.seatId === seatId);
+}

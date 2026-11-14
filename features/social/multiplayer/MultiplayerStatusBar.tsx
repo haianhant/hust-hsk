@@ -47,7 +47,9 @@ export function useMultiplayerBridge(entered: boolean): MultiplayerSnapshot {
         ? 'classroom'
         : playerState.inLibraryLobby
           ? 'library'
-          : 'campus';
+          : playerState.inBoardGameClub
+            ? 'boardgame'
+            : 'campus';
       const libraryFloor = playerState.libraryFloor ?? 1;
       const seatedSeatId =
         scene === 'library' && playerState.seated ? playerState.seatId : null;

@@ -5,6 +5,10 @@
 // ---------------------------------------------------------------------------
 
 import {
+  BOARD_GAME_CLUB_DOOR,
+  BOARD_GAME_LOUNGE,
+  BOARD_GAME_SEATS,
+  type BoardGameSeatSpec,
   C7_DOOR,
   CAMPUS_DRINK_STALLS,
   CAMPUS_FOOTBALL_PITCH,
@@ -29,6 +33,27 @@ export type BkhnHook = {
   enterLibraryLobby?: () => void;
   exitLibraryLobby?: () => void;
   isInLibraryLobby?: () => boolean;
+  enterBoardGameClub?: () => void;
+  exitBoardGameClub?: () => void;
+  isInBoardGameClub?: () => boolean;
+  sitAtBoardGameSeat?: (seatId: string) => {
+    ok: boolean;
+    reason?: string;
+    seatId?: string;
+    tableId?: string;
+    label?: string;
+  };
+  standUpBoardGameSeat?: () => {
+    ok: boolean;
+    releasedSeatId?: string | null;
+    pos?: { x: number; z: number };
+  };
+  getBoardGameSeatState?: () => {
+    seated: boolean;
+    seatId: string | null;
+    tableId: string | null;
+    pos: { x: number; z: number };
+  };
   teleport: (x: number, z: number, yaw?: number, pitch?: number) => void;
   getPos: () => { x: number; z: number };
   getYaw?: () => number;
@@ -98,7 +123,10 @@ export interface InteractableDetectionInput {
   pos: { x: number; z: number };
   inClassroom: boolean;
   inLibraryLobby: boolean;
+  inBoardGameClub?: boolean;
   libraryFloor?: number;
+  boardGameSeatId?: string | null;
+  occupiedBoardGameSeatIds?: ReadonlySet<string>;
   bikeRiding: boolean;
   bikeSpeed: number;
   bikePos: { x: number; z: number };
@@ -153,6 +181,20 @@ export function isNearLibraryElevator(pos: { x: number; z: number }, libraryFloo
  *   4. Tương tác ngoài sân (`npc-minh`, `classroom-door`, `library-door`)
  *   5. Tương tác trong phòng học (`board`, `notebook`, `homework`)
  */
+export function findNearestBoardGameSeat(
+  pos: { x: number; z: number },
+  maxRadius = 1.45,
+): { seat: BoardGameSeatSpec; dist: number } | null {
+  let best: { seat: BoardGameSeatSpec; dist: number } | null = null;
+  for (const seat of BOARD_GAME_SEATS) {
+    const d = Math.hypot(pos.x - seat.x, pos.z - seat.z);
+    if (d <= maxRadius && (!best || d < best.dist)) {
+      best = { seat, dist: d };
+    }
+  }
+  return best;
+}
+
 export function findNearestInteractable(
   input: InteractableDetectionInput,
 ): DetectedInteractable | null {
@@ -160,6 +202,7 @@ export function findNearestInteractable(
     pos,
     inClassroom,
     inLibraryLobby,
+    inBoardGameClub = false,
     libraryFloor = 1,
     bikeRiding,
     bikeSpeed,
@@ -169,13 +212,42 @@ export function findNearestInteractable(
     anyQuestDone,
     stepId,
     seated = false,
+    boardGameSeatId = null,
     occupiedByOtherSeatIds,
+    occupiedBoardGameSeatIds,
     pendingSeatId = null,
     outdoorBenchId = null,
     footballPos = null,
     hskMode = true,
   } = input;
   const dist = (x: number, z: number) => Math.hypot(pos.x - x, pos.z - z);
+
+  if (inBoardGameClub) {
+    if (boardGameSeatId) {
+      return { id: 'bg-seat-stand-up', label: 'E — Đứng dậy khỏi bàn chơi' };
+    }
+    const nearBgSeat = findNearestBoardGameSeat(pos);
+    if (nearBgSeat) {
+      const sid = nearBgSeat.seat.seatId;
+      if (occupiedBoardGameSeatIds?.has(sid)) {
+        return {
+          id: `bg-seat:${sid}`,
+          label: '🔒 Ghế đang có người ngồi — hãy chọn ghế khác',
+        };
+      }
+      return {
+        id: `bg-seat:${sid}`,
+        label: `E — Ngồi vào ${nearBgSeat.seat.label}`,
+      };
+    }
+    if (dist(BOARD_GAME_LOUNGE.infoBoardPos.x, BOARD_GAME_LOUNGE.infoBoardPos.z) <= BOARD_GAME_LOUNGE.infoTriggerRadius) {
+      return { id: 'boardgame-info', label: 'E — Xem Bảng thông tin & Luật Bóng Đêm KTX' };
+    }
+    if (dist(BOARD_GAME_LOUNGE.exitDoorPos.x, BOARD_GAME_LOUNGE.exitDoorPos.z) <= BOARD_GAME_LOUNGE.exitTriggerRadius) {
+      return { id: 'boardgame-exit', label: 'E — Rời CLB Board Game ra sân KTX' };
+    }
+    return null;
+  }
 
   if (inLibraryLobby) {
     if (seated) {
@@ -273,6 +345,9 @@ export function findNearestInteractable(
     }
     if (dist(LIBRARY_DOOR.pos.x, LIBRARY_DOOR.pos.z) <= LIBRARY_DOOR.triggerRadius) {
       return { id: 'library-door', label: 'E — Vào sảnh Thư viện Tạ Quang Bửu' };
+    }
+    if (dist(BOARD_GAME_CLUB_DOOR.pos.x, BOARD_GAME_CLUB_DOOR.pos.z) <= BOARD_GAME_CLUB_DOOR.triggerRadius) {
+      return { id: 'boardgame-door', label: '🎲 Nhấn E — Vào CLB Board Game' };
     }
     if (dist(C7_DOOR.pos.x, C7_DOOR.pos.z) <= C7_DOOR.triggerRadius) {
       return {

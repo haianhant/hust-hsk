@@ -12,6 +12,7 @@ import { DORM_COMPLEX } from '../world-data';
 import { LabelPlane } from '../../../components/three/TextPlate';
 import { RoofSoffitAndPlinth, WindowGrid3D } from '../../../components/three/ArchitecturalWindowBand';
 import { getSharedBuildingPbrTextures } from '../../../components/three/materials';
+import BoardGameEntrance from '../../boardgame/world/BoardGameEntrance';
 
 type LaundryGeometryBundle = {
   shirt: THREE.BufferGeometry;
@@ -598,6 +599,9 @@ export function HustDormitoryZone({ isNight }: { isNight: boolean }) {
 
       {/* Cổng trụ gạch đỏ "HỘI SINH VIÊN" trước lối vào sân trong KTX B8 - B9 (ktx-02.jpg) */}
       <HoiSinhVienBrickGate x={95.8} z={-28.5} />
+
+      {/* Nhà CLB Board Game KTX — Bóng Đêm KTX (góc trống giữa B6 và B7, nhìn sang Căng tin B5-9) */}
+      <BoardGameEntrance isNight={isNight} />
 
       {/* Hai tòa KTX Mới 9 tầng phối ô cờ Xanh dương đậm - Xanh da trời - Trắng (B10 & B13 — ktx-03.jpg) */}
       {highRiseDorms.map((item) => (

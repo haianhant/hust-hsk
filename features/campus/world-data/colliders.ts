@@ -8,6 +8,8 @@ import type { AABB, Vec2 } from './bounds';
 import {
   ALUMNI_HOUSE,
   BIKE_PARKING_SHED,
+  BOARD_GAME_CLUB,
+  BOARD_GAME_TABLES,
   C1,
   C15_BUILDING,
   C1_FOUNTAIN,
@@ -173,6 +175,7 @@ export const BUILDING_COLLIDERS: NamedCollider[] = [
   { name: 'KTX B7', box: DORM_COMPLEX.b7Box },
   { name: 'KTX B7bis', box: DORM_COMPLEX.b7bisBox },
   { name: 'KTX B8 (VP Hội Sinh viên)', box: DORM_COMPLEX.b8Box },
+  { name: 'CLB Board Game KTX', box: BOARD_GAME_CLUB.box },
   { name: 'KTX B5', box: DORM_COMPLEX.b5Box },
   { name: 'Căng tin B5-9', box: DORM_COMPLEX.b59CanteenBox },
   { name: 'KTX B9', box: DORM_COMPLEX.b9Box },
@@ -366,4 +369,18 @@ export const NPC_CIRCLES: { pos: Vec2; radius: number; name?: string }[] = [
   { pos: { x: -27.38, z: 66.0 }, radius: 0.45, name: 'Sinh viên (NPC)' },
   // Bác bảo vệ Bách Khoa đứng trực gác cạnh phòng bảo vệ Cổng Trần Đại Nghĩa
   { pos: { x: 91.65, z: -12.25 }, radius: 0.45, name: 'Bác bảo vệ Bách Khoa' },
+];
+
+/** Collider nội thất Phòng Sinh Hoạt Chung CLB Board Game KTX. */
+export const BOARD_GAME_LOUNGE_COLLIDERS: NamedCollider[] = [
+  { name: 'Tường bắc CLB Board Game', box: { minX: -7.5, maxX: 7.5, minZ: -5.65, maxZ: -5.2 } },
+  { name: 'Tường nam CLB Board Game', box: { minX: -7.5, maxX: 7.5, minZ: 5.2, maxZ: 5.65 } },
+  { name: 'Tường tây CLB Board Game', box: { minX: -7.5, maxX: -7.0, minZ: -5.5, maxZ: 5.5 } },
+  { name: 'Tường đông CLB Board Game', box: { minX: 7.0, maxX: 7.5, minZ: -5.5, maxZ: 5.5 } },
+  { name: 'Bàn Board Game 1 (Tây)', box: BOARD_GAME_TABLES[0].box },
+  { name: 'Bàn Board Game 2 (Đông)', box: BOARD_GAME_TABLES[1].box },
+  { name: 'Tủ trò chơi CLB', box: { minX: -6.7, maxX: -4.45, minZ: -5.2, maxZ: -4.25 } },
+  { name: 'Bảng thông tin trận CLB', box: { minX: -1.45, maxX: 1.45, minZ: -5.25, maxZ: -4.7 } },
+  { name: 'Quầy nước CLB', box: { minX: 4.15, maxX: 6.65, minZ: -5.2, maxZ: -3.95 } },
+  { name: 'Ghế băng góc đứng xem CLB', box: { minX: 4.35, maxX: 6.25, minZ: 3.15, maxZ: 4.05 } },
 ];

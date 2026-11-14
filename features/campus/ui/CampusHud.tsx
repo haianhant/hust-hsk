@@ -131,6 +131,7 @@ function MobileStudyMenuItem({
 export interface CampusHudProps {
   inClassroom: boolean;
   inLibraryLobby: boolean;
+  inBoardGameClub?: boolean;
   seated?: boolean;
   activeSeatId?: string | null;
   activeSeatLabel?: string | null;
@@ -196,6 +197,7 @@ export interface CampusHudProps {
 export function CampusHud({
   inClassroom,
   inLibraryLobby,
+  inBoardGameClub = false,
   seated = false,
   activeSeatId = null,
   activeSeatLabel = null,
@@ -282,7 +284,9 @@ export function CampusHud({
             ? '🎓 Giảng đường HSK · Tòa C7'
             : inLibraryLobby
               ? 'Sảnh Thư viện Tạ Quang Bửu'
-              : zone}
+              : inBoardGameClub
+                ? '🎲 CLB Board Game KTX'
+                : zone}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <div className="w-fit rounded-full bg-[#A54432]/90 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm sm:px-4 sm:py-1.5 sm:text-sm">
@@ -357,7 +361,7 @@ export function CampusHud({
           </div>
         )}
         {/* Chip trạng thái đang ngồi ghế đá ngoài sân trường */}
-        {!inClassroom && !inLibraryLobby && outdoorBenchLabel && (
+        {!inClassroom && !inLibraryLobby && !inBoardGameClub && outdoorBenchLabel && (
           <div
             data-testid="hud-outdoor-bench-status"
             className="pointer-events-auto flex w-fit max-w-[92vw] flex-wrap items-center gap-2 rounded-2xl border border-emerald-300/40 bg-black/75 px-3.5 py-1.5 text-xs font-bold text-white shadow-xl backdrop-blur-sm"
@@ -409,7 +413,7 @@ export function CampusHud({
           - Desktop (sm: trở lên): giữ nguyên 100% Minimap + hàng nút chức năng.
           - Điện thoại (< sm): ẩn Minimap góc, gom toàn bộ tùy chọn vào 1 nút Menu 3 gạch (☰) gọn thoáng. */}
       <div className="absolute right-3 top-3 z-40 flex flex-col items-end gap-2 sm:flex-row-reverse sm:items-start">
-        {!inClassroom && !inLibraryLobby && !hideNav && <Minimap />}
+        {!inClassroom && !inLibraryLobby && !inBoardGameClub && !hideNav && <Minimap />}
 
         {/* Nút Menu 3 gạch (☰) dành riêng cho điện thoại (< sm) */}
         <div className="pointer-events-auto relative flex flex-col items-end sm:hidden">
@@ -627,7 +631,7 @@ export function CampusHud({
                 </button>
               )}
 
-              {!inClassroom && !inLibraryLobby && !hideNav && (
+              {!inClassroom && !inLibraryLobby && !inBoardGameClub && !hideNav && (
                 <button
                   type="button"
                   data-testid="mobile-menu-map"
@@ -684,7 +688,7 @@ export function CampusHud({
                 </button>
               )}
 
-              {!inClassroom && !inLibraryLobby && !hideNav && (
+              {!inClassroom && !inLibraryLobby && !inBoardGameClub && !hideNav && (
                 <div className="border-t border-white/10 pt-1">
                   <button
                     type="button"

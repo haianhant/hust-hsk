@@ -159,6 +159,7 @@ export const CAMPUS_MAP_BUILDINGS: CampusMapBuildingSpec[] = [
   { code: 'B8', label: 'KTX B8 (VP Hội Sinh viên)', box: DORM_COMPLEX.b8Box, kind: 'dorm' },
   { code: 'B5', label: 'KTX B5', box: DORM_COMPLEX.b5Box, kind: 'dorm' },
   { code: 'B5-9', label: 'Căng tin B5-9', box: DORM_COMPLEX.b59CanteenBox, kind: 'dorm' },
+  { code: 'CLB', label: 'CLB Board Game KTX', box: { minX: 102.8, maxX: 109.2, minZ: -56.9, maxZ: -53.1 }, kind: 'dorm' },
   { code: 'B9', label: 'KTX B9 (TT Quản lý KTX)', box: DORM_COMPLEX.b9Box, kind: 'dorm' },
   { code: 'TTPV', label: 'TT Phục vụ Tổng hợp BK', box: DORM_COMPLEX.serviceBox, kind: 'dorm' },
   { code: 'B13', label: 'KTX B13', box: DORM_COMPLEX.b13Box, kind: 'dorm' },

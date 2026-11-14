@@ -5,7 +5,7 @@
 // <Classroom/> thay cho Ground/Landmarks (+ NPC Minh chỉ ở campus).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
@@ -15,6 +15,9 @@ import Player from './Player';
 import RemotePlayers from './RemotePlayers';
 import Classroom, { type HomeworkState } from './Classroom';
 import LibraryLobby from './LibraryLobby';
+import type { BoardGameSeatOccupant } from '../../features/boardgame/world/BoardGameSeats';
+
+const BoardGameLounge = lazy(() => import('../../features/boardgame/world/BoardGameLounge'));
 import { MinhNpc } from './Npc';
 import BackgroundBuildings from './BackgroundBuildings';
 import CampusExpansion from './CampusExpansion';
@@ -61,13 +64,22 @@ function PhotoCaptureBridge() {
 export interface CampusSceneProps {
   inClassroom?: boolean;
   inLibraryLobby?: boolean;
+  inBoardGameClub?: boolean;
   activeSeatId?: string | null;
   nearestSeatId?: string | null;
+  boardGameSeatId?: string | null;
+  nearestBoardGameSeatId?: string | null;
+  boardGameOccupants?: readonly BoardGameSeatOccupant[];
+  boardGameLocalPlayerId?: string | null;
+  boardGameTable1Count?: number;
+  boardGameTable2Count?: number;
+  suspend3D?: boolean;
   timeOfDay?: TimeOfDay;
   hskMode?: boolean;
   notebookOpen?: boolean;
   homework?: HomeworkState;
   onObjectClick?: (id: string) => void;
+  onSelectBoardGameSeat?: (seatId: string) => void;
 }
 
 const ATMOSPHERE: Record<
@@ -650,13 +662,22 @@ function PlayerCenteredSunLight({
 export default function CampusScene({
   inClassroom = false,
   inLibraryLobby = false,
+  inBoardGameClub = false,
   activeSeatId = null,
   nearestSeatId = null,
+  boardGameSeatId = null,
+  nearestBoardGameSeatId = null,
+  boardGameOccupants = [],
+  boardGameLocalPlayerId = null,
+  boardGameTable1Count = 0,
+  boardGameTable2Count = 0,
+  suspend3D = false,
   timeOfDay = 'day',
   hskMode = false,
   notebookOpen = false,
   homework = 'desk',
   onObjectClick,
+  onSelectBoardGameSeat,
 }: CampusSceneProps) {
   const [libraryFloor, setLibraryFloor] = useState<number>(() => playerState.libraryFloor);
   useEffect(() => {
@@ -678,7 +699,7 @@ export default function CampusScene({
 
   const atm = ATMOSPHERE[timeOfDay] ?? ATMOSPHERE.day;
   const isOpenAirRooftop = inLibraryLobby && libraryFloor === 10;
-  const isIndoor = inClassroom || (inLibraryLobby && !isOpenAirRooftop);
+  const isIndoor = inClassroom || inBoardGameClub || (inLibraryLobby && !isOpenAirRooftop);
   const activeAtm = isIndoor ? (INDOOR_ATMOSPHERE[timeOfDay] ?? ATMOSPHERE.day) : atm;
 
   useEffect(() => {
@@ -690,6 +711,7 @@ export default function CampusScene({
   return (
     <Canvas
       shadows
+      frameloop={suspend3D ? 'demand' : 'always'}
       dpr={[1, 1.75]}
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.06 }}
       camera={{ fov: 55, near: 0.1, far: 600, position: [-70, 10, 26] }}
@@ -725,6 +747,19 @@ export default function CampusScene({
           timeOfDay={timeOfDay}
           onObjectClick={onObjectClick ?? (() => undefined)}
         />
+      ) : inBoardGameClub ? (
+        <Suspense fallback={null}>
+          <BoardGameLounge
+            timeOfDay={timeOfDay}
+            nearestSeatId={nearestBoardGameSeatId}
+            activeSeatId={boardGameSeatId}
+            occupants={boardGameOccupants}
+            localPlayerId={boardGameLocalPlayerId}
+            table1Count={boardGameTable1Count}
+            table2Count={boardGameTable2Count}
+            onSelectSeat={onSelectBoardGameSeat}
+          />
+        </Suspense>
       ) : inLibraryLobby ? (
         <>
           {isOpenAirRooftop && (
@@ -774,7 +809,15 @@ export default function CampusScene({
         </CampusTreeBatchProvider>
       )}
       <RemotePlayers
-        scene={inClassroom ? 'classroom' : inLibraryLobby ? 'library' : 'campus'}
+        scene={
+          inClassroom
+            ? 'classroom'
+            : inBoardGameClub
+              ? 'boardgame'
+              : inLibraryLobby
+                ? 'library'
+                : 'campus'
+        }
       />
       <Player />
       <PhotoCaptureBridge />

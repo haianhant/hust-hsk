@@ -46,6 +46,8 @@ import {
   BIKE_MAX_SPEED,
   BIKE_PARK,
   BIKE_RADIUS,
+  BOARD_GAME_CLUB_DOOR,
+  BOARD_GAME_LOUNGE,
   BUILDING_COLLIDERS,
   CAMPUS_PILLAR_CIRCLES,
   C7_DOOR,
@@ -58,10 +60,12 @@ import {
   ROADS,
   SPAWN,
   findFreeSpotNear,
+  getBoardGameSeatById,
   getCampusGroundElevation,
   nearestRoadPoint,
   pushOutOfCircle,
   resolveBikeCollisions,
+  resolveBoardGameLoungeCollisions,
   resolveClassroomCollisions,
   resolveCollisions,
   resolveLibraryLobbyCollisions,
@@ -79,8 +83,13 @@ import {
   type LibraryFloor,
   type LibrarySpatialDiagnostics,
   type OutdoorBenchSpec,
+  type BoardGameSeatSpec,
   type Vec2,
 } from '../../lib/campus';
+import {
+  BOARD_GAME_CAMERA_LIMITS,
+  clampBoardGameLoungeCamera,
+} from '../../features/boardgame/world/BoardGameCamera';
 import { activeWalkingStudentPositions } from './AmbientLife';
 import { remoteRenderPos } from './RemotePlayers';
 import {
@@ -325,6 +334,12 @@ export default function Player() {
   );
   const outdoorBenchRef = useRef<OutdoorBenchSpec | null>(null);
   const [isOutdoorSeated, setIsOutdoorSeated] = useState<boolean>(Boolean(playerState.outdoorBenchId));
+  const boardGameSeatRef = useRef<BoardGameSeatSpec | null>(
+    getBoardGameSeatById(playerState.boardGameSeatId) ?? null,
+  );
+  const [isBoardGameSeated, setIsBoardGameSeated] = useState<boolean>(
+    Boolean(playerState.boardGameSeatId),
+  );
 
   const syncSeatingToPlayerState = (nextState: LocalSeatingState) => {
     seatingStateRef.current = nextState;
@@ -438,6 +453,18 @@ export default function Player() {
       return { target, camPos };
     }
 
+    if (playerState.inBoardGameClub) {
+      d = Math.min(d, seatedNow ? 2.6 : BOARD_GAME_CAMERA_LIMITS.maxFollowDistance);
+      if (sp > 1e-4) {
+        d = Math.min(d, Math.max(0.55, (BOARD_GAME_CAMERA_LIMITS.maxY - target.y) / sp));
+      } else if (sp < -1e-4) {
+        d = Math.min(d, Math.max(0.48, (target.y - CAM_GROUND_CLEARANCE) / -sp));
+      }
+      const rawCam = placeCamera(d);
+      const clamped = clampBoardGameLoungeCamera({ x: rawCam.x, y: rawCam.y, z: rawCam.z });
+      return { target, camPos: new THREE.Vector3(clamped.x, clamped.y, clamped.z) };
+    }
+
     if (playerState.inLibraryLobby) {
       d = Math.min(d, seatedNow ? 2.6 : 4.2);
       const desired = placeCamera(d);
@@ -497,10 +524,13 @@ export default function Player() {
       camera.updateMatrixWorld();
       return;
     }
-    const seatedNow = seatingStateRef.current.status === 'seated' || Boolean(outdoorBenchRef.current);
+    const seatedNow =
+      seatingStateRef.current.status === 'seated' ||
+      Boolean(outdoorBenchRef.current) ||
+      Boolean(boardGameSeatRef.current);
     const libY = playerState.inLibraryLobby
       ? playerState.libraryY
-      : !playerState.inClassroom
+      : !playerState.inClassroom && !playerState.inBoardGameClub
         ? getCampusGroundElevation(posRef.current.x, posRef.current.z)
         : 0;
     if (viewModeRef.current === 'pov') {
@@ -569,6 +599,19 @@ export default function Player() {
     if (seatingStateRef.current.status === 'seated' || playerState.seated || playerState.seatId) {
       applyPoseImmediately(false);
       syncSeatingToPlayerState(createInitialSeatingState());
+    }
+    if (boardGameSeatRef.current || playerState.boardGameSeatId) {
+      boardGameSeatRef.current = null;
+      playerState.boardGameSeatId = null;
+      setIsBoardGameSeated(false);
+      applyPoseImmediately(false);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('bkhn:boardgame-seat-change', {
+            detail: { seated: false, seatId: null, tableId: null },
+          }),
+        );
+      }
     }
   };
 
@@ -965,12 +1008,95 @@ export default function Player() {
     return { ok: true };
   };
 
+  const sitAtBoardGameSeat = (
+    seatId: string,
+  ): { ok: boolean; reason?: string; seatId?: string; tableId?: string; label?: string } => {
+    if (!playerState.inBoardGameClub) {
+      return { ok: false, reason: 'not-in-club' };
+    }
+    const seat = getBoardGameSeatById(seatId);
+    if (!seat) return { ok: false, reason: 'unknown-seat' };
+    if (seatingStateRef.current.status === 'seated' || outdoorBenchRef.current) {
+      forceClearSeat();
+    }
+    keysRef.current.clear();
+    playerInput.move.x = 0;
+    playerInput.move.y = 0;
+    playerInput.run = false;
+    moveBlendRef.current = 0;
+    playerState.moving = false;
+    boardGameSeatRef.current = seat;
+    playerState.boardGameSeatId = seat.seatId;
+    setIsBoardGameSeated(true);
+    posRef.current = { x: seat.x, z: seat.z };
+    facingRef.current = seat.facing;
+    yawRef.current = seat.yaw;
+    playerState.cameraYaw = seat.yaw;
+    playerState.pos = { x: seat.x, z: seat.z };
+    playerState.facing = seat.facing;
+    if (groupRef.current) {
+      groupRef.current.position.set(seat.x, SEATED_GROUP_Y_OFFSET, seat.z);
+      groupRef.current.rotation.y = seat.facing;
+    }
+    applyPoseImmediately(true, seat.seatId);
+    syncCameraTransform();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('bkhn:boardgame-seat-change', {
+          detail: { seated: true, seatId: seat.seatId, tableId: seat.tableId, label: seat.label },
+        }),
+      );
+    }
+    return { ok: true, seatId: seat.seatId, tableId: seat.tableId, label: seat.label };
+  };
+
+  const standUpBoardGameSeat = (): {
+    ok: boolean;
+    reason?: string;
+    releasedSeatId?: string | null;
+    pos?: { x: number; z: number };
+  } => {
+    const seat = boardGameSeatRef.current;
+    if (!seat) return { ok: false, reason: 'not-seated' };
+    const releasedSeatId = seat.seatId;
+    keysRef.current.clear();
+    playerInput.move.x = 0;
+    playerInput.move.y = 0;
+    playerInput.run = false;
+    moveBlendRef.current = 0;
+    playerState.moving = false;
+    boardGameSeatRef.current = null;
+    playerState.boardGameSeatId = null;
+    setIsBoardGameSeated(false);
+    const safePos = resolveBoardGameLoungeCollisions(seat.standPos, AVATAR.radius).pos;
+    posRef.current = safePos;
+    facingRef.current = seat.facing;
+    playerState.pos = { ...safePos };
+    playerState.facing = seat.facing;
+    if (groupRef.current) {
+      groupRef.current.position.set(safePos.x, 0, safePos.z);
+      groupRef.current.rotation.y = seat.facing;
+    }
+    applyPoseImmediately(false);
+    syncCameraTransform();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('bkhn:boardgame-seat-change', {
+          detail: { seated: false, seatId: null, tableId: null, releasedSeatId },
+        }),
+      );
+    }
+    return { ok: true, releasedSeatId, pos: safePos };
+  };
+
   const seatActionsRef = useRef({
     sitAtSeat,
     standUp,
     forceClearSeat,
     sitOutdoorBench,
     standUpOutdoorBench,
+    sitAtBoardGameSeat,
+    standUpBoardGameSeat,
   });
   seatActionsRef.current = {
     sitAtSeat,
@@ -978,6 +1104,8 @@ export default function Player() {
     forceClearSeat,
     sitOutdoorBench,
     standUpOutdoorBench,
+    sitAtBoardGameSeat,
+    standUpBoardGameSeat,
   };
   // --- Dịch chuyển nhanh (đợt 3 giai đoạn 5) ---------------------------------
   // Chỉ thay VỊ TRÍ + hướng nhìn: không chạm quest/progress/điểm (không
@@ -1037,6 +1165,10 @@ export default function Player() {
     if (playerState.inLibraryLobby) {
       playerState.inLibraryLobby = false;
       window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: false } }));
+    }
+    if (playerState.inBoardGameClub) {
+      playerState.inBoardGameClub = false;
+      window.dispatchEvent(new CustomEvent('bkhn:boardgame-club', { detail: { inBoardGameClub: false } }));
     }
     posRef.current = resolveCollisions({ x: dest.x, z: dest.z }, AVATAR.radius).pos;
     facingRef.current = dest.facing;
@@ -1117,9 +1249,11 @@ export default function Player() {
           : null;
         const resolved = playerState.inClassroom
           ? resolveClassroomCollisions({ x, z }, AVATAR.radius).pos
-          : libMove
-            ? { x: libMove.position.x, z: libMove.position.z }
-            : resolveCollisions({ x, z }, AVATAR.radius).pos;
+          : playerState.inBoardGameClub
+            ? resolveBoardGameLoungeCollisions({ x, z }, AVATAR.radius).pos
+            : libMove
+              ? { x: libMove.position.x, z: libMove.position.z }
+              : resolveCollisions({ x, z }, AVATAR.radius).pos;
         posRef.current = resolved;
         // Đợt 5 — ghi playerState ngay để cầu nối multiplayer gửi vị trí
         // mới trong 100 ms (không chờ frame sau — xem mountBike).
@@ -1143,7 +1277,7 @@ export default function Player() {
             lastCollisionId: libMove?.collisionIds[0] ?? null,
             nearestDoorId: nearDoor ? nearDoor.id : null,
           };
-        } else if (!playerState.inClassroom) {
+        } else if (!playerState.inClassroom && !playerState.inBoardGameClub) {
           groundY = getCampusGroundElevation(resolved.x, resolved.z);
         }
         if (groupRef.current) {
@@ -1394,6 +1528,70 @@ export default function Player() {
         window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: false } }));
       },
       isInLibraryLobby: () => playerState.inLibraryLobby,
+      enterBoardGameClub: () => {
+        seatActionsRef.current.forceClearSeat();
+        keysRef.current.clear();
+        playerInput.move.x = 0;
+        playerInput.move.y = 0;
+        playerInput.run = false;
+        moveBlendRef.current = 0;
+        playerState.moving = false;
+        if (ridingRef.current) {
+          ridingRef.current = false;
+          bikeSpeedRef.current = 0;
+          bikeSteerRef.current = 0;
+          bikeLeanRef.current = 0;
+          syncBikeState();
+        }
+        playerState.inClassroom = false;
+        playerState.inLibraryLobby = false;
+        playerState.inBoardGameClub = true;
+        playerState.boardGameSeatId = null;
+        posRef.current = { ...BOARD_GAME_LOUNGE.spawn };
+        playerState.pos = { ...BOARD_GAME_LOUNGE.spawn };
+        facingRef.current = BOARD_GAME_LOUNGE.spawnFacing;
+        playerState.facing = BOARD_GAME_LOUNGE.spawnFacing;
+        yawRef.current = BOARD_GAME_LOUNGE.spawnYaw;
+        playerState.cameraYaw = BOARD_GAME_LOUNGE.spawnYaw;
+        pitchRef.current = 0.2;
+        playerState.cameraPitch = 0.2;
+        distRef.current = 3.4;
+        viewModeRef.current = 'follow';
+        syncCameraTransform();
+        window.dispatchEvent(new CustomEvent('bkhn:boardgame-club', { detail: { inBoardGameClub: true } }));
+      },
+      exitBoardGameClub: () => {
+        seatActionsRef.current.forceClearSeat();
+        keysRef.current.clear();
+        playerInput.move.x = 0;
+        playerInput.move.y = 0;
+        playerInput.run = false;
+        moveBlendRef.current = 0;
+        playerState.moving = false;
+        playerState.inBoardGameClub = false;
+        playerState.boardGameSeatId = null;
+        posRef.current = { ...BOARD_GAME_CLUB_DOOR.exitReturnPos };
+        playerState.pos = { ...BOARD_GAME_CLUB_DOOR.exitReturnPos };
+        facingRef.current = BOARD_GAME_CLUB_DOOR.exitReturnFacing;
+        playerState.facing = BOARD_GAME_CLUB_DOOR.exitReturnFacing;
+        yawRef.current = BOARD_GAME_CLUB_DOOR.exitReturnYaw;
+        playerState.cameraYaw = BOARD_GAME_CLUB_DOOR.exitReturnYaw;
+        pitchRef.current = 0.18;
+        playerState.cameraPitch = 0.18;
+        distRef.current = 7;
+        viewModeRef.current = 'follow';
+        syncCameraTransform();
+        window.dispatchEvent(new CustomEvent('bkhn:boardgame-club', { detail: { inBoardGameClub: false } }));
+      },
+      isInBoardGameClub: () => playerState.inBoardGameClub,
+      sitAtBoardGameSeat: (seatId: string) => seatActionsRef.current.sitAtBoardGameSeat(seatId),
+      standUpBoardGameSeat: () => seatActionsRef.current.standUpBoardGameSeat(),
+      getBoardGameSeatState: () => ({
+        seated: Boolean(boardGameSeatRef.current),
+        seatId: boardGameSeatRef.current?.seatId ?? null,
+        tableId: boardGameSeatRef.current?.tableId ?? null,
+        pos: { ...posRef.current },
+      }),
       getLibraryFloor: () => ({ floor: playerState.libraryFloor, y: playerState.libraryY }),
       getLibraryNavState: () => libraryNavigationController.getSnapshot(),
       navigateLibraryPreset: (presetId: string) => {
@@ -1785,6 +1983,10 @@ export default function Player() {
         playerState.inLibraryLobby = false;
         window.dispatchEvent(new CustomEvent('bkhn:library-lobby', { detail: { inLibraryLobby: false } }));
       }
+      if (playerState.inBoardGameClub) {
+        playerState.inBoardGameClub = false;
+        window.dispatchEvent(new CustomEvent('bkhn:boardgame-club', { detail: { inBoardGameClub: false } }));
+      }
       posRef.current = { ...SPAWN };
       playerState.pos = { ...SPAWN };
       facingRef.current = -Math.PI / 2;
@@ -1914,6 +2116,13 @@ export default function Player() {
       if (typeof seatingStateRef.current.facing === 'number') {
         facingRef.current = seatingStateRef.current.facing;
       }
+    } else if (boardGameSeatRef.current) {
+      // Đang ngồi tại bàn CLB Board Game — giữ nguyên vị trí ghế quay mặt vào bàn
+      moving = false;
+      effectivelyMoving = false;
+      posRef.current.x = boardGameSeatRef.current.x;
+      posRef.current.z = boardGameSeatRef.current.z;
+      facingRef.current = boardGameSeatRef.current.facing;
     } else if (outdoorBenchRef.current) {
       if (!playerState.uiLocked && (playerInput.move.x !== 0 || playerInput.move.y !== 0)) {
         standUpOutdoorBench(true);
@@ -2012,11 +2221,13 @@ export default function Player() {
           };
           const res = playerState.inClassroom
             ? resolveClassroomCollisions(next, AVATAR.radius)
-            : resolveCollisions(next, AVATAR.radius);
+            : playerState.inBoardGameClub
+              ? resolveBoardGameLoungeCollisions(next, AVATAR.radius)
+              : resolveCollisions(next, AVATAR.radius);
           curPos = res.pos;
           if (res.hit) hit = res.hit;
           // Chặn đi xuyên qua sinh viên đang đi bộ (AmbientLife) và người chơi khác (RemotePlayers) ngoài sân trường
-          if (!playerState.inClassroom && !playerState.inLibraryLobby) {
+          if (!playerState.inClassroom && !playerState.inLibraryLobby && !playerState.inBoardGameClub) {
             for (const wp of activeWalkingStudentPositions) {
               const pushed = pushOutOfCircle(curPos.x, curPos.z, wp, 0.38, AVATAR.radius);
               if (pushed) {
@@ -2114,7 +2325,9 @@ export default function Player() {
     // trước (elbow ÂM ≈ −0,55). Balô theo người trong `body` nên ngồi
     // trên yên mà không xuyên yên (yên y 0,78 ≈ hông 0,80).
     const seatedNow =
-      seatingStateRef.current.status === 'seated' || Boolean(outdoorBenchRef.current);
+      seatingStateRef.current.status === 'seated' ||
+      Boolean(outdoorBenchRef.current) ||
+      Boolean(boardGameSeatRef.current);
     const currentSeatId = seatingStateRef.current.seatId;
     const isLyingNow = seatedNow && isLyingSeatId(currentSeatId);
     const isPianoNow = seatedNow && isPianoBenchSeatId(currentSeatId);
@@ -2300,7 +2513,12 @@ export default function Player() {
       groundY = elev.y;
     } else if (playerState.inLibraryLobby && seatedNow) {
       groundY = playerState.libraryY;
-    } else if (!playerState.inClassroom && !playerState.inLibraryLobby && !ridingRef.current) {
+    } else if (
+      !playerState.inClassroom &&
+      !playerState.inLibraryLobby &&
+      !playerState.inBoardGameClub &&
+      !ridingRef.current
+    ) {
       groundY = getCampusGroundElevation(posRef.current.x, posRef.current.z);
     }
 
@@ -2407,8 +2625,8 @@ export default function Player() {
       <group ref={groupRef} position={[SPAWN.x, 0, SPAWN.z]}>
         <StudentAvatar
           joints={joints}
-          showBackpack={backpackOn && !isSeated && !isOutdoorSeated}
-          seated={isSeated || isOutdoorSeated}
+          showBackpack={backpackOn && !isSeated && !isOutdoorSeated && !isBoardGameSeated}
+          seated={isSeated || isOutdoorSeated || isBoardGameSeated}
           gender={gender}
           hairStyle={hairStyle}
           outfit={outfit}

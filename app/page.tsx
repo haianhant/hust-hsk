@@ -113,6 +113,7 @@ import {
   type CampusQuestsState,
 } from '../features/campus/quests/campus-quests';
 import CampusMemoryWallModal from '../features/social/memory-wall/CampusMemoryWallModal';
+import { BoardGameHUD, BoardGameLobby } from '../features/boardgame';
 import type { MemoryBoardId } from '../features/social/memory-wall/memory-wall';
 import {
   EntryScreen,
@@ -195,6 +196,12 @@ export default function HomePage() {
   const [reviewSession, setReviewSession] = useState<ReviewSessionState | null>(null);
   const [inClassroom, setInClassroom] = useState(false);
   const [inLibraryLobby, setInLibraryLobby] = useState(false);
+  const [inBoardGameClub, setInBoardGameClub] = useState(false);
+  const [boardGameSeatId, setBoardGameSeatId] = useState<string | null>(null);
+  const [nearestBoardGameSeatId, setNearestBoardGameSeatId] = useState<string | null>(null);
+  const [boardGameLobbyOpen, setBoardGameLobbyOpen] = useState(false);
+  const [boardGameRulesOpen, setBoardGameRulesOpen] = useState(false);
+  const [boardGameExitConfirmOpen, setBoardGameExitConfirmOpen] = useState(false);
   const [seatedSeatId, setSeatedSeatId] = useState<string | null>(null);
   const [seatedSeatLabel, setSeatedSeatLabel] = useState<string | null>(null);
   const [nearestSeatId, setNearestSeatId] = useState<string | null>(null);
@@ -843,6 +850,9 @@ export default function HomePage() {
       outfitOpen ||
       memoryWallOpen ||
       campusQuestsOpen ||
+      boardGameLobbyOpen ||
+      boardGameRulesOpen ||
+      boardGameExitConfirmOpen ||
       study.studyPanelOpen ||
       study.focusPolicy.suspend3DRendering;
     return () => {
@@ -857,6 +867,9 @@ export default function HomePage() {
     outfitOpen,
     memoryWallOpen,
     campusQuestsOpen,
+    boardGameLobbyOpen,
+    boardGameRulesOpen,
+    boardGameExitConfirmOpen,
     study.studyPanelOpen,
     study.focusPolicy.suspend3DRendering,
   ]);
@@ -946,6 +959,24 @@ export default function HomePage() {
         }
       }
     };
+    const onBoardGameMode = (e: Event) => {
+      const d = (e as CustomEvent<{ inBoardGameClub: boolean }>).detail;
+      if (d) {
+        setInBoardGameClub(d.inBoardGameClub);
+        if (!d.inBoardGameClub) {
+          setBoardGameSeatId(null);
+          setBoardGameLobbyOpen(false);
+          setBoardGameRulesOpen(false);
+          setBoardGameExitConfirmOpen(false);
+        }
+      }
+    };
+    const onBoardGameSeat = (e: Event) => {
+      const d = (e as CustomEvent<{ seated?: boolean; seatId?: string | null }>).detail;
+      if (d) {
+        setBoardGameSeatId(d.seated ? d.seatId ?? null : null);
+      }
+    };
     const onLibraryFloor = (e: Event) => {
       const d = (e as CustomEvent<{ floor: number }>).detail;
       if (!d) return;
@@ -978,10 +1009,14 @@ export default function HomePage() {
     window.addEventListener('bkhn:classroom', onMode);
     window.addEventListener('bkhn:library-lobby', onLobbyMode);
     window.addEventListener('bkhn:library-floor', onLibraryFloor);
+    window.addEventListener('bkhn:boardgame-club', onBoardGameMode);
+    window.addEventListener('bkhn:boardgame-seat-change', onBoardGameSeat);
     return () => {
       window.removeEventListener('bkhn:classroom', onMode);
       window.removeEventListener('bkhn:library-lobby', onLobbyMode);
       window.removeEventListener('bkhn:library-floor', onLibraryFloor);
+      window.removeEventListener('bkhn:boardgame-club', onBoardGameMode);
+      window.removeEventListener('bkhn:boardgame-seat-change', onBoardGameSeat);
     };
   }, []);
 
@@ -1068,9 +1103,11 @@ export default function HomePage() {
         pos: playerState.pos,
         inClassroom,
         inLibraryLobby,
+        inBoardGameClub,
         libraryFloor: playerState.libraryFloor,
         seated: playerState.seated,
         seatId: playerState.seatId,
+        boardGameSeatId: playerState.boardGameSeatId,
         occupiedByOtherSeatIds: occupiedOtherSet,
         pendingSeatId: snapNow.pendingSeatRequest?.seatId ?? null,
         outdoorBenchId: playerState.outdoorBenchId,
@@ -1089,9 +1126,12 @@ export default function HomePage() {
       setNearestSeatId(
         found?.id?.startsWith('seat:') ? found.id.slice('seat:'.length) : null,
       );
+      setNearestBoardGameSeatId(
+        found?.id?.startsWith('bg-seat:') ? found.id.slice('bg-seat:'.length) : null,
+      );
     }, 200);
     return () => clearInterval(id);
-  }, [entered, inClassroom, inLibraryLobby, questActive, questDoneBefore, anyQuestDone, step?.id, hskMode, showToast]);
+  }, [entered, inClassroom, inLibraryLobby, inBoardGameClub, questActive, questDoneBefore, anyQuestDone, step?.id, hskMode, showToast]);
 
   // --- Ghi đáp án vào store -----------------------------------------------------
   const handleAnswer = useCallback((a: QuestAnswer) => {
@@ -1348,6 +1388,55 @@ export default function HomePage() {
       setFade(false);
     }, 350);
   }, []);
+
+  const enterBoardGameClubFade = useCallback(() => {
+    setFade(true);
+    window.setTimeout(() => {
+      getHook()?.enterBoardGameClub?.();
+      setInBoardGameClub(true);
+      setFade(false);
+    }, 350);
+  }, []);
+
+  const exitBoardGameClubFade = useCallback(() => {
+    setBoardGameLobbyOpen(false);
+    setBoardGameRulesOpen(false);
+    setBoardGameExitConfirmOpen(false);
+    setFade(true);
+    window.setTimeout(() => {
+      getHook()?.exitBoardGameClub?.();
+      setInBoardGameClub(false);
+      setBoardGameSeatId(null);
+      setFade(false);
+    }, 350);
+  }, []);
+
+  const handleRequestExitBoardGameClub = useCallback(() => {
+    if (boardGameSeatId) {
+      setBoardGameExitConfirmOpen(true);
+      return;
+    }
+    exitBoardGameClubFade();
+  }, [boardGameSeatId, exitBoardGameClubFade]);
+
+  const handleSelectBoardGameSeat = useCallback(
+    (seatId: string) => {
+      const r = getHook()?.sitAtBoardGameSeat?.(seatId);
+      if (r?.ok) {
+        setBoardGameSeatId(r.seatId ?? seatId);
+        showToast(`🪑 Đã ngồi vào ${r.label ?? 'ghế bàn chơi'} (bấm E để đứng dậy)`);
+      }
+    },
+    [showToast],
+  );
+
+  const handleStandUpBoardGameSeat = useCallback(() => {
+    const r = getHook()?.standUpBoardGameSeat?.();
+    if (r?.ok) {
+      setBoardGameSeatId(null);
+      showToast('Đã đứng dậy khỏi bàn Board Game.');
+    }
+  }, [showToast]);
 
   const cycleTimeOfDay = useCallback(() => {
     setAutoTimeOfDay(false);
@@ -1624,6 +1713,26 @@ export default function HomePage() {
       enterLibraryLobbyFade();
       return;
     }
+    if (id === 'boardgame-door') {
+      enterBoardGameClubFade();
+      return;
+    }
+    if (id === 'bg-seat-stand-up') {
+      handleStandUpBoardGameSeat();
+      return;
+    }
+    if (id.startsWith('bg-seat:')) {
+      handleSelectBoardGameSeat(id.slice('bg-seat:'.length));
+      return;
+    }
+    if (id === 'boardgame-info') {
+      setBoardGameRulesOpen(true);
+      return;
+    }
+    if (id === 'boardgame-exit') {
+      handleRequestExitBoardGameClub();
+      return;
+    }
     if (id.startsWith('checkin:')) {
       const lmId = id.slice('checkin:'.length);
       stampLandmarkCheckin(lmId, false);
@@ -1730,6 +1839,10 @@ export default function HomePage() {
     stampLandmarkCheckin,
     enterClassroomFade,
     enterLibraryLobbyFade,
+    enterBoardGameClubFade,
+    handleSelectBoardGameSeat,
+    handleStandUpBoardGameSeat,
+    handleRequestExitBoardGameClub,
     advance,
     handleObjectAction,
     handleSitAtSeat,
@@ -1800,14 +1913,20 @@ export default function HomePage() {
       if (resumeQuest && qs && !qs.done && qs.stepIndex >= 2) {
         playerState.inClassroom = true;
         playerState.inLibraryLobby = false;
+        playerState.inBoardGameClub = false;
+        playerState.boardGameSeatId = null;
         playerState.pos = { ...CLASSROOM.spawn };
         playerState.cameraYaw = typeof qs.yaw === 'number' ? qs.yaw : 0;
         playerState.cameraPitch = typeof qs.pitch === 'number' ? qs.pitch : 0.25;
         setInClassroom(true);
         setInLibraryLobby(false);
+        setInBoardGameClub(false);
+        setBoardGameSeatId(null);
       } else {
         playerState.inClassroom = false;
         playerState.inLibraryLobby = false;
+        playerState.inBoardGameClub = false;
+        playerState.boardGameSeatId = null;
         playerState.pos = { ...SPAWN };
         playerState.facing = -Math.PI / 2;
         playerState.zone = nearestZone(SPAWN);
@@ -1815,6 +1934,8 @@ export default function HomePage() {
         playerState.cameraPitch = 0.18;
         setInClassroom(false);
         setInLibraryLobby(false);
+        setInBoardGameClub(false);
+        setBoardGameSeatId(null);
       }
       setEntered(true);
       if (!lofiManuallyPausedRef.current) {
@@ -2060,7 +2181,12 @@ export default function HomePage() {
     ? 'Giảng đường HSK · Tòa C7'
     : inLibraryLobby
       ? 'Sảnh Thư viện Tạ Quang Bửu'
-      : zone;
+      : inBoardGameClub
+        ? '🎲 CLB Board Game KTX'
+        : zone;
+
+  const bgTable1Count = boardGameSeatId?.startsWith('bg-t1-') ? 1 : 0;
+  const bgTable2Count = boardGameSeatId?.startsWith('bg-t2-') ? 1 : 0;
 
   const unclaimedQuestCount = CAMPUS_LIFE_QUESTS.filter(
     (q) => isCampusQuestCompleted(campusQuests, q) && !campusQuests.claimedIds.includes(q.id),
@@ -2111,13 +2237,19 @@ export default function HomePage() {
             <CampusScene
               inClassroom={inClassroom}
               inLibraryLobby={inLibraryLobby}
+              inBoardGameClub={inBoardGameClub}
               activeSeatId={seatedSeatId}
               nearestSeatId={nearestSeatId}
+              boardGameSeatId={boardGameSeatId}
+              nearestBoardGameSeatId={nearestBoardGameSeatId}
+              boardGameTable1Count={bgTable1Count}
+              boardGameTable2Count={bgTable2Count}
               timeOfDay={timeOfDay}
               hskMode={hskMode}
               notebookOpen={notebookOpen}
               homework={homework}
               onObjectClick={handleObjectClick}
+              onSelectBoardGameSeat={handleSelectBoardGameSeat}
             />
           </div>
 
@@ -2152,6 +2284,7 @@ export default function HomePage() {
             <CampusHud
               inClassroom={inClassroom}
               inLibraryLobby={inLibraryLobby}
+              inBoardGameClub={inBoardGameClub}
               seated={!!seatedSeatId}
               activeSeatId={seatedSeatId}
               activeSeatLabel={seatedSeatLabel}
@@ -2334,6 +2467,36 @@ export default function HomePage() {
           onSpeak={speakText}
           onClose={() => setLobbyModal(null)}
         />
+      )}
+
+      {/* HUD & Sảnh phòng CLB Board Game KTX (BG1) */}
+      {inBoardGameClub && entered && (
+        <>
+          <BoardGameHUD
+            seatId={boardGameSeatId}
+            table1Count={bgTable1Count}
+            table2Count={bgTable2Count}
+            lobbyOpen={boardGameLobbyOpen}
+            rulesOpen={boardGameRulesOpen}
+            hasActiveMatch={Boolean(boardGameSeatId)}
+            onToggleLobby={() => setBoardGameLobbyOpen((v) => !v)}
+            onToggleRules={() => setBoardGameRulesOpen((v) => !v)}
+            onStandUpSeat={handleStandUpBoardGameSeat}
+            onRequestExit={handleRequestExitBoardGameClub}
+          />
+          <BoardGameLobby
+            open={boardGameLobbyOpen}
+            rulesOpen={boardGameRulesOpen}
+            exitConfirmOpen={boardGameExitConfirmOpen}
+            currentSeatId={boardGameSeatId}
+            onCloseLobby={() => setBoardGameLobbyOpen(false)}
+            onCloseRules={() => setBoardGameRulesOpen(false)}
+            onCancelExit={() => setBoardGameExitConfirmOpen(false)}
+            onConfirmExit={exitBoardGameClubFade}
+            onSelectSeat={handleSelectBoardGameSeat}
+            onStandUpSeat={handleStandUpBoardGameSeat}
+          />
+        </>
       )}
 
       {/* Cửa sổ Check-in & Trải nghiệm riêng của từng Tòa nhà Bách Khoa */}

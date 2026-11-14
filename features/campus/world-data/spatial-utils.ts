@@ -6,8 +6,9 @@
 // ---------------------------------------------------------------------------
 
 import { BIKE_RADIUS, BOUNDS, type AABB, type Vec2 } from './bounds';
-import { CLASSROOM, LAKE, LIBRARY_LOBBY } from './buildings';
+import { BOARD_GAME_LOUNGE, CLASSROOM, LAKE, LIBRARY_LOBBY } from './buildings';
 import {
+  BOARD_GAME_LOUNGE_COLLIDERS,
   BUILDING_COLLIDERS,
   CAMPUS_PILLAR_CIRCLES,
   CLASSROOM_COLLIDERS,
@@ -156,6 +157,14 @@ export function resolveClassroomCollisions(
   radius: number,
 ): { pos: Vec2; hit: string | null } {
   return resolveAabbCollisions(p, radius, CLASSROOM.bounds, CLASSROOM_COLLIDERS);
+}
+
+/** Đẩy vị trí ra khỏi collider Phòng Sinh Hoạt Chung CLB Board Game KTX + biên phòng. */
+export function resolveBoardGameLoungeCollisions(
+  p: Vec2,
+  radius: number,
+): { pos: Vec2; hit: string | null } {
+  return resolveAabbCollisions(p, radius, BOARD_GAME_LOUNGE.bounds, BOARD_GAME_LOUNGE_COLLIDERS);
 }
 
 /** Đẩy vị trí ra khỏi collider Sảnh tầng 1–10 Thư viện + biên từng tầng. */

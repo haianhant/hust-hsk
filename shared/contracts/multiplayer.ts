@@ -112,7 +112,7 @@ export const SHIRT_COLORS = [
   '#8E24AA', // magenta
 ] as const;
 
-export type MultiplayerSceneId = 'campus' | 'library' | 'classroom';
+export type MultiplayerSceneId = 'campus' | 'library' | 'classroom' | 'boardgame';
 
 export interface RemoteAppearance {
   gender?: AvatarGender;
@@ -459,7 +459,7 @@ export function clampMoveStep(
 const TAU = Math.PI * 2;
 const TELEMETRY_RADIX_X = 2641; // [-96.0 .. +168.0] in 0.1m steps
 const TELEMETRY_RADIX_Z = 1841; // [-76.0 .. +108.0] in 0.1m steps
-const TELEMETRY_RADIX_SCENE = 24; // 0=campus, 1..8=lib floors, 9=classroom, 10..13=1F seats, 14..21=seated floors, 22=piano, 23=lying 10F
+const TELEMETRY_RADIX_SCENE = 25; // 0=campus, 1..8=lib floors, 9=classroom, 10..13=1F seats, 14..21=seated floors, 22=piano, 23=lying 10F, 24=boardgame
 const TELEMETRY_RADIX_APP = 961; // 0=none, 1..960 = 2(gender)*10(outfit)*6(hair)*8(flags)
 
 const TELEMETRY_LIBRARY_FLOORS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 10] as const;
@@ -529,6 +529,7 @@ function encodeSceneCode(
   seatedSeatId?: string | null,
 ): number {
   if (scene === 'classroom') return 9;
+  if (scene === 'boardgame') return 24;
   if (scene === 'library') {
     const flrIdx = TELEMETRY_LIBRARY_FLOORS.indexOf(libraryFloor ?? 1);
     const validFlrIdx = flrIdx >= 0 ? flrIdx : 0;
@@ -586,6 +587,9 @@ function decodeSceneCode(code: number): {
       libraryFloor: 10,
       seatedSeatId: 'lying-floor-10',
     };
+  }
+  if (code === 24) {
+    return { scene: 'boardgame', libraryFloor: 1, seatedSeatId: null };
   }
   if (code >= 1 && code <= 8) {
     return {

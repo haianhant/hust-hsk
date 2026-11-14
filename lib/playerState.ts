@@ -108,6 +108,10 @@ export const playerState = {
   inClassroom: false,
   /** Giai đoạn 4 — true khi đang ở Sảnh tầng 1–10 Thư viện Tạ Quang Bửu (tọa độ cục bộ LIBRARY_LOBBY). */
   inLibraryLobby: false,
+  /** HUSTVerse Board Game Club — true khi đang ở Phòng Sinh Hoạt Chung CLB Board Game KTX (tọa độ cục bộ BOARD_GAME_LOUNGE). */
+  inBoardGameClub: false,
+  /** ID ghế đang ngồi trong CLB Board Game (null nếu đang đứng/chưa ngồi). */
+  boardGameSeatId: null as string | null,
   /** Tầng hiện tại trong Thư viện Tạ Quang Bửu (1, 2, 3, 4, 5, 6, 7, 10 theo chuẩn studywithhuster.cyou). */
   libraryFloor: 1 as LibraryFloor,
   /** Cao độ Y cục bộ của người chơi trong Thư viện (T1=0, T2=4.5, T3=9.0, T4=13.5, T5=18.0, T6=0/0.6, T7=5.25, T10=0/0.18). */
