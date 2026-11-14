@@ -34,12 +34,17 @@ import {
   type HibernatedSeatAttachment,
   type SeatRegistry,
 } from '../../features/social/rooms/seat-manager';
-import { BOUNDS, SPAWN, clampScalar } from '../../shared/constants/world';
+import { BOUNDS, CAMPUS_FOOTBALL_PITCH, SPAWN, clampScalar } from '../../shared/constants/world';
 import {
   MAX_MSG_PER_SEC,
   ROOM_CAPACITY,
   SHIRT_COLORS,
+  applyFootballDribble,
+  applyFootballKick,
+  applyFootballReset,
   clampMoveStep,
+  createInitialFootballState,
+  decodeMoveTelemetry,
   derivePublicPlayerId,
   extractValidAppearance,
   hashString,
@@ -47,12 +52,16 @@ import {
   isRemoteState,
   pickShirtColor,
   sanitizeChatMessage,
+  sanitizeFootballState,
   sanitizeMssv,
   sanitizeName,
   sanitizeReconnectToken,
+  stepFootballPhysics,
   type AvatarGender,
   type AvatarHairStyle,
   type AvatarOutfitId,
+  type FootballActionKind,
+  type FootballBallState,
   type Player,
   type PlayerState,
 } from '../../shared/contracts/multiplayer';
@@ -125,6 +134,7 @@ export interface SocketAttachment {
     updatedAtMs?: number;
   } | null;
   studyRevision?: number;
+  football?: FootballBallState | null;
 }
 
 interface HibernatableWebSocket extends WebSocket {
@@ -270,6 +280,8 @@ export class HskRoom {
   private seatRegistry: SeatRegistry = createSeatRegistry();
   private presences = new Map<string, PlayerStudyPresence>();
   private studyRevision = 1;
+  private footballState: FootballBallState | null = null;
+  private lastFootballActionAt = new Map<string, number>();
   private leaderboardSchemaReady = false;
   private leaderboardMem = new Map<string, LeaderboardRow>();
   private memoriesSchemaReady = false;
@@ -849,6 +861,7 @@ export class HskRoom {
       NonNullable<SocketAttachment['studyPresence']>
     >();
     let restoredAnyNewSession = false;
+    let bestFootball: FootballBallState | null = null;
 
     for (const rawWs of sockets) {
       const ws = rawWs as HibernatableWebSocket;
@@ -865,6 +878,12 @@ export class HskRoom {
       }
       if (typeof att.studyRevision === 'number' && Number.isFinite(att.studyRevision)) {
         this.studyRevision = Math.max(this.studyRevision, att.studyRevision);
+      }
+      if (att.football) {
+        const sanitizedBall = sanitizeFootballState(att.football);
+        if (sanitizedBall && (!bestFootball || sanitizedBall.seq > bestFootball.seq)) {
+          bestFootball = sanitizedBall;
+        }
       }
       this.bySocket.set(ws, att.id);
       if (!this.sessions.has(att.id)) {
@@ -912,6 +931,10 @@ export class HskRoom {
           rawPresenceBySession.set(session.id, att.studyPresence);
         }
       }
+    }
+
+    if (bestFootball && (!this.footballState || bestFootball.seq > this.footballState.seq)) {
+      this.footballState = bestFootball;
     }
 
     if (!restoredAnyNewSession) return;
@@ -992,10 +1015,32 @@ export class HskRoom {
             }
           : null,
         studyRevision: this.studyRevision,
+        football: this.footballState,
       });
     } catch {
       // Older runtimes without attachments: bySocket covers in-memory state.
     }
+  }
+
+  private persistAllSocketAttachments() {
+    for (const [sock, sid] of this.bySocket.entries()) {
+      const sess = this.sessions.get(sid);
+      if (sess) {
+        this.persistSocketAttachment(sock, sess);
+      }
+    }
+  }
+
+  private getCurrentFootballState(nowMs = Date.now()): FootballBallState {
+    if (!this.footballState) {
+      this.footballState = createInitialFootballState(nowMs);
+      return this.footballState;
+    }
+    const elapsed = Math.min(12, Math.max(0, (nowMs - this.footballState.updatedAtMs) / 1000));
+    if (elapsed > 0.01) {
+      this.footballState = stepFootballPhysics(this.footballState, elapsed, nowMs).state;
+    }
+    return this.footballState;
   }
 
   private buildStudyRoomSnapshot(nowMs: number = Date.now()): ServerStudyRoomSnapshotMessage {
@@ -1334,6 +1379,7 @@ export class HskRoom {
         roomId: this.roomId,
         players: [...this.sessions.values()].map((s) => this.publicPlayer(s)),
         count: this.sessions.size,
+        football: this.getCurrentFootballState(now),
       });
       this.send(ws, this.buildStudyRoomSnapshot(now));
       this.broadcast({ type: 'join', player: this.publicPlayer(session) }, sessionId);
@@ -1688,6 +1734,62 @@ export class HskRoom {
       return;
     }
 
+    if (msg.type === 'football:action') {
+      const rawKind = typeof msg.kind === 'string' ? msg.kind : '';
+      if (rawKind !== 'kick' && rawKind !== 'dribble' && rawKind !== 'reset') return;
+      const kind: FootballActionKind = rawKind;
+
+      const decodedFacing = decodeMoveTelemetry(session.facing);
+      if (decodedFacing.hasTelemetry && decodedFacing.scene !== 'campus') return;
+
+      const lastActionAt = this.lastFootballActionAt.get(sessionId) ?? 0;
+      const minIntervalMs = kind === 'reset' ? 400 : 55;
+      if (now - lastActionAt < minIntervalMs) return;
+
+      const current = this.getCurrentFootballState(now);
+      const rawPx = Number(msg.playerX);
+      const rawPz = Number(msg.playerZ);
+      const rawFacing = Number(msg.facing);
+      const actionFacing = Number.isFinite(rawFacing) ? rawFacing : decodedFacing.facing;
+
+      let nextBall: FootballBallState | null = null;
+      if (kind === 'reset') {
+        const checkX = Number.isFinite(rawPx) ? rawPx : session.x;
+        const checkZ = Number.isFinite(rawPz) ? rawPz : session.z;
+        if (
+          Math.abs(checkX - CAMPUS_FOOTBALL_PITCH.center.x) > CAMPUS_FOOTBALL_PITCH.halfW + 18 ||
+          Math.abs(checkZ - CAMPUS_FOOTBALL_PITCH.center.z) > CAMPUS_FOOTBALL_PITCH.halfD + 18
+        ) {
+          return;
+        }
+        nextBall = applyFootballReset(current, now, sessionId);
+      } else {
+        if (!Number.isFinite(rawPx) || !Number.isFinite(rawPz)) return;
+        if (
+          Math.abs(rawPx - CAMPUS_FOOTBALL_PITCH.center.x) > CAMPUS_FOOTBALL_PITCH.halfW + 6 ||
+          Math.abs(rawPz - CAMPUS_FOOTBALL_PITCH.center.z) > CAMPUS_FOOTBALL_PITCH.halfD + 6
+        ) {
+          return;
+        }
+        nextBall =
+          kind === 'kick'
+            ? applyFootballKick(current, rawPx, rawPz, actionFacing, now, sessionId)
+            : applyFootballDribble(current, rawPx, rawPz, actionFacing, now, sessionId);
+      }
+      if (!nextBall) return;
+
+      this.lastFootballActionAt.set(sessionId, now);
+      this.footballState = nextBall;
+      session.lastUpdate = now;
+      this.persistAllSocketAttachments();
+      this.broadcast({
+        type: 'football:state',
+        ball: nextBall,
+        serverNowMs: now,
+      });
+      return;
+    }
+
     if (msg.type === 'study:progress') {
       if (rawStr.length > MAX_STUDY_WS_PAYLOAD_BYTES) return;
       const deltaSeconds = Number(msg.deltaSeconds) || 0;
@@ -1747,6 +1849,7 @@ export class HskRoom {
     const now = Date.now();
     const releasedSeat = releaseSeatByOccupant(this.seatRegistry, sessionId);
     this.presences.delete(sessionId);
+    this.lastFootballActionAt.delete(sessionId);
     if (this.sessions.delete(sessionId)) {
       if (releasedSeat) {
         this.studyRevision += 1;

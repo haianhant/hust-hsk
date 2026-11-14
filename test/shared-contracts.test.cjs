@@ -1162,6 +1162,200 @@ test('(10) Real-time Campus Chat & Avatar Emote animations broadcast and pose co
   assert.equal(emoteMsgA.emote, 'dance');
 });
 
+test('(20) Telemetry preserves all 16 Board Game seat IDs and appearance across wire encoding', () => {
+  assert.equal(mpContracts.TELEMETRY_BOARDGAME_SEAT_IDS.length, 16);
+
+  const sampleAppearance = {
+    gender: 'female',
+    outfit: 'bomber-red-grey',
+    hairStyle: 'ponytail',
+    skirt: true,
+    glasses: true,
+    backpack: false,
+  };
+
+  for (const seatId of [...mpContracts.TELEMETRY_BOARDGAME_SEAT_IDS, null]) {
+    const encoded = mpContracts.encodeMoveTelemetry({
+      x: -3.2,
+      z: -0.95,
+      facing: 1.25,
+      scene: 'boardgame',
+      libraryFloor: 1,
+      seatedSeatId: seatId,
+      appearance: sampleAppearance,
+    });
+    const decoded = mpContracts.decodeMoveTelemetry(encoded);
+    assert.equal(decoded.hasTelemetry, true);
+    assert.equal(decoded.scene, 'boardgame', `Expected boardgame scene for ${seatId}`);
+    assert.equal(decoded.seatedSeatId, seatId, `Expected round-trip seatId=${seatId}`);
+    assert.ok(Math.abs(decoded.facing - 1.25) < 0.02);
+    assert.equal(decoded.appearance.gender, 'female');
+    assert.equal(decoded.appearance.outfit, 'bomber-red-grey');
+    assert.equal(decoded.appearance.skirt, true);
+    assert.equal(decoded.appearance.glasses, true);
+    assert.equal(decoded.appearance.backpack, false);
+  }
+});
+
+test('(21) HskRoom synchronizes football actions across players and survives hibernation', async () => {
+  const wsA = createMockSocket();
+  const wsB = createMockSocket();
+  const doState = createMockDoState([wsA, wsB]);
+  const room = new workerRoom.HskRoom(doState);
+
+  await room.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'tok-fb-a',
+      name: 'Cầu thủ An',
+      mssv: '20227001',
+    }),
+  );
+  await room.webSocketMessage(
+    wsB,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'tok-fb-b',
+      name: 'Cầu thủ Bình',
+      mssv: '20227002',
+    }),
+  );
+
+  const welcomeA = wsA.sent.find((m) => m.type === 'welcome');
+  const welcomeB = wsB.sent.find((m) => m.type === 'welcome');
+  assert.ok(welcomeA?.football && welcomeB?.football, 'Welcome must include football state');
+  assert.equal(welcomeA.football.x, world.CAMPUS_FOOTBALL_PITCH.center.x);
+  assert.equal(welcomeA.football.z, world.CAMPUS_FOOTBALL_PITCH.center.z);
+  assert.equal(welcomeA.football.seq, 0);
+
+  // Move A inside Board Game Club -> football:action must be ignored when not in campus scene
+  await room.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'move',
+      x: 95.5,
+      z: -6,
+      facing: mpContracts.encodeMoveTelemetry({
+        x: 95.5,
+        z: -6,
+        facing: 0,
+        scene: 'boardgame',
+        seatedSeatId: 'bg-t1-s0',
+      }),
+      state: 'idle',
+    }),
+  );
+  wsA.sent.length = 0;
+  wsB.sent.length = 0;
+  await room.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'football:action',
+      kind: 'kick',
+      playerX: 130.5,
+      playerZ: 80,
+      facing: Math.PI / 2,
+    }),
+  );
+  assert.equal(
+    wsB.sent.filter((m) => m.type === 'football:state').length,
+    0,
+    'Players inside interior scenes must not be allowed to kick the stadium ball',
+  );
+
+  // Return A to campus and kick from pitch range
+  await room.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'move',
+      x: 97,
+      z: -6,
+      facing: mpContracts.encodeMoveTelemetry({
+        x: 97,
+        z: -6,
+        facing: Math.PI / 2,
+        scene: 'campus',
+        seatedSeatId: null,
+      }),
+      state: 'idle',
+    }),
+  );
+  wsA.sent.length = 0;
+  wsB.sent.length = 0;
+  await room.webSocketMessage(
+    wsA,
+    JSON.stringify({
+      type: 'football:action',
+      kind: 'kick',
+      playerX: 130.5,
+      playerZ: 80,
+      facing: Math.PI / 2,
+    }),
+  );
+
+  const stateA = wsA.sent.find((m) => m.type === 'football:state');
+  const stateB = wsB.sent.find((m) => m.type === 'football:state');
+  assert.ok(stateA && stateB, 'Both kicker and peer must receive football:state');
+  assert.equal(stateA.ball.seq, 1);
+  assert.equal(stateB.ball.seq, 1);
+  assert.ok(stateB.ball.vx > 8, `Expected eastward velocity, got ${stateB.ball.vx}`);
+  assert.ok(stateB.ball.vy > 3);
+  assert.equal(stateB.ball.lastTouchId, welcomeA.id);
+
+  // Out-of-bounds kick must be rejected
+  wsB.sent.length = 0;
+  await room.webSocketMessage(
+    wsB,
+    JSON.stringify({
+      type: 'football:action',
+      kind: 'kick',
+      playerX: 10,
+      playerZ: 10,
+      facing: 0,
+    }),
+  );
+  assert.equal(wsB.sent.filter((m) => m.type === 'football:state').length, 0);
+
+  // Hibernation recovery must preserve football state on new HskRoom instance
+  const hibernatedRoom = new workerRoom.HskRoom(doState);
+  const wsC = createMockSocket();
+  await hibernatedRoom.webSocketMessage(
+    wsC,
+    JSON.stringify({
+      type: 'join',
+      sessionId: 'tok-fb-c',
+      name: 'Cầu thủ Chi',
+      mssv: '20227003',
+    }),
+  );
+  const welcomeC = wsC.sent.find((m) => m.type === 'welcome');
+  assert.ok(welcomeC?.football, 'Newcomer after hibernation must receive preserved football');
+  assert.ok(welcomeC.football.seq >= 1);
+  assert.ok(welcomeC.football.x > world.CAMPUS_FOOTBALL_PITCH.center.x - 0.1);
+
+  // Shared deterministic physics goal + reset check
+  const nearGoal = {
+    ...mpContracts.createInitialFootballState(1000),
+    x: world.CAMPUS_FOOTBALL_PITCH.eastGoalX - 0.2,
+    y: 0.4,
+    z: world.CAMPUS_FOOTBALL_PITCH.center.z,
+    vx: 10,
+    vy: 0,
+    vz: 0,
+    seq: 4,
+  };
+  const steppedGoal = mpContracts.stepFootballPhysics(nearGoal, 0.2, 1200);
+  assert.equal(steppedGoal.goalScoredSide, 'east');
+  assert.equal(steppedGoal.state.goals, 1);
+  assert.ok(steppedGoal.state.goalCooldown > 0);
+  const afterKickoffReset = mpContracts.stepFootballPhysics(steppedGoal.state, 1.7, 2900);
+  assert.equal(afterKickoffReset.state.goalCooldown, 0);
+  assert.equal(afterKickoffReset.state.x, world.CAMPUS_FOOTBALL_PITCH.center.x);
+  assert.equal(afterKickoffReset.state.z, world.CAMPUS_FOOTBALL_PITCH.center.z);
+});
+
+
 
 
 

@@ -24,9 +24,12 @@ import {
   isAvatarEmoteId,
   isRemoteState,
   sanitizeChatMessage,
+  sanitizeFootballState,
   sanitizeName,
   sanitizeReconnectToken,
   type AvatarEmoteId,
+  type FootballActionKind,
+  type FootballBallState,
   type MultiplayerSceneId,
   type RemoteAppearance,
   type RemotePlayer,
@@ -62,6 +65,8 @@ import { rotateTabSessionCredentials } from './identity';
 
 export type {
   AvatarEmoteId,
+  FootballActionKind,
+  FootballBallState,
   LeaderboardPeriod,
   MultiplayerSceneId,
   RemoteAppearance,
@@ -169,6 +174,8 @@ export interface MultiplayerSnapshot {
   messages: ChatMessageEntry[];
   chatBubbles: Record<string, ActiveChatBubble>;
   emotes: Record<string, ActiveEmoteState>;
+  // Đồng bộ bóng đá SVĐ Bách Khoa:
+  football: FootballBallState | null;
 }
 
 export const TRUSTED_PROD_WS_URL = 'wss://hust-hsk-rooms.hunganhz179.workers.dev/ws';
@@ -519,6 +526,7 @@ export class MultiplayerClient {
   private lastServerLeaderboardEntry: StudyLeaderboardEntry | null = null;
   private companionReplyCounter = 0;
   private companionReplyTimer: ReturnType<typeof setTimeout> | null = null;
+  private football: FootballBallState | null = null;
   private lastLocalMove: {
     x: number;
     z: number;
@@ -590,6 +598,7 @@ export class MultiplayerClient {
       messages: [...this.messages],
       chatBubbles: bubblesRecord,
       emotes: emotesRecord,
+      football: this.football ? { ...this.football } : null,
     };
   }
 
@@ -1060,6 +1069,35 @@ export class MultiplayerClient {
       }
     }
     return true;
+  }
+
+  /**
+   * Gửi thao tác đá/rê/đặt lại bóng tại SVĐ Bách Khoa để Worker DO đồng bộ
+   * trạng thái vật lý bóng tới tất cả người chơi trong phòng.
+   */
+  sendFootballAction(
+    kind: FootballActionKind,
+    playerX: number,
+    playerZ: number,
+    facing: number,
+  ): boolean {
+    if (!this.ws || this.ws.readyState !== 1 /* WebSocket.OPEN */ || !this.selfId) {
+      return false;
+    }
+    try {
+      this.ws.send(
+        JSON.stringify({
+          type: 'football:action',
+          kind,
+          playerX,
+          playerZ,
+          facing,
+        }),
+      );
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private resolveHttpApiBase(): string | null {
@@ -1809,6 +1847,7 @@ export class MultiplayerClient {
     }
     this.players.clear();
     this.clearLiveStudyRoomState('disconnect');
+    this.football = null;
     this.lastLocalMove = null;
     this.roomId = null;
     this.count = 0;
@@ -2035,6 +2074,24 @@ export class MultiplayerClient {
           }
           if (this.selfId) {
             this.players.delete(this.selfId);
+          }
+          if (msg.football && typeof msg.football === 'object') {
+            const sanitizedBall = sanitizeFootballState(msg.football);
+            if (
+              sanitizedBall &&
+              (!this.football ||
+                !hadAuthenticatedOnThisSocket ||
+                sanitizedBall.seq >= this.football.seq)
+            ) {
+              this.football = sanitizedBall;
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('bkhn:mp-football-state', {
+                    detail: { ball: sanitizedBall, source: 'welcome' },
+                  }),
+                );
+              }
+            }
           }
           this.setStatus('online', null);
           this.flushLocalMoveTelemetry();
@@ -2782,6 +2839,24 @@ export class MultiplayerClient {
               }),
             );
           }
+          break;
+        }
+        case 'football:state': {
+          if (!msg.ball || typeof msg.ball !== 'object') break;
+          const sanitizedBall = sanitizeFootballState(msg.ball);
+          if (!sanitizedBall) break;
+          if (this.football && sanitizedBall.seq < this.football.seq) {
+            break;
+          }
+          this.football = sanitizedBall;
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('bkhn:mp-football-state', {
+                detail: { ball: sanitizedBall, source: 'state' },
+              }),
+            );
+          }
+          this.emit();
           break;
         }
         case 'study:leaderboard-ack': {

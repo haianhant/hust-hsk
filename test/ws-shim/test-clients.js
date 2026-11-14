@@ -10,7 +10,12 @@
  *  7. Reconnect cùng sessionId thay thế socket cũ, không nhân bản người chơi
  *  8. Ping/pong & rời phòng (leave + giảm count)
  */
+require('../register-ts.cjs');
 const WebSocket = require('./mini-ws');
+const {
+  encodeMoveTelemetry,
+  decodeMoveTelemetry,
+} = require('../../shared/contracts/multiplayer.ts');
 
 const PORT = Number(process.argv[2] || 8788);
 const BASE_HTTP = `http://127.0.0.1:${PORT}`;
@@ -496,6 +501,103 @@ function connectClient(room = 'hsk-1') {
       JSON.stringify(cClaimOk),
     );
     wsC.close();
+
+    // 15b. Board Game Club seating telemetry round-trip (bg-t1-s3) over live WS
+    const bSeeBgSeatPromise = wsB.waitFor(
+      (m) =>
+        m.type === 'move' &&
+        m.id === pubA &&
+        decodeMoveTelemetry(m.facing).scene === 'boardgame',
+    );
+    wsA2.send(
+      JSON.stringify({
+        type: 'move',
+        x: -3.2,
+        z: -0.95,
+        facing: encodeMoveTelemetry({
+          x: -3.2,
+          z: -0.95,
+          facing: 0.75,
+          scene: 'boardgame',
+          libraryFloor: 1,
+          seatedSeatId: 'bg-t1-s3',
+        }),
+        state: 'idle',
+      }),
+    );
+    const bSeeBgSeat = await bSeeBgSeatPromise;
+    const decodedBgSeat = decodeMoveTelemetry(bSeeBgSeat.facing);
+    assert(
+      'Board Game Seat Sync: Peer B decodes bg-t1-s3 in boardgame scene from A move',
+      decodedBgSeat.scene === 'boardgame' && decodedBgSeat.seatedSeatId === 'bg-t1-s3',
+      JSON.stringify(decodedBgSeat),
+    );
+
+    // 15c. Football kick sync & hibernation recovery over live WS
+    const bSeeCampusPromise = wsB.waitFor(
+      (m) =>
+        m.type === 'move' &&
+        m.id === pubA &&
+        decodeMoveTelemetry(m.facing).scene === 'campus',
+    );
+    wsA2.send(
+      JSON.stringify({
+        type: 'move',
+        x: 97,
+        z: -6,
+        facing: encodeMoveTelemetry({
+          x: 97,
+          z: -6,
+          facing: Math.PI / 2,
+          scene: 'campus',
+          libraryFloor: 1,
+          seatedSeatId: null,
+        }),
+        state: 'idle',
+      }),
+    );
+    await bSeeCampusPromise;
+
+    const aBallStatePromise = wsA2.waitFor((m) => m.type === 'football:state');
+    const bBallStatePromise = wsB.waitFor((m) => m.type === 'football:state');
+    wsA2.send(
+      JSON.stringify({
+        type: 'football:action',
+        kind: 'kick',
+        playerX: 130.5,
+        playerZ: 80,
+        facing: Math.PI / 2,
+      }),
+    );
+    const [aBallState, bBallState] = await Promise.all([aBallStatePromise, bBallStatePromise]);
+    assert(
+      'Football Sync: Both A and B receive football:state with positive velocity',
+      aBallState.ball?.seq === 1 &&
+        bBallState.ball?.seq === 1 &&
+        bBallState.ball?.vx > 8 &&
+        bBallState.ball?.lastTouchId === pubA,
+      JSON.stringify({ aBallState, bBallState }),
+    );
+
+    // Simulate DO hibernation restart and verify newcomer welcome preserves football state
+    await fetch(`${BASE_HTTP}/__hibernate?room=hsk-1`, { method: 'POST' });
+    const wsHibFb = await connectClient('hsk-1');
+    wsHibFb.send(
+      JSON.stringify({
+        type: 'join',
+        sessionId: 'sess-fb-hib',
+        name: 'Phạm Văn Hib',
+        mssv: '20226020',
+      }),
+    );
+    const welcomeHibFb = await wsHibFb.waitFor((m) => m.type === 'welcome');
+    assert(
+      'Football Sync Hibernation: Newcomer receives football seq>=1 after DO hibernation',
+      welcomeHibFb.football && welcomeHibFb.football.seq >= 1 && welcomeHibFb.football.x >= 132,
+      JSON.stringify(welcomeHibFb.football),
+    );
+    wsHibFb.close();
+    await new Promise((r) => setTimeout(r, 80));
 
     // 16. Leave & Seat Release broadcast when B disconnects
     const releaseOnLeavePromise = wsA2.waitFor(

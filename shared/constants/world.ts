@@ -54,6 +54,20 @@ export const BIKE_PARK: Vec2 & { heading: number } = {
 export const BIKE_MAX_SPEED = 14;
 export const BIKE_RADIUS = 0.55;
 
+/** Authoritative football stadium pitch dimensions and physics constants (in meters). */
+export const CAMPUS_FOOTBALL_PITCH = {
+  center: { x: 132, z: 80 },
+  halfW: 15.6,
+  halfD: 9.8,
+  westGoalX: 117.6,
+  eastGoalX: 146.4,
+  goalHalfZ: 2.55,
+  goalHeight: 2.35,
+  kickInteractRadius: 2.35,
+  dribbleRadius: 0.95,
+  ballRadius: 0.22,
+} as const;
+
 export function clampScalar(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }

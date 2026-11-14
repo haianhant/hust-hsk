@@ -21,6 +21,7 @@ import {
 } from '../lib/playerState';
 import {
   CAMPUS_DRINK_STALLS,
+  CAMPUS_FOOTBALL_PITCH,
   CLASSROOM,
   FAST_TRAVEL_DESTINATIONS,
   SPAWN,
@@ -177,6 +178,51 @@ function computeRealWorldTimeOfDay(now: Date = new Date()): {
     return { timeOfDay: 'sunset', clockText };
   }
   return { timeOfDay: 'night', clockText };
+}
+
+function collectOtherOccupiedBoardGameSeats(
+  mpSnap: Pick<ReturnType<typeof multiplayer.getSnapshot>, 'selfId' | 'players'>,
+  bgSnap: Pick<ReturnType<typeof boardGameClient.getSnapshot>, 'matchId' | 'playerId' | 'players'>,
+  localSeatId: string | null,
+): Set<string> {
+  const occupied = new Set<string>();
+  if (bgSnap.matchId) {
+    for (const p of bgSnap.players) {
+      if (!p.seatId || p.isSpectator) continue;
+      if (bgSnap.playerId && p.playerId === bgSnap.playerId) continue;
+      if (localSeatId && p.seatId === localSeatId) continue;
+      occupied.add(p.seatId);
+    }
+  }
+  for (const p of mpSnap.players) {
+    if (mpSnap.selfId && p.id === mpSnap.selfId) continue;
+    if (p.scene !== 'boardgame' || !p.seatedSeatId?.startsWith('bg-')) continue;
+    if (localSeatId && p.seatedSeatId === localSeatId) continue;
+    occupied.add(p.seatedSeatId);
+  }
+  return occupied;
+}
+
+function countBoardGameTablePlayers(
+  tableId: BoardGameTableId,
+  occupants: readonly BoardGameSeatOccupant[],
+  localSeatId: string | null,
+  directoryMatches: readonly { tableId: string; playerCount: number }[],
+): number {
+  const prefix = tableId === 'table-1' ? 'bg-t1-' : 'bg-t2-';
+  const seatSet = new Set<string>();
+  for (const occ of occupants) {
+    if (occ.seatId.startsWith(prefix)) {
+      seatSet.add(occ.seatId);
+    }
+  }
+  if (localSeatId?.startsWith(prefix)) {
+    seatSet.add(localSeatId);
+  }
+  const dirCount = directoryMatches
+    .filter((m) => m.tableId === tableId)
+    .reduce((acc, m) => Math.max(acc, m.playerCount), 0);
+  return Math.min(8, Math.max(seatSet.size, dirCount));
 }
 
 export default function HomePage() {
@@ -960,10 +1006,32 @@ export default function HomePage() {
       }
     };
     const onFootballGoal = (e: Event) => {
-      const d = (e as CustomEvent<{ side: 'west' | 'east'; totalGoals: number }>).detail;
+      const d = (
+        e as CustomEvent<{
+          side: 'west' | 'east';
+          totalGoals: number;
+          lastTouchId?: string | null;
+        }>
+      ).detail;
       if (!d) return;
-      bumpQuestMetricRef.current('footballGoals', { setAbsolute: d.totalGoals });
-      showToast(`⚽ VÀOOO! Bạn vừa ghi bàn thắng thứ ${d.totalGoals} tại SVĐ Bách Khoa!`);
+      const selfId = multiplayer.getSnapshot().selfId;
+      const scoredBySelf =
+        !d.lastTouchId || d.lastTouchId === 'local' || (selfId && d.lastTouchId === selfId);
+      const nearStadium =
+        Math.hypot(
+          playerState.pos.x - CAMPUS_FOOTBALL_PITCH.center.x,
+          playerState.pos.z - CAMPUS_FOOTBALL_PITCH.center.z,
+        ) <= 45;
+      if (scoredBySelf) {
+        bumpQuestMetricRef.current('footballGoals', { setAbsolute: d.totalGoals });
+      }
+      if (scoredBySelf || nearStadium) {
+        showToast(
+          scoredBySelf
+            ? `⚽ VÀOOO! Bạn vừa ghi bàn thắng thứ ${d.totalGoals} tại SVĐ Bách Khoa!`
+            : `⚽ VÀOOO! Bàn thắng thứ ${d.totalGoals} tại SVĐ Bách Khoa!`,
+        );
+      }
     };
     window.addEventListener('bkhn:view-mode', onViewModeChange);
     window.addEventListener('bkhn:outdoor-bench-change', onOutdoorBenchChange);
@@ -1132,6 +1200,12 @@ export default function HomePage() {
           occupiedOtherSet.add(occ.seatId);
         }
       }
+      const bgNow = boardGameClient.getSnapshot();
+      const occupiedBoardGameSeatIds = collectOtherOccupiedBoardGameSeats(
+        snapNow,
+        bgNow,
+        playerState.boardGameSeatId,
+      );
       const found = findNearestInteractable({
         pos: playerState.pos,
         inClassroom,
@@ -1141,6 +1215,7 @@ export default function HomePage() {
         seated: playerState.seated,
         seatId: playerState.seatId,
         boardGameSeatId: playerState.boardGameSeatId,
+        occupiedBoardGameSeatIds,
         occupiedByOtherSeatIds: occupiedOtherSet,
         pendingSeatId: snapNow.pendingSeatRequest?.seatId ?? null,
         outdoorBenchId: playerState.outdoorBenchId,
@@ -1458,6 +1533,18 @@ export default function HomePage() {
   const handleSelectBoardGameSeat = useCallback(
     (seatId: string) => {
       const snap = boardGameClient.getSnapshot();
+      const mpNow = multiplayer.getSnapshot();
+      const takenByBg = snap.players.find(
+        (p) => p.seatId === seatId && p.playerId !== snap.playerId && !p.isSpectator,
+      );
+      const takenByMp = mpNow.players.find(
+        (p) => p.id !== mpNow.selfId && p.scene === 'boardgame' && p.seatedSeatId === seatId,
+      );
+      if (takenByBg || takenByMp) {
+        const who = takenByBg?.displayName ?? takenByMp?.name ?? 'người chơi khác';
+        showToast(`🪑 Ghế này đang có ${who} ngồi — hãy chọn ghế trống khác!`);
+        return;
+      }
       if (snap.matchId) {
         if (snap.status === 'PLAYING' || snap.status === 'STARTING') {
           showToast('Ván đấu đang diễn ra, không thể đổi ghế lúc này.');
@@ -1843,13 +1930,22 @@ export default function HomePage() {
         occupiedOtherSet.add(occ.seatId);
       }
     }
+    const bgNow = boardGameClient.getSnapshot();
+    const occupiedBoardGameSeatIds = collectOtherOccupiedBoardGameSeats(
+      snapNow,
+      bgNow,
+      playerState.boardGameSeatId,
+    );
     const liveFound = findNearestInteractable({
       pos: playerState.pos,
       inClassroom: playerState.inClassroom,
       inLibraryLobby: playerState.inLibraryLobby,
+      inBoardGameClub: playerState.inBoardGameClub,
       libraryFloor: playerState.libraryFloor,
       seated: playerState.seated,
       seatId: playerState.seatId,
+      boardGameSeatId: playerState.boardGameSeatId,
+      occupiedBoardGameSeatIds,
       occupiedByOtherSeatIds: occupiedOtherSet,
       pendingSeatId: snapNow.pendingSeatRequest?.seatId ?? null,
       outdoorBenchId: playerState.outdoorBenchId,
@@ -2364,44 +2460,81 @@ export default function HomePage() {
   );
 
   const boardGameOccupants: BoardGameSeatOccupant[] = useMemo(() => {
-    if (!bgSnap.matchId) return [];
     const list: BoardGameSeatOccupant[] = [];
-    for (const p of bgSnap.players) {
-      if (!p.seatId || p.isSpectator) continue;
+    const seenSeatIds = new Set<string>();
+    const matchSeatedNamesByTable = new Set<string>();
+
+    if (bgSnap.matchId) {
+      for (const p of bgSnap.players) {
+        if (!p.seatId || p.isSpectator) continue;
+        seenSeatIds.add(p.seatId);
+        const tablePrefix = p.seatId.startsWith('bg-t2-') ? 't2' : 't1';
+        matchSeatedNamesByTable.add(`${tablePrefix}:${p.displayName.trim().toLowerCase()}`);
+        list.push({
+          playerId: p.playerId,
+          seatId: p.seatId,
+          displayName: p.displayName,
+          isHost: p.isHost,
+          ready: p.ready,
+          connected: p.connected,
+          appearance: p.appearance,
+        });
+      }
+    }
+
+    for (const p of mpSnap.players) {
+      if (mpSnap.selfId && p.id === mpSnap.selfId) continue;
+      if (p.scene !== 'boardgame' || !p.seatedSeatId?.startsWith('bg-')) continue;
+      if (seenSeatIds.has(p.seatedSeatId)) continue;
+      const tablePrefix = p.seatedSeatId.startsWith('bg-t2-') ? 't2' : 't1';
+      if (
+        bgSnap.matchId &&
+        matchSeatedNamesByTable.has(`${tablePrefix}:${p.name.trim().toLowerCase()}`)
+      ) {
+        continue;
+      }
+      seenSeatIds.add(p.seatedSeatId);
       list.push({
-        playerId: p.playerId,
-        seatId: p.seatId,
-        displayName: p.displayName,
-        isHost: p.isHost,
-        ready: p.ready,
-        connected: p.connected,
-        appearance: p.appearance,
+        playerId: p.id,
+        seatId: p.seatedSeatId,
+        displayName: p.name,
+        isHost: false,
+        ready: false,
+        connected: true,
+        appearance: {
+          gender: p.gender,
+          outfit: p.outfit,
+          hairStyle: p.hairStyle,
+          skirt: p.skirt,
+          glasses: p.glasses,
+        },
       });
     }
+
     return list;
-  }, [bgSnap.matchId, bgSnap.players]);
+  }, [bgSnap.matchId, bgSnap.players, mpSnap.players, mpSnap.selfId]);
 
-  const bgTable1Count = useMemo(() => {
-    if (bgSnap.matchId && bgSnap.tableId === 'table-1') {
-      return boardGameOccupants.length;
-    }
-    const dirT1 = bgSnap.directoryMatches
-      .filter((m) => m.tableId === 'table-1')
-      .reduce((acc, m) => Math.max(acc, m.playerCount), 0);
-    if (dirT1 > 0) return dirT1;
-    return boardGameSeatId?.startsWith('bg-t1-') ? 1 : 0;
-  }, [bgSnap.matchId, bgSnap.tableId, bgSnap.directoryMatches, boardGameOccupants.length, boardGameSeatId]);
+  const bgTable1Count = useMemo(
+    () =>
+      countBoardGameTablePlayers(
+        'table-1',
+        boardGameOccupants,
+        boardGameSeatId,
+        bgSnap.directoryMatches,
+      ),
+    [boardGameOccupants, boardGameSeatId, bgSnap.directoryMatches],
+  );
 
-  const bgTable2Count = useMemo(() => {
-    if (bgSnap.matchId && bgSnap.tableId === 'table-2') {
-      return boardGameOccupants.length;
-    }
-    const dirT2 = bgSnap.directoryMatches
-      .filter((m) => m.tableId === 'table-2')
-      .reduce((acc, m) => Math.max(acc, m.playerCount), 0);
-    if (dirT2 > 0) return dirT2;
-    return boardGameSeatId?.startsWith('bg-t2-') ? 1 : 0;
-  }, [bgSnap.matchId, bgSnap.tableId, bgSnap.directoryMatches, boardGameOccupants.length, boardGameSeatId]);
+  const bgTable2Count = useMemo(
+    () =>
+      countBoardGameTablePlayers(
+        'table-2',
+        boardGameOccupants,
+        boardGameSeatId,
+        bgSnap.directoryMatches,
+      ),
+    [boardGameOccupants, boardGameSeatId, bgSnap.directoryMatches],
+  );
 
   const selfBgPlayer = useMemo(
     () => (bgSnap.playerId ? bgSnap.players.find((p) => p.playerId === bgSnap.playerId) ?? null : null),
@@ -2510,7 +2643,7 @@ export default function HomePage() {
               boardGameSeatId={boardGameSeatId}
               nearestBoardGameSeatId={nearestBoardGameSeatId}
               boardGameOccupants={boardGameOccupants}
-              boardGameLocalPlayerId={bgSnap.playerId}
+              boardGameLocalPlayerId={bgSnap.playerId ?? mpSnap.selfId}
               boardGameTable1Count={bgTable1Count}
               boardGameTable2Count={bgTable2Count}
               timeOfDay={timeOfDay}
@@ -2762,6 +2895,8 @@ export default function HomePage() {
             exitConfirmOpen={boardGameExitConfirmOpen}
             currentSeatId={boardGameSeatId}
             occupants={boardGameOccupants}
+            table1Count={bgTable1Count}
+            table2Count={bgTable2Count}
             directoryMatches={bgSnap.directoryMatches}
             activePlayers={bgSnap.players}
             spectatorCount={bgSnap.spectatorCount}

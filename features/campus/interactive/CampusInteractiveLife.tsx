@@ -29,6 +29,15 @@ import {
   type DrinkStallSpec,
 } from '../world-data';
 import { playerState, type TimeOfDay } from '../../../lib/playerState';
+import { multiplayer } from '../../../lib/multiplayer';
+import {
+  applyFootballDribble,
+  applyFootballKick,
+  applyFootballReset,
+  createInitialFootballState,
+  stepFootballPhysics,
+  type FootballBallState,
+} from '../../../shared/contracts/multiplayer';
 
 declare global {
   interface Window {
@@ -941,27 +950,14 @@ export default function CampusInteractiveLife({ timeOfDay }: { timeOfDay: TimeOf
   const confettiMeshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
-  const ballStateRef = useRef<{
-    x: number;
-    y: number;
-    z: number;
-    vx: number;
-    vy: number;
-    vz: number;
-    goalCooldown: number;
-    dribbleCooldown: number;
-    confettiTimer: number;
-  }>({
-    x: CAMPUS_FOOTBALL_PITCH.center.x,
-    y: BALL_RADIUS,
-    z: CAMPUS_FOOTBALL_PITCH.center.z,
-    vx: 0,
-    vy: 0,
-    vz: 0,
-    goalCooldown: 0,
-    dribbleCooldown: 0,
-    confettiTimer: 0,
-  });
+  const simStateRef = useRef<FootballBallState>(createInitialFootballState());
+  const visualOffsetRef = useRef<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
+  const dribbleCooldownRef = useRef(0);
+  const confettiTimerRef = useRef(0);
+  const lastServerSeqRef = useRef(-1);
+  const lastAnnouncedGoalsRef = useRef(playerState.footballGoals);
+  const scoreboardGoalsRef = useRef(playerState.footballGoals);
+  const scoreboardHighlightRef = useRef<'west' | 'east' | null>(null);
 
   const confettiParticlesRef = useRef<ConfettiParticle[]>(
     Array.from({ length: CONFETTI_COUNT }, () => ({
@@ -1003,8 +999,7 @@ export default function CampusInteractiveLife({ timeOfDay }: { timeOfDay: TimeOf
   }, []);
 
   const spawnGoalConfetti = (gx: number, gz: number) => {
-    const b = ballStateRef.current;
-    b.confettiTimer = 2.0;
+    confettiTimerRef.current = 2.0;
     const parts = confettiParticlesRef.current;
     for (let i = 0; i < parts.length; i++) {
       const a = (i / parts.length) * Math.PI * 2 + (i % 3) * 0.25;
@@ -1019,67 +1014,153 @@ export default function CampusInteractiveLife({ timeOfDay }: { timeOfDay: TimeOf
     }
   };
 
+  const applyAuthoritativeBall = (
+    serverBall: FootballBallState,
+    source: 'welcome' | 'state',
+  ) => {
+    if (source !== 'welcome' && serverBall.seq < lastServerSeqRef.current) {
+      return;
+    }
+    lastServerSeqRef.current = Math.max(lastServerSeqRef.current, serverBall.seq);
+
+    const prevSim = simStateRef.current;
+    const prevVo = visualOffsetRef.current;
+    const prevRenderX = prevSim.x + prevVo.x;
+    const prevRenderY = prevSim.y + prevVo.y;
+    const prevRenderZ = prevSim.z + prevVo.z;
+
+    const deltaDist = Math.hypot(prevRenderX - serverBall.x, prevRenderZ - serverBall.z);
+    if (source === 'welcome' || deltaDist > 8) {
+      visualOffsetRef.current = { x: 0, y: 0, z: 0 };
+    } else {
+      visualOffsetRef.current = {
+        x: Math.max(-4, Math.min(4, prevRenderX - serverBall.x)),
+        y: Math.max(-2, Math.min(2, prevRenderY - serverBall.y)),
+        z: Math.max(-4, Math.min(4, prevRenderZ - serverBall.z)),
+      };
+    }
+
+    if (
+      serverBall.goalCooldown > 0 &&
+      prevSim.goalCooldown <= 0 &&
+      serverBall.goals > lastAnnouncedGoalsRef.current
+    ) {
+      lastAnnouncedGoalsRef.current = serverBall.goals;
+      const goalSide = serverBall.lastGoalSide ?? 'east';
+      spawnGoalConfetti(
+        goalSide === 'west' ? CAMPUS_FOOTBALL_PITCH.westGoalX : CAMPUS_FOOTBALL_PITCH.eastGoalX,
+        CAMPUS_FOOTBALL_PITCH.center.z,
+      );
+      window.dispatchEvent(
+        new CustomEvent('bkhn:football-goal', {
+          detail: {
+            side: goalSide,
+            totalGoals: serverBall.goals,
+            lastTouchId: serverBall.lastTouchId ?? null,
+          },
+        }),
+      );
+    } else {
+      lastAnnouncedGoalsRef.current = Math.max(lastAnnouncedGoalsRef.current, serverBall.goals);
+    }
+
+    simStateRef.current = { ...serverBall };
+    playerState.footballPos = { x: serverBall.x, z: serverBall.z };
+    playerState.footballGoals = serverBall.goals;
+    if (
+      serverBall.goals !== scoreboardGoalsRef.current ||
+      (serverBall.lastGoalSide ?? null) !== scoreboardHighlightRef.current
+    ) {
+      scoreboardGoalsRef.current = serverBall.goals;
+      scoreboardHighlightRef.current = serverBall.lastGoalSide;
+      drawScoreboardCanvas(scoreboard.canvas, serverBall.goals, serverBall.lastGoalSide);
+      scoreboard.tex.needsUpdate = true;
+    }
+  };
+
   const performKick = (force = false): boolean => {
-    if (playerState.inClassroom || playerState.inLibraryLobby) return false;
-    const b = ballStateRef.current;
-    const dx = b.x - playerState.pos.x;
-    const dz = b.z - playerState.pos.z;
-    const dist = Math.hypot(dx, dz);
-    if (!force && dist > CAMPUS_FOOTBALL_PITCH.kickInteractRadius + 0.85) {
+    if (playerState.inClassroom || playerState.inLibraryLobby || playerState.inBoardGameClub) {
       return false;
     }
-    const fX = Math.sin(playerState.facing);
-    const fZ = Math.cos(playerState.facing);
-    const dirLen = dist > 0.08 ? dist : 1;
-    const awayX = dist > 0.08 ? dx / dirLen : fX;
-    const awayZ = dist > 0.08 ? dz / dirLen : fZ;
-    let kx = awayX * 0.65 + fX * 0.35;
-    let kz = awayZ * 0.65 + fZ * 0.35;
-    const kLen = Math.hypot(kx, kz) || 1;
-    kx /= kLen;
-    kz /= kLen;
-
-    b.vx = kx * 12.2;
-    b.vz = kz * 12.2;
-    b.vy = 3.8;
-    b.dribbleCooldown = 0.25;
+    const maxDist = force ? 1e6 : CAMPUS_FOOTBALL_PITCH.kickInteractRadius + 0.85;
+    const selfKey = multiplayer.getSnapshot().selfId ?? 'local';
+    const kicked = applyFootballKick(
+      simStateRef.current,
+      playerState.pos.x,
+      playerState.pos.z,
+      playerState.facing,
+      Date.now(),
+      selfKey,
+      maxDist,
+    );
+    if (!kicked) return false;
+    simStateRef.current = kicked;
+    dribbleCooldownRef.current = 0.25;
+    multiplayer.sendFootballAction(
+      'kick',
+      playerState.pos.x,
+      playerState.pos.z,
+      playerState.facing,
+    );
     return true;
   };
 
   useEffect(() => {
-    playerState.footballPos = {
-      x: ballStateRef.current.x,
-      z: ballStateRef.current.z,
-    };
+    const initialMpBall = multiplayer.getSnapshot().football;
+    if (initialMpBall) {
+      applyAuthoritativeBall(initialMpBall, 'welcome');
+    } else {
+      playerState.footballPos = {
+        x: simStateRef.current.x,
+        z: simStateRef.current.z,
+      };
+    }
 
     const onKickEvent = () => {
       performKick(false);
     };
+    const onRemoteBallEvent = (ev: Event) => {
+      const detail = (
+        ev as CustomEvent<{ ball?: FootballBallState; source?: 'welcome' | 'state' }>
+      ).detail;
+      if (detail?.ball) {
+        applyAuthoritativeBall(detail.ball, detail.source ?? 'state');
+      }
+    };
     window.addEventListener('bkhn:football-kick', onKickEvent);
+    window.addEventListener('bkhn:mp-football-state', onRemoteBallEvent);
 
     window.__bkhnFootball = {
       kick: (force = true) => performKick(force),
       reset: () => {
-        const b = ballStateRef.current;
-        b.x = CAMPUS_FOOTBALL_PITCH.center.x;
-        b.y = BALL_RADIUS;
-        b.z = CAMPUS_FOOTBALL_PITCH.center.z;
-        b.vx = 0;
-        b.vy = 0;
-        b.vz = 0;
-        b.goalCooldown = 0;
-        playerState.footballPos = { x: b.x, z: b.z };
+        const selfKey = multiplayer.getSnapshot().selfId ?? 'local';
+        const resetBall = applyFootballReset(simStateRef.current, Date.now(), selfKey);
+        simStateRef.current = resetBall;
+        visualOffsetRef.current = { x: 0, y: 0, z: 0 };
+        playerState.footballPos = { x: resetBall.x, z: resetBall.z };
+        if (scoreboardHighlightRef.current !== null) {
+          scoreboardHighlightRef.current = null;
+          drawScoreboardCanvas(scoreboard.canvas, resetBall.goals, null);
+          scoreboard.tex.needsUpdate = true;
+        }
+        multiplayer.sendFootballAction(
+          'reset',
+          playerState.pos.x,
+          playerState.pos.z,
+          playerState.facing,
+        );
       },
       getBall: () => ({
-        x: ballStateRef.current.x,
-        y: ballStateRef.current.y,
-        z: ballStateRef.current.z,
-        goals: playerState.footballGoals,
+        x: simStateRef.current.x,
+        y: simStateRef.current.y,
+        z: simStateRef.current.z,
+        goals: simStateRef.current.goals,
       }),
     };
 
     return () => {
       window.removeEventListener('bkhn:football-kick', onKickEvent);
+      window.removeEventListener('bkhn:mp-football-state', onRemoteBallEvent);
       delete window.__bkhnFootball;
       playerState.footballPos = {
         x: CAMPUS_FOOTBALL_PITCH.center.x,
@@ -1118,127 +1199,111 @@ export default function CampusInteractiveLife({ timeOfDay }: { timeOfDay: TimeOf
 
   useFrame((state, rawDelta) => {
     const dt = Math.min(rawDelta, 0.05);
-    const b = ballStateRef.current;
     const pitch = CAMPUS_FOOTBALL_PITCH;
 
-    if (b.dribbleCooldown > 0) b.dribbleCooldown = Math.max(0, b.dribbleCooldown - dt);
+    dribbleCooldownRef.current = Math.max(0, dribbleCooldownRef.current - dt);
 
     // 1) Dẫn bóng khi người chơi chạm bóng ngoài sân
     if (
       !playerState.inClassroom &&
       !playerState.inLibraryLobby &&
+      !playerState.inBoardGameClub &&
       !playerState.riding &&
-      b.dribbleCooldown <= 0
+      dribbleCooldownRef.current <= 0
     ) {
-      const dx = b.x - playerState.pos.x;
-      const dz = b.z - playerState.pos.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist < pitch.dribbleRadius && b.y <= 0.7) {
-        const len = dist > 0.04 ? dist : 1;
-        const pushX = dist > 0.04 ? dx / len : Math.sin(playerState.facing);
-        const pushZ = dist > 0.04 ? dz / len : Math.cos(playerState.facing);
-        b.vx = Math.max(-7.5, Math.min(7.5, b.vx * 0.35 + pushX * 4.4));
-        b.vz = Math.max(-7.5, Math.min(7.5, b.vz * 0.35 + pushZ * 4.4));
-        b.dribbleCooldown = 0.09;
-      }
-    }
-
-    // 2) Trọng lực, nảy & ma sát sân cỏ
-    b.x += b.vx * dt;
-    b.z += b.vz * dt;
-    if (b.y > BALL_RADIUS || b.vy !== 0) {
-      b.vy -= 14.5 * dt;
-      b.y += b.vy * dt;
-      if (b.y <= BALL_RADIUS) {
-        b.y = BALL_RADIUS;
-        if (Math.abs(b.vy) > 1.1) {
-          b.vy = -b.vy * 0.45;
-        } else {
-          b.vy = 0;
+      const sim = simStateRef.current;
+      const dist = Math.hypot(sim.x - playerState.pos.x, sim.z - playerState.pos.z);
+      if (dist < pitch.dribbleRadius && sim.y <= 0.7 && sim.goalCooldown <= 0) {
+        const selfKey = multiplayer.getSnapshot().selfId ?? 'local';
+        const dribbled = applyFootballDribble(
+          sim,
+          playerState.pos.x,
+          playerState.pos.z,
+          playerState.facing,
+          Date.now(),
+          selfKey,
+        );
+        if (dribbled) {
+          simStateRef.current = dribbled;
+          dribbleCooldownRef.current = 0.09;
+          multiplayer.sendFootballAction(
+            'dribble',
+            playerState.pos.x,
+            playerState.pos.z,
+            playerState.facing,
+          );
         }
       }
     }
-    const friction = Math.exp(-1.9 * dt);
-    b.vx *= friction;
-    b.vz *= friction;
-    if (Math.hypot(b.vx, b.vz) < 0.04) {
-      b.vx = 0;
-      b.vz = 0;
-    }
 
-    // 3) Giới hạn đường biên SVĐ Bách Khoa
-    const minX = pitch.center.x - pitch.halfW;
-    const maxX = pitch.center.x + pitch.halfW;
-    const minZ = pitch.center.z - pitch.halfD;
-    const maxZ = pitch.center.z + pitch.halfD;
-    if (b.x < minX) {
-      b.x = minX;
-      b.vx = Math.abs(b.vx) * 0.65;
-    } else if (b.x > maxX) {
-      b.x = maxX;
-      b.vx = -Math.abs(b.vx) * 0.65;
-    }
-    if (b.z < minZ) {
-      b.z = minZ;
-      b.vz = Math.abs(b.vz) * 0.65;
-    } else if (b.z > maxZ) {
-      b.z = maxZ;
-      b.vz = -Math.abs(b.vz) * 0.65;
-    }
+    // 2) Tiến bước vật lý bóng chia sẻ (trọng lực, ma sát, đường biên, khung thành)
+    const prevCooldown = simStateRef.current.goalCooldown;
+    const stepped = stepFootballPhysics(simStateRef.current, dt);
+    const b = stepped.state;
+    simStateRef.current = b;
 
-    // 4) Kiểm tra ghi bàn vào khung thành Tây (117.6) hoặc Đông (146.4)
-    if (b.goalCooldown > 0) {
-      b.goalCooldown -= dt;
-      if (b.goalCooldown <= 0) {
-        b.x = pitch.center.x;
-        b.y = BALL_RADIUS;
-        b.z = pitch.center.z;
-        b.vx = 0;
-        b.vy = 0;
-        b.vz = 0;
-        drawScoreboardCanvas(scoreboard.canvas, playerState.footballGoals, null);
-        scoreboard.tex.needsUpdate = true;
+    if (stepped.goalScoredSide) {
+      const gx = stepped.goalScoredSide === 'west' ? pitch.westGoalX : pitch.eastGoalX;
+      spawnGoalConfetti(gx, pitch.center.z);
+      if (b.goals > lastAnnouncedGoalsRef.current) {
+        lastAnnouncedGoalsRef.current = b.goals;
+        window.dispatchEvent(
+          new CustomEvent('bkhn:football-goal', {
+            detail: {
+              side: stepped.goalScoredSide,
+              totalGoals: b.goals,
+              lastTouchId: b.lastTouchId ?? null,
+            },
+          }),
+        );
       }
-    } else if (
-      Math.abs(b.z - pitch.center.z) <= pitch.goalHalfZ &&
-      b.y <= pitch.goalHeight &&
-      (b.x <= pitch.westGoalX || b.x >= pitch.eastGoalX)
+    }
+    if (
+      (prevCooldown > 0 && b.goalCooldown <= 0) ||
+      stepped.goalScoredSide ||
+      b.goals !== scoreboardGoalsRef.current ||
+      (b.lastGoalSide ?? null) !== scoreboardHighlightRef.current
     ) {
-      const side: 'west' | 'east' = b.x <= pitch.westGoalX ? 'west' : 'east';
-      b.goalCooldown = 1.55;
-      b.vx *= 0.2;
-      b.vz *= 0.2;
-      playerState.footballGoals += 1;
-      spawnGoalConfetti(side === 'west' ? pitch.westGoalX : pitch.eastGoalX, pitch.center.z);
-      drawScoreboardCanvas(scoreboard.canvas, playerState.footballGoals, side);
+      playerState.footballGoals = b.goals;
+      scoreboardGoalsRef.current = b.goals;
+      scoreboardHighlightRef.current = b.lastGoalSide;
+      drawScoreboardCanvas(scoreboard.canvas, b.goals, b.lastGoalSide);
       scoreboard.tex.needsUpdate = true;
-      window.dispatchEvent(
-        new CustomEvent('bkhn:football-goal', {
-          detail: { side, totalGoals: playerState.footballGoals },
-        }),
-      );
     }
 
     playerState.footballPos = { x: b.x, z: b.z };
 
-    // 5) Cập nhật vị trí bóng + độ xoay lăn
-    const groundY = getCampusGroundElevation(b.x, b.z);
+    // 3) Làm mượt sai số mạng & cập nhật vị trí lưới 3D + độ xoay lăn
+    const vo = visualOffsetRef.current;
+    const decay = Math.exp(-16 * dt);
+    vo.x *= decay;
+    vo.y *= decay;
+    vo.z *= decay;
+    if (Math.abs(vo.x) < 0.001) vo.x = 0;
+    if (Math.abs(vo.y) < 0.001) vo.y = 0;
+    if (Math.abs(vo.z) < 0.001) vo.z = 0;
+
+    const renderX = b.x + vo.x;
+    const renderY = Math.max(BALL_RADIUS, b.y + vo.y);
+    const renderZ = b.z + vo.z;
+
+    const groundY = getCampusGroundElevation(renderX, renderZ);
     if (ballMeshRef.current) {
-      ballMeshRef.current.position.set(b.x, groundY + b.y, b.z);
+      ballMeshRef.current.position.set(renderX, groundY + renderY, renderZ);
       ballMeshRef.current.rotation.z -= (b.vx * dt) / BALL_RADIUS;
       ballMeshRef.current.rotation.x += (b.vz * dt) / BALL_RADIUS;
     }
     if (ballShadowRef.current) {
-      const shrink = Math.max(0.45, 1 - (b.y - BALL_RADIUS) * 0.2);
-      ballShadowRef.current.position.set(b.x, groundY + 0.032, b.z);
+      const shrink = Math.max(0.45, 1 - (renderY - BALL_RADIUS) * 0.2);
+      ballShadowRef.current.position.set(renderX, groundY + 0.032, renderZ);
       ballShadowRef.current.scale.setScalar(shrink);
     }
 
-    // 6) Pháo giấy ăn mừng bàn thắng
+    // 4) Pháo giấy ăn mừng bàn thắng
     const confetti = confettiMeshRef.current;
     if (confetti) {
-      if (b.confettiTimer > 0) {
-        b.confettiTimer = Math.max(0, b.confettiTimer - dt);
+      if (confettiTimerRef.current > 0) {
+        confettiTimerRef.current = Math.max(0, confettiTimerRef.current - dt);
         confetti.visible = true;
         const parts = confettiParticlesRef.current;
         for (let i = 0; i < parts.length; i++) {

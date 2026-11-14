@@ -52,7 +52,11 @@ export function useMultiplayerBridge(entered: boolean): MultiplayerSnapshot {
             : 'campus';
       const libraryFloor = playerState.libraryFloor ?? 1;
       const seatedSeatId =
-        scene === 'library' && playerState.seated ? playerState.seatId : null;
+        scene === 'library' && playerState.seated
+          ? playerState.seatId
+          : scene === 'boardgame' && playerState.boardGameSeatId
+            ? playerState.boardGameSeatId
+            : null;
       const state: RemoteState =
         scene === 'campus' && bikeState.riding
           ? 'riding'
@@ -111,12 +115,16 @@ export function useMultiplayerBridge(entered: boolean): MultiplayerSnapshot {
     window.addEventListener('bkhn:library-lobby', tick);
     window.addEventListener('bkhn:library-floor', tick);
     window.addEventListener('bkhn:classroom', tick);
+    window.addEventListener('bkhn:boardgame-club', tick);
+    window.addEventListener('bkhn:boardgame-seat-change', tick);
     window.addEventListener('bkhn:outfit', tick);
     return () => {
       clearInterval(id);
       window.removeEventListener('bkhn:library-lobby', tick);
       window.removeEventListener('bkhn:library-floor', tick);
       window.removeEventListener('bkhn:classroom', tick);
+      window.removeEventListener('bkhn:boardgame-club', tick);
+      window.removeEventListener('bkhn:boardgame-seat-change', tick);
       window.removeEventListener('bkhn:outfit', tick);
     };
   }, [entered]);

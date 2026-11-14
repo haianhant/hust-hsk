@@ -5,6 +5,7 @@
 // gọn trong phạm vi khuôn viên ĐHBK Hà Nội) & bộ ảnh thực tế tham-khao/.
 // ---------------------------------------------------------------------------
 
+import { CAMPUS_FOOTBALL_PITCH } from '../../../shared/constants/world';
 import type { AABB, Vec2 } from './bounds';
 
 // --- Landmark chính ---------------------------------------------------------
@@ -1132,17 +1133,7 @@ export const CAMPUS_MEMORY_BOARDS: readonly CampusMemoryBoardSpec[] = [
 ] as const;
 
 /** Thông số sân bóng đá mini-game tương tác tại SVĐ Bách Khoa. */
-export const CAMPUS_FOOTBALL_PITCH = {
-  center: { x: 132, z: 80 },
-  halfW: 15.6,
-  halfD: 9.8,
-  westGoalX: 117.6,
-  eastGoalX: 146.4,
-  goalHalfZ: 2.55,
-  goalHeight: 2.35,
-  kickInteractRadius: 2.35,
-  dribbleRadius: 0.95,
-} as const;
+export { CAMPUS_FOOTBALL_PITCH };
 
 // --- HUSTVerse Board Game Club & Phòng Sinh Hoạt Chung KTX (BG1) --------------
 // Đặt ở vịnh trống phía Tây Căng tin KTX B5-9 (giữa KTX B6 và KTX B7), quay mặt Đông

@@ -24,6 +24,8 @@ export interface BoardGameLobbyProps {
   exitConfirmOpen: boolean;
   currentSeatId: string | null;
   occupants?: readonly BoardGameSeatOccupant[];
+  table1Count?: number;
+  table2Count?: number;
   directoryMatches?: readonly BoardGameMatchSummary[];
   activePlayers?: readonly BoardGameLobbyPlayerView[];
   spectatorCount?: number;
@@ -56,6 +58,8 @@ export default function BoardGameLobby({
   exitConfirmOpen,
   currentSeatId,
   occupants = [],
+  table1Count = 0,
+  table2Count = 0,
   directoryMatches = [],
   activePlayers = [],
   spectatorCount = 0,
@@ -133,13 +137,24 @@ export default function BoardGameLobby({
                   const tableOccs = occupants.filter((o) =>
                     o.seatId.startsWith(table.tableId === 'table-1' ? 'bg-t1-' : 'bg-t2-'),
                   );
-                  const count =
+                  const passedCount =
+                    table.tableId === 'table-1' ? table1Count : table2Count;
+                  const localSeatCount =
                     tableOccs.length +
                     (currentSeatId &&
                     currentSeatId.startsWith(table.tableId === 'table-1' ? 'bg-t1-' : 'bg-t2-') &&
                     !tableOccs.some((o) => o.seatId === currentSeatId)
                       ? 1
                       : 0);
+                  const count = Math.min(8, Math.max(localSeatCount, passedCount));
+                  const matchingOpenMatch = directoryMatches.find(
+                    (m) =>
+                      m.tableId === table.tableId &&
+                      (m.status === 'CREATED' ||
+                        m.status === 'WAITING' ||
+                        m.status === 'READY_CHECK') &&
+                      m.playerCount < m.maxPlayers,
+                  );
                   const isSel = selectedTable === table.tableId;
                   const nextFreeSeat = findFreeSeatForTable(table.tableId);
 
@@ -194,6 +209,24 @@ export default function BoardGameLobby({
                             🪑 Ngồi vào bàn này
                           </button>
                         )}
+                        {!inviteCode && matchingOpenMatch && onJoinDirectoryMatch ? (
+                          <button
+                            type="button"
+                            data-testid={`bg-join-open-${table.tableId}-btn`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onJoinDirectoryMatch(
+                                matchingOpenMatch.matchId,
+                                matchingOpenMatch.inviteCode,
+                                false,
+                              );
+                            }}
+                            className="rounded-lg border border-sky-400/50 bg-sky-500/20 px-2.5 py-1 text-xs font-semibold text-sky-200 hover:bg-sky-500/30"
+                          >
+                            🎲 Vào phòng chờ ({matchingOpenMatch.inviteCode}) ·{' '}
+                            {matchingOpenMatch.playerCount}/{matchingOpenMatch.maxPlayers}
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   );
