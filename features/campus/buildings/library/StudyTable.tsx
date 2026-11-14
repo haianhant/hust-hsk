@@ -6,8 +6,17 @@
 // khung chân thép sơn tĩnh điện xám đen, vách ngăn thấp kèm đèn đọc sách LED.
 // ---------------------------------------------------------------------------
 
+import { useMemo } from 'react';
 import type * as THREE from 'three';
 import { CANVAS_VN_FONT, LabelPlane } from '../../../../components/three/TextPlate';
+import { makeSoftShadowTexture } from '../../../../components/three/materials';
+
+let sharedTableShadowTex: THREE.CanvasTexture | null = null;
+function getStudyTableShadowTex(): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+  if (!sharedTableShadowTex) sharedTableShadowTex = makeSoftShadowTexture();
+  return sharedTableShadowTex;
+}
 
 export interface StudyTableModelProps {
   tableId: string;
@@ -65,9 +74,21 @@ export function StudyTable({
   const bookCornerX = index === 0 ? -w / 2 + 0.19 : w / 2 - 0.19;
   const drawPlaque = index === 0 ? drawTablePlaque1 : drawTablePlaque2;
   const plaqueKey = `library-study-table-plaque-${tableId}`;
+  const shadowTex = useMemo(() => getStudyTableShadowTex(), []);
 
   return (
     <group position={[x, 0, z]} userData={{ studyTableId: tableId }}>
+      {/* Bóng tiếp xúc AO mềm dưới gầm bàn đọc & ghế xung quanh */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.008, 0]} raycast={() => null}>
+        <planeGeometry args={[w + 0.72, d + 0.88]} />
+        <meshBasicMaterial
+          map={shadowTex ?? undefined}
+          color="#0A0E17"
+          transparent
+          opacity={0.5}
+          depthWrite={false}
+        />
+      </mesh>
       {/* Mặt bàn gỗ sồi phủ laminate chống lóa (cao 0.75m) & nẹp óc chó chu vi */}
       <mesh position={[0, h - 0.022, 0]} castShadow receiveShadow>
         <boxGeometry args={[w, 0.044, d]} />

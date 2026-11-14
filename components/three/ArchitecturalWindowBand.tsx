@@ -6,6 +6,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { getSharedBuildingPbrTextures } from './materials';
 
 export interface WindowGrid3DProps {
   /** Tọa độ tâm mặt tường trên bề mặt tường (mặt ngoài đẩy theo +Z cục bộ) */
@@ -59,6 +60,7 @@ export function WindowGrid3D({
   const sillHoodRef = useRef<THREE.InstancedMesh>(null);
   const acBoxRef = useRef<THREE.InstancedMesh>(null);
   const acFanRef = useRef<THREE.InstancedMesh>(null);
+  const pbr = useMemo(() => getSharedBuildingPbrTextures(), []);
 
   const cells = useMemo<CellSpec[]>(() => {
     const out: CellSpec[] = [];
@@ -216,10 +218,11 @@ export function WindowGrid3D({
           args={[geos.unitBox, undefined, unlitCells.length]}
         >
           <meshStandardMaterial
-            color={glassColor}
-            roughness={0.14}
-            metalness={0.55}
-            envMapIntensity={1.25}
+            color={pbr?.windowGlass ? '#CFE3F7' : glassColor}
+            map={pbr?.windowGlass}
+            roughness={0.16}
+            metalness={0.4}
+            envMapIntensity={1.22}
           />
         </instancedMesh>
       )}
@@ -242,7 +245,6 @@ export function WindowGrid3D({
         ref={framePartRef}
         key={`frames-${frameInstancesCount}`}
         args={[geos.unitBox, undefined, frameInstancesCount]}
-        castShadow
       >
         <meshStandardMaterial color={frameColor} roughness={0.55} metalness={0.35} />
       </instancedMesh>
@@ -250,7 +252,6 @@ export function WindowGrid3D({
         ref={sillHoodRef}
         key={`sills-${sillHoodCount}`}
         args={[geos.unitBox, undefined, sillHoodCount]}
-        castShadow
         receiveShadow
       >
         <meshStandardMaterial color={sillColor} roughness={0.82} />
@@ -261,7 +262,6 @@ export function WindowGrid3D({
             ref={acBoxRef}
             key={`ac-box-${acCells.length}`}
             args={[geos.unitBox, undefined, acCells.length]}
-            castShadow
           >
             <meshStandardMaterial color="#E2E8F0" roughness={0.62} metalness={0.15} />
           </instancedMesh>

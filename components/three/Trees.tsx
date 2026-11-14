@@ -1,25 +1,22 @@
 // ---------------------------------------------------------------------------
-// Trees.tsx — cây cải tiến cho đợt sửa lần 2 (brief §4).
-// ImprovedTree: CÙNG chữ ký props với SimpleTree trong Landmarks.tsx
-// (x, z, trunkH?, canopyR?, canopyY?, canopyColor?) để luồng tích hợp thay
-// thế trong một dòng: SimpleTree -> ImprovedTree.
-// Khác SimpleTree cũ (1 thân trụ + 1 cầu tròn như chiếc mũ):
-//   - thân thuôn dần + 1 nhánh/cụm tán, ngắm thẳng từ ngọn thân tới tâm
-//     cụm (gốc chôn trong thân, ngọn nằm trong tán — không lơ lửng);
-//   - tán = 4-6 cụm lệch nhau (quả dẹt, lệch tâm, lệch cao), không đối xứng;
-//   - 3-4 sắc xanh gần nhau rút từ canopyColor (sáng/tối ±) để có chiều sâu;
-//   - mỗi cây khác nhau về tỉ lệ/chiều cao/góc xoay nhờ seed cố định theo
-//     vị trí (mulberry32) — load lại vẫn giống hệt, không dùng Math.random().
-// DroopingTree (liễu rủ): cùng triết lý, cành CONG 2 đoạn (vươn ra rồi rủ
-// xuống) + cụm lá nhỏ ĐI THEO cành, không dây thẳng đứng. CHỈ dùng cho ven
-// hồ nếu cần — LƯU Ý: TienLake.tsx đã có LakeWillow phân lớp riêng (3 tán +
-// cành rủ), nên luồng tích hợp KHÔNG thay LakeWillow bằng DroopingTree trừ
-// khi luồng hồ yêu cầu; DroopingTree ở đây là biến thể dự phòng/ven hồ mới.
-// Không cây nào có collider — cây không chặn đường (leg-sim chỉ dùng
-// lib/campus.ts nên không bị ảnh hưởng); đặt cây ngoài đường đi chính.
+// Trees.tsx — Hệ thống cây xanh Bách Khoa thế hệ mới:
+//   1. Pháp tuyến vòm lá làm mượt liên tục + pha trộn hướng cầu (Hemispherical Smooth
+//      Foliage Normals) xóa hoàn toàn vết vát tam giác cứng (flat-shaded facets).
+//   2. CampusTreeBatchProvider: gom toàn bộ ~80 cây ImprovedTree toàn khuôn viên vào
+//      các lớp InstancedMesh dùng chung vật liệu + lắc gió bằng Vertex Shader (GPU),
+//      kéo ~2.500 mesh rời xuống còn ~8 draw calls và 1 uniform uWindTime duy nhất.
+//   3. OrnamentalShrub: bụi cây cảnh đa thùy có hoa điểm xuyết & bóng AO mềm cho bồn hoa.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useRef } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
@@ -42,7 +39,6 @@ export interface TreeProps {
 
 const TRUNK = '#7A5E42';
 
-// Shared singleton PBR textures & geometries for all campus trees (avoids duplicating 50+ CanvasTextures in VRAM)
 let sharedTreeTex: {
   bark: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
   foliage: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
@@ -56,24 +52,82 @@ let sharedTreeGeos: {
   pitSoilGeo: THREE.BufferGeometry;
   rootFlareGeo: THREE.BufferGeometry;
   leafCardGeo: THREE.BufferGeometry;
+  unitTrunkGeo: THREE.BufferGeometry;
+  unitBranchGeo: THREE.BufferGeometry;
+  shadowDiscGeo: THREE.BufferGeometry;
 } | null = null;
 
+/**
+ * Tạo hình học vòm lá hữu cơ với pháp tuyến hàn mượt tại mọi đỉnh trùng tọa độ
+ * kết hợp thiên hướng vòm cầu hướng sáng (62% spherical foliage normal) để
+ * ánh nắng chuyển sắc êm như mây lá tự nhiên, không lộ cạnh tam giác phẳng.
+ */
 function createOrganicCanopyGeometry(): THREE.BufferGeometry {
   const geo = new THREE.IcosahedronGeometry(1, 2);
   const pos = geo.attributes.position as THREE.BufferAttribute;
+
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
     const z = pos.getZ(i);
-    // Dịch chuyển theo hàm hướng đơn vị nên mọi đỉnh trùng vị trí luôn khớp khít tuyệt đối
     const bump =
       1 +
-      0.13 * Math.sin(3.6 * x + 2.4 * y) * Math.cos(3.2 * z) +
-      0.07 * Math.cos(5.8 * y - 4.1 * x + 2.7 * z);
+      0.115 * Math.sin(3.6 * x + 2.4 * y) * Math.cos(3.2 * z) +
+      0.06 * Math.cos(5.8 * y - 4.1 * x + 2.7 * z);
     pos.setXYZ(i, x * bump, y * bump, z * bump);
   }
+
+  // Bước 1: Tính pháp tuyến mặt cơ sở
   geo.computeVertexNormals();
+  const norm = geo.attributes.normal as THREE.BufferAttribute;
+
+  // Bước 2: Trung bình hóa pháp tuyến của mọi đỉnh trùng vị trí không gian (hàn mượt C1 qua đường nối UV)
+  const accum = new Map<string, [number, number, number]>();
+  const keys = new Array<string>(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    const k = `${Math.round(pos.getX(i) * 2000)}_${Math.round(pos.getY(i) * 2000)}_${Math.round(pos.getZ(i) * 2000)}`;
+    keys[i] = k;
+    const cur = accum.get(k);
+    if (cur) {
+      cur[0] += norm.getX(i);
+      cur[1] += norm.getY(i);
+      cur[2] += norm.getZ(i);
+    } else {
+      accum.set(k, [norm.getX(i), norm.getY(i), norm.getZ(i)]);
+    }
+  }
+
+  // Bước 3: Pha trộn 62% pháp tuyến vòm cầu hướng ra ngoài/lên trời giúp tán lá mịn & bắt nắng dịu
+  for (let i = 0; i < pos.count; i++) {
+    const sum = accum.get(keys[i])!;
+    let snx = sum[0];
+    let sny = sum[1];
+    let snz = sum[2];
+    const sLen = Math.hypot(snx, sny, snz) || 1;
+    snx /= sLen;
+    sny /= sLen;
+    snz /= sLen;
+
+    const px = pos.getX(i);
+    const py = pos.getY(i) * 1.18 + 0.16;
+    const pz = pos.getZ(i);
+    const rLen = Math.hypot(px, py, pz) || 1;
+    const rx = px / rLen;
+    const ry = py / rLen;
+    const rz = pz / rLen;
+
+    const bx = snx * 0.38 + rx * 0.62;
+    const by = sny * 0.38 + ry * 0.62;
+    const bz = snz * 0.38 + rz * 0.62;
+    const bLen = Math.hypot(bx, by, bz) || 1;
+    norm.setXYZ(i, bx / bLen, by / bLen, bz / bLen);
+  }
+  norm.needsUpdate = true;
   return geo;
+}
+
+export function getSharedOrganicCanopyGeometry(): THREE.BufferGeometry {
+  return getSharedTreeGeometries().canopyGeo;
 }
 
 function createTreePitRimGeometry(): THREE.BufferGeometry {
@@ -116,7 +170,22 @@ function getSharedTreeGeometries() {
     const rootFlareGeo = new THREE.CylinderGeometry(0.035, 0.14, 0.34, 6);
     rootFlareGeo.translate(0, 0.15, 0);
     const leafCardGeo = new THREE.PlaneGeometry(1, 1);
-    sharedTreeGeos = { canopyGeo, pitRimGeo, pitSoilGeo, rootFlareGeo, leafCardGeo };
+    const unitTrunkGeo = new THREE.CylinderGeometry(0.56, 1.0, 1.0, 10);
+    unitTrunkGeo.translate(0, 0.5, 0);
+    const unitBranchGeo = new THREE.CylinderGeometry(0.55, 1.0, 1.0, 6);
+    unitBranchGeo.translate(0, 0.5, 0);
+    const shadowDiscGeo = new THREE.PlaneGeometry(1, 1);
+    shadowDiscGeo.rotateX(-Math.PI / 2);
+    sharedTreeGeos = {
+      canopyGeo,
+      pitRimGeo,
+      pitSoilGeo,
+      rootFlareGeo,
+      leafCardGeo,
+      unitTrunkGeo,
+      unitBranchGeo,
+      shadowDiscGeo,
+    };
   }
   return sharedTreeGeos;
 }
@@ -133,7 +202,6 @@ function getSharedTreeTextures() {
   return sharedTreeTex;
 }
 
-// Seed cố định theo vị trí: cùng (x, z) luôn cho cùng một cây.
 function mulberry32(seed: number) {
   return () => {
     let t = (seed += 0x6d2b79f5);
@@ -144,22 +212,16 @@ function mulberry32(seed: number) {
 }
 
 function seedFromXZ(x: number, z: number): number {
-  // Băm vị trí thành số nguyên 32-bit ổn định (tránh trùng khi x/z đổi dấu).
   let h = (Math.round(x * 100) + 100000) * 374761393 + (Math.round(z * 100) + 100000) * 668265263;
   h = (h ^ (h >>> 13)) * 1274126177;
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-// 3 sắc xanh gần nhau rút từ màu tán gốc: gốc, sáng hơn, tối hơn.
 function leafTones(base: string): [string, string, string] {
   const c = new THREE.Color(base);
   const light = c.clone().offsetHSL(0.015, -0.05, 0.09);
   const dark = c.clone().offsetHSL(-0.01, 0.05, -0.09);
-  return [
-    `#${c.getHexString()}`,
-    `#${light.getHexString()}`,
-    `#${dark.getHexString()}`,
-  ];
+  return [`#${c.getHexString()}`, `#${light.getHexString()}`, `#${dark.getHexString()}`];
 }
 
 type Lobe = { dx: number; dy: number; dz: number; r: number; tone: number; sy: number };
@@ -184,14 +246,13 @@ function clampRadialOffset(dx: number, dz: number, maxReach: number): [number, n
 
 function buildImprovedSpec(x: number, z: number, trunkH: number, canopyR: number, canopyY: number) {
   const rand = mulberry32(seedFromXZ(x, z));
-  const s = 0.94 + rand() * 0.14; // giới hạn s <= 1.08 để maxVisualR <= 1.15 * canopyR
+  const s = 0.94 + rand() * 0.14;
   const maxVisualUnscaled = (1.13 * canopyR) / s;
   const rotY = rand() * Math.PI * 2;
   const trunkTopR = 0.085 + rand() * 0.028;
   const trunkBotR = 0.17 + rand() * 0.055;
   const lean = (rand() - 0.5) * 0.08;
 
-  // Tán phân tầng tự nhiên gồm vòm dù trung tâm + 3 nhánh tầng giữa + 3 đỉnh tán vươn sáng
   const lobes: Lobe[] = [];
   const mainA = rand() * Math.PI * 2;
   lobes.push({
@@ -203,13 +264,16 @@ function buildImprovedSpec(x: number, z: number, trunkH: number, canopyR: number
     sy: 0.58 + rand() * 0.1,
   });
 
-  // 3 tầng giữa tỏa ngang gọn bên trong phạm vi tán (không tách rời kiểu kẹo mút)
   const midPhase = rand() * Math.PI * 2;
   for (let k = 0; k < 3; k++) {
     const a = midPhase + (k / 3) * Math.PI * 2 + (rand() - 0.5) * 0.45;
     const rr = canopyR * (0.36 + rand() * 0.07);
     const off = canopyR * (0.34 + rand() * 0.14);
-    const [dx, dz] = clampRadialOffset(Math.cos(a) * off, Math.sin(a) * off, Math.max(0.05, maxVisualUnscaled - rr));
+    const [dx, dz] = clampRadialOffset(
+      Math.cos(a) * off,
+      Math.sin(a) * off,
+      Math.max(0.05, maxVisualUnscaled - rr),
+    );
     lobes.push({
       dx,
       dy: canopyY + (-0.12 + rand() * 0.2) * canopyR,
@@ -220,13 +284,16 @@ function buildImprovedSpec(x: number, z: number, trunkH: number, canopyR: number
     });
   }
 
-  // 3 cụm đỉnh tán nhỏ hứng nắng phía trên
   const topPhase = midPhase + Math.PI / 3;
   for (let k = 0; k < 3; k++) {
     const a = topPhase + (k / 3) * Math.PI * 2 + (rand() - 0.5) * 0.4;
     const rr = canopyR * (0.28 + rand() * 0.06);
     const off = canopyR * (0.22 + rand() * 0.12);
-    const [dx, dz] = clampRadialOffset(Math.cos(a) * off, Math.sin(a) * off, Math.max(0.05, maxVisualUnscaled - rr));
+    const [dx, dz] = clampRadialOffset(
+      Math.cos(a) * off,
+      Math.sin(a) * off,
+      Math.max(0.05, maxVisualUnscaled - rr),
+    );
     lobes.push({
       dx,
       dy: canopyY + (0.22 + rand() * 0.2) * canopyR,
@@ -237,7 +304,6 @@ function buildImprovedSpec(x: number, z: number, trunkH: number, canopyR: number
     });
   }
 
-  // Nhánh chính cắm vào từng tầng tán + cành cấp 2 chẽ nhánh tạo bộ xương tán khi nhìn ngước lên
   const pivotY = trunkH * 0.9;
   const branches: Branch[] = [];
   for (const l of lobes) {
@@ -254,7 +320,6 @@ function buildImprovedSpec(x: number, z: number, trunkH: number, canopyR: number
     });
   }
 
-  // 7 thẻ cành lá cắt alphaTest (crossed leaf-sprig cards) ôm rìa vòm tán
   const leafCards: LeafCard[] = [];
   const cardPhase = rand() * Math.PI * 2;
   for (let k = 0; k < 7; k++) {
@@ -290,7 +355,453 @@ function buildImprovedSpec(x: number, z: number, trunkH: number, canopyR: number
   return { s, rotY, trunkTopR, trunkBotR, lean, branches, lobes, leafCards };
 }
 
+// ---------------------------------------------------------------------------
+// CampusTreeBatchProvider — Gom toàn bộ cây ImprovedTree thành 8 InstancedMesh
+// + lắc gió bằng Vertex Shader (0 CPU matrix loop mỗi frame).
+// ---------------------------------------------------------------------------
+type RegisteredTreeEntry = Required<TreeProps>;
+
+interface TreeBatchContextValue {
+  registerTree: (entry: RegisteredTreeEntry) => () => void;
+}
+
+const TreeBatchContext = createContext<TreeBatchContextValue | null>(null);
+const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => {};
+
+function applyWindShaderToFoliageMaterial(
+  mat: THREE.MeshStandardMaterial,
+  windTimeUniform: { value: number },
+  cacheKey: string,
+) {
+  mat.customProgramCacheKey = () => cacheKey;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uWindTime = windTimeUniform;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uWindTime;`,
+      )
+      .replace(
+        '#include <project_vertex>',
+        `vec4 mvPosition = vec4( transformed, 1.0 );
+        #ifdef USE_INSTANCING
+          mvPosition = instanceMatrix * mvPosition;
+          float treePhase = instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.53;
+          float swayFactor = clamp((mvPosition.y - 1.4) * 0.014, 0.0, 0.055);
+          mvPosition.x += sin(uWindTime * 1.2 + treePhase) * swayFactor;
+          mvPosition.z += cos(uWindTime * 0.92 + treePhase * 1.27) * swayFactor * 0.82;
+        #endif
+        mvPosition = modelViewMatrix * mvPosition;
+        gl_Position = projectionMatrix * mvPosition;`,
+      );
+  };
+}
+
+export function CampusTreeBatchProvider({ children }: { children: ReactNode }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const entriesRef = useRef<Map<number, RegisteredTreeEntry>>(new Map());
+  const nextIdRef = useRef(1);
+  const dirtyRef = useRef(true);
+  const windTimeUniform = useMemo(() => ({ value: 0 }), []);
+
+  const ctxVal = useMemo<TreeBatchContextValue>(
+    () => ({
+      registerTree: (entry) => {
+        const id = nextIdRef.current++;
+        entriesRef.current.set(id, entry);
+        dirtyRef.current = true;
+        return () => {
+          entriesRef.current.delete(id);
+          dirtyRef.current = true;
+        };
+      },
+    }),
+    [],
+  );
+
+  const batchMaterials = useMemo(() => {
+    const tex = getSharedTreeTextures();
+    const greenCutout = getSharedLeafClusterCutoutTexture('green');
+    const goldenCutout = getSharedLeafClusterCutoutTexture('golden');
+
+    const pitRimMat = new THREE.MeshStandardMaterial({
+      color: '#CBD5E1',
+      map: tex.granite.map,
+      bumpMap: tex.granite.bumpMap,
+      bumpScale: 0.012,
+      roughness: 0.88,
+    });
+    const pitSoilMat = new THREE.MeshStandardMaterial({
+      color: '#3E2F23',
+      roughness: 0.96,
+    });
+    const shadowMat = new THREE.MeshBasicMaterial({
+      map: tex.shadow,
+      transparent: true,
+      opacity: 0.36,
+      depthWrite: false,
+    });
+    const barkMat = new THREE.MeshStandardMaterial({
+      color: TRUNK,
+      map: tex.bark.map,
+      bumpMap: tex.bark.bumpMap,
+      bumpScale: 0.025,
+      roughness: 0.92,
+    });
+    const canopyMat = new THREE.MeshStandardMaterial({
+      color: '#FFFFFF',
+      map: tex.foliage.map,
+      bumpMap: tex.foliage.bumpMap,
+      bumpScale: 0.024,
+      roughness: 0.84,
+    });
+    applyWindShaderToFoliageMaterial(canopyMat, windTimeUniform, 'hust-tree-canopy-wind-v1');
+
+    const greenCardMat = new THREE.MeshStandardMaterial({
+      color: '#FFFFFF',
+      map: greenCutout,
+      alphaTest: 0.42,
+      side: THREE.DoubleSide,
+      roughness: 0.82,
+    });
+    applyWindShaderToFoliageMaterial(greenCardMat, windTimeUniform, 'hust-tree-card-green-wind-v1');
+
+    const goldenCardMat = new THREE.MeshStandardMaterial({
+      color: '#FFFFFF',
+      map: goldenCutout,
+      alphaTest: 0.42,
+      side: THREE.DoubleSide,
+      roughness: 0.82,
+    });
+    applyWindShaderToFoliageMaterial(
+      goldenCardMat,
+      windTimeUniform,
+      'hust-tree-card-golden-wind-v1',
+    );
+
+    return {
+      pitRimMat,
+      pitSoilMat,
+      shadowMat,
+      barkMat,
+      canopyMat,
+      greenCardMat,
+      goldenCardMat,
+    };
+  }, [windTimeUniform]);
+
+  const clearInstancedChildren = (grp: THREE.Group) => {
+    for (let i = grp.children.length - 1; i >= 0; i--) {
+      const ch = grp.children[i] as THREE.InstancedMesh;
+      grp.remove(ch);
+      if (ch.dispose) ch.dispose();
+    }
+  };
+
+  useEffect(() => {
+    const grp = groupRef.current;
+    return () => {
+      if (grp) clearInstancedChildren(grp);
+      batchMaterials.pitRimMat.dispose();
+      batchMaterials.pitSoilMat.dispose();
+      batchMaterials.shadowMat.dispose();
+      batchMaterials.barkMat.dispose();
+      batchMaterials.canopyMat.dispose();
+      batchMaterials.greenCardMat.dispose();
+      batchMaterials.goldenCardMat.dispose();
+    };
+  }, [batchMaterials]);
+
+  const rebuildBatches = () => {
+    const grp = groupRef.current;
+    if (!grp) return;
+    clearInstancedChildren(grp);
+
+    const list = Array.from(entriesRef.current.values());
+    if (list.length === 0) return;
+
+    const geos = getSharedTreeGeometries();
+    const pitMats: THREE.Matrix4[] = [];
+    const shadowMats: THREE.Matrix4[] = [];
+    const trunkMats: THREE.Matrix4[] = [];
+    const branchMats: THREE.Matrix4[] = [];
+    const canopyMats: THREE.Matrix4[] = [];
+    const canopyCols: THREE.Color[] = [];
+    const greenCardMats: THREE.Matrix4[] = [];
+    const greenCardCols: THREE.Color[] = [];
+    const goldenCardMats: THREE.Matrix4[] = [];
+    const goldenCardCols: THREE.Color[] = [];
+
+    const mTree = new THREE.Matrix4();
+    const mRotY = new THREE.Matrix4();
+    const mScale = new THREE.Matrix4();
+    const mLean = new THREE.Matrix4();
+    const mLocal = new THREE.Matrix4();
+    const mSub = new THREE.Matrix4();
+    const mSub2 = new THREE.Matrix4();
+    const vPos = new THREE.Vector3();
+    const vScl = new THREE.Vector3();
+    const qRot = new THREE.Quaternion();
+    const eul = new THREE.Euler();
+
+    for (const item of list) {
+      const spec = buildImprovedSpec(item.x, item.z, item.trunkH, item.canopyR, item.canopyY);
+      const tones = leafTones(item.canopyColor).map((hex) => new THREE.Color(hex));
+      const isGolden =
+        item.canopyColor.toLowerCase().startsWith('#e') ||
+        item.canopyColor.toLowerCase().startsWith('#d');
+
+      if (item.withTreePit) {
+        pitMats.push(new THREE.Matrix4().makeTranslation(item.x, 0, item.z));
+      }
+
+      const shSize = item.canopyR * 2.2 * spec.s;
+      vPos.set(item.x, 0.038, item.z);
+      qRot.identity();
+      vScl.set(shSize, 1, shSize);
+      shadowMats.push(new THREE.Matrix4().compose(vPos, qRot, vScl));
+
+      // M_tree = T(x, 0, z) * Ry(rotY) * S(s) * Rz(lean)
+      mTree.makeTranslation(item.x, 0, item.z);
+      mRotY.makeRotationY(spec.rotY);
+      mScale.makeScale(spec.s, spec.s, spec.s);
+      mLean.makeRotationZ(spec.lean);
+      mTree.multiply(mRotY).multiply(mScale).multiply(mLean);
+
+      // Thân chính
+      vPos.set(0, 0, 0);
+      qRot.identity();
+      vScl.set(spec.trunkBotR, item.trunkH, spec.trunkBotR);
+      mLocal.compose(vPos, qRot, vScl);
+      trunkMats.push(new THREE.Matrix4().multiplyMatrices(mTree, mLocal));
+
+      // 4 rễ bạnh
+      for (let ri = 0; ri < 4; ri++) {
+        const ang = (ri / 4) * Math.PI * 2 + 0.35;
+        mSub.makeRotationY(ang);
+        vPos.set(spec.trunkBotR * 0.52, -0.02, 0);
+        eul.set(0, 0, -0.38);
+        qRot.setFromEuler(eul);
+        vScl.set(0.135, 0.34, 0.135);
+        mSub2.compose(vPos, qRot, vScl);
+        mLocal.multiplyMatrices(mSub, mSub2);
+        branchMats.push(new THREE.Matrix4().multiplyMatrices(mTree, mLocal));
+      }
+
+      // Nhánh chính & cành con
+      for (const b of spec.branches) {
+        mSub.makeTranslation(0, b.startY, 0);
+        mRotY.makeRotationY(-b.az);
+        mSub.multiply(mRotY);
+        mLean.makeRotationZ(b.tilt);
+        mSub.multiply(mLean);
+        mScale.makeScale(b.r, b.len, b.r);
+        mSub.multiply(mScale);
+        branchMats.push(new THREE.Matrix4().multiplyMatrices(mTree, mSub));
+      }
+
+      // 7 tầng vòm lá pháp tuyến mượt
+      for (let i = 0; i < spec.lobes.length; i++) {
+        const l = spec.lobes[i];
+        vPos.set(l.dx, l.dy, l.dz);
+        eul.set(i * 0.7, i * 1.1, 0);
+        qRot.setFromEuler(eul);
+        vScl.set(l.r, l.r * l.sy, l.r);
+        mLocal.compose(vPos, qRot, vScl);
+        canopyMats.push(new THREE.Matrix4().multiplyMatrices(mTree, mLocal));
+        canopyCols.push(tones[l.tone]);
+      }
+
+      // Thẻ chùm lá cắt alphaTest (crossed cards)
+      const targetMats = isGolden ? goldenCardMats : greenCardMats;
+      const targetCols = isGolden ? goldenCardCols : greenCardCols;
+      for (const lc of spec.leafCards) {
+        vPos.set(lc.dx, lc.dy, lc.dz);
+        eul.set(lc.rx, lc.ry, lc.rz);
+        qRot.setFromEuler(eul);
+        vScl.set(1, 1, 1);
+        mSub.compose(vPos, qRot, vScl);
+
+        mScale.makeScale(lc.size, lc.size, 1);
+        mLocal.multiplyMatrices(mSub, mScale);
+        targetMats.push(new THREE.Matrix4().multiplyMatrices(mTree, mLocal));
+        targetCols.push(tones[lc.tone]);
+
+        mRotY.makeRotationY(Math.PI * 0.48);
+        mSub2.multiplyMatrices(mSub, mRotY).multiply(mScale);
+        targetMats.push(new THREE.Matrix4().multiplyMatrices(mTree, mSub2));
+        targetCols.push(tones[(lc.tone + 1) % 3]);
+      }
+    }
+
+    const addLayer = (
+      geo: THREE.BufferGeometry,
+      mat: THREE.Material,
+      matrices: THREE.Matrix4[],
+      colors: THREE.Color[] | null,
+      castShadow: boolean,
+      receiveShadow: boolean,
+    ) => {
+      if (matrices.length === 0) return;
+      const im = new THREE.InstancedMesh(geo, mat, matrices.length);
+      im.castShadow = castShadow;
+      im.receiveShadow = receiveShadow;
+      im.frustumCulled = false;
+      im.raycast = NOOP_RAYCAST;
+      for (let i = 0; i < matrices.length; i++) {
+        im.setMatrixAt(i, matrices[i]);
+        if (colors) im.setColorAt(i, colors[i]);
+      }
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      grp.add(im);
+    };
+
+    addLayer(geos.pitRimGeo, batchMaterials.pitRimMat, pitMats, null, false, true);
+    addLayer(geos.pitSoilGeo, batchMaterials.pitSoilMat, pitMats, null, false, true);
+    addLayer(geos.shadowDiscGeo, batchMaterials.shadowMat, shadowMats, null, false, false);
+    addLayer(geos.unitTrunkGeo, batchMaterials.barkMat, trunkMats, null, true, true);
+    addLayer(geos.unitBranchGeo, batchMaterials.barkMat, branchMats, null, false, true);
+    addLayer(geos.canopyGeo, batchMaterials.canopyMat, canopyMats, canopyCols, true, true);
+    addLayer(geos.leafCardGeo, batchMaterials.greenCardMat, greenCardMats, greenCardCols, false, false);
+    addLayer(
+      geos.leafCardGeo,
+      batchMaterials.goldenCardMat,
+      goldenCardMats,
+      goldenCardCols,
+      false,
+      false,
+    );
+  };
+
+  useFrame((state) => {
+    windTimeUniform.value = state.clock.elapsedTime;
+    if (dirtyRef.current) {
+      dirtyRef.current = false;
+      rebuildBatches();
+    }
+  });
+
+  return (
+    <TreeBatchContext.Provider value={ctxVal}>
+      <group ref={groupRef} name="CampusBatchedTrees" />
+      {children}
+    </TreeBatchContext.Provider>
+  );
+}
+
+/**
+ * Bụi cây cảnh cắt tỉa tự nhiên đa thùy (Ornamental Botanical Shrub) kèm bóng tiếp xúc AO
+ * và nụ hoa điểm xuyết nhẹ — thay thế hoàn toàn các khối cầu nhựa đơn điệu ở bồn hoa.
+ */
+export function OrnamentalShrub({
+  position = [0, 0, 0],
+  radius = 0.5,
+  color = '#367A3C',
+  flowerColor,
+}: {
+  position?: [number, number, number];
+  radius?: number;
+  color?: string;
+  flowerColor?: string;
+}) {
+  const geos = useMemo(() => getSharedTreeGeometries(), []);
+  const tex = useMemo(() => getSharedTreeTextures(), []);
+  const tones = useMemo(() => leafTones(color), [color]);
+
+  return (
+    <group position={position}>
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.018, 0]}>
+        <planeGeometry args={[radius * 2.35, radius * 2.35]} />
+        <meshBasicMaterial map={tex.shadow} transparent opacity={0.34} depthWrite={false} />
+      </mesh>
+      {[
+        { dx: 0, dy: radius * 0.62, dz: 0, sx: radius * 0.96, sy: radius * 0.72, sz: radius * 0.96, t: 0, ry: 0.2 },
+        { dx: -radius * 0.42, dy: radius * 0.48, dz: radius * 0.24, sx: radius * 0.66, sy: radius * 0.56, sz: radius * 0.66, t: 1, ry: 1.3 },
+        { dx: radius * 0.44, dy: radius * 0.5, dz: -radius * 0.2, sx: radius * 0.64, sy: radius * 0.54, sz: radius * 0.64, t: 2, ry: 2.4 },
+        { dx: radius * 0.08, dy: radius * 0.46, dz: -radius * 0.42, sx: radius * 0.58, sy: radius * 0.5, sz: radius * 0.58, t: 1, ry: 3.6 },
+      ].map((lb, idx) => (
+        <mesh
+          key={`shrub-lobe-${idx}`}
+          geometry={geos.canopyGeo}
+          position={[lb.dx, lb.dy, lb.dz]}
+          rotation={[0, lb.ry, 0]}
+          scale={[lb.sx, lb.sy, lb.sz]}
+          castShadow={idx === 0}
+          receiveShadow
+        >
+          <meshStandardMaterial
+            color={tones[lb.t]}
+            map={tex.foliage.map}
+            bumpMap={tex.foliage.bumpMap}
+            bumpScale={0.02}
+            roughness={0.85}
+          />
+        </mesh>
+      ))}
+      {flowerColor &&
+        [
+          [-0.26, 0.98, 0.28],
+          [0.3, 0.94, 0.22],
+          [0.06, 1.16, -0.14],
+          [-0.22, 0.86, -0.32],
+          [0.34, 0.82, -0.26],
+        ].map(([fx, fy, fz], fIdx) => (
+          <mesh
+            key={`shrub-bud-${fIdx}`}
+            position={[fx * radius, fy * radius, fz * radius]}
+          >
+            <icosahedronGeometry args={[radius * 0.095, 0]} />
+            <meshStandardMaterial color={flowerColor} roughness={0.65} />
+          </mesh>
+        ))}
+    </group>
+  );
+}
+
 export function ImprovedTree({
+  x,
+  z,
+  trunkH = 2,
+  canopyR = 1.3,
+  canopyY = 2.9,
+  canopyColor = '#5D7D4A',
+  withTreePit = true,
+}: TreeProps) {
+  const batchCtx = useContext(TreeBatchContext);
+
+  useLayoutEffect(() => {
+    if (!batchCtx) return;
+    return batchCtx.registerTree({
+      x,
+      z,
+      trunkH,
+      canopyR,
+      canopyY,
+      canopyColor,
+      withTreePit,
+    });
+  }, [batchCtx, x, z, trunkH, canopyR, canopyY, canopyColor, withTreePit]);
+
+  if (batchCtx) {
+    return null;
+  }
+
+  return (
+    <StandaloneImprovedTree
+      x={x}
+      z={z}
+      trunkH={trunkH}
+      canopyR={canopyR}
+      canopyY={canopyY}
+      canopyColor={canopyColor}
+      withTreePit={withTreePit}
+    />
+  );
+}
+
+function StandaloneImprovedTree({
   x,
   z,
   trunkH = 2,
@@ -306,7 +817,8 @@ export function ImprovedTree({
   const tones = useMemo(() => leafTones(canopyColor), [canopyColor]);
   const tex = useMemo(() => getSharedTreeTextures(), []);
   const geos = useMemo(() => getSharedTreeGeometries(), []);
-  const isGolden = canopyColor.toLowerCase().startsWith('#e') || canopyColor.toLowerCase().startsWith('#d');
+  const isGolden =
+    canopyColor.toLowerCase().startsWith('#e') || canopyColor.toLowerCase().startsWith('#d');
   const leafCutoutTex = useMemo(
     () => getSharedLeafClusterCutoutTexture(isGolden ? 'golden' : 'green'),
     [isGolden],
@@ -323,10 +835,9 @@ export function ImprovedTree({
 
   return (
     <group position={[x, 0, z]}>
-      {/* Bồn cây bó vỉa đá granite + đất nâu ẩm (thuần thị giác, không collider, nằm phẳng trục sân/vỉa hè) */}
       {withTreePit && (
         <group>
-          <mesh geometry={geos.pitRimGeo} receiveShadow castShadow>
+          <mesh geometry={geos.pitRimGeo} receiveShadow>
             <meshStandardMaterial
               color="#CBD5E1"
               map={tex.granite.map}
@@ -340,18 +851,11 @@ export function ImprovedTree({
           </mesh>
         </group>
       )}
-      {/* Bóng đổ tiếp xúc mềm dưới gốc cây (Ambient Occlusion, nâng lên 0.038m để luôn nổi trên vỉa hè 0.031m) */}
       <mesh rotation-x={-Math.PI / 2} position={[0, 0.038, 0]}>
         <planeGeometry args={[canopyR * 2.2 * spec.s, canopyR * 2.2 * spec.s]} />
-        <meshBasicMaterial
-          map={tex.shadow}
-          transparent
-          opacity={0.36}
-          depthWrite={false}
-        />
+        <meshBasicMaterial map={tex.shadow} transparent opacity={0.36} depthWrite={false} />
       </mesh>
       <group rotation-y={spec.rotY} scale={spec.s} rotation-z={spec.lean}>
-        {/* Rễ bạnh loe tự nhiên ôm chân thân cây */}
         {[0, 1, 2, 3].map((ri) => {
           const ang = (ri / 4) * Math.PI * 2 + 0.35;
           return (
@@ -360,7 +864,6 @@ export function ImprovedTree({
                 geometry={geos.rootFlareGeo}
                 position={[spec.trunkBotR * 0.52, -0.02, 0]}
                 rotation-z={-0.38}
-                castShadow
               >
                 <meshStandardMaterial
                   color={TRUNK}
@@ -373,7 +876,6 @@ export function ImprovedTree({
             </group>
           );
         })}
-        {/* Thân thuôn dần (đáy to, ngọn nhỏ) có vân vỏ cây PBR. */}
         <mesh position={[0, trunkH / 2, 0]} castShadow receiveShadow>
           <cylinderGeometry args={[spec.trunkTopR, spec.trunkBotR, trunkH, 10]} />
           <meshStandardMaterial
@@ -384,11 +886,10 @@ export function ImprovedTree({
             roughness={0.92}
           />
         </mesh>
-        {/* Nhánh chính & cành con chẽ lên các tầng tán. */}
         {spec.branches.map((b, i) => (
           <group key={`br-${i}`} position={[0, b.startY, 0]} rotation-y={-b.az}>
             <group rotation-z={b.tilt}>
-              <mesh position={[0, b.len / 2, 0]} castShadow>
+              <mesh position={[0, b.len / 2, 0]}>
                 <cylinderGeometry args={[b.r * 0.55, b.r, b.len, 6]} />
                 <meshStandardMaterial
                   color={TRUNK}
@@ -401,7 +902,6 @@ export function ImprovedTree({
             </group>
           </group>
         ))}
-        {/* Tán dù phân tầng gọn (maxVisualR <= 1.15 * canopyR) + thẻ lá cắt alphaTest + đung đưa nhẹ theo gió. */}
         <group ref={canopyRef}>
           {spec.lobes.map((l, i) => (
             <mesh
@@ -417,8 +917,8 @@ export function ImprovedTree({
                 color={tones[l.tone]}
                 map={tex.foliage.map}
                 bumpMap={tex.foliage.bumpMap}
-                bumpScale={0.032}
-                roughness={0.86}
+                bumpScale={0.024}
+                roughness={0.84}
               />
             </mesh>
           ))}
@@ -430,16 +930,20 @@ export function ImprovedTree({
                   map={leafCutoutTex}
                   alphaTest={0.42}
                   side={THREE.DoubleSide}
-                  roughness={0.84}
+                  roughness={0.82}
                 />
               </mesh>
-              <mesh geometry={geos.leafCardGeo} rotation-y={Math.PI * 0.48} scale={[lc.size, lc.size, 1]}>
+              <mesh
+                geometry={geos.leafCardGeo}
+                rotation-y={Math.PI * 0.48}
+                scale={[lc.size, lc.size, 1]}
+              >
                 <meshStandardMaterial
                   color={tones[(lc.tone + 1) % 3]}
                   map={leafCutoutTex}
                   alphaTest={0.42}
                   side={THREE.DoubleSide}
-                  roughness={0.84}
+                  roughness={0.82}
                 />
               </mesh>
             </group>
@@ -451,9 +955,6 @@ export function ImprovedTree({
 }
 
 // --- Liễu rủ: cành cong + cụm lá nhỏ đi theo cành ----------------------------
-// Mỗi cành rủ = 2 đoạn: đoạn 1 vươn chéo ra ngoài từ tán, đoạn 2 gập xuống
-// (cong ở khớp giữa) + 2-3 cụm lá nhỏ (quả dẹt r 0,22-0,4) bám dọc đoạn 2.
-// Không có sợi dây thẳng đứng nào.
 type DroopArm = {
   az: number;
   tilt1: number;
@@ -521,7 +1022,6 @@ export function DroopingTree({
             geometry={geos.rootFlareGeo}
             position={[0.14, -0.02, 0]}
             rotation-z={-0.36}
-            castShadow
           >
             <meshStandardMaterial
               color={TRUNK}
@@ -543,7 +1043,6 @@ export function DroopingTree({
           roughness={0.92}
         />
       </mesh>
-      {/* Tán trên 3 tầng vòm hữu cơ gọn (maxVisualR <= 1.15 * canopyR). */}
       {spec.lobes.map((l, i) => (
         <mesh
           key={`top-${i}`}
@@ -557,21 +1056,20 @@ export function DroopingTree({
             color={tones[l.tone]}
             map={tex.foliage.map}
             bumpMap={tex.foliage.bumpMap}
-            bumpScale={0.032}
-            roughness={0.86}
+            bumpScale={0.024}
+            roughness={0.84}
           />
         </mesh>
       ))}
-      {/* Cành rủ cong: chùm thẻ lá liễu alphaTest buông dọc nhánh thay cho khối cầu tròn. */}
       {spec.arms.map((a, i) => (
         <group key={`arm-${i}`} position={[0, canopyY + 0.15, 0]} rotation-y={-a.az}>
           <group rotation-z={a.tilt1}>
-            <mesh position={[0, a.len1 / 2, 0]} castShadow>
+            <mesh position={[0, a.len1 / 2, 0]}>
               <cylinderGeometry args={[0.028, 0.048, a.len1, 5]} />
               <meshStandardMaterial color={TRUNK} roughness={0.92} />
             </mesh>
             <group position={[0, a.len1, 0]} rotation-z={1.15}>
-              <mesh position={[0, a.len2 / 2, 0]} castShadow>
+              <mesh position={[0, a.len2 / 2, 0]}>
                 <cylinderGeometry args={[0.012, 0.028, a.len2, 5]} />
                 <meshStandardMaterial color={TRUNK} roughness={0.92} />
               </mesh>

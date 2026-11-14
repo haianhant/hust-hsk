@@ -10,7 +10,7 @@ import { ExtrudedText3D } from '../../../components/three/Signage3D';
 import { CANVAS_VN_FONT, LabelPlane } from '../../../components/three/TextPlate';
 import { RoofSoffitAndPlinth, WindowGrid3D } from '../../../components/three/ArchitecturalWindowBand';
 import { getSharedBuildingPbrTextures } from '../../../components/three/materials';
-import { ImprovedTree } from '../../../components/three/Trees';
+import { ImprovedTree, OrnamentalShrub } from '../../../components/three/Trees';
 import { FacultyParkedCar } from './C6C7C8Cluster';
 import { SimpleBench } from '../landscape/C1SquareLandmarks';
 import { BlueParkingSignPost, ParkedMotorbike } from '../landscape/CampusParkingAndAnnexes';
@@ -23,6 +23,7 @@ const GLASS_DARK = '#27445C';
  * làn đỗ xe ô tô giảng viên phía Đông, hàng ghế đá, đèn sân trước và cây bóng mát góc sân.
  */
 function SoictB1Forecourt({ isNight }: { isNight: boolean }) {
+  const pbr = useMemo(() => getSharedBuildingPbrTextures(), []);
   const b1Bikes: Array<{ x: number; z: number; yaw: number; color: string }> = [
     { x: 101.8, z: 3.1, yaw: Math.PI / 2, color: '#DC2626' },
     { x: 101.8, z: 4.5, yaw: Math.PI / 2, color: '#0F172A' },
@@ -40,35 +41,56 @@ function SoictB1Forecourt({ isNight }: { isNight: boolean }) {
 
   return (
     <group>
-      {/* Mảng đá lát sân quay xe trước sảnh Rotunda (y = 0.024 > mặt plaza 0.015 tránh Z-fighting) */}
+      {/* Mảng đá lát granite sân quay xe trước sảnh Rotunda + viền đá bo tròn (y = 0.023..0.026 > mặt plaza 0.015) */}
+      <mesh position={[115.5, 0.021, 6.2]} receiveShadow>
+        <cylinderGeometry args={[8.9, 8.9, 0.01, 36]} />
+        <meshStandardMaterial color="#94A3B8" roughness={0.86} />
+      </mesh>
       <mesh position={[115.5, 0.024, 6.2]} receiveShadow>
-        <cylinderGeometry args={[8.6, 8.6, 0.012, 32]} />
-        <meshStandardMaterial color="#CBD5E1" roughness={0.86} />
+        <cylinderGeometry args={[8.55, 8.55, 0.012, 36]} />
+        <meshStandardMaterial
+          color="#DDE5EE"
+          map={pbr?.granite.map}
+          bumpMap={pbr?.granite.bumpMap}
+          bumpScale={0.01}
+          roughness={0.84}
+        />
       </mesh>
       <mesh position={[115.5, 0.026, 0.6]} receiveShadow>
         <boxGeometry args={[6.4, 0.012, 6.2]} />
-        <meshStandardMaterial color="#CBD5E1" roughness={0.86} />
+        <meshStandardMaterial
+          color="#DDE5EE"
+          map={pbr?.granite.map}
+          bumpMap={pbr?.granite.bumpMap}
+          bumpScale={0.01}
+          roughness={0.84}
+        />
       </mesh>
 
       {/* Thảm cỏ bán nguyệt / elip trước sảnh B1 tại (115.5, 5.8) */}
       <group position={[115.5, 0, 5.8]}>
-        <mesh position={[0, 0.14, 0]} scale={[4.2, 1, 1.8]} receiveShadow castShadow>
+        <mesh position={[0, 0.14, 0]} scale={[4.2, 1, 1.8]} receiveShadow>
           <cylinderGeometry args={[1, 1.03, 0.28, 32]} />
-          <meshStandardMaterial color="#CBD5E1" roughness={0.84} />
+          <meshStandardMaterial
+            color="#CBD5E1"
+            map={pbr?.granite.map}
+            bumpMap={pbr?.granite.bumpMap}
+            bumpScale={0.012}
+            roughness={0.84}
+          />
         </mesh>
         <mesh position={[0, 0.295, 0]} scale={[3.9, 1, 1.54]} receiveShadow>
           <cylinderGeometry args={[1, 1, 0.04, 32]} />
           <meshStandardMaterial color="#4D8B45" roughness={0.94} />
         </mesh>
-        {[-2.2, -1.0, 0, 1.0, 2.2].map((bx, idx) => (
-          <mesh
+        {[-2.25, -1.08, 0, 1.08, 2.25].map((bx, idx) => (
+          <OrnamentalShrub
             key={`b1-lawn-shrub-${idx}`}
-            position={[bx, idx === 2 ? 0.66 : 0.56, idx === 2 ? 0 : idx % 2 === 0 ? 0.42 : -0.42]}
-            castShadow
-          >
-            <sphereGeometry args={[idx === 2 ? 0.58 : 0.44, 10, 8]} />
-            <meshStandardMaterial color={idx % 2 === 0 ? '#2E6F34' : '#3B8242'} roughness={0.9} />
-          </mesh>
+            position={[bx, 0.3, idx === 2 ? 0.04 : idx % 2 === 0 ? 0.4 : -0.38]}
+            radius={idx === 2 ? 0.62 : 0.48}
+            color={idx % 2 === 0 ? '#2E6F34' : '#3B8242'}
+            flowerColor={idx === 2 ? '#FDE047' : idx % 2 === 1 ? '#FB7185' : undefined}
+          />
         ))}
         {/* Bục đá khắc bảng hiệu "SOICT · HUST" trước bồn cỏ */}
         <mesh position={[0, 0.36, -1.42]} rotation={[-0.22, 0, 0]} castShadow>
@@ -564,11 +586,12 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
             <mesh position={[0, 5.42, 0]}>
               <cylinderGeometry args={[5.19, 5.19, 1.05, 32, 1, true, -Math.PI * 0.46, Math.PI * 0.92]} />
               <meshStandardMaterial
-                color={isNight ? '#FFE4A0' : GLASS_DARK}
+                color={isNight ? '#FFE4A0' : pbr?.windowGlass ? '#D2E6FA' : GLASS_DARK}
+                map={isNight ? undefined : pbr?.windowGlass}
                 emissive={isNight ? '#FFB84D' : '#000000'}
                 emissiveIntensity={isNight ? 0.55 : 0}
-                roughness={0.22}
-                metalness={0.45}
+                roughness={0.18}
+                metalness={0.42}
                 side={2}
               />
             </mesh>
@@ -586,11 +609,12 @@ export function SoictB1Building({ isNight }: { isNight: boolean }) {
             <mesh position={[0, 8.32, 0]}>
               <cylinderGeometry args={[5.19, 5.19, 1.05, 32, 1, true, -Math.PI * 0.46, Math.PI * 0.92]} />
               <meshStandardMaterial
-                color={isNight ? '#FFE4A0' : GLASS_DARK}
+                color={isNight ? '#FFE4A0' : pbr?.windowGlass ? '#D2E6FA' : GLASS_DARK}
+                map={isNight ? undefined : pbr?.windowGlass}
                 emissive={isNight ? '#FFB84D' : '#000000'}
                 emissiveIntensity={isNight ? 0.5 : 0}
-                roughness={0.22}
-                metalness={0.45}
+                roughness={0.18}
+                metalness={0.42}
                 side={2}
               />
             </mesh>

@@ -60,15 +60,16 @@ export function canvasTex(
 export const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => {};
 
 /**
- * Batches static `THREE.Mesh` objects sharing `(geometry, material)` inside
- * `container` into `THREE.InstancedMesh` instances (preserving any animated
- * subtrees in `preserveRoots`) and disables pointer raycasting on all procedural
- * meshes inside `container`.
+ * Batches heavily repeated static `THREE.Mesh` objects sharing `(geometry, material)`
+ * into `THREE.InstancedMesh` instances, merges remaining static opaque meshes per
+ * material into a single baked `BufferGeometry` (cutting WebGL draw calls & GPU
+ * geometry uploads across Floors 1–10), preserves any animated subtrees in
+ * `preserveRoots`, and disables pointer raycasting on decorative procedural meshes.
  */
 export function optimizeStaticLibraryGroup(
   container: THREE.Object3D,
   preserveRoots: ReadonlyArray<THREE.Object3D | null | undefined> = [],
-): { batchedMeshes: number; instancedGroups: number } {
+): { batchedMeshes: number; instancedGroups: number; mergedMaterialGroups: number } {
   const preserved = new Set<THREE.Object3D>();
   for (let i = 0; i < preserveRoots.length; i++) {
     const root = preserveRoots[i];
@@ -102,7 +103,7 @@ export function optimizeStaticLibraryGroup(
     if (!mesh.isMesh) return;
     mesh.raycast = NOOP_RAYCAST;
 
-    if (preserved.has(mesh) || mesh.children.length > 0) return;
+    if (!mesh.visible || preserved.has(mesh) || mesh.children.length > 0) return;
     if (!mesh.geometry || !mesh.material || Array.isArray(mesh.material)) return;
 
     const key = `${mesh.geometry.uuid}_${mesh.material.uuid}`;
@@ -124,24 +125,157 @@ export function optimizeStaticLibraryGroup(
 
   let batchedMeshes = 0;
   let instancedGroups = 0;
+  let mergedMaterialGroups = 0;
+
+  const matMergeBuckets = new Map<
+    string,
+    {
+      material: THREE.Material;
+      items: Array<{
+        mesh: THREE.Mesh;
+        geometry: THREE.BufferGeometry;
+        matrix: THREE.Matrix4;
+      }>;
+    }
+  >();
 
   buckets.forEach(({ geometry, material, meshes, matrices }) => {
-    if (meshes.length < 2) return;
-    for (const m of meshes) {
-      m.parent?.remove(m);
+    const canMergeByMat =
+      !material.transparent &&
+      Boolean(geometry.attributes.position) &&
+      geometry.attributes.position.itemSize === 3 &&
+      Boolean(geometry.attributes.normal) &&
+      geometry.attributes.normal.itemSize === 3 &&
+      !geometry.attributes.color;
+
+    // Dùng InstancedMesh cho các chi tiết lặp lại >= 6 lần (hoặc >= 2 nếu là kính trong suốt)
+    const instanceThreshold = canMergeByMat ? 6 : 2;
+    if (meshes.length >= instanceThreshold) {
+      for (const m of meshes) {
+        m.parent?.remove(m);
+      }
+      const im = new THREE.InstancedMesh(geometry, material, matrices.length);
+      im.raycast = NOOP_RAYCAST;
+      im.castShadow = meshes.some((m) => m.castShadow);
+      im.receiveShadow = meshes.some((m) => m.receiveShadow);
+      for (let i = 0; i < matrices.length; i++) {
+        im.setMatrixAt(i, matrices[i]);
+      }
+      im.instanceMatrix.needsUpdate = true;
+      container.add(im);
+      batchedMeshes += meshes.length;
+      instancedGroups += 1;
+      return;
     }
-    const im = new THREE.InstancedMesh(geometry, material, matrices.length);
-    im.raycast = NOOP_RAYCAST;
-    for (let i = 0; i < matrices.length; i++) {
-      im.setMatrixAt(i, matrices[i]);
+
+    if (canMergeByMat) {
+      let mBucket = matMergeBuckets.get(material.uuid);
+      if (!mBucket) {
+        mBucket = { material, items: [] };
+        matMergeBuckets.set(material.uuid, mBucket);
+      }
+      for (let i = 0; i < meshes.length; i++) {
+        mBucket.items.push({ mesh: meshes[i], geometry, matrix: matrices[i] });
+      }
     }
-    im.instanceMatrix.needsUpdate = true;
-    container.add(im);
-    batchedMeshes += meshes.length;
-    instancedGroups += 1;
   });
 
-  return { batchedMeshes, instancedGroups };
+  const tmpPos = new THREE.Vector3();
+  const tmpNorm = new THREE.Vector3();
+  const normalMat = new THREE.Matrix3();
+
+  matMergeBuckets.forEach(({ material, items }) => {
+    if (items.length < 2) return;
+
+    let totalVerts = 0;
+    for (let i = 0; i < items.length; i++) {
+      const g = items[i].geometry;
+      const count = g.index ? g.index.count : g.attributes.position.count;
+      totalVerts += count;
+    }
+    if (totalVerts === 0) return;
+
+    const posOut = new Float32Array(totalVerts * 3);
+    const normOut = new Float32Array(totalVerts * 3);
+    const uvOut = new Float32Array(totalVerts * 2);
+
+    let vCursor = 0;
+    let castShadow = false;
+    let receiveShadow = false;
+
+    for (let i = 0; i < items.length; i++) {
+      const { mesh, geometry, matrix } = items[i];
+      if (mesh.castShadow) castShadow = true;
+      if (mesh.receiveShadow) receiveShadow = true;
+      mesh.parent?.remove(mesh);
+
+      normalMat.getNormalMatrix(matrix);
+      const flipWinding = matrix.determinant() < 0;
+      const posAttr = geometry.attributes.position;
+      const normAttr = geometry.attributes.normal;
+      const uvAttr = geometry.attributes.uv;
+      const idxAttr = geometry.index;
+      const vCount = idxAttr ? idxAttr.count : posAttr.count;
+
+      for (let t = 0; t < vCount; t += 3) {
+        for (let k = 0; k < 3; k++) {
+          const sk = flipWinding ? (k === 1 ? 2 : k === 2 ? 1 : 0) : k;
+          const vi = idxAttr ? idxAttr.getX(t + sk) : t + sk;
+
+          tmpPos.fromBufferAttribute(posAttr, vi).applyMatrix4(matrix);
+          posOut[vCursor * 3] = tmpPos.x;
+          posOut[vCursor * 3 + 1] = tmpPos.y;
+          posOut[vCursor * 3 + 2] = tmpPos.z;
+
+          tmpNorm.fromBufferAttribute(normAttr, vi).applyMatrix3(normalMat).normalize();
+          normOut[vCursor * 3] = tmpNorm.x;
+          normOut[vCursor * 3 + 1] = tmpNorm.y;
+          normOut[vCursor * 3 + 2] = tmpNorm.z;
+
+          if (uvAttr) {
+            uvOut[vCursor * 2] = uvAttr.getX(vi);
+            uvOut[vCursor * 2 + 1] = uvAttr.getY(vi);
+          }
+          vCursor++;
+        }
+      }
+    }
+
+    const mergedGeo = new THREE.BufferGeometry();
+    mergedGeo.setAttribute('position', new THREE.BufferAttribute(posOut, 3));
+    mergedGeo.setAttribute('normal', new THREE.BufferAttribute(normOut, 3));
+    mergedGeo.setAttribute('uv', new THREE.BufferAttribute(uvOut, 2));
+    mergedGeo.computeBoundingBox();
+    mergedGeo.computeBoundingSphere();
+
+    const mergedMesh = new THREE.Mesh(mergedGeo, material);
+    mergedMesh.raycast = NOOP_RAYCAST;
+    mergedMesh.castShadow = castShadow;
+    mergedMesh.receiveShadow = receiveShadow;
+    container.add(mergedMesh);
+
+    batchedMeshes += items.length;
+    mergedMaterialGroups += 1;
+  });
+
+  return { batchedMeshes, instancedGroups, mergedMaterialGroups };
+}
+
+/**
+ * Sinh CanvasTexture bóng tiếp xúc mềm (Contact Ambient Occlusion) đặt dưới chân
+ * bàn ghế, bục đàn Grand Piano, quầy lễ tân để triệt tiêu cảm giác vật thể trôi nổi.
+ */
+export function makeLibrarySoftAoTex(): THREE.CanvasTexture {
+  return canvasTex(128, 128, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    const g = ctx.createRadialGradient(w / 2, h / 2, w * 0.06, w / 2, h / 2, w * 0.49);
+    g.addColorStop(0, 'rgba(10, 14, 22, 0.72)');
+    g.addColorStop(0.52, 'rgba(10, 14, 22, 0.34)');
+    g.addColorStop(0.84, 'rgba(10, 14, 22, 0.08)');
+    g.addColorStop(1, 'rgba(10, 14, 22, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  });
 }
 
 /**

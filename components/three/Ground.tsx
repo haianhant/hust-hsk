@@ -22,13 +22,13 @@ import {
   makeC1PlazaStoneTexture,
   makeCircuitPlazaTexture,
   makeGrassTexture,
+  makeRoadJunctionDiscTexture,
   makeSidewalkPaverTexture,
   makeTerracottaTileTexture,
   makeZebraAndDrainTextures,
 } from './materials';
 
 const GRASS_COLOR = '#86A665';
-const ROAD_COLOR = '#9d9d99';
 const CURB_COLOR = '#D6D3C9'; // bó vỉa bê tông dọc hai mép đường
 const C1_PLAZA_COLOR = '#DAD6CE'; // quảng trường C1, đá rửa xám sáng
 const LIB_PLAZA_COLOR = '#B86B52'; // sân thư viện, gạch đỏ-nâu đất nung (nhân với map)
@@ -36,9 +36,9 @@ const LIB_PLAZA_COLOR = '#B86B52'; // sân thư viện, gạch đỏ-nâu đất
 const GRASS_Y = 0;
 const PLAZA_Y = 0.015;
 const ROAD_Y = 0.02;
-const JOINT_Y = 0.03;
+const JOINT_Y = 0.0215;
 
-const GRASS_SIZE: [number, number] = [290, 220];
+const GRASS_SIZE: [number, number] = [540, 540];
 const GRASS_CENTER: [number, number, number] = [36, GRASS_Y, 16];
 
 type Rect = { minX: number; maxX: number; minZ: number; maxZ: number };
@@ -823,23 +823,115 @@ function FallenLipaLeaves() {
 }
 
 export default function Ground() {
+  const curbInstRef = useRef<THREE.InstancedMesh>(null);
+  const jointDiscInstRef = useRef<THREE.InstancedMesh>(null);
+  const c1JointInstRef = useRef<THREE.InstancedMesh>(null);
+
   const textures = useMemo(() => {
-    const grass = makeGrassTexture(28, 24);
+    const grass = makeGrassTexture(52, 52);
     const asphalt = makeAsphaltTexture(4, 1);
+    const junctionDisc = makeRoadJunctionDiscTexture();
     const c1Stone = makeC1PlazaStoneTexture(12, 6);
     const libTile = makeTerracottaTileTexture(14, 22);
     const tdnCircuit = makeCircuitPlazaTexture(2, 2);
-    return { grass, asphalt, c1Stone, libTile, tdnCircuit };
+    const unitBox = new THREE.BoxGeometry(1, 1, 1);
+    const unitPlane = new THREE.PlaneGeometry(1, 1);
+    const unitCircle = new THREE.CircleGeometry(1, 32);
+    return {
+      grass,
+      asphalt,
+      junctionDisc,
+      c1Stone,
+      libTile,
+      tdnCircuit,
+      unitBox,
+      unitPlane,
+      unitCircle,
+    };
   }, []);
+
+  const curbTransforms = useMemo(() => {
+    const out: Array<{ x: number; z: number; rotY: number; len: number }> = [];
+    for (const seg of ROAD_PIECES) {
+      const dx = seg.b.x - seg.a.x;
+      const dz = seg.b.z - seg.a.z;
+      const len = Math.hypot(dx, dz);
+      if (len <= 2.5) continue;
+      const cx = (seg.a.x + seg.b.x) / 2;
+      const cz = (seg.a.z + seg.b.z) / 2;
+      const rotY = Math.atan2(-dz, dx);
+      const curbOffset = seg.width / 2 + 0.12;
+      const nx = -dz / len;
+      const nz = dx / len;
+      out.push({ x: cx - nx * curbOffset, z: cz - nz * curbOffset, rotY, len: len - 0.4 });
+      out.push({ x: cx + nx * curbOffset, z: cz + nz * curbOffset, rotY, len: len - 0.4 });
+    }
+    return out;
+  }, []);
+
+  useLayoutEffect(() => {
+    const m = new THREE.Matrix4();
+    const pos = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    const eul = new THREE.Euler();
+    const scl = new THREE.Vector3();
+
+    if (curbInstRef.current) {
+      curbTransforms.forEach((cb, idx) => {
+        pos.set(cb.x, ROAD_Y + 0.025, cb.z);
+        eul.set(0, cb.rotY, 0);
+        q.setFromEuler(eul);
+        scl.set(cb.len, 0.07, 0.22);
+        m.compose(pos, q, scl);
+        curbInstRef.current!.setMatrixAt(idx, m);
+      });
+      curbInstRef.current.instanceMatrix.needsUpdate = true;
+    }
+
+    if (jointDiscInstRef.current) {
+      eul.set(-Math.PI / 2, 0, 0);
+      q.setFromEuler(eul);
+      JOINT_DISCS.forEach((d, idx) => {
+        pos.set(d.center.x, JOINT_Y, d.center.z);
+        scl.set(d.radius, d.radius, 1);
+        m.compose(pos, q, scl);
+        jointDiscInstRef.current!.setMatrixAt(idx, m);
+      });
+      jointDiscInstRef.current.instanceMatrix.needsUpdate = true;
+    }
+
+    if (c1JointInstRef.current) {
+      eul.set(-Math.PI / 2, 0, 0);
+      q.setFromEuler(eul);
+      let ptr = 0;
+      for (const j of C1_JOINTS_X) {
+        pos.set(-58, C1_JOINT_Y, j.cz);
+        scl.set(j.len, C1_JOINT_W, 1);
+        m.compose(pos, q, scl);
+        c1JointInstRef.current.setMatrixAt(ptr++, m);
+      }
+      for (const j of C1_JOINTS_Z) {
+        pos.set(j.cx, C1_JOINT_Y, -35.8);
+        scl.set(C1_JOINT_W, j.len, 1);
+        m.compose(pos, q, scl);
+        c1JointInstRef.current.setMatrixAt(ptr++, m);
+      }
+      c1JointInstRef.current.instanceMatrix.needsUpdate = true;
+    }
+  }, [curbTransforms]);
 
   useEffect(
     () => () => {
       textures.grass.dispose();
       textures.asphalt.dispose();
+      textures.junctionDisc.dispose();
       textures.c1Stone.dispose();
       textures.libTile.map.dispose();
       textures.libTile.bumpMap.dispose();
       textures.tdnCircuit.dispose();
+      textures.unitBox.dispose();
+      textures.unitPlane.dispose();
+      textures.unitCircle.dispose();
     },
     [textures],
   );
@@ -923,29 +1015,14 @@ export default function Ground() {
         </mesh>
       ))}
 
-      {/* Mạch lát ô vuông trên quảng trường C1, y = 0,025. */}
-      {C1_JOINTS_X.map((j, i) => (
-        <mesh
-          key={`c1-joint-x-${i}`}
-          rotation-x={-Math.PI / 2}
-          position={[-58, C1_JOINT_Y, j.cz]}
-          receiveShadow
-        >
-          <planeGeometry args={[j.len, C1_JOINT_W]} />
-          <meshStandardMaterial color={C1_JOINT_COLOR} roughness={0.95} metalness={0} />
-        </mesh>
-      ))}
-      {C1_JOINTS_Z.map((j, i) => (
-        <mesh
-          key={`c1-joint-z-${i}`}
-          rotation-x={-Math.PI / 2}
-          position={[j.cx, C1_JOINT_Y, -35.8]}
-          receiveShadow
-        >
-          <planeGeometry args={[C1_JOINT_W, j.len]} />
-          <meshStandardMaterial color={C1_JOINT_COLOR} roughness={0.95} metalness={0} />
-        </mesh>
-      ))}
+      {/* Mạch lát ô vuông trên quảng trường C1 gộp thành 1 InstancedMesh duy nhất, y = 0,025. */}
+      <instancedMesh
+        ref={c1JointInstRef}
+        args={[textures.unitPlane, undefined, C1_JOINTS_X.length + C1_JOINTS_Z.length]}
+        receiveShadow
+      >
+        <meshStandardMaterial color={C1_JOINT_COLOR} roughness={0.95} metalness={0} />
+      </instancedMesh>
 
       {/* Lá vàng Lipa 3D rụng rải rác bám sát bề mặt bồn cỏ & mặt sân C1. */}
       <FallenLipaLeaves />
@@ -953,69 +1030,68 @@ export default function Ground() {
       {/* Các bồn cỏ đối xứng trên Quảng trường C1: viền bê tông + hộp cỏ thấp. */}
       {C1_GRASS_BEDS.map((b, i) => (
         <group key={`c1-bed-${i}`}>
-          <mesh position={[b.cx, 0.05, b.cz]} castShadow receiveShadow>
+          <mesh position={[b.cx, 0.05, b.cz]} receiveShadow>
             <boxGeometry args={[b.w + 0.2, 0.06, b.d + 0.2]} />
             <meshStandardMaterial color={GRASS_BED_EDGE} roughness={0.95} metalness={0} />
           </mesh>
-          <mesh position={[b.cx, 0.11, b.cz]} castShadow receiveShadow>
+          <mesh position={[b.cx, 0.11, b.cz]} receiveShadow>
             <boxGeometry args={[b.w, 0.18, b.d]} />
             <meshStandardMaterial color={GRASS_BED_COLOR} roughness={0.95} metalness={0} />
           </mesh>
         </group>
       ))}
 
-      {/* Đường đi dọc ROADS: mặt nhựa đường PBR + bó vỉa bê tông 2 bên mép đường. */}
+      {/* Đường đi dọc ROADS: mặt nhựa đường PBR. */}
       {ROAD_PIECES.map((seg, i) => {
         const dx = seg.b.x - seg.a.x;
         const dz = seg.b.z - seg.a.z;
         const len = Math.hypot(dx, dz);
-        const curbOffset = seg.width / 2 + 0.12;
         return (
-          <group
+          <mesh
             key={`road-${i}`}
             position={[(seg.a.x + seg.b.x) / 2, ROAD_Y, (seg.a.z + seg.b.z) / 2]}
-            rotation-y={Math.atan2(-dz, dx)}
+            rotation={[-Math.PI / 2, 0, Math.atan2(-dz, dx)]}
+            receiveShadow
           >
-            <mesh rotation-x={-Math.PI / 2} receiveShadow>
-              <planeGeometry args={[len, seg.width]} />
-              <meshStandardMaterial
-                color="#FFFFFF"
-                map={textures.asphalt}
-                bumpMap={textures.asphalt}
-                bumpScale={0.01}
-                roughness={0.9}
-                metalness={0}
-              />
-            </mesh>
-            {/* Bó vỉa bê tông hai bên mép đường (cao 0,07 m, rộng 0,22 m). */}
-            {len > 2.5 && (
-              <>
-                <mesh position={[0, 0.025, -curbOffset]} receiveShadow>
-                  <boxGeometry args={[len - 0.4, 0.07, 0.22]} />
-                  <meshStandardMaterial color={CURB_COLOR} roughness={0.92} />
-                </mesh>
-                <mesh position={[0, 0.025, curbOffset]} receiveShadow>
-                  <boxGeometry args={[len - 0.4, 0.07, 0.22]} />
-                  <meshStandardMaterial color={CURB_COLOR} roughness={0.92} />
-                </mesh>
-              </>
-            )}
-          </group>
+            <planeGeometry args={[len, seg.width]} />
+            <meshStandardMaterial
+              color="#FFFFFF"
+              map={textures.asphalt}
+              bumpMap={textures.asphalt}
+              bumpScale={0.01}
+              roughness={0.9}
+              metalness={0}
+            />
+          </mesh>
         );
       })}
 
-      {/* Đĩa nối tròn tại nút giao của đường, y = 0,03 (cách đường 0,01). */}
-      {JOINT_DISCS.map((d, i) => (
-        <mesh
-          key={`joint-${i}`}
-          rotation-x={-Math.PI / 2}
-          position={[d.center.x, JOINT_Y, d.center.z]}
-          receiveShadow
-        >
-          <circleGeometry args={[d.radius, 32]} />
-          <meshStandardMaterial color={ROAD_COLOR} roughness={0.9} metalness={0} />
-        </mesh>
-      ))}
+      {/* Bó vỉa bê tông hai bên mép đường gộp toàn bộ thành 1 InstancedMesh. */}
+      <instancedMesh
+        ref={curbInstRef}
+        args={[textures.unitBox, undefined, curbTransforms.length]}
+        receiveShadow
+      >
+        <meshStandardMaterial color={CURB_COLOR} roughness={0.92} />
+      </instancedMesh>
+
+      {/* Đĩa nối tròn tại nút giao (gộp 1 InstancedMesh + texture nhựa đường làm mờ biên alpha, xóa vết khoanh tròn). */}
+      <instancedMesh
+        ref={jointDiscInstRef}
+        args={[textures.unitCircle, undefined, JOINT_DISCS.length]}
+        receiveShadow
+      >
+        <meshStandardMaterial
+          color="#FFFFFF"
+          map={textures.junctionDisc}
+          bumpMap={textures.junctionDisc}
+          bumpScale={0.008}
+          transparent
+          depthWrite={false}
+          roughness={0.9}
+          metalness={0}
+        />
+      </instancedMesh>
     </group>
   );
 }

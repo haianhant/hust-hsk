@@ -23,7 +23,14 @@ import Motorbike from './Motorbike';
 import CampusCheckinMarkers from '../../features/campus/checkin/CampusCheckinMarkers';
 import CampusAtmosphereFX from '../../features/campus/atmosphere/CampusAtmosphereFX';
 import CampusInteractiveLife from '../../features/campus/interactive/CampusInteractiveLife';
-import { makeCloudPuffTexture, makeSkyEnvEquirectTexture, makeSunHaloTexture } from './materials';
+import {
+  makeCloudPuffTexture,
+  makeHanoiHorizonPanoramaTexture,
+  makeIndoorAtriumEnvEquirectTexture,
+  makeSkyEnvEquirectTexture,
+  makeSunHaloTexture,
+} from './materials';
+import { CampusTreeBatchProvider } from './Trees';
 import { libraryNavigationController } from '../../lib/campus';
 import { playerState, type TimeOfDay } from '../../lib/playerState';
 
@@ -85,22 +92,22 @@ const ATMOSPHERE: Record<
   }
 > = {
   day: {
-    bg: '#cfe0ec',
-    fogColor: '#dce8ef',
-    fogNear: 180,
-    fogFar: 520,
-    hemiSky: '#dceefb',
-    hemiGround: '#8a9a72',
-    hemiIntensity: 1.24,
-    sunPos: [80, 100, 40],
-    sunColor: '#ffffff',
-    sunIntensity: 1.68,
-    westFillColor: '#ffffff',
-    westFillIntensity: 0.52,
-    southFillColor: '#fff2df',
-    southFillIntensity: 0.28,
-    northFillColor: '#ffffff',
-    northFillIntensity: 0.38,
+    bg: '#b9d6ee',
+    fogColor: '#d4e6f4',
+    fogNear: 185,
+    fogFar: 465,
+    hemiSky: '#d4ebff',
+    hemiGround: '#7d9268',
+    hemiIntensity: 1.06,
+    sunPos: [82, 96, 44],
+    sunColor: '#fff9ec',
+    sunIntensity: 1.88,
+    westFillColor: '#e4f0fb',
+    westFillIntensity: 0.34,
+    southFillColor: '#fff3df',
+    southFillIntensity: 0.24,
+    northFillColor: '#dceaf9',
+    northFillIntensity: 0.22,
   },
   sunset: {
     bg: '#dfa074',
@@ -141,7 +148,23 @@ const ATMOSPHERE: Record<
 };
 
 const INDOOR_ATMOSPHERE: Record<TimeOfDay, (typeof ATMOSPHERE)['day']> = {
-  day: ATMOSPHERE.day,
+  day: {
+    ...ATMOSPHERE.day,
+    bg: '#e9eff5',
+    fogColor: '#eef3f8',
+    hemiSky: '#eef5fc',
+    hemiGround: '#9a8b78',
+    hemiIntensity: 1.22,
+    sunPos: [48, 86, 36],
+    sunColor: '#fffaf0',
+    sunIntensity: 1.56,
+    westFillColor: '#eef4fb',
+    westFillIntensity: 0.48,
+    southFillColor: '#fff4e2',
+    southFillIntensity: 0.34,
+    northFillColor: '#edf3fa',
+    northFillIntensity: 0.38,
+  },
   sunset: {
     ...ATMOSPHERE.day,
     bg: '#dfa074',
@@ -210,28 +233,34 @@ function isSoftwareWebGLRenderer(gl: THREE.WebGLRenderer): boolean {
  */
 function ProceduralEnvironment({
   timeOfDay,
-  enabled,
+  isIndoor,
 }: {
   timeOfDay: TimeOfDay;
-  enabled: boolean;
+  isIndoor: boolean;
 }) {
   const { gl, scene } = useThree();
 
   useEffect(() => {
-    if (!enabled) {
+    // Trên trình render phần mềm (SwiftShader CI), bỏ qua PMREM trong nhà để giữ tốc độ tối đa
+    if (isIndoor && isSoftwareWebGLRenderer(gl)) {
       scene.environment = null;
       return;
     }
 
-    const equirect = makeSkyEnvEquirectTexture(timeOfDay);
+    const equirect = isIndoor
+      ? makeIndoorAtriumEnvEquirectTexture(timeOfDay)
+      : makeSkyEnvEquirectTexture(timeOfDay);
     const pmrem = new THREE.PMREMGenerator(gl);
     pmrem.compileEquirectangularShader();
     const envTarget = pmrem.fromEquirectangular(equirect);
 
     scene.environment = envTarget.texture;
     if ('environmentIntensity' in scene) {
-      (scene as THREE.Scene & { environmentIntensity: number }).environmentIntensity =
-        timeOfDay === 'night' ? 0.3 : 0.55;
+      (scene as THREE.Scene & { environmentIntensity: number }).environmentIntensity = isIndoor
+        ? 0.5
+        : timeOfDay === 'night'
+          ? 0.3
+          : 0.55;
     }
 
     return () => {
@@ -242,14 +271,81 @@ function ProceduralEnvironment({
       equirect.dispose();
       pmrem.dispose();
     };
-  }, [gl, scene, timeOfDay, enabled]);
+  }, [gl, scene, timeOfDay, isIndoor]);
 
   return null;
 }
 
-function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
+/**
+ * Tự động tinh chỉnh độ phân giải DPR theo tốc độ khung hình thực tế (Adaptive DPR):
+ * giữ sắc nét tối đa trên GPU khỏe và tự động giảm tải mượt trên iGPU / thiết bị di động.
+ */
+function AdaptiveDprController() {
+  const { gl } = useThree();
+  const stateRef = useRef<{
+    isSoft: boolean | null;
+    frames: number;
+    accMs: number;
+    warmupFrames: number;
+    currentDpr: number;
+  }>({
+    isSoft: null,
+    frames: 0,
+    accMs: 0,
+    warmupFrames: 0,
+    currentDpr: 1,
+  });
+
+  useEffect(() => {
+    const isSoft = isSoftwareWebGLRenderer(gl);
+    stateRef.current.isSoft = isSoft;
+    const maxDpr = isSoft
+      ? 1
+      : Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 1.75);
+    stateRef.current.currentDpr = maxDpr;
+    gl.setPixelRatio(maxDpr);
+  }, [gl]);
+
+  useFrame((_, rawDelta) => {
+    const st = stateRef.current;
+    if (st.isSoft) return;
+    if (st.warmupFrames < 60) {
+      st.warmupFrames += 1;
+      return;
+    }
+    if (rawDelta <= 0 || rawDelta > 0.25) return;
+
+    st.frames += 1;
+    st.accMs += rawDelta * 1000;
+    if (st.frames < 45) return;
+
+    const avgMs = st.accMs / st.frames;
+    st.frames = 0;
+    st.accMs = 0;
+
+    const maxDpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 1.75);
+    if (avgMs > 22.5 && st.currentDpr > 1.0) {
+      st.currentDpr = Math.max(1.0, Number((st.currentDpr - 0.15).toFixed(2)));
+      gl.setPixelRatio(st.currentDpr);
+    } else if (avgMs < 16.8 && st.currentDpr < maxDpr) {
+      st.currentDpr = Math.min(maxDpr, Number((st.currentDpr + 0.1).toFixed(2)));
+      gl.setPixelRatio(st.currentDpr);
+    }
+  });
+
+  return null;
+}
+
+function SkyAtmosphereAndNightLights({
+  timeOfDay,
+  groundOffset = [0, 0, 0],
+}: {
+  timeOfDay: TimeOfDay;
+  groundOffset?: [number, number, number];
+}) {
   const cloudsRef = useRef<THREE.Group>(null!);
   const skyDomeTex = useMemo(() => makeSkyEnvEquirectTexture(timeOfDay), [timeOfDay]);
+  const horizonTex = useMemo(() => makeHanoiHorizonPanoramaTexture(timeOfDay), [timeOfDay]);
   const sunHaloTex = useMemo(() => makeSunHaloTexture(), []);
   const cloudPuffTex = useMemo(() => makeCloudPuffTexture(), []);
   const starGeo = useMemo(() => {
@@ -277,10 +373,11 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
     () => () => {
       starGeo.dispose();
       skyDomeTex.dispose();
+      horizonTex.dispose();
       sunHaloTex.dispose();
       cloudPuffTex.dispose();
     },
-    [starGeo, skyDomeTex, sunHaloTex, cloudPuffTex],
+    [starGeo, skyDomeTex, horizonTex, sunHaloTex, cloudPuffTex],
   );
 
   useFrame(({ clock }) => {
@@ -299,6 +396,24 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
       <mesh position={[0, -10, 0]} scale={[-1, 1, 1]}>
         <sphereGeometry args={[460, 32, 20]} />
         <meshBasicMaterial map={skyDomeTex} side={THREE.BackSide} depthWrite={false} fog={false} />
+      </mesh>
+
+      {/* Vành đai cây xanh & đường chân trời Hà Nội bao quanh khuôn viên (r = 235 m) */}
+      <mesh
+        position={[
+          36 + groundOffset[0],
+          18 + groundOffset[1],
+          16 + groundOffset[2],
+        ]}
+      >
+        <cylinderGeometry args={[235, 235, 44, 48, 1, true]} />
+        <meshBasicMaterial
+          map={horizonTex}
+          side={THREE.BackSide}
+          transparent
+          depthWrite={false}
+          fog={true}
+        />
       </mesh>
 
       {/* Đĩa Mặt trời + Hào quang Corona ban ngày */}
@@ -467,7 +582,7 @@ function PlayerCenteredSunLight({
       gl.shadowMap.needsUpdate = !isIndoor;
     } else {
       gl.shadowMap.type = THREE.PCFSoftShadowMap;
-      gl.shadowMap.autoUpdate = true;
+      gl.shadowMap.autoUpdate = false;
       if (light.shadow.mapSize.width !== 2048 || light.shadow.mapSize.height !== 2048) {
         light.shadow.mapSize.set(2048, 2048);
         if (light.shadow.map) {
@@ -475,6 +590,7 @@ function PlayerCenteredSunLight({
           light.shadow.map = null;
         }
       }
+      gl.shadowMap.needsUpdate = !isIndoor;
     }
   }, [gl, isIndoor, atm.sunPos]);
 
@@ -497,9 +613,10 @@ function PlayerCenteredSunLight({
       targetObj.position.set(snapX, 0, snapZ);
       targetObj.updateMatrixWorld();
     }
-    if (softwareRef.current && !isIndoor) {
+    if (!isIndoor) {
       frameCountRef.current += 1;
-      if (movedSnap || frameCountRef.current % 10 === 0) {
+      const interval = softwareRef.current ? 10 : 2;
+      if (movedSnap || frameCountRef.current % interval === 0) {
         gl.shadowMap.needsUpdate = true;
       }
     }
@@ -580,7 +697,8 @@ export default function CampusScene({
     >
       <color attach="background" args={[activeAtm.bg]} />
       <fog attach="fog" args={[activeAtm.fogColor, activeAtm.fogNear, activeAtm.fogFar]} />
-      <ProceduralEnvironment timeOfDay={timeOfDay} enabled={!isIndoor} />
+      <AdaptiveDprController />
+      <ProceduralEnvironment timeOfDay={timeOfDay} isIndoor={isIndoor} />
 
       <hemisphereLight args={[activeAtm.hemiSky, activeAtm.hemiGround, activeAtm.hemiIntensity]} />
       <PlayerCenteredSunLight atm={activeAtm} isIndoor={isIndoor} />
@@ -611,12 +729,17 @@ export default function CampusScene({
         <>
           {isOpenAirRooftop && (
             <>
-              <SkyAtmosphereAndNightLights timeOfDay={timeOfDay} />
+              <SkyAtmosphereAndNightLights
+                timeOfDay={timeOfDay}
+                groundOffset={[-38, -36.0, -36.5]}
+              />
               <group position={[-38, -36.0, -36.5]}>
-                <Ground />
-                <Landmarks timeOfDay={timeOfDay} />
-                <BackgroundBuildings timeOfDay={timeOfDay} />
-                <CampusExpansion timeOfDay={timeOfDay} hskMode={hskMode} />
+                <CampusTreeBatchProvider>
+                  <Ground />
+                  <Landmarks timeOfDay={timeOfDay} />
+                  <BackgroundBuildings timeOfDay={timeOfDay} />
+                  <CampusExpansion timeOfDay={timeOfDay} hskMode={hskMode} />
+                </CampusTreeBatchProvider>
               </group>
             </>
           )}
@@ -628,7 +751,7 @@ export default function CampusScene({
           />
         </>
       ) : (
-        <>
+        <CampusTreeBatchProvider>
           <SkyAtmosphereAndNightLights timeOfDay={timeOfDay} />
           <Ground />
           <Landmarks timeOfDay={timeOfDay} />
@@ -648,7 +771,7 @@ export default function CampusScene({
           {/* Hiệu ứng không gian sống động & Tương tác đời thường HUSTVerse */}
           <CampusAtmosphereFX timeOfDay={timeOfDay} />
           <CampusInteractiveLife timeOfDay={timeOfDay} />
-        </>
+        </CampusTreeBatchProvider>
       )}
       <RemotePlayers
         scene={inClassroom ? 'classroom' : inLibraryLobby ? 'library' : 'campus'}

@@ -5,6 +5,8 @@
 // Module IDs: building.c6-c15, building.c7, building.viet-duc-center, building.alumni-house
 // ---------------------------------------------------------------------------
 
+import { useMemo } from 'react';
+import * as THREE from 'three';
 import {
   ALUMNI_HOUSE,
   C7_BUILDING,
@@ -17,6 +19,7 @@ import {
 import { ExtrudedText3D, FramedSignBox3D } from '../../../components/three/Signage3D';
 import { LabelPlane } from '../../../components/three/TextPlate';
 import { ImprovedTree } from '../../../components/three/Trees';
+import { makeSoftShadowTexture } from '../../../components/three/materials';
 
 const WALL_BLUE_LIGHT = '#DCEAF7';
 const HEADER_BLUE = '#3B6E9C';
@@ -2063,6 +2066,113 @@ export function D3D5ParkingGarage() {
 /**
  * Một chiếc ô tô 3D của giảng viên đỗ trên trục đường cạnh tòa C7
  */
+interface SharedCarAssets {
+  sedanBodyGeo: THREE.BufferGeometry;
+  suvBodyGeo: THREE.BufferGeometry;
+  sedanSideGlassGeo: THREE.BufferGeometry;
+  suvSideGlassGeo: THREE.BufferGeometry;
+  wheelArchGeo: THREE.BufferGeometry;
+  tireGeo: THREE.BufferGeometry;
+  rimGeo: THREE.BufferGeometry;
+  hubGeo: THREE.BufferGeometry;
+  shadowTex: THREE.CanvasTexture;
+}
+
+let sharedCarAssetsSingleton: SharedCarAssets | null = null;
+
+function extrudeCarSideProfile(shape: THREE.Shape, halfWidth: number, bevel = 0.045): THREE.BufferGeometry {
+  const depth = Math.max(0.1, (halfWidth - bevel) * 2);
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: bevel > 0,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 3,
+    curveSegments: 14,
+  });
+  // Shape (x = car Z length, y = car Y height), extruded along local +Z -> center & rotateY(+PI/2) so:
+  // new X = old Z (width), new Y = old Y (height), new Z = -old X -> negate shape X or rotateY(-PI/2):
+  // With rotateY(-PI/2): new X = -old Z, new Y = old Y, new Z = +old X!
+  geo.translate(0, 0, -depth / 2);
+  geo.rotateY(-Math.PI / 2);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function getSharedCarAssets(): SharedCarAssets | null {
+  if (typeof document === 'undefined') return null;
+  if (sharedCarAssetsSingleton) return sharedCarAssetsSingleton;
+
+  // Profile Sedan khí động học: mũi thấp bo cong, nắp capo dốc nhẹ, kính lái 38°, mui cong mượt, cốp sau gọn
+  const sedanS = new THREE.Shape();
+  sedanS.moveTo(-2.12, 0.3);
+  sedanS.lineTo(2.08, 0.28);
+  sedanS.quadraticCurveTo(2.2, 0.34, 2.18, 0.58);
+  sedanS.quadraticCurveTo(2.12, 0.72, 1.88, 0.77);
+  sedanS.lineTo(1.06, 0.85);
+  sedanS.quadraticCurveTo(0.62, 1.24, 0.28, 1.33);
+  sedanS.quadraticCurveTo(-0.32, 1.37, -0.78, 1.3);
+  sedanS.quadraticCurveTo(-1.18, 1.18, -1.48, 0.9);
+  sedanS.lineTo(-2.04, 0.85);
+  sedanS.quadraticCurveTo(-2.16, 0.82, -2.16, 0.56);
+  sedanS.closePath();
+
+  const sedanGlassS = new THREE.Shape();
+  sedanGlassS.moveTo(0.92, 0.88);
+  sedanGlassS.quadraticCurveTo(0.56, 1.2, 0.25, 1.27);
+  sedanGlassS.quadraticCurveTo(-0.3, 1.3, -0.74, 1.24);
+  sedanGlassS.quadraticCurveTo(-1.08, 1.14, -1.32, 0.91);
+  sedanGlassS.closePath();
+
+  // Profile Crossover SUV: gầm cao khoẻ khoắn, mui dài, cửa hậu vát thể thao
+  const suvS = new THREE.Shape();
+  suvS.moveTo(-2.14, 0.34);
+  suvS.lineTo(2.08, 0.32);
+  suvS.quadraticCurveTo(2.22, 0.38, 2.2, 0.68);
+  suvS.quadraticCurveTo(2.14, 0.84, 1.88, 0.89);
+  suvS.lineTo(1.08, 0.95);
+  suvS.quadraticCurveTo(0.64, 1.38, 0.28, 1.48);
+  suvS.lineTo(-1.38, 1.47);
+  suvS.quadraticCurveTo(-1.74, 1.44, -1.98, 0.98);
+  suvS.quadraticCurveTo(-2.16, 0.9, -2.16, 0.58);
+  suvS.closePath();
+
+  const suvGlassS = new THREE.Shape();
+  suvGlassS.moveTo(0.94, 0.98);
+  suvGlassS.quadraticCurveTo(0.58, 1.33, 0.26, 1.41);
+  suvGlassS.lineTo(-1.34, 1.4);
+  suvGlassS.quadraticCurveTo(-1.62, 1.37, -1.82, 1.0);
+  suvGlassS.closePath();
+
+  const sedanBodyGeo = extrudeCarSideProfile(sedanS, 0.89, 0.055);
+  const suvBodyGeo = extrudeCarSideProfile(suvS, 0.92, 0.06);
+  // Kính sườn rộng hơn thân xe +0.014m mỗi bên để nổi rõ trên hông xe và không bị lấp trong thân
+  const sedanSideGlassGeo = extrudeCarSideProfile(sedanGlassS, 0.904, 0.01);
+  const suvSideGlassGeo = extrudeCarSideProfile(suvGlassS, 0.934, 0.01);
+
+  const wheelArchGeo = new THREE.CylinderGeometry(0.375, 0.375, 0.26, 20);
+  wheelArchGeo.rotateZ(Math.PI / 2);
+  const tireGeo = new THREE.CylinderGeometry(0.33, 0.33, 0.275, 20);
+  tireGeo.rotateZ(Math.PI / 2);
+  const rimGeo = new THREE.CylinderGeometry(0.21, 0.21, 0.288, 14);
+  rimGeo.rotateZ(Math.PI / 2);
+  const hubGeo = new THREE.CylinderGeometry(0.075, 0.075, 0.298, 10);
+  hubGeo.rotateZ(Math.PI / 2);
+
+  sharedCarAssetsSingleton = {
+    sedanBodyGeo,
+    suvBodyGeo,
+    sedanSideGlassGeo,
+    suvSideGlassGeo,
+    wheelArchGeo,
+    tireGeo,
+    rimGeo,
+    hubGeo,
+    shadowTex: makeSoftShadowTexture(),
+  };
+  return sharedCarAssetsSingleton;
+}
+
 export function FacultyParkedCar({
   x,
   z,
@@ -2081,92 +2191,191 @@ export function FacultyParkedCar({
   isNight: boolean;
 }) {
   const isSuv = kind === 'suv';
-  const bodyH = isSuv ? 0.68 : 0.56;
-  const cabinH = isSuv ? 0.58 : 0.48;
-  const cabinL = isSuv ? 2.45 : 2.05;
-  const cabinZ = isSuv ? -0.18 : -0.1;
+  const assets = useMemo(() => getSharedCarAssets(), []);
 
   return (
     <group position={[x, 0, z]} rotation-y={yaw}>
-      {/* Bóng đổ tiếp xúc dưới gầm ô tô */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.024, 0]}>
-        <planeGeometry args={[2.05, 4.5]} />
-        <meshBasicMaterial color="#0F172A" transparent opacity={0.38} depthWrite={false} />
+      {/* Bóng tiếp xúc AO mềm dưới gầm ô tô */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.026, 0]}>
+        <planeGeometry args={[2.35, 4.95]} />
+        <meshBasicMaterial
+          map={assets?.shadowTex}
+          color="#090D16"
+          transparent
+          opacity={0.76}
+          depthWrite={false}
+        />
       </mesh>
 
-      {/* 4 bánh xe hợp kim đa chấu */}
+      {/* 4 bánh xe lốp đen + mâm đúc hợp kim đa chấu */}
       {[
-        [-0.86, -1.32],
-        [0.86, -1.32],
-        [-0.86, 1.32],
-        [0.86, 1.32],
+        [-0.84, -1.34],
+        [0.84, -1.34],
+        [-0.84, 1.34],
+        [0.84, 1.34],
       ].map(([wx, wz], idx) => (
-        <group key={`wheel-${idx}`} position={[wx, 0.32, wz]}>
-          <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
-            <cylinderGeometry args={[0.32, 0.32, 0.22, 16]} />
-            <meshStandardMaterial color="#18181B" roughness={0.85} />
-          </mesh>
-          <mesh rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.2, 0.2, 0.23, 12]} />
-            <meshStandardMaterial color="#CBD5E1" roughness={0.3} metalness={0.75} />
-          </mesh>
+        <group key={`wheel-${idx}`} position={[wx, 0.33, wz]}>
+          {assets ? (
+            <>
+              <mesh geometry={assets.wheelArchGeo}>
+                <meshStandardMaterial color="#0F172A" roughness={0.92} />
+              </mesh>
+              <mesh geometry={assets.tireGeo} castShadow>
+                <meshStandardMaterial color="#18181B" roughness={0.86} />
+              </mesh>
+              <mesh geometry={assets.rimGeo}>
+                <meshStandardMaterial color="#DCE4EE" roughness={0.26} metalness={0.78} />
+              </mesh>
+              <mesh geometry={assets.hubGeo}>
+                <meshStandardMaterial color="#334155" roughness={0.4} metalness={0.65} />
+              </mesh>
+            </>
+          ) : (
+            <mesh rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.32, 0.32, 0.22, 16]} />
+              <meshStandardMaterial color="#18181B" roughness={0.85} />
+            </mesh>
+          )}
         </group>
       ))}
 
-      {/* Thân xe dưới (Lower Chassis) sơn bóng kim loại */}
-      <mesh position={[0, 0.32 + bodyH / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.82, bodyH, 4.32]} />
-        <meshStandardMaterial color={color} roughness={0.28} metalness={0.55} />
+      {/* Thân xe nguyên khối bo cong khí động học (ExtrudeGeometry có vát mép mềm) */}
+      {assets && (
+        <>
+          <mesh
+            geometry={isSuv ? assets.suvBodyGeo : assets.sedanBodyGeo}
+            castShadow
+            receiveShadow
+          >
+            <meshStandardMaterial
+              color={color}
+              roughness={0.24}
+              metalness={0.52}
+              envMapIntensity={1.25}
+            />
+          </mesh>
+          {/* Cụm cửa kính sườn hai bên thân xe */}
+          <mesh geometry={isSuv ? assets.suvSideGlassGeo : assets.sedanSideGlassGeo}>
+            <meshStandardMaterial
+              color="#1E2F42"
+              roughness={0.14}
+              metalness={0.68}
+              envMapIntensity={1.35}
+            />
+          </mesh>
+        </>
+      )}
+
+      {/* Kính chắn gió trước nghiêng 38° & kính hậu nghiêng */}
+      <mesh
+        position={[0, isSuv ? 1.18 : 1.07, 0.69]}
+        rotation={[-0.95, 0, 0]}
+      >
+        <boxGeometry args={[isSuv ? 1.52 : 1.46, 0.82, 0.03]} />
+        <meshStandardMaterial color="#203449" roughness={0.12} metalness={0.72} envMapIntensity={1.4} />
       </mesh>
-      {/* Cản trước & cản sau */}
-      <mesh position={[0, 0.38, 2.18]} castShadow>
-        <boxGeometry args={[1.76, 0.24, 0.12]} />
-        <meshStandardMaterial color="#1E293B" roughness={0.6} />
-      </mesh>
-      <mesh position={[0, 0.38, -2.18]} castShadow>
-        <boxGeometry args={[1.76, 0.24, 0.12]} />
-        <meshStandardMaterial color="#1E293B" roughness={0.6} />
+      <mesh
+        position={[0, isSuv ? 1.2 : 1.08, isSuv ? -1.78 : -1.16]}
+        rotation={[isSuv ? 0.56 : 0.96, 0, 0]}
+      >
+        <boxGeometry args={[isSuv ? 1.48 : 1.42, isSuv ? 0.58 : 0.72, 0.03]} />
+        <meshStandardMaterial color="#1E2F42" roughness={0.14} metalness={0.68} envMapIntensity={1.35} />
       </mesh>
 
-      {/* Khoang cabin & kính chắn gió trước/sau/bên hông */}
-      <mesh position={[0, 0.32 + bodyH + cabinH / 2 - 0.04, cabinZ]} castShadow>
-        <boxGeometry args={[1.58, cabinH, cabinL]} />
-        <meshStandardMaterial color={color} roughness={0.3} metalness={0.5} />
+      {/* Bậc ốp sườn tối màu + gương chiếu hậu hai bên + tay nắm cửa mạ crôm */}
+      <mesh position={[0, 0.31, 0]}>
+        <boxGeometry args={[isSuv ? 1.86 : 1.8, 0.09, 2.2]} />
+        <meshStandardMaterial color="#1E293B" roughness={0.72} />
       </mesh>
-      <mesh position={[0, 0.32 + bodyH + cabinH * 0.48, cabinZ]}>
-        <boxGeometry args={[1.61, cabinH * 0.76, cabinL * 0.92]} />
-        <meshStandardMaterial color="#1E293B" roughness={0.18} metalness={0.65} />
-      </mesh>
+      {([-1, 1] as const).map((side) => (
+        <group key={`car-side-trim-${side}`}>
+          {/* Trụ B đen bóng chia ranh giới cửa kính trước & kính sau */}
+          <mesh position={[side * (isSuv ? 0.938 : 0.908), isSuv ? 1.19 : 1.08, -0.14]}>
+            <boxGeometry args={[0.018, isSuv ? 0.42 : 0.36, 0.09]} />
+            <meshStandardMaterial color="#0F172A" roughness={0.22} metalness={0.45} />
+          </mesh>
+          {/* Nẹp crôm chân kính cửa xe */}
+          <mesh position={[side * (isSuv ? 0.938 : 0.908), isSuv ? 0.98 : 0.89, isSuv ? -0.35 : -0.18]}>
+            <boxGeometry args={[0.018, 0.022, isSuv ? 2.48 : 2.12]} />
+            <meshStandardMaterial color="#CBD5E1" roughness={0.26} metalness={0.82} />
+          </mesh>
+          {/* Gương chiếu hậu khí động học */}
+          <mesh position={[side * (isSuv ? 0.96 : 0.93), isSuv ? 0.99 : 0.9, 0.76]}>
+            <boxGeometry args={[0.16, 0.1, 0.2]} />
+            <meshStandardMaterial color={color} roughness={0.26} metalness={0.5} />
+          </mesh>
+          {/* Tay nắm cửa trước & sau */}
+          {[-0.42, 0.28].map((hz, hIdx) => (
+            <mesh
+              key={`handle-${side}-${hIdx}`}
+              position={[side * (isSuv ? 0.925 : 0.895), isSuv ? 0.86 : 0.77, hz]}
+            >
+              <boxGeometry args={[0.025, 0.035, 0.16]} />
+              <meshStandardMaterial color="#CBD5E1" roughness={0.28} metalness={0.78} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      {isSuv &&
+        ([-0.66, 0.66] as const).map((rx) => (
+          <mesh key={`roof-rail-${rx}`} position={[rx, 1.5, -0.52]}>
+            <boxGeometry args={[0.045, 0.045, 1.65]} />
+            <meshStandardMaterial color="#94A3B8" roughness={0.32} metalness={0.75} />
+          </mesh>
+        ))}
 
-      {/* Cụm đèn pha trước & lưới tản nhiệt mạ crôm */}
-      <mesh position={[0, 0.56, 2.17]}>
-        <boxGeometry args={[0.92, 0.18, 0.04]} />
-        <meshStandardMaterial color="#94A3B8" roughness={0.3} metalness={0.8} />
+      {/* Cản dưới trước/sau + lưới tản nhiệt nan crôm */}
+      <mesh position={[0, 0.34, 2.15]}>
+        <boxGeometry args={[1.64, 0.14, 0.1]} />
+        <meshStandardMaterial color="#1E293B" roughness={0.68} />
       </mesh>
-      {[-0.64, 0.64].map((lx) => (
-        <mesh key={`headlight-${lx}`} position={[lx, 0.62, 2.17]}>
-          <boxGeometry args={[0.32, 0.14, 0.04]} />
+      <mesh position={[0, 0.36, -2.13]}>
+        <boxGeometry args={[1.66, 0.16, 0.1]} />
+        <meshStandardMaterial color="#1E293B" roughness={0.68} />
+      </mesh>
+      <mesh position={[0, isSuv ? 0.62 : 0.54, 2.18]}>
+        <boxGeometry args={[0.92, isSuv ? 0.24 : 0.18, 0.04]} />
+        <meshStandardMaterial color="#0F172A" roughness={0.5} metalness={0.35} />
+      </mesh>
+      {[0, 1, 2].map((bar) => (
+        <mesh
+          key={`grille-bar-${bar}`}
+          position={[0, (isSuv ? 0.55 : 0.48) + bar * 0.065, 2.202]}
+        >
+          <boxGeometry args={[0.86, 0.018, 0.02]} />
+          <meshStandardMaterial color="#CBD5E1" roughness={0.24} metalness={0.85} />
+        </mesh>
+      ))}
+
+      {/* Cụm đèn pha Projector LED trước & dải đèn hậu LED đỏ sau */}
+      {[-0.63, 0.63].map((lx) => (
+        <mesh
+          key={`headlight-${lx}`}
+          position={[lx, isSuv ? 0.68 : 0.59, 2.15]}
+          rotation={[0, lx > 0 ? 0.16 : -0.16, 0]}
+        >
+          <boxGeometry args={[0.34, 0.12, 0.06]} />
           <meshStandardMaterial
             color="#F8FAFC"
             emissive="#FEF08A"
-            emissiveIntensity={isNight ? 0.9 : 0.15}
-            roughness={0.2}
+            emissiveIntensity={isNight ? 0.95 : 0.2}
+            roughness={0.18}
           />
         </mesh>
       ))}
-      {/* Cụm đèn hậu đỏ */}
-      {[-0.64, 0.64].map((lx) => (
-        <mesh key={`taillight-${lx}`} position={[lx, 0.64, -2.17]}>
-          <boxGeometry args={[0.34, 0.14, 0.04]} />
+      {[-0.62, 0.62].map((lx) => (
+        <mesh key={`taillight-${lx}`} position={[lx, isSuv ? 0.78 : 0.68, -2.14]}>
+          <boxGeometry args={[0.38, 0.12, 0.05]} />
           <meshStandardMaterial
             color="#DC2626"
             emissive="#EF4444"
-            emissiveIntensity={isNight ? 0.8 : 0.2}
-            roughness={0.3}
+            emissiveIntensity={isNight ? 0.85 : 0.24}
+            roughness={0.28}
           />
         </mesh>
       ))}
-      {/* Biển số xe trắng */}
+
+      {/* Biển số xe trắng trước & sau */}
       <LabelPlane
         textureKey={`car-plate-${plate}`}
         canvasW={192}
@@ -2183,8 +2392,29 @@ export function FacultyParkedCar({
           ctx.textBaseline = 'middle';
           ctx.fillText(plate, w / 2, h / 2 + 1);
         }}
-        size={[0.48, 0.12]}
-        position={[0, 0.42, 2.25]}
+        size={[0.46, 0.115]}
+        position={[0, 0.41, 2.215]}
+        transparent={false}
+      />
+      <LabelPlane
+        textureKey={`car-plate-${plate}`}
+        canvasW={192}
+        canvasH={48}
+        draw={(ctx, w, h) => {
+          ctx.fillStyle = '#F8FAFC';
+          ctx.fillRect(0, 0, w, h);
+          ctx.strokeStyle = '#1E293B';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(2, 2, w - 4, h - 4);
+          ctx.fillStyle = '#0F172A';
+          ctx.font = '900 26px Arial, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(plate, w / 2, h / 2 + 1);
+        }}
+        size={[0.46, 0.115]}
+        position={[0, isSuv ? 0.68 : 0.62, -2.17]}
+        rotation={[0, Math.PI, 0]}
         transparent={false}
       />
     </group>

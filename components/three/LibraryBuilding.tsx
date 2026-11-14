@@ -345,46 +345,107 @@ function drawOneLoveSlogan(ctx: CanvasRenderingContext2D, w: number, h: number) 
   ctx.fillText('ONE LOVE. ONE FUTURE.', w / 2, h / 2);
 }
 
-function makeLibraryWindowTexture(): { map: THREE.CanvasTexture } {
-  const size = 128;
+function makeLibraryWindowTexture(): { map: THREE.CanvasTexture; lobbyBackdrop: THREE.CanvasTexture } {
+  const size = 256;
   const cMap = document.createElement('canvas');
   cMap.width = size;
   cMap.height = size;
   const ctx = cMap.getContext('2d')!;
 
-  const grad = ctx.createLinearGradient(0, 0, size * 0.35, size);
-  grad.addColorStop(0, '#3C546E');
-  grad.addColorStop(0.38, '#2B3E52');
-  grad.addColorStop(0.72, '#1F2E3D');
-  grad.addColorStop(1, '#293B4E');
+  const grad = ctx.createLinearGradient(0, 0, size * 0.28, size);
+  grad.addColorStop(0, '#5B84AE');
+  grad.addColorStop(0.34, '#365678');
+  grad.addColorStop(0.7, '#21364C');
+  grad.addColorStop(1, '#2D4761');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
 
-  ctx.fillStyle = 'rgba(210, 232, 255, 0.14)';
+  // Ánh đèn trần phòng đọc và giá sách mờ sâu bên trong kính (Pseudo-Interior)
+  const ceilGlow = ctx.createLinearGradient(0, 8, 0, 96);
+  ceilGlow.addColorStop(0, 'rgba(255, 241, 206, 0.34)');
+  ceilGlow.addColorStop(0.55, 'rgba(255, 232, 184, 0.12)');
+  ceilGlow.addColorStop(1, 'rgba(255, 232, 184, 0)');
+  ctx.fillStyle = ceilGlow;
+  ctx.fillRect(10, 8, size - 20, 90);
+  ctx.fillStyle = 'rgba(255, 248, 224, 0.42)';
+  ctx.fillRect(28, 16, 76, 5);
+  ctx.fillRect(152, 16, 76, 5);
+
+  // Rèm lá ngang che nắng 1/3 trên ô cửa thư viện
+  ctx.fillStyle = 'rgba(226, 236, 248, 0.24)';
+  for (let y = 12; y < 82; y += 7) {
+    ctx.fillRect(10, y, size / 2 - 16, 3);
+  }
+  ctx.fillStyle = 'rgba(226, 236, 248, 0.16)';
+  for (let y = 12; y < 56; y += 7) {
+    ctx.fillRect(size / 2 + 6, y, size / 2 - 16, 3);
+  }
+
+  // Bóng kệ sách & bàn đọc thấp ở nửa dưới khung kính
+  ctx.fillStyle = 'rgba(18, 30, 44, 0.42)';
+  ctx.fillRect(18, 152, 74, 92);
+  ctx.fillRect(154, 168, 78, 76);
+
+  // Vệt phản chiếu bầu trời chéo sắc nét trên mặt kính
+  const sheen = ctx.createLinearGradient(0, 0, size, size * 0.85);
+  sheen.addColorStop(0, 'rgba(232, 245, 255, 0.34)');
+  sheen.addColorStop(0.24, 'rgba(210, 234, 255, 0.18)');
+  sheen.addColorStop(0.45, 'rgba(210, 234, 255, 0)');
+  ctx.fillStyle = sheen;
   ctx.beginPath();
-  ctx.moveTo(12, 0);
-  ctx.lineTo(44, 0);
-  ctx.lineTo(10, size);
+  ctx.moveTo(16, 0);
+  ctx.lineTo(106, 0);
+  ctx.lineTo(24, size);
   ctx.lineTo(0, size);
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.12)';
-  for (let y = 8; y < 38; y += 5) {
-    ctx.fillRect(6, y, size - 12, 2);
-  }
-
   ctx.strokeStyle = '#6D7A88';
-  ctx.lineWidth = 6;
-  ctx.strokeRect(3, 3, size - 6, size - 6);
+  ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, size - 10, size - 10);
 
   ctx.fillStyle = '#73808E';
-  ctx.fillRect(size / 2 - 3, 3, 6, size - 6);
-  ctx.fillRect(3, Math.round(size * 0.34) - 2, size - 6, 4);
+  ctx.fillRect(size / 2 - 5, 5, 10, size - 10);
+  ctx.fillRect(5, Math.round(size * 0.34) - 4, size - 10, 8);
 
   const map = new THREE.CanvasTexture(cMap);
   map.colorSpace = THREE.SRGBColorSpace;
-  return { map };
+
+  // Phông chiều sâu Đại sảnh Tạ Quang Bửu nhìn xuyên qua vách kính sảnh chính
+  const lCanvas = document.createElement('canvas');
+  lCanvas.width = 512;
+  lCanvas.height = 256;
+  const lCtx = lCanvas.getContext('2d')!;
+  const lGrad = lCtx.createLinearGradient(0, 0, 0, 256);
+  lGrad.addColorStop(0, '#5E462E');
+  lGrad.addColorStop(0.32, '#8F6A43');
+  lGrad.addColorStop(0.7, '#C49A68');
+  lGrad.addColorStop(1, '#6E563B');
+  lCtx.fillStyle = lGrad;
+  lCtx.fillRect(0, 0, 512, 256);
+
+  // Đèn chùm thông tầng & hành lang tầng lửng ấm áp bên trong đại sảnh
+  const halo = lCtx.createRadialGradient(256, 62, 10, 256, 62, 190);
+  halo.addColorStop(0, 'rgba(255, 244, 204, 0.95)');
+  halo.addColorStop(0.45, 'rgba(255, 214, 130, 0.48)');
+  halo.addColorStop(1, 'rgba(255, 196, 102, 0)');
+  lCtx.fillStyle = halo;
+  lCtx.fillRect(0, 0, 512, 256);
+
+  // Dải lan can gỗ tầng 2 & hàng cột tròn đại sảnh mờ phía xa
+  lCtx.fillStyle = 'rgba(92, 56, 30, 0.65)';
+  lCtx.fillRect(0, 96, 512, 14);
+  for (const cx of [68, 152, 360, 444]) {
+    lCtx.fillStyle = 'rgba(236, 228, 214, 0.52)';
+    lCtx.fillRect(cx - 10, 18, 20, 220);
+  }
+  // Bóng tượng & bệ trung tâm đại sảnh
+  lCtx.fillStyle = 'rgba(58, 38, 24, 0.55)';
+  lCtx.fillRect(236, 128, 40, 108);
+
+  const lobbyBackdrop = new THREE.CanvasTexture(lCanvas);
+  lobbyBackdrop.colorSpace = THREE.SRGBColorSpace;
+  return { map, lobbyBackdrop };
 }
 
 function makeRedPaverTexture(): { map: THREE.CanvasTexture } {
@@ -481,14 +542,28 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
   const glassMat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#D8E6F5',
+        color: '#DCEAF8',
         map: windowPbr.map,
         emissive: new THREE.Color(LIB_GLASS),
-        emissiveIntensity: 0.36,
-        roughness: 0.16,
-        metalness: 0.38,
+        emissiveIntensity: 0.28,
+        roughness: 0.15,
+        metalness: 0.42,
+        envMapIntensity: 1.25,
       }),
     [windowPbr],
+  );
+  const porticoGlassMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: '#D8ECFF',
+        map: windowPbr.map,
+        transparent: true,
+        opacity: isNight ? 0.56 : 0.72,
+        roughness: 0.12,
+        metalness: 0.48,
+        envMapIntensity: 1.35,
+      }),
+    [windowPbr, isNight],
   );
   const whiteWallMat = useMemo(
     () =>
@@ -558,11 +633,13 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       granitePbr.map.dispose();
       granitePbr.bumpMap.dispose();
       windowPbr.map.dispose();
+      windowPbr.lobbyBackdrop.dispose();
       paverPbr.map.dispose();
       glassMat.dispose();
+      porticoGlassMat.dispose();
       whiteWallMat.dispose();
     },
-    [clockTex, concretePbr, granitePbr, windowPbr, paverPbr, glassMat, whiteWallMat],
+    [clockTex, concretePbr, granitePbr, windowPbr, paverPbr, glassMat, porticoGlassMat, whiteWallMat],
   );
 
   // 7 tầng lam chắn nắng ngang bê tông/nhôm sáng màu nhô sâu 0,50 m ra phía trước & ôm vòng qua 2 góc khối đế
@@ -1002,35 +1079,36 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
         <boxGeometry args={[10.4, 5.3, 1.4]} />
         <meshStandardMaterial color={INTERIOR_DARK} roughness={1} />
       </mesh>
-      {/* Ánh sáng ấm của Đại sảnh thông tầng nhìn qua cửa kính */}
-      <mesh position={[38.0, 2.6, DOOR_WALL_Z + 0.08]}>
-        <planeGeometry args={[3.6, 4.0]} />
+      {/* Ánh sáng ấm & chiều sâu kiến trúc Đại sảnh thông tầng nhìn xuyên qua toàn bộ vách kính sảnh */}
+      <mesh position={[38.0, 2.85, DOOR_WALL_Z + 0.14]}>
+        <planeGeometry args={[10.1, 4.45]} />
         <meshStandardMaterial
-          color="#FFF3D1"
-          emissive="#FFD782"
-          emissiveIntensity={isNight ? 0.95 : 0.45}
-          roughness={0.6}
+          map={windowPbr.lobbyBackdrop}
+          emissiveMap={windowPbr.lobbyBackdrop}
+          emissive="#FFD98E"
+          emissiveIntensity={isNight ? 0.95 : 0.52}
+          roughness={0.55}
           side={THREE.DoubleSide}
         />
       </mesh>
 
       {/* 2 cánh cửa kính trung tâm tự động trượt mở sang hai bên */}
       <group ref={leftDoorRef} position={[37.1, 2.6, DOOR_WALL_Z]}>
-        <GlassBox p={[0, 0, 0]} s={[1.65, 4.0, 0.06]} mat={glassMat} />
+        <GlassBox p={[0, 0, 0]} s={[1.65, 4.0, 0.06]} mat={porticoGlassMat} />
         <mesh position={[0.68, -0.1, -0.045]}>
           <boxGeometry args={[0.04, 0.72, 0.04]} />
           <meshStandardMaterial color="#D8DCE2" roughness={0.25} metalness={0.78} />
         </mesh>
       </group>
       <group ref={rightDoorRef} position={[38.9, 2.6, DOOR_WALL_Z]}>
-        <GlassBox p={[0, 0, 0]} s={[1.65, 4.0, 0.06]} mat={glassMat} />
+        <GlassBox p={[0, 0, 0]} s={[1.65, 4.0, 0.06]} mat={porticoGlassMat} />
         <mesh position={[-0.68, -0.1, -0.045]}>
           <boxGeometry args={[0.04, 0.72, 0.04]} />
           <meshStandardMaterial color="#D8DCE2" roughness={0.25} metalness={0.78} />
         </mesh>
       </group>
       {[34.4, 41.6].map((x) => (
-        <GlassBox key={`lib-door-side-${x}`} p={[x, 2.6, DOOR_WALL_Z]} s={[3.2, 4.0, 0.06]} mat={glassMat} />
+        <GlassBox key={`lib-door-side-${x}`} p={[x, 2.6, DOOR_WALL_Z]} s={[3.2, 4.0, 0.06]} mat={porticoGlassMat} />
       ))}
       {/* Khung nhôm xanh dương đậm bao quanh vách kính sảnh chính */}
       {[32.8, 36.0, 38.0, 40.0, 43.2].map((x) => (

@@ -653,23 +653,27 @@ export function makeSkyEnvEquirectTexture(
 
   const grad = ctx.createLinearGradient(0, 0, 0, 256);
   if (timeOfDay === 'day') {
-    grad.addColorStop(0.0, '#4E88C7'); // Thiên đỉnh xanh trong
-    grad.addColorStop(0.32, '#8EBCE6'); // Bầu trời cao
-    grad.addColorStop(0.49, '#DCEBF7'); // Đường chân trời sáng
-    grad.addColorStop(0.52, '#C8D8C2'); // Tiếp giáp mặt đất
+    grad.addColorStop(0.0, '#3674BD'); // Thiên đỉnh xanh biếc sâu
+    grad.addColorStop(0.24, '#5A9BE0'); // Bầu trời cao trong trẻo
+    grad.addColorStop(0.41, '#8CC4F2'); // Giữ sắc xanh da trời xuống gần chân trời (~15°)
+    grad.addColorStop(0.475, '#C4E0F6'); // Sương nắng nhẹ sát đường chân trời
+    grad.addColorStop(0.5, '#DAEAF4'); // Đường chân trời dịu
+    grad.addColorStop(0.53, '#BDD0BA'); // Tiếp giáp mặt đất
     grad.addColorStop(0.75, '#7A9668'); // Phản xạ cỏ xanh
     grad.addColorStop(1.0, '#5A6E4E');
   } else if (timeOfDay === 'sunset') {
-    grad.addColorStop(0.0, '#3D4E78'); // Thiên đỉnh tím chiều
-    grad.addColorStop(0.28, '#9E6B78');
-    grad.addColorStop(0.45, '#EB9560'); // Chân trời cam hồng hoàng hôn
-    grad.addColorStop(0.5, '#FFD099');
+    grad.addColorStop(0.0, '#2F416D'); // Thiên đỉnh tím chiều sâu
+    grad.addColorStop(0.26, '#7E5E82');
+    grad.addColorStop(0.41, '#D87D64'); // Ánh chiều hồng cam
+    grad.addColorStop(0.48, '#F7A966'); // Chân trời cam vàng hoàng hôn
+    grad.addColorStop(0.505, '#FFD59E');
     grad.addColorStop(0.55, '#8A6E5A');
     grad.addColorStop(1.0, '#4A3C32');
   } else {
-    grad.addColorStop(0.0, '#0B1324'); // Thiên đỉnh đêm sâu
-    grad.addColorStop(0.38, '#162442');
-    grad.addColorStop(0.5, '#253A60'); // Chân trời đêm Hà Nội
+    grad.addColorStop(0.0, '#081021'); // Thiên đỉnh đêm sâu
+    grad.addColorStop(0.34, '#132240');
+    grad.addColorStop(0.47, '#1F355C');
+    grad.addColorStop(0.505, '#2A436C'); // Ánh đô thị Hà Nội mờ sát chân trời đêm
     grad.addColorStop(0.55, '#1B2622');
     grad.addColorStop(1.0, '#0F1514');
   }
@@ -1331,6 +1335,7 @@ export type SharedBuildingPbrTextures = {
   granite: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
   brickWall: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
   ribbedMetalBump: THREE.CanvasTexture;
+  windowGlass: THREE.CanvasTexture;
 };
 
 let sharedBuildingPbr: SharedBuildingPbrTextures | null = null;
@@ -1396,8 +1401,9 @@ export function getSharedBuildingPbrTextures(): SharedBuildingPbrTextures | null
     rctx.fillRect(x, 0, 1, 128);
   }
   const ribbedMetalBump = configureTexture(new THREE.CanvasTexture(rc), 8, 1, false);
+  const windowGlass = makeArchitecturalGlassTexture();
 
-  sharedBuildingPbr = { plaster, granite, brickWall, ribbedMetalBump };
+  sharedBuildingPbr = { plaster, granite, brickWall, ribbedMetalBump, windowGlass };
   return sharedBuildingPbr;
 }
 
@@ -1567,4 +1573,275 @@ export function getSharedLeafClusterCutoutTexture(variant: LeafCutoutVariant = '
     leafClusterCutoutCache[variant] = makeLeafClusterCutoutTexture(variant);
   }
   return leafClusterCutoutCache[variant]!;
+}
+
+/**
+ * Bản đồ môi trường nội thất Equirectangular (256×128) nhẹ cho Thư viện & Phòng học:
+ * dải đèn trần ấm, cửa kính giếng trời dịu và phản xạ sàn gỗ/đá ấm giúp Đại dương cầm,
+ * đồng thau, inox và vách kính nội thất bắt sáng tự nhiên mà không cần tính lại mỗi frame.
+ */
+export function makeIndoorAtriumEnvEquirectTexture(
+  timeOfDay: 'day' | 'sunset' | 'night' = 'day',
+): THREE.CanvasTexture {
+  const w = 256;
+  const h = 128;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  if (timeOfDay === 'night') {
+    grad.addColorStop(0.0, '#FFF2D6');
+    grad.addColorStop(0.28, '#EAD9BE');
+    grad.addColorStop(0.52, '#8E7B66');
+    grad.addColorStop(0.78, '#6B533B');
+    grad.addColorStop(1.0, '#443324');
+  } else if (timeOfDay === 'sunset') {
+    grad.addColorStop(0.0, '#FFF6E3');
+    grad.addColorStop(0.3, '#F6DEC0');
+    grad.addColorStop(0.52, '#C8A88B');
+    grad.addColorStop(0.78, '#8B6D52');
+    grad.addColorStop(1.0, '#594432');
+  } else {
+    grad.addColorStop(0.0, '#F8FBFF');
+    grad.addColorStop(0.28, '#EDF3FA');
+    grad.addColorStop(0.5, '#D4DCE6');
+    grad.addColorStop(0.76, '#A68B6D');
+    grad.addColorStop(1.0, '#6E5841');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Dải đèn âm trần & ô cửa sổ sáng quanh chu vi sảnh tạo vệt specular sắc nét trên nắp đàn Piano & inox
+  ctx.fillStyle = 'rgba(255, 250, 235, 0.88)';
+  for (let x = 16; x < w; x += 48) {
+    ctx.fillRect(x, 12, 26, 8);
+  }
+  ctx.fillStyle = timeOfDay === 'day' ? 'rgba(220, 240, 255, 0.65)' : 'rgba(255, 218, 165, 0.55)';
+  for (let x = 12; x < w; x += 64) {
+    ctx.fillRect(x, 46, 38, 18);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Đĩa nhựa đường nút giao (Road Junction Disc) khớp chính xác hạt đá & sắc độ của `makeAsphaltTexture`,
+ * đồng thời làm mờ biên alpha mềm từ r = 0.78..1.0 để xóa hoàn toàn vết khoanh tròn giữa ngã tư.
+ */
+export function makeRoadJunctionDiscTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+  const rnd = createSeededRandom(20260102);
+
+  ctx.fillStyle = '#8B8C88';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 3200; i++) {
+    const v = 105 + Math.floor(rnd() * 60);
+    ctx.fillStyle = `rgba(${v}, ${v}, ${v - 3}, ${0.14 + rnd() * 0.16})`;
+    ctx.fillRect(rnd() * size, rnd() * size, 1.8, 1.8);
+  }
+
+  // Mặt nạ alpha tròn mờ dần ở viền ngoài (destination-in)
+  ctx.globalCompositeOperation = 'destination-in';
+  const mask = ctx.createRadialGradient(128, 128, 86, 128, 128, 127);
+  mask.addColorStop(0.0, 'rgba(0, 0, 0, 1)');
+  mask.addColorStop(0.68, 'rgba(0, 0, 0, 0.98)');
+  mask.addColorStop(0.9, 'rgba(0, 0, 0, 0.45)');
+  mask.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = mask;
+  ctx.fillRect(0, 0, size, size);
+  ctx.globalCompositeOperation = 'source-over';
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Kính kiến trúc có chiều sâu giả nội thất (Pseudo-Interior Architectural Glass):
+ * kết hợp rèm sáo nửa trên, trần phòng sáng dịu, chiều sâu vách trong và vệt chéo phản chiếu bầu trời.
+ */
+export function makeArchitecturalGlassTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  // Nền chiều sâu phòng học / văn phòng nhìn qua lớp kính xanh khói
+  const bg = ctx.createLinearGradient(0, 0, 0, size);
+  bg.addColorStop(0.0, '#6A93B8');
+  bg.addColorStop(0.32, '#4A6E8E');
+  bg.addColorStop(0.68, '#2C4760');
+  bg.addColorStop(1.0, '#35536E');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, size, size);
+
+  // Mảng tường trong & trần đèn huỳnh quang mờ tạo cảm giác có phòng thật phía sau kính
+  ctx.fillStyle = 'rgba(232, 244, 255, 0.16)';
+  ctx.fillRect(22, 18, size - 44, 24);
+  ctx.fillStyle = 'rgba(20, 34, 48, 0.24)';
+  ctx.fillRect(size * 0.62, 42, size * 0.22, size - 56);
+
+  // Rèm sáo ngang nửa trên ô cửa sổ
+  ctx.fillStyle = 'rgba(226, 236, 246, 0.18)';
+  for (let y = 12; y < 96; y += 9) {
+    ctx.fillRect(10, y, size - 20, 4);
+  }
+
+  // Hai vệt phản chiếu bầu trời chéo sắc nét trên mặt kính phẳng
+  const sheen = ctx.createLinearGradient(0, 0, size, size);
+  sheen.addColorStop(0.0, 'rgba(235, 247, 255, 0.28)');
+  sheen.addColorStop(0.28, 'rgba(235, 247, 255, 0.04)');
+  sheen.addColorStop(0.46, 'rgba(255, 255, 255, 0.22)');
+  sheen.addColorStop(0.6, 'rgba(255, 255, 255, 0.0)');
+  sheen.addColorStop(1.0, 'rgba(190, 222, 250, 0.12)');
+  ctx.fillStyle = sheen;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(118, 0);
+  ctx.lineTo(28, size);
+  ctx.lineTo(0, size);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(154, 0);
+  ctx.lineTo(198, 0);
+  ctx.lineTo(106, size);
+  ctx.lineTo(68, size);
+  ctx.closePath();
+  ctx.fill();
+
+  // Bóng đổ khung cửa (ambient vignette sát mép kính)
+  ctx.strokeStyle = 'rgba(12, 22, 34, 0.36)';
+  ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, size - 10, size - 10);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Panorama 360° liền mạch (1024×256) tái hiện dải cây xanh đô thị và đường chân trời Hà Nội
+ * mờ trong sương nắng bên ngoài hàng rào Bách Khoa (Giải Phóng, Đại Cồ Việt, Trần Đại Nghĩa).
+ */
+export function makeHanoiHorizonPanoramaTexture(
+  timeOfDay: 'day' | 'sunset' | 'night' = 'day',
+): THREE.CanvasTexture {
+  const w = 1024;
+  const h = 256;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+  const rnd = createSeededRandom(20261015);
+
+  ctx.clearRect(0, 0, w, h);
+
+  const farSil =
+    timeOfDay === 'day'
+      ? 'rgba(154, 182, 206, 0.52)'
+      : timeOfDay === 'sunset'
+        ? 'rgba(146, 106, 118, 0.58)'
+        : 'rgba(20, 32, 54, 0.78)';
+  const midSil =
+    timeOfDay === 'day'
+      ? 'rgba(124, 154, 178, 0.68)'
+      : timeOfDay === 'sunset'
+        ? 'rgba(108, 76, 92, 0.72)'
+        : 'rgba(15, 25, 44, 0.88)';
+  const treeLine =
+    timeOfDay === 'day'
+      ? '#6D8D6A'
+      : timeOfDay === 'sunset'
+        ? '#5A5C4F'
+        : '#15221E';
+
+  // Lớp 1: Cao ốc mờ xa phía Đại Cồ Việt / Giải Phóng (periodic để nối mí X = 0..1024 hoàn hảo)
+  ctx.fillStyle = farSil;
+  let bx = 0;
+  while (bx < w) {
+    const bw = Math.min(w - bx, 22 + Math.floor(rnd() * 34));
+    const bh = 42 + Math.floor(rnd() * 78);
+    ctx.fillRect(bx, h - 54 - bh, bw - 2, bh + 54);
+    bx += bw + Math.floor(rnd() * 8);
+  }
+
+  // Lớp 2: Khu nhà phố & trường lân cận tầm trung + ô cửa sáng đèn khi về đêm
+  bx = 8;
+  while (bx < w - 12) {
+    const bw = Math.min(w - bx, 26 + Math.floor(rnd() * 38));
+    const bh = 28 + Math.floor(rnd() * 52);
+    const topY = h - 46 - bh;
+    ctx.fillStyle = midSil;
+    ctx.fillRect(bx, topY, bw - 3, bh + 46);
+    if (timeOfDay !== 'day') {
+      ctx.fillStyle =
+        timeOfDay === 'night' ? 'rgba(255, 222, 148, 0.58)' : 'rgba(255, 208, 140, 0.28)';
+      for (let wy = topY + 8; wy < h - 52; wy += 10) {
+        for (let wx = bx + 5; wx < bx + bw - 8; wx += 8) {
+          if (rnd() > 0.46) ctx.fillRect(wx, wy, 4, 5);
+        }
+      }
+    }
+    bx += bw + 4 + Math.floor(rnd() * 10);
+  }
+
+  // Lớp 3: Vành đai tán cây xanh ven đường Hà Nội liên tục (dùng hàm tuần hoàn 2π)
+  ctx.fillStyle = treeLine;
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  for (let x = 0; x <= w; x += 4) {
+    const u = (x / w) * Math.PI * 2;
+    const wave =
+      Math.sin(u * 14) * 7 +
+      Math.cos(u * 29 + 0.8) * 5 +
+      Math.sin(u * 53 + 1.7) * 3;
+    ctx.lineTo(x, h - 44 - Math.max(-8, wave));
+  }
+  ctx.lineTo(w, h);
+  ctx.closePath();
+  ctx.fill();
+
+  // Sương mù chân trời hòa mượt phần chân panorama vào nền cỏ & fog
+  const haze = ctx.createLinearGradient(0, h - 64, 0, h);
+  const hazeCol =
+    timeOfDay === 'day'
+      ? 'rgba(212, 229, 242,'
+      : timeOfDay === 'sunset'
+        ? 'rgba(242, 186, 142,'
+        : 'rgba(22, 36, 62,';
+  haze.addColorStop(0.0, `${hazeCol} 0)`);
+  haze.addColorStop(0.75, `${hazeCol} 0.28)`);
+  haze.addColorStop(1.0, `${hazeCol} 0.52)`);
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, h - 64, w, 64);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.repeat.set(3, 1);
+  tex.needsUpdate = true;
+  return tex;
 }

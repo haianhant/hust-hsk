@@ -37,7 +37,7 @@ import {
 } from '../../lib/campus';
 import { playerState, type TimeOfDay } from '../../lib/playerState';
 import { multiplayer } from '../../lib/multiplayer';
-import { makeGraniteStoneTexture, makeLightShaftTexture } from './materials';
+import { makeGraniteStoneTexture, makeLightShaftTexture, makeSoftShadowTexture } from './materials';
 import { CANVAS_VN_FONT, LabelPlane } from './TextPlate';
 
 export interface LibraryLobbyProps {
@@ -311,7 +311,8 @@ export default function LibraryLobby({
         false,
       ),
     ];
-    return { mahoganyTex, deskMonitorTex, ropeGeos };
+    const aoShadowTex = makeSoftShadowTexture();
+    return { mahoganyTex, deskMonitorTex, ropeGeos, aoShadowTex };
   }, []);
 
   // Khởi tạo 3 phân khu kiến trúc đa tầng của Thư viện Tạ Quang Bửu (Tầng 1–5, Tầng 6–7, Sân thượng Tầng 10)
@@ -421,6 +422,7 @@ export default function LibraryLobby({
       atriumBeamTex.dispose();
       lobbyAssets.mahoganyTex.map.dispose();
       lobbyAssets.deskMonitorTex.map.dispose();
+      lobbyAssets.aoShadowTex.dispose();
       lobbyAssets.ropeGeos.forEach((g) => g.dispose());
       multiFloor.disposeBlockB();
       disposeObject3D(multiFloor.groupA);
@@ -623,6 +625,17 @@ export default function LibraryLobby({
           onPointerOver={hover}
           onPointerOut={leave}
         >
+          {/* Bóng tiếp xúc AO mềm dưới bệ tượng */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.008, 0]} raycast={() => null}>
+            <planeGeometry args={[2.35, 2.05]} />
+            <meshBasicMaterial
+              map={lobbyAssets.aoShadowTex}
+              color="#0A0E17"
+              transparent
+              opacity={0.55}
+              depthWrite={false}
+            />
+          </mesh>
           {/* Bậc đá nguyên khối đen xám dưới chân bệ (2 cấp vát) */}
           <mesh position={[0, 0.08, 0]} castShadow receiveShadow>
             <boxGeometry args={[1.45, 0.16, 1.25]} />
@@ -823,6 +836,16 @@ export default function LibraryLobby({
           onPointerOver={hover}
           onPointerOut={leave}
         >
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.008, 0]} raycast={() => null}>
+            <planeGeometry args={[2.35, 2.05]} />
+            <meshBasicMaterial
+              map={lobbyAssets.aoShadowTex}
+              color="#0A0E17"
+              transparent
+              opacity={0.52}
+              depthWrite={false}
+            />
+          </mesh>
           {/* Chân đế âm & thân gỗ gụ soi nan dọc */}
           <mesh position={[0, 0.05, 0]}>
             <boxGeometry args={[1.54, 0.1, 1.24]} />
@@ -943,6 +966,16 @@ export default function LibraryLobby({
           onPointerOver={hover}
           onPointerOut={leave}
         >
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.008, 0]} raycast={() => null}>
+            <planeGeometry args={[2.1, 0.95]} />
+            <meshBasicMaterial
+              map={lobbyAssets.aoShadowTex}
+              color="#0A0E17"
+              transparent
+              opacity={0.46}
+              depthWrite={false}
+            />
+          </mesh>
           {/* Chân chữ T có mặt bích & thanh giằng ngang */}
           {([-0.65, 0.65] as const).map((lx) => (
             <group key={`board-leg-${lx}`} position={[lx, 0, 0]}>

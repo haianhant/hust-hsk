@@ -45,6 +45,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { LAKE, LAKE_BANK, LAKE_BENCHES, LAKE_WILLOWS } from '../../lib/campus';
 import { playerState, type TimeOfDay } from '../../lib/playerState';
+import { getSharedOrganicCanopyGeometry } from './Trees';
 import {
   getSharedLeafClusterCutoutTexture,
   makeBarkTexture,
@@ -665,6 +666,7 @@ function LakeWillow({
   const canopyRef = useRef<THREE.Group>(null!);
   const willowCutoutTex = useMemo(() => getSharedLeafClusterCutoutTexture('willow'), []);
   const frondGeo = useMemo(() => getSharedWillowFrondGeo(), []);
+  const canopyGeo = useMemo(() => getSharedOrganicCanopyGeometry(), []);
   useFrame((state) => {
     if (!canopyRef.current) return;
     const t = state.clock.elapsedTime;
@@ -694,7 +696,7 @@ function LakeWillow({
       {spec.branches.map((b, i) => (
         <group key={`br-${i}`} position={[0, spec.trunkH, 0]} rotation-y={-b.az}>
           <group rotation-z={b.tilt}>
-            <mesh position={[0, b.len / 2, 0]} castShadow>
+            <mesh position={[0, b.len / 2, 0]}>
               <cylinderGeometry args={[b.r * 0.6, b.r, b.len, 6]} />
               <meshStandardMaterial
                 color={TRUNK}
@@ -704,24 +706,31 @@ function LakeWillow({
                 roughness={0.92}
               />
             </mesh>
-            <mesh position={[0.18, b.len * 0.88, 0.14]} rotation={[0.35, 0, -0.45]} castShadow>
+            <mesh position={[0.18, b.len * 0.88, 0.14]} rotation={[0.35, 0, -0.45]}>
               <cylinderGeometry args={[b.r * 0.3, b.r * 0.5, b.len * 0.55, 5]} />
               <meshStandardMaterial color={TRUNK} roughness={0.92} />
             </mesh>
           </group>
         </group>
       ))}
-      {/* Tán nhiều tầng gọn + mành lá liễu cắt alphaTest rủ tự nhiên */}
+      {/* Tán nhiều tầng pháp tuyến mượt + mành lá liễu cắt alphaTest rủ tự nhiên */}
       <group ref={canopyRef}>
         {spec.lobes.map((l, i) => (
-          <mesh key={`lobe-${i}`} position={[l.dx, l.dy, l.dz]} scale={[1, l.sy, 1]} castShadow receiveShadow>
-            <icosahedronGeometry args={[l.r, 2]} />
+          <mesh
+            key={`lobe-${i}`}
+            geometry={canopyGeo}
+            position={[l.dx, l.dy, l.dz]}
+            rotation={[0, i * 1.15, 0]}
+            scale={[l.r, l.r * l.sy, l.r]}
+            castShadow
+            receiveShadow
+          >
             <meshStandardMaterial
               color={l.color}
               map={foliagePbr.map}
               bumpMap={foliagePbr.bumpMap}
-              bumpScale={0.032}
-              roughness={0.86}
+              bumpScale={0.024}
+              roughness={0.84}
             />
           </mesh>
         ))}
