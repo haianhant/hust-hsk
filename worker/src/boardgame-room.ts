@@ -34,18 +34,29 @@ import {
   sanitizeInviteCode,
   seatIndexToSeatId,
   isValidBoardGameEmote,
+  type BoardGameActionPayload,
   type BoardGameLobbyPlayerView,
   type BoardGameMatchStatus,
   type BoardGameMatchSummary,
+  type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
   type BoardGameServerMessage,
   type BoardGameTableId,
 } from '../../shared/contracts/boardgame';
+import {
+  applyPlayerGameAction,
+  applyTimeoutAutoTurn,
+  createInitialGameState,
+  getActivePlayer,
+  getPrivateGameView,
+  getPublicGameView,
+  type AuthoritativeGameState,
+} from '../../features/boardgame/domain';
 
 export const BG_DIRECTORY_ROOM_NAME = '__lounge_directory__';
 export const BG_WS_FENCE_CLOSE_CODE = 4001;
 const MAX_WS_PAYLOAD_BYTES = 8192;
-const MIN_ACTION_INTERVAL_MS = 120;
+const MIN_ACTION_INTERVAL_MS = 25;
 const EMOTE_COOLDOWN_MS = 1500;
 const WINDOW_MS = 2000;
 const MAX_MSGS_PER_WINDOW = 25;
@@ -708,12 +719,10 @@ export class BoardGameRoom {
       return;
     }
 
-    // Rate-limit state mutations (`>= 120ms`)
-    if (nowMs - rl.lastActionMs < MIN_ACTION_INTERVAL_MS && msg.type === 'BG_GAME_ACTION') {
-      this.sendError(ws, 'RATE_LIMITED', 'Thao tác quá nhanh.', { requestId: reqId });
+    if (msg.type === 'BG_GAME_ACTION') {
+      await this.handleGameAction(ws, player, msg, reqId, rl, nowMs);
       return;
     }
-    rl.lastActionMs = nowMs;
 
     switch (msg.type) {
       case 'BG_SELECT_SEAT': {
@@ -734,15 +743,6 @@ export class BoardGameRoom {
             ? Math.max(1500, Math.min(120_000, Math.floor(msg.turnTimeoutMs)))
             : undefined;
         await this.handleStartMatch(ws, player, reqId, timeoutOverride);
-        return;
-      }
-      case 'BG_GAME_ACTION': {
-        this.sendError(
-          ws,
-          'INVALID_ACTION',
-          'Động cơ lượt chơi chi tiết đang kích hoạt ở Phase BG3.',
-          { requestId: reqId },
-        );
         return;
       }
       default:
@@ -787,6 +787,19 @@ export class BoardGameRoom {
       this.promoteNextConnectedHost(player.player_id);
     }
 
+    // If active turn holder disconnects mid-PLAYING, cap remaining deadline cleanly
+    if (match.status === 'PLAYING') {
+      const engineState = this.loadEngineState(match);
+      const active = engineState ? getActivePlayer(engineState) : null;
+      if (active && active.playerId === player.player_id) {
+        const capped = Math.min(
+          match.turn_deadline_ms ?? nowMs + BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
+          nowMs + BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
+        );
+        this.sql.exec('UPDATE matches SET turn_deadline_ms = ? WHERE match_id = ?', capped, match.match_id);
+      }
+    }
+
     await this.scheduleNextAlarm(nowMs);
     this.bumpMatchRevisionOnly(nowMs);
     this.broadcastStateSync();
@@ -802,6 +815,40 @@ export class BoardGameRoom {
     const match = this.getMatchRow();
     if (!match || match.status === 'CLOSED') return;
     const nowMs = Date.now();
+
+    // Auto-advance expired turns during PLAYING so a disconnected/AFK player never stalls the table
+    if (
+      match.status === 'PLAYING' &&
+      typeof match.turn_deadline_ms === 'number' &&
+      nowMs >= match.turn_deadline_ms - 50
+    ) {
+      const rows = this.listPlayerRows();
+      const engineState = this.loadEngineState(match, rows);
+      if (engineState && !engineState.finished) {
+        applyTimeoutAutoTurn(engineState, nowMs);
+        const nextStatus: BoardGameMatchStatus = engineState.finished ? 'FINISHED' : 'PLAYING';
+        const nextDeadline = engineState.finished
+          ? null
+          : this.computeNextTurnDeadline(engineState, rows, match.turn_timeout_ms, nowMs);
+        if (engineState.finished) {
+          this.sql.exec('UPDATE match_players SET ready = 0');
+        }
+        this.sql.exec(
+          `UPDATE matches
+           SET status = ?, revision = revision + 1, turn_deadline_ms = ?, updated_at_ms = ?, game_state_json = ?
+           WHERE match_id = ?`,
+          nextStatus,
+          nextDeadline,
+          nowMs,
+          JSON.stringify({ engineState }),
+          match.match_id,
+        );
+        await this.scheduleNextAlarm(nowMs);
+        this.broadcastStateSync();
+        await this.syncDirectoryFromMatch();
+        return;
+      }
+    }
 
     // Release lobby seats of players disconnected longer than BOARD_GAME_RECONNECT_HOLD_MS
     if (match.status === 'WAITING' || match.status === 'READY_CHECK' || match.status === 'FINISHED') {
@@ -1156,8 +1203,10 @@ export class BoardGameRoom {
       player.player_id,
     );
     if (match.status === 'FINISHED' && canTransitionBoardGameStatus('FINISHED', 'WAITING')) {
+      this.sql.exec('DELETE FROM processed_requests');
+      this.sql.exec('UPDATE match_players SET ready = 0 WHERE player_id != ?', player.player_id);
       this.sql.exec(
-        'UPDATE matches SET status = ?, game_state_json = NULL, updated_at_ms = ? WHERE match_id = ?',
+        'UPDATE matches SET status = ?, game_state_json = NULL, turn_deadline_ms = NULL, updated_at_ms = ? WHERE match_id = ?',
         'WAITING',
         nowMs,
         match.match_id,
@@ -1233,53 +1282,24 @@ export class BoardGameRoom {
     const timeoutMs = turnTimeoutOverrideMs ?? match.turn_timeout_ms ?? BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
     const deadlineMs = nowMs + timeoutMs;
 
-    const initialPublicShell: BoardGamePublicGameView = {
+    const seedArr = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(seedArr);
+    const seed = (seedArr[0] >>> 0) || 1337;
+
+    const engineState = createInitialGameState({
       matchId: match.match_id,
-      round: 1,
-      maxRounds: seated.length <= 5 ? 7 : 8,
-      signalProgress: 0,
-      mistProgress: 0,
-      maxTrackValue: 6,
-      turnPhase: 'MOVE',
-      activePlayerId: seated[0]?.player_id ?? null,
-      turnOrder: seated.map((p) => p.player_id),
-      blackoutLocation: null,
+      seed,
+      nowMs,
       players: seated.map((p) => ({
         playerId: p.player_id,
         displayName: p.display_name,
         seatIndex: p.seat_index ?? 0,
-        location: 'lobby',
-        hp: 12,
-        maxHp: 12,
-        shield: 0,
-        fragments: 0,
-        handCount: 2,
-        alive: true,
-        connected: true,
-        skillUsed: false,
-        revealedRoleId: null,
-        revealedFaction: null,
         appearance: sanitizeBoardGameAppearance(parseJsonObject(p.outfit_json)),
+        connected: p.connected === 1,
       })),
-      deckCounts: { clue: 10, event: 12, tactic: 10 },
-      publicLog: [
-        {
-          id: `log-start-${nowMs}`,
-          round: 1,
-          atMs: nowMs,
-          kind: 'system',
-          text: `Ván đấu Bóng Đêm KTX bắt đầu với ${seated.length} sinh viên.`,
-          actorId: match.host_player_id,
-        },
-      ],
-      highlights: [],
-      winnerLabel: null,
-      winnerFaction: null,
-      winnerPlayerIds: [],
-      winReason: null,
-      finalReveal: null,
-    };
+    });
 
+    this.sql.exec('DELETE FROM processed_requests');
     this.sql.exec(
       `UPDATE matches
        SET status = 'PLAYING',
@@ -1292,7 +1312,7 @@ export class BoardGameRoom {
       deadlineMs,
       timeoutMs,
       nowMs,
-      JSON.stringify({ shellPublic: initialPublicShell }),
+      JSON.stringify({ engineState }),
       match.match_id,
     );
 
@@ -1305,6 +1325,183 @@ export class BoardGameRoom {
         revision: this.getMatchRow()?.revision ?? match.revision + 1,
       });
     }
+    this.broadcastStateSync();
+    await this.syncDirectoryFromMatch();
+  }
+
+  private async handleGameAction(
+    ws: WebSocket,
+    player: MatchPlayerDbRow,
+    msg: Record<string, unknown>,
+    reqId: string | undefined,
+    rl: SocketRateState,
+    nowMs: number,
+  ): Promise<void> {
+    const match = this.getMatchRow();
+    const curRev = match?.revision ?? 0;
+
+    if (!reqId) {
+      this.sendError(ws, 'INVALID_ACTION', 'Thiếu requestId cho hành động trong ván.');
+      return;
+    }
+
+    // 1. Idempotency check BEFORE rate throttling so legitimate retries always resolve cleanly
+    const existingReq = this.sql
+      .exec<{ revision: number }>(
+        'SELECT revision FROM processed_requests WHERE player_id = ? AND request_id = ? LIMIT 1',
+        player.player_id,
+        reqId,
+      )
+      .toArray();
+    if (existingReq.length > 0) {
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId: reqId,
+        ok: true,
+        revision: existingReq[0].revision,
+      });
+      const resync = this.buildStateSyncPayload(player.player_id, false);
+      if (resync) this.send(ws, resync);
+      return;
+    }
+
+    // 2. Per-socket mutation cadence throttle
+    if (nowMs - rl.lastActionMs < MIN_ACTION_INTERVAL_MS) {
+      this.sendError(ws, 'RATE_LIMITED', 'Thao tác quá nhanh.', {
+        requestId: reqId,
+        revision: curRev,
+      });
+      return;
+    }
+    rl.lastActionMs = nowMs;
+
+    if (!match || match.status !== 'PLAYING') {
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId: reqId,
+        ok: false,
+        revision: curRev,
+        reason: 'Ván đấu chưa ở trạng thái đang chơi.',
+      });
+      this.sendError(ws, 'INVALID_ACTION', 'Ván đấu chưa ở trạng thái đang chơi.', {
+        requestId: reqId,
+        revision: curRev,
+      });
+      return;
+    }
+
+    // 3. Optimistic concurrency check (`expectedRevision`)
+    if (typeof msg.expectedRevision !== 'number' || msg.expectedRevision !== match.revision) {
+      const latestSync = this.buildStateSyncPayload(player.player_id, false);
+      if (latestSync) this.send(ws, latestSync);
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId: reqId,
+        ok: false,
+        revision: match.revision,
+        reason: 'Trạng thái bàn vừa cập nhật mới hơn; vui lòng thử lại.',
+      });
+      this.sendError(ws, 'STALE_REVISION', 'Trạng thái bàn đã thay đổi, vừa đồng bộ lại.', {
+        requestId: reqId,
+        revision: match.revision,
+      });
+      return;
+    }
+
+    const rawAction = msg.action;
+    if (!rawAction || typeof rawAction !== 'object' || typeof (rawAction as Record<string, unknown>).type !== 'string') {
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId: reqId,
+        ok: false,
+        revision: match.revision,
+        reason: 'Gói lệnh hành động không hợp lệ.',
+      });
+      this.sendError(ws, 'INVALID_ACTION', 'Gói lệnh hành động không hợp lệ.', {
+        requestId: reqId,
+        revision: match.revision,
+      });
+      return;
+    }
+
+    const playerRows = this.listPlayerRows();
+    const engineState = this.loadEngineState(match, playerRows);
+    if (!engineState) {
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId: reqId,
+        ok: false,
+        revision: match.revision,
+        reason: 'Không đọc được trạng thái ván đấu trên máy chủ.',
+      });
+      this.sendError(ws, 'INVALID_ACTION', 'Không đọc được trạng thái ván đấu.', {
+        requestId: reqId,
+        revision: match.revision,
+      });
+      return;
+    }
+
+    const res = applyPlayerGameAction(
+      engineState,
+      player.player_id,
+      rawAction as BoardGameActionPayload,
+      nowMs,
+    );
+    if (!res.ok) {
+      const reason = res.reason || 'Hành động không hợp lệ ở pha hiện tại.';
+      const errCode = reason.includes('Chưa tới lượt') ? 'NOT_YOUR_TURN' : 'INVALID_ACTION';
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId: reqId,
+        ok: false,
+        revision: match.revision,
+        reason,
+      });
+      this.sendError(ws, errCode, reason, {
+        requestId: reqId,
+        revision: match.revision,
+      });
+      return;
+    }
+
+    const nextStatus: BoardGameMatchStatus = engineState.finished ? 'FINISHED' : 'PLAYING';
+    const nextDeadline = engineState.finished
+      ? null
+      : this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs);
+    const newRevision = match.revision + 1;
+
+    if (engineState.finished) {
+      this.sql.exec('UPDATE match_players SET ready = 0');
+    }
+
+    this.sql.exec(
+      `UPDATE matches
+       SET status = ?, revision = ?, turn_deadline_ms = ?, updated_at_ms = ?, game_state_json = ?
+       WHERE match_id = ?`,
+      nextStatus,
+      newRevision,
+      nextDeadline,
+      nowMs,
+      JSON.stringify({ engineState }),
+      match.match_id,
+    );
+
+    this.sql.exec(
+      `INSERT OR REPLACE INTO processed_requests (player_id, request_id, revision, created_at_ms)
+       VALUES (?, ?, ?, ?)`,
+      player.player_id,
+      reqId,
+      newRevision,
+      nowMs,
+    );
+
+    await this.scheduleNextAlarm(nowMs);
+    this.send(ws, {
+      type: 'BG_ACTION_ACK',
+      requestId: reqId,
+      ok: true,
+      revision: newRevision,
+    });
     this.broadcastStateSync();
     await this.syncDirectoryFromMatch();
   }
@@ -1359,6 +1556,16 @@ export class BoardGameRoom {
     if (match.host_player_id === player.player_id) {
       this.promoteNextConnectedHost(player.player_id);
     }
+    const engineState = this.loadEngineState(match);
+    const active = engineState ? getActivePlayer(engineState) : null;
+    if (active && active.playerId === player.player_id) {
+      const capped = Math.min(
+        match.turn_deadline_ms ?? nowMs + BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
+        nowMs + BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
+      );
+      this.sql.exec('UPDATE matches SET turn_deadline_ms = ? WHERE match_id = ?', capped, match.match_id);
+    }
+    await this.scheduleNextAlarm(nowMs);
     this.bumpMatchRevisionOnly(nowMs);
     this.broadcastStateSync();
     await this.syncDirectoryFromMatch();
@@ -1484,7 +1691,47 @@ export class BoardGameRoom {
     await storage.setAlarm(earliest);
   }
 
-  private buildStateSyncPayload(_forPlayerId: string | null, _isSpectator: boolean): BoardGameServerMessage | null {
+  private loadEngineState(
+    match: MatchDbRow,
+    playerRows?: readonly MatchPlayerDbRow[],
+  ): AuthoritativeGameState | null {
+    const parsedState = parseJsonObject(match.game_state_json);
+    const rawEngine = parsedState?.engineState;
+    if (!rawEngine || typeof rawEngine !== 'object') return null;
+    const engineState = rawEngine as AuthoritativeGameState;
+    if (playerRows && Array.isArray(engineState.players)) {
+      const connById = new Map<string, boolean>();
+      for (const row of playerRows) {
+        connById.set(row.player_id, row.connected === 1);
+      }
+      for (const ep of engineState.players) {
+        const isConn = connById.get(ep.playerId);
+        if (typeof isConn === 'boolean') {
+          ep.connected = isConn;
+        }
+      }
+    }
+    return engineState;
+  }
+
+  private computeNextTurnDeadline(
+    engineState: AuthoritativeGameState,
+    playerRows: readonly MatchPlayerDbRow[],
+    turnTimeoutMs: number,
+    nowMs: number,
+  ): number | null {
+    if (engineState.finished) return null;
+    const active = getActivePlayer(engineState);
+    if (!active) return null;
+    const row = playerRows.find((r) => r.player_id === active.playerId);
+    const isConnected = row ? row.connected === 1 : active.connected;
+    const dur = isConnected
+      ? turnTimeoutMs
+      : Math.min(turnTimeoutMs, BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS);
+    return nowMs + Math.max(1000, dur);
+  }
+
+  private buildStateSyncPayload(forPlayerId: string | null, isSpectator: boolean): BoardGameServerMessage | null {
     const match = this.getMatchRow();
     if (!match) return null;
     const rows = this.listPlayerRows();
@@ -1505,11 +1752,17 @@ export class BoardGameRoom {
         lastSeenMs: p.last_seen_ms,
       }));
 
-    const parsedState = parseJsonObject(match.game_state_json);
-    const publicGame =
-      match.status === 'PLAYING' && parsedState?.shellPublic
-        ? (parsedState.shellPublic as BoardGamePublicGameView)
+    const engineState =
+      match.status === 'PLAYING' || match.status === 'FINISHED'
+        ? this.loadEngineState(match, rows)
         : null;
+    const publicGame: BoardGamePublicGameView | null = engineState
+      ? getPublicGameView(engineState)
+      : null;
+    const privateView: BoardGamePrivateGameView | null =
+      !engineState || isSpectator || !forPlayerId
+        ? null
+        : getPrivateGameView(engineState, forPlayerId);
 
     return {
       type: 'BG_STATE_SYNC',
@@ -1523,8 +1776,7 @@ export class BoardGameRoom {
       spectatorCount: spectators.length,
       turnDeadlineMs: match.turn_deadline_ms,
       publicGame,
-      // BG2 chưa chia vai bí mật; BG3 gắn getPrivateGameView(state, forPlayerId) riêng từng kết nối
-      privateView: null,
+      privateView,
     };
   }
 

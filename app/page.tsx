@@ -116,6 +116,7 @@ import CampusMemoryWallModal from '../features/social/memory-wall/CampusMemoryWa
 import {
   BoardGameHUD,
   BoardGameLobby,
+  GameBoard,
   boardGameClient,
   useBoardGameClientSnapshot,
   type BoardGameSeatOccupant,
@@ -852,6 +853,12 @@ export default function HomePage() {
     if (viewMode === 'top') setHelpOpen(false);
   }, [viewMode]);
 
+  const bgGameActive =
+    inBoardGameClub &&
+    entered &&
+    (bgSnap.status === 'PLAYING' || bgSnap.status === 'FINISHED') &&
+    Boolean(bgSnap.publicGame);
+
   // Khi panel học, menu chọn bài, thẻ EdTech công trình, bảng thông tin sảnh thư viện, bảng Tự học, bảng Xếp hạng, Lưu bút, Nhiệm vụ SV hoặc modal nhân vật mở: khóa di chuyển.
   useEffect(() => {
     playerState.uiLocked =
@@ -866,6 +873,7 @@ export default function HomePage() {
       boardGameLobbyOpen ||
       boardGameRulesOpen ||
       boardGameExitConfirmOpen ||
+      bgGameActive ||
       study.studyPanelOpen ||
       study.focusPolicy.suspend3DRendering;
     return () => {
@@ -883,6 +891,7 @@ export default function HomePage() {
     boardGameLobbyOpen,
     boardGameRulesOpen,
     boardGameExitConfirmOpen,
+    bgGameActive,
     study.studyPanelOpen,
     study.focusPolicy.suspend3DRendering,
   ]);
@@ -1513,6 +1522,13 @@ export default function HomePage() {
       }, 250);
     }
   }, [entered, characterProfile.name, bgAppearance]);
+
+  // Tự động đóng modal sảnh chờ khi ván Bóng Đêm KTX bắt đầu
+  useEffect(() => {
+    if (bgSnap.status === 'PLAYING') {
+      setBoardGameLobbyOpen(false);
+    }
+  }, [bgSnap.status]);
 
   // Đồng bộ ghế được server chỉ định về avatar 3D local trong CLB
   useEffect(() => {
@@ -2440,6 +2456,7 @@ export default function HomePage() {
               inClassroom={inClassroom}
               inLibraryLobby={inLibraryLobby}
               inBoardGameClub={inBoardGameClub}
+              suspend3D={bgGameActive}
               activeSeatId={seatedSeatId}
               nearestSeatId={nearestSeatId}
               boardGameSeatId={boardGameSeatId}
@@ -2726,6 +2743,31 @@ export default function HomePage() {
               setBoardGameSeatId(null);
             }}
           />
+          {bgGameActive && bgSnap.publicGame && (
+            <GameBoard
+              inviteCode={bgSnap.inviteCode}
+              publicGame={bgSnap.publicGame}
+              privateView={bgSnap.privateView}
+              selfPlayerId={bgSnap.playerId}
+              isSpectator={bgSnap.isSpectator}
+              turnDeadlineMs={bgSnap.turnDeadlineMs}
+              recentEmotes={bgSnap.recentEmotes}
+              lastError={bgSnap.lastError}
+              onAction={(action) => boardGameClient.sendGameAction(action)}
+              onSendEmote={(emote) => boardGameClient.sendEmote(emote)}
+              onSendChat={(text) => boardGameClient.sendChat(text)}
+              onOpenRules={() => setBoardGameRulesOpen(true)}
+              onPlayAgain={() => {
+                boardGameClient.setReady(true);
+                setBoardGameLobbyOpen(true);
+              }}
+              onLeaveMatch={() => {
+                boardGameClient.leaveMatch();
+                getHook()?.standUpBoardGameSeat?.();
+                setBoardGameSeatId(null);
+              }}
+            />
+          )}
         </>
       )}
 

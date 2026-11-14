@@ -12,6 +12,7 @@
     "src/**/*.ts",
     "src/**/*.d.ts",
     "../shared/**/*.ts",
-    "../features/social/rooms/seat-manager.ts"
+    "../features/social/rooms/seat-manager.ts",
+    "../features/boardgame/domain/**/*.ts"
   ]
 }
