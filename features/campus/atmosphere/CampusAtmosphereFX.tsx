@@ -12,8 +12,14 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { getCampusGroundElevation } from '../../../lib/campus';
+import {
+  CAMPUS_DRINK_STALLS,
+  CAMPUS_MEMORY_BOARDS,
+  SPORTS_COMPLEX,
+  getCampusGroundElevation,
+} from '../../../lib/campus';
 import { playerState, type TimeOfDay } from '../../../lib/playerState';
+import { makeWarmLightPoolTexture } from '../../../components/three/materials';
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -539,6 +545,125 @@ function createPigeonAssets() {
   };
 }
 
+function buildLightPoolSpecs(): Array<{ x: number; z: number; radius: number; color: string }> {
+  const specs: Array<{ x: number; z: number; radius: number; color: string }> = [];
+
+  // Đèn đường dọc đại lộ & ven hồ phía Đông (BackgroundBuildings LAMPS)
+  const streetLamps: Array<[number, number]> = [
+    [-34, -11.3], [-8, -11.3], [18, -11.3], [36, -11.3], [48, -11.3],
+    [28, 14], [28, 36], [28, 60], [28, 82],
+  ];
+  for (const [x, z] of streetLamps) {
+    specs.push({ x, z, radius: 5.0, color: '#FFD28A' });
+  }
+
+  // 9 cột đèn sân vườn 5 chao dọc lối dạo Hồ Tiền (TienLake)
+  const lakeLamps: Array<[number, number]> = [
+    [-27.4, 13], [-27.4, 32], [-27.4, 50], [-27.4, 66], [-27.4, 86],
+    [22.1, 14], [22.1, 36], [22.1, 60], [22.1, 84],
+  ];
+  for (const [x, z] of lakeLamps) {
+    specs.push({ x, z, radius: 4.0, color: '#FFC978' });
+  }
+
+  // Đèn Quảng trường C1 & Tiền sảnh Thư viện Tạ Quang Bửu + Cổng Parabol / Trần Đại Nghĩa
+  const plazaLamps: Array<[number, number, number]> = [
+    [-76.5, -30, 5.2], [-39.5, -30, 5.2], [-77.5, -44, 5.2], [-38.5, -44, 5.2],
+    [25.8, 10.8, 4.8], [30.0, 10.8, 4.8], [25.8, 17.5, 4.8], [48.6, 11.8, 4.5], [48.6, 18.2, 4.5],
+    [-86.2, -3.5, 5.6], [-86.2, 3.5, 5.6], [88.5, -6.0, 6.2],
+  ];
+  for (const [x, z, r] of plazaLamps) {
+    specs.push({ x, z, radius: r, color: '#FFE0A3' });
+  }
+
+  // Quầy Trà chanh / Xe Cà phê & Bảng Lưu bút sinh viên
+  for (const st of CAMPUS_DRINK_STALLS) {
+    specs.push({ x: st.x, z: st.z, radius: 4.4, color: '#FFB86B' });
+  }
+  for (const mb of CAMPUS_MEMORY_BOARDS) {
+    specs.push({ x: mb.x, z: mb.z, radius: 3.6, color: '#FFC97D' });
+  }
+
+  // 4 quầng pha cao áp trên mặt cỏ Sân vận động Bách Khoa
+  const { footballFieldCenter, footballFieldSize } = SPORTS_COMPLEX;
+  for (const lx of [-15, 15]) {
+    for (const lz of [-footballFieldSize.z / 2 + 1.5, footballFieldSize.z / 2 - 1.5]) {
+      specs.push({
+        x: footballFieldCenter.x + lx * 0.68,
+        z: footballFieldCenter.z + lz * 0.65,
+        radius: 13.5,
+        color: '#FFF3D6',
+      });
+    }
+  }
+
+  return specs;
+}
+
+function NightGroundLightPools({ timeOfDay }: { timeOfDay: TimeOfDay }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const pools = useMemo(() => buildLightPoolSpecs(), []);
+  const assets = useMemo(() => {
+    const tex = makeWarmLightPoolTexture();
+    const geo = new THREE.PlaneGeometry(1, 1);
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+    });
+    return { tex, geo, mat };
+  }, []);
+
+  useEffect(
+    () => () => {
+      assets.geo.dispose();
+      assets.mat.dispose();
+      assets.tex.dispose();
+    },
+    [assets],
+  );
+
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+    const pos = new THREE.Vector3();
+    const scl = new THREE.Vector3();
+    const col = new THREE.Color();
+    const strength = timeOfDay === 'night' ? 0.72 : timeOfDay === 'sunset' ? 0.24 : 0;
+
+    for (let i = 0; i < pools.length; i++) {
+      const p = pools[i];
+      const groundY = Math.max(getCampusGroundElevation(p.x, p.z), 0.036);
+      pos.set(p.x, groundY + 0.009, p.z);
+      scl.set(p.radius * 2, p.radius * 2, 1);
+      m.compose(pos, q, scl);
+      mesh.setMatrixAt(i, m);
+      col.set(p.color).multiplyScalar(strength);
+      mesh.setColorAt(i, col);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }, [pools, timeOfDay]);
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[assets.geo, assets.mat, pools.length]}
+      frustumCulled={false}
+      renderOrder={2}
+      visible={timeOfDay !== 'day'}
+      raycast={() => null}
+    />
+  );
+}
+
 export default function CampusAtmosphereFX({ timeOfDay }: { timeOfDay: TimeOfDay }) {
   const leafMeshRef = useRef<THREE.InstancedMesh>(null);
   const fireflyMeshRef = useRef<THREE.InstancedMesh>(null);
@@ -752,6 +877,7 @@ export default function CampusAtmosphereFX({ timeOfDay }: { timeOfDay: TimeOfDay
 
   return (
     <group name="CampusAtmosphereFX">
+      <NightGroundLightPools timeOfDay={timeOfDay} />
       <instancedMesh
         ref={leafMeshRef}
         args={[leafAssets.geo, leafAssets.mat, LEAF_COUNT]}

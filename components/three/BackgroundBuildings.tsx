@@ -11,9 +11,13 @@
 // CampusScene (đã gắn sẵn trong bản sao này; KHÔNG gắn lần 2).
 // ---------------------------------------------------------------------------
 
+import { useMemo } from 'react';
+import * as THREE from 'three';
 import { ImprovedTree } from './Trees';
 import { ExtrudedText3D, FramedSignBox3D } from './Signage3D';
 import { LabelPlane } from './TextPlate';
+import { RoofSoffitAndPlinth, WindowGrid3D } from './ArchitecturalWindowBand';
+import { getSharedBuildingPbrTextures } from './materials';
 import {
   BIKE_PARKING_SHED,
   CAMPUS_SHADE_TREES,
@@ -38,26 +42,59 @@ const PAVE_TONE = '#A8A8A2';
 
 // Nhà D4 (Viện Ngoại ngữ — khối nhà hình chữ L ở góc Tây-Nam sát đường Giải Phóng theo đúng bản đồ)
 function D4ForeignLanguagesBuilding({ isNight }: { isNight: boolean }) {
+  const pbr = useMemo(() => getSharedBuildingPbrTextures(), []);
   return (
     <group position={[D4_BUILDING.center.x, 0, D4_BUILDING.center.z]}>
       {/* Cánh ngang phía Nam (18 × 7 m) */}
       <mesh position={[0, 5.1, 4.5]} castShadow receiveShadow>
         <boxGeometry args={[18, 10.2, 7]} />
-        <meshStandardMaterial color="#EAE3D2" roughness={0.88} />
+        <meshStandardMaterial
+          color="#EAE3D2"
+          map={pbr?.plaster.map}
+          bumpMap={pbr?.plaster.bumpMap}
+          bumpScale={0.012}
+          roughness={0.88}
+        />
       </mesh>
       {/* Cánh dọc phía Đông tạo hình chữ L (7 × 13 m) */}
       <mesh position={[5.5, 5.1, -2.0]} castShadow receiveShadow>
         <boxGeometry args={[7, 10.2, 13]} />
-        <meshStandardMaterial color="#EAE3D2" roughness={0.88} />
+        <meshStandardMaterial
+          color="#EAE3D2"
+          map={pbr?.plaster.map}
+          bumpMap={pbr?.plaster.bumpMap}
+          bumpScale={0.012}
+          roughness={0.88}
+        />
       </mesh>
-      {/* Chân đế ốp màu vàng kem */}
+      {/* Chân đế granite dưới cùng + tầng 1 ốp vàng kem */}
+      <mesh position={[0, 0.24, 4.5]} receiveShadow>
+        <boxGeometry args={[18.22, 0.48, 7.22]} />
+        <meshStandardMaterial
+          color="#64748B"
+          map={pbr?.granite.map}
+          bumpMap={pbr?.granite.bumpMap}
+          bumpScale={0.014}
+          roughness={0.86}
+        />
+      </mesh>
+      <mesh position={[5.5, 0.24, -2.0]} receiveShadow>
+        <boxGeometry args={[7.22, 0.48, 13.22]} />
+        <meshStandardMaterial
+          color="#64748B"
+          map={pbr?.granite.map}
+          bumpMap={pbr?.granite.bumpMap}
+          bumpScale={0.014}
+          roughness={0.86}
+        />
+      </mesh>
       <mesh position={[0, 1.6, 4.5]} receiveShadow>
         <boxGeometry args={[18.1, 3.2, 7.1]} />
-        <meshStandardMaterial color={PLINTH_BEIGE} roughness={0.9} />
+        <meshStandardMaterial color={PLINTH_BEIGE} map={pbr?.plaster.map} roughness={0.9} />
       </mesh>
       <mesh position={[5.5, 1.6, -2.0]} receiveShadow>
         <boxGeometry args={[7.1, 3.2, 13.1]} />
-        <meshStandardMaterial color={PLINTH_BEIGE} roughness={0.9} />
+        <meshStandardMaterial color={PLINTH_BEIGE} map={pbr?.plaster.map} roughness={0.9} />
       </mesh>
       {/* Mái phẳng chữ L */}
       <mesh position={[0, 10.38, 4.5]} castShadow>
@@ -68,20 +105,43 @@ function D4ForeignLanguagesBuilding({ isNight }: { isNight: boolean }) {
         <boxGeometry args={[7.5, 0.36, 13.5]} />
         <meshStandardMaterial color={ROOF_TONE} roughness={0.92} />
       </mesh>
-      {/* Cửa sổ mặt Bắc cánh ngang */}
-      {[0, 1, 2].map((fl) =>
-        [-6.5, -3.5, -0.5].map((wx, idx) => (
-          <mesh key={`d4-win-${fl}-${idx}`} position={[wx, fl * 3.3 + 1.8, 0.96]}>
-            <planeGeometry args={[1.4, 1.1]} />
-            <meshStandardMaterial
-              color={isNight ? '#FFE4A0' : WINDOW_TONE}
-              emissive={isNight ? '#FFB84D' : '#000000'}
-              emissiveIntensity={isNight ? 0.65 : 0}
-              roughness={0.35}
-            />
-          </mesh>
-        )),
-      )}
+      {/* Cửa sổ nổi khối 3D mặt Bắc, mặt Nam & hông Đông cánh dọc */}
+      <WindowGrid3D
+        position={[0, 0, 0.95]}
+        rotation={[0, Math.PI, 0]}
+        colXs={[-6.5, -3.5, -0.5]}
+        rowYs={[1.8, 5.1, 7.9]}
+        winW={1.4}
+        winH={1.1}
+        frameColor="#1E293B"
+        sillColor="#F3EDE0"
+        isNight={isNight}
+        seedOffset={181}
+        withAcUnits
+      />
+      <WindowGrid3D
+        position={[0, 0, 8.0]}
+        colXs={[-6.0, -2.5, 1.0, 4.5]}
+        rowYs={[1.8, 5.1, 7.9]}
+        winW={1.45}
+        winH={1.12}
+        frameColor="#1E293B"
+        sillColor="#F3EDE0"
+        isNight={isNight}
+        seedOffset={183}
+      />
+      <WindowGrid3D
+        position={[9.0, 0, -2.0]}
+        rotation={[0, Math.PI / 2, 0]}
+        colXs={[-4.2, -1.4, 1.4, 4.2]}
+        rowYs={[1.8, 5.1, 7.9]}
+        winW={1.45}
+        winH={1.12}
+        frameColor="#1E293B"
+        sillColor="#F3EDE0"
+        isNight={isNight}
+        seedOffset={187}
+      />
       <FramedSignBox3D
         canvasW={512}
         canvasH={128}
@@ -101,7 +161,7 @@ function D4ForeignLanguagesBuilding({ isNight }: { isNight: boolean }) {
         depth={0.1}
         boxColor="#7F1D1D"
         frameColor="#F5C518"
-        position={[-2.5, 9.2, 0.92]}
+        position={[-2.5, 9.2, 0.88]}
         rotation={[0, Math.PI, 0]}
         isNight={isNight}
       />
@@ -112,6 +172,7 @@ function D4ForeignLanguagesBuilding({ isNight }: { isNight: boolean }) {
 // Khối nhà nối 3 tầng chạm đất (C3-4, C4-5, C5-10 theo chuẩn https://hustmap.com/)
 // kết hợp hành lang cầu nối trên cao ở đầu Đông Khu C, giữa D3 ↔ D5 và giữa D6 ↔ D8
 function LectureSkybridges({ isNight }: { isNight: boolean }) {
+  const pbr = useMemo(() => getSharedBuildingPbrTextures(), []);
   const bridges: Array<{ x: number; z: number; w: number; d: number; y: number }> = [
     // Cầu nối đầu Đông giữa C4 (-57) ↔ C5 (-46) ↔ C10 (-35)
     { x: -5.5, z: -51.5, w: 2.2, d: 4.8, y: 3.6 },
@@ -125,9 +186,7 @@ function LectureSkybridges({ isNight }: { isNight: boolean }) {
   ];
   return (
     <group>
-      {/* Cầu nối khung bê tông trắng 5 tầng bắc ngang cuối trục đường x = 56.2 nối cụm D7 ↔ D9
-          (tầng 1 cao thoáng 3.85m cho xe & người đi xuyên qua, tầng 2–5 khung trắng thoáng đúng ảnh
-          `từ cuối 2 nhánh bên nhìn sang bên trái, cụm tòa D3,5,7,9.jpg` & `nhìn chếch trái sang thư viện.jpg`) */}
+      {/* Cầu nối khung bê tông trắng 5 tầng bắc ngang cuối trục đường x = 56.2 nối cụm D7 ↔ D9 */}
       <group position={[56.0, 0, 61.2]}>
         {[-3.85, -1.3, 1.3, 3.85].map((cx, cIdx) => {
           const isOuter = cIdx === 0 || cIdx === 3;
@@ -138,18 +197,22 @@ function LectureSkybridges({ isNight }: { isNight: boolean }) {
               castShadow
             >
               <boxGeometry args={[0.38, isOuter ? 15.5 : 11.7, 2.2]} />
-              <meshStandardMaterial color="#F8FAFC" roughness={0.8} />
+              <meshStandardMaterial
+                color="#F8FAFC"
+                map={pbr?.plaster.map}
+                bumpMap={pbr?.plaster.bumpMap}
+                bumpScale={0.01}
+                roughness={0.8}
+              />
             </mesh>
           );
         })}
         {[1, 2, 3, 4].map((fl) => (
           <group key={`d79-bridge-fl-${fl}`} position={[0, fl * 3.1 + 0.65, 0]}>
-            {/* Dầm & sàn hành lang cầu nối trắng */}
             <mesh position={[0, 0, 0]} castShadow>
               <boxGeometry args={[8.1, 0.32, 2.3]} />
-              <meshStandardMaterial color="#F8FAFC" roughness={0.8} />
+              <meshStandardMaterial color="#F8FAFC" map={pbr?.plaster.map} roughness={0.8} />
             </mesh>
-            {/* Lan can sắt màu nâu đỏ hai mặt Bắc & Nam */}
             {[-1.04, 1.04].map((rz, rIdx) => (
               <mesh key={`rail-${rIdx}`} position={[0, 0.56, rz]}>
                 <boxGeometry args={[7.8, 0.68, 0.06]} />
@@ -158,7 +221,6 @@ function LectureSkybridges({ isNight }: { isNight: boolean }) {
             ))}
           </group>
         ))}
-        {/* Mái cầu nối tầng 5 */}
         <mesh position={[0, 15.65, 0]} castShadow>
           <boxGeometry args={[8.3, 0.34, 2.5]} />
           <meshStandardMaterial color="#E2E8F0" roughness={0.82} />
@@ -166,51 +228,56 @@ function LectureSkybridges({ isNight }: { isNight: boolean }) {
       </group>
 
       {/* 3 Khối nhà nối 3 tầng chạm đất C3-4, C4-5, C5-10 ở đầu Tây cụm C3–C4–C5–C10 */}
-      {C_CONNECTOR_BUILDINGS.map((cb) => (
+      {C_CONNECTOR_BUILDINGS.map((cb, cbIdx) => (
         <group key={cb.code} position={[cb.center.x, 0, cb.center.z]}>
-          {/* Chân đế vàng kem */}
           <mesh position={[0, 1.4, 0]} receiveShadow>
             <boxGeometry args={[cb.size.x + 0.08, 2.8, cb.size.z + 0.08]} />
-            <meshStandardMaterial color={PLINTH_BEIGE} roughness={0.92} />
+            <meshStandardMaterial color={PLINTH_BEIGE} map={pbr?.plaster.map} roughness={0.92} />
           </mesh>
-          {/* Cổng vòm lối đi xuyên sân tầng 1 */}
           <mesh position={[0, 1.25, 0]}>
             <boxGeometry args={[cb.size.x + 0.14, 2.5, 2.1]} />
             <meshStandardMaterial color="#273038" roughness={0.9} />
           </mesh>
-          {/* Thân nhà nối 3 tầng */}
           <mesh position={[0, cb.h / 2, 0]} castShadow receiveShadow>
             <boxGeometry args={[cb.size.x, cb.h, cb.size.z]} />
-            <meshStandardMaterial color={WALL_TONES[1]} roughness={0.88} />
+            <meshStandardMaterial
+              color={WALL_TONES[1]}
+              map={pbr?.plaster.map}
+              bumpMap={pbr?.plaster.bumpMap}
+              bumpScale={0.012}
+              roughness={0.88}
+            />
           </mesh>
-          {/* Mái phẳng */}
           <mesh position={[0, cb.h + 0.16, 0]} castShadow>
             <boxGeometry args={[cb.size.x + 0.45, 0.32, cb.size.z + 0.45]} />
             <meshStandardMaterial color={ROOF_TONE} roughness={0.92} />
           </mesh>
-          {/* Cửa sổ tầng 2 & 3 mặt Tây (nhìn ra Quảng trường C1) và mặt Đông (nhìn vào Nhà xe C5) */}
-          {[1, 2].map((fl) => (
-            <group key={`${cb.code}-fl-${fl}`}>
-              <mesh position={[-cb.size.x / 2 - 0.03, fl * 3.3 + 1.65, 0]} rotation-y={-Math.PI / 2}>
-                <planeGeometry args={[2.1, 1.15]} />
-                <meshStandardMaterial
-                  color={isNight ? '#FFE4A0' : WINDOW_TONE}
-                  emissive={isNight ? '#FFB84D' : '#000000'}
-                  emissiveIntensity={isNight ? 0.65 : 0}
-                  roughness={0.32}
-                />
-              </mesh>
-              <mesh position={[cb.size.x / 2 + 0.03, fl * 3.3 + 1.65, 0]} rotation-y={Math.PI / 2}>
-                <planeGeometry args={[2.1, 1.15]} />
-                <meshStandardMaterial
-                  color={isNight ? '#FFE4A0' : WINDOW_TONE}
-                  emissive={isNight ? '#FFB84D' : '#000000'}
-                  emissiveIntensity={isNight ? 0.65 : 0}
-                  roughness={0.32}
-                />
-              </mesh>
-            </group>
-          ))}
+          {/* Cửa sổ nổi khối 3D tầng 2 & 3 mặt Tây và mặt Đông */}
+          <WindowGrid3D
+            position={[-cb.size.x / 2, 0, 0]}
+            rotation={[0, -Math.PI / 2, 0]}
+            colXs={[0]}
+            rowYs={[4.95, 7.95]}
+            winW={2.05}
+            winH={1.12}
+            frameColor={WINDOW_FRAME}
+            sillColor="#DFC99B"
+            isNight={isNight}
+            seedOffset={191 + cbIdx * 5}
+            withRainHood={false}
+          />
+          <WindowGrid3D
+            position={[cb.size.x / 2, 0, 0]}
+            rotation={[0, Math.PI / 2, 0]}
+            colXs={[0]}
+            rowYs={[4.95, 7.95]}
+            winW={2.05}
+            winH={1.12}
+            frameColor={WINDOW_FRAME}
+            sillColor="#DFC99B"
+            isNight={isNight}
+            seedOffset={197 + cbIdx * 5}
+          />
           {/* Biển tên NHÀ C3-4 / C4-5 / C5-10 gắn trên mặt Tây */}
           <LabelPlane
             textureKey={`connector-sign-${cb.code}`}
@@ -229,7 +296,7 @@ function LectureSkybridges({ isNight }: { isNight: boolean }) {
               ctx.fillText(cb.code, w / 2, h / 2 + 2);
             }}
             size={[1.65, 0.58]}
-            position={[-cb.size.x / 2 - 0.05, cb.h - 0.62, 0]}
+            position={[-cb.size.x / 2 - 0.08, cb.h - 0.62, 0]}
             rotation={[0, -Math.PI / 2, 0]}
             transparent={false}
           />
@@ -241,7 +308,7 @@ function LectureSkybridges({ isNight }: { isNight: boolean }) {
         <group key={`skybridge-${idx}`} position={[br.x, br.y, br.z]}>
           <mesh position={[0, 0, 0]} castShadow>
             <boxGeometry args={[br.w, 0.28, br.d]} />
-            <meshStandardMaterial color="#F2EFE6" roughness={0.88} />
+            <meshStandardMaterial color="#F2EFE6" map={pbr?.plaster.map} roughness={0.88} />
           </mesh>
           <mesh position={[br.w / 2 - 0.06, 0.55, 0]}>
             <boxGeometry args={[0.08, 0.72, br.d]} />
@@ -274,6 +341,12 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
   const floorH = b.h / floors; // 15.5m / 5 = 3.1m
   const isD3 = b.code === 'D3';
   const isNorthSouth = b.face === 'w' || b.face === 'e'; // D3-5 chạy dọc Bắc–Nam
+  const pbr = useMemo(() => getSharedBuildingPbrTextures(), []);
+  const westWinRowYs = useMemo(() => [0, 1, 2, 3, 4].map((fl) => fl * floorH + 1.68), [floorH]);
+  const upperRowYs = useMemo(() => [1, 2, 3, 4].map((fl) => fl * floorH + 1.62), [floorH]);
+  const groundRowYs = useMemo(() => [1.62], []);
+  const fullColXs = useMemo(() => [-4.5, -1.6, 1.4, 4.3, 6.9], []);
+  const d3GroundNorthColXs = useMemo(() => [-4.5, -1.6, 4.3, 6.9], []);
 
   if (isNorthSouth) {
     // Khối nối D3-5 chạy dọc Bắc–Nam (5 tầng sơn trắng đồng bộ + hành lang hướng Tây nhìn ra sân trong D3-D5)
@@ -283,16 +356,40 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
       <group position={[b.x, 0, b.z]}>
         <mesh position={[0, 0.18, 0]} receiveShadow>
           <boxGeometry args={[b.w + 0.16, 0.36, b.d + 0.16]} />
-          <meshStandardMaterial color="#CBD5E1" roughness={0.86} />
+          <meshStandardMaterial
+            color="#CBD5E1"
+            map={pbr?.granite.map}
+            bumpMap={pbr?.granite.bumpMap}
+            bumpScale={0.012}
+            roughness={0.86}
+          />
         </mesh>
         <mesh position={[0.45, b.h / 2, 0]} castShadow receiveShadow>
           <boxGeometry args={[b.w - 0.9, b.h, b.d]} />
-          <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+          <meshStandardMaterial
+            color="#F8FAFC"
+            map={pbr?.plaster.map}
+            bumpMap={pbr?.plaster.bumpMap}
+            bumpScale={0.012}
+            roughness={0.82}
+          />
         </mesh>
         <mesh position={[0, b.h + 0.16, 0]} castShadow>
           <boxGeometry args={[b.w + 0.36, 0.32, b.d + 0.36]} />
           <meshStandardMaterial color="#E2E8F0" roughness={0.82} />
         </mesh>
+        <WindowGrid3D
+          position={[b.w / 2, 0, 0]}
+          rotation={[0, Math.PI / 2, 0]}
+          colXs={[-4.8, -1.6, 1.6, 4.8]}
+          rowYs={[0, 1, 2, 3, 4].map((fl) => fl * floorH + 1.62)}
+          winW={1.8}
+          winH={1.28}
+          frameColor="#E2E8F0"
+          sillColor="#CBD5E1"
+          isNight={isNight}
+          seedOffset={211}
+        />
         {[1, 2, 3, 4].map((fl) => (
           <group key={`d35-fl-${fl}`} position={[0, fl * floorH, 0]}>
             <mesh position={[-b.w / 2 + 0.5, -0.08, 0]} castShadow>
@@ -342,7 +439,13 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
               <group key={`d3-treepit-${tIdx}`} position={[tx, 0.075, frontZ - 1.35]}>
                 <mesh position={[0, 0.03, 0]} receiveShadow>
                   <boxGeometry args={[2.3, 0.06, 1.35]} />
-                  <meshStandardMaterial color="#94A3B8" roughness={0.85} />
+                  <meshStandardMaterial
+                    color="#94A3B8"
+                    map={pbr?.granite.map}
+                    bumpMap={pbr?.granite.bumpMap}
+                    bumpScale={0.01}
+                    roughness={0.85}
+                  />
                 </mesh>
                 <mesh position={[0, 0.065, 0]} receiveShadow>
                   <boxGeometry args={[2.05, 0.02, 1.12]} />
@@ -353,19 +456,29 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
         </group>
       )}
 
-      {/* Bệ chân đế bê tông xám sáng */}
+      {/* Bệ chân đế bê tông granite xám sáng */}
       <mesh position={[0, 0.18, 0]} receiveShadow>
         <boxGeometry args={[b.w + 0.16, 0.36, b.d + 0.16]} />
-        <meshStandardMaterial color="#CBD5E1" roughness={0.86} />
+        <meshStandardMaterial
+          color="#CBD5E1"
+          map={pbr?.granite.map}
+          bumpMap={pbr?.granite.bumpMap}
+          bumpScale={0.012}
+          roughness={0.86}
+        />
       </mesh>
 
       {/* 1. KHỐI ĐẦU HỒI TÂY PHẲNG MÀU TRẮNG TINH (#F8FAFC) + CHỮ NỔI ĐEN "D3" & DÀN NÓNG ĐIỀU HÒA HÔNG TÂY */}
       <mesh position={[-b.w / 2 + endBayW / 2, b.h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[endBayW, b.h, b.d]} />
-        <meshStandardMaterial color="#F8FAFC" roughness={0.8} />
+        <meshStandardMaterial
+          color="#F8FAFC"
+          map={pbr?.plaster.map}
+          bumpMap={pbr?.plaster.bumpMap}
+          bumpScale={0.012}
+          roughness={0.8}
+        />
       </mesh>
-      {/* Chữ nổi 3D khối đặc màu than đậm "D3" / "D5" / "D7" / "D9" (dày 0.16m) trên mảng tường trắng đầu Tây hướng Bắc (-Z)
-          (khớp góc trái ảnh `từ cuối 2 nhánh bên nhìn sang bên trái, cụm tòa D3,5,7,9.jpg`) */}
       <ExtrudedText3D
         text={b.code}
         size={[1.62, 0.98]}
@@ -378,36 +491,23 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
         metalness={0.55}
         roughness={0.35}
       />
-      {/* Cửa sổ khung nhôm trắng + dàn nóng điều hòa gắn dọc mặt Tây (-X, sát trục đường x = 56.2) */}
-      {[0, 1, 2, 3, 4].map((fl) =>
-        [-1.65, 1.55].map((wz, wIdx) => (
-          <group key={`${b.code}-west-win-${fl}-${wIdx}`} position={[-b.w / 2 - 0.03, fl * floorH + 1.68, wz]}>
-            <mesh>
-              <boxGeometry args={[0.04, 1.48, 1.95]} />
-              <meshStandardMaterial color="#CBD5E1" roughness={0.5} />
-            </mesh>
-            <mesh position={[-0.025, 0, 0]} rotation-y={-Math.PI / 2}>
-              <planeGeometry args={[1.78, 1.32]} />
-              <meshStandardMaterial
-                color={isNight && (fl + wIdx) % 2 === 0 ? '#FFE8A3' : '#64748B'}
-                emissive={isNight && (fl + wIdx) % 2 === 0 ? '#FFB84D' : '#000000'}
-                emissiveIntensity={isNight && (fl + wIdx) % 2 === 0 ? 0.65 : 0}
-                roughness={0.28}
-              />
-            </mesh>
-            {/* Dàn nóng điều hòa trắng đặt trên bệ bê tông dưới bậu cửa (khớp ảnh thật!) */}
-            {fl >= 1 && (
-              <mesh position={[-0.18, -0.95, 0.55]} castShadow>
-                <boxGeometry args={[0.32, 0.46, 0.68]} />
-                <meshStandardMaterial color="#E2E8F0" roughness={0.65} />
-              </mesh>
-            )}
-          </group>
-        )),
-      )}
+      {/* Cửa sổ khung nhôm trắng 3D + dàn nóng điều hòa gắn dọc mặt Tây (-X, sát trục đường x = 56.2) */}
+      <WindowGrid3D
+        position={[-b.w / 2, 0, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
+        colXs={[-1.65, 1.55]}
+        rowYs={westWinRowYs}
+        winW={1.85}
+        winH={1.36}
+        frameColor="#CBD5E1"
+        sillColor="#E2E8F0"
+        glassColor="#64748B"
+        isNight={isNight}
+        seedOffset={b.code.charCodeAt(1) + 221}
+        withAcUnits
+      />
 
-      {/* 2. THÂN PHÒNG HỌC LÙI SAU HÀNH LANG MỞ HƯỚNG BẮC (-Z)
-          Riêng Nhà D3 chừa khoang xuyên sảnh tầng 1 ở chính giữa (x = -0.8..+2.6) nhìn thẳng ra sân xe phía sau! */}
+      {/* 2. THÂN PHÒNG HỌC LÙI SAU HÀNH LANG MỞ HƯỚNG BẮC (-Z) */}
       {isD3 ? (
         <group>
           {/* Tầng 2–5 liền khối phía trên cổng xuyên sảnh */}
@@ -417,16 +517,34 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
             receiveShadow
           >
             <boxGeometry args={[openSpanW, b.h - floorH, b.d - corrDepth]} />
-            <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+            <meshStandardMaterial
+              color="#F8FAFC"
+              map={pbr?.plaster.map}
+              bumpMap={pbr?.plaster.bumpMap}
+              bumpScale={0.012}
+              roughness={0.82}
+            />
           </mesh>
           {/* Hai cánh tầng 1 hai bên lối xuyên sảnh trung tâm */}
           <mesh position={[-2.95, floorH / 2, corrDepth / 2]} castShadow receiveShadow>
             <boxGeometry args={[6.2, floorH, b.d - corrDepth]} />
-            <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+            <meshStandardMaterial
+              color="#F8FAFC"
+              map={pbr?.plaster.map}
+              bumpMap={pbr?.plaster.bumpMap}
+              bumpScale={0.012}
+              roughness={0.82}
+            />
           </mesh>
           <mesh position={[5.9, floorH / 2, corrDepth / 2]} castShadow receiveShadow>
             <boxGeometry args={[6.2, floorH, b.d - corrDepth]} />
-            <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+            <meshStandardMaterial
+              color="#F8FAFC"
+              map={pbr?.plaster.map}
+              bumpMap={pbr?.plaster.bumpMap}
+              bumpScale={0.012}
+              roughness={0.82}
+            />
           </mesh>
           {/* Trần lối đi xuyên sảnh sáng đèn LED trắng */}
           <mesh position={[1.45, floorH - 0.06, corrDepth / 2]}>
@@ -441,7 +559,13 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
       ) : (
         <mesh position={[openCenterX, b.h / 2, corrDepth / 2]} castShadow receiveShadow>
           <boxGeometry args={[openSpanW, b.h, b.d - corrDepth]} />
-          <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+          <meshStandardMaterial
+            color="#F8FAFC"
+            map={pbr?.plaster.map}
+            bumpMap={pbr?.plaster.bumpMap}
+            bumpScale={0.012}
+            roughness={0.82}
+          />
         </mesh>
       )}
 
@@ -455,18 +579,16 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
       {colXs.map((cx, idx) => (
         <mesh key={`${b.code}-grid-col-${idx}`} position={[cx, b.h / 2, frontZ + 0.16]} castShadow>
           <boxGeometry args={[0.3, b.h, 0.32]} />
-          <meshStandardMaterial color="#FFFFFF" roughness={0.78} />
+          <meshStandardMaterial color="#FFFFFF" map={pbr?.plaster.map} roughness={0.78} />
         </mesh>
       ))}
 
       {[1, 2, 3, 4].map((fl) => (
         <group key={`${b.code}-corr-${fl}`} position={[openCenterX, fl * floorH, 0]}>
-          {/* Sàn & dầm ngang hành lang sơn trắng */}
           <mesh position={[0, -0.09, frontZ + corrDepth / 2]} castShadow>
             <boxGeometry args={[openSpanW, 0.22, corrDepth + 0.06]} />
             <meshStandardMaterial color="#FFFFFF" roughness={0.8} />
           </mesh>
-          {/* Đèn ốp trần hành lang sáng ấm ban ngày lẫn ban đêm đúng ảnh D3 */}
           {[-4.2, -0.8, 2.6, 5.8].map((lx, lIdx) => (
             <mesh key={`corr-light-${lIdx}`} position={[lx, -0.21, frontZ + 0.65]}>
               <boxGeometry args={[0.75, 0.03, 0.18]} />
@@ -477,7 +599,6 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
               />
             </mesh>
           ))}
-          {/* Lan can kim loại thanh mảnh màu nâu đỏ đặc trưng của D3–D9 */}
           <mesh position={[0, 0.78, frontZ + 0.12]}>
             <boxGeometry args={[openSpanW - 0.2, 0.06, 0.05]} />
             <meshStandardMaterial color="#5A2322" roughness={0.5} metalness={0.35} />
@@ -493,56 +614,74 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
         </group>
       ))}
 
-      {/* Hệ cửa sổ lớp học sáng ấm bên trong hành lang Bắc & mặt Nam */}
-      {[0, 1, 2, 3, 4].map((fl) =>
-        [-4.5, -1.6, 1.4, 4.3, 6.9].map((wx, wIdx) => {
-          if (isD3 && fl === 0 && Math.abs(wx - 1.4) < 1.5) return null; // chừa lối xuyên sảnh tầng 1 D3
-          const warmLit = fl <= 1 || (isNight && (fl + wIdx) % 2 === 0);
-          return (
-            <group key={`${b.code}-room-win-${fl}-${wIdx}`}>
-              <mesh
-                position={[wx, fl * floorH + 1.62, frontZ + corrDepth - 0.03]}
-                rotation-y={Math.PI}
-              >
-                <planeGeometry args={[2.05, 1.45]} />
-                <meshStandardMaterial
-                  color={warmLit ? '#FEF3C7' : '#475569'}
-                  emissive={warmLit ? '#FDE68A' : '#000000'}
-                  emissiveIntensity={warmLit ? (isNight ? 0.85 : 0.42) : 0}
-                  roughness={0.3}
-                />
-              </mesh>
-              <mesh position={[wx, fl * floorH + 1.62, b.d / 2 + 0.03]}>
-                <planeGeometry args={[1.95, 1.38]} />
-                <meshStandardMaterial
-                  color={warmLit ? '#FEF3C7' : '#475569'}
-                  emissive={warmLit ? '#FDE68A' : '#000000'}
-                  emissiveIntensity={warmLit ? (isNight ? 0.75 : 0.25) : 0}
-                  roughness={0.3}
-                />
-              </mesh>
-            </group>
-          );
-        }),
-      )}
+      {/* Hệ cửa sổ lớp học 3D bên trong hành lang Bắc & mặt Nam */}
+      <WindowGrid3D
+        position={[0, 0, frontZ + corrDepth]}
+        rotation={[0, Math.PI, 0]}
+        colXs={isD3 ? d3GroundNorthColXs : fullColXs}
+        rowYs={groundRowYs}
+        winW={2.02}
+        winH={1.42}
+        frameColor="#E2E8F0"
+        sillColor="#CBD5E1"
+        glassColor="#475569"
+        isNight={isNight}
+        seedOffset={231}
+        withRainHood={false}
+      />
+      <WindowGrid3D
+        position={[0, 0, frontZ + corrDepth]}
+        rotation={[0, Math.PI, 0]}
+        colXs={fullColXs}
+        rowYs={upperRowYs}
+        winW={2.02}
+        winH={1.42}
+        frameColor="#E2E8F0"
+        sillColor="#CBD5E1"
+        glassColor="#475569"
+        isNight={isNight}
+        seedOffset={233}
+        withRainHood={false}
+      />
+      <WindowGrid3D
+        position={[0, 0, b.d / 2]}
+        colXs={isD3 ? d3GroundNorthColXs : fullColXs}
+        rowYs={groundRowYs}
+        winW={1.95}
+        winH={1.38}
+        frameColor="#E2E8F0"
+        sillColor="#CBD5E1"
+        glassColor="#475569"
+        isNight={isNight}
+        seedOffset={239}
+      />
+      <WindowGrid3D
+        position={[0, 0, b.d / 2]}
+        colXs={fullColXs}
+        rowYs={upperRowYs}
+        winW={1.95}
+        winH={1.38}
+        frameColor="#E2E8F0"
+        sillColor="#CBD5E1"
+        glassColor="#475569"
+        isNight={isNight}
+        seedOffset={241}
+        withAcUnits
+      />
 
-      {/* 4. MÁI ĐÓN SẢNH BẮC 4 CỘT TRÒN TRẮNG + BẬC TAM CẤP + ĐƯỜNG DỐC KHUYẾT TẬT CỦA NHÀ D3
-          (khớp 1:1 ảnh `Một phần tòa D3 nhìn từ trục đường phải, bên tòa C7.jpg`) */}
+      {/* 4. MÁI ĐÓN SẢNH BẮC 4 CỘT TRÒN TRẮNG + BẬC TAM CẤP + ĐƯỜNG DỐC KHUYẾT TẬT CỦA NHÀ D3 */}
       {isD3 && (
         <group position={[1.45, 0, frontZ]}>
-          {/* Bản mái hiên phẳng màu trắng dày dặn vươn ra 1.75m */}
           <mesh position={[0, 3.48, -0.88]} castShadow>
             <boxGeometry args={[8.4, 0.36, 1.82]} />
-            <meshStandardMaterial color="#F8FAFC" roughness={0.78} />
+            <meshStandardMaterial color="#F8FAFC" map={pbr?.plaster.map} roughness={0.78} />
           </mesh>
-          {/* 4 cột trụ tròn trắng đỡ mái đón sảnh D3 */}
           {[-3.6, -1.5, 1.5, 3.6].map((px, pIdx) => (
             <mesh key={`d3-portico-col-${pIdx}`} position={[px, 1.74, -1.52]} castShadow>
               <cylinderGeometry args={[0.2, 0.2, 3.48, 16]} />
               <meshStandardMaterial color="#F8FAFC" roughness={0.76} />
             </mesh>
           ))}
-          {/* Bậc tam cấp đá granite xám dẫn lên sảnh */}
           {[0, 1, 2].map((st) => (
             <mesh
               key={`d3-step-${st}`}
@@ -550,15 +689,19 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
               receiveShadow
             >
               <boxGeometry args={[7.4, 0.1, 0.32]} />
-              <meshStandardMaterial color="#94A3B8" roughness={0.88} />
+              <meshStandardMaterial
+                color="#94A3B8"
+                map={pbr?.granite.map}
+                bumpMap={pbr?.granite.bumpMap}
+                bumpScale={0.01}
+                roughness={0.88}
+              />
             </mesh>
           ))}
-          {/* Bàn trực đỏ HUST đặt ngay trước sảnh xuyên tầng 1 */}
           <mesh position={[0.95, 0.56, -0.45]} castShadow>
             <boxGeometry args={[1.15, 0.62, 0.55]} />
             <meshStandardMaterial color="#B91C1C" roughness={0.65} />
           </mesh>
-          {/* Đường dốc người khuyết tật kèm tay vịn sắt nâu đỏ bên trái sảnh (+X) */}
           <group position={[5.35, 0, -0.68]}>
             <mesh position={[0, 0.18, 0]} rotation={[0, 0, 0.08]} receiveShadow>
               <boxGeometry args={[3.4, 0.22, 0.92]} />
@@ -576,6 +719,7 @@ function ModernistWhiteDBuilding({ b, isNight }: { b: LectureBuildingSpec; isNig
 }
 
 function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: boolean }) {
+  const pbr = useMemo(() => getSharedBuildingPbrTextures(), []);
   if (
     b.code === 'D3' ||
     b.code === 'D5' ||
@@ -591,38 +735,54 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
   const isHighRise = floors >= 8;
   const floorH = b.h / floors;
   const upperFloors = Array.from({ length: floors - 1 }, (_, idx) => idx + 1);
-  const wins: Array<{ u: number; y: number; lit: boolean }> = [];
-  for (let r = 0; r < floors; r++) {
-    for (let k = 0; k < count; k++) {
-      const lit = ((r * 7 + k * 13 + b.code.charCodeAt(0)) % 3) !== 0;
-      wins.push({
-        u: -along / 2 + ((k + 0.5) / count) * along,
-        y: (r + 0.56) * floorH,
-        lit,
-      });
-    }
-  }
+  const winColXs = useMemo(
+    () => Array.from({ length: count }, (_, k) => -along / 2 + ((k + 0.5) / count) * along),
+    [along, count],
+  );
+  const winRowYs = useMemo(
+    () => Array.from({ length: floors }, (_, r) => (r + 0.56) * floorH),
+    [floorH, floors],
+  );
   const faceOffset = ((): [number, number, number] => {
     switch (b.face) {
-      case 's': return [0, 0, b.d / 2 + 0.04];
-      case 'n': return [0, 0, -b.d / 2 - 0.04];
-      case 'e': return [b.w / 2 + 0.04, 0, 0];
-      case 'w': return [-b.w / 2 - 0.04, 0, 0];
+      case 's': return [0, 0, b.d / 2];
+      case 'n': return [0, 0, -b.d / 2];
+      case 'e': return [b.w / 2, 0, 0];
+      case 'w': return [-b.w / 2, 0, 0];
     }
   })();
   const faceRotY = b.face === 's' ? 0 : b.face === 'n' ? Math.PI : b.face === 'e' ? Math.PI / 2 : -Math.PI / 2;
 
   return (
     <group position={[b.x, 0, b.z]} rotation-y={b.rotY ?? 0}>
-      {/* Thân nhà chính màu trắng sáng / trắng kem */}
+      <RoofSoffitAndPlinth
+        w={b.w}
+        d={b.d}
+        height={b.h}
+        plinthH={0.44}
+        plinthColor={isHighRise ? '#64748B' : '#94A3B8'}
+        graniteMap={pbr?.granite.map}
+        graniteBump={pbr?.granite.bumpMap}
+      />
+      {/* Thân nhà chính màu trắng sáng / trắng kem PBR */}
       <mesh position={[0, b.h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[b.w, b.h, b.d]} />
-        <meshStandardMaterial color={isHighRise ? '#F8FAFC' : WALL_TONES[b.tone]} roughness={0.86} />
+        <meshStandardMaterial
+          color={isHighRise ? '#F8FAFC' : WALL_TONES[b.tone]}
+          map={pbr?.plaster.map}
+          bumpMap={pbr?.plaster.bumpMap}
+          bumpScale={0.012}
+          roughness={0.86}
+        />
       </mesh>
       {/* Tầng 1 ốp màu vàng kem nhạt (hoặc đá granite xám hiện đại cho cao ốc D8 11 tầng) */}
       <mesh position={[0, floorH * 0.48, 0]} receiveShadow>
         <boxGeometry args={[b.w + 0.06, floorH * 0.96, b.d + 0.06]} />
-        <meshStandardMaterial color={isHighRise ? '#94A3B8' : PLINTH_BEIGE} roughness={0.9} />
+        <meshStandardMaterial
+          color={isHighRise ? '#94A3B8' : PLINTH_BEIGE}
+          map={isHighRise ? pbr?.granite.map : pbr?.plaster.map}
+          roughness={0.9}
+        />
       </mesh>
       {/* Mái phẳng + gờ parapet nhô nhẹ khỏi tường */}
       <mesh position={[0, b.h + 0.18, 0]} castShadow>
@@ -634,7 +794,7 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
         <group position={[0, b.h + 0.36, 0]}>
           <mesh position={[0, 1.1, 0]} castShadow>
             <boxGeometry args={[4.6, 2.2, 3.8]} />
-            <meshStandardMaterial color="#E2E8F0" roughness={0.82} />
+            <meshStandardMaterial color="#E2E8F0" map={pbr?.plaster.map} roughness={0.82} />
           </mesh>
           <mesh position={[0, 2.32, 0]} castShadow>
             <boxGeometry args={[5.0, 0.24, 4.2]} />
@@ -664,7 +824,7 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
               ctx.fillText(`TÒA ${b.code}`, w / 2, h / 2 + 2);
             }}
             size={[2.6, 0.98]}
-            position={[b.w / 2 + 0.06, -1.6, 0]}
+            position={[b.w / 2 + 0.08, -1.6, 0]}
             rotation={[0, Math.PI / 2, 0]}
             transparent={false}
           />
@@ -684,7 +844,7 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
         </mesh>
       ))}
 
-      {/* Mặt chính: sảnh tầng 1 + các dải hành lang & lan can đỏ HUST + hệ cửa sổ phát sáng ban đêm + biển tên tòa */}
+      {/* Mặt chính: sảnh tầng 1 + dải hành lang & lan can đỏ HUST + hệ cửa sổ 3D + biển tên tòa */}
       <group position={[faceOffset[0], 0, faceOffset[2]]} rotation-y={faceRotY}>
         {/* Mái hiên cửa chính tầng 1 & bậc tam cấp */}
         <mesh position={[0, floorH * 0.88, 0.48]} castShadow>
@@ -693,17 +853,15 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
         </mesh>
         <mesh position={[0, 0.12, 0.42]} receiveShadow>
           <boxGeometry args={[3.2, 0.24, 0.85]} />
-          <meshStandardMaterial color="#9E9B93" roughness={0.9} />
+          <meshStandardMaterial color="#9E9B93" map={pbr?.granite.map} roughness={0.9} />
         </mesh>
 
         {upperFloors.map((fl) => (
           <group key={`rail-${fl}`} position={[0, fl * floorH, 0]}>
-            {/* Dầm sàn hành lang trắng */}
             <mesh position={[0, -0.08, 0.05]}>
               <boxGeometry args={[along - 0.4, 0.18, 0.14]} />
               <meshStandardMaterial color={WINDOW_FRAME} roughness={0.85} />
             </mesh>
-            {/* Dải lan can kim loại đỏ HUST (hoặc chỉ xám hiện đại cho cao ốc D8) */}
             <mesh position={[0, 0.42, 0.08]}>
               <boxGeometry args={[along - 0.6, 0.12, 0.06]} />
               <meshStandardMaterial color={isHighRise ? '#475569' : HUST_RAIL_RED} roughness={0.55} metalness={0.25} />
@@ -715,28 +873,20 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
           </group>
         ))}
 
-        {/* Cửa sổ các tầng (tự động phát sáng ấm áp khi về chiều tối / ban đêm) */}
-        {wins.map((wn, i) => {
-          const glow = isNight && wn.lit;
-          return (
-            <group key={`win-${i}`} position={[wn.u, wn.y, 0.02]}>
-              <mesh position={[0, 0, -0.01]}>
-                <planeGeometry args={[1.42, 1.22]} />
-                <meshStandardMaterial color={WINDOW_FRAME} roughness={0.85} />
-              </mesh>
-              <mesh position={[0, 0, 0.01]}>
-                <planeGeometry args={[1.24, 1.04]} />
-                <meshStandardMaterial
-                  color={glow ? '#FFE59E' : WINDOW_TONE}
-                  emissive={glow ? '#FFB84D' : '#000000'}
-                  emissiveIntensity={glow ? 0.7 : 0}
-                  roughness={0.35}
-                  metalness={0.2}
-                />
-              </mesh>
-            </group>
-          );
-        })}
+        {/* Cửa sổ 3D các tầng phía sau thanh lan can */}
+        <WindowGrid3D
+          position={[0, 0, 0.03]}
+          colXs={winColXs}
+          rowYs={winRowYs}
+          winW={1.36}
+          winH={1.12}
+          frameColor={WINDOW_FRAME}
+          sillColor="#CBD5E1"
+          glassColor={WINDOW_TONE}
+          isNight={isNight}
+          seedOffset={b.code.charCodeAt(0) + 251}
+          withRainHood={false}
+        />
 
         {/* Biển tên giảng đường gắn gần cổ mái */}
         <LabelPlane
@@ -756,12 +906,12 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
             ctx.fillText(`NHÀ ${b.code}`, w / 2, h / 2 + 2);
           }}
           size={[isHighRise ? 2.6 : 2.1, isHighRise ? 0.9 : 0.75]}
-          position={[-along / 2 + 1.8, b.h - 0.75, 0.09]}
+          position={[-along / 2 + 1.8, b.h - 0.75, 0.14]}
           transparent={false}
         />
       </group>
 
-      {/* Mặt sau: dải gờ tầng + hệ cửa sổ thông gió giúp tòa nhà nhìn từ mọi phía đều có chiều sâu kiến trúc */}
+      {/* Mặt sau: dải gờ tầng + hệ cửa sổ 3D có bệ đá & ô văng che mưa */}
       <group position={[-faceOffset[0], 0, -faceOffset[2]]} rotation-y={faceRotY + Math.PI}>
         {upperFloors.map((fl) => (
           <mesh key={`back-ledge-${fl}`} position={[0, fl * floorH - 0.06, 0.03]}>
@@ -769,27 +919,19 @@ function BackgroundBuilding({ b, isNight }: { b: LectureBuildingSpec; isNight: b
             <meshStandardMaterial color={WINDOW_FRAME} roughness={0.86} />
           </mesh>
         ))}
-        {wins.map((wn, i) => {
-          const glow = isNight && wn.lit;
-          return (
-            <group key={`back-win-${i}`} position={[wn.u, wn.y, 0.02]}>
-              <mesh position={[0, 0, -0.01]}>
-                <planeGeometry args={[1.36, 1.14]} />
-                <meshStandardMaterial color={WINDOW_FRAME} roughness={0.85} />
-              </mesh>
-              <mesh position={[0, 0, 0.01]}>
-                <planeGeometry args={[1.18, 0.96]} />
-                <meshStandardMaterial
-                  color={glow ? '#FFE59E' : WINDOW_TONE}
-                  emissive={glow ? '#FFB84D' : '#000000'}
-                  emissiveIntensity={glow ? 0.65 : 0}
-                  roughness={0.35}
-                  metalness={0.2}
-                />
-              </mesh>
-            </group>
-          );
-        })}
+        <WindowGrid3D
+          position={[0, 0, 0]}
+          colXs={winColXs}
+          rowYs={winRowYs}
+          winW={1.32}
+          winH={1.08}
+          frameColor={WINDOW_FRAME}
+          sillColor="#CBD5E1"
+          glassColor={WINDOW_TONE}
+          isNight={isNight}
+          seedOffset={b.code.charCodeAt(0) + 271}
+          withAcUnits={isHighRise}
+        />
       </group>
 
       {/* Biển phụ gắn đầu hồi Tây cho cụm D3 – D5 – D7 hướng về phía sân Thư viện Tạ Quang Bửu */}
@@ -914,9 +1056,40 @@ function CampusSignpost({ x, z, rotationY = 0 }: { x: number; z: number; rotatio
   );
 }
 
+let sharedParkedScooterShellGeo: THREE.BufferGeometry | null = null;
+function getParkedScooterShellGeometry(): THREE.BufferGeometry | null {
+  if (typeof document === 'undefined') return null;
+  if (sharedParkedScooterShellGeo) return sharedParkedScooterShellGeo;
+  const s = new THREE.Shape();
+  s.moveTo(-0.56, 0.34);
+  s.quadraticCurveTo(-0.46, 0.62, -0.34, 0.72);
+  s.quadraticCurveTo(-0.24, 0.78, -0.22, 0.68);
+  s.quadraticCurveTo(-0.18, 0.38, -0.02, 0.36);
+  s.lineTo(0.14, 0.36);
+  s.quadraticCurveTo(0.24, 0.56, 0.52, 0.58);
+  s.quadraticCurveTo(0.58, 0.52, 0.54, 0.4);
+  s.lineTo(0.2, 0.24);
+  s.lineTo(-0.24, 0.22);
+  s.quadraticCurveTo(-0.44, 0.24, -0.56, 0.34);
+  const g = new THREE.ExtrudeGeometry(s, {
+    depth: 0.28,
+    bevelEnabled: true,
+    bevelThickness: 0.03,
+    bevelSize: 0.024,
+    bevelSegments: 2,
+    curveSegments: 10,
+  });
+  g.translate(0, 0, -0.14);
+  g.rotateY(-Math.PI / 2);
+  sharedParkedScooterShellGeo = g;
+  return sharedParkedScooterShellGeo;
+}
+
 // --- Điểm trông giữ xe D4-6-8 mở rộng có mái che tôn xanh + dãy xe máy sinh viên (chuẩn https://hustmap.com/) ----
 function BikeParkingShed() {
   const { center, size } = BIKE_PARKING_SHED;
+  const pbr = useMemo(() => getSharedBuildingPbrTextures(), []);
+  const scooterShellGeo = useMemo(() => getParkedScooterShellGeometry(), []);
   return (
     <group position={[center.x, 0, center.z]}>
       {/* Nền bê tông nhà xe 14.8 × 5.0 m */}
@@ -924,7 +1097,7 @@ function BikeParkingShed() {
         <boxGeometry args={[size.x, 0.06, size.z]} />
         <meshStandardMaterial color="#9E9E98" roughness={0.95} />
       </mesh>
-      {/* 8 cột thép đỡ mái */}
+      {/* 8 cột thép đỡ mái + xà gồ ngang */}
       {[-6.6, -2.2, 2.2, 6.6].map((px) =>
         [-2.1, 2.1].map((pz) => (
           <mesh key={`shed-col-${px}-${pz}`} position={[px, 1.35, pz]} castShadow>
@@ -933,32 +1106,92 @@ function BikeParkingShed() {
           </mesh>
         )),
       )}
-      {/* Mái tôn xanh dương chuẩn nhà xe sinh viên Bách Khoa */}
-      <mesh position={[0, 2.72, 0]} rotation={[0.06, 0, 0]} castShadow>
-        <boxGeometry args={[size.x + 0.6, 0.14, size.z + 0.6]} />
-        <meshStandardMaterial color="#2E6B9E" roughness={0.62} metalness={0.28} />
+      {[-6.6, -2.2, 2.2, 6.6].map((px) => (
+        <mesh key={`shed-beam-${px}`} position={[px, 2.64, 0]} rotation={[0.06, 0, 0]}>
+          <boxGeometry args={[0.08, 0.1, size.z - 0.3]} />
+          <meshStandardMaterial color="#334155" roughness={0.5} metalness={0.5} />
+        </mesh>
+      ))}
+      {/* Mái tôn xanh dương gợn sóng PBR chuẩn nhà xe sinh viên Bách Khoa */}
+      <mesh position={[0, 2.74, 0]} rotation={[0.06, 0, 0]} castShadow>
+        <boxGeometry args={[size.x + 0.6, 0.12, size.z + 0.6]} />
+        <meshStandardMaterial
+          color="#2E6B9E"
+          bumpMap={pbr?.ribbedMetalBump}
+          bumpScale={0.025}
+          roughness={0.48}
+          metalness={0.38}
+        />
       </mesh>
-      {/* Dãy xe máy sinh viên đỗ gọn trong nhà xe D4-6-8 */}
+      {/* Dãy xe máy tay ga 3D bo cong đỗ gọn trong nhà xe D4-6-8 */}
       {[-5.4, -3.8, -2.2, -0.6, 1.0, 2.6, 4.2, 5.6].map((mx, idx) => {
         const colors = ['#1E293B', '#991B1B', '#1D4ED8', '#F8FAFC', '#0F766E'];
         const col = colors[idx % colors.length];
         return (
-          <group key={`d468-moto-${idx}`} position={[mx, 0, idx % 2 === 0 ? -0.9 : 0.9]}>
-            <mesh position={[0, 0.24, -0.45]} rotation={[0, Math.PI / 2, 0]}>
-              <torusGeometry args={[0.17, 0.05, 8, 12]} />
-              <meshStandardMaterial color="#18181B" roughness={0.85} />
+          <group
+            key={`d468-moto-${idx}`}
+            position={[mx, 0, idx % 2 === 0 ? -0.9 : 0.9]}
+            rotation-z={0.06}
+          >
+            {/* Lốp trước & sau + vành đúc */}
+            {[-0.44, 0.44].map((wz, wi) => (
+              <group key={`w-${wi}`} position={[0, 0.22, wz]}>
+                <mesh rotation={[0, Math.PI / 2, 0]}>
+                  <torusGeometry args={[0.17, 0.052, 8, 14]} />
+                  <meshStandardMaterial color="#18181B" roughness={0.85} />
+                </mesh>
+                <mesh rotation={[0, 0, Math.PI / 2]}>
+                  <cylinderGeometry args={[0.11, 0.11, 0.05, 10]} />
+                  <meshStandardMaterial color="#94A3B8" roughness={0.4} metalness={0.65} />
+                </mesh>
+              </group>
+            ))}
+            {/* Chắn bùn trước cong ôm bánh */}
+            <mesh position={[0, 0.34, -0.44]} rotation={[Math.PI * 0.2, 0, 0]}>
+              <cylinderGeometry args={[0.21, 0.21, 0.12, 10, 1, true, -Math.PI * 0.38, Math.PI * 0.76]} />
+              <meshStandardMaterial color={col} roughness={0.32} metalness={0.45} side={THREE.DoubleSide} />
             </mesh>
-            <mesh position={[0, 0.24, 0.45]} rotation={[0, Math.PI / 2, 0]}>
-              <torusGeometry args={[0.17, 0.05, 8, 12]} />
-              <meshStandardMaterial color="#18181B" roughness={0.85} />
-            </mesh>
-            <mesh position={[0, 0.52, 0.05]} castShadow>
-              <boxGeometry args={[0.36, 0.34, 1.05]} />
-              <meshStandardMaterial color={col} roughness={0.35} metalness={0.4} />
-            </mesh>
-            <mesh position={[0, 0.72, 0.12]}>
-              <boxGeometry args={[0.3, 0.1, 0.62]} />
+            {/* Thân vỏ ExtrudeGeometry bo cong khí động học */}
+            {scooterShellGeo && (
+              <mesh geometry={scooterShellGeo} castShadow>
+                <meshStandardMaterial color={col} roughness={0.28} metalness={0.5} envMapIntensity={1.2} />
+              </mesh>
+            )}
+            {/* Yên 2 tầng da đen */}
+            <mesh position={[0, 0.59, 0.2]} rotation={[0.08, 0, 0]}>
+              <capsuleGeometry args={[0.11, 0.36, 4, 8]} />
               <meshStandardMaterial color="#1E293B" roughness={0.8} />
+            </mesh>
+            {/* Tay lái + 2 gương tròn + cụm đồng hồ */}
+            <mesh position={[0, 0.78, -0.28]} rotation-z={Math.PI / 2}>
+              <cylinderGeometry args={[0.02, 0.02, 0.46, 8]} />
+              <meshStandardMaterial color="#1E293B" roughness={0.45} metalness={0.55} />
+            </mesh>
+            {[-0.2, 0.2].map((gx) => (
+              <group key={`m-${gx}`} position={[gx, 0.85, -0.28]}>
+                <mesh rotation-z={gx > 0 ? -0.25 : 0.25}>
+                  <cylinderGeometry args={[0.008, 0.008, 0.12, 6]} />
+                  <meshStandardMaterial color="#CBD5E1" metalness={0.8} roughness={0.25} />
+                </mesh>
+                <mesh position={[gx > 0 ? 0.02 : -0.02, 0.07, 0]}>
+                  <cylinderGeometry args={[0.038, 0.038, 0.015, 10]} />
+                  <meshStandardMaterial color="#E2E8F0" metalness={0.75} roughness={0.2} />
+                </mesh>
+              </group>
+            ))}
+            {/* Pô xe mạ & biển số trắng phía sau */}
+            <mesh position={[0.14, 0.25, 0.32]} rotation-x={Math.PI / 2 - 0.12}>
+              <cylinderGeometry args={[0.036, 0.04, 0.42, 8]} />
+              <meshStandardMaterial color="#CBD5E1" metalness={0.75} roughness={0.28} />
+            </mesh>
+            <mesh position={[0, 0.46, 0.56]} rotation-x={0.22}>
+              <boxGeometry args={[0.14, 0.1, 0.015]} />
+              <meshStandardMaterial color="#F8FAFC" roughness={0.5} />
+            </mesh>
+            {/* Chân chống nghiêng */}
+            <mesh position={[-0.08, 0.12, 0.05]} rotation-z={0.35}>
+              <cylinderGeometry args={[0.01, 0.01, 0.24, 6]} />
+              <meshStandardMaterial color="#334155" metalness={0.6} roughness={0.4} />
             </mesh>
           </group>
         );

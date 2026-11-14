@@ -13,10 +13,12 @@
 // cho mobile.
 // ---------------------------------------------------------------------------
 
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CLASSROOM } from '../../lib/campus';
+import type { TimeOfDay } from '../../lib/playerState';
+import { getSharedBuildingPbrTextures, makeLightShaftTexture, makeWoodGrainTexture } from './materials';
 import { LabelPlane } from './TextPlate';
 import { TeacherNpc } from './Npc';
 
@@ -25,6 +27,7 @@ export type HomeworkState = 'desk' | 'hand' | 'teacher';
 export interface ClassroomProps {
   notebookOpen: boolean;
   homework: HomeworkState;
+  timeOfDay?: TimeOfDay;
   onObjectClick: (id: string) => void;
 }
 
@@ -68,7 +71,19 @@ function drawRoomSign(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillText('Đại học Bách Khoa Hà Nội — Học HSK theo từng bài', w / 2, h * 0.72);
 }
 
-function Desk({ x, z, id, onObjectClick }: { x: number; z: number; id: string; onObjectClick: (id: string) => void }) {
+function Desk({
+  x,
+  z,
+  id,
+  woodTex,
+  onObjectClick,
+}: {
+  x: number;
+  z: number;
+  id: string;
+  woodTex: THREE.CanvasTexture;
+  onObjectClick: (id: string) => void;
+}) {
   const click = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
     onObjectClick(id);
@@ -85,7 +100,7 @@ function Desk({ x, z, id, onObjectClick }: { x: number; z: number; id: string; o
       {/* Mặt bàn 1,2 × 0,6 m, cao 0,75 m (đúng tỉ lệ avatar 1,7 m). */}
       <mesh position={[0, 0.75, 0]} onClick={click} onPointerOver={hover} onPointerOut={leave}>
         <boxGeometry args={[1.2, 0.05, 0.6]} />
-        <meshStandardMaterial color={DESK_WOOD} roughness={0.8} />
+        <meshStandardMaterial color={DESK_WOOD} map={woodTex} roughness={0.78} />
       </mesh>
       {[[-0.55, -0.25], [0.55, -0.25], [-0.55, 0.25], [0.55, 0.25]].map(([lx, lz]) => (
         <mesh key={`${lx},${lz}`} position={[lx, 0.375, lz]}>
@@ -97,11 +112,11 @@ function Desk({ x, z, id, onObjectClick }: { x: number; z: number; id: string; o
       <group position={[0, 0, 0.55]}>
         <mesh position={[0, 0.45, 0]}>
           <boxGeometry args={[0.42, 0.05, 0.42]} />
-          <meshStandardMaterial color={CHAIR_WOOD} roughness={0.85} />
+          <meshStandardMaterial color={CHAIR_WOOD} map={woodTex} roughness={0.85} />
         </mesh>
         <mesh position={[0, 0.72, 0.2]}>
           <boxGeometry args={[0.42, 0.55, 0.05]} />
-          <meshStandardMaterial color={CHAIR_WOOD} roughness={0.85} />
+          <meshStandardMaterial color={CHAIR_WOOD} map={woodTex} roughness={0.85} />
         </mesh>
         {[[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]].map(([lx, lz]) => (
           <mesh key={`${lx},${lz}`} position={[lx, 0.225, lz]}>
@@ -114,9 +129,27 @@ function Desk({ x, z, id, onObjectClick }: { x: number; z: number; id: string; o
   );
 }
 
-export default function Classroom({ notebookOpen, homework, onObjectClick }: ClassroomProps) {
+export default function Classroom({
+  notebookOpen,
+  homework,
+  timeOfDay = 'day',
+  onObjectClick,
+}: ClassroomProps) {
   const coverRef = useRef<THREE.Group>(null!);
   const homeworkRef = useRef<THREE.Group>(null!);
+  const pbr = useMemo(() => getSharedBuildingPbrTextures(), []);
+  const woodTex = useMemo(() => makeWoodGrainTexture(3, 3), []);
+  const sunShaftGeo = useMemo(() => new THREE.PlaneGeometry(3.2, 2.7), []);
+  const sunShaftTex = useMemo(() => makeLightShaftTexture(), []);
+
+  useEffect(
+    () => () => {
+      woodTex.dispose();
+      sunShaftGeo.dispose();
+      sunShaftTex.dispose();
+    },
+    [woodTex, sunShaftGeo, sunShaftTex],
+  );
 
   // Animation vở + bài tập: nội suy mỗi frame về trạng thái đích.
   useFrame((_, rawDelta) => {
@@ -152,14 +185,20 @@ export default function Classroom({ notebookOpen, homework, onObjectClick }: Cla
     document.body.style.cursor = 'auto';
   };
 
+  const isNight = timeOfDay === 'night';
+  const isSunset = timeOfDay === 'sunset';
+  const winColor = isNight ? '#162442' : isSunset ? '#FFB076' : '#CBEBFB';
+  const winEmissive = isNight ? '#1E3A5F' : isSunset ? '#FF8C42' : '#9AD8F5';
+  const winEmissiveIntensity = isNight ? 0.24 : isSunset ? 0.85 : 0.55;
+
   return (
     <group>
-      {/* Sàn gỗ 9 × 6 m. */}
+      {/* Sàn gỗ 9 × 6 m có vân thớ gỗ tự nhiên */}
       <mesh position={[0, -0.05, 0]} receiveShadow>
         <boxGeometry args={[9, 0.1, 6]} />
-        <meshStandardMaterial color={FLOOR} roughness={0.85} />
+        <meshStandardMaterial color={FLOOR} map={woodTex} roughness={0.82} />
       </mesh>
-      {/* Trần phòng học 9,2 × 6,2 m + dải đèn tuýp âm trần chiếu sáng lớp học (không castShadow để giữ sáng đều). */}
+      {/* Trần phòng học 9,2 × 6,2 m + dải đèn tuýp âm trần (tăng sáng ấm áp vào ban đêm) */}
       <mesh position={[0, 3.06, 0]}>
         <boxGeometry args={[9.2, 0.12, 6.2]} />
         <meshStandardMaterial color="#FAF8F2" roughness={0.88} />
@@ -167,10 +206,19 @@ export default function Classroom({ notebookOpen, homework, onObjectClick }: Cla
       {[-2.4, 0, 2.4].map((lx) => (
         <mesh key={`classroom-ceil-light-${lx}`} position={[lx, 2.99, 0]}>
           <boxGeometry args={[0.36, 0.02, 3.8]} />
-          <meshStandardMaterial color="#FFFDF7" emissive="#FFE8B0" emissiveIntensity={0.9} />
+          <meshStandardMaterial
+            color="#FFFDF7"
+            emissive="#FFE8B0"
+            emissiveIntensity={isNight ? 1.45 : isSunset ? 1.15 : 0.9}
+          />
         </mesh>
       ))}
-      <pointLight position={[0, 2.85, 0]} color="#FFF9E6" intensity={0.65} distance={14} />
+      <pointLight
+        position={[0, 2.85, 0]}
+        color={isNight ? '#FFF2CC' : isSunset ? '#FFE4B8' : '#FFF9E6'}
+        intensity={isNight ? 1.05 : isSunset ? 0.8 : 0.65}
+        distance={14}
+      />
       {/* Vân sàn (dải gỗ sẫm, chống phẳng lì). */}
       {[-2.5, -1.5, -0.5, 0.5, 1.5, 2.5].map((z) => (
         <mesh key={z} position={[0, 0.002, z]}>
@@ -178,36 +226,87 @@ export default function Classroom({ notebookOpen, homework, onObjectClick }: Cla
           <meshStandardMaterial color={FLOOR_DARK} roughness={0.9} />
         </mesh>
       ))}
-      {/* Tường bắc (có bảng) + tường đông/tây. */}
+      {/* Tường bắc (có bảng) + tường đông/tây + tường nam ốp vữa PBR */}
       <mesh position={[0, 1.5, -3.05]}>
         <boxGeometry args={[9.2, 3, 0.2]} />
-        <meshStandardMaterial color={WALL} roughness={0.9} />
+        <meshStandardMaterial
+          color={WALL}
+          map={pbr?.plaster.map}
+          bumpMap={pbr?.plaster.bumpMap}
+          bumpScale={0.01}
+          roughness={0.9}
+        />
       </mesh>
       <mesh position={[-4.55, 1.5, 0]}>
         <boxGeometry args={[0.2, 3, 6.2]} />
-        <meshStandardMaterial color={WALL} roughness={0.9} />
+        <meshStandardMaterial
+          color={WALL}
+          map={pbr?.plaster.map}
+          bumpMap={pbr?.plaster.bumpMap}
+          bumpScale={0.01}
+          roughness={0.9}
+        />
       </mesh>
       <mesh position={[4.55, 1.5, 0]}>
         <boxGeometry args={[0.2, 3, 6.2]} />
-        <meshStandardMaterial color={WALL} roughness={0.9} />
+        <meshStandardMaterial
+          color={WALL}
+          map={pbr?.plaster.map}
+          bumpMap={pbr?.plaster.bumpMap}
+          bumpScale={0.01}
+          roughness={0.9}
+        />
       </mesh>
       {/* Tường nam: hai đoạn + lanh-tô trên cửa (cửa rộng 1,2 m ở giữa). */}
       <mesh position={[-2.55, 1.5, 3.05]}>
         <boxGeometry args={[4.1, 3, 0.2]} />
-        <meshStandardMaterial color={WALL} roughness={0.9} />
+        <meshStandardMaterial
+          color={WALL}
+          map={pbr?.plaster.map}
+          bumpMap={pbr?.plaster.bumpMap}
+          bumpScale={0.01}
+          roughness={0.9}
+        />
       </mesh>
       <mesh position={[2.55, 1.5, 3.05]}>
         <boxGeometry args={[4.1, 3, 0.2]} />
-        <meshStandardMaterial color={WALL} roughness={0.9} />
+        <meshStandardMaterial
+          color={WALL}
+          map={pbr?.plaster.map}
+          bumpMap={pbr?.plaster.bumpMap}
+          bumpScale={0.01}
+          roughness={0.9}
+        />
       </mesh>
       <mesh position={[0, 2.6, 3.05]}>
         <boxGeometry args={[1.2, 0.8, 0.2]} />
-        <meshStandardMaterial color={WALL} roughness={0.9} />
+        <meshStandardMaterial color={WALL} map={pbr?.plaster.map} roughness={0.9} />
+      </mesh>
+      {/* Phào chân tường gỗ chạy quanh phòng học */}
+      <mesh position={[0, 0.06, -2.935]}>
+        <boxGeometry args={[8.9, 0.12, 0.03]} />
+        <meshStandardMaterial color={CHAIR_WOOD} roughness={0.82} />
+      </mesh>
+      <mesh position={[-4.435, 0.06, 0]}>
+        <boxGeometry args={[0.03, 0.12, 5.9]} />
+        <meshStandardMaterial color={CHAIR_WOOD} roughness={0.82} />
+      </mesh>
+      <mesh position={[4.435, 0.06, 0]}>
+        <boxGeometry args={[0.03, 0.12, 5.9]} />
+        <meshStandardMaterial color={CHAIR_WOOD} roughness={0.82} />
+      </mesh>
+      <mesh position={[-2.55, 0.06, 2.935]}>
+        <boxGeometry args={[3.9, 0.12, 0.03]} />
+        <meshStandardMaterial color={CHAIR_WOOD} roughness={0.82} />
+      </mesh>
+      <mesh position={[2.55, 0.06, 2.935]}>
+        <boxGeometry args={[3.9, 0.12, 0.03]} />
+        <meshStandardMaterial color={CHAIR_WOOD} roughness={0.82} />
       </mesh>
       {/* Cánh cửa mở hé (gỗ). */}
       <mesh position={[0.55, 1.1, 2.85]} rotation={[0, 0.7, 0]}>
         <boxGeometry args={[1.1, 2.2, 0.06]} />
-        <meshStandardMaterial color="#7A5C38" roughness={0.8} />
+        <meshStandardMaterial color="#7A5C38" map={woodTex} roughness={0.8} />
       </mesh>
 
       {/* Bảng đen lớn tường bắc: 3,4 × 1,2 m, chữ phấn đọc rõ. */}
@@ -241,12 +340,33 @@ export default function Classroom({ notebookOpen, homework, onObjectClick }: Cla
         transparent={false}
       />
 
-      {/* Cửa sổ tường đông (vật gây nhiễu bước chọn bảng). */}
+      {/* Cửa sổ tường đông đồng bộ thời gian Ngày / Hoàng hôn / Đêm */}
       <group position={[4.44, 1.6, -0.8]} rotation={[0, -Math.PI / 2, 0]}>
         <mesh onClick={clickObj('window')} onPointerOver={hover} onPointerOut={leave}>
           <boxGeometry args={[1.4, 1.5, 0.06]} />
-          <meshStandardMaterial color="#BFE3F0" roughness={0.3} emissive="#9FC8DC" emissiveIntensity={0.4} />
+          <meshStandardMaterial
+            color={winColor}
+            roughness={0.28}
+            emissive={winEmissive}
+            emissiveIntensity={winEmissiveIntensity}
+          />
         </mesh>
+        {isNight && (
+          <>
+            {[
+              [-0.42, 0.45],
+              [0.35, 0.52],
+              [-0.22, 0.18],
+              [0.44, -0.25],
+              [-0.36, -0.35],
+            ].map(([sx, sy], si) => (
+              <mesh key={`star-${si}`} position={[sx, sy, 0.036]}>
+                <circleGeometry args={[0.02, 6]} />
+                <meshBasicMaterial color="#FFFBEB" />
+              </mesh>
+            ))}
+          </>
+        )}
         <mesh position={[0, 0, 0.05]}>
           <boxGeometry args={[1.5, 0.08, 0.04]} />
           <meshStandardMaterial color="#FFFFFF" roughness={0.8} />
@@ -256,6 +376,30 @@ export default function Classroom({ notebookOpen, homework, onObjectClick }: Cla
           <meshStandardMaterial color="#FFFFFF" roughness={0.8} />
         </mesh>
       </group>
+
+      {/* Luồng nắng mềm nghiêng qua cửa sổ tường Đông xuống sàn & bàn học (tắt về đêm) */}
+      {!isNight && (
+        <group position={[3.15, 1.08, -0.8]} rotation={[0, 0, -0.92]}>
+          {[0, Math.PI / 2].map((rotY, idx) => (
+            <mesh
+              key={`sun-shaft-${idx}`}
+              geometry={sunShaftGeo}
+              rotation={[0, rotY, 0]}
+              raycast={() => null}
+            >
+              <meshBasicMaterial
+                map={sunShaftTex}
+                color={isSunset ? '#FFB060' : '#FFF6D8'}
+                transparent
+                opacity={isSunset ? 0.24 : 0.16}
+                blending={THREE.AdditiveBlending}
+                depthWrite={false}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          ))}
+        </group>
+      )}
 
       {/* Đồng hồ tường nam (vật gây nhiễu). */}
       <group position={[-3, 2.2, 2.93]} rotation={[0, Math.PI, 0]}>
@@ -277,7 +421,7 @@ export default function Classroom({ notebookOpen, homework, onObjectClick }: Cla
       <group position={[-4.35, 0, 0.8]} onClick={clickObj('shelf')} onPointerOver={hover} onPointerOut={leave}>
         <mesh position={[0, 1.1, 0]}>
           <boxGeometry args={[0.4, 2.2, 1.8]} />
-          <meshStandardMaterial color="#7A5C38" roughness={0.85} />
+          <meshStandardMaterial color="#7A5C38" map={woodTex} roughness={0.85} />
         </mesh>
         {['#A54432', '#2E7D32', '#1F5C8A', '#C9A227', '#6A4C93'].map((c, i) => (
           <mesh key={c} position={[0.05, 0.55 + Math.floor(i / 3) * 0.6, -0.6 + (i % 3) * 0.5]}>
@@ -289,7 +433,7 @@ export default function Classroom({ notebookOpen, homework, onObjectClick }: Cla
 
       {/* 3 bàn học + ghế. */}
       {CLASSROOM.desks.map((d, i) => (
-        <Desk key={i} x={d.x} z={d.z} id="desk" onObjectClick={onObjectClick} />
+        <Desk key={i} x={d.x} z={d.z} id="desk" woodTex={woodTex} onObjectClick={onObjectClick} />
       ))}
 
       {/* Vở 笔记 trên bàn 1: trang + nắp xoay mở (bản lề ở mép bắc). */}

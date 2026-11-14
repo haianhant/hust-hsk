@@ -33,20 +33,21 @@ import {
   libraryNavigationController,
   type LibraryFloor,
 } from '../../lib/campus';
-import { playerState } from '../../lib/playerState';
+import { playerState, type TimeOfDay } from '../../lib/playerState';
 import { multiplayer } from '../../lib/multiplayer';
-import { makeGraniteStoneTexture } from './materials';
+import { makeGraniteStoneTexture, makeLightShaftTexture } from './materials';
 import { LabelPlane } from './TextPlate';
 
 export interface LibraryLobbyProps {
   activeSeatId?: string | null;
   nearestSeatId?: string | null;
+  timeOfDay?: TimeOfDay;
   onObjectClick?: (id: string) => void;
 }
 
 const WOOD_DARK = '#3B2214';
 const WOOD_MID = '#54321E';
-const BRONZE_DARK = '#4A3623';
+const BRONZE_DARK = '#664B32';
 const GOLD_BRASS = '#D4AF37';
 const VELVET_RED = '#A81C24';
 const AMBER_GLOW = '#FFB627';
@@ -222,10 +223,13 @@ function drawInfoDeskSign(ctx: CanvasRenderingContext2D, w: number, h: number) {
 export default function LibraryLobby({
   activeSeatId = null,
   nearestSeatId = null,
+  timeOfDay = 'day',
   onObjectClick,
 }: LibraryLobbyProps) {
   const binaryWall = useMemo(() => makeBinaryWallTextures(), []);
   const granitePbr = useMemo(() => makeGraniteStoneTexture(2, 2), []);
+  const atriumBeamGeo = useMemo(() => new THREE.PlaneGeometry(11.5, 16.5), []);
+  const atriumBeamTex = useMemo(() => makeLightShaftTexture(), []);
 
   // Khởi tạo 3 phân khu kiến trúc đa tầng của Thư viện Tạ Quang Bửu (Tầng 1–5, Tầng 6–7, Sân thượng Tầng 10)
   // Các tầng trên (Tầng 2–5 nội thất hành lang/phòng đọc, Khối B Tầng 6–7, Khối D Tầng 10)
@@ -259,6 +263,7 @@ export default function LibraryLobby({
   const floor1AnchorsRef = useRef<THREE.Group>(null);
   const floor6InteractiveRef = useRef<THREE.Group>(null);
   const floor10InteractiveRef = useRef<THREE.Group>(null);
+  const atriumBeamRef = useRef<THREE.Group>(null);
   const debugOverlayRef = useRef<THREE.Group>(null);
   const debugFloorRenderedRef = useRef<LibraryFloor | null>(null);
   const perfStatsRef = useRef({ lastFrameDeltaMs: 0, maxFrameDeltaMs: 0 });
@@ -329,6 +334,8 @@ export default function LibraryLobby({
       binaryWall.emissiveMap.dispose();
       granitePbr.map.dispose();
       granitePbr.bumpMap.dispose();
+      atriumBeamGeo.dispose();
+      atriumBeamTex.dispose();
       multiFloor.disposeBlockB();
       disposeObject3D(multiFloor.groupA);
       disposeObject3D(multiFloor.groupB);
@@ -337,7 +344,7 @@ export default function LibraryLobby({
         disposeObject3D(debugOverlayRef.current);
       }
     };
-  }, [binaryWall, granitePbr, multiFloor]);
+  }, [binaryWall, granitePbr, atriumBeamGeo, atriumBeamTex, multiFloor]);
 
   useFrame((state, rawDelta) => {
     const dtMs = rawDelta * 1000;
@@ -386,6 +393,9 @@ export default function LibraryLobby({
     }
     if (floor10InteractiveRef.current && floor10InteractiveRef.current.visible !== showBlockD) {
       floor10InteractiveRef.current.visible = showBlockD;
+    }
+    if (atriumBeamRef.current && atriumBeamRef.current.visible !== showBlockA) {
+      atriumBeamRef.current.visible = showBlockA;
     }
 
     if (debugOverlayRef.current) {
@@ -447,10 +457,20 @@ export default function LibraryLobby({
     [1.18, -2.95],
   ];
 
+  const ambientColor =
+    timeOfDay === 'night' ? '#FFE4B5' : timeOfDay === 'sunset' ? '#FFD8A8' : '#FFF6E5';
+  const ambientIntensity = timeOfDay === 'night' ? 0.56 : timeOfDay === 'sunset' ? 0.48 : 0.44;
+  const binaryEmissiveIntensity =
+    timeOfDay === 'night' ? 1.5 : timeOfDay === 'sunset' ? 1.22 : 0.95;
+  const beamColor =
+    timeOfDay === 'night' ? '#FFD580' : timeOfDay === 'sunset' ? '#FFB36B' : '#FFF8E7';
+  const beamOpacity = timeOfDay === 'night' ? 0.045 : timeOfDay === 'sunset' ? 0.085 : 0.055;
+  const beamRotZ = timeOfDay === 'day' ? 0.14 : timeOfDay === 'sunset' ? -0.18 : 0;
+
   return (
     <group>
-      {/* Hệ thống ánh sáng ấm áp đa tầng cho Đại sảnh thông tầng & các tầng đọc sách (ambientLight giữ nguyên NUM_POINT_LIGHTS=0 để không phải biên dịch lại shader GLSL) */}
-      <ambientLight color="#FFEBC2" intensity={0.42} />
+      {/* Hệ thống ánh sáng ấm áp đồng bộ Ngày/Hoàng hôn/Đêm cho Đại sảnh & các tầng đọc (giữ nguyên NUM_POINT_LIGHTS=0 để không biên dịch lại shader GLSL) */}
+      <ambientLight color={ambientColor} intensity={ambientIntensity} />
 
       {/* =====================================================================
           3 PHÂN KHU KIẾN TRÚC ĐA TẦNG THƯ VIỆN TẠ QUANG BỬU (TẦNG 1–10)
@@ -458,6 +478,34 @@ export default function LibraryLobby({
       <primitive object={multiFloor.groupA} />
       <primitive object={multiFloor.groupB} />
       <primitive object={multiFloor.groupD} />
+
+      {/* Luồng ánh sáng giếng trời thông tầng mềm mại (chỉ bật ban ngày & hoàng hôn) */}
+      <group
+        ref={atriumBeamRef}
+        position={[0, 12.8, -1.5]}
+        rotation={[0, 0, beamRotZ]}
+        visible={timeOfDay !== 'night'}
+      >
+        {timeOfDay !== 'night' &&
+          [0, Math.PI / 2].map((rotY, idx) => (
+            <mesh
+              key={`atrium-beam-${idx}`}
+              geometry={atriumBeamGeo}
+              rotation={[0, rotY, 0]}
+              raycast={() => null}
+            >
+              <meshBasicMaterial
+                map={atriumBeamTex}
+                color={beamColor}
+                transparent
+                opacity={beamOpacity * 1.4}
+                blending={THREE.AdditiveBlending}
+                depthWrite={false}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          ))}
+      </group>
 
       {/* =====================================================================
           CÁC ĐIỂM TƯƠNG TÁC HỌC HSK & MULTIPLAYER SEATING TẠI SẢNH TẦNG 1
@@ -475,8 +523,8 @@ export default function LibraryLobby({
             <meshStandardMaterial
               map={binaryWall.map}
               emissiveMap={binaryWall.emissiveMap}
-              emissive={new THREE.Color(AMBER_GLOW)}
-              emissiveIntensity={0.95}
+              emissive={AMBER_GLOW}
+              emissiveIntensity={binaryEmissiveIntensity}
               roughness={0.5}
             />
           </mesh>

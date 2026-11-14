@@ -23,7 +23,7 @@ import Motorbike from './Motorbike';
 import CampusCheckinMarkers from '../../features/campus/checkin/CampusCheckinMarkers';
 import CampusAtmosphereFX from '../../features/campus/atmosphere/CampusAtmosphereFX';
 import CampusInteractiveLife from '../../features/campus/interactive/CampusInteractiveLife';
-import { makeSkyEnvEquirectTexture, makeSunHaloTexture } from './materials';
+import { makeCloudPuffTexture, makeSkyEnvEquirectTexture, makeSunHaloTexture } from './materials';
 import { libraryNavigationController } from '../../lib/campus';
 import { playerState, type TimeOfDay } from '../../lib/playerState';
 
@@ -91,16 +91,16 @@ const ATMOSPHERE: Record<
     fogFar: 520,
     hemiSky: '#dceefb',
     hemiGround: '#8a9a72',
-    hemiIntensity: 1.3,
+    hemiIntensity: 1.24,
     sunPos: [80, 100, 40],
     sunColor: '#ffffff',
-    sunIntensity: 1.6,
+    sunIntensity: 1.68,
     westFillColor: '#ffffff',
-    westFillIntensity: 0.7,
+    westFillIntensity: 0.52,
     southFillColor: '#fff2df',
-    southFillIntensity: 0.3,
+    southFillIntensity: 0.28,
     northFillColor: '#ffffff',
-    northFillIntensity: 0.5,
+    northFillIntensity: 0.38,
   },
   sunset: {
     bg: '#dfa074',
@@ -109,16 +109,16 @@ const ATMOSPHERE: Record<
     fogFar: 500,
     hemiSky: '#ffd4a3',
     hemiGround: '#7a6355',
-    hemiIntensity: 1.28,
+    hemiIntensity: 1.22,
     sunPos: [-95, 42, 18],
     sunColor: '#ff9e58',
-    sunIntensity: 1.65,
+    sunIntensity: 1.72,
     westFillColor: '#ffb87a',
-    westFillIntensity: 0.72,
+    westFillIntensity: 0.58,
     southFillColor: '#ffd9b3',
-    southFillIntensity: 0.45,
+    southFillIntensity: 0.36,
     northFillColor: '#e8c3a8',
-    northFillIntensity: 0.55,
+    northFillIntensity: 0.42,
   },
   night: {
     bg: '#131d31',
@@ -127,7 +127,7 @@ const ATMOSPHERE: Record<
     fogFar: 480,
     hemiSky: '#5876ab',
     hemiGround: '#2e3b32',
-    hemiIntensity: 0.98,
+    hemiIntensity: 0.96,
     sunPos: [-60, 95, -35],
     sunColor: '#b8d0ff',
     sunIntensity: 0.85,
@@ -136,6 +136,44 @@ const ATMOSPHERE: Record<
     southFillColor: '#FFE0A3',
     southFillIntensity: 0.42,
     northFillColor: '#88a4d4',
+    northFillIntensity: 0.48,
+  },
+};
+
+const INDOOR_ATMOSPHERE: Record<TimeOfDay, (typeof ATMOSPHERE)['day']> = {
+  day: ATMOSPHERE.day,
+  sunset: {
+    ...ATMOSPHERE.day,
+    bg: '#dfa074',
+    fogColor: '#e6b896',
+    hemiSky: '#ffe0bd',
+    hemiGround: '#8a6f5a',
+    hemiIntensity: 1.18,
+    sunPos: [48, 32, -8],
+    sunColor: '#ffb26b',
+    sunIntensity: 1.35,
+    westFillColor: '#ffd6ad',
+    westFillIntensity: 0.52,
+    southFillColor: '#ffe7c8',
+    southFillIntensity: 0.36,
+    northFillColor: '#f5dfc8',
+    northFillIntensity: 0.42,
+  },
+  night: {
+    ...ATMOSPHERE.day,
+    bg: '#131d31',
+    fogColor: '#1b263b',
+    hemiSky: '#d8e2f5',
+    hemiGround: '#6b5b4b',
+    hemiIntensity: 1.05,
+    sunPos: [18, 65, 16],
+    sunColor: '#ffe9c4',
+    sunIntensity: 0.95,
+    westFillColor: '#d9e3f2',
+    westFillIntensity: 0.48,
+    southFillColor: '#ffe4b8',
+    southFillIntensity: 0.46,
+    northFillColor: '#dce6f8',
     northFillIntensity: 0.48,
   },
 };
@@ -187,6 +225,7 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
   const cloudsRef = useRef<THREE.Group>(null!);
   const skyDomeTex = useMemo(() => makeSkyEnvEquirectTexture(timeOfDay), [timeOfDay]);
   const sunHaloTex = useMemo(() => makeSunHaloTexture(), []);
+  const cloudPuffTex = useMemo(() => makeCloudPuffTexture(), []);
   const starGeo = useMemo(() => {
     const g = new THREE.BufferGeometry();
     const count = 260;
@@ -213,8 +252,9 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
       starGeo.dispose();
       skyDomeTex.dispose();
       sunHaloTex.dispose();
+      cloudPuffTex.dispose();
     },
-    [starGeo, skyDomeTex, sunHaloTex],
+    [starGeo, skyDomeTex, sunHaloTex, cloudPuffTex],
   );
 
   useFrame(({ clock }) => {
@@ -225,6 +265,7 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
 
   const cloudColor =
     timeOfDay === 'day' ? '#F8FBFF' : timeOfDay === 'sunset' ? '#FFD2B3' : '#2C3E5A';
+  const cloudOpacity = timeOfDay === 'night' ? 0.32 : timeOfDay === 'sunset' ? 0.72 : 0.84;
 
   return (
     <group>
@@ -258,22 +299,30 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
         </group>
       )}
 
-      {/* Các cụm mây 3D xốp nhẹ trôi chậm trên bầu trời Hà Nội */}
+      {/* Các cụm mây bông mềm (Billboards xếp lớp mượt, không lộ ngấn giao cắt hình cầu) */}
       <group ref={cloudsRef}>
         {CLOUD_CLUSTERS.map((c, idx) => (
           <group key={`cloud-${idx}`} position={[c.x, c.y, c.z]} scale={c.scale}>
-            <mesh position={[0, 0, 0]} scale={[1.8, 0.65, 1.1]}>
-              <sphereGeometry args={[9, 14, 10]} />
-              <meshBasicMaterial color={cloudColor} transparent opacity={timeOfDay === 'night' ? 0.35 : 0.82} fog={false} />
-            </mesh>
-            <mesh position={[-8, -1.5, 2]} scale={[1.3, 0.55, 0.95]}>
-              <sphereGeometry args={[7.5, 12, 10]} />
-              <meshBasicMaterial color={cloudColor} transparent opacity={timeOfDay === 'night' ? 0.3 : 0.76} fog={false} />
-            </mesh>
-            <mesh position={[8.5, -1.2, -1.5]} scale={[1.4, 0.58, 1.0]}>
-              <sphereGeometry args={[7.8, 12, 10]} />
-              <meshBasicMaterial color={cloudColor} transparent opacity={timeOfDay === 'night' ? 0.3 : 0.76} fog={false} />
-            </mesh>
+            {[
+              { x: 0, y: 0, z: 0, w: 30, h: 17, op: 1.0 },
+              { x: -10, y: -1.6, z: 1.8, w: 22, h: 13.5, op: 0.9 },
+              { x: 10.5, y: -1.4, z: -1.4, w: 23, h: 14, op: 0.9 },
+              { x: 2.2, y: 3.4, z: 0.5, w: 20, h: 13, op: 0.85 },
+            ].map((p, pIdx) => (
+              <Billboard key={`puff-${idx}-${pIdx}`} position={[p.x, p.y, p.z]}>
+                <mesh>
+                  <planeGeometry args={[p.w, p.h]} />
+                  <meshBasicMaterial
+                    map={cloudPuffTex}
+                    color={cloudColor}
+                    transparent
+                    opacity={cloudOpacity * p.op}
+                    depthWrite={false}
+                    fog={false}
+                  />
+                </mesh>
+              </Billboard>
+            ))}
           </group>
         ))}
       </group>
@@ -338,6 +387,88 @@ function SkyAtmosphereAndNightLights({ timeOfDay }: { timeOfDay: TimeOfDay }) {
   );
 }
 
+/**
+ * Đèn mặt trời bám theo người chơi trên lưới 2 m (triệt tiêu rung mép bóng)
+ * thu hẹp frustum shadow-map từ 315×240 m xuống ±46 m -> bóng đổ sắc nét ~4×
+ * mà không tốn thêm 1 byte VRAM hay draw call nào.
+ */
+function PlayerCenteredSunLight({
+  atm,
+  isIndoor,
+}: {
+  atm: (typeof ATMOSPHERE)['day'];
+  isIndoor: boolean;
+}) {
+  const lightRef = useRef<THREE.DirectionalLight>(null!);
+  const targetObj = useMemo(() => new THREE.Object3D(), []);
+  const lastSnapRef = useRef<{ x: number; z: number; sx: number; sy: number; sz: number }>({
+    x: Number.NaN,
+    z: Number.NaN,
+    sx: Number.NaN,
+    sy: Number.NaN,
+    sz: Number.NaN,
+  });
+
+  useEffect(() => {
+    const light = lightRef.current;
+    if (!light) return;
+    const half = isIndoor ? 24 : 46;
+    const cam = light.shadow.camera;
+    cam.left = -half;
+    cam.right = half;
+    cam.top = half;
+    cam.bottom = -half;
+    cam.near = 8;
+    cam.far = 240;
+    cam.updateProjectionMatrix();
+    lastSnapRef.current.x = Number.NaN;
+  }, [isIndoor, atm.sunPos]);
+
+  useFrame(() => {
+    const light = lightRef.current;
+    if (!light) return;
+    const snapX = isIndoor ? 0 : Math.round(playerState.pos.x / 2) * 2;
+    const snapZ = isIndoor ? 0 : Math.round(playerState.pos.z / 2) * 2;
+    const [ox, oy, oz] = atm.sunPos;
+    const prev = lastSnapRef.current;
+    if (prev.x === snapX && prev.z === snapZ && prev.sx === ox && prev.sy === oy && prev.sz === oz) {
+      return;
+    }
+    prev.x = snapX;
+    prev.z = snapZ;
+    prev.sx = ox;
+    prev.sy = oy;
+    prev.sz = oz;
+    light.position.set(snapX + ox, oy, snapZ + oz);
+    targetObj.position.set(snapX, 0, snapZ);
+    targetObj.updateMatrixWorld();
+  });
+
+  return (
+    <>
+      <primitive object={targetObj} />
+      <directionalLight
+        ref={lightRef}
+        target={targetObj}
+        position={atm.sunPos}
+        color={atm.sunColor}
+        intensity={atm.sunIntensity}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-left={-46}
+        shadow-camera-right={46}
+        shadow-camera-top={46}
+        shadow-camera-bottom={-46}
+        shadow-camera-near={8}
+        shadow-camera-far={240}
+        shadow-bias={-0.00025}
+        shadow-normalBias={0.022}
+      />
+    </>
+  );
+}
+
 export default function CampusScene({
   inClassroom = false,
   inLibraryLobby = false,
@@ -370,7 +501,7 @@ export default function CampusScene({
   const atm = ATMOSPHERE[timeOfDay] ?? ATMOSPHERE.day;
   const isOpenAirRooftop = inLibraryLobby && libraryFloor === 10;
   const isIndoor = inClassroom || (inLibraryLobby && !isOpenAirRooftop);
-  const activeAtm = isIndoor ? ATMOSPHERE.day : atm;
+  const activeAtm = isIndoor ? (INDOOR_ATMOSPHERE[timeOfDay] ?? ATMOSPHERE.day) : atm;
 
   useEffect(() => {
     return () => {
@@ -391,29 +522,14 @@ export default function CampusScene({
       <ProceduralEnvironment timeOfDay={timeOfDay} />
 
       <hemisphereLight args={[activeAtm.hemiSky, activeAtm.hemiGround, activeAtm.hemiIntensity]} />
-      <directionalLight
-        position={activeAtm.sunPos}
-        color={activeAtm.sunColor}
-        intensity={activeAtm.sunIntensity}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-left={-140}
-        shadow-camera-right={175}
-        shadow-camera-top={125}
-        shadow-camera-bottom={-115}
-        shadow-camera-near={10}
-        shadow-camera-far={340}
-        shadow-bias={-0.0003}
-        shadow-normalBias={0.03}
-      />
+      <PlayerCenteredSunLight atm={activeAtm} isIndoor={isIndoor} />
       <directionalLight
         position={[-60, 40, -20]}
         color={activeAtm.westFillColor}
         intensity={activeAtm.westFillIntensity}
       />
       <directionalLight
-        position={[10, 30, 90]}
+        position={[10, isIndoor ? 65 : 30, isIndoor ? 45 : 90]}
         color={activeAtm.southFillColor}
         intensity={activeAtm.southFillIntensity}
       />
@@ -427,6 +543,7 @@ export default function CampusScene({
         <Classroom
           notebookOpen={notebookOpen}
           homework={homework}
+          timeOfDay={timeOfDay}
           onObjectClick={onObjectClick ?? (() => undefined)}
         />
       ) : inLibraryLobby ? (
@@ -445,6 +562,7 @@ export default function CampusScene({
           <LibraryLobby
             activeSeatId={activeSeatId}
             nearestSeatId={nearestSeatId}
+            timeOfDay={timeOfDay}
             onObjectClick={onObjectClick}
           />
         </>

@@ -63,7 +63,7 @@ export default function Landmarks({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay
       <C1Building timeOfDay={timeOfDay} />
       <ILoveBK isNight={isNight} />
       <LibraryBuilding timeOfDay={timeOfDay} />
-      <TienLake />
+      <TienLake timeOfDay={timeOfDay} />
       <C9Building timeOfDay={timeOfDay} />
       <WhiteRock />
       <C1Fountain isNight={isNight} />

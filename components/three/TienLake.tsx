@@ -44,14 +44,17 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { LAKE, LAKE_BANK, LAKE_BENCHES, LAKE_WILLOWS } from '../../lib/campus';
-import { playerState } from '../../lib/playerState';
+import { playerState, type TimeOfDay } from '../../lib/playerState';
 import {
   makeBarkTexture,
   makeFoliageCanopyTexture,
+  makeLakeWaterSurfaceTexture,
   makeSoftShadowTexture,
   makeStoneBankTexture,
   makeWalkwayBrickTexture,
+  makeWarmLightPoolTexture,
   makeWaterRippleBumpTexture,
+  makeWaterSecondaryRippleTexture,
   makeWoodGrainTexture,
 } from './materials';
 
@@ -762,25 +765,69 @@ const WALKWAYS: Array<{ cx: number; cz: number; w: number; l: number }> = [
   { cx: -3.25, cz: LAKE.center.z + LAKE.halfL + 1.3, w: 48.7, l: 1.4 }, // nam
 ];
 
-export function TienLake() {
+const LAKE_EDGE_REFLECTION_POINTS: ReadonlyArray<{ x: number; z: number; phase: number }> = [
+  { x: -23.7, z: 13, phase: 0.2 },
+  { x: -23.7, z: 32, phase: 1.1 },
+  { x: -23.7, z: 50, phase: 2.0 },
+  { x: -23.7, z: 66, phase: 2.9 },
+  { x: -23.7, z: 83, phase: 3.8 },
+  { x: 17.8, z: 14, phase: 0.7 },
+  { x: 17.8, z: 36, phase: 1.6 },
+  { x: 17.8, z: 60, phase: 2.5 },
+  { x: 17.8, z: 82, phase: 3.4 },
+];
+
+export function TienLake({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
   const w = LAKE.halfW * 2; // 45 m
   const l = LAKE.halfL * 2; // 88 m
   const willowSpecs = useMemo(() => buildWillowSpecs(), []);
   const waterRef = useRef<THREE.Mesh>(null);
+  const waterShimmerRef = useRef<THREE.Mesh>(null);
+  const reflectionRef = useRef<THREE.InstancedMesh>(null);
+  const reflDummy = useMemo(() => new THREE.Object3D(), []);
   const lakeTextures = useMemo(() => {
+    const lakeColorTex = makeLakeWaterSurfaceTexture();
     const waterBump = makeWaterRippleBumpTexture(10, 18);
+    const waterBump2 = makeWaterSecondaryRippleTexture(16, 28);
+    const warmPoolTex = makeWarmLightPoolTexture();
     const stoneBank = makeStoneBankTexture(16, 1);
     const walkwayBrick = makeWalkwayBrickTexture(2, 32);
     const barkPbr = makeBarkTexture(2, 4);
     const foliagePbr = makeFoliageCanopyTexture(3, 3);
     const woodTex = makeWoodGrainTexture(2, 1);
     const shadowTex = makeSoftShadowTexture();
-    return { waterBump, stoneBank, walkwayBrick, barkPbr, foliagePbr, woodTex, shadowTex };
+    const reflGeo = new THREE.PlaneGeometry(1, 1);
+    const reflMat = new THREE.MeshBasicMaterial({
+      map: warmPoolTex,
+      color: '#FFC870',
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    return {
+      lakeColorTex,
+      waterBump,
+      waterBump2,
+      warmPoolTex,
+      stoneBank,
+      walkwayBrick,
+      barkPbr,
+      foliagePbr,
+      woodTex,
+      shadowTex,
+      reflGeo,
+      reflMat,
+    };
   }, []);
 
   useEffect(
     () => () => {
+      lakeTextures.lakeColorTex.dispose();
       lakeTextures.waterBump.dispose();
+      lakeTextures.waterBump2.dispose();
+      lakeTextures.warmPoolTex.dispose();
       lakeTextures.stoneBank.dispose();
       lakeTextures.walkwayBrick.dispose();
       lakeTextures.barkPbr.map.dispose();
@@ -789,37 +836,94 @@ export function TienLake() {
       lakeTextures.foliagePbr.bumpMap.dispose();
       lakeTextures.woodTex.dispose();
       lakeTextures.shadowTex.dispose();
+      lakeTextures.reflGeo.dispose();
+      lakeTextures.reflMat.dispose();
     },
     [lakeTextures],
   );
 
-  // Gợn nhẹ, chậm: mặt nước dao động ±0,008 m quanh y = 0,05 + dịch chuyển
-  // vân sóng gợn (bumpMap offset) tạo hiệu ứng lấp lánh tự nhiên.
-  useFrame((state) => {
+  // Gợn nhẹ, chậm: mặt nước 2 lớp cuộn sóng chéo ngược pha + phản chiếu đèn ven bờ lung linh ban đêm.
+  useFrame((state, rawDelta) => {
+    const dt = Math.min(rawDelta, 0.05);
     const t = state.clock.elapsedTime;
+    const bob = WATER_Y + Math.sin(t * 0.45) * 0.008;
     if (waterRef.current) {
-      waterRef.current.position.y = WATER_Y + Math.sin(t * 0.45) * 0.008;
+      waterRef.current.position.y = bob;
     }
-    lakeTextures.waterBump.offset.x = (t * 0.032) % 1;
-    lakeTextures.waterBump.offset.y = (t * 0.022) % 1;
+    if (waterShimmerRef.current) {
+      waterShimmerRef.current.position.y = bob + 0.008;
+    }
+    lakeTextures.waterBump.offset.x = (lakeTextures.waterBump.offset.x + 0.016 * dt) % 1;
+    lakeTextures.waterBump.offset.y = (lakeTextures.waterBump.offset.y + 0.011 * dt) % 1;
+    lakeTextures.waterBump2.offset.x = (lakeTextures.waterBump2.offset.x - 0.012 * dt + 1) % 1;
+    lakeTextures.waterBump2.offset.y = (lakeTextures.waterBump2.offset.y + 0.019 * dt) % 1;
+
+    const refl = reflectionRef.current;
+    if (refl && timeOfDay !== 'day') {
+      const strength = timeOfDay === 'night' ? 0.62 : 0.25;
+      lakeTextures.reflMat.opacity = strength;
+      for (let i = 0; i < LAKE_EDGE_REFLECTION_POINTS.length; i++) {
+        const pt = LAKE_EDGE_REFLECTION_POINTS[i];
+        const sx = 3.2 + Math.sin(t * 1.9 + pt.phase) * 0.55;
+        const sz = 2.4 + Math.cos(t * 1.4 + pt.phase) * 0.35;
+        reflDummy.position.set(pt.x, bob + 0.012, pt.z);
+        reflDummy.rotation.set(-Math.PI / 2, 0, 0);
+        reflDummy.scale.set(sx, sz, 1);
+        reflDummy.updateMatrix();
+        refl.setMatrixAt(i, reflDummy.matrix);
+      }
+      refl.instanceMatrix.needsUpdate = true;
+    }
   });
+
+  const waterTint =
+    timeOfDay === 'sunset' ? '#FFE2CC' : timeOfDay === 'night' ? '#8BB0DC' : '#FFFFFF';
+  const shimmerTint =
+    timeOfDay === 'sunset' ? '#FFD199' : timeOfDay === 'night' ? '#6E94C8' : '#A8D8CE';
 
   return (
     <group>
-      {/* Mặt nước hình chữ nhật 45 × 88 m, y = 0,05 — thấp hơn gờ bê tông
-          (y = 0,51) 0,46 m. Màu xanh xám/ôliu dịu, có bumpMap gợn sóng
-          chuyển động mượt + phản chiếu IBL bầu trời; KHÔNG nhận bóng để mặt nước không loang lổ bóng lá. */}
+      {/* Mặt nước 2 lớp gợn sóng động: lớp nền chiều sâu AO ven bờ + bumpMap sóng thứ nhất */}
       <mesh ref={waterRef} rotation-x={-Math.PI / 2} position={[LAKE.center.x, WATER_Y, LAKE.center.z]}>
         <planeGeometry args={[w, l]} />
         <meshStandardMaterial
-          color={LAKE_WATER}
+          color={waterTint}
+          map={lakeTextures.lakeColorTex}
           bumpMap={lakeTextures.waterBump}
-          bumpScale={0.022}
-          roughness={0.16}
-          metalness={0.12}
-          envMapIntensity={1.25}
+          bumpScale={0.042}
+          roughness={0.23}
+          metalness={0.08}
+          envMapIntensity={timeOfDay === 'night' ? 0.65 : 1.05}
         />
       </mesh>
+      {/* Lớp giao thoa sóng gợn & lấp lánh thứ cấp cuộn ngược pha (triệt tiêu đốm lóa cứng) */}
+      <mesh
+        ref={waterShimmerRef}
+        rotation-x={-Math.PI / 2}
+        position={[LAKE.center.x, WATER_Y + 0.008, LAKE.center.z]}
+        raycast={() => null}
+      >
+        <planeGeometry args={[w - 0.2, l - 0.2]} />
+        <meshStandardMaterial
+          color={shimmerTint}
+          alphaMap={lakeTextures.waterBump2}
+          bumpMap={lakeTextures.waterBump2}
+          bumpScale={0.025}
+          transparent
+          opacity={timeOfDay === 'night' ? 0.16 : 0.2}
+          roughness={0.19}
+          metalness={0.12}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* Ánh phản chiếu vàng ấm lung linh trên mặt nước sát bờ kè từ đèn sân vườn ban đêm */}
+      <instancedMesh
+        ref={reflectionRef}
+        args={[lakeTextures.reflGeo, lakeTextures.reflMat, LAKE_EDGE_REFLECTION_POINTS.length]}
+        visible={timeOfDay !== 'day'}
+        frustumCulled={false}
+        raycast={() => null}
+      />
 
       {/* Bờ kè đá hộc THẤP: tường kè cao 0,45 m ôm mép nước + bệ chân kè
           thấp nhô về phía nước + gờ bê tông phẳng trên cùng (mặt trên

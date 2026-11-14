@@ -10,7 +10,9 @@ import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { SPORTS_COMPLEX } from '../world-data';
 import { LabelPlane } from '../../../components/three/TextPlate';
+import { RoofSoffitAndPlinth, WindowGrid3D } from '../../../components/three/ArchitecturalWindowBand';
 import {
+  getSharedBuildingPbrTextures,
   makeFootballFieldTexture,
   makeGraniteStoneTexture,
   makeSportsCourtTexture,
@@ -300,6 +302,7 @@ export function HustSportsAndStadiumComplex({ isNight }: { isNight: boolean }) {
   const poolTex = useMemo(() => makeSwimmingPoolTexture(), []);
   const goalNetTex = useMemo(() => createGoalNetTexture(), []);
   const stonePbr = useMemo(() => makeGraniteStoneTexture(4, 2), []);
+  const buildingPbr = useMemo(() => getSharedBuildingPbrTextures(), []);
 
   useEffect(
     () => () => {
@@ -317,20 +320,73 @@ export function HustSportsAndStadiumComplex({ isNight }: { isNight: boolean }) {
     <group>
       {/* 6.1 Bể bơi Bách Khoa (nằm Đông-Bắc Nhà thi đấu dọc phố Lê Thanh Nghị theo https://hustmap.com/) */}
       <group position={[poolCenter.x, 0, poolCenter.z]}>
-        {/* Thành bể bơi lát gạch trắng kem */}
+        {/* Thành bể bơi lát đá granite trắng xám PBR */}
         <mesh position={[0, 0.22, 0]} receiveShadow>
           <boxGeometry args={[poolSize.x + 1.4, 0.44, poolSize.z + 1.4]} />
-          <meshStandardMaterial color="#E2E8F0" roughness={0.75} />
+          <meshStandardMaterial
+            color="#E2E8F0"
+            map={stonePbr.map}
+            bumpMap={stonePbr.bumpMap}
+            bumpScale={0.014}
+            roughness={0.75}
+          />
         </mesh>
         {/* Mặt nước bể bơi xanh ngọc có phao phân làn */}
         <mesh rotation-x={-Math.PI / 2} position={[0, 0.46, 0]}>
           <planeGeometry args={[poolSize.x, poolSize.z]} />
-          <meshStandardMaterial map={poolTex} roughness={0.2} metalness={0.1} />
+          <meshStandardMaterial map={poolTex} roughness={0.18} metalness={0.18} envMapIntensity={1.25} />
         </mesh>
+        {/* 6 bục xuất phát nghiêng ở đầu Nam bể */}
+        {[-5, -3, -1, 1, 3, 5].map((bx, bIdx) => (
+          <group key={`dive-block-${bIdx}`} position={[bx, 0.44, poolSize.z / 2 + 0.35]}>
+            <mesh position={[0, 0.22, 0]} castShadow>
+              <boxGeometry args={[0.42, 0.44, 0.42]} />
+              <meshStandardMaterial color="#CBD5E1" roughness={0.6} />
+            </mesh>
+            <mesh position={[0, 0.46, -0.04]} rotation-x={-0.16} castShadow>
+              <boxGeometry args={[0.48, 0.08, 0.5]} />
+              <meshStandardMaterial color="#F8FAFC" roughness={0.35} />
+            </mesh>
+          </group>
+        ))}
+        {/* 2 cầu thang tay vịn inox mép Tây */}
+        {[-1.8, 1.8].map((lz, lIdx) => (
+          <group key={`pool-ladder-${lIdx}`} position={[-poolSize.x / 2 - 0.12, 0.44, lz]}>
+            {[-0.22, 0.22].map((rz) => (
+              <mesh key={`rail-${rz}`} position={[0, 0.38, rz]}>
+                <cylinderGeometry args={[0.025, 0.025, 0.76, 8]} />
+                <meshStandardMaterial color="#E2E8F0" metalness={0.85} roughness={0.2} />
+              </mesh>
+            ))}
+          </group>
+        ))}
+        {/* Mái che nắng nhẹ bờ Đông bể bơi */}
+        <group position={[poolSize.x / 2 + 0.95, 0, 0]}>
+          {[-poolSize.z * 0.34, 0, poolSize.z * 0.34].map((pz, pi) => (
+            <mesh key={`pool-canopy-col-${pi}`} position={[0, 1.45, pz]} castShadow>
+              <cylinderGeometry args={[0.05, 0.055, 2.9, 8]} />
+              <meshStandardMaterial color="#475569" metalness={0.6} roughness={0.4} />
+            </mesh>
+          ))}
+          <mesh position={[-0.25, 2.95, 0]} rotation-z={0.08} castShadow>
+            <boxGeometry args={[1.45, 0.08, poolSize.z - 0.8]} />
+            <meshStandardMaterial color="#38BDF8" roughness={0.35} metalness={0.25} />
+          </mesh>
+        </group>
         {/* Nhà điều hành & cổng vào Bể bơi ở mép Bắc */}
         <mesh position={[0, 1.45, -poolSize.z / 2 - 0.45]} castShadow receiveShadow>
           <boxGeometry args={[6.8, 2.9, 0.7]} />
-          <meshStandardMaterial color="#F8FAFC" roughness={0.82} />
+          <meshStandardMaterial
+            color="#F8FAFC"
+            map={buildingPbr?.plaster.map}
+            bumpMap={buildingPbr?.plaster.bumpMap}
+            bumpScale={0.012}
+            roughness={0.82}
+          />
+        </mesh>
+        <mesh position={[0, 2.98, -poolSize.z / 2 - 0.45]} castShadow>
+          <boxGeometry args={[7.1, 0.2, 0.95]} />
+          <meshStandardMaterial color="#0369A1" roughness={0.6} />
         </mesh>
         <LabelPlane
           textureKey="bk-swimming-pool-sign"
@@ -357,14 +413,160 @@ export function HustSportsAndStadiumComplex({ isNight }: { isNight: boolean }) {
 
       {/* 6.2 Nhà thi đấu Bách Khoa — Khối nhà thi đấu lớn ở giữa cụm Thể thao */}
       <group position={[stadiumCenter.x, 0, stadiumCenter.z]}>
-        <mesh position={[0, 4.4, 0]} castShadow receiveShadow>
-          <boxGeometry args={[stadiumSize.x, 8.8, stadiumSize.z]} />
-          <meshStandardMaterial color="#EAE6DC" roughness={0.86} />
+        <RoofSoffitAndPlinth
+          w={stadiumSize.x}
+          d={stadiumSize.z}
+          height={8.8}
+          plinthH={0.55}
+          graniteMap={stonePbr.map}
+          graniteBump={stonePbr.bumpMap}
+        />
+        {/* Tường bê tông nửa dưới 0..5.65m */}
+        <mesh position={[0, 2.825, 0]} castShadow receiveShadow>
+          <boxGeometry args={[stadiumSize.x, 5.65, stadiumSize.z]} />
+          <meshStandardMaterial
+            color="#EAE6DC"
+            map={buildingPbr?.plaster.map}
+            bumpMap={buildingPbr?.plaster.bumpMap}
+            bumpScale={0.014}
+            roughness={0.86}
+          />
         </mesh>
+        {/* Gờ phân tầng ngang chu vi nhà thi đấu */}
+        <mesh position={[0, 5.68, 0]} castShadow>
+          <boxGeometry args={[stadiumSize.x + 0.24, 0.22, stadiumSize.z + 0.24]} />
+          <meshStandardMaterial color="#CBD5E1" roughness={0.78} />
+        </mesh>
+        {/* Cổ mái ốp tôn sóng công nghiệp nửa trên 5.75..8.8m */}
+        <mesh position={[0, 7.28, 0]} castShadow receiveShadow>
+          <boxGeometry args={[stadiumSize.x - 0.1, 3.05, stadiumSize.z - 0.1]} />
+          <meshStandardMaterial
+            color="#DCE3EA"
+            bumpMap={buildingPbr?.ribbedMetalBump}
+            bumpScale={0.025}
+            metalness={0.28}
+            roughness={0.52}
+          />
+        </mesh>
+        {/* Trụ cột thép gia cường dọc tường hông */}
+        {[-4.8, 0, 4.8].map((pz) =>
+          [-stadiumSize.x / 2 - 0.06, stadiumSize.x / 2 + 0.06].map((px, xi) => (
+            <mesh key={`arena-col-${pz}-${xi}`} position={[px, 4.4, pz]} castShadow>
+              <boxGeometry args={[0.26, 8.8, 0.34]} />
+              <meshStandardMaterial color="#475569" roughness={0.55} metalness={0.4} />
+            </mesh>
+          )),
+        )}
+        {/* Mái lớn vươn hiên + diềm đỏ Bách Khoa */}
         <mesh position={[0, 9.0, 0]} castShadow>
-          <boxGeometry args={[stadiumSize.x + 0.6, 0.6, stadiumSize.z + 0.6]} />
-          <meshStandardMaterial color="#27496D" roughness={0.65} metalness={0.25} />
+          <boxGeometry args={[stadiumSize.x + 0.85, 0.52, stadiumSize.z + 0.85]} />
+          <meshStandardMaterial color="#27496D" roughness={0.6} metalness={0.28} />
         </mesh>
+        <mesh position={[0, 9.3, 0]} castShadow>
+          <boxGeometry args={[stadiumSize.x - 1.2, 0.32, stadiumSize.z - 1.2]} />
+          <meshStandardMaterial color="#335C85" roughness={0.58} metalness={0.25} />
+        </mesh>
+        {/* Cửa kính lấy sáng trên cao (clerestory) 4 mặt — chừa khoảng giữa mặt Bắc cho biển hiệu */}
+        <WindowGrid3D
+          position={[0, 0, -stadiumSize.z / 2 + 0.04]}
+          rotation={[0, Math.PI, 0]}
+          colXs={[-5.6, -4.1, 4.1, 5.6]}
+          rowYs={[7.25]}
+          winW={1.18}
+          winH={0.95}
+          frameColor="#1E3A5F"
+          sillColor="#E2E8F0"
+          isNight={isNight}
+          seedOffset={141}
+          withRainHood={false}
+        />
+        <WindowGrid3D
+          position={[0, 0, stadiumSize.z / 2 - 0.04]}
+          colXs={[-4.8, -1.6, 1.6, 4.8]}
+          rowYs={[7.25]}
+          winW={2.2}
+          winH={1.0}
+          frameColor="#1E3A5F"
+          sillColor="#E2E8F0"
+          isNight={isNight}
+          seedOffset={143}
+          withRainHood={false}
+        />
+        <WindowGrid3D
+          position={[stadiumSize.x / 2 - 0.04, 0, 0]}
+          rotation={[0, Math.PI / 2, 0]}
+          colXs={[-4.2, -1.4, 1.4, 4.2]}
+          rowYs={[7.25]}
+          winW={2.0}
+          winH={1.0}
+          frameColor="#1E3A5F"
+          sillColor="#E2E8F0"
+          isNight={isNight}
+          seedOffset={145}
+          withRainHood={false}
+        />
+        <WindowGrid3D
+          position={[-stadiumSize.x / 2 + 0.04, 0, 0]}
+          rotation={[0, -Math.PI / 2, 0]}
+          colXs={[-4.2, -1.4, 1.4, 4.2]}
+          rowYs={[7.25]}
+          winW={2.0}
+          winH={1.0}
+          frameColor="#1E3A5F"
+          sillColor="#E2E8F0"
+          isNight={isNight}
+          seedOffset={147}
+          withRainHood={false}
+        />
+        {/* Sảnh đón mặt Bắc: bậc tam cấp granite + cửa kính 4 cánh khung nhôm + mái đón giằng V thép */}
+        <group position={[0, 0, -stadiumSize.z / 2]}>
+          <mesh position={[0, 1.45, -0.05]}>
+            <boxGeometry args={[4.4, 2.8, 0.1]} />
+            <meshStandardMaterial
+              color={isNight ? '#FFE4A0' : '#1E3A5F'}
+              emissive={isNight ? '#FFB84D' : '#000000'}
+              emissiveIntensity={isNight ? 0.55 : 0}
+              roughness={0.18}
+              metalness={0.55}
+              envMapIntensity={1.25}
+            />
+          </mesh>
+          {/* Khung nhôm cửa kính sảnh 4 khoang + đố ngang + tay nắm inox */}
+          {[-2.17, -1.08, 0, 1.08, 2.17].map((dx) => (
+            <mesh key={`arena-mullion-v-${dx}`} position={[dx, 1.45, -0.11]}>
+              <boxGeometry args={[0.07, 2.82, 0.05]} />
+              <meshStandardMaterial color="#CBD5E1" metalness={0.65} roughness={0.32} />
+            </mesh>
+          ))}
+          {[0.08, 2.22, 2.84].map((dy) => (
+            <mesh key={`arena-mullion-h-${dy}`} position={[0, dy, -0.11]}>
+              <boxGeometry args={[4.42, 0.07, 0.05]} />
+              <meshStandardMaterial color="#CBD5E1" metalness={0.65} roughness={0.32} />
+            </mesh>
+          ))}
+          {[-0.22, 0.22].map((hx) => (
+            <mesh key={`arena-handle-${hx}`} position={[hx, 1.15, -0.15]}>
+              <boxGeometry args={[0.04, 0.45, 0.05]} />
+              <meshStandardMaterial color="#F8FAFC" metalness={0.85} roughness={0.2} />
+            </mesh>
+          ))}
+          {[0, 1, 2].map((st) => (
+            <mesh key={`arena-step-${st}`} position={[0, 0.07 + st * 0.1, -1.3 + st * 0.34]} receiveShadow>
+              <boxGeometry args={[5.4 - st * 0.4, 0.1, 0.4]} />
+              <meshStandardMaterial color="#94A3B8" map={stonePbr.map} roughness={0.86} />
+            </mesh>
+          ))}
+          <mesh position={[0, 3.5, -0.82]} castShadow>
+            <boxGeometry args={[5.6, 0.2, 1.65]} />
+            <meshStandardMaterial color="#27496D" roughness={0.55} metalness={0.35} />
+          </mesh>
+          {[-2.1, 2.1].map((sx) => (
+            <mesh key={`arena-strut-${sx}`} position={[sx, 4.15, -0.78]} rotation-x={0.58}>
+              <cylinderGeometry args={[0.03, 0.03, 1.65, 8]} />
+              <meshStandardMaterial color="#CBD5E1" metalness={0.75} roughness={0.3} />
+            </mesh>
+          ))}
+        </group>
         <LabelPlane
           textureKey="bk-stadium-arena-sign"
           canvasW={512}
@@ -385,7 +587,7 @@ export function HustSportsAndStadiumComplex({ isNight }: { isNight: boolean }) {
             ctx.fillText('BACH KHOA INDOOR STADIUM · 体育馆', w / 2, h * 0.75);
           }}
           size={[5.6, 1.25]}
-          position={[0, 6.4, -stadiumSize.z / 2 - 0.06]}
+          position={[0, 6.4, -stadiumSize.z / 2 - 0.14]}
           rotation={[0, Math.PI, 0]}
           transparent={false}
         />
@@ -393,14 +595,63 @@ export function HustSportsAndStadiumComplex({ isNight }: { isNight: boolean }) {
 
       {/* 6.3 Nhà TC (Trung tâm Giáo dục Thể chất & Thể thao — nằm Tây-Nam Nhà thi đấu theo https://hustmap.com/) */}
       <group position={[nhaTcCenter.x, 0, nhaTcCenter.z]}>
+        <RoofSoffitAndPlinth
+          w={nhaTcSize.x}
+          d={nhaTcSize.z}
+          height={8.0}
+          plinthH={0.48}
+          graniteMap={stonePbr.map}
+          graniteBump={stonePbr.bumpMap}
+        />
         <mesh position={[0, 4.0, 0]} castShadow receiveShadow>
           <boxGeometry args={[nhaTcSize.x, 8.0, nhaTcSize.z]} />
-          <meshStandardMaterial color="#F0ECE1" roughness={0.86} />
+          <meshStandardMaterial
+            color="#F0ECE1"
+            map={buildingPbr?.plaster.map}
+            bumpMap={buildingPbr?.plaster.bumpMap}
+            bumpScale={0.012}
+            roughness={0.86}
+          />
         </mesh>
         <mesh position={[0, 8.22, 0]} castShadow>
           <boxGeometry args={[nhaTcSize.x + 0.5, 0.44, nhaTcSize.z + 0.5]} />
           <meshStandardMaterial color="#2A5C6A" roughness={0.7} metalness={0.2} />
         </mesh>
+        <WindowGrid3D
+          position={[0, 0, -nhaTcSize.z / 2]}
+          rotation={[0, Math.PI, 0]}
+          colXs={[-4.2, -1.4, 1.4, 4.2]}
+          rowYs={[1.7, 4.15]}
+          winW={1.45}
+          winH={1.1}
+          frameColor="#2A5C6A"
+          sillColor="#E2E8F0"
+          isNight={isNight}
+          seedOffset={151}
+        />
+        <WindowGrid3D
+          position={[0, 0, nhaTcSize.z / 2]}
+          colXs={[-4.2, -1.4, 1.4, 4.2]}
+          rowYs={[1.7, 4.15]}
+          winW={1.45}
+          winH={1.1}
+          frameColor="#2A5C6A"
+          sillColor="#E2E8F0"
+          isNight={isNight}
+          seedOffset={153}
+        />
+        <WindowGrid3D
+          position={[nhaTcSize.x / 2, 0, 0]}
+          rotation={[0, Math.PI / 2, 0]}
+          colXs={[-3.2, 0, 3.2]}
+          rowYs={[1.7, 4.15]}
+          winW={1.45}
+          winH={1.1}
+          frameColor="#2A5C6A"
+          sillColor="#E2E8F0"
+          isNight={isNight}
+          seedOffset={155}
+        />
         <LabelPlane
           textureKey="bk-nha-tc-sign"
           canvasW={512}
@@ -421,7 +672,7 @@ export function HustSportsAndStadiumComplex({ isNight }: { isNight: boolean }) {
             ctx.fillText('TRUNG TÂM GDTC & THỂ THAO ĐHBK HÀ NỘI', w / 2, h * 0.76);
           }}
           size={[5.0, 1.1]}
-          position={[0, 6.0, -nhaTcSize.z / 2 - 0.06]}
+          position={[0, 6.0, -nhaTcSize.z / 2 - 0.08]}
           rotation={[0, Math.PI, 0]}
           transparent={false}
         />
@@ -487,36 +738,57 @@ export function HustSportsAndStadiumComplex({ isNight }: { isNight: boolean }) {
       {[
         { code: 'KTX A3', center: ktxA3Center, size: ktxA3Size },
         { code: 'KTX A2', center: ktxA2Center, size: ktxA2Size },
-      ].map((dorm) => (
+      ].map((dorm, dIdx) => (
         <group key={dorm.code} position={[dorm.center.x, 0, dorm.center.z]}>
+          <RoofSoffitAndPlinth
+            w={dorm.size.x}
+            d={dorm.size.z}
+            height={10.8}
+            plinthH={0.45}
+            graniteMap={stonePbr.map}
+            graniteBump={stonePbr.bumpMap}
+          />
           <mesh position={[0, 5.4, 0]} castShadow receiveShadow>
             <boxGeometry args={[dorm.size.x, 10.8, dorm.size.z]} />
-            <meshStandardMaterial color="#E8D8C0" roughness={0.88} />
+            <meshStandardMaterial
+              color="#E8D8C0"
+              map={buildingPbr?.plaster.map}
+              bumpMap={buildingPbr?.plaster.bumpMap}
+              bumpScale={0.014}
+              roughness={0.88}
+            />
           </mesh>
           <mesh position={[0, 11.0, 0]} castShadow>
             <boxGeometry args={[dorm.size.x + 0.4, 0.4, dorm.size.z + 0.4]} />
             <meshStandardMaterial color="#8C6D53" roughness={0.82} />
           </mesh>
-          {[0, 1, 2].map((fl) =>
-            [-4.0, -1.35, 1.35, 4.0].map((wx, idx) => {
-              const glow = isNight && (fl + idx) % 2 === 0;
-              return (
-                <mesh
-                  key={`${dorm.code}-win-${fl}-${idx}`}
-                  position={[wx, fl * 3.3 + 1.8, -dorm.size.z / 2 - 0.03]}
-                  rotation-y={Math.PI}
-                >
-                  <planeGeometry args={[1.45, 1.15]} />
-                  <meshStandardMaterial
-                    color={glow ? '#FFE4A0' : '#2C4257'}
-                    emissive={glow ? '#FFB84D' : '#000000'}
-                    emissiveIntensity={glow ? 0.72 : 0}
-                    roughness={0.35}
-                  />
-                </mesh>
-              );
-            }),
-          )}
+          <WindowGrid3D
+            position={[0, 0, -dorm.size.z / 2]}
+            rotation={[0, Math.PI, 0]}
+            colXs={[-4.0, -1.35, 1.35, 4.0]}
+            rowYs={[1.65, 4.75, 7.65]}
+            winW={1.45}
+            winH={1.12}
+            frameColor="#5C3228"
+            sillColor="#E8D8C0"
+            glassColor="#2C4257"
+            isNight={isNight}
+            seedOffset={163 + dIdx * 11}
+            withAcUnits
+          />
+          <WindowGrid3D
+            position={[0, 0, dorm.size.z / 2]}
+            colXs={[-4.0, -1.35, 1.35, 4.0]}
+            rowYs={[1.65, 4.75, 7.65]}
+            winW={1.45}
+            winH={1.12}
+            frameColor="#5C3228"
+            sillColor="#E8D8C0"
+            glassColor="#2C4257"
+            isNight={isNight}
+            seedOffset={169 + dIdx * 11}
+            withAcUnits
+          />
           <LabelPlane
             textureKey={`dorm-sign-${dorm.code}`}
             canvasW={384}
@@ -534,7 +806,7 @@ export function HustSportsAndStadiumComplex({ isNight }: { isNight: boolean }) {
               ctx.fillText(dorm.code, w / 2, h / 2);
             }}
             size={[3.0, 0.78]}
-            position={[0, 9.4, -dorm.size.z / 2 - 0.05]}
+            position={[0, 9.4, -dorm.size.z / 2 - 0.08]}
             rotation={[0, Math.PI, 0]}
             transparent={false}
           />

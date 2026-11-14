@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import {
   makeBarkTexture,
   makeFoliageCanopyTexture,
+  makeGraniteStoneTexture,
   makeSoftShadowTexture,
 } from './materials';
 
@@ -35,22 +36,94 @@ export interface TreeProps {
   canopyR?: number;
   canopyY?: number;
   canopyColor?: string;
+  withTreePit?: boolean;
 }
 
 const TRUNK = '#7A5E42';
 
-// Shared singleton PBR textures for all campus trees (avoids duplicating 50+ CanvasTextures in VRAM)
+// Shared singleton PBR textures & geometries for all campus trees (avoids duplicating 50+ CanvasTextures in VRAM)
 let sharedTreeTex: {
   bark: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
   foliage: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+  granite: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
   shadow: THREE.CanvasTexture;
 } | null = null;
+
+let sharedTreeGeos: {
+  canopyGeo: THREE.BufferGeometry;
+  pitRimGeo: THREE.BufferGeometry;
+  pitSoilGeo: THREE.BufferGeometry;
+  rootFlareGeo: THREE.BufferGeometry;
+} | null = null;
+
+function createOrganicCanopyGeometry(): THREE.BufferGeometry {
+  const geo = new THREE.IcosahedronGeometry(1, 2);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    // Dịch chuyển theo hàm hướng đơn vị nên mọi đỉnh trùng vị trí luôn khớp khít tuyệt đối
+    const bump =
+      1 +
+      0.13 * Math.sin(3.6 * x + 2.4 * y) * Math.cos(3.2 * z) +
+      0.07 * Math.cos(5.8 * y - 4.1 * x + 2.7 * z);
+    pos.setXYZ(i, x * bump, y * bump, z * bump);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createTreePitRimGeometry(): THREE.BufferGeometry {
+  const outer = 0.62;
+  const inner = 0.46;
+  const shape = new THREE.Shape();
+  shape.moveTo(-outer, -outer);
+  shape.lineTo(outer, -outer);
+  shape.lineTo(outer, outer);
+  shape.lineTo(-outer, outer);
+  shape.closePath();
+
+  const hole = new THREE.Path();
+  hole.moveTo(-inner, -inner);
+  hole.lineTo(-inner, inner);
+  hole.lineTo(inner, inner);
+  hole.lineTo(inner, -inner);
+  hole.closePath();
+  shape.holes.push(hole);
+
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.085,
+    bevelEnabled: true,
+    bevelThickness: 0.015,
+    bevelSize: 0.015,
+    bevelSegments: 2,
+  });
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, 0.015, 0);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function getSharedTreeGeometries() {
+  if (!sharedTreeGeos) {
+    const canopyGeo = createOrganicCanopyGeometry();
+    const pitRimGeo = createTreePitRimGeometry();
+    const pitSoilGeo = new THREE.BoxGeometry(0.94, 0.055, 0.94);
+    pitSoilGeo.translate(0, 0.028, 0);
+    const rootFlareGeo = new THREE.CylinderGeometry(0.035, 0.14, 0.34, 6);
+    rootFlareGeo.translate(0, 0.15, 0);
+    sharedTreeGeos = { canopyGeo, pitRimGeo, pitSoilGeo, rootFlareGeo };
+  }
+  return sharedTreeGeos;
+}
 
 function getSharedTreeTextures() {
   if (!sharedTreeTex) {
     sharedTreeTex = {
       bark: makeBarkTexture(2, 4),
       foliage: makeFoliageCanopyTexture(3, 3),
+      granite: makeGraniteStoneTexture(2, 2),
       shadow: makeSoftShadowTexture(),
     };
   }
@@ -158,6 +231,7 @@ export function ImprovedTree({
   canopyR = 1.3,
   canopyY = 2.9,
   canopyColor = '#5D7D4A',
+  withTreePit = true,
 }: TreeProps) {
   const spec = useMemo(
     () => buildImprovedSpec(x, z, trunkH, canopyR, canopyY),
@@ -165,6 +239,7 @@ export function ImprovedTree({
   );
   const tones = useMemo(() => leafTones(canopyColor), [canopyColor]);
   const tex = useMemo(() => getSharedTreeTextures(), []);
+  const geos = useMemo(() => getSharedTreeGeometries(), []);
   const canopyRef = useRef<THREE.Group>(null!);
   const phase = useMemo(() => (seedFromXZ(x, z) % 1000) * 0.00628, [x, z]);
 
@@ -176,65 +251,107 @@ export function ImprovedTree({
   });
 
   return (
-    <group position={[x, 0, z]} rotation-y={spec.rotY} scale={spec.s} rotation-z={spec.lean}>
-      {/* Bóng đổ tiếp xúc mềm dưới gốc cây (Ambient Occlusion / Contact Shadow) */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.022 / spec.s, 0]}>
-        <planeGeometry args={[canopyR * 2.2, canopyR * 2.2]} />
+    <group position={[x, 0, z]}>
+      {/* Bồn cây bó vỉa đá granite + đất nâu ẩm (thuần thị giác, không collider, nằm phẳng trục sân/vỉa hè) */}
+      {withTreePit && (
+        <group>
+          <mesh geometry={geos.pitRimGeo} receiveShadow castShadow>
+            <meshStandardMaterial
+              color="#CBD5E1"
+              map={tex.granite.map}
+              bumpMap={tex.granite.bumpMap}
+              bumpScale={0.012}
+              roughness={0.88}
+            />
+          </mesh>
+          <mesh geometry={geos.pitSoilGeo} receiveShadow>
+            <meshStandardMaterial color="#3E2F23" roughness={0.96} />
+          </mesh>
+        </group>
+      )}
+      {/* Bóng đổ tiếp xúc mềm dưới gốc cây (Ambient Occlusion, nâng lên 0.038m để luôn nổi trên vỉa hè 0.031m) */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.038, 0]}>
+        <planeGeometry args={[canopyR * 2.2 * spec.s, canopyR * 2.2 * spec.s]} />
         <meshBasicMaterial
           map={tex.shadow}
           transparent
-          opacity={0.38}
+          opacity={0.36}
           depthWrite={false}
         />
       </mesh>
-      {/* Thân thuôn dần (đáy to, ngọn nhỏ) có vân vỏ cây PBR. */}
-      <mesh position={[0, trunkH / 2, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[spec.trunkTopR, spec.trunkBotR, trunkH, 10]} />
-        <meshStandardMaterial
-          color={TRUNK}
-          map={tex.bark.map}
-          bumpMap={tex.bark.bumpMap}
-          bumpScale={0.025}
-          roughness={0.92}
-        />
-      </mesh>
-      {/* Nhánh: 1 nhánh/cụm tán, ngắm thẳng từ ngọn thân tới tâm cụm. */}
-      {spec.branches.map((b, i) => (
-        <group key={`br-${i}`} position={[0, spec.pivotY, 0]} rotation-y={-b.az}>
-          <group rotation-z={b.tilt}>
-            <mesh position={[0, b.len / 2, 0]} castShadow>
-              <cylinderGeometry args={[b.r * 0.55, b.r, b.len, 6]} />
+      <group rotation-y={spec.rotY} scale={spec.s} rotation-z={spec.lean}>
+        {/* Rễ bạnh loe tự nhiên ôm chân thân cây */}
+        {[0, 1, 2, 3].map((ri) => {
+          const ang = (ri / 4) * Math.PI * 2 + 0.35;
+          return (
+            <group key={`root-${ri}`} rotation-y={ang}>
+              <mesh
+                geometry={geos.rootFlareGeo}
+                position={[spec.trunkBotR * 0.52, -0.02, 0]}
+                rotation-z={-0.38}
+                castShadow
+              >
+                <meshStandardMaterial
+                  color={TRUNK}
+                  map={tex.bark.map}
+                  bumpMap={tex.bark.bumpMap}
+                  bumpScale={0.025}
+                  roughness={0.92}
+                />
+              </mesh>
+            </group>
+          );
+        })}
+        {/* Thân thuôn dần (đáy to, ngọn nhỏ) có vân vỏ cây PBR. */}
+        <mesh position={[0, trunkH / 2, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[spec.trunkTopR, spec.trunkBotR, trunkH, 10]} />
+          <meshStandardMaterial
+            color={TRUNK}
+            map={tex.bark.map}
+            bumpMap={tex.bark.bumpMap}
+            bumpScale={0.025}
+            roughness={0.92}
+          />
+        </mesh>
+        {/* Nhánh: 1 nhánh/cụm tán, ngắm thẳng từ ngọn thân tới tâm cụm. */}
+        {spec.branches.map((b, i) => (
+          <group key={`br-${i}`} position={[0, spec.pivotY, 0]} rotation-y={-b.az}>
+            <group rotation-z={b.tilt}>
+              <mesh position={[0, b.len / 2, 0]} castShadow>
+                <cylinderGeometry args={[b.r * 0.55, b.r, b.len, 6]} />
+                <meshStandardMaterial
+                  color={TRUNK}
+                  map={tex.bark.map}
+                  bumpMap={tex.bark.bumpMap}
+                  bumpScale={0.018}
+                  roughness={0.92}
+                />
+              </mesh>
+            </group>
+          </group>
+        ))}
+        {/* Tán nhiều cụm hữu cơ nổi bướu tự nhiên (bỏ hình cầu trơn), 3 sắc xanh + đung đưa nhẹ theo gió. */}
+        <group ref={canopyRef}>
+          {spec.lobes.map((l, i) => (
+            <mesh
+              key={`lobe-${i}`}
+              geometry={geos.canopyGeo}
+              position={[l.dx, l.dy, l.dz]}
+              rotation={[i * 0.7, i * 1.1, 0]}
+              scale={[l.r, l.r * l.sy, l.r]}
+              castShadow
+              receiveShadow
+            >
               <meshStandardMaterial
-                color={TRUNK}
-                map={tex.bark.map}
-                bumpMap={tex.bark.bumpMap}
-                bumpScale={0.018}
-                roughness={0.92}
+                color={tones[l.tone]}
+                map={tex.foliage.map}
+                bumpMap={tex.foliage.bumpMap}
+                bumpScale={0.032}
+                roughness={0.86}
               />
             </mesh>
-          </group>
+          ))}
         </group>
-      ))}
-      {/* Tán nhiều cụm lệch nhau, 3 sắc xanh gần nhau + vân tán lá PBR + đung đưa nhẹ theo gió. */}
-      <group ref={canopyRef}>
-        {spec.lobes.map((l, i) => (
-          <mesh
-            key={`lobe-${i}`}
-            position={[l.dx, l.dy, l.dz]}
-            scale={[1, l.sy, 1]}
-            castShadow
-            receiveShadow
-          >
-            <sphereGeometry args={[l.r, 16, 12]} />
-            <meshStandardMaterial
-              color={tones[l.tone]}
-              map={tex.foliage.map}
-              bumpMap={tex.foliage.bumpMap}
-              bumpScale={0.032}
-              roughness={0.86}
-            />
-          </mesh>
-        ))}
       </group>
     </group>
   );
@@ -293,12 +410,31 @@ export function DroopingTree({
   );
   const tones = useMemo(() => leafTones(canopyColor), [canopyColor]);
   const tex = useMemo(() => getSharedTreeTextures(), []);
+  const geos = useMemo(() => getSharedTreeGeometries(), []);
   return (
     <group position={[x, 0, z]} rotation-y={spec.rotY} scale={spec.s}>
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.022 / spec.s, 0]}>
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.038 / spec.s, 0]}>
         <planeGeometry args={[canopyR * 2.2, canopyR * 2.2]} />
         <meshBasicMaterial map={tex.shadow} transparent opacity={0.38} depthWrite={false} />
       </mesh>
+      {[0, 1, 2, 3].map((ri) => (
+        <group key={`droop-root-${ri}`} rotation-y={(ri / 4) * Math.PI * 2}>
+          <mesh
+            geometry={geos.rootFlareGeo}
+            position={[0.14, -0.02, 0]}
+            rotation-z={-0.36}
+            castShadow
+          >
+            <meshStandardMaterial
+              color={TRUNK}
+              map={tex.bark.map}
+              bumpMap={tex.bark.bumpMap}
+              bumpScale={0.025}
+              roughness={0.92}
+            />
+          </mesh>
+        </group>
+      ))}
       <mesh position={[0, trunkH / 2, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[0.13, 0.23, trunkH, 10]} />
         <meshStandardMaterial
@@ -309,10 +445,16 @@ export function DroopingTree({
           roughness={0.92}
         />
       </mesh>
-      {/* Tán trên 3 cụm lệch. */}
+      {/* Tán trên 3 cụm lệch hữu cơ. */}
       {spec.lobes.map((l, i) => (
-        <mesh key={`top-${i}`} position={[l.dx, l.dy, l.dz]} scale={[1, l.sy, 1]} castShadow receiveShadow>
-          <sphereGeometry args={[l.r, 16, 12]} />
+        <mesh
+          key={`top-${i}`}
+          geometry={geos.canopyGeo}
+          position={[l.dx, l.dy, l.dz]}
+          scale={[l.r, l.r * l.sy, l.r]}
+          castShadow
+          receiveShadow
+        >
           <meshStandardMaterial
             color={tones[l.tone]}
             map={tex.foliage.map}

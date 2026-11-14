@@ -1035,3 +1035,406 @@ export function makeHairStrandTexture(
     bumpMap: configureTexture(new THREE.CanvasTexture(b), repeatX, repeatY, false),
   };
 }
+
+// ===========================================================================
+// ĐỢT NÂNG CẤP 3 ĐỢT (ÁNH SÁNG/MẶT NƯỚC, CÂY CỎ/ĐƯỜNG PHỐ/XE MÁY, KHU ĐÔNG PBR)
+// ===========================================================================
+
+/**
+ * Quầng sáng đèn đêm ấm mềm (Warm Radial Light Pool) dùng cho InstancedMesh mặt đất & phản chiếu Hồ Tiền.
+ */
+export function makeWarmLightPoolTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  ctx.clearRect(0, 0, 256, 256);
+  const g = ctx.createRadialGradient(128, 128, 4, 128, 128, 124);
+  g.addColorStop(0.0, 'rgba(255, 232, 168, 0.78)');
+  g.addColorStop(0.28, 'rgba(255, 204, 118, 0.44)');
+  g.addColorStop(0.62, 'rgba(255, 178, 86, 0.14)');
+  g.addColorStop(1.0, 'rgba(255, 165, 70, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Kết cấu cụm mây bông mềm nhiều lớp radial gradient (không lộ ngấn giao cắt hình cầu).
+ */
+export function makeCloudPuffTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  ctx.clearRect(0, 0, 256, 256);
+  const lobes: Array<[number, number, number, string, string]> = [
+    [128, 134, 92, 'rgba(240, 246, 255, 0.62)', 'rgba(220, 232, 248, 0)'],
+    [82, 140, 62, 'rgba(246, 250, 255, 0.56)', 'rgba(224, 235, 248, 0)'],
+    [176, 138, 64, 'rgba(246, 250, 255, 0.54)', 'rgba(224, 235, 248, 0)'],
+    [116, 102, 68, 'rgba(255, 255, 255, 0.72)', 'rgba(248, 252, 255, 0)'],
+    [150, 108, 56, 'rgba(255, 255, 255, 0.68)', 'rgba(248, 252, 255, 0)'],
+  ];
+  for (const [cx, cy, r, c0, c1] of lobes) {
+    const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, r);
+    g.addColorStop(0.0, c0);
+    g.addColorStop(0.55, c0.replace(/0\.[0-9]+/, '0.28'));
+    g.addColorStop(1.0, c1);
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Bản đồ sắc độ & chiều sâu lòng Hồ Tiền (45 × 88 m):
+ * tâm hồ xanh ngọc lục bảo trầm, tối rêu sâu dọc 4 bờ kè đá + tia caustics nắng loang nhẹ.
+ */
+export function makeLakeWaterSurfaceTexture(): THREE.CanvasTexture {
+  const w = 512;
+  const h = 512;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+  const rnd = createSeededRandom(20261114);
+
+  ctx.fillStyle = '#366559';
+  ctx.fillRect(0, 0, w, h);
+
+  const centerGrad = ctx.createRadialGradient(w * 0.5, h * 0.5, 42, w * 0.5, h * 0.5, 250);
+  centerGrad.addColorStop(0.0, 'rgba(68, 122, 108, 0.72)');
+  centerGrad.addColorStop(0.65, 'rgba(47, 94, 83, 0.42)');
+  centerGrad.addColorStop(1.0, 'rgba(28, 56, 49, 0.78)');
+  ctx.fillStyle = centerGrad;
+  ctx.fillRect(0, 0, w, h);
+
+  const edgeSize = 38;
+  const topG = ctx.createLinearGradient(0, 0, 0, edgeSize);
+  topG.addColorStop(0, 'rgba(20, 42, 36, 0.78)');
+  topG.addColorStop(1, 'rgba(20, 42, 36, 0)');
+  ctx.fillStyle = topG;
+  ctx.fillRect(0, 0, w, edgeSize);
+
+  const botG = ctx.createLinearGradient(0, h - edgeSize, 0, h);
+  botG.addColorStop(0, 'rgba(20, 42, 36, 0)');
+  botG.addColorStop(1, 'rgba(20, 42, 36, 0.78)');
+  ctx.fillStyle = botG;
+  ctx.fillRect(0, h - edgeSize, w, edgeSize);
+
+  const leftG = ctx.createLinearGradient(0, 0, edgeSize, 0);
+  leftG.addColorStop(0, 'rgba(20, 42, 36, 0.78)');
+  leftG.addColorStop(1, 'rgba(20, 42, 36, 0)');
+  ctx.fillStyle = leftG;
+  ctx.fillRect(0, 0, edgeSize, h);
+
+  const rightG = ctx.createLinearGradient(w - edgeSize, 0, w, 0);
+  rightG.addColorStop(0, 'rgba(20, 42, 36, 0)');
+  rightG.addColorStop(1, 'rgba(20, 42, 36, 0.78)');
+  ctx.fillStyle = rightG;
+  ctx.fillRect(w - edgeSize, 0, edgeSize, h);
+
+  for (let i = 0; i < 65; i++) {
+    const x = 44 + rnd() * (w - 88);
+    const y = 44 + rnd() * (h - 88);
+    const rx = 14 + rnd() * 34;
+    const ry = 8 + rnd() * 22;
+    const g = ctx.createRadialGradient(x, y, 1, x, y, Math.max(rx, ry));
+    const bright = rnd() > 0.35;
+    g.addColorStop(0, bright ? 'rgba(130, 186, 168, 0.14)' : 'rgba(22, 48, 42, 0.16)');
+    g.addColorStop(1, 'rgba(54, 101, 89, 0)');
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rnd() * Math.PI);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Sóng gợn thứ cấp tần số cao (Seamless Secondary Ripple) để cuộn ngược pha tạo giao thoa sóng động.
+ */
+export function makeWaterSecondaryRippleTexture(repeatX = 16, repeatY = 28): THREE.CanvasTexture {
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const img = ctx.createImageData(size, size);
+  const data = img.data;
+  const tau = Math.PI * 2;
+
+  for (let y = 0; y < size; y++) {
+    const v = (y / size) * tau;
+    for (let x = 0; x < size; x++) {
+      const u = (x / size) * tau;
+      const w1 = Math.sin(u * 4 - v * 3 + 0.9);
+      const w2 = Math.cos(u * 6 + v * 2 - 0.5) * 0.7;
+      const w3 = Math.sin(u * 9 - v * 7) * 0.4;
+      const norm = Math.max(0, Math.min(1, (w1 + w2 + w3 + 2.1) / 4.2));
+      const crest = Math.pow(norm, 1.85);
+      const val = Math.floor(20 + crest * 220);
+      const idx = (y * size + x) * 4;
+      data[idx] = val;
+      data[idx + 1] = val;
+      data[idx + 2] = val;
+      data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  return configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, false);
+}
+
+/**
+ * Texture vạch kẻ qua đường (Zebra Crosswalk) chống trượt & song chắn rác gang đúc thoát nước.
+ */
+export function makeZebraAndDrainTextures(): {
+  zebraMap: THREE.CanvasTexture;
+  drainMap: THREE.CanvasTexture;
+} {
+  const zc = document.createElement('canvas');
+  zc.width = 128;
+  zc.height = 256;
+  const zctx = zc.getContext('2d');
+  if (!zctx) throw new Error('Canvas 2D không khả dụng');
+  const rnd = createSeededRandom(20261115);
+
+  zctx.fillStyle = '#EFEFE9';
+  zctx.fillRect(0, 0, 128, 256);
+  for (let i = 0; i < 650; i++) {
+    const x = rnd() * 128;
+    const y = rnd() * 256;
+    const v = 215 + Math.floor(rnd() * 35);
+    zctx.fillStyle = `rgba(${v}, ${v}, ${v - 4}, 0.35)`;
+    zctx.fillRect(x, y, 2, 2);
+  }
+  zctx.fillStyle = 'rgba(120, 122, 118, 0.22)';
+  zctx.fillRect(0, 0, 128, 12);
+  zctx.fillRect(0, 244, 128, 12);
+
+  const zebraMap = new THREE.CanvasTexture(zc);
+  zebraMap.colorSpace = THREE.SRGBColorSpace;
+  zebraMap.anisotropy = 4;
+  zebraMap.needsUpdate = true;
+
+  const dc = document.createElement('canvas');
+  dc.width = 128;
+  dc.height = 128;
+  const dctx = dc.getContext('2d');
+  if (!dctx) throw new Error('Canvas 2D không khả dụng');
+
+  dctx.fillStyle = '#333940';
+  dctx.fillRect(0, 0, 128, 128);
+  dctx.strokeStyle = '#525B65';
+  dctx.lineWidth = 6;
+  dctx.strokeRect(5, 5, 118, 118);
+
+  for (let y = 16; y <= 104; y += 16) {
+    dctx.fillStyle = '#12161A';
+    dctx.fillRect(14, y, 44, 8);
+    dctx.fillRect(70, y, 44, 8);
+    dctx.fillStyle = '#4B535D';
+    dctx.fillRect(14, y + 8, 44, 2);
+    dctx.fillRect(70, y + 8, 44, 2);
+  }
+
+  const drainMap = new THREE.CanvasTexture(dc);
+  drainMap.colorSpace = THREE.SRGBColorSpace;
+  drainMap.anisotropy = 4;
+  drainMap.needsUpdate = true;
+
+  return { zebraMap, drainMap };
+}
+
+/**
+ * Gạch block tự chèn vỉa hè Bách Khoa (tông xám ấm – điểm gạch đỏ đất tinh tế + mạch cát).
+ */
+export function makeSidewalkPaverTexture(
+  repeatX = 16,
+  repeatY = 2,
+): { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture } {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const b = document.createElement('canvas');
+  b.width = 256;
+  b.height = 256;
+  const bctx = b.getContext('2d');
+  if (!bctx) throw new Error('Canvas 2D không khả dụng');
+
+  const rnd = createSeededRandom(20261116);
+  ctx.fillStyle = '#8F8D84';
+  ctx.fillRect(0, 0, 256, 256);
+  bctx.fillStyle = '#3E3E3E';
+  bctx.fillRect(0, 0, 256, 256);
+
+  const rows = 8;
+  const cols = 4;
+  const rh = 256 / rows;
+  const cw = 256 / cols;
+
+  for (let r = 0; r < rows; r++) {
+    const offset = (r % 2) * (cw / 2);
+    for (let k = -1; k <= cols; k++) {
+      const x = k * cw + offset;
+      const isTerracottaAccent = (r + k) % 7 === 0;
+      const delta = Math.floor((rnd() - 0.5) * 14);
+      ctx.fillStyle = isTerracottaAccent
+        ? `rgb(${168 + delta}, ${112 + delta}, ${96 + delta})`
+        : `rgb(${182 + delta}, ${178 + delta}, ${168 + delta})`;
+      ctx.fillRect(x + 2, r * rh + 2, cw - 4, rh - 4);
+
+      const bv = 175 + Math.floor(rnd() * 35);
+      bctx.fillStyle = `rgb(${bv}, ${bv}, ${bv})`;
+      bctx.fillRect(x + 2, r * rh + 2, cw - 4, rh - 4);
+    }
+  }
+
+  return {
+    map: configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true),
+    bumpMap: configureTexture(new THREE.CanvasTexture(b), repeatX, repeatY, false),
+  };
+}
+
+export type SharedBuildingPbrTextures = {
+  plaster: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+  granite: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+  brickWall: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+  ribbedMetalBump: THREE.CanvasTexture;
+};
+
+let sharedBuildingPbr: SharedBuildingPbrTextures | null = null;
+
+/**
+ * Singleton dùng chung toàn khu Đông / KTX / Nhà thi đấu / Giảng đường để cấp vật liệu
+ * PBR sắc nét mà không nhân bản CanvasTexture trong VRAM.
+ */
+export function getSharedBuildingPbrTextures(): SharedBuildingPbrTextures | null {
+  if (typeof document === 'undefined') return null;
+  if (sharedBuildingPbr) return sharedBuildingPbr;
+
+  const plaster = makeWeatheredConcreteTexture(3, 2);
+  const granite = makeGraniteStoneTexture(3, 1);
+
+  const bc = document.createElement('canvas');
+  bc.width = 256;
+  bc.height = 256;
+  const bctx = bc.getContext('2d');
+  const bb = document.createElement('canvas');
+  bb.width = 256;
+  bb.height = 256;
+  const bbctx = bb.getContext('2d');
+  if (!bctx || !bbctx) throw new Error('Canvas 2D không khả dụng');
+  const rnd = createSeededRandom(20261117);
+
+  bctx.fillStyle = '#E5DFD6';
+  bctx.fillRect(0, 0, 256, 256);
+  bbctx.fillStyle = '#484848';
+  bbctx.fillRect(0, 0, 256, 256);
+
+  const rows = 8;
+  const cols = 4;
+  const rh = 256 / rows;
+  const cw = 256 / cols;
+  for (let r = 0; r < rows; r++) {
+    const off = (r % 2) * (cw / 2);
+    for (let k = -1; k <= cols; k++) {
+      const x = k * cw + off;
+      const v = 236 + Math.floor((rnd() - 0.5) * 18);
+      bctx.fillStyle = `rgb(${v}, ${v - 2}, ${v - 5})`;
+      bctx.fillRect(x + 2, r * rh + 2, cw - 4, rh - 4);
+
+      const bv = 165 + Math.floor(rnd() * 35);
+      bbctx.fillStyle = `rgb(${bv}, ${bv}, ${bv})`;
+      bbctx.fillRect(x + 2, r * rh + 2, cw - 4, rh - 4);
+    }
+  }
+  const brickWall = {
+    map: configureTexture(new THREE.CanvasTexture(bc), 4, 3, true),
+    bumpMap: configureTexture(new THREE.CanvasTexture(bb), 4, 3, false),
+  };
+
+  const rc = document.createElement('canvas');
+  rc.width = 256;
+  rc.height = 128;
+  const rctx = rc.getContext('2d');
+  if (!rctx) throw new Error('Canvas 2D không khả dụng');
+  for (let x = 0; x < 256; x++) {
+    const wave = Math.sin((x / 16) * Math.PI * 2);
+    const val = Math.floor(128 + wave * 88);
+    rctx.fillStyle = `rgb(${val}, ${val}, ${val})`;
+    rctx.fillRect(x, 0, 1, 128);
+  }
+  const ribbedMetalBump = configureTexture(new THREE.CanvasTexture(rc), 8, 1, false);
+
+  sharedBuildingPbr = { plaster, granite, brickWall, ribbedMetalBump };
+  return sharedBuildingPbr;
+}
+
+/**
+ * Sinh texture vệt nắng / luồng sáng thông tầng mềm mại (tắt alpha hoàn toàn về 0
+ * ở cả 4 biên để loại bỏ hoàn toàn cạnh cứng của hình trụ khi xoay camera).
+ */
+export function makeLightShaftTexture(): THREE.CanvasTexture {
+  const w = 256;
+  const h = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  const img = ctx.createImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    const v = y / (h - 1); // 0 = top (gốc cửa), 1 = bottom (hướng sàn)
+    const verticalEnvelope = Math.sin(Math.PI * Math.pow(v, 0.72));
+    for (let x = 0; x < w; x++) {
+      const u = (x / (w - 1)) * 2 - 1; // -1..1 ngang chùm sáng
+      const radialFalloff = Math.pow(Math.max(0, 1 - u * u), 1.85);
+      const alpha = Math.max(0, Math.min(255, Math.round(verticalEnvelope * radialFalloff * 255)));
+      const idx = (y * w + x) * 4;
+      img.data[idx] = 255;
+      img.data[idx + 1] = 255;
+      img.data[idx + 2] = 255;
+      img.data[idx + 3] = alpha;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}

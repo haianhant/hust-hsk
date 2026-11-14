@@ -12,6 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { C1, LIBRARY, LOVE_ROAD_TREES, NGA_5_PLAZA, ROADS, TDN_SQUARE, type Vec2 } from '../../lib/campus';
 import { createAutumnLeafAssets } from '../../features/campus/atmosphere/CampusAtmosphereFX';
@@ -21,7 +22,9 @@ import {
   makeC1PlazaStoneTexture,
   makeCircuitPlazaTexture,
   makeGrassTexture,
+  makeSidewalkPaverTexture,
   makeTerracottaTileTexture,
+  makeZebraAndDrainTextures,
 } from './materials';
 
 const GRASS_COLOR = '#86A665';
@@ -241,45 +244,170 @@ function buildJointDiscs(): Array<{ center: Vec2; radius: number }> {
 const ROAD_PIECES = buildRoadPieces();
 const JOINT_DISCS = buildJointDiscs();
 
-/** Cụm cỏ 3D & hoa dại nhỏ dọc bồn cỏ C1, ven Đường Tình Yêu và thảm cỏ quanh Hồ Tiền (2 InstancedMesh = 2 draw calls). */
+/**
+ * Sinh hình học bụi cỏ gồm 6 phiến lá dẹt uốn cong parabol tỏa ra các hướng
+ * (thay thế hoàn toàn hình nón ConeGeometry), có vertexColors gốc đậm → ngọn sáng.
+ */
+function createCurvedGrassClumpGeometry(): THREE.BufferGeometry {
+  const blades = [
+    { ang: 0.0, lean: 0.085, h: 0.24, w: 0.032, tiltPhase: 0.1 },
+    { ang: 1.05, lean: 0.075, h: 0.21, w: 0.028, tiltPhase: 1.1 },
+    { ang: 2.15, lean: 0.095, h: 0.26, w: 0.03, tiltPhase: 2.2 },
+    { ang: 3.25, lean: 0.072, h: 0.19, w: 0.027, tiltPhase: 0.6 },
+    { ang: 4.35, lean: 0.088, h: 0.23, w: 0.03, tiltPhase: 1.7 },
+    { ang: 5.4, lean: 0.065, h: 0.18, w: 0.026, tiltPhase: 2.8 },
+  ];
+  const segs = 4;
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const indices: number[] = [];
+  const cBase = new THREE.Color('#3B662B');
+  const cTip = new THREE.Color('#8CC657');
+  const cMix = new THREE.Color();
+
+  for (const b of blades) {
+    const dirX = Math.cos(b.ang);
+    const dirZ = Math.sin(b.ang);
+    const sideX = -dirZ;
+    const sideZ = dirX;
+    const ox = dirX * 0.018;
+    const oz = dirZ * 0.018;
+    const baseVert = positions.length / 3;
+
+    for (let s = 0; s <= segs; s++) {
+      const t = s / segs;
+      const halfW = (b.w * 0.5) * (1 - t * 0.88);
+      const y = b.h * (t - 0.12 * t * t);
+      const bend = b.lean * t * t;
+      const cx = ox + dirX * bend;
+      const cz = oz + dirZ * bend;
+      cMix.copy(cBase).lerp(cTip, t);
+
+      positions.push(
+        cx - sideX * halfW,
+        y,
+        cz - sideZ * halfW,
+        cx + sideX * halfW,
+        y,
+        cz + sideZ * halfW,
+      );
+      colors.push(cMix.r, cMix.g, cMix.b, cMix.r, cMix.g, cMix.b);
+    }
+
+    for (let s = 0; s < segs; s++) {
+      const i0 = baseVert + s * 2;
+      const i1 = i0 + 1;
+      const i2 = i0 + 2;
+      const i3 = i0 + 3;
+      indices.push(i0, i2, i1, i1, i2, i3);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Sinh cụm hoa dại 5 cánh xòe ngang kèm cuống mảnh thay cho khối DodecahedronGeometry đơn điệu.
+ */
+function createWildflowerClusterGeometry(): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const indices: number[] = [];
+  const petalColor = new THREE.Color('#FFFFFF');
+  const centerColor = new THREE.Color('#F59E0B');
+
+  const headY = 0.21;
+  // Cuống mảnh (tứ diện dẹt đứng)
+  const stemTopColor = new THREE.Color('#5E8C3A');
+  const stemVert = positions.length / 3;
+  positions.push(-0.008, 0, -0.008, 0.008, 0, 0.008, -0.005, headY, -0.005, 0.005, headY, 0.005);
+  for (let k = 0; k < 4; k++) colors.push(stemTopColor.r, stemTopColor.g, stemTopColor.b);
+  indices.push(stemVert, stemVert + 2, stemVert + 1, stemVert + 1, stemVert + 2, stemVert + 3);
+
+  // 5 cánh hoa dại xòe quanh tâm
+  const petals = 5;
+  for (let p = 0; p < petals; p++) {
+    const a0 = (p / petals) * Math.PI * 2;
+    const aL = a0 - 0.34;
+    const aR = a0 + 0.34;
+    const rTip = 0.068;
+    const rMid = 0.044;
+    const vIdx = positions.length / 3;
+    positions.push(
+      0, headY, 0,
+      Math.cos(aL) * rMid, headY + 0.012, Math.sin(aL) * rMid,
+      Math.cos(a0) * rTip, headY + 0.008, Math.sin(a0) * rTip,
+      Math.cos(aR) * rMid, headY + 0.012, Math.sin(aR) * rMid,
+    );
+    colors.push(
+      centerColor.r, centerColor.g, centerColor.b,
+      petalColor.r, petalColor.g, petalColor.b,
+      petalColor.r, petalColor.g, petalColor.b,
+      petalColor.r, petalColor.g, petalColor.b,
+    );
+    indices.push(vIdx, vIdx + 1, vIdx + 2, vIdx, vIdx + 2, vIdx + 3);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Cụm cỏ lá cong đung đưa theo gió & hoa dại 5 cánh (2 InstancedMesh = 2 draw calls). */
 function GrassAndFlowerTufts() {
   const grassRef = useRef<THREE.InstancedMesh>(null);
   const flowerRef = useRef<THREE.InstancedMesh>(null);
+  const dummyObj = useMemo(() => new THREE.Object3D(), []);
+  const swayAccRef = useRef(0);
 
   const { grassGeo, flowerGeo, grassItems, flowerItems } = useMemo(() => {
     const rnd = createSeededRandom(20261108);
-    // Hình học bụi cỏ: nón ngược 5 cạnh thuôn nhẹ ở gốc
-    const gGeo = new THREE.ConeGeometry(0.11, 0.24, 5);
-    gGeo.translate(0, 0.12, 0);
-    // Hình học bông hoa nhỏ trên thảm cỏ
-    const fGeo = new THREE.DodecahedronGeometry(0.055, 0);
-    fGeo.translate(0, 0.22, 0);
+    const gGeo = createCurvedGrassClumpGeometry();
+    const fGeo = createWildflowerClusterGeometry();
 
-    const gList: Array<{ x: number; y: number; z: number; sx: number; sy: number; rot: number; color: string }> = [];
+    const gList: Array<{
+      x: number;
+      y: number;
+      z: number;
+      sx: number;
+      sy: number;
+      rot: number;
+      phase: number;
+      color: string;
+    }> = [];
     const fList: Array<{ x: number; y: number; z: number; s: number; color: string }> = [];
-    const grassTones = ['#5B873B', '#6A9946', '#4E7832', '#75A44F'];
+    const grassTones = ['#7BB24E', '#8BC35A', '#6A9F42', '#95CE62'];
     const flowerTones = ['#FFD54F', '#FFF176', '#FF8A65', '#F48FB1', '#FFFFFF'];
 
-    // 1. Trên các bồn cỏ Quảng trường C1 (y = 0,20)
+    // 1. Trên các bồn cỏ Quảng trường C1 (y = 0,19)
     for (const bed of C1_GRASS_BEDS) {
-      for (let i = 0; i < 68; i++) {
+      for (let i = 0; i < 84; i++) {
         const x = bed.cx + (rnd() - 0.5) * (bed.w - 0.8);
         const z = bed.cz + (rnd() - 0.5) * (bed.d - 0.6);
         gList.push({
           x,
           y: 0.19,
           z,
-          sx: 0.75 + rnd() * 0.6,
-          sy: 0.7 + rnd() * 0.65,
+          sx: 0.82 + rnd() * 0.55,
+          sy: 0.78 + rnd() * 0.55,
           rot: rnd() * Math.PI * 2,
+          phase: x * 0.25 + z * 0.19,
           color: grassTones[i % grassTones.length],
         });
-        if (i % 3 === 0) {
+        if (i % 4 === 0) {
           fList.push({
-            x: x + (rnd() - 0.5) * 0.12,
+            x: x + (rnd() - 0.5) * 0.14,
             y: 0.19,
-            z: z + (rnd() - 0.5) * 0.12,
-            s: 0.8 + rnd() * 0.45,
+            z: z + (rnd() - 0.5) * 0.14,
+            s: 0.85 + rnd() * 0.45,
             color: flowerTones[i % flowerTones.length],
           });
         }
@@ -288,21 +416,22 @@ function GrassAndFlowerTufts() {
 
     // 2. Quanh gốc các cây dọc Đường Tình Yêu (trên cỏ y = 0,01)
     for (const tree of LOVE_ROAD_TREES) {
-      for (let i = 0; i < 18; i++) {
+      for (let i = 0; i < 20; i++) {
         const ang = rnd() * Math.PI * 2;
-        const r = 0.45 + rnd() * 1.15;
+        const r = 0.72 + rnd() * 0.95;
         const x = tree.x + Math.cos(ang) * r;
         const z = tree.z + Math.sin(ang) * r;
         gList.push({
           x,
           y: 0.01,
           z,
-          sx: 0.85 + rnd() * 0.6,
-          sy: 0.8 + rnd() * 0.7,
+          sx: 0.9 + rnd() * 0.55,
+          sy: 0.85 + rnd() * 0.6,
           rot: rnd() * Math.PI * 2,
+          phase: x * 0.25 + z * 0.19,
           color: grassTones[i % grassTones.length],
         });
-        if (i % 4 === 0) {
+        if (i % 5 === 0) {
           fList.push({
             x,
             y: 0.01,
@@ -314,17 +443,18 @@ function GrassAndFlowerTufts() {
       }
     }
 
-    // 3. Dải thảm cỏ phía tây lối dạo Hồ Tiền (x = -31..-28.2, z = -2..78)
-    for (let i = 0; i < 120; i++) {
+    // 3. Dải thảm cỏ phía tây lối dạo Hồ Tiền (x = -31.2..-28.4, z = -2..78)
+    for (let i = 0; i < 145; i++) {
       const x = -31.2 + rnd() * 2.8;
       const z = -2 + rnd() * 80;
       gList.push({
         x,
         y: 0.01,
         z,
-        sx: 0.85 + rnd() * 0.65,
-        sy: 0.75 + rnd() * 0.75,
+        sx: 0.9 + rnd() * 0.58,
+        sy: 0.8 + rnd() * 0.65,
         rot: rnd() * Math.PI * 2,
+        phase: x * 0.25 + z * 0.19,
         color: grassTones[i % grassTones.length],
       });
       if (i % 4 === 0) {
@@ -332,7 +462,7 @@ function GrassAndFlowerTufts() {
           x,
           y: 0.01,
           z,
-          s: 0.85 + rnd() * 0.45,
+          s: 0.88 + rnd() * 0.45,
           color: flowerTones[(i + 2) % flowerTones.length],
         });
       }
@@ -388,14 +518,257 @@ function GrassAndFlowerTufts() {
     }
   }, [grassItems, flowerItems]);
 
+  // Gió thổi nhẹ qua thảm cỏ (~24fps để giữ CPU gần như bằng 0)
+  useFrame((state, rawDelta) => {
+    const gMesh = grassRef.current;
+    if (!gMesh) return;
+    swayAccRef.current += rawDelta;
+    if (swayAccRef.current < 0.042) return;
+    swayAccRef.current = 0;
+    const t = state.clock.elapsedTime;
+    for (let i = 0; i < grassItems.length; i++) {
+      const it = grassItems[i];
+      const wave = Math.sin(t * 2.1 + it.phase);
+      dummyObj.position.set(it.x, it.y, it.z);
+      dummyObj.rotation.set(wave * 0.075, it.rot, Math.cos(t * 1.6 + it.phase) * 0.055);
+      dummyObj.scale.set(it.sx, it.sy, it.sx);
+      dummyObj.updateMatrix();
+      gMesh.setMatrixAt(i, dummyObj.matrix);
+    }
+    gMesh.instanceMatrix.needsUpdate = true;
+  });
+
   return (
     <group>
       <instancedMesh ref={grassRef} args={[grassGeo, undefined, grassItems.length]}>
-        <meshStandardMaterial color="#FFFFFF" roughness={0.9} />
+        <meshStandardMaterial color="#FFFFFF" vertexColors roughness={0.88} side={THREE.DoubleSide} />
       </instancedMesh>
       <instancedMesh ref={flowerRef} args={[flowerGeo, undefined, flowerItems.length]}>
-        <meshStandardMaterial color="#FFFFFF" roughness={0.75} />
+        <meshStandardMaterial color="#FFFFFF" vertexColors roughness={0.72} side={THREE.DoubleSide} />
       </instancedMesh>
+    </group>
+  );
+}
+
+/**
+ * Chi tiết hạ tầng đường phố ĐHBK Hà Nội: vạch kẻ qua đường (Zebra Crosswalk),
+ * vạch tim đường nét đứt, song chắn rác gang đúc thu nước & vỉa hè gạch block tự chèn.
+ */
+function CampusStreetscapeDetails() {
+  const crosswalkRef = useRef<THREE.InstancedMesh>(null);
+  const centerLineRef = useRef<THREE.InstancedMesh>(null);
+  const drainRef = useRef<THREE.InstancedMesh>(null);
+
+  const assets = useMemo(() => {
+    const { zebraMap, drainMap } = makeZebraAndDrainTextures();
+    const sidewalk = makeSidewalkPaverTexture(14, 1);
+    const stripeGeo = new THREE.PlaneGeometry(1, 1);
+    const zebraMat = new THREE.MeshStandardMaterial({
+      map: zebraMap,
+      color: '#F1F5F9',
+      roughness: 0.78,
+      metalness: 0.02,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+    });
+    const lineMat = new THREE.MeshStandardMaterial({
+      color: '#E8ECEF',
+      roughness: 0.82,
+      metalness: 0.02,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+    });
+    const drainMat = new THREE.MeshStandardMaterial({
+      map: drainMap,
+      roughness: 0.52,
+      metalness: 0.65,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+    });
+    return { zebraMap, drainMap, sidewalk, stripeGeo, zebraMat, lineMat, drainMat };
+  }, []);
+
+  useEffect(
+    () => () => {
+      assets.stripeGeo.dispose();
+      assets.zebraMat.dispose();
+      assets.lineMat.dispose();
+      assets.drainMat.dispose();
+      assets.zebraMap.dispose();
+      assets.drainMap.dispose();
+      assets.sidewalk.map.dispose();
+      assets.sidewalk.bumpMap.dispose();
+    },
+    [assets],
+  );
+
+  // Vạch kẻ qua đường trắng ngà tại các giao lộ trọng điểm dọc ROADS
+  const crosswalkStripes = useMemo(() => {
+    const list: Array<{ x: number; z: number; w: number; l: number; rotY: number }> = [];
+    const addCrosswalk = (cx: number, cz: number, roadWidth: number, orientation: 'ns' | 'ew') => {
+      const count = Math.max(4, Math.floor((roadWidth - 0.8) / 0.92));
+      const span = (count - 1) * 0.92;
+      for (let i = 0; i < count; i++) {
+        const off = -span / 2 + i * 0.92;
+        if (orientation === 'ew') {
+          // Băng ngang qua trục Đông-Tây (các vạch xếp theo chiều Z)
+          list.push({ x: cx, z: cz + off, w: 2.35, l: 0.46, rotY: 0 });
+        } else {
+          // Băng ngang qua trục Bắc-Nam (các vạch xếp theo chiều X)
+          list.push({ x: cx + off, z: cz, w: 0.46, l: 2.35, rotY: 0 });
+        }
+      }
+    };
+
+    // 1. Đầu Cổng Parabol lên Đại lộ chính
+    addCrosswalk(-83.5, -6, 8.2, 'ew');
+    // 2. Ngã tư Quảng trường C1 (trên nhánh Bắc + hai bên trên đại lộ chính)
+    addCrosswalk(-58, -12.6, 5.4, 'ns');
+    addCrosswalk(-64.2, -6, 8.2, 'ew');
+    addCrosswalk(-51.8, -6, 8.2, 'ew');
+    // 3. Giao lộ Đường Tình Yêu – Thư viện TQB / Hồ Tiền (x = 24, z = -6)
+    addCrosswalk(18.5, -6, 8.2, 'ew');
+    addCrosswalk(29.5, -6, 8.2, 'ew');
+    addCrosswalk(24, 1.5, 5.4, 'ns');
+    // 4. Lối rẽ nhánh C7 / D3 & Cổng Trần Đại Nghĩa
+    addCrosswalk(51.2, -6, 8.2, 'ew');
+    addCrosswalk(56.2, -13.5, 5.4, 'ns');
+    addCrosswalk(56.2, 2.2, 5.2, 'ns');
+    addCrosswalk(91.5, -10.4, 5.0, 'ew');
+    addCrosswalk(91.5, -1.6, 5.0, 'ew');
+    return list;
+  }, []);
+
+  // Vạch tim đường nét đứt trên các trục chính (không chạm quảng trường hay ngã tư)
+  const centerDashes = useMemo(() => {
+    const dashes: Array<{ x: number; z: number; w: number; l: number }> = [];
+    const ewSpans: Array<[number, number, number]> = [
+      [-80.5, -66.5, -6],
+      [-49.0, -40.5, -6],
+      [-31.5, 16.0, -6],
+      [32.5, 48.5, -6],
+      [97.5, 112.0, -6],
+    ];
+    for (const [x0, x1, z] of ewSpans) {
+      for (let x = x0 + 1.4; x <= x1 - 1.4; x += 3.8) {
+        dashes.push({ x, z, w: 1.9, l: 0.14 });
+      }
+    }
+    const nsSpans: Array<[number, number, number]> = [
+      [24, -52.5, -11.5],
+      [24, 4.5, 51.0],
+      [56.2, -54.5, -16.0],
+      [56.2, 5.0, 56.5],
+    ];
+    for (const [x, z0, z1] of nsSpans) {
+      for (let z = z0 + 1.4; z <= z1 - 1.4; z += 3.8) {
+        dashes.push({ x, z, w: 0.14, l: 1.85 });
+      }
+    }
+    return dashes;
+  }, []);
+
+  // Song chắn rác gang thu nước mưa dọc hai bên rãnh đường
+  const drains = useMemo(() => {
+    const items: Array<{ x: number; z: number; rotY: number }> = [];
+    for (let x = -76; x <= 48; x += 18) {
+      if (Math.abs(x - -58) < 5 || Math.abs(x - -38) < 6 || Math.abs(x - 24) < 5) continue;
+      items.push({ x, z: -9.78, rotY: 0 });
+      items.push({ x, z: -2.22, rotY: 0 });
+    }
+    for (const z of [-46, -28, 12, 28, 44]) {
+      items.push({ x: 21.62, z, rotY: Math.PI / 2 });
+      items.push({ x: 53.95, z, rotY: Math.PI / 2 });
+    }
+    return items;
+  }, []);
+
+  // Các dải vỉa hè gạch block dọc các tuyến đường thoáng (y = 0,031)
+  const sidewalks: Array<{ x: number; z: number; w: number; d: number }> = useMemo(
+    () => [
+      { x: -49.5, z: -11.15, w: 10.2, d: 1.4 }, // Bắc Đại lộ C1 -> Ngã 5
+      { x: -6.5, z: -11.15, w: 50.0, d: 1.4 },  // Bắc Đại lộ Đường Tình Yêu (Ngã 5 -> đường x=24)
+      { x: 40.5, z: -11.15, w: 26.0, d: 1.4 },  // Bắc Đại lộ đoạn Thư viện -> C7/D3
+      { x: -62.0, z: -0.9, w: 34.0, d: 1.35 },  // Nam Đại lộ đối diện C9/C1
+      { x: -5.5, z: -0.9, w: 52.0, d: 1.35 },   // Nam Đại lộ trước dải xanh Hồ Tiền
+      { x: 40.5, z: -0.9, w: 25.0, d: 1.35 },   // Nam Đại lộ phía Bắc sân Thư viện
+    ],
+    [],
+  );
+
+  useLayoutEffect(() => {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+    const qRotY = new THREE.Quaternion();
+    const pos = new THREE.Vector3();
+    const scl = new THREE.Vector3();
+
+    if (crosswalkRef.current) {
+      crosswalkStripes.forEach((st, idx) => {
+        pos.set(st.x, 0.026, st.z);
+        scl.set(st.w, st.l, 1);
+        m.compose(pos, q, scl);
+        crosswalkRef.current!.setMatrixAt(idx, m);
+      });
+      crosswalkRef.current.instanceMatrix.needsUpdate = true;
+    }
+
+    if (centerLineRef.current) {
+      centerDashes.forEach((ds, idx) => {
+        pos.set(ds.x, 0.025, ds.z);
+        scl.set(ds.w, ds.l, 1);
+        m.compose(pos, q, scl);
+        centerLineRef.current!.setMatrixAt(idx, m);
+      });
+      centerLineRef.current.instanceMatrix.needsUpdate = true;
+    }
+
+    if (drainRef.current) {
+      drains.forEach((dr, idx) => {
+        qRotY.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, dr.rotY));
+        pos.set(dr.x, 0.0245, dr.z);
+        scl.set(0.68, 0.42, 1);
+        m.compose(pos, qRotY, scl);
+        drainRef.current!.setMatrixAt(idx, m);
+      });
+      drainRef.current.instanceMatrix.needsUpdate = true;
+    }
+  }, [crosswalkStripes, centerDashes, drains]);
+
+  return (
+    <group name="CampusStreetscapeDetails">
+      <instancedMesh
+        ref={crosswalkRef}
+        args={[assets.stripeGeo, assets.zebraMat, crosswalkStripes.length]}
+        receiveShadow
+      />
+      <instancedMesh
+        ref={centerLineRef}
+        args={[assets.stripeGeo, assets.lineMat, centerDashes.length]}
+        receiveShadow
+      />
+      <instancedMesh
+        ref={drainRef}
+        args={[assets.stripeGeo, assets.drainMat, drains.length]}
+        receiveShadow
+      />
+      {sidewalks.map((sw, idx) => (
+        <mesh
+          key={`sidewalk-strip-${idx}`}
+          rotation-x={-Math.PI / 2}
+          position={[sw.x, 0.031, sw.z]}
+          receiveShadow
+        >
+          <planeGeometry args={[sw.w, sw.d]} />
+          <meshStandardMaterial
+            color="#FFFFFF"
+            map={assets.sidewalk.map}
+            bumpMap={assets.sidewalk.bumpMap}
+            bumpScale={0.012}
+            roughness={0.88}
+          />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -482,6 +855,7 @@ export default function Ground() {
         />
       </mesh>
       <GrassAndFlowerTufts />
+      <CampusStreetscapeDetails />
 
       {/* Các tuyến phố bên ngoài rìa Đông (Trần Đại Nghĩa, Tạ Quang Bửu, Lê Thanh Nghị) và sân trước cầu thang C9 (y = 0,012). */}
       {[

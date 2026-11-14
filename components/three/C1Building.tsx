@@ -351,7 +351,17 @@ function WindTower({
 
 // --- Cây Lipa tán phân lớp có vân vỏ cây + tán lá PBR & đung đưa nhẹ ----------
 function LocalTree({ x, z, canopyColor }: { x: number; z: number; canopyColor: string }) {
-  return <ImprovedTree x={x} z={z} trunkH={3.2} canopyR={2.4} canopyY={4.7} canopyColor={canopyColor} />;
+  return (
+    <ImprovedTree
+      x={x}
+      z={z}
+      trunkH={3.2}
+      canopyR={2.4}
+      canopyY={4.7}
+      canopyColor={canopyColor}
+      withTreePit={false}
+    />
+  );
 }
 
 // --- Ghế gỗ nâu, khung sắt đen -------------------------------------------------
