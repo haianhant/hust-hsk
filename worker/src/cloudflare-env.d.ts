@@ -35,6 +35,9 @@ interface SqlStorage {
 
 interface DurableObjectStorage {
   readonly sql?: SqlStorage;
+  getAlarm?(): Promise<number | null>;
+  setAlarm?(scheduledTime: number | Date): Promise<void>;
+  deleteAlarm?(): Promise<void>;
 }
 
 interface DurableObjectState {
@@ -42,6 +45,11 @@ interface DurableObjectState {
   readonly storage?: DurableObjectStorage;
   acceptWebSocket(ws: WebSocket, tags?: string[]): void;
   getWebSockets(tag?: string): WebSocket[];
+}
+
+interface WebSocket {
+  serializeAttachment?(value: unknown): void;
+  deserializeAttachment?(): unknown;
 }
 
 declare class WebSocketPair {

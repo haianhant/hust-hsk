@@ -14,6 +14,9 @@ export interface BoardGameHUDProps {
   lobbyOpen: boolean;
   rulesOpen: boolean;
   hasActiveMatch?: boolean;
+  inviteCode?: string | null;
+  matchStatusLabel?: string | null;
+  isSpectator?: boolean;
   onToggleLobby: () => void;
   onToggleRules: () => void;
   onStandUpSeat: () => void;
@@ -28,6 +31,9 @@ export default function BoardGameHUD({
   lobbyOpen,
   rulesOpen,
   hasActiveMatch = false,
+  inviteCode = null,
+  matchStatusLabel = null,
+  isSpectator = false,
   onToggleLobby,
   onToggleRules,
   onStandUpSeat,
@@ -51,6 +57,21 @@ export default function BoardGameHUD({
         <span className="rounded-lg bg-slate-900/90 px-2 py-0.5 text-[11px] text-slate-200">
           Bàn 1: <strong>{table1Count}/8</strong> · Bàn 2: <strong>{table2Count}/8</strong>
         </span>
+
+        {inviteCode && (
+          <span className="inline-flex items-center gap-1 rounded-lg bg-amber-950/90 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-300 ring-1 ring-amber-400/40">
+            Mã: {inviteCode}
+            {matchStatusLabel ? (
+              <span className="font-sans font-normal text-amber-100/90">· {matchStatusLabel}</span>
+            ) : null}
+          </span>
+        )}
+
+        {isSpectator && (
+          <span className="rounded-lg bg-sky-950/90 px-2 py-0.5 text-[11px] font-semibold text-sky-300 ring-1 ring-sky-500/35">
+            👁 Khán giả
+          </span>
+        )}
 
         {activeSeat && (
           <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-950/90 px-2 py-0.5 text-[11px] font-medium text-emerald-300 ring-1 ring-emerald-500/40">

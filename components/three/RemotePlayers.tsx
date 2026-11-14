@@ -604,6 +604,7 @@ function filterPlayersForScene(
 ): RemotePlayer[] {
   return players.filter((p) => {
     if (scene === 'library' && seatedIds.has(p.id)) return false;
+    if (scene === 'boardgame' && p.seatedSeatId?.startsWith('bg-')) return false;
     const pScene = p.scene ?? 'campus';
     return pScene === scene;
   });

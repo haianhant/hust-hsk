@@ -12,6 +12,10 @@ import {
   BOARD_GAME_TABLES,
   type BoardGameTableId,
 } from '../../campus/world-data';
+import type {
+  BoardGameLobbyPlayerView,
+  BoardGameMatchSummary,
+} from '../network/contracts';
 import type { BoardGameSeatOccupant } from '../world/BoardGameSeats';
 
 export interface BoardGameLobbyProps {
@@ -20,6 +24,11 @@ export interface BoardGameLobbyProps {
   exitConfirmOpen: boolean;
   currentSeatId: string | null;
   occupants?: readonly BoardGameSeatOccupant[];
+  directoryMatches?: readonly BoardGameMatchSummary[];
+  activePlayers?: readonly BoardGameLobbyPlayerView[];
+  spectatorCount?: number;
+  selfPlayerId?: string | null;
+  isSpectator?: boolean;
   inviteCode?: string | null;
   matchStatusLabel?: string | null;
   isHost?: boolean;
@@ -34,9 +43,11 @@ export interface BoardGameLobbyProps {
   onSelectSeat: (seatId: string) => void;
   onStandUpSeat: () => void;
   onCreateMatch?: (tableId: BoardGameTableId) => void;
-  onJoinByCode?: (code: string) => void;
+  onJoinByCode?: (code: string, asSpectator?: boolean) => void;
+  onJoinDirectoryMatch?: (matchId: string, inviteCode: string, asSpectator: boolean) => void;
   onToggleReady?: () => void;
   onStartMatch?: () => void;
+  onLeaveMatch?: () => void;
 }
 
 export default function BoardGameLobby({
@@ -45,6 +56,11 @@ export default function BoardGameLobby({
   exitConfirmOpen,
   currentSeatId,
   occupants = [],
+  directoryMatches = [],
+  activePlayers = [],
+  spectatorCount = 0,
+  selfPlayerId = null,
+  isSpectator = false,
   inviteCode = null,
   matchStatusLabel = null,
   isHost = false,
@@ -60,12 +76,15 @@ export default function BoardGameLobby({
   onStandUpSeat,
   onCreateMatch,
   onJoinByCode,
+  onJoinDirectoryMatch,
   onToggleReady,
   onStartMatch,
+  onLeaveMatch,
 }: BoardGameLobbyProps) {
   const [selectedTable, setSelectedTable] = useState<BoardGameTableId>('table-1');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [localInfoMsg, setLocalInfoMsg] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const occupiedMap = new Map<string, BoardGameSeatOccupant>();
   for (const occ of occupants) {
@@ -187,27 +206,93 @@ export default function BoardGameLobby({
                 </h3>
 
                 {inviteCode ? (
-                  <div className="mt-2.5 space-y-2 rounded-lg border border-emerald-500/35 bg-emerald-950/30 p-3">
+                  <div className="mt-2.5 space-y-3 rounded-lg border border-emerald-500/35 bg-emerald-950/25 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <span className="text-xs text-emerald-200">Mã mời phòng:</span>{' '}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-emerald-200">Mã mời phòng:</span>
                         <span
                           data-testid="bg-invite-code"
-                          className="rounded bg-slate-900 px-2 py-0.5 font-mono text-sm font-bold tracking-widest text-amber-300"
+                          className="rounded bg-slate-900 px-2.5 py-0.5 font-mono text-sm font-bold tracking-widest text-amber-300"
                         >
                           {inviteCode}
                         </span>
-                      </div>
-                      {matchStatusLabel && (
-                        <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-200">
-                          {matchStatusLabel}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {onToggleReady && (
                         <button
                           type="button"
+                          data-testid="bg-copy-invite-btn"
+                          onClick={() => {
+                            if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                              void navigator.clipboard.writeText(inviteCode);
+                              setCopiedCode(true);
+                              setTimeout(() => setCopiedCode(false), 1800);
+                            }
+                          }}
+                          className="rounded-lg bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-200 hover:bg-slate-700"
+                        >
+                          {copiedCode ? '✓ Đã sao chép' : '📋 Sao chép'}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {matchStatusLabel && (
+                          <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-200">
+                            {matchStatusLabel}
+                          </span>
+                        )}
+                        {spectatorCount > 0 && (
+                          <span className="rounded bg-slate-900 px-2 py-0.5 text-[11px] text-sky-300">
+                            👁 {spectatorCount} xem
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Danh sách thành viên đang ngồi bàn */}
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                      {activePlayers.map((p) => {
+                        const isMe = selfPlayerId === p.playerId;
+                        return (
+                          <div
+                            key={p.playerId}
+                            className={`flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-xs ${
+                              isMe
+                                ? 'border-amber-400/45 bg-amber-950/30'
+                                : 'border-slate-800 bg-slate-900/75'
+                            }`}
+                          >
+                            <span className="truncate font-medium text-slate-100">
+                              <span className="mr-1.5 text-[11px] text-slate-400">
+                                #{(p.seatIndex ?? 0) + 1}
+                              </span>
+                              {p.isHost ? '👑 ' : ''}
+                              {p.displayName}
+                              {isMe ? ' (Bạn)' : ''}
+                            </span>
+                            <span
+                              className={`shrink-0 text-[11px] font-semibold ${
+                                !p.connected
+                                  ? 'text-rose-300'
+                                  : p.ready || p.isHost
+                                    ? 'text-emerald-300'
+                                    : 'text-amber-300'
+                              }`}
+                            >
+                              {!p.connected
+                                ? 'Mất kết nối'
+                                : p.isHost
+                                  ? 'Chủ bàn'
+                                  : p.ready
+                                    ? '✓ Sẵn sàng'
+                                    : 'Đang chờ'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!isSpectator && onToggleReady && (
+                        <button
+                          type="button"
+                          data-testid="bg-ready-toggle-btn"
                           onClick={onToggleReady}
                           className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
                             localReady
@@ -221,6 +306,7 @@ export default function BoardGameLobby({
                       {isHost && onStartMatch && (
                         <button
                           type="button"
+                          data-testid="bg-start-match-btn"
                           disabled={!canStartMatch}
                           onClick={onStartMatch}
                           className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-40"
@@ -228,68 +314,127 @@ export default function BoardGameLobby({
                           ▶ Bắt đầu ván đấu
                         </button>
                       )}
+                      {onLeaveMatch && (
+                        <button
+                          type="button"
+                          data-testid="bg-leave-match-btn"
+                          onClick={onLeaveMatch}
+                          className="ml-auto rounded-lg bg-rose-700/80 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-600"
+                        >
+                          Rời phòng đấu
+                        </button>
+                      )}
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <p className="text-xs text-slate-300">
-                        Tạo phòng tại <strong>{selectedTable === 'table-1' ? 'Bàn 1 (Tây)' : 'Bàn 2 (Đông)'}</strong> để nhận mã mời 6 ký tự.
-                      </p>
-                      <button
-                        type="button"
-                        data-testid="bg-create-match-btn"
-                        onClick={() => {
-                          if (supportsOnlineLobby && onCreateMatch) {
-                            onCreateMatch(selectedTable);
+                  <div className="mt-2.5 space-y-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <p className="text-xs text-slate-300">
+                          Tạo phòng tại <strong>{selectedTable === 'table-1' ? 'Bàn 1 (Tây)' : 'Bàn 2 (Đông)'}</strong> để nhận mã mời 6 ký tự.
+                        </p>
+                        <button
+                          type="button"
+                          data-testid="bg-create-match-btn"
+                          onClick={() => {
+                            if (supportsOnlineLobby && onCreateMatch) {
+                              onCreateMatch(selectedTable);
+                            } else {
+                              setLocalInfoMsg(
+                                'Sảnh 3D đã sẵn sàng! Máy chủ đồng bộ trận đấu Bóng Đêm KTX đang được kích hoạt.',
+                              );
+                            }
+                          }}
+                          className="w-full rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400"
+                        >
+                          ✨ Tạo trận Bóng Đêm KTX
+                        </button>
+                      </div>
+
+                      <form
+                        className="space-y-2"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const clean = joinCodeInput.trim().toUpperCase();
+                          if (!clean) return;
+                          if (supportsOnlineLobby && onJoinByCode) {
+                            onJoinByCode(clean, false);
                           } else {
                             setLocalInfoMsg(
-                              'Sảnh 3D đã sẵn sàng! Máy chủ đồng bộ trận đấu Bóng Đêm KTX đang được kích hoạt ở chặng kết nối mạng tiếp theo.',
+                              `Đã ghi nhận mã mời ${clean}. Kết nối trực tuyến cần chạy máy chủ BoardGameRoom.`,
                             );
                           }
                         }}
-                        className="w-full rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400"
                       >
-                        ✨ Tạo trận Bóng Đêm KTX
-                      </button>
+                        <label className="block text-xs text-slate-300" htmlFor="bg-join-code-input">
+                          Đã có mã mời từ bạn cùng phòng?
+                        </label>
+                        <div className="flex gap-1.5">
+                          <input
+                            id="bg-join-code-input"
+                            data-testid="bg-join-code-input"
+                            value={joinCodeInput}
+                            onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase().slice(0, 8))}
+                            placeholder="VD: KTX89A"
+                            className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs uppercase text-amber-200 outline-none focus:border-amber-400"
+                          />
+                          <button
+                            type="submit"
+                            data-testid="bg-join-code-btn"
+                            className="rounded-xl bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
+                          >
+                            Tham gia
+                          </button>
+                        </div>
+                      </form>
                     </div>
 
-                    <form
-                      className="space-y-2"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const clean = joinCodeInput.trim().toUpperCase();
-                        if (!clean) return;
-                        if (supportsOnlineLobby && onJoinByCode) {
-                          onJoinByCode(clean);
-                        } else {
-                          setLocalInfoMsg(
-                            `Đã ghi nhận mã mời ${clean}. Chức năng kết nối phòng trực tuyến sẽ kích hoạt cùng máy chủ BoardGameRoom.`,
-                          );
-                        }
-                      }}
-                    >
-                      <label className="block text-xs text-slate-300" htmlFor="bg-join-code-input">
-                        Đã có mã mời từ bạn cùng phòng?
-                      </label>
-                      <div className="flex gap-1.5">
-                        <input
-                          id="bg-join-code-input"
-                          data-testid="bg-join-code-input"
-                          value={joinCodeInput}
-                          onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase().slice(0, 8))}
-                          placeholder="VD: KTX89A"
-                          className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-1.5 font-mono text-xs uppercase text-amber-200 outline-none focus:border-amber-400"
-                        />
-                        <button
-                          type="submit"
-                          data-testid="bg-join-code-btn"
-                          className="rounded-xl bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
-                        >
-                          Tham gia
-                        </button>
+                    {directoryMatches.length > 0 && (
+                      <div className="space-y-1.5 border-t border-slate-800 pt-2.5">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                          Phòng đang mở trong CLB ({directoryMatches.length})
+                        </div>
+                        <div className="space-y-1.5">
+                          {directoryMatches.map((m) => (
+                            <div
+                              key={m.matchId}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/80 px-2.5 py-1.5 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <span className="font-mono font-bold text-amber-300">{m.inviteCode}</span>
+                                <span className="mx-1.5 text-slate-600">·</span>
+                                <span className="text-slate-200">
+                                  {m.tableId === 'table-1' ? 'Bàn 1' : 'Bàn 2'} · Chủ: {m.hostName}
+                                </span>
+                                <span className="ml-2 text-[11px] text-slate-400">
+                                  ({m.playerCount}/{m.maxPlayers})
+                                </span>
+                              </div>
+                              {onJoinDirectoryMatch && (
+                                <div className="flex items-center gap-1.5">
+                                  {m.status !== 'PLAYING' && m.playerCount < m.maxPlayers && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onJoinDirectoryMatch(m.matchId, m.inviteCode, false)}
+                                      className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500"
+                                    >
+                                      Vào bàn
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => onJoinDirectoryMatch(m.matchId, m.inviteCode, true)}
+                                    className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-medium text-sky-300 hover:bg-slate-700"
+                                  >
+                                    👁 Xem
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </form>
+                    )}
                   </div>
                 )}
 

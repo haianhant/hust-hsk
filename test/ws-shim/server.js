@@ -19,6 +19,7 @@ const http = require('http');
 const { WebSocketServer } = require('./mini-ws');
 const { ROOM_CAPACITY, ROOM_IDS } = require('../../shared/contracts/multiplayer.ts');
 const { HskRoom } = require('../../worker/src/room.ts');
+const { createBoardGameHttpAndWsHandler } = require('./boardgame-do-harness.cjs');
 
 const PORT = Number(process.argv[2] || 8788);
 const ROOMS = [...ROOM_IDS];
@@ -78,8 +79,24 @@ function attachHibernationSupport(ws, roomId) {
 
 const rooms = new Map(ROOMS.map((id) => [id, createRoomContainer(id)]));
 const wss = new WebSocketServer({ noServer: true });
+const bgHandler = createBoardGameHttpAndWsHandler();
 
 const server = http.createServer((req, res) => {
+  const reqUrl = new URL(req.url, 'http://localhost');
+  if (
+    reqUrl.pathname.startsWith('/api/boardgame') ||
+    reqUrl.pathname === '/__bg_hibernate' ||
+    reqUrl.pathname === '/__bg_trigger_alarm'
+  ) {
+    void bgHandler.tryHandleHttp(req, res).then((handled) => {
+      if (!handled && !res.writableEnded) {
+        res.writeHead(404);
+        res.end('not found');
+      }
+    });
+    return;
+  }
+
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -127,6 +144,12 @@ const server = http.createServer((req, res) => {
 
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/ws/boardgame') {
+    void bgHandler.tryHandleUpgrade(req, socket, head, wss).then((handled) => {
+      if (!handled) socket.destroy();
+    });
+    return;
+  }
   if (url.pathname !== '/ws') {
     socket.destroy();
     return;

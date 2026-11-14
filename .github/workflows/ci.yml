@@ -61,14 +61,6 @@ jobs:
             echo "::error::CLOUDFLARE_API_TOKEN secret is not configured in GitHub Actions Secrets."
             exit 1
           fi
-          if ! npx --yes wrangler@3 deploy; then
-            echo "Retrying Cloudflare Worker deploy without initial DO creation migration tag..."
-            node -e '
-              const fs = require("fs");
-              const toml = fs.readFileSync("wrangler.toml", "utf8").replace(/\[\[migrations\]\][\s\S]*$/, "");
-              fs.writeFileSync("wrangler.toml", toml);
-            '
-            npx --yes wrangler@3 deploy
-          fi
+          npx --yes wrangler@3 deploy
           curl -fsS https://hust-hsk-rooms.hunganhz179.workers.dev/health
           echo ""

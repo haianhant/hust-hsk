@@ -56,7 +56,12 @@ function useSeatJoints(): FigureJoints {
   };
 }
 
-function makeSeatNameBadgeTexture(name: string, ready: boolean, isHost: boolean): THREE.CanvasTexture {
+function makeSeatNameBadgeTexture(
+  name: string,
+  ready: boolean,
+  isHost: boolean,
+  connected: boolean,
+): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 128;
@@ -67,7 +72,13 @@ function makeSeatNameBadgeTexture(name: string, ready: boolean, isHost: boolean)
     ctx.beginPath();
     ctx.roundRect(12, 16, 488, 96, 22);
     ctx.fill();
-    ctx.strokeStyle = ready ? '#10B981' : isHost ? '#F59E0B' : '#64748B';
+    ctx.strokeStyle = !connected
+      ? '#FB7185'
+      : ready
+        ? '#10B981'
+        : isHost
+          ? '#F59E0B'
+          : '#64748B';
     ctx.lineWidth = 4;
     ctx.stroke();
 
@@ -76,9 +87,13 @@ function makeSeatNameBadgeTexture(name: string, ready: boolean, isHost: boolean)
     ctx.font = `700 32px ${CANVAS_VN_FONT}`;
     ctx.fillText(isHost ? `👑 ${name}` : name, 256, 54);
 
-    ctx.fillStyle = ready ? '#34D399' : '#FDE68A';
+    ctx.fillStyle = !connected ? '#FDA4AF' : ready ? '#34D399' : '#FDE68A';
     ctx.font = `600 22px ${CANVAS_VN_FONT}`;
-    ctx.fillText(ready ? 'Sẵn sàng vào ván' : 'Đang chờ tại bàn', 256, 92);
+    ctx.fillText(
+      !connected ? 'Mất kết nối (giữ ghế)' : ready ? 'Sẵn sàng vào ván' : 'Đang chờ tại bàn',
+      256,
+      92,
+    );
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -94,14 +109,16 @@ function SeatedRemotePlayerAvatar({
   occupant: BoardGameSeatOccupant;
 }) {
   const joints = useSeatJoints();
+  const isConnected = occupant.connected !== false;
   const badgeTex = useMemo(
     () =>
       makeSeatNameBadgeTexture(
         occupant.displayName,
         Boolean(occupant.ready),
         Boolean(occupant.isHost),
+        isConnected,
       ),
-    [occupant.displayName, occupant.ready, occupant.isHost],
+    [occupant.displayName, occupant.ready, occupant.isHost, isConnected],
   );
 
   useEffect(() => {

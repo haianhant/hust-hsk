@@ -157,6 +157,8 @@ class MiniWebSocket extends EventEmitter {
 
       if (opcode === 0x08) {
         // Close frame
+        const closeCode = payload.length >= 2 ? payload.readUInt16BE(0) : 1005;
+        const closeReason = payload.length > 2 ? payload.subarray(2).toString('utf8') : '';
         if (this.readyState === 1 && this._socket && !this._socket.destroyed) {
           try {
             this._socket.write(encodeFrame(0x08, Buffer.alloc(0), !this._isServer));
@@ -168,7 +170,7 @@ class MiniWebSocket extends EventEmitter {
         if (this._socket && !this._socket.destroyed) {
           this._socket.destroy();
         }
-        this.emit('close');
+        this.emit('close', closeCode, closeReason);
         return;
       } else if (opcode === 0x09) {
         // Ping -> Pong

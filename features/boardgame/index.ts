@@ -9,3 +9,10 @@ export { default as BoardGameSeats, type BoardGameSeatOccupant } from './world/B
 export { default as BoardGameTable } from './world/BoardGameTable';
 export { default as BoardGameHUD } from './ui/BoardGameHUD';
 export { default as BoardGameLobby } from './ui/BoardGameLobby';
+export {
+  BoardGameClient,
+  boardGameClient,
+  useBoardGameClientSnapshot,
+  type BoardGameClientSnapshot,
+  type BoardGameConnectionState,
+} from './network/client';
