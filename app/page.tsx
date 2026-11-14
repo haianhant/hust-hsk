@@ -123,6 +123,7 @@ import {
 } from '../features/boardgame';
 import {
   BOARD_GAME_MIN_PLAYERS,
+  sanitizeInviteCode,
   seatIdToTableAndIndex,
   type BoardGameTableId,
 } from '../shared/contracts/boardgame';
@@ -216,6 +217,7 @@ export default function HomePage() {
   const [boardGameExitConfirmOpen, setBoardGameExitConfirmOpen] = useState(false);
   const bgSnap = useBoardGameClientSnapshot();
   const bgSessionRestoredRef = useRef(false);
+  const pendingBgInviteRef = useRef<string | null>(null);
   const [seatedSeatId, setSeatedSeatId] = useState<string | null>(null);
   const [seatedSeatLabel, setSeatedSeatLabel] = useState<string | null>(null);
   const [nearestSeatId, setNearestSeatId] = useState<string | null>(null);
@@ -263,6 +265,15 @@ export default function HomePage() {
       setSavedIdentity(saved);
       setIdentityName(saved.name);
       setIdentityMssv(saved.mssv);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const rawInvite = sanitizeInviteCode(urlParams.get('bgInvite'));
+    if (rawInvite) {
+      pendingBgInviteRef.current = rawInvite;
+      urlParams.delete('bgInvite');
+      const qs = urlParams.toString();
+      const cleanUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`;
+      window.history.replaceState({}, '', cleanUrl);
     }
   }, []);
 
@@ -1511,6 +1522,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!entered || bgSessionRestoredRef.current) return;
     bgSessionRestoredRef.current = true;
+    if (pendingBgInviteRef.current) return;
     const restoredMatchId = boardGameClient.tryRestoreSessionMatch(
       characterProfile.name,
       bgAppearance,
@@ -1577,6 +1589,42 @@ export default function HomePage() {
     },
     [characterProfile.name, bgAppearance, showToast],
   );
+
+  // Tự động bước vào CLB & gia nhập bàn khi mở liên kết mời `?bgInvite=CODE`
+  useEffect(() => {
+    if (!entered || !pendingBgInviteRef.current) return;
+    const code = pendingBgInviteRef.current;
+    pendingBgInviteRef.current = null;
+    setInBoardGameClub(true);
+    setBoardGameLobbyOpen(true);
+    void handleJoinBoardGameByCode(code, false);
+
+    // Đồng bộ Player 3D vào phòng CLB ngay khi Three.js Canvas hoàn tất mount
+    let cancelled = false;
+    let attempts = 0;
+    let activeTimer: number | null = null;
+    const syncPlayerHook = () => {
+      if (cancelled) return;
+      const hook = getHook();
+      if (hook?.enterBoardGameClub) {
+        if (!hook.isInBoardGameClub?.()) {
+          hook.enterBoardGameClub();
+        }
+        return;
+      }
+      if (attempts < 150) {
+        attempts += 1;
+        activeTimer = window.setTimeout(syncPlayerHook, 150);
+      }
+    };
+    activeTimer = window.setTimeout(syncPlayerHook, 150);
+    return () => {
+      cancelled = true;
+      if (activeTimer !== null) {
+        window.clearTimeout(activeTimer);
+      }
+    };
+  }, [entered, handleJoinBoardGameByCode]);
 
   const handleJoinDirectoryBoardGameMatch = useCallback(
     (matchId: string, inviteCode: string, asSpectator: boolean) => {
@@ -2315,30 +2363,6 @@ export default function HomePage() {
     [activeEdTechLandmarkId],
   );
 
-  // --- Màn mở đầu (Trình tạo Nhân vật 3D trước khi vào trường) ---------------
-  if (!entered) {
-    return (
-      <EntryScreen
-        characterProfile={characterProfile}
-        savedIdentity={savedIdentity}
-        identityName={identityName}
-        identityMssv={identityMssv}
-        progress={progress}
-        hskMode={hskMode}
-        onToggleHskMode={() => handleToggleHskMode(undefined, true)}
-        onEnter={tryEnter}
-      />
-    );
-  }
-
-  const currentZoneLabel = inClassroom
-    ? 'Giảng đường HSK · Tòa C7'
-    : inLibraryLobby
-      ? 'Sảnh Thư viện Tạ Quang Bửu'
-      : inBoardGameClub
-        ? '🎲 CLB Board Game KTX'
-        : zone;
-
   const boardGameOccupants: BoardGameSeatOccupant[] = useMemo(() => {
     if (!bgSnap.matchId) return [];
     const list: BoardGameSeatOccupant[] = [];
@@ -2405,6 +2429,30 @@ export default function HomePage() {
               : bgSnap.status === 'FINISHED'
                 ? 'Đã kết thúc'
                 : null;
+
+  // --- Màn mở đầu (Trình tạo Nhân vật 3D trước khi vào trường) ---------------
+  if (!entered) {
+    return (
+      <EntryScreen
+        characterProfile={characterProfile}
+        savedIdentity={savedIdentity}
+        identityName={identityName}
+        identityMssv={identityMssv}
+        progress={progress}
+        hskMode={hskMode}
+        onToggleHskMode={() => handleToggleHskMode(undefined, true)}
+        onEnter={tryEnter}
+      />
+    );
+  }
+
+  const currentZoneLabel = inClassroom
+    ? 'Giảng đường HSK · Tòa C7'
+    : inLibraryLobby
+      ? 'Sảnh Thư viện Tạ Quang Bửu'
+      : inBoardGameClub
+        ? '🎲 CLB Board Game KTX'
+        : zone;
 
   const unclaimedQuestCount = CAMPUS_LIFE_QUESTS.filter(
     (q) => isCampusQuestCompleted(campusQuests, q) && !campusQuests.claimedIds.includes(q.id),

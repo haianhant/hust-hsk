@@ -1,7 +1,7 @@
 # HUSTVerse Board Game Club & “Bóng Đêm KTX — Secrets After Dark”
 
 > **Module IDs:** `feature.board-game-club`, `feature.bong-dem-ktx`, `worker.board-game-room`  
-> **Phiên bản kiến trúc:** BG1 → BG4 (Stacked Branches trên nền `main`)  
+> **Trạng thái triển khai:** Hoàn thiện trọn bộ BG1 (`feat/bg1-board-game-lounge`) → BG2 (`feat/bg2-match-lobby-do`) → BG3 (`feat/bg3-playable-mvp`) → BG4 (`feat/bg4-polish-social`)  
 > **Bản quyền:** 100% IP, bối cảnh, nhân vật, luật chơi, bộ thẻ và giao diện nguyên bản lấy cảm hứng từ thể loại *social deduction / hidden-role tactical board game*; không sao chép tên thương mại, luật chi tiết hay lời văn của bất kỳ sản phẩm nào khác.
 
 ---
@@ -130,13 +130,17 @@ Mỗi `GameCard` khai báo thuần dữ liệu `{ id, deck: 'clue' | 'event' | '
 ### 3.5. Cấu trúc 1 Lượt Chơi (Server-Authoritative)
 
 1. **Di chuyển (`MOVE`):** Chọn 1 trong 5 khu vực khác vị trí hiện tại (hoặc giữ vị trí theo hiệu ứng).
-2. **Hành động Khu vực (`EXPLORE` / `DRAW_CARD`):** Rút `1 lá` từ bộ `clue`, `event` hoặc `tactic` phù hợp khu vực (hoặc kích hoạt đặc quyền khu vực).
-3. **Tác động Chiến thuật (`ACT`):** Chọn **1 trong các lựa chọn** hợp lệ trước khi kết thúc lượt:
+2. **Hành động Khu vực (`EXPLORE` / `DRAW_CARD` / `ADJUST_TRACK`):** Rút `1 lá` từ bộ `clue`, `event` hoặc `tactic` phù hợp khu vực (bộ `tactic` nhân bản thành 20 lá để đủ chia 2 lá khởi đầu cho tối đa 8 người); riêng khi đang ở **Phòng Phát Thanh (`radio`)** có thể chọn `ADJUST_TRACK` (`+1 Tín hiệu` hoặc `+1 Nhiễu sóng`).
+3. **Tác động Chiến thuật (`TACTICAL_ACTION`):** Chọn **1 trong các lựa chọn** hợp lệ trước khi kết thúc lượt (nếu sự kiện vừa rút khiến bản thân gục trước pha này, lượt tự động chuyển tiếp an toàn):
    - Sử dụng 1 lá `Tactic` trên tay.
    - Kích hoạt **Kỹ năng Nhân vật** (có thể kèm **Lật Vai / Reveal Identity** để tăng uy lực hoặc đạt điều kiện).
-   - **Thăm dò / Công kích** 1 người chơi ở cùng khu vực (hoặc tầm xa hợp lệ) gây sát thương / phá khiên.
-   - **Bỏ qua (`END_TURN`)**.
-4. **Hết giờ tự động (`DO alarm()`):** Sau `45 giây` không thao tác (hoặc `30 giây` cấu hình nhanh), `BoardGameRoom` Durable Object tự động thực hiện bước di chuyển/kết thúc lượt hợp lệ để ván đấu không bao giờ treo.
+   - **Thăm dò (`PROBE`)** hoặc **Công kích (`ATTACK`)** 1 người chơi ở cùng khu vực (hoặc lân cận từ Sân Bóng Rổ `court`).
+   - **Kết thúc lượt (`END_TURN`)**.
+4. **Hết giờ tự động (`DO alarm()`):** Sau `45 giây` không thao tác (hoặc `15 giây` nếu người tới lượt bị mất kết nối), `BoardGameRoom` Durable Object tự động thực hiện bước di chuyển/kết thúc lượt hợp lệ để ván đấu không bao giờ treo.
+5. **Chia sẻ & Hậu kỳ (`BG4`):**
+   - **Link mời trực tiếp (`?bgInvite=CODE`):** Nút `🔗 Link mời` trong `BoardGameLobby` tạo URL kèm `?bgInvite=CODE`; khi người chơi mở link và vào campus (`#enter-campus`), `app/page.tsx` tự động đưa avatar vào Phòng CLB Board Game, mở sảnh và kết nối thẳng vào bàn chờ theo mã mời.
+   - **Âm thanh WebAudio thủ tục (`features/boardgame/ui/sound.ts`):** Âm thanh rút thẻ, lật vai, tiến độ tín hiệu/nhiễu sóng, báo tới lượt, biểu cảm và chiến thắng (lưu trạng thái tắt/bật ở `localStorage`, an toàn khi thiếu `AudioContext`).
+   - **Bưu thiếp Tổng kết (`MatchPostcard.tsx`):** Canvas 2D `1200×675` tiếng Việt NFC qua `wrapVietnameseCanvasContext`, xuất PNG tải về; tuyệt đối không hiển thị MSSV.
 
 ---
 
@@ -220,11 +224,13 @@ CREATE TABLE IF NOT EXISTS directory_matches (
    - `getPrivateGameView(state, authenticatedPlayerId)`: Chỉ trả riêng cho `WebSocket` gắn đúng `authenticatedPlayerId` qua kênh unicast (`ws.send`). Chứa `roleId`, `faction`, `secretGoal`, `wardId` (nếu có), `hand` (danh sách `GameCard` trên tay), `privateNotes` (kết quả soi vai riêng cho người chơi đó).
 2. **Spectator Strictly Read-Only:** Kết nối khán giả luôn nhận `privateView: null`, không thể gửi lệnh thay đổi trạng thái ván (`REJECTED_SPECTATOR`).
 3. **Không bao giờ trả `game_state_json`, `reconnect_token_hash`, vai bí mật chưa lật, hoặc MSSV** trong `/api/boardgame/matches`, `MatchPostcard`, hay log lỗi.
-4. **Rate limiting & Guard:** Kiểm tra `Origin` header với allowlist, giới hạn độ dài `displayName <= 24`, chặn spam chat/emote (`1.5s` cooldown trên server) và giới hạn tần suất action (`>= 120ms` giữa các lệnh).
+4. **Rate limiting & Idempotency Guard:** Kiểm tra `Origin` header với allowlist, giới hạn độ dài `displayName <= 24`, chặn spam chat/emote (`1.5s` cooldown trên server). Với `BG_GAME_ACTION`, kiểm tra bảng `processed_requests` (idempotency theo `requestId`) **trước**, sau đó mới áp dụng ngưỡng tần suất `MIN_ACTION_INTERVAL_MS = 25ms` và kiểm tra `expectedRevision` (`STALE_REVISION` resync nếu lệch phiên bản).
 
 ---
 
 ## 6. Xử lý Lỗi & Kế hoạch Kiểm thử (`BG1 → BG4`)
+
+Chạy gộp nhanh toàn bộ kiểm thử tự động Board Game qua `npm run test:boardgame` (tích hợp trong CI Gate 5b tại `.github/workflows/ci.yml`), và chạy E2E trình duyệt đa ngữ cảnh qua `node test/boardgame-e2e.cjs`:
 
 | Nhóm kiểm thử | Script / Công cụ | Mục tiêu xác minh |
 |---|---|---|

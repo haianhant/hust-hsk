@@ -293,14 +293,16 @@ export function CampusHud({
             ⭐ {progress?.points ?? 0} điểm
             {progress?.streak && progress.streak.count > 0 ? ` · 🔥 ${progress.streak.count} ngày` : ''}
           </div>
-          <button
-            id="hud-checkin-badge"
-            type="button"
-            onClick={() => onOpenHandbook('lesson')}
-            className="pointer-events-auto hidden w-fit rounded-full border border-amber-300/45 bg-slate-900/80 px-3.5 py-1.5 text-xs font-bold text-amber-200 shadow-md backdrop-blur-sm transition hover:bg-slate-800 sm:inline-flex"
-          >
-            📍 Check-in {checkedInCount}/{totalLandmarks} tòa
-          </button>
+          {!inBoardGameClub && (
+            <button
+              id="hud-checkin-badge"
+              type="button"
+              onClick={() => onOpenHandbook('lesson')}
+              className="pointer-events-auto hidden w-fit rounded-full border border-amber-300/45 bg-slate-900/80 px-3.5 py-1.5 text-xs font-bold text-amber-200 shadow-md backdrop-blur-sm transition hover:bg-slate-800 sm:inline-flex"
+            >
+              📍 Check-in {checkedInCount}/{totalLandmarks} tòa
+            </button>
+          )}
         </div>
         {/* Đợt 5 multiplayer — phòng + số người THẬT trong phòng; mất
             kết nối thì ghi rõ đang chơi một mình, không báo số giả. */}
@@ -780,14 +782,14 @@ export function CampusHud({
 
         {/* Cụm nút trên Desktop (sm:flex) */}
         <div className="pointer-events-auto hidden max-w-[calc(100vw-480px)] flex-wrap justify-end gap-1.5 sm:flex lg:max-w-[calc(100vw-520px)]">
-          {onOpenStudyPanel && (
+          {!inBoardGameClub && onOpenStudyPanel && (
             <StudyHudButton
               pomodoro={pomodoro}
               onOpenStudyPanel={onOpenStudyPanel}
               onReconcileStudyAt={onReconcileStudyAt}
             />
           )}
-          {onOpenLeaderboard && (
+          {!inBoardGameClub && onOpenLeaderboard && (
             <button
               id="open-study-leaderboard"
               data-testid="open-study-leaderboard"
@@ -852,7 +854,7 @@ export function CampusHud({
               👕 Nhân vật &amp; trang phục
             </button>
           )}
-          {!hideNav && onOpenCampusQuests && (
+          {!hideNav && !inBoardGameClub && onOpenCampusQuests && (
             <button
               id="open-campus-quests"
               data-testid="open-campus-quests"
@@ -868,7 +870,7 @@ export function CampusHud({
               )}
             </button>
           )}
-          {!hideNav && onOpenMemoryWall && (
+          {!hideNav && !inBoardGameClub && onOpenMemoryWall && (
             <button
               id="open-memory-wall"
               data-testid="open-memory-wall"
@@ -879,7 +881,7 @@ export function CampusHud({
               📌 Lưu bút
             </button>
           )}
-          {!hideNav && onOpenPhotoMode && (
+          {!hideNav && !inBoardGameClub && onOpenPhotoMode && (
             <button
               id="open-photo-mode"
               data-testid="open-photo-mode"
@@ -907,15 +909,17 @@ export function CampusHud({
               {viewMode === 'pov' ? '👁️ Góc nhìn 1' : '🎥 Góc nhìn 3'}
             </button>
           )}
-          <button
-            id="open-handbook"
-            type="button"
-            onClick={() => onOpenHandbook('lesson')}
-            className="whitespace-nowrap rounded-full bg-black/55 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
-          >
-            🗺️ Sổ tay
-          </button>
-          {onToggleHskMode && (
+          {!inBoardGameClub && (
+            <button
+              id="open-handbook"
+              type="button"
+              onClick={() => onOpenHandbook('lesson')}
+              className="whitespace-nowrap rounded-full bg-black/55 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
+            >
+              🗺️ Sổ tay
+            </button>
+          )}
+          {!inBoardGameClub && onToggleHskMode && (
             <button
               id="toggle-hsk-mode"
               data-testid="toggle-hsk-mode"

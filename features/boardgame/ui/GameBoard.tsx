@@ -6,7 +6,7 @@
 // điều khiển theo lượt, nhật ký, kết quả & responsive Mobile 390x844).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   VALID_BOARD_GAME_EMOTES,
   type BoardGameActionPayload,
@@ -20,7 +20,18 @@ import { FACTION_LABELS } from '../domain/roles';
 import RoleCard from './RoleCard';
 import ActionPanel from './ActionPanel';
 import GameLog from './GameLog';
+import MatchPostcard from './MatchPostcard';
 import MatchResult from './MatchResult';
+import {
+  isBoardGameSoundMuted,
+  playCardDraw,
+  playEmotePop,
+  playRoleReveal,
+  playTrackAdvance,
+  playTurnAlert,
+  playVictoryFanfare,
+  setBoardGameSoundMuted,
+} from './sound';
 
 const EMOTE_META: Record<BoardGameEmoteId, { icon: string; label: string }> = {
   wave: { icon: '👋', label: 'Chào' },
@@ -74,6 +85,100 @@ export default function GameBoard({
   const [mobileTab, setMobileTab] = useState<'board' | 'role' | 'log'>('board');
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
+  const [internalMuted, setInternalMuted] = useState<boolean>(() => isBoardGameSoundMuted());
+  const [toastEmote, setToastEmote] = useState<BoardGameChatEmoteServerMessage | null>(null);
+
+  const effectiveMuted = onToggleSound ? soundMuted : internalMuted;
+  const handleToggleSound = () => {
+    const next = !effectiveMuted;
+    setBoardGameSoundMuted(next);
+    setInternalMuted(next);
+    onToggleSound?.();
+  };
+
+  const didInitAudioRefs = useRef(false);
+  const prevActiveIdRef = useRef<string | null>(publicGame.activePlayerId);
+  const prevSignalRef = useRef<number>(publicGame.signalProgress);
+  const prevMistRef = useRef<number>(publicGame.mistProgress);
+  const prevHandCountRef = useRef<number>(privateView?.hand.length ?? 0);
+  const prevRevealedCountRef = useRef<number>(
+    publicGame.players.filter((p) => Boolean(p.revealedFaction || p.revealedRoleId)).length,
+  );
+  const prevPhaseRef = useRef<string>(publicGame.turnPhase);
+  const prevEmoteCountRef = useRef<number>(recentEmotes.length);
+
+  useEffect(() => {
+    const handCount = privateView?.hand.length ?? 0;
+    const revealedCount = publicGame.players.filter((p) =>
+      Boolean(p.revealedFaction || p.revealedRoleId),
+    ).length;
+    if (!didInitAudioRefs.current) {
+      didInitAudioRefs.current = true;
+      prevActiveIdRef.current = publicGame.activePlayerId;
+      prevSignalRef.current = publicGame.signalProgress;
+      prevMistRef.current = publicGame.mistProgress;
+      prevHandCountRef.current = handCount;
+      prevRevealedCountRef.current = revealedCount;
+      prevPhaseRef.current = publicGame.turnPhase;
+      return;
+    }
+
+    if (publicGame.turnPhase === 'ENDED' && prevPhaseRef.current !== 'ENDED') {
+      playVictoryFanfare();
+    } else if (
+      publicGame.activePlayerId === selfPlayerId &&
+      prevActiveIdRef.current !== selfPlayerId &&
+      !isSpectator &&
+      publicGame.turnPhase !== 'ENDED'
+    ) {
+      playTurnAlert();
+    }
+
+    if (
+      publicGame.signalProgress > prevSignalRef.current ||
+      publicGame.mistProgress > prevMistRef.current
+    ) {
+      playTrackAdvance();
+    }
+    if (handCount > prevHandCountRef.current) {
+      playCardDraw();
+    }
+    if (revealedCount > prevRevealedCountRef.current) {
+      playRoleReveal();
+    }
+
+    prevActiveIdRef.current = publicGame.activePlayerId;
+    prevSignalRef.current = publicGame.signalProgress;
+    prevMistRef.current = publicGame.mistProgress;
+    prevHandCountRef.current = handCount;
+    prevRevealedCountRef.current = revealedCount;
+    prevPhaseRef.current = publicGame.turnPhase;
+  }, [
+    publicGame.activePlayerId,
+    publicGame.signalProgress,
+    publicGame.mistProgress,
+    publicGame.players,
+    publicGame.turnPhase,
+    privateView?.hand.length,
+    selfPlayerId,
+    isSpectator,
+  ]);
+
+  useEffect(() => {
+    if (recentEmotes.length <= prevEmoteCountRef.current) {
+      prevEmoteCountRef.current = recentEmotes.length;
+      return;
+    }
+    prevEmoteCountRef.current = recentEmotes.length;
+    const latest = recentEmotes[recentEmotes.length - 1];
+    if (!latest) return;
+    playEmotePop();
+    setToastEmote(latest);
+    const timer = window.setTimeout(() => {
+      setToastEmote((curr) => (curr === latest ? null : curr));
+    }, 2800);
+    return () => window.clearTimeout(timer);
+  }, [recentEmotes]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 500);
@@ -110,7 +215,7 @@ export default function GameBoard({
   return (
     <div
       data-testid="boardgame-2d-board"
-      className="fixed inset-0 z-40 flex flex-col overflow-x-hidden bg-slate-950/94 text-slate-100 backdrop-blur-md"
+      className="fixed inset-0 z-[45] flex flex-col overflow-x-hidden bg-slate-950/94 text-slate-100 backdrop-blur-md"
     >
       {/* Thanh đỉnh: Tên trận, Chỉ số Tín hiệu vs Màn sương, Vòng, Đồng hồ, Nút */}
       <header className="shrink-0 border-b border-slate-800 bg-slate-950/90 px-3 py-2.5 sm:px-4">
@@ -140,17 +245,15 @@ export default function GameBoard({
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            {onToggleSound && (
-              <button
-                type="button"
-                data-testid="bg-sound-toggle-btn"
-                onClick={onToggleSound}
-                className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
-                title={soundMuted ? 'Bật âm thanh bàn chơi' : 'Tắt âm thanh bàn chơi'}
-              >
-                {soundMuted ? '🔇' : '🔊'}
-              </button>
-            )}
+            <button
+              type="button"
+              data-testid="bg-sound-toggle-btn"
+              onClick={handleToggleSound}
+              className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+              title={effectiveMuted ? 'Bật âm thanh bàn chơi' : 'Tắt âm thanh bàn chơi'}
+            >
+              {effectiveMuted ? '🔇' : '🔊'}
+            </button>
             <button
               type="button"
               data-testid="bg-board-rules-btn"
@@ -209,6 +312,18 @@ export default function GameBoard({
           <div className="rounded-xl border border-rose-500/50 bg-rose-950/75 px-3 py-1.5 text-center text-xs text-rose-100">
             ⚠️ {actionErr || lastError}
           </div>
+        </div>
+      )}
+
+      {/* Thông báo biểu cảm / nhắn nhanh nổi phía góc trên phải */}
+      {toastEmote && (
+        <div
+          data-testid="bg-emote-toast"
+          className="pointer-events-none fixed right-3 top-20 z-[52] max-w-xs rounded-xl border border-amber-400/50 bg-slate-900/95 px-3 py-2 text-xs text-amber-100 shadow-xl transition duration-200 motion-reduce:transition-none"
+        >
+          <span className="font-bold text-amber-300">{toastEmote.displayName}: </span>
+          {toastEmote.emote ? `${EMOTE_META[toastEmote.emote]?.icon ?? ''} ` : ''}
+          {toastEmote.text ?? (toastEmote.emote ? EMOTE_META[toastEmote.emote]?.label : '')}
         </div>
       )}
 
@@ -388,7 +503,7 @@ export default function GameBoard({
       </div>
 
       {/* Thanh tab Mobile (dưới cùng trên < lg) */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t border-slate-800 bg-slate-950/95 lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-[46] grid grid-cols-3 border-t border-slate-800 bg-slate-950/95 lg:hidden">
         <button
           type="button"
           onClick={() => setMobileTab('board')}
@@ -424,6 +539,7 @@ export default function GameBoard({
           publicGame={publicGame}
           selfPlayerId={selfPlayerId}
           isSpectator={isSpectator}
+          postcardSlot={<MatchPostcard publicGame={publicGame} inviteCode={inviteCode} />}
           onPlayAgain={onPlayAgain}
           onLeaveMatch={onLeaveMatch}
         />
@@ -431,7 +547,7 @@ export default function GameBoard({
 
       {/* Hộp thoại xác nhận rời ván giữa chừng */}
       {leaveConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-rose-500/45 bg-slate-900 p-4 text-xs text-slate-100 shadow-2xl">
             <h3 className="text-sm font-bold text-rose-300">Xác nhận rời ván đấu?</h3>
             <p className="mt-1.5 leading-relaxed text-slate-300">

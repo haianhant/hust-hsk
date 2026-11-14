@@ -36,6 +36,7 @@ Bộ tài liệu này được thiết kế làm **nguồn sự thật kỹ thu�
 - **Hệ thống Chế độ Gắn rời (`lib/gameModes.ts`)** — `feature.modes.hsk-toggle` (Lớp Lõi Khám phá & Tương tác Bách Khoa 3D luôn bật; `HSK Mode` mặc định TẮT cho người mới và bật/tắt lưu bền vững qua `localStorage`).
 - [Chế độ Học HSK 3–4 & SRS (`docs/features/hsk-learning.md`)](./features/hsk-learning.md) — `feature.learning.hsk` (1.057 từ, 50 nhiệm vụ, lịch ôn tập ngắt quãng SRS, sổ lỗi, huy hiệu — kích hoạt khi bật `HSK Mode`).
 - [Kiến trúc Pomodoro & Study Rooms (`docs/features/study-pomodoro.md`)](./features/study-pomodoro.md) — `feature.study.pomodoro`, `feature.social.study-rooms` (`Co-Study Mode` tại Thư viện Tạ Quang Bửu).
+- [CLB Board Game KTX & “Bóng Đêm KTX” (`docs/features/board-game-club.md`)](./features/board-game-club.md) — `feature.board-game-club`, `feature.bong-dem-ktx`, `worker.board-game-room`.
 
 ### Quyết định Kiến trúc (`docs/adr/`)
 - [ADR-0001: Kiến trúc Modular Monolith & Shared Contracts](./adr/0001-modular-monolith-and-shared-contracts.md)
@@ -79,6 +80,9 @@ Bộ tài liệu này được thiết kế làm **nguồn sự thật kỹ thu�
 | `feature.learning.hsk` | Engine học HSK 3–4 (1.057 từ, 50 quest, SRS) | `lib/learn/*`, `content/*`, `components/learn/*` | [hsk-learning.md](./features/hsk-learning.md) | Production |
 | `feature.social.multiplayer` | Đồng bộ vị trí & ngoại hình qua WebSocket DO | `shared/contracts/multiplayer.ts`, `lib/multiplayer.ts`, `worker/src/room.ts` | [multiplayer.md](./architecture/multiplayer.md) | Production (`PR1`) |
 | `feature.study.pomodoro` | Đồng hồ Pomodoro, Focus Mode, Study Session & Study Rooms | `shared/contracts/study.ts`, `features/study/*`, `features/social/rooms/*`, `features/social/presence/*` | [study-pomodoro.md](./features/study-pomodoro.md) | Production (`PR6`) |
+| `feature.board-game-club` | Phòng CLB Board Game KTX 3D, 16 ghế & sảnh chờ bàn | `features/boardgame/world/*`, `features/boardgame/ui/BoardGame{HUD,Lobby}.tsx`, `features/campus/world-data/boardGameData.ts` | [board-game-club.md](./features/board-game-club.md) | Stack BG1–BG4 |
+| `feature.bong-dem-ktx` | Board game suy luận chiến thuật vai ẩn 4–8 người, MatchPostcard & SFX | `shared/contracts/boardgame.ts`, `features/boardgame/domain/*`, `features/boardgame/ui/*` | [board-game-club.md](./features/board-game-club.md) | Stack BG1–BG4 |
+| `worker.board-game-room` | Authoritative SQLite Durable Object quản lý phòng chờ, lượt & hibernation | `worker/src/boardgame-room.ts`, `worker/src/boardgame-router.ts`, `worker/wrangler.toml` | [board-game-club.md](./features/board-game-club.md) | Stack BG1–BG4 |
 
 ---
 

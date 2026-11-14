@@ -85,6 +85,7 @@ export default function BoardGameLobby({
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [localInfoMsg, setLocalInfoMsg] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const occupiedMap = new Map<string, BoardGameSeatOccupant>();
   for (const occ of occupants) {
@@ -101,7 +102,7 @@ export default function BoardGameLobby({
   return (
     <>
       {open && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[45] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm">
           <div
             data-testid="boardgame-lobby-modal"
             className="flex max-h-[86vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-amber-400/35 bg-slate-900 text-slate-100 shadow-2xl"
@@ -221,7 +222,7 @@ export default function BoardGameLobby({
                           data-testid="bg-copy-invite-btn"
                           onClick={() => {
                             if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                              void navigator.clipboard.writeText(inviteCode);
+                              void navigator.clipboard.writeText(inviteCode).catch(() => undefined);
                               setCopiedCode(true);
                               setTimeout(() => setCopiedCode(false), 1800);
                             }
@@ -229,6 +230,22 @@ export default function BoardGameLobby({
                           className="rounded-lg bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-200 hover:bg-slate-700"
                         >
                           {copiedCode ? '✓ Đã sao chép' : '📋 Sao chép'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="bg-copy-invite-link-btn"
+                          onClick={() => {
+                            if (typeof window === 'undefined') return;
+                            const shareUrl = `${window.location.origin}${window.location.pathname}?bgInvite=${encodeURIComponent(inviteCode)}`;
+                            if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                              void navigator.clipboard.writeText(shareUrl).catch(() => undefined);
+                            }
+                            setCopiedLink(true);
+                            setTimeout(() => setCopiedLink(false), 1800);
+                          }}
+                          className="rounded-lg bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-amber-200 hover:bg-slate-700"
+                        >
+                          {copiedLink ? '✓ Đã chép link' : '🔗 Link mời'}
                         </button>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -451,7 +468,7 @@ export default function BoardGameLobby({
 
       {/* Bảng luật chơi Bóng Đêm KTX thân thiện cho người mới */}
       {rulesOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm">
           <div
             data-testid="boardgame-rules-modal"
             className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-sky-400/35 bg-slate-900 text-slate-100 shadow-2xl"
@@ -517,7 +534,7 @@ export default function BoardGameLobby({
 
       {/* Hộp thoại xác nhận rời CLB khi đang trong ván / sảnh có trận */}
       {exitConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
           <div
             data-testid="boardgame-exit-confirm-modal"
             className="w-full max-w-sm rounded-2xl border border-rose-400/40 bg-slate-900 p-4 text-slate-100 shadow-2xl"

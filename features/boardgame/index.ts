@@ -13,7 +13,9 @@ export { default as GameBoard } from './ui/GameBoard';
 export { default as RoleCard } from './ui/RoleCard';
 export { default as ActionPanel } from './ui/ActionPanel';
 export { default as GameLog } from './ui/GameLog';
+export { default as MatchPostcard, renderMatchPostcardDataUrl } from './ui/MatchPostcard';
 export { default as MatchResult } from './ui/MatchResult';
+export { isBoardGameSoundMuted, setBoardGameSoundMuted } from './ui/sound';
 export * from './domain';
 export {
   BoardGameClient,

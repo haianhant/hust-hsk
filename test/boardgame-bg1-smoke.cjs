@@ -12,8 +12,10 @@
  */
 'use strict';
 
+const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
+const net = require('node:net');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 
@@ -54,6 +56,52 @@ function startOutServer() {
   });
 }
 
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.on('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+async function startWsShim(port) {
+  const proc = spawn(process.execPath, [path.join(ROOT, 'test/ws-shim/server.js'), String(port)], {
+    cwd: ROOT,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdoutBuf = '';
+  let stderrBuf = '';
+  proc.stdout.on('data', (d) => {
+    stdoutBuf += d.toString();
+  });
+  proc.stderr.on('data', (d) => {
+    stderrBuf += d.toString();
+  });
+  const healthUrl = `http://127.0.0.1:${port}/health`;
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 15000) {
+    if (proc.exitCode !== null) {
+      throw new Error(
+        `ws-shim exited early (${proc.exitCode}): stdout=${stdoutBuf} stderr=${stderrBuf}`,
+      );
+    }
+    try {
+      const res = await fetch(healthUrl);
+      if (res.ok) {
+        return { proc, wsBaseUrl: `ws://127.0.0.1:${port}` };
+      }
+    } catch {
+      // wait for port bind
+    }
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  proc.kill('SIGKILL');
+  throw new Error(`Timed out waiting for ws-shim health: ${stdoutBuf} ${stderrBuf}`);
+}
+
 function loadPlaywright() {
   const candidates = [
     path.join(ROOT, 'node_modules/playwright-core'),
@@ -71,6 +119,8 @@ async function main() {
     throw new Error('Missing out/index.html — run npm run build before boardgame-bg1-smoke.cjs');
   }
   const { chromium } = loadPlaywright();
+  const shimPort = await getFreePort();
+  const shim = await startWsShim(shimPort);
   const { server, url } = await startOutServer();
   let browser;
   try {
@@ -89,6 +139,9 @@ async function main() {
 
     // --- 1. Desktop (1280x800) ---
     const ctxDesktop = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
+    await ctxDesktop.addInitScript(({ wsUrl }) => {
+      window.__HUST_TEST_MP_WS_URL = wsUrl;
+    }, { wsUrl: `${shim.wsBaseUrl}/ws` });
     const page = await ctxDesktop.newPage();
     const errors = [];
     page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`));
@@ -176,6 +229,9 @@ async function main() {
       hasTouch: true,
       isMobile: true,
     });
+    await ctxMobile.addInitScript(({ wsUrl }) => {
+      window.__HUST_TEST_MP_WS_URL = wsUrl;
+    }, { wsUrl: `${shim.wsBaseUrl}/ws` });
     const mPage = await ctxMobile.newPage();
     await mPage.goto(url, { waitUntil: 'domcontentloaded' });
     await mPage.locator('#enter-campus').click();
@@ -197,6 +253,9 @@ async function main() {
   } finally {
     if (browser) await browser.close();
     server.close();
+    if (shim && shim.proc && shim.proc.exitCode === null) {
+      shim.proc.kill('SIGTERM');
+    }
   }
 }
 

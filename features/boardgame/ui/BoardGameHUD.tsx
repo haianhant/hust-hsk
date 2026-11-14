@@ -44,7 +44,7 @@ export default function BoardGameHUD({
   return (
     <div
       data-testid="boardgame-club-hud"
-      className="pointer-events-none fixed inset-x-0 top-14 z-30 flex flex-col items-center gap-2 px-3 sm:top-16"
+      className="pointer-events-none fixed inset-x-0 top-28 z-[41] flex flex-col items-center gap-2 px-3 sm:top-16"
     >
       <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-2 rounded-2xl border border-amber-400/35 bg-slate-950/88 px-3 py-2 text-xs text-amber-50 shadow-xl backdrop-blur-md">
         <span className="inline-flex items-center gap-1.5 font-semibold text-amber-300">

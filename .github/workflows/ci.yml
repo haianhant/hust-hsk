@@ -42,6 +42,9 @@ jobs:
       - name: Gate 5 — Multiplayer WebSocket Protocol Tests
         run: npm run test:mp
 
+      - name: Gate 5b — Board Game Club & Bóng Đêm KTX Tests + Balance Sim
+        run: npm run test:boardgame
+
       - name: Gate 6 — Next.js Static Export Build
         run: npm run build
 
