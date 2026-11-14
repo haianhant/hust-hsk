@@ -10,8 +10,22 @@
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loadGameModes, saveGameModes } from '../lib/gameModes';
-import { bikeState, playerState, type TimeOfDay } from '../lib/playerState';
-import { CLASSROOM, FAST_TRAVEL_DESTINATIONS, SPAWN, nearestZone } from '../lib/campus';
+import {
+  bikeState,
+  playerState,
+  type CameraViewMode,
+  type CampusTitleId,
+  type HeldDrinkId,
+  type SchoolBadgeId,
+  type TimeOfDay,
+} from '../lib/playerState';
+import {
+  CAMPUS_DRINK_STALLS,
+  CLASSROOM,
+  FAST_TRAVEL_DESTINATIONS,
+  SPAWN,
+  nearestZone,
+} from '../lib/campus';
 import { ALL_HSK3_LEXEMES as LEXEMES, HSK3_LESSON_LEXEMES } from '../content/hsk3-index';
 import { ALL_HSK4_LEXEMES, HSK4_LESSON_LEXEMES } from '../content/hsk4-index';
 import {
@@ -80,7 +94,26 @@ import {
   validateSeatSelection,
   type LibraryLobbyTopic,
 } from '../features/campus/interaction';
-import { CampusHud } from '../features/campus/ui';
+import {
+  CampusHud,
+  CampusQuestsModal,
+  PHOTO_FILTERS,
+  PhotoModeOverlay,
+  type PhotoFilterId,
+} from '../features/campus/ui';
+import {
+  CAMPUS_LIFE_QUESTS,
+  claimCampusQuest,
+  createInitialCampusQuestsState,
+  isCampusQuestCompleted,
+  loadCampusQuestsState,
+  recordCampusQuestMetric,
+  saveCampusQuestsState,
+  type CampusQuestMetricKey,
+  type CampusQuestsState,
+} from '../features/campus/quests/campus-quests';
+import CampusMemoryWallModal from '../features/social/memory-wall/CampusMemoryWallModal';
+import type { MemoryBoardId } from '../features/social/memory-wall/memory-wall';
 import {
   EntryScreen,
   LearningOverlayModal,
@@ -135,7 +168,16 @@ function computeRealWorldTimeOfDay(now: Date = new Date()): {
 export default function HomePage() {
   const [entered, setEntered] = useState(false);
   const [zone, setZone] = useState(playerState.zone);
-  const [viewMode, setViewMode] = useState<'follow' | 'top'>(playerState.viewMode);
+  const [viewMode, setViewMode] = useState<CameraViewMode>(playerState.viewMode);
+  const [photoMode, setPhotoMode] = useState<boolean>(false);
+  const [photoFilter, setPhotoFilter] = useState<PhotoFilterId>('none');
+  const [memoryWallOpen, setMemoryWallOpen] = useState<boolean>(false);
+  const [memoryWallBoardId, setMemoryWallBoardId] = useState<MemoryBoardId | undefined>(undefined);
+  const [campusQuestsOpen, setCampusQuestsOpen] = useState<boolean>(false);
+  const [campusQuests, setCampusQuests] = useState<CampusQuestsState>(() =>
+    createInitialCampusQuestsState(),
+  );
+  const [outdoorBenchLabel, setOutdoorBenchLabel] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   // Hộp "Cách di chuyển" mặc định THU GỌN trong game (mục 7, 06/11): chỉ
   // hiện nút "?" để mở lại; màn hình vào (entry screen) không dùng state này.
@@ -187,6 +229,7 @@ export default function HomePage() {
     playerState.hskMode = savedModes.hskMode;
     hskModeRef.current = savedModes.hskMode;
     setPassport(loadCampusPassport());
+    setCampusQuests(loadCampusQuestsState());
     const saved = loadIdentity();
     const savedChar = loadCharacterProfile() ?? {
       ...DEFAULT_CHARACTER_PROFILE,
@@ -291,6 +334,36 @@ export default function HomePage() {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), TOAST_MS);
   }, []);
+
+  const bumpQuestMetric = useCallback(
+    (
+      metricKey: CampusQuestMetricKey,
+      options?: { setAbsolute?: number; increment?: number; uniqueFlag?: string },
+    ) => {
+      setCampusQuests((prev) => {
+        const res = recordCampusQuestMetric(prev, metricKey, options);
+        if (res.next !== prev) {
+          saveCampusQuestsState(res.next);
+        }
+        if (res.newlyCompletedQuestIds.length > 0) {
+          window.setTimeout(() => {
+            showToast('🎉 Hoàn thành nhiệm vụ Bách Khoa! Mở "🎒 Nhiệm vụ SV" để nhận thưởng!');
+          }, 0);
+        }
+        return res.next;
+      });
+    },
+    [showToast],
+  );
+  const bumpQuestMetricRef = useRef(bumpQuestMetric);
+  bumpQuestMetricRef.current = bumpQuestMetric;
+
+  useEffect(() => {
+    const total = Object.keys(passport.checkedInAt).length;
+    if (total > 0) {
+      bumpQuestMetricRef.current('checkins', { setAbsolute: total });
+    }
+  }, [passport.checkedInAt]);
 
   const study = useStudySession({ onNotify: showToast });
   const bindSeatRef = useRef(study.bindSeat);
@@ -759,7 +832,7 @@ export default function HomePage() {
     if (viewMode === 'top') setHelpOpen(false);
   }, [viewMode]);
 
-  // Khi panel học, menu chọn bài, thẻ EdTech công trình, bảng thông tin sảnh thư viện, bảng Tự học, bảng Xếp hạng hoặc modal nhân vật mở: khóa di chuyển.
+  // Khi panel học, menu chọn bài, thẻ EdTech công trình, bảng thông tin sảnh thư viện, bảng Tự học, bảng Xếp hạng, Lưu bút, Nhiệm vụ SV hoặc modal nhân vật mở: khóa di chuyển.
   useEffect(() => {
     playerState.uiLocked =
       panel !== null ||
@@ -768,6 +841,8 @@ export default function HomePage() {
       activeEdTechLandmarkId !== null ||
       lobbyModal !== null ||
       outfitOpen ||
+      memoryWallOpen ||
+      campusQuestsOpen ||
       study.studyPanelOpen ||
       study.focusPolicy.suspend3DRendering;
     return () => {
@@ -780,9 +855,79 @@ export default function HomePage() {
     activeEdTechLandmarkId,
     lobbyModal,
     outfitOpen,
+    memoryWallOpen,
+    campusQuestsOpen,
     study.studyPanelOpen,
     study.focusPolicy.suspend3DRendering,
   ]);
+
+  useEffect(() => {
+    playerState.photoMode = photoMode;
+    return () => {
+      playerState.photoMode = false;
+    };
+  }, [photoMode]);
+
+  useEffect(() => {
+    if (!entered) return;
+    const onPhotoHotkey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) {
+        return;
+      }
+      if (e.code === 'Escape' && photoMode) {
+        setPhotoMode(false);
+        return;
+      }
+      if (
+        e.code === 'KeyP' &&
+        !e.repeat &&
+        !playerState.uiLocked &&
+        !study.focusPolicy.suspend3DRendering
+      ) {
+        setPhotoMode((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', onPhotoHotkey);
+    return () => window.removeEventListener('keydown', onPhotoHotkey);
+  }, [entered, photoMode, study.focusPolicy.suspend3DRendering]);
+
+  useEffect(() => {
+    if (!entered) return;
+    const onViewModeChange = (e: Event) => {
+      const d = (e as CustomEvent<{ viewMode?: CameraViewMode }>).detail;
+      if (!d?.viewMode) return;
+      setViewMode(d.viewMode);
+      if (d.viewMode === 'pov') {
+        bumpQuestMetricRef.current('cameraMoments');
+      }
+    };
+    const onOutdoorBenchChange = (e: Event) => {
+      const d = (e as CustomEvent<{ seated: boolean; benchId: string | null; label?: string }>).detail;
+      if (!d) return;
+      if (d.seated) {
+        setOutdoorBenchLabel(d.label || d.benchId || 'Ghế đá sân trường');
+        bumpQuestMetricRef.current('chillLake', { uniqueFlag: 'sat-bench' });
+      } else {
+        setOutdoorBenchLabel(null);
+      }
+    };
+    const onFootballGoal = (e: Event) => {
+      const d = (e as CustomEvent<{ side: 'west' | 'east'; totalGoals: number }>).detail;
+      if (!d) return;
+      bumpQuestMetricRef.current('footballGoals', { setAbsolute: d.totalGoals });
+      showToast(`⚽ VÀOOO! Bạn vừa ghi bàn thắng thứ ${d.totalGoals} tại SVĐ Bách Khoa!`);
+    };
+    window.addEventListener('bkhn:view-mode', onViewModeChange);
+    window.addEventListener('bkhn:outdoor-bench-change', onOutdoorBenchChange);
+    window.addEventListener('bkhn:football-goal', onFootballGoal);
+    return () => {
+      window.removeEventListener('bkhn:view-mode', onViewModeChange);
+      window.removeEventListener('bkhn:outdoor-bench-change', onOutdoorBenchChange);
+      window.removeEventListener('bkhn:football-goal', onFootballGoal);
+    };
+  }, [entered, showToast]);
 
   // Đồng bộ mode phòng học & sảnh thư viện từ hook Player.
   useEffect(() => {
@@ -928,6 +1073,8 @@ export default function HomePage() {
         seatId: playerState.seatId,
         occupiedByOtherSeatIds: occupiedOtherSet,
         pendingSeatId: snapNow.pendingSeatRequest?.seatId ?? null,
+        outdoorBenchId: playerState.outdoorBenchId,
+        footballPos: playerState.footballPos,
         bikeRiding: bikeState.riding,
         bikeSpeed: bikeState.speed,
         bikePos: bikeState.pos,
@@ -1183,6 +1330,7 @@ export default function HomePage() {
 
   const enterLibraryLobbyFade = useCallback(() => {
     stampLandmarkCheckin('library', true);
+    bumpQuestMetricRef.current('libraryVisits');
     setFade(true);
     window.setTimeout(() => {
       getHook()?.enterLibraryLobby?.();
@@ -1226,6 +1374,7 @@ export default function HomePage() {
   const handleSaveCharacterInGame = useCallback(
     (nextProfile: CharacterProfile) => {
       saveCharacterProfile(nextProfile);
+      syncCharacterToPlayerState(nextProfile);
       setCharacterProfile(nextProfile);
       setSavedIdentity({ name: nextProfile.name, mssv: nextProfile.mssv });
       setIdentityName(nextProfile.name);
@@ -1243,6 +1392,83 @@ export default function HomePage() {
     },
     [showToast],
   );
+
+  const handleUpdateCosmetics = useCallback(
+    (patch: { schoolId?: SchoolBadgeId; titleId?: CampusTitleId; gradCap?: boolean }) => {
+      setCharacterProfile((prev) => {
+        const next: CharacterProfile = { ...prev, ...patch };
+        saveCharacterProfile(next);
+        syncCharacterToPlayerState(next);
+        return next;
+      });
+      showToast('🏅 Đã cập nhật danh hiệu / phụ kiện Bách Khoa!');
+    },
+    [showToast],
+  );
+
+  const handleSelectDrink = useCallback(
+    (drinkId: HeldDrinkId) => {
+      setCharacterProfile((prev) => {
+        const next: CharacterProfile = { ...prev, heldDrink: drinkId };
+        saveCharacterProfile(next);
+        syncCharacterToPlayerState(next);
+        return next;
+      });
+      if (drinkId === 'iced-tea') {
+        showToast('🍋 Đã cầm trên tay Trà chanh đá Bách Khoa!');
+        bumpQuestMetricRef.current('chillLake', { uniqueFlag: 'ordered-drink' });
+      } else if (drinkId === 'coffee') {
+        showToast('☕ Đã cầm trên tay Cà phê nâu đá Hồ Tiền!');
+        bumpQuestMetricRef.current('chillLake', { uniqueFlag: 'ordered-drink' });
+      } else {
+        showToast('Đã cất đồ uống cầm tay.');
+      }
+    },
+    [showToast],
+  );
+
+  const handleClaimCampusQuest = useCallback(
+    (questId: string) => {
+      const res = claimCampusQuest(campusQuests, questId);
+      if (!res.claimed) return;
+      saveCampusQuestsState(res.next);
+      setCampusQuests(res.next);
+      setProgress((prev) =>
+        prev ? { ...prev, points: (prev.points ?? 0) + res.rewardPoints } : prev,
+      );
+      if (res.unlockedTitleId || res.unlockedGradCap) {
+        setCharacterProfile((prev) => {
+          const next: CharacterProfile = {
+            ...prev,
+            ...(res.unlockedTitleId ? { titleId: res.unlockedTitleId } : {}),
+            ...(res.unlockedGradCap ? { gradCap: true } : {}),
+          };
+          saveCharacterProfile(next);
+          syncCharacterToPlayerState(next);
+          return next;
+        });
+      }
+      showToast(
+        `🎁 Nhận thưởng +${res.rewardPoints} điểm${res.unlockedGradCap ? ' & mở khóa 🎓 Mũ Cử nhân Bách Khoa!' : ' & danh hiệu mới!'}`,
+      );
+    },
+    [campusQuests, showToast],
+  );
+
+  const handleTogglePov = useCallback(() => {
+    const next = getHook()?.togglePov?.();
+    if (next) {
+      setViewMode(next);
+      if (next === 'pov') {
+        bumpQuestMetricRef.current('cameraMoments');
+      }
+      showToast(
+        next === 'pov'
+          ? '👁️ Đã chuyển sang Góc nhìn thứ nhất (POV · bấm V để quay lại)'
+          : '🎥 Đã quay lại Góc nhìn thứ ba',
+      );
+    }
+  }, [showToast]);
 
   // --- Dịch chuyển nhanh (đợt 3 giai đoạn 5) -----------------------------------
   const doFastTravel = useCallback((destId: string) => {
@@ -1335,6 +1561,8 @@ export default function HomePage() {
       seatId: playerState.seatId,
       occupiedByOtherSeatIds: occupiedOtherSet,
       pendingSeatId: snapNow.pendingSeatRequest?.seatId ?? null,
+      outdoorBenchId: playerState.outdoorBenchId,
+      footballPos: playerState.footballPos,
       bikeRiding: bikeState.riding,
       bikeSpeed: bikeState.speed,
       bikePos: bikeState.pos,
@@ -1404,6 +1632,36 @@ export default function HomePage() {
       if (lm?.vocab[0]) {
         speakText(lm.vocab[0].hanzi);
       }
+      return;
+    }
+    if (id === 'bench-stand-up') {
+      getHook()?.standUpOutdoorBench?.();
+      return;
+    }
+    if (id.startsWith('bench:')) {
+      const benchId = id.slice('bench:'.length);
+      const r = getHook()?.sitOutdoorBench?.(benchId);
+      if (r?.ok) {
+        showToast(`🪑 Đang ngồi nghỉ tại ${r.label ?? 'ghế đá'} (di chuyển WASD hoặc bấm E để đứng dậy)`);
+      }
+      return;
+    }
+    if (id.startsWith('drink-stall:')) {
+      const stallId = id.slice('drink-stall:'.length);
+      const stall = CAMPUS_DRINK_STALLS.find((s) => s.id === stallId);
+      if (stall) {
+        handleSelectDrink(stall.drinkId);
+      }
+      return;
+    }
+    if (id.startsWith('memory-board:')) {
+      const boardId = id.slice('memory-board:'.length) as MemoryBoardId;
+      setMemoryWallBoardId(boardId);
+      setMemoryWallOpen(true);
+      return;
+    }
+    if (id === 'football-kick') {
+      window.dispatchEvent(new CustomEvent('bkhn:football-kick'));
       return;
     }
     if (id === 'seat-stand-up') {
@@ -1476,6 +1734,7 @@ export default function HomePage() {
     handleObjectAction,
     handleSitAtSeat,
     handleStandUp,
+    handleSelectDrink,
     handleToggleHskMode,
     showToast,
     speakText,
@@ -1803,6 +2062,13 @@ export default function HomePage() {
       ? 'Sảnh Thư viện Tạ Quang Bửu'
       : zone;
 
+  const unclaimedQuestCount = CAMPUS_LIFE_QUESTS.filter(
+    (q) => isCampusQuestCompleted(campusQuests, q) && !campusQuests.claimedIds.includes(q.id),
+  ).length;
+  const activePhotoCssFilter = photoMode
+    ? PHOTO_FILTERS.find((f) => f.id === photoFilter)?.cssFilter ?? 'none'
+    : 'none';
+
   return (
     <main className="relative h-dvh w-full overflow-hidden">
       {study.focusPolicy.suspend3DRendering ? (
@@ -1836,7 +2102,12 @@ export default function HomePage() {
       ) : (
         <>
           {/* Canvas chiếm toàn bộ viewport phía sau HUD. */}
-          <div className="absolute inset-0">
+          <div
+            className="absolute inset-0 transition-[filter] duration-200"
+            style={{
+              filter: activePhotoCssFilter !== 'none' ? activePhotoCssFilter : undefined,
+            }}
+          >
             <CampusScene
               inClassroom={inClassroom}
               inLibraryLobby={inLibraryLobby}
@@ -1858,66 +2129,97 @@ export default function HomePage() {
             }`}
           />
 
-          {/* HUD sân trường */}
-          <CampusHud
-            inClassroom={inClassroom}
-            inLibraryLobby={inLibraryLobby}
-            seated={!!seatedSeatId}
-            activeSeatId={seatedSeatId}
-            activeSeatLabel={seatedSeatLabel}
-            zone={zone}
-            progress={progress}
-            mpSnap={mpSnap}
-            riding={riding}
-            bikeSpeed={bikeSpeed}
-            noVoice={noVoice}
-            questActive={questActive}
-            panel={panel}
-            lessonsOpen={lessonsOpen}
-            timeOfDay={timeOfDay}
-            realClockText={realClockText}
-            autoTimeOfDay={autoTimeOfDay}
-            lofiPlaying={lofiPlaying}
-            soundOn={soundOn}
-            speechRate={speechRate}
-            objectiveText={null}
-            interactLabel={interactLabel}
-            fastTravelOpen={fastTravelOpen}
-            traveling={traveling}
-            helpOpen={helpOpen}
-            toast={toast}
-            checkedInCount={passportSummary.checkedInCount}
-            totalLandmarks={passportSummary.totalLandmarks}
-            hskMode={hskMode}
-            pomodoro={study.session.pomodoro}
-            focusPolicy={study.focusPolicy}
-            onToggleHskMode={() => handleToggleHskMode()}
-            onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
-            onOpenLeaderboard={() => setLeaderboardOpen(true)}
-            onStandUp={handleStandUp}
-            onReconcileStudyAt={study.reconcileAt}
-            onExitFocusMode={study.exitFocusMode}
-            onDismissNoVoice={() => {
-              noVoiceDismissedRef.current = true;
-              setNoVoice(false);
-            }}
-            onSetPanel={setPanel}
-            onSetReReviewIds={setReReviewIds}
-            onFastTravel={doFastTravel}
-            onSetFastTravelOpen={setFastTravelOpen}
-            onCycleTimeOfDay={cycleTimeOfDay}
-            onToggleLofi={handleToggleLofi}
-            onToggleOutfit={() => setOutfitOpen((o) => !o)}
-            onOpenLessons={() => setLessonsOpen(true)}
-            onOpenHandbook={openHandbook}
-            onToggleSound={toggleSound}
-            onCycleRate={cycleRate}
-            onExitLibraryLobby={exitLibraryLobbyFade}
-            onExitClassroom={exitClassroomFade}
-            onInteract={handleInteract}
-            onSetHelpOpen={setHelpOpen}
-            onShowToast={showToast}
-          />
+          {/* HUD sân trường hoặc Studio Photo Mode */}
+          {photoMode ? (
+            <PhotoModeOverlay
+              open={photoMode}
+              zone={currentZoneLabel}
+              characterProfile={characterProfile}
+              timeOfDay={timeOfDay}
+              viewMode={viewMode}
+              filterId={photoFilter}
+              onChangeFilter={setPhotoFilter}
+              onCycleTimeOfDay={cycleTimeOfDay}
+              onToggleViewMode={handleTogglePov}
+              onTriggerEmote={(emoteId) => multiplayer.sendEmote(emoteId)}
+              onExportedPostcard={() => {
+                bumpQuestMetric('cameraMoments');
+                showToast('📸 Đã xuất Bưu thiếp Kỷ yếu HUSTVerse PNG!');
+              }}
+              onClose={() => setPhotoMode(false)}
+            />
+          ) : (
+            <CampusHud
+              inClassroom={inClassroom}
+              inLibraryLobby={inLibraryLobby}
+              seated={!!seatedSeatId}
+              activeSeatId={seatedSeatId}
+              activeSeatLabel={seatedSeatLabel}
+              zone={zone}
+              progress={progress}
+              mpSnap={mpSnap}
+              riding={riding}
+              bikeSpeed={bikeSpeed}
+              noVoice={noVoice}
+              questActive={questActive}
+              panel={panel}
+              lessonsOpen={lessonsOpen}
+              timeOfDay={timeOfDay}
+              realClockText={realClockText}
+              autoTimeOfDay={autoTimeOfDay}
+              lofiPlaying={lofiPlaying}
+              soundOn={soundOn}
+              speechRate={speechRate}
+              objectiveText={null}
+              interactLabel={interactLabel}
+              fastTravelOpen={fastTravelOpen}
+              traveling={traveling}
+              helpOpen={helpOpen}
+              toast={toast}
+              checkedInCount={passportSummary.checkedInCount}
+              totalLandmarks={passportSummary.totalLandmarks}
+              hskMode={hskMode}
+              viewMode={viewMode}
+              outdoorBenchLabel={outdoorBenchLabel}
+              unclaimedQuestCount={unclaimedQuestCount}
+              pomodoro={study.session.pomodoro}
+              focusPolicy={study.focusPolicy}
+              onToggleHskMode={() => handleToggleHskMode()}
+              onTogglePov={handleTogglePov}
+              onOpenPhotoMode={() => setPhotoMode(true)}
+              onOpenMemoryWall={() => {
+                setMemoryWallBoardId(undefined);
+                setMemoryWallOpen(true);
+              }}
+              onOpenCampusQuests={() => setCampusQuestsOpen(true)}
+              onStandUpOutdoorBench={() => getHook()?.standUpOutdoorBench?.()}
+              onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
+              onOpenLeaderboard={() => setLeaderboardOpen(true)}
+              onStandUp={handleStandUp}
+              onReconcileStudyAt={study.reconcileAt}
+              onExitFocusMode={study.exitFocusMode}
+              onDismissNoVoice={() => {
+                noVoiceDismissedRef.current = true;
+                setNoVoice(false);
+              }}
+              onSetPanel={setPanel}
+              onSetReReviewIds={setReReviewIds}
+              onFastTravel={doFastTravel}
+              onSetFastTravelOpen={setFastTravelOpen}
+              onCycleTimeOfDay={cycleTimeOfDay}
+              onToggleLofi={handleToggleLofi}
+              onToggleOutfit={() => setOutfitOpen((o) => !o)}
+              onOpenLessons={() => setLessonsOpen(true)}
+              onOpenHandbook={openHandbook}
+              onToggleSound={toggleSound}
+              onCycleRate={cycleRate}
+              onExitLibraryLobby={exitLibraryLobbyFade}
+              onExitClassroom={exitClassroomFade}
+              onInteract={handleInteract}
+              onSetHelpOpen={setHelpOpen}
+              onShowToast={showToast}
+            />
+          )}
 
           {/* Bảng điều khiển Thang máy & Chuyển tầng Thư viện Tạ Quang Bửu (Tầng 1–10) */}
           <LibraryFloorNav
@@ -1975,6 +2277,30 @@ export default function HomePage() {
         session={study.session}
         onClose={() => setLeaderboardOpen(false)}
         onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
+      />
+
+      {/* Bảng Lưu bút Sân trường (Async Memory Wall) */}
+      <CampusMemoryWallModal
+        open={memoryWallOpen && entered}
+        initialBoardId={memoryWallBoardId}
+        characterProfile={characterProfile}
+        onMemoryAction={() => {
+          bumpQuestMetric('memoryActions');
+        }}
+        onClose={() => setMemoryWallOpen(false)}
+      />
+
+      {/* Bảng Hành trình Sinh viên Bách Khoa & Danh hiệu mở khóa */}
+      <CampusQuestsModal
+        open={campusQuestsOpen && entered}
+        questsState={campusQuests}
+        characterProfile={characterProfile}
+        heldDrink={characterProfile.heldDrink ?? 'none'}
+        onClaimQuest={handleClaimCampusQuest}
+        onFastTravel={doFastTravel}
+        onUpdateCosmetics={handleUpdateCosmetics}
+        onSelectDrink={handleSelectDrink}
+        onClose={() => setCampusQuestsOpen(false)}
       />
 
       {/* Cửa sổ 3D Nhân vật & Trang phục HUST mở từ HUD trong sân trường */}

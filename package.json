@@ -17,7 +17,7 @@
     "test:study": "node --test test/study-social-contracts.test.cjs",
     "test:nav": "node test/leg-sim.cjs",
     "test:mp": "node test/mp-protocol.cjs",
-    "test": "npm run test:learn && npm run test:contracts && npm run test:world && npm run test:avatar && npm run test:ui && npm run test:study && npm run test:nav && npm run test:mp"
+    "test": "npm run test:learn && npm run test:contracts && npm run test:world && npm run test:avatar && npm run test:ui && npm run test:study && npm run test:nav && npm run test:mp && node --test test/campus-engagement.test.cjs"
   },
   "dependencies": {
     "@react-three/drei": "9.114.3",

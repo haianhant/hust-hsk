@@ -4,7 +4,17 @@
 // Module ID: feature.campus.interaction
 // ---------------------------------------------------------------------------
 
-import { C7_DOOR, CLASSROOM, CLASSROOM_DOOR, LIBRARY_DOOR, LIBRARY_LOBBY } from '../world-data';
+import {
+  C7_DOOR,
+  CAMPUS_DRINK_STALLS,
+  CAMPUS_FOOTBALL_PITCH,
+  CAMPUS_MEMORY_BOARDS,
+  CLASSROOM,
+  CLASSROOM_DOOR,
+  LIBRARY_DOOR,
+  LIBRARY_LOBBY,
+  OUTDOOR_SITTABLE_BENCHES,
+} from '../world-data';
 import { findNearestCheckinLandmark } from '../checkin/campus-passport';
 import { findNearestLibrarySeat, SEAT_INTERACT_RADIUS } from './seat-interaction';
 
@@ -72,6 +82,11 @@ export type BkhnHook = {
   getLibraryFloor?: () => 1 | 2 | 3 | 4 | 5 | 6 | 7 | 10;
   getLibrarySpatialDiagnostics?: () => unknown;
   setLibraryCollisionDebug?: (enabled: boolean) => boolean;
+  setViewMode?: (mode: 'follow' | 'pov' | 'top') => void;
+  getViewMode?: () => 'follow' | 'pov' | 'top';
+  togglePov?: () => 'follow' | 'pov';
+  sitOutdoorBench?: (benchId: string) => { ok: boolean; reason?: string; label?: string };
+  standUpOutdoorBench?: () => { ok: boolean; reason?: string };
 };
 
 export function getHook(): BkhnHook | undefined {
@@ -95,6 +110,10 @@ export interface InteractableDetectionInput {
   seatId?: string | null;
   occupiedByOtherSeatIds?: ReadonlySet<string>;
   pendingSeatId?: string | null;
+  /** ID ghế đá sân trường đang ngồi (nếu có). */
+  outdoorBenchId?: string | null;
+  /** Tọa độ quả bóng đá tại SVĐ Bách Khoa. */
+  footballPos?: { x: number; z: number } | null;
   /** Mặc định `true` khi bỏ trống để tương thích ngược bộ unit test HSK; `app/page.tsx` truyền tường minh trạng thái `hskMode`. */
   hskMode?: boolean;
 }
@@ -152,6 +171,8 @@ export function findNearestInteractable(
     seated = false,
     occupiedByOtherSeatIds,
     pendingSeatId = null,
+    outdoorBenchId = null,
+    footballPos = null,
     hskMode = true,
   } = input;
   const dist = (x: number, z: number) => Math.hypot(pos.x - x, pos.z - z);
@@ -233,6 +254,9 @@ export function findNearestInteractable(
   }
 
   if (!inClassroom) {
+    if (outdoorBenchId) {
+      return { id: 'bench-stand-up', label: 'E — Đứng dậy khỏi ghế' };
+    }
     if (hskMode) {
       if (!questActive && !questDoneBefore && dist(MINH_POS.x, MINH_POS.z) <= MINH_RADIUS) {
         return { id: 'npc-minh', label: 'E — Nói chuyện với Minh' };
@@ -266,6 +290,37 @@ export function findNearestInteractable(
           !hskMode && nearCheckin.id === 'c7'
             ? 'E — Khám phá & Check-in Tòa C7'
             : nearCheckin.promptLabel,
+      };
+    }
+    if (
+      footballPos &&
+      dist(footballPos.x, footballPos.z) <= CAMPUS_FOOTBALL_PITCH.kickInteractRadius
+    ) {
+      return { id: 'football-kick', label: 'E — Sút bóng mạnh về phía trước' };
+    }
+    for (const stall of CAMPUS_DRINK_STALLS) {
+      if (dist(stall.x, stall.z) <= 2.6) {
+        return { id: `drink-stall:${stall.id}`, label: stall.promptLabel };
+      }
+    }
+    for (const board of CAMPUS_MEMORY_BOARDS) {
+      if (dist(board.x, board.z) <= 2.6) {
+        return { id: `memory-board:${board.id}`, label: board.promptLabel };
+      }
+    }
+    let nearestBench: (typeof OUTDOOR_SITTABLE_BENCHES)[number] | null = null;
+    let nearestBenchDist = 2.2;
+    for (const bench of OUTDOOR_SITTABLE_BENCHES) {
+      const bd = dist(bench.seatPos.x, bench.seatPos.z);
+      if (bd <= nearestBenchDist) {
+        nearestBenchDist = bd;
+        nearestBench = bench;
+      }
+    }
+    if (nearestBench) {
+      return {
+        id: `bench:${nearestBench.id}`,
+        label: `E — Ngồi nghỉ tại ${nearestBench.label}`,
       };
     }
     return null;

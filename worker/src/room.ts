@@ -57,6 +57,17 @@ import {
   type PlayerState,
 } from '../../shared/contracts/multiplayer';
 import {
+  SEED_CAMPUS_MEMORIES,
+  isValidMemoryBoardId,
+  isValidMemoryColor,
+  sanitizeMemoryAuthor,
+  sanitizeMemoryCohort,
+  sanitizeMemoryText,
+  type CampusMemoryNote,
+  type MemoryBoardId,
+  type MemoryNoteColor,
+} from '../../shared/contracts/memory';
+import {
   MAX_STUDY_WS_PAYLOAD_BYTES,
   formatHustCohortBadge,
   getVietnamDayKey,
@@ -261,6 +272,8 @@ export class HskRoom {
   private studyRevision = 1;
   private leaderboardSchemaReady = false;
   private leaderboardMem = new Map<string, LeaderboardRow>();
+  private memoriesSchemaReady = false;
+  private memoriesMem = new Map<string, CampusMemoryNote>();
 
   constructor(ctx: DurableObjectState) {
     this.ctx = ctx;
@@ -638,6 +651,185 @@ export class HskRoom {
     };
   }
 
+  private ensureMemoriesSchema() {
+    const sql = this.sql;
+    if (!this.memoriesSchemaReady) {
+      this.memoriesSchemaReady = true;
+      if (sql) {
+        try {
+          sql.exec(`
+            CREATE TABLE IF NOT EXISTS campus_memories (
+              id TEXT PRIMARY KEY,
+              board_id TEXT NOT NULL,
+              author_name TEXT NOT NULL,
+              cohort_badge TEXT NOT NULL,
+              message TEXT NOT NULL,
+              color TEXT NOT NULL DEFAULT 'yellow',
+              likes INTEGER NOT NULL DEFAULT 0,
+              created_at_ms INTEGER NOT NULL DEFAULT 0
+            )
+          `);
+          sql.exec(
+            `CREATE INDEX IF NOT EXISTS idx_memories_created ON campus_memories(created_at_ms DESC)`,
+          );
+        } catch {
+          // fallback to memoriesMem
+        }
+      }
+    }
+
+    for (const seed of SEED_CAMPUS_MEMORIES) {
+      if (!this.memoriesMem.has(seed.id)) {
+        const existing = this.getMemoryById(seed.id);
+        if (!existing) {
+          this.saveMemoryNote({ ...seed });
+        } else {
+          this.memoriesMem.set(existing.id, existing);
+        }
+      }
+    }
+  }
+
+  private getMemoryById(id: string): CampusMemoryNote | null {
+    const sql = this.sql;
+    if (sql) {
+      try {
+        const rows = sql
+          .exec<{
+            id: string;
+            board_id: string;
+            author_name: string;
+            cohort_badge: string;
+            message: string;
+            color: string;
+            likes: number;
+            created_at_ms: number;
+          }>(`SELECT * FROM campus_memories WHERE id = ? LIMIT 1`, id)
+          .toArray();
+        if (rows.length > 0) {
+          const r = rows[0];
+          const boardId: MemoryBoardId = isValidMemoryBoardId(r.board_id) ? r.board_id : 'c1-board';
+          const color: MemoryNoteColor = isValidMemoryColor(r.color) ? r.color : 'yellow';
+          return {
+            id: String(r.id),
+            boardId,
+            authorName: sanitizeMemoryAuthor(r.author_name),
+            cohortBadge: sanitizeMemoryCohort(r.cohort_badge),
+            message: sanitizeMemoryText(r.message),
+            color,
+            likes: Math.max(0, Math.floor(Number(r.likes) || 0)),
+            createdAtMs: Math.max(0, Math.floor(Number(r.created_at_ms) || 0)),
+          };
+        }
+        return null;
+      } catch {
+        // fallback to memoriesMem
+      }
+    }
+    return this.memoriesMem.get(id) ?? null;
+  }
+
+  private saveMemoryNote(note: CampusMemoryNote) {
+    this.memoriesMem.set(note.id, note);
+    const sql = this.sql;
+    if (sql) {
+      try {
+        sql.exec(
+          `INSERT INTO campus_memories (
+            id, board_id, author_name, cohort_badge, message, color, likes, created_at_ms
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            likes = excluded.likes`,
+          note.id,
+          note.boardId,
+          note.authorName,
+          note.cohortBadge,
+          note.message,
+          note.color,
+          note.likes,
+          note.createdAtMs,
+        );
+      } catch {
+        // already in memoriesMem
+      }
+    }
+  }
+
+  private listCampusMemories(boardId?: MemoryBoardId | null): CampusMemoryNote[] {
+    this.ensureMemoriesSchema();
+    const sql = this.sql;
+    let list: CampusMemoryNote[] | null = null;
+    if (sql) {
+      try {
+        const rows = sql
+          .exec<{
+            id: string;
+            board_id: string;
+            author_name: string;
+            cohort_badge: string;
+            message: string;
+            color: string;
+            likes: number;
+            created_at_ms: number;
+          }>(
+            boardId
+              ? `SELECT * FROM campus_memories WHERE board_id = ? ORDER BY created_at_ms DESC LIMIT 80`
+              : `SELECT * FROM campus_memories ORDER BY created_at_ms DESC LIMIT 80`,
+            ...(boardId ? [boardId] : []),
+          )
+          .toArray();
+        list = rows.map((r) => ({
+          id: String(r.id),
+          boardId: isValidMemoryBoardId(r.board_id) ? r.board_id : 'c1-board',
+          authorName: sanitizeMemoryAuthor(r.author_name),
+          cohortBadge: sanitizeMemoryCohort(r.cohort_badge),
+          message: sanitizeMemoryText(r.message),
+          color: isValidMemoryColor(r.color) ? r.color : 'yellow',
+          likes: Math.max(0, Math.floor(Number(r.likes) || 0)),
+          createdAtMs: Math.max(0, Math.floor(Number(r.created_at_ms) || 0)),
+        }));
+      } catch {
+        list = null;
+      }
+    }
+    if (!list) {
+      list = Array.from(this.memoriesMem.values())
+        .filter((n) => !boardId || n.boardId === boardId)
+        .sort((a, b) => b.createdAtMs - a.createdAtMs)
+        .slice(0, 80);
+    }
+    return list;
+  }
+
+  private addCampusMemory(body: Record<string, unknown>, nowMs: number = Date.now()): CampusMemoryNote | null {
+    this.ensureMemoriesSchema();
+    const message = sanitizeMemoryText(body.message);
+    if (!message) return null;
+    const boardId: MemoryBoardId = isValidMemoryBoardId(body.boardId) ? body.boardId : 'c1-board';
+    const color: MemoryNoteColor = isValidMemoryColor(body.color) ? body.color : 'yellow';
+    const note: CampusMemoryNote = {
+      id: `mem-${nowMs}-${Math.floor(Math.random() * 1e6).toString(36)}`,
+      boardId,
+      authorName: sanitizeMemoryAuthor(body.authorName),
+      cohortBadge: sanitizeMemoryCohort(body.cohortBadge),
+      message,
+      color,
+      likes: 0,
+      createdAtMs: nowMs,
+    };
+    this.saveMemoryNote(note);
+    return note;
+  }
+
+  private likeCampusMemory(id: string): CampusMemoryNote | null {
+    this.ensureMemoriesSchema();
+    const existing = this.getMemoryById(id);
+    if (!existing) return null;
+    const updated: CampusMemoryNote = { ...existing, likes: existing.likes + 1 };
+    this.saveMemoryNote(updated);
+    return updated;
+  }
+
   /**
    * Rehydrates `this.sessions`, `this.bySocket`, `this.roomId`, `this.seatRegistry`,
    * and `this.presences` from Cloudflare Durable Object WebSocket attachments
@@ -893,6 +1085,41 @@ export class HskRoom {
         entry,
         serverNowMs: Date.now(),
       });
+    }
+    if (url.pathname === '/__memories' && request.method === 'GET') {
+      const rawBoard = url.searchParams.get('boardId');
+      const boardId = isValidMemoryBoardId(rawBoard) ? rawBoard : null;
+      return Response.json({ ok: true, notes: this.listCampusMemories(boardId) });
+    }
+    if (url.pathname === '/__memories' && request.method === 'POST') {
+      let body: Record<string, unknown>;
+      try {
+        body = (await request.json()) as Record<string, unknown>;
+      } catch {
+        return Response.json({ ok: false, error: 'invalid-json' }, { status: 400 });
+      }
+      const note = this.addCampusMemory(body, Date.now());
+      if (!note) {
+        return Response.json({ ok: false, error: 'empty-message' }, { status: 400 });
+      }
+      return Response.json({ ok: true, note });
+    }
+    if (url.pathname === '/__memories/like' && request.method === 'POST') {
+      let body: Record<string, unknown>;
+      try {
+        body = (await request.json()) as Record<string, unknown>;
+      } catch {
+        return Response.json({ ok: false, error: 'invalid-json' }, { status: 400 });
+      }
+      const id = typeof body.id === 'string' ? body.id.trim().slice(0, 64) : '';
+      if (!id) {
+        return Response.json({ ok: false, error: 'missing-id' }, { status: 400 });
+      }
+      const note = this.likeCampusMemory(id);
+      if (!note) {
+        return Response.json({ ok: false, error: 'not-found' }, { status: 404 });
+      }
+      return Response.json({ ok: true, note });
     }
     this.roomId = request.headers.get('x-room-id') || this.roomId;
     const upgrade = request.headers.get('Upgrade');

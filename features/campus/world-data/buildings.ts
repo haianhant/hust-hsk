@@ -953,3 +953,185 @@ export const LIBRARY_LOBBY = {
     },
   ],
 } as const;
+
+// --- Đời sống sinh viên & Tương tác ngoài sân trường (HUSTVerse Engagement) ---
+
+export type OutdoorBenchSpec = {
+  id: string;
+  x: number;
+  z: number;
+  rotY: number;
+  seatPos: Vec2;
+  standPos: Vec2;
+  seatFacing: number;
+  seatYaw: number;
+  label: string;
+  zoneTag: string;
+  isExtraMesh?: boolean;
+};
+
+/** 6 ghế đá sân trường không có NPC ngồi cố định, cho phép người chơi bấm E ngồi nghỉ & chụp ảnh. */
+export const OUTDOOR_SITTABLE_BENCHES: readonly OutdoorBenchSpec[] = [
+  {
+    id: 'bench-lake-east-1',
+    x: 22.3,
+    z: 58.5,
+    rotY: -Math.PI / 2,
+    seatPos: { x: 22.18, z: 58.5 },
+    standPos: { x: 23.45, z: 58.5 },
+    seatFacing: -Math.PI / 2,
+    seatYaw: Math.PI / 2,
+    label: 'Ghế đá Ngắm Sen Hồ Tiền',
+    zoneTag: 'lake',
+    isExtraMesh: true,
+  },
+  {
+    id: 'bench-lake-east-2',
+    x: 22.3,
+    z: 72.0,
+    rotY: -Math.PI / 2,
+    seatPos: { x: 22.18, z: 72.0 },
+    standPos: { x: 23.45, z: 72.0 },
+    seatFacing: -Math.PI / 2,
+    seatYaw: Math.PI / 2,
+    label: 'Ghế đá Nam Hồ Tiền',
+    zoneTag: 'lake',
+  },
+  {
+    id: 'bench-c1-west',
+    x: -73.2,
+    z: -29.8,
+    rotY: 0,
+    seatPos: { x: -73.2, z: -29.68 },
+    standPos: { x: -73.2, z: -28.55 },
+    seatFacing: 0,
+    seatYaw: Math.PI,
+    label: 'Ghế đá Quảng trường C1 (Tây)',
+    zoneTag: 'c1',
+  },
+  {
+    id: 'bench-love-road-0',
+    x: -38.0,
+    z: -10.9,
+    rotY: 0,
+    seatPos: { x: -38.0, z: -10.78 },
+    standPos: { x: -38.0, z: -9.7 },
+    seatFacing: 0,
+    seatYaw: Math.PI,
+    label: 'Ghế đá Đường Tình Yêu (Ngã 5)',
+    zoneTag: 'c9',
+  },
+  {
+    id: 'bench-love-road-1',
+    x: -22.0,
+    z: -10.9,
+    rotY: 0,
+    seatPos: { x: -22.0, z: -10.78 },
+    standPos: { x: -22.0, z: -9.7 },
+    seatFacing: 0,
+    seatYaw: Math.PI,
+    label: 'Ghế đá Đường Tình Yêu (Giữa)',
+    zoneTag: 'c9',
+  },
+  {
+    id: 'bench-love-road-2',
+    x: 16.0,
+    z: -10.9,
+    rotY: 0,
+    seatPos: { x: 16.0, z: -10.78 },
+    standPos: { x: 16.0, z: -9.7 },
+    seatFacing: 0,
+    seatYaw: Math.PI,
+    label: 'Ghế đá Đường Tình Yêu (Đông)',
+    zoneTag: 'lake',
+  },
+] as const;
+
+export type DrinkStallSpec = {
+  id: string;
+  x: number;
+  z: number;
+  rotY: number;
+  drinkId: 'iced-tea' | 'coffee';
+  label: string;
+  promptLabel: string;
+  zoneTag: string;
+};
+
+/** Các quầy Trà chanh / Cà phê sinh viên Bách Khoa cầm tay trong khuôn viên. */
+export const CAMPUS_DRINK_STALLS: readonly DrinkStallSpec[] = [
+  {
+    id: 'stall-iced-tea',
+    x: -74.0,
+    z: 2.2,
+    rotY: Math.PI,
+    drinkId: 'iced-tea',
+    label: 'Quầy Trà đá & Trà chanh Bách Khoa',
+    promptLabel: 'E — Gọi cốc Trà chanh đá Bách Khoa (cầm tay)',
+    zoneTag: 'parabol',
+  },
+  {
+    id: 'stall-alumni-coffee',
+    x: 28.2,
+    z: 58.5,
+    rotY: -Math.PI / 2,
+    drinkId: 'coffee',
+    label: 'Xe Cà phê Hồ Tiền Bách Khoa',
+    promptLabel: 'E — Gọi ly Cà phê nâu đá Hồ Tiền (cầm tay)',
+    zoneTag: 'lake',
+  },
+] as const;
+
+export type CampusMemoryBoardSpec = {
+  id: 'c1-board' | 'tien-lake-board' | 'library-board';
+  x: number;
+  z: number;
+  rotY: number;
+  label: string;
+  promptLabel: string;
+  zoneTag: string;
+};
+
+/** 3 Bảng Lưu bút Sân trường đặt tại Quảng trường C1, Bờ Hồ Tiền & Tiền sảnh Thư viện TQB. */
+export const CAMPUS_MEMORY_BOARDS: readonly CampusMemoryBoardSpec[] = [
+  {
+    id: 'c1-board',
+    x: -64.8,
+    z: -41.5,
+    rotY: 0,
+    label: 'Bảng Lưu bút Quảng trường C1',
+    promptLabel: 'E — Đọc & Ghim Lưu bút Quảng trường C1',
+    zoneTag: 'c1',
+  },
+  {
+    id: 'tien-lake-board',
+    x: 21.8,
+    z: 64.0,
+    rotY: Math.PI / 2,
+    label: 'Bảng Lưu bút Bờ Hồ Tiền',
+    promptLabel: 'E — Đọc & Ghim Lưu bút Bờ Hồ Tiền',
+    zoneTag: 'lake',
+  },
+  {
+    id: 'library-board',
+    x: 32.2,
+    z: 14.2,
+    rotY: Math.PI,
+    label: 'Bảng Lưu bút Thư viện Tạ Quang Bửu',
+    promptLabel: 'E — Đọc & Ghim Lưu bút Thư viện TQB',
+    zoneTag: 'library',
+  },
+] as const;
+
+/** Thông số sân bóng đá mini-game tương tác tại SVĐ Bách Khoa. */
+export const CAMPUS_FOOTBALL_PITCH = {
+  center: { x: 132, z: 80 },
+  halfW: 15.6,
+  halfD: 9.8,
+  westGoalX: 117.6,
+  eastGoalX: 146.4,
+  goalHalfZ: 2.55,
+  goalHeight: 2.35,
+  kickInteractRadius: 2.35,
+  dribbleRadius: 0.95,
+} as const;

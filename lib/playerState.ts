@@ -75,6 +75,17 @@ export const fastTravelState = {
 };
 
 export type TimeOfDay = 'day' | 'sunset' | 'night';
+export type CameraViewMode = 'follow' | 'pov' | 'top';
+export type HeldDrinkId = 'none' | 'iced-tea' | 'coffee';
+export type SchoolBadgeId = 'none' | 'soict' | 'sme' | 'seee' | 'sccls' | 'smse';
+export type CampusTitleId =
+  | 'none'
+  | 'tan-binh-bk'
+  | 'tho-san-goc-song-ao'
+  | 'ban-than-ho-tien'
+  | 'chan-sut-bk'
+  | 'chien-than-tqb'
+  | 'huyen-thoai-bk';
 
 export const playerState = {
   pos: { ...SPAWN } as Vec2,
@@ -82,9 +93,10 @@ export const playerState = {
   moving: false,
   /** số lần va chạm (đếm trong Player) — chỉ để HUD debug, không phải điểm */
   collisions: 0,
-  /** chế độ camera: 'follow' (chơi) hay 'top' (nhìn từ trên cao, test hook) —
-   *  HUD tự ẩn hộp hướng dẫn khi ở top-view để khỏi che khung cảnh. */
-  viewMode: 'follow' as 'follow' | 'top',
+  /** chế độ camera: 'follow' (thứ 3), 'pov' (thứ 1 tầm mắt), hay 'top' (nhìn từ trên cao, test hook) */
+  viewMode: 'follow' as CameraViewMode,
+  /** true khi đang mở Photo Mode chụp ảnh Bưu thiếp Kỷ yếu */
+  photoMode: false,
   /** độ phủ lá + bèo trên Hồ Tiền (0..1), đo thật bằng rasterization trong
    *  LotusField — mục tiêu 0,70–0,80. 0 = chưa đo. */
   lakeCoverage: 0,
@@ -124,6 +136,18 @@ export const playerState = {
   avatarBackpack: true,
   avatarGlasses: false,
   avatarLanyard: true,
+  /** Ngoại trang & đời sống sinh viên Bách khoa mở rộng (HUSTVerse Engagement). */
+  avatarSchoolId: 'none' as SchoolBadgeId,
+  avatarSchoolShortLabel: '',
+  avatarTitleId: 'none' as CampusTitleId,
+  avatarTitleLabel: '',
+  avatarGradCap: false,
+  heldDrink: 'none' as HeldDrinkId,
+  /** ID ghế đá ngoài trời đang ngồi (null nếu đang đứng/ngồi trong Thư viện). */
+  outdoorBenchId: null as string | null,
+  /** Vị trí quả bóng và số bàn thắng trong mini-game bóng đá tại SVĐ Bách Khoa. */
+  footballPos: { x: 132, z: 80 } as Vec2,
+  footballGoals: 0,
   /**
    * Góc camera (yaw/pitch, radian) đã lưu — Player khởi tạo từ đây khi
    * mount (reload trong phòng khôi phục đúng hướng nhìn, F5b) và ghi đè

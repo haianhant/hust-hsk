@@ -9,6 +9,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type * as THREE from 'three';
 import type { AvatarGender } from '../../../lib/playerState';
+import { GraduationCap } from '../appearance/Accessories';
 import {
   HAIR,
   HAIR_HIGHLIGHT,
@@ -25,11 +26,13 @@ export function Head({
   hairStyle,
   glasses,
   cap,
+  gradCap,
 }: {
   gender?: AvatarGender;
   hairStyle: HairStyle;
   glasses?: boolean;
   cap?: string;
+  gradCap?: boolean;
 }) {
   const isFemale = gender === 'female';
   const eyelidLRef = useRef<THREE.Mesh>(null!);
@@ -445,6 +448,7 @@ export function Head({
           </mesh>
         </group>
       )}
+      {gradCap && <GraduationCap />}
     </group>
   );
 }

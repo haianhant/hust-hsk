@@ -15,7 +15,7 @@ import { FAST_TRAVEL_DESTINATIONS } from '../../../lib/campus';
 import { formatCampusChannelLabel } from '../../../lib/gameModes';
 import type { Progress } from '../../../lib/learn/types';
 import type { MultiplayerSnapshot } from '../../../lib/multiplayer';
-import { bikeInput, playerInput, type TimeOfDay } from '../../../lib/playerState';
+import { bikeInput, playerInput, type CameraViewMode, type TimeOfDay } from '../../../lib/playerState';
 import type { HandbookTab } from '../../learning/hsk/EntryScreen';
 import type { LearningPanelType } from '../../learning/hsk/LearningOverlayModal';
 import { MultiplayerStatusChip } from '../../social/multiplayer/MultiplayerStatusBar';
@@ -158,9 +158,17 @@ export interface CampusHudProps {
   checkedInCount?: number;
   totalLandmarks?: number;
   hskMode?: boolean;
+  viewMode?: CameraViewMode;
+  outdoorBenchLabel?: string | null;
+  unclaimedQuestCount?: number;
   pomodoro?: PomodoroState;
   focusPolicy?: FocusRuntimePolicy;
   onToggleHskMode?: () => void;
+  onTogglePov?: () => void;
+  onOpenPhotoMode?: () => void;
+  onOpenMemoryWall?: () => void;
+  onOpenCampusQuests?: () => void;
+  onStandUpOutdoorBench?: () => void;
   onOpenStudyPanel?: () => void;
   onOpenLeaderboard?: () => void;
   onStandUp?: () => void;
@@ -212,9 +220,17 @@ export function CampusHud({
   checkedInCount = 0,
   totalLandmarks = 9,
   hskMode = false,
+  viewMode = 'follow',
+  outdoorBenchLabel = null,
+  unclaimedQuestCount = 0,
   pomodoro,
   focusPolicy,
   onToggleHskMode,
+  onTogglePov,
+  onOpenPhotoMode,
+  onOpenMemoryWall,
+  onOpenCampusQuests,
+  onStandUpOutdoorBench,
   onOpenStudyPanel,
   onOpenLeaderboard,
   onStandUp,
@@ -336,6 +352,24 @@ export function CampusHud({
                 className="rounded-xl bg-[#A54432] px-2.5 py-1 text-xs font-bold text-white transition hover:bg-[#8A3828]"
               >
                 🚶 Đứng dậy
+              </button>
+            )}
+          </div>
+        )}
+        {/* Chip trạng thái đang ngồi ghế đá ngoài sân trường */}
+        {!inClassroom && !inLibraryLobby && outdoorBenchLabel && (
+          <div
+            data-testid="hud-outdoor-bench-status"
+            className="pointer-events-auto flex w-fit max-w-[92vw] flex-wrap items-center gap-2 rounded-2xl border border-emerald-300/40 bg-black/75 px-3.5 py-1.5 text-xs font-bold text-white shadow-xl backdrop-blur-sm"
+          >
+            <span>🪑 Đang ngồi nghỉ: {outdoorBenchLabel}</span>
+            {onStandUpOutdoorBench && (
+              <button
+                type="button"
+                onClick={onStandUpOutdoorBench}
+                className="rounded-xl bg-[#A54432] px-2.5 py-1 text-xs font-bold text-white transition hover:bg-[#8A3828]"
+              >
+                🚶 Đứng dậy (E / WASD)
               </button>
             )}
           </div>
@@ -511,6 +545,88 @@ export function CampusHud({
                 </button>
               )}
 
+              {!hideNav && onOpenCampusQuests && (
+                <button
+                  type="button"
+                  data-testid="mobile-menu-quests"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenCampusQuests();
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">🎒</span>
+                    <span>Nhiệm vụ Sinh viên</span>
+                  </span>
+                  {unclaimedQuestCount > 0 ? (
+                    <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[11px] font-extrabold text-slate-950">
+                      +{unclaimedQuestCount}
+                    </span>
+                  ) : (
+                    <span className="text-white/50">›</span>
+                  )}
+                </button>
+              )}
+
+              {!hideNav && onOpenMemoryWall && (
+                <button
+                  type="button"
+                  data-testid="mobile-menu-memory-wall"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenMemoryWall();
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">📌</span>
+                    <span>Bảng Lưu bút Sân trường</span>
+                  </span>
+                  <span className="text-white/50">›</span>
+                </button>
+              )}
+
+              {!hideNav && onOpenPhotoMode && (
+                <button
+                  type="button"
+                  data-testid="mobile-menu-photo-mode"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenPhotoMode();
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">📸</span>
+                    <span>Chụp ảnh &amp; Bưu thiếp (P)</span>
+                  </span>
+                  <span className="text-white/50">›</span>
+                </button>
+              )}
+
+              {!hideNav && onTogglePov && (
+                <button
+                  type="button"
+                  data-testid="mobile-menu-pov"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onTogglePov();
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10 active:bg-white/15"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none">
+                      {viewMode === 'pov' ? '👁️' : '🎥'}
+                    </span>
+                    <span>Đổi góc nhìn (V)</span>
+                  </span>
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-amber-200">
+                    {viewMode === 'pov' ? 'Thứ 1' : 'Thứ 3'}
+                  </span>
+                </button>
+              )}
+
               {!inClassroom && !inLibraryLobby && !hideNav && (
                 <button
                   type="button"
@@ -658,8 +774,8 @@ export function CampusHud({
           )}
         </div>
 
-        {/* Cụm nút trên Desktop (sm:flex) — giữ nguyên không đổi */}
-        <div className="pointer-events-auto hidden max-w-[calc(100vw-260px)] flex-wrap justify-end gap-1.5 sm:flex">
+        {/* Cụm nút trên Desktop (sm:flex) */}
+        <div className="pointer-events-auto hidden max-w-[calc(100vw-480px)] flex-wrap justify-end gap-1.5 sm:flex lg:max-w-[calc(100vw-520px)]">
           {onOpenStudyPanel && (
             <StudyHudButton
               pomodoro={pomodoro}
@@ -730,6 +846,61 @@ export function CampusHud({
               className="whitespace-nowrap rounded-full bg-black/50 px-3 py-1.5 text-xs font-semibold tabular-nums text-white backdrop-blur-sm transition hover:bg-black/70 sm:text-[13px]"
             >
               👕 Nhân vật &amp; trang phục
+            </button>
+          )}
+          {!hideNav && onOpenCampusQuests && (
+            <button
+              id="open-campus-quests"
+              data-testid="open-campus-quests"
+              type="button"
+              onClick={onOpenCampusQuests}
+              className="relative whitespace-nowrap rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
+            >
+              🎒 Nhiệm vụ SV
+              {unclaimedQuestCount > 0 && (
+                <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-extrabold text-slate-950">
+                  {unclaimedQuestCount}
+                </span>
+              )}
+            </button>
+          )}
+          {!hideNav && onOpenMemoryWall && (
+            <button
+              id="open-memory-wall"
+              data-testid="open-memory-wall"
+              type="button"
+              onClick={onOpenMemoryWall}
+              className="whitespace-nowrap rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
+            >
+              📌 Lưu bút
+            </button>
+          )}
+          {!hideNav && onOpenPhotoMode && (
+            <button
+              id="open-photo-mode"
+              data-testid="open-photo-mode"
+              type="button"
+              onClick={onOpenPhotoMode}
+              title="Chụp ảnh & xuất Bưu thiếp Kỷ yếu (Phím P)"
+              className="whitespace-nowrap rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
+            >
+              📸 Chụp ảnh
+            </button>
+          )}
+          {!hideNav && onTogglePov && (
+            <button
+              id="toggle-pov"
+              data-testid="toggle-pov"
+              type="button"
+              onClick={onTogglePov}
+              title="Chuyển góc nhìn thứ 3 / thứ 1 (Phím V)"
+              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition sm:text-[13px] ${
+                viewMode === 'pov'
+                  ? 'bg-[#1D4ED8]/90 ring-1 ring-sky-300/70 hover:bg-[#1E40AF]'
+                  : 'bg-black/55 hover:bg-black/75'
+              }`}
+            >
+              {viewMode === 'pov' ? '👁️ Góc nhìn 1' : '🎥 Góc nhìn 3'}
             </button>
           )}
           <button
@@ -1017,6 +1188,8 @@ export function CampusHud({
               <li>Kéo chuột — xoay camera</li>
               <li>Lăn chuột — zoom</li>
               <li>E — tương tác khi lại gần</li>
+              <li>V — đổi góc nhìn thứ 1 / thứ 3</li>
+              <li>P — studio chụp ảnh &amp; xuất bưu thiếp</li>
               <li>Phím 1–6 — vẫy tay, nhảy nhót, hoan hô...</li>
               <li>Shift — chạy</li>
               <li>Đang lái xe: W ga · S phanh · A/D lái · E xuống xe</li>

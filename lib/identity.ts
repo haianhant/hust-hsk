@@ -12,7 +12,14 @@ import {
   type AvatarGender,
   type AvatarHairStyle,
   type AvatarOutfitId,
+  type CampusTitleId,
+  type HeldDrinkId,
+  type SchoolBadgeId,
 } from './playerState';
+import {
+  getCampusTitleDef,
+  getSchoolBadgeDef,
+} from '../features/campus/quests/campus-quests';
 import {
   MSSV_RE,
   VALID_GENDERS,
@@ -41,6 +48,10 @@ export interface CharacterProfile {
   backpack: boolean;
   glasses: boolean;
   lanyard: boolean;
+  schoolId?: SchoolBadgeId;
+  titleId?: CampusTitleId;
+  gradCap?: boolean;
+  heldDrink?: HeldDrinkId;
 }
 
 export const IDENTITY_KEY = 'bkhn-identity-v1';
@@ -92,6 +103,16 @@ export function syncCharacterToPlayerState(profile: CharacterProfile): void {
   playerState.avatarBackpack = profile.backpack;
   playerState.avatarGlasses = profile.glasses;
   playerState.avatarLanyard = profile.lanyard;
+  const schoolId: SchoolBadgeId = profile.schoolId ?? 'none';
+  const titleId: CampusTitleId = profile.titleId ?? 'none';
+  playerState.avatarSchoolId = schoolId;
+  playerState.avatarSchoolShortLabel = getSchoolBadgeDef(schoolId).shortLabel;
+  playerState.avatarTitleId = titleId;
+  playerState.avatarTitleLabel = titleId === 'none' ? '' : getCampusTitleDef(titleId).label;
+  playerState.avatarGradCap = Boolean(profile.gradCap);
+  if (profile.heldDrink !== undefined) {
+    playerState.heldDrink = profile.heldDrink;
+  }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('bkhn:outfit'));
   }
@@ -146,6 +167,9 @@ export function loadCharacterProfile(): CharacterProfile | null {
       backpack: typeof parsedChar.backpack === 'boolean' ? parsedChar.backpack : true,
       glasses: typeof parsedChar.glasses === 'boolean' ? parsedChar.glasses : false,
       lanyard: typeof parsedChar.lanyard === 'boolean' ? parsedChar.lanyard : true,
+      ...(typeof parsedChar.schoolId === 'string' ? { schoolId: parsedChar.schoolId as SchoolBadgeId } : {}),
+      ...(typeof parsedChar.titleId === 'string' ? { titleId: parsedChar.titleId as CampusTitleId } : {}),
+      ...(typeof parsedChar.gradCap === 'boolean' ? { gradCap: parsedChar.gradCap } : {}),
     };
   } catch {
     return null;

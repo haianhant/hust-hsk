@@ -45,6 +45,8 @@ export function HumanFigure(props: FigureProps) {
     lanyard = false,
     wristwatch = false,
     cap,
+    gradCap = false,
+    heldDrink = 'none',
     backpack,
     backpackColors,
     joints,
@@ -160,10 +162,11 @@ export function HumanFigure(props: FigureProps) {
               fabricTex={fabricTex}
               sleeveBadgeTex={sleeveBadgeTex}
               wristwatch={wristwatch}
+              heldDrink={heldDrink}
               shoulderRef={joints?.armR}
               elbowRef={joints?.elbowR}
             />
-            <Head gender={gender} hairStyle={hairStyle} glasses={glasses} cap={cap} />
+            <Head gender={gender} hairStyle={hairStyle} glasses={glasses} cap={cap} gradCap={gradCap} />
             {backpack && showBackpack && <Backpack colors={packColors} />}
           </group>
         </group>
@@ -183,6 +186,8 @@ export default function StudentAvatar({
   skirt = false,
   glasses = false,
   lanyard = true,
+  gradCap = false,
+  heldDrink = 'none',
 }: StudentAvatarProps) {
   const preset = OUTFIT_PRESETS[outfit] ?? OUTFIT_PRESETS['windbreaker-hust'];
   const skirtColor = gender === 'female' && skirt ? (preset.defaultSkirtColor ?? '#1E293B') : undefined;
@@ -201,6 +206,8 @@ export default function StudentAvatar({
       hairStyle={hairStyle}
       glasses={glasses}
       lanyard={lanyard}
+      gradCap={gradCap}
+      heldDrink={heldDrink}
       wristwatch
       backpack
       backpackColors={{ pack: PACK_BLACK, packLight: '#2A2E33', packZip: PACK_ZIP }}

@@ -21,9 +21,35 @@ import CampusExpansion from './CampusExpansion';
 import AmbientLife from './AmbientLife';
 import Motorbike from './Motorbike';
 import CampusCheckinMarkers from '../../features/campus/checkin/CampusCheckinMarkers';
+import CampusAtmosphereFX from '../../features/campus/atmosphere/CampusAtmosphereFX';
+import CampusInteractiveLife from '../../features/campus/interactive/CampusInteractiveLife';
 import { makeSkyEnvEquirectTexture, makeSunHaloTexture } from './materials';
 import { libraryNavigationController } from '../../lib/campus';
 import { playerState, type TimeOfDay } from '../../lib/playerState';
+
+declare global {
+  interface Window {
+    __bkhnCaptureCanvas?: () => string;
+  }
+}
+
+function PhotoCaptureBridge() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+
+  useEffect(() => {
+    window.__bkhnCaptureCanvas = () => {
+      gl.render(scene, camera);
+      return gl.domElement.toDataURL('image/png');
+    };
+    return () => {
+      delete window.__bkhnCaptureCanvas;
+    };
+  }, [gl, scene, camera]);
+
+  return null;
+}
 
 export interface CampusSceneProps {
   inClassroom?: boolean;
@@ -440,12 +466,16 @@ export default function CampusScene({
           <Motorbike />
           {/* Hệ thống trụ Check-in & Giới thiệu EdTech 9 công trình biểu tượng ĐHBK Hà Nội */}
           <CampusCheckinMarkers isNight={timeOfDay === 'night'} hskMode={hskMode} />
+          {/* Hiệu ứng không gian sống động & Tương tác đời thường HUSTVerse */}
+          <CampusAtmosphereFX timeOfDay={timeOfDay} />
+          <CampusInteractiveLife timeOfDay={timeOfDay} />
         </>
       )}
       <RemotePlayers
         scene={inClassroom ? 'classroom' : inLibraryLobby ? 'library' : 'campus'}
       />
       <Player />
+      <PhotoCaptureBridge />
     </Canvas>
   );
 }

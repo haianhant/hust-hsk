@@ -53,6 +53,7 @@ import {
   FAST_TRAVEL_DESTINATIONS,
   LIBRARY_DOOR,
   LIBRARY_LOBBY,
+  OUTDOOR_SITTABLE_BENCHES,
   ROADS,
   SPAWN,
   findFreeSpotNear,
@@ -76,6 +77,7 @@ import {
   type LibraryCameraOcclusionResult,
   type LibraryFloor,
   type LibrarySpatialDiagnostics,
+  type OutdoorBenchSpec,
   type Vec2,
 } from '../../lib/campus';
 import { activeWalkingStudentPositions } from './AmbientLife';
@@ -92,6 +94,8 @@ import {
   type AvatarGender,
   type AvatarHairStyle,
   type AvatarOutfitId,
+  type CameraViewMode,
+  type HeldDrinkId,
 } from '../../lib/playerState';
 import { multiplayer } from '../../lib/multiplayer';
 import {
@@ -123,42 +127,55 @@ import {
   wrapVietnameseCanvasContext,
 } from './TextPlate';
 
-function usePlayerNameplateTexture(name: string): THREE.CanvasTexture {
+function usePlayerNameplateTexture(name: string, subtitle = ''): THREE.CanvasTexture {
   const display = (name || 'Sinh viên').trim() || 'Sinh viên';
+  const cleanSub = subtitle.trim();
   const tex = useMemo(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
-    canvas.height = 80;
+    canvas.height = cleanSub ? 108 : 80;
     const rawCtx = canvas.getContext('2d');
     if (rawCtx) {
       const ctx = wrapVietnameseCanvasContext(rawCtx);
-      ctx.clearRect(0, 0, 512, 80);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       // Pill nền tối mờ sang trọng + viền vàng mảnh
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.84)';
       ctx.beginPath();
-      ctx.roundRect(12, 10, 488, 60, 30);
+      ctx.roundRect(12, 8, 488, canvas.height - 16, 28);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(250, 204, 21, 0.72)';
+      ctx.strokeStyle = cleanSub ? 'rgba(251, 191, 36, 0.9)' : 'rgba(250, 204, 21, 0.72)';
       ctx.lineWidth = 3;
       ctx.stroke();
 
       ctx.fillStyle = '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      let fontSize = 32;
+      let fontSize = cleanSub ? 28 : 32;
       ctx.font = `700 ${fontSize}px ${CANVAS_VN_FONT}`;
       const textW = ctx.measureText(display).width;
       if (textW > 440) {
         fontSize = Math.max(18, Math.floor((fontSize * 440) / textW));
         ctx.font = `700 ${fontSize}px ${CANVAS_VN_FONT}`;
       }
-      ctx.fillText(display, 256, 42);
+      ctx.fillText(display, 256, cleanSub ? 38 : 42);
+
+      if (cleanSub) {
+        ctx.fillStyle = '#FCD34D';
+        let subSize = 20;
+        ctx.font = `700 ${subSize}px ${CANVAS_VN_FONT}`;
+        const subW = ctx.measureText(cleanSub).width;
+        if (subW > 440) {
+          subSize = Math.max(14, Math.floor((subSize * 440) / subW));
+          ctx.font = `700 ${subSize}px ${CANVAS_VN_FONT}`;
+        }
+        ctx.fillText(cleanSub, 256, 76);
+      }
     }
     const t = new THREE.CanvasTexture(canvas);
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4;
     return t;
-  }, [display]);
+  }, [display, cleanSub]);
   useEffect(() => () => tex.dispose(), [tex]);
   return tex;
 }
@@ -167,6 +184,8 @@ const CAM_MIN_DIST = 4;
 const CAM_MAX_DIST = 10;
 const CAM_MIN_PITCH = 0.05; // rad — camera không xuống dưới mặt đất
 const CAM_MAX_PITCH = 1.1; // rad
+const POV_MIN_PITCH = -0.72; // rad — ngẩng lên nhìn mái C1 / Tháp TQB ở góc nhìn thứ 1
+const POV_MAX_PITCH = 0.78;
 const CAM_MIN_Y = 0.6;
 const LOOK_SPEED = 0.005;
 
@@ -243,7 +262,7 @@ export default function Player() {
     setBackpackOn(!!v);
   };
 
-  // Việc 2 — Tùy chỉnh nhân vật, giới tính, kiểu tóc, trang phục, kính & dây đeo thẻ SV
+  // Việc 2 — Tùy chỉnh nhân vật, giới tính, kiểu tóc, trang phục, kính & dây đeo thẻ SV + phụ kiện mở khóa
   const [avatarName, setAvatarName] = useState<string>(playerState.avatarName || 'Sinh viên');
   const [gender, setGender] = useState<AvatarGender>(playerState.avatarGender);
   const [hairStyle, setHairStyle] = useState<AvatarHairStyle>(playerState.avatarHairStyle);
@@ -251,7 +270,12 @@ export default function Player() {
   const [skirtOn, setSkirtOn] = useState<boolean>(playerState.avatarSkirt);
   const [glassesOn, setGlassesOn] = useState<boolean>(playerState.avatarGlasses);
   const [lanyardOn, setLanyardOn] = useState<boolean>(playerState.avatarLanyard);
-  const nameplateTex = usePlayerNameplateTexture(avatarName);
+  const [gradCapOn, setGradCapOn] = useState<boolean>(playerState.avatarGradCap);
+  const [heldDrink, setHeldDrink] = useState<HeldDrinkId>(playerState.heldDrink);
+  const [nameSubtitle, setNameSubtitle] = useState<string>(() =>
+    [playerState.avatarTitleLabel, playerState.avatarSchoolShortLabel].filter(Boolean).join(' · '),
+  );
+  const nameplateTex = usePlayerNameplateTexture(avatarName, nameSubtitle);
   const bubbleMeshRef = useRef<THREE.Mesh>(null!);
   const lastBubbleTextRef = useRef<string>('');
   const bubbleTex = useMemo(() => {
@@ -287,6 +311,8 @@ export default function Player() {
   const [isSeated, setIsSeated] = useState<boolean>(
     seatingStateRef.current.status === 'seated',
   );
+  const outdoorBenchRef = useRef<OutdoorBenchSpec | null>(null);
+  const [isOutdoorSeated, setIsOutdoorSeated] = useState<boolean>(Boolean(playerState.outdoorBenchId));
 
   const syncSeatingToPlayerState = (nextState: LocalSeatingState) => {
     seatingStateRef.current = nextState;
@@ -348,7 +374,11 @@ export default function Player() {
       bodyRef.current.rotation.z = targets.bodyRollTarget;
     }
     if (groupRef.current) {
-      const baseLibY = playerState.inLibraryLobby ? playerState.libraryY : 0;
+      const baseLibY = playerState.inLibraryLobby
+        ? playerState.libraryY
+        : seatedNow && outdoorBenchRef.current
+          ? getCampusGroundElevation(posRef.current.x, posRef.current.z)
+          : 0;
       const yOffset = seatedNow ? (isLying ? LYING_GROUP_Y_OFFSET : SEATED_GROUP_Y_OFFSET) : 0;
       groupRef.current.position.y = baseLibY + yOffset;
     }
@@ -361,8 +391,26 @@ export default function Player() {
       camera.updateMatrixWorld();
       return;
     }
-    const seatedNow = seatingStateRef.current.status === 'seated';
-    const libY = playerState.inLibraryLobby ? playerState.libraryY : 0;
+    const seatedNow = seatingStateRef.current.status === 'seated' || Boolean(outdoorBenchRef.current);
+    const libY = playerState.inLibraryLobby
+      ? playerState.libraryY
+      : !playerState.inClassroom
+        ? getCampusGroundElevation(posRef.current.x, posRef.current.z)
+        : 0;
+    if (viewModeRef.current === 'pov') {
+      const eyeY = libY + (ridingRef.current ? 1.48 : seatedNow ? 1.18 : 1.58);
+      const eyePos = new THREE.Vector3(posRef.current.x, eyeY, posRef.current.z);
+      const cp = Math.cos(pitchRef.current);
+      const lookTarget = new THREE.Vector3(
+        eyePos.x - Math.sin(yawRef.current) * cp * 8,
+        eyePos.y - Math.sin(pitchRef.current) * 8,
+        eyePos.z - Math.cos(yawRef.current) * cp * 8,
+      );
+      camera.position.copy(eyePos);
+      camera.lookAt(lookTarget);
+      camera.updateMatrixWorld();
+      return;
+    }
     const target = new THREE.Vector3(
       posRef.current.x,
       (ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2) + libY,
@@ -444,6 +492,19 @@ export default function Player() {
   }, []);
 
   const forceClearSeat = () => {
+    if (outdoorBenchRef.current || playerState.outdoorBenchId) {
+      outdoorBenchRef.current = null;
+      playerState.outdoorBenchId = null;
+      setIsOutdoorSeated(false);
+      applyPoseImmediately(false);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('bkhn:outdoor-bench-change', {
+            detail: { seated: false, benchId: null },
+          }),
+        );
+      }
+    }
     if (seatingStateRef.current.status === 'seated' || playerState.seated || playerState.seatId) {
       applyPoseImmediately(false);
       syncSeatingToPlayerState(createInitialSeatingState());
@@ -461,6 +522,13 @@ export default function Player() {
       setLanyardOn(playerState.avatarLanyard);
       backpackRef.current = !!playerState.avatarBackpack;
       setBackpackOn(!!playerState.avatarBackpack);
+      setGradCapOn(Boolean(playerState.avatarGradCap));
+      setHeldDrink(playerState.heldDrink ?? 'none');
+      setNameSubtitle(
+        [playerState.avatarTitleLabel, playerState.avatarSchoolShortLabel]
+          .filter(Boolean)
+          .join(' · '),
+      );
     };
     window.addEventListener('bkhn:outfit', onOutfitChange);
     return () => window.removeEventListener('bkhn:outfit', onOutfitChange);
@@ -520,6 +588,9 @@ export default function Player() {
     if (playerState.uiLocked) return { ok: false, reason: 'ui-locked' };
     const d = Math.hypot(posRef.current.x - bikePosRef.current.x, posRef.current.z - bikePosRef.current.z);
     if (d > BIKE_MOUNT_RADIUS) return { ok: false, reason: 'too-far' };
+    if (outdoorBenchRef.current) {
+      forceClearSeat();
+    }
     ridingRef.current = true;
     bikeSpeedRef.current = 0;
     bikeSteerRef.current = 0;
@@ -736,8 +807,104 @@ export default function Player() {
     };
   };
 
-  const seatActionsRef = useRef({ sitAtSeat, standUp, forceClearSeat });
-  seatActionsRef.current = { sitAtSeat, standUp, forceClearSeat };
+  const sitOutdoorBench = (
+    benchId: string,
+  ): { ok: boolean; reason?: string; label?: string } => {
+    if (playerState.inClassroom || playerState.inLibraryLobby) {
+      return { ok: false, reason: 'indoor' };
+    }
+    if (ridingRef.current) return { ok: false, reason: 'riding' };
+    if (seatingStateRef.current.status === 'seated') {
+      return { ok: false, reason: 'already-seated' };
+    }
+    const bench = OUTDOOR_SITTABLE_BENCHES.find((b) => b.id === benchId);
+    if (!bench) return { ok: false, reason: 'unknown-bench' };
+    const dist = Math.hypot(posRef.current.x - bench.seatPos.x, posRef.current.z - bench.seatPos.z);
+    if (dist > 3.6) {
+      return { ok: false, reason: 'too-far' };
+    }
+    keysRef.current.clear();
+    playerInput.move.x = 0;
+    playerInput.move.y = 0;
+    playerInput.run = false;
+    moveBlendRef.current = 0;
+    playerState.moving = false;
+    outdoorBenchRef.current = bench;
+    playerState.outdoorBenchId = bench.id;
+    setIsOutdoorSeated(true);
+    posRef.current = { ...bench.seatPos };
+    facingRef.current = bench.seatFacing;
+    yawRef.current = bench.seatFacing + Math.PI;
+    playerState.cameraYaw = yawRef.current;
+    playerState.pos = { ...bench.seatPos };
+    playerState.facing = bench.seatFacing;
+    const baseY = getCampusGroundElevation(bench.seatPos.x, bench.seatPos.z);
+    if (groupRef.current) {
+      groupRef.current.position.set(bench.seatPos.x, baseY + SEATED_GROUP_Y_OFFSET, bench.seatPos.z);
+      groupRef.current.rotation.y = bench.seatFacing;
+    }
+    applyPoseImmediately(true);
+    syncCameraTransform();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('bkhn:outdoor-bench-change', {
+          detail: { seated: true, benchId: bench.id, label: bench.label },
+        }),
+      );
+    }
+    return { ok: true, label: bench.label };
+  };
+
+  const standUpOutdoorBench = (keepInputs = false): { ok: boolean; reason?: string } => {
+    const bench = outdoorBenchRef.current;
+    if (!bench) return { ok: false, reason: 'not-seated' };
+    if (!keepInputs) {
+      keysRef.current.clear();
+      playerInput.move.x = 0;
+      playerInput.move.y = 0;
+      playerInput.run = false;
+    }
+    moveBlendRef.current = 0;
+    outdoorBenchRef.current = null;
+    playerState.outdoorBenchId = null;
+    setIsOutdoorSeated(false);
+    const safePos = resolveCollisions(bench.standPos, AVATAR.radius).pos;
+    posRef.current = safePos;
+    facingRef.current = bench.seatFacing;
+    playerState.pos = { ...safePos };
+    playerState.facing = bench.seatFacing;
+    playerState.moving = false;
+    const baseY = getCampusGroundElevation(safePos.x, safePos.z);
+    if (groupRef.current) {
+      groupRef.current.position.set(safePos.x, baseY, safePos.z);
+      groupRef.current.rotation.y = bench.seatFacing;
+    }
+    applyPoseImmediately(false);
+    syncCameraTransform();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('bkhn:outdoor-bench-change', {
+          detail: { seated: false, benchId: null },
+        }),
+      );
+    }
+    return { ok: true };
+  };
+
+  const seatActionsRef = useRef({
+    sitAtSeat,
+    standUp,
+    forceClearSeat,
+    sitOutdoorBench,
+    standUpOutdoorBench,
+  });
+  seatActionsRef.current = {
+    sitAtSeat,
+    standUp,
+    forceClearSeat,
+    sitOutdoorBench,
+    standUpOutdoorBench,
+  };
   // --- Dịch chuyển nhanh (đợt 3 giai đoạn 5) ---------------------------------
   // Chỉ thay VỊ TRÍ + hướng nhìn: không chạm quest/progress/điểm (không
   // gọi bất kỳ hàm store nào). Khóa chống bấm chồng: fastTravelState.traveling
@@ -809,15 +976,33 @@ export default function Player() {
     playerState.cameraPitch = 0.18;
     distRef.current = 7;
     viewModeRef.current = 'follow';
+    playerState.viewMode = 'follow';
     moveBlendRef.current = 0;
     prevHitRef.current = null;
+    window.dispatchEvent(new CustomEvent('bkhn:view-mode', { detail: { viewMode: 'follow' } }));
     return { ok: true };
   };
   const fastTravelRef = useRef(fastTravel);
   fastTravelRef.current = fastTravel;
-  // window.__bkhn = { getPos, teleport(x, z, yaw?), topView() } — dùng để chụp
-  // ảnh từ trên cao và đặt avatar đúng đầu mỗi chặng kiểm tra trong Playwright.
-  const viewModeRef = useRef<'follow' | 'top'>(playerState.viewMode ?? 'follow');
+  // window.__bkhn = { getPos, teleport(x, z, yaw?), topView(), setViewMode(...) } — dùng để chụp
+  // ảnh từ trên cao, góc nhìn thứ 1, và đặt avatar đúng đầu mỗi chặng kiểm tra trong Playwright.
+  const viewModeRef = useRef<CameraViewMode>(playerState.viewMode ?? 'follow');
+  const setCameraViewMode = (next: CameraViewMode) => {
+    const prev = viewModeRef.current;
+    viewModeRef.current = next;
+    playerState.viewMode = next;
+    if (next === 'pov') {
+      pitchRef.current = clamp(pitchRef.current, POV_MIN_PITCH, POV_MAX_PITCH);
+    } else if (next === 'follow') {
+      pitchRef.current = clamp(pitchRef.current, CAM_MIN_PITCH, CAM_MAX_PITCH);
+    }
+    syncCameraTransform();
+    if (prev !== next && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('bkhn:view-mode', { detail: { viewMode: next } }));
+    }
+  };
+  const setCameraViewModeRef = useRef(setCameraViewMode);
+  setCameraViewModeRef.current = setCameraViewMode;
   const classroomOriginRef = useRef<'c7' | 'c1'>('c7');
   useEffect(() => {
     const hook = {
@@ -825,6 +1010,15 @@ export default function Player() {
       // F5b — góc camera hiện tại (page lưu vào questState khi ở trong phòng).
       getYaw: () => yawRef.current,
       getPitch: () => pitchRef.current,
+      setViewMode: (mode: CameraViewMode) => setCameraViewModeRef.current(mode),
+      getViewMode: () => viewModeRef.current,
+      togglePov: () => {
+        const next: CameraViewMode = viewModeRef.current === 'pov' ? 'follow' : 'pov';
+        setCameraViewModeRef.current(next);
+        return next;
+      },
+      sitOutdoorBench: (benchId: string) => seatActionsRef.current.sitOutdoorBench(benchId),
+      standUpOutdoorBench: () => seatActionsRef.current.standUpOutdoorBench(),
       teleport: (x: number, z: number, yaw?: number, pitch?: number) => {
         seatActionsRef.current.forceClearSeat();
         // Đẩy ra khỏi collider (hồ/tòa nhà) để một điểm teleport lỗi không đặt
@@ -850,6 +1044,7 @@ export default function Player() {
         if (typeof yaw === 'number') yawRef.current = yaw;
         if (typeof pitch === 'number') pitchRef.current = pitch;
         viewModeRef.current = 'follow';
+        playerState.viewMode = 'follow';
         let groundY = 0;
         if (playerState.inLibraryLobby) {
           const elev = computeLibraryElevation(resolved.x, resolved.z, playerState.libraryFloor, playerState.libraryY);
@@ -874,10 +1069,10 @@ export default function Player() {
         syncCameraTransform();
       },
       topView: () => {
-        viewModeRef.current = 'top';
+        setCameraViewModeRef.current('top');
       },
       followView: () => {
-        viewModeRef.current = 'follow';
+        setCameraViewModeRef.current('follow');
       },
       // Độ phủ lá + bèo Hồ Tiền (0..1), đo thật trong LotusField.
       lakeCoverage: () => playerState.lakeCoverage,
@@ -929,8 +1124,8 @@ export default function Player() {
           moving: playerInput.move.x !== 0 || playerInput.move.y !== 0,
           run: playerInput.run,
           riding: ridingRef.current,
-          seated: seatingStateRef.current.status === 'seated',
-          seatId: seatingStateRef.current.seatId,
+          seated: seatingStateRef.current.status === 'seated' || Boolean(outdoorBenchRef.current),
+          seatId: seatingStateRef.current.seatId ?? outdoorBenchRef.current?.id ?? null,
           bikeSpeed: bikeSpeedRef.current,
           bikeHeading: bikeHeadingRef.current,
           bikePos: { ...bikePosRef.current },
@@ -1379,6 +1574,10 @@ export default function Player() {
         // Bước 5: khi panel học mở (uiLocked) thì E không có tác dụng.
         window.dispatchEvent(new CustomEvent('bkhn:interact'));
       }
+      if (e.code === 'KeyV' && !e.repeat && !playerState.uiLocked) {
+        const nextMode: CameraViewMode = viewModeRef.current === 'pov' ? 'follow' : 'pov';
+        setCameraViewModeRef.current(nextMode);
+      }
       if (
         !e.repeat &&
         !playerState.uiLocked &&
@@ -1443,7 +1642,12 @@ export default function Player() {
       const dy = e.clientY - lastPointerRef.current.y;
       lastPointerRef.current = { x: e.clientX, y: e.clientY };
       yawRef.current -= dx * LOOK_SPEED;
-      pitchRef.current = clamp(pitchRef.current - dy * LOOK_SPEED, CAM_MIN_PITCH, CAM_MAX_PITCH);
+      const isPov = viewModeRef.current === 'pov';
+      pitchRef.current = clamp(
+        pitchRef.current - dy * LOOK_SPEED,
+        isPov ? POV_MIN_PITCH : CAM_MIN_PITCH,
+        isPov ? POV_MAX_PITCH : CAM_MAX_PITCH,
+      );
     };
     const onPointerUp = () => {
       draggingRef.current = false;
@@ -1509,10 +1713,11 @@ export default function Player() {
     // cùng quy ước delta kéo như chuột, cộng dồn rồi reset về 0.
     if (playerInput.lookDelta.x !== 0 || playerInput.lookDelta.y !== 0) {
       yawRef.current -= playerInput.lookDelta.x;
+      const isPov = viewModeRef.current === 'pov';
       pitchRef.current = clamp(
         pitchRef.current - playerInput.lookDelta.y,
-        CAM_MIN_PITCH,
-        CAM_MAX_PITCH,
+        isPov ? POV_MIN_PITCH : CAM_MIN_PITCH,
+        isPov ? POV_MAX_PITCH : CAM_MAX_PITCH,
       );
       playerInput.lookDelta.x = 0;
       playerInput.lookDelta.y = 0;
@@ -1621,6 +1826,16 @@ export default function Player() {
       }
       if (typeof seatingStateRef.current.facing === 'number') {
         facingRef.current = seatingStateRef.current.facing;
+      }
+    } else if (outdoorBenchRef.current) {
+      if (!playerState.uiLocked && (playerInput.move.x !== 0 || playerInput.move.y !== 0)) {
+        standUpOutdoorBench(true);
+      } else {
+        moving = false;
+        effectivelyMoving = false;
+        posRef.current.x = outdoorBenchRef.current.seatPos.x;
+        posRef.current.z = outdoorBenchRef.current.seatPos.z;
+        facingRef.current = outdoorBenchRef.current.seatFacing;
       }
     } else {
     // --- Di chuyển theo hướng camera (yaw) ----------------------------------
@@ -1792,7 +2007,8 @@ export default function Player() {
     // tay đưa về trước lên tay lái (arm ≈ −0,95), khuỷu gập cẳng về
     // trước (elbow ÂM ≈ −0,55). Balô theo người trong `body` nên ngồi
     // trên yên mà không xuyên yên (yên y 0,78 ≈ hông 0,80).
-    const seatedNow = seatingStateRef.current.status === 'seated';
+    const seatedNow =
+      seatingStateRef.current.status === 'seated' || Boolean(outdoorBenchRef.current);
     const currentSeatId = seatingStateRef.current.seatId;
     const isLyingNow = seatedNow && isLyingSeatId(currentSeatId);
     const isPianoNow = seatedNow && isPianoBenchSeatId(currentSeatId);
@@ -1911,6 +2127,18 @@ export default function Player() {
       }
     }
 
+    // Đưa cẳng tay phải lên khi cầm trà chanh / cà phê sân trường
+    if (
+      playerState.heldDrink !== 'none' &&
+      !ridingRef.current &&
+      !isLyingNow &&
+      !isPianoNow &&
+      !playerState.activeEmote
+    ) {
+      armRTarget = -0.26;
+      elbowRTarget = -0.92;
+    }
+
     const poseEase = playerState.activeEmote ? Math.min(1, frameStepSec * 14) : ease;
     const lerp = (ref: React.RefObject<THREE.Group>, axis: 'x' | 'y' | 'z', target: number) => {
       if (ref.current) {
@@ -1963,10 +2191,12 @@ export default function Player() {
       groundY = elev.y;
     } else if (playerState.inLibraryLobby && seatedNow) {
       groundY = playerState.libraryY;
-    } else if (!playerState.inClassroom && !playerState.inLibraryLobby && !ridingRef.current && !seatedNow) {
+    } else if (!playerState.inClassroom && !playerState.inLibraryLobby && !ridingRef.current) {
       groundY = getCampusGroundElevation(posRef.current.x, posRef.current.z);
     }
 
+    const hideLocalForPov = viewModeRef.current === 'pov';
+    groupRef.current.visible = !hideLocalForPov;
     const seatYOffset = isLyingNow ? LYING_GROUP_Y_OFFSET : SEATED_GROUP_Y_OFFSET;
     groupRef.current.position.set(
       posRef.current.x,
@@ -1975,6 +2205,8 @@ export default function Player() {
     );
     groupRef.current.rotation.y = facingRef.current;
     if (nameplateGroupRef.current) {
+      nameplateGroupRef.current.visible =
+        !hideLocalForPov && !playerState.photoMode && viewModeRef.current !== 'top';
       nameplateGroupRef.current.position.set(
         posRef.current.x,
         (ridingRef.current ? 2.05 : isLyingNow ? 1.15 : seatedNow ? 1.62 : 1.95) + groundY + smoothEmoteJumpY * 0.5,
@@ -2029,12 +2261,25 @@ export default function Player() {
     playerState.seated = seatedNow;
     playerState.seatId = seatingStateRef.current.seatId;
 
-    // --- Camera thứ ba: nhìn vào điểm cao ~1,2 m trên avatar -----------------
+    // --- Camera thứ ba / góc nhìn thứ 1 / top view ----------------------------
     // TEST HOOK: chế độ top — camera trên cao nhìn thẳng xuống campus (chụp ảnh
     // mặt bằng kiểm tra), không phải góc chơi.
     if (viewModeRef.current === 'top') {
       camera.position.set(0, 160, 5.01);
       camera.lookAt(0, 0, 5);
+      return;
+    }
+    if (viewModeRef.current === 'pov') {
+      const eyeY = groundY + (ridingRef.current ? 1.48 : seatedNow ? 1.18 : 1.58);
+      const eyePos = new THREE.Vector3(posRef.current.x, eyeY, posRef.current.z);
+      const cpPov = Math.cos(pitchRef.current);
+      const lookTarget = new THREE.Vector3(
+        eyePos.x - Math.sin(yawRef.current) * cpPov * 8,
+        eyePos.y - Math.sin(pitchRef.current) * 8,
+        eyePos.z - Math.cos(yawRef.current) * cpPov * 8,
+      );
+      camera.position.copy(eyePos);
+      camera.lookAt(lookTarget);
       return;
     }
     const target = new THREE.Vector3(
@@ -2106,14 +2351,16 @@ export default function Player() {
       <group ref={groupRef} position={[SPAWN.x, 0, SPAWN.z]}>
         <StudentAvatar
           joints={joints}
-          showBackpack={backpackOn && !isSeated}
-          seated={isSeated}
+          showBackpack={backpackOn && !isSeated && !isOutdoorSeated}
+          seated={isSeated || isOutdoorSeated}
           gender={gender}
           hairStyle={hairStyle}
           outfit={outfit}
           skirt={skirtOn}
           glasses={glassesOn}
           lanyard={lanyardOn}
+          gradCap={gradCapOn}
+          heldDrink={heldDrink}
         />
       </group>
       <group ref={nameplateGroupRef} position={[SPAWN.x, 1.95, SPAWN.z]}>
@@ -2133,7 +2380,7 @@ export default function Player() {
             />
           </mesh>
           <mesh userData={{ ignoreMeasure: true }}>
-            <planeGeometry args={[1.28, 0.2]} />
+            <planeGeometry args={[1.28, nameSubtitle ? 0.27 : 0.2]} />
             <meshBasicMaterial
               map={nameplateTex}
               transparent

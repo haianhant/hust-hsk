@@ -6,6 +6,8 @@
 
 import type { RefObject } from 'react';
 import type * as THREE from 'three';
+import type { HeldDrinkId } from '../../../lib/playerState';
+import { HandheldDrinkCup } from '../appearance/Accessories';
 import {
   HUST_CRIMSON,
   POLO_RED,
@@ -91,6 +93,7 @@ export function ArmSide({
   fabricTex,
   sleeveBadgeTex,
   wristwatch,
+  heldDrink,
   shoulderRef,
   elbowRef,
 }: {
@@ -105,6 +108,7 @@ export function ArmSide({
   fabricTex: THREE.CanvasTexture;
   sleeveBadgeTex?: THREE.CanvasTexture;
   wristwatch?: boolean;
+  heldDrink?: HeldDrinkId;
   shoulderRef?: RefObject<THREE.Group>;
   elbowRef?: RefObject<THREE.Group>;
 }) {
@@ -233,6 +237,9 @@ export function ArmSide({
         )}
         <group position={[0, -0.24, 0]}>
           <Hand side={side} scale={armScale} />
+          {side === -1 && heldDrink && heldDrink !== 'none' && (
+            <HandheldDrinkCup drink={heldDrink} />
+          )}
         </group>
       </group>
     </group>

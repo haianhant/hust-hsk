@@ -10,6 +10,7 @@ import type {
   AvatarGender,
   AvatarHairStyle,
   AvatarOutfitId,
+  HeldDrinkId,
 } from '../../../lib/playerState';
 
 // --- Bảng màu chuẩn ----------------------------------------------------------
@@ -101,6 +102,10 @@ export interface FigureProps {
   showBackpack?: boolean;
   /** Cờ đánh dấu nhân vật đang ngồi học (bù cao độ đĩa bóng tiếp xúc với sàn) */
   seated?: boolean;
+  /** Mũ cử nhân tốt nghiệp ĐHBK (mở khóa qua chuỗi Nhiệm vụ Đời Sinh Viên) */
+  gradCap?: boolean;
+  /** Đồ uống sinh viên cầm tay phải ('none' | 'iced-tea' | 'coffee') */
+  heldDrink?: HeldDrinkId;
 }
 
 export interface StudentAvatarProps {
@@ -113,6 +118,8 @@ export interface StudentAvatarProps {
   skirt?: boolean;
   glasses?: boolean;
   lanyard?: boolean;
+  gradCap?: boolean;
+  heldDrink?: HeldDrinkId;
 }
 
 export const OUTFIT_PRESETS: Record<

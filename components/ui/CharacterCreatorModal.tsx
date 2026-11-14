@@ -28,7 +28,16 @@ import type {
   AvatarGender,
   AvatarHairStyle,
   AvatarOutfitId,
+  CampusTitleId,
+  SchoolBadgeId,
 } from '../../lib/playerState';
+import {
+  CAMPUS_TITLES,
+  SCHOOL_BADGES,
+  getUnlockedTitleIds,
+  isGradCapUnlocked,
+  loadCampusQuestsState,
+} from '../../features/campus/quests/campus-quests';
 import {
   validateIdentity,
   type CharacterProfile,
@@ -182,6 +191,8 @@ function AvatarPreviewRig({
           skirt={profile.skirt}
           glasses={profile.glasses}
           lanyard={profile.lanyard}
+          gradCap={profile.gradCap}
+          heldDrink={profile.heldDrink}
         />
       </group>
     </group>
@@ -223,6 +234,11 @@ export default function CharacterCreatorModal({
   const [backpack, setBackpack] = useState<boolean>(initialProfile.backpack);
   const [glasses, setGlasses] = useState<boolean>(initialProfile.glasses);
   const [lanyard, setLanyard] = useState<boolean>(initialProfile.lanyard);
+  const [schoolId, setSchoolId] = useState<SchoolBadgeId>(initialProfile.schoolId ?? 'none');
+  const [titleId, setTitleId] = useState<CampusTitleId>(initialProfile.titleId ?? 'none');
+  const [gradCap, setGradCap] = useState<boolean>(Boolean(initialProfile.gradCap));
+  const [unlockedTitleIds, setUnlockedTitleIds] = useState<CampusTitleId[]>(['none']);
+  const [gradCapUnlocked, setGradCapUnlocked] = useState<boolean>(false);
   const [motion, setMotion] = useState<PreviewMotionMode>('idle');
   const [yaw, setYaw] = useState<number>(0.25);
   const [error, setError] = useState<string | null>(null);
@@ -230,6 +246,9 @@ export default function CharacterCreatorModal({
 
   useEffect(() => {
     setCanvasReady(true);
+    const qs = loadCampusQuestsState();
+    setUnlockedTitleIds(getUnlockedTitleIds(qs));
+    setGradCapUnlocked(isGradCapUnlocked(qs));
   }, []);
 
   useEffect(() => {
@@ -248,6 +267,9 @@ export default function CharacterCreatorModal({
     setBackpack(initialProfile.backpack);
     setGlasses(initialProfile.glasses);
     setLanyard(initialProfile.lanyard);
+    setSchoolId(initialProfile.schoolId ?? 'none');
+    setTitleId(initialProfile.titleId ?? 'none');
+    setGradCap(Boolean(initialProfile.gradCap));
   }, [
     initialProfile.gender,
     initialProfile.hairStyle,
@@ -256,6 +278,9 @@ export default function CharacterCreatorModal({
     initialProfile.backpack,
     initialProfile.glasses,
     initialProfile.lanyard,
+    initialProfile.schoolId,
+    initialProfile.titleId,
+    initialProfile.gradCap,
   ]);
 
   const draggingRef = useRef(false);
@@ -272,6 +297,10 @@ export default function CharacterCreatorModal({
     backpack,
     glasses,
     lanyard,
+    schoolId,
+    titleId,
+    gradCap,
+    heldDrink: initialProfile.heldDrink ?? 'none',
   };
 
   const handleGenderChange = (nextGender: AvatarGender) => {
@@ -317,6 +346,10 @@ export default function CharacterCreatorModal({
         backpack,
         glasses,
         lanyard,
+        schoolId,
+        titleId,
+        gradCap,
+        heldDrink: initialProfile.heldDrink ?? 'none',
       },
       resumeQuest,
     );
@@ -680,6 +713,67 @@ export default function CharacterCreatorModal({
               >
                 🪪 Thẻ SV: {lanyard ? 'Đeo' : 'Ẩn'}
               </button>
+              <button
+                type="button"
+                data-testid="toggle-grad-cap"
+                disabled={!gradCapUnlocked && !gradCap}
+                onClick={() => setGradCap((v) => !v)}
+                title={
+                  gradCapUnlocked || gradCap
+                    ? 'Đội / Tháo Mũ Cử nhân Bách Khoa'
+                    : 'Hoàn thành Nhiệm vụ 6 (Lưu bút Kỷ yếu) để mở khóa Mũ Cử nhân'
+                }
+                className={`rounded-xl border px-3 py-1.5 text-xs font-bold transition ${
+                  gradCap
+                    ? 'border-purple-700 bg-purple-700 text-white'
+                    : gradCapUnlocked
+                      ? 'border-black/20 bg-white text-[#1E293B]'
+                      : 'cursor-not-allowed border-black/15 bg-black/5 text-slate-400'
+                }`}
+              >
+                🎓 Mũ Cử nhân: {gradCap ? 'Đội' : gradCapUnlocked ? 'Cất' : '🔒 NV 6'}
+              </button>
+            </div>
+
+            {/* 6. Trường / Viện & Danh hiệu mở khóa */}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className="block">
+                <span className="block text-xs font-bold text-[#1E293B]">
+                  Trường / Viện trực thuộc
+                </span>
+                <select
+                  data-testid="creator-school-select"
+                  value={schoolId}
+                  onChange={(e) => setSchoolId(e.target.value as SchoolBadgeId)}
+                  className="mt-1 w-full rounded-xl border border-black/20 bg-white px-2.5 py-1.5 text-xs font-bold text-[#1E293B] focus:border-[#B5121B] focus:outline-none"
+                >
+                  {SCHOOL_BADGES.map((sb) => (
+                    <option key={sb.id} value={sb.id}>
+                      {sb.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-xs font-bold text-[#1E293B]">
+                  Danh hiệu mở khóa ({Math.max(0, unlockedTitleIds.length - 1)}/{CAMPUS_TITLES.length - 1})
+                </span>
+                <select
+                  data-testid="creator-title-select"
+                  value={titleId}
+                  onChange={(e) => setTitleId(e.target.value as CampusTitleId)}
+                  className="mt-1 w-full rounded-xl border border-black/20 bg-white px-2.5 py-1.5 text-xs font-bold text-[#1E293B] focus:border-[#B5121B] focus:outline-none"
+                >
+                  {CAMPUS_TITLES.map((t) => {
+                    const unlocked = unlockedTitleIds.includes(t.id) || t.id === titleId;
+                    return (
+                      <option key={t.id} value={t.id} disabled={!unlocked}>
+                        {unlocked ? t.label : `🔒 ${t.label}`}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
             </div>
 
             {error && (

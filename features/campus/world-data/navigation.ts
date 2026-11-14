@@ -33,6 +33,7 @@ export const FAST_TRAVEL_DESTINATIONS: FastTravelDestination[] = [
   { id: 'parabol', name: 'Cổng Parabol', icon: '⛩️', desc: 'Biểu tượng kiến trúc Giải Phóng', x: -88, z: -6, yaw: -Math.PI / 2, facing: Math.PI / 2 },
   { id: 'c9', name: 'Khu C9', icon: '🏢', desc: 'Trước cầu thang đỏ zic-zac', x: -60, z: -17, yaw: Math.PI / 2, facing: -Math.PI / 2 },
   { id: 'ktx', name: 'Khu KTX B8–B9', icon: '🏘️', desc: 'Đời sống nội trú & Căng tin B5-9', x: 112.5, z: -45, yaw: -Math.PI / 2, facing: Math.PI / 2 },
+  { id: 'stadium', name: 'SVĐ Bách Khoa', icon: '⚽', desc: 'Sân bóng đá tương tác & Khu thể thao', x: 132, z: 73.2, yaw: Math.PI, facing: 0 },
   { id: 'spawn', name: 'Điểm bắt đầu', icon: '📍', desc: 'Cổng Trần Đại Nghĩa', x: SPAWN.x, z: SPAWN.z, yaw: Math.PI / 2, facing: -Math.PI / 2 },
 ];
 
