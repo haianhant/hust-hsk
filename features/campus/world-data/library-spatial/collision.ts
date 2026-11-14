@@ -481,7 +481,12 @@ export function resolveCanonicalLibraryPointCollision(
   floorInput: number = 1,
 ): { pos: Vec2; hit: string | null } {
   const floor = sanitizeLibraryFloor(floorInput, 1);
-  const loc = createLibraryLocation(floor, p.x, p.z);
+  const probe = createLibraryLocation(floor, p.x, p.z);
+  const ground = queryLibraryGround(probe);
+  const loc =
+    ground.supported && ground.elevation !== null
+      ? createLibraryLocation(floor, p.x, p.z, ground.elevation)
+      : probe;
   const res = resolveLibraryMovement(loc, loc, radius, AVATAR.height);
   return {
     pos: { x: res.position.x, z: res.position.z },

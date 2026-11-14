@@ -322,14 +322,22 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
     mk(topGeo, M_FLR_WOOD, 0, PY + 0.008, 0);
     stadRing(PR - 0.06, PR + 0.04, PY - 0.08, PY + 0.02, M_LED);
 
-    // 4 cụm bậc tam cấp bước lên bục trung tâm
-    for (const s of [0.08, 0.42, 0.58, 0.92]) {
-      const [sx, sz] = stadAt(s, PR + 0.35);
+    // 4 cụm bậc tam cấp gỗ đặc bước từ hành lang Tầng 6 (y = 0) lên bục trung tâm (y = 0.60m)
+    for (const s of BLOCK_B_DIMS.STAIR_S) {
+      const [sx, sz] = stadAt(s, PR + 0.48);
       const ry = ryOf(sx, sz);
       const sg = G(world, sx, 0, sz, ry);
       for (let st = 0; st < 3; st++) {
-        box(2.2, 0.2, 0.36, M_WOOD_L, 0, (st + 0.5) * 0.2, (1 - st) * 0.34, 0, 0, 0, sg);
+        const stepH = (st + 1) * 0.2;
+        const stepZ = (st - 1) * 0.32;
+        // Khối bậc đặc từ sàn y = 0 (không rỗng gầm) tiến dần vào tâm bục (+localZ hướng vào PR)
+        box(2.2, stepH, 0.35, M_WOOD_L, 0, stepH / 2, stepZ, 0, 0, 0, sg);
+        // Nẹp mũi bậc gỗ sẫm chống trượt giúp phân tách rõ 3 bậc khi nhìn từ trên xuống
+        box(2.22, 0.024, 0.048, M_WOOD_D, 0, stepH + 0.004, stepZ - 0.155, 0, 0, 0, sg);
       }
+      // Thành kẹp sườn gỗ hai bên bậc tam cấp
+      box(0.06, 0.22, 1.0, M_WOOD_D, -1.12, 0.11, 0, 0, 0, 0, sg);
+      box(0.06, 0.22, 1.0, M_WOOD_D, 1.12, 0.11, 0, 0, 0, 0, sg);
     }
   }
 
@@ -501,20 +509,22 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
   {
     const pg = G(world, PIANO.x, PY, PIANO.z, 0.38);
     // Bóng tiếp xúc AO mềm dưới chân Đại dương cầm & ghế đàn
-    const pianoAo = new THREE.PlaneGeometry(2.35, 2.65);
+    const pianoAo = new THREE.PlaneGeometry(2.25, 2.55);
     pianoAo.rotateX(-Math.PI / 2);
-    mk(pianoAo, M_AO, 0, 0.012, 0.12, 0, 0, 0, pg);
+    mk(pianoAo, M_AO, 0, 0.012, 0.32, 0, 0, 0, pg);
     const benchAo = new THREE.PlaneGeometry(1.12, 0.68);
     benchAo.rotateX(-Math.PI / 2);
-    mk(benchAo, M_AO, 0, 0.012, -0.98, 0, 0, 0, pg);
+    mk(benchAo, M_AO, 0, 0.012, -1.04, 0, 0, 0, pg);
 
     // Thân đàn Grand Piano sơn mài đen ánh than chì + chỉ viền đồng mạ vàng nổi khối
+    // Lưu ý: `rotateX(-Math.PI / 2)` ánh xạ `localZ = -shapeY`, nên cạnh phẳng bàn phím ở `shapeY = +0.52`
+    // (`localZ = -0.52`) và đuôi cong Grand Piano vươn về phía sau `shapeY = -1.38` (`localZ = +1.38`).
     const bodyS = new THREE.Shape();
-    bodyS.moveTo(-0.82, -0.55);
-    bodyS.lineTo(0.82, -0.55);
-    bodyS.lineTo(0.82, 0.35);
-    bodyS.bezierCurveTo(0.82, 1.35, 0.15, 1.45, -0.1, 0.95);
-    bodyS.bezierCurveTo(-0.35, 0.55, -0.82, 0.85, -0.82, 0.15);
+    bodyS.moveTo(-0.82, 0.52);
+    bodyS.lineTo(-0.82, -1.0);
+    bodyS.bezierCurveTo(-0.82, -1.44, -0.12, -1.46, 0.06, -1.0);
+    bodyS.bezierCurveTo(0.22, -0.56, 0.82, -0.6, 0.82, -0.16);
+    bodyS.lineTo(0.82, 0.52);
     bodyS.closePath();
     const bodyGeo = new THREE.ExtrudeGeometry(bodyS, { depth: 0.38, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025 });
     bodyGeo.rotateX(-Math.PI / 2);
@@ -531,35 +541,37 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
     const spruceGeo = new THREE.ExtrudeGeometry(bodyS, { depth: 0.014, bevelEnabled: false });
     spruceGeo.rotateX(-Math.PI / 2);
     spruceGeo.scale(0.91, 1, 0.91);
-    mk(spruceGeo, M_SPRUCE, 0, 1.084, 0.015, 0, 0, 0, pg);
+    mk(spruceGeo, M_SPRUCE, 0, 1.084, 0.02, 0, 0, 0, pg);
 
     const plateGeo = new THREE.ExtrudeGeometry(bodyS, { depth: 0.014, bevelEnabled: false });
     plateGeo.rotateX(-Math.PI / 2);
     plateGeo.scale(0.75, 1, 0.72);
-    mk(plateGeo, M_GOLD, 0.05, 1.096, -0.03, 0, 0, 0, pg);
+    mk(plateGeo, M_GOLD, -0.02, 1.096, 0.02, 0, 0, 0, pg);
     for (let sIdx = 0; sIdx < 6; sIdx++) {
-      const sx = -0.46 + sIdx * 0.2;
-      box(0.018, 0.016, 1.12 - sIdx * 0.06, M_GOLD, sx, 1.112, 0.12, 0, -0.18 + sIdx * 0.05, 0, pg);
+      const sx = -0.52 + sIdx * 0.2;
+      const barLen = 1.16 - sIdx * 0.1;
+      const barZ = 0.2 - sIdx * 0.055;
+      box(0.018, 0.016, barLen, M_GOLD, sx, 1.112, barZ, 0, 0.12 - sIdx * 0.04, 0, pg);
     }
 
-    // Nắp đàn mở nghiêng 38° (mặt dưới ánh gỗ ấm + viền đồng + thanh chống vàng)
+    // Nắp đàn mở nghiêng 33° dọc sống lưng trái (mặt dưới ánh gỗ ấm + viền đồng + thanh chống vàng)
     const lidGeo = new THREE.ExtrudeGeometry(bodyS, { depth: 0.026, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008 });
     lidGeo.rotateX(-Math.PI / 2);
     const lidUnderGeo = new THREE.ExtrudeGeometry(bodyS, { depth: 0.008, bevelEnabled: false });
     lidUnderGeo.rotateX(-Math.PI / 2);
     lidUnderGeo.scale(0.94, 1, 0.94);
-    const lidPivot = G(pg, -0.8, 1.08, 0);
-    lidPivot.rotation.z = 0.62;
+    const lidPivot = G(pg, -0.8, 1.088, 0);
+    lidPivot.rotation.z = 0.58;
     mk(lidGeo, M_PIANO_BLK, 0.8, 0, 0, 0, 0, 0, lidPivot);
     mk(lidUnderGeo, M_WOOD_M, 0.8, -0.006, 0, 0, 0, 0, lidPivot);
-    cyl(0.014, 0.014, 0.92, 8, M_GOLD, 0.42, 1.42, -0.1, 0, 0, -0.38, pg);
-    cyl(0.01, 0.01, 1.38, 8, M_GOLD, -0.8, 1.085, 0.16, Math.PI / 2, 0, 0, pg);
+    cyl(0.014, 0.014, 0.86, 8, M_GOLD, 0.61, 1.495, -0.08, 0, 0, 0.31, pg);
+    cyl(0.01, 0.01, 1.38, 8, M_GOLD, -0.8, 1.09, 0.22, Math.PI / 2, 0, 0, pg);
 
     // 3 chân đàn tiện + bộ 3 bàn đạp Pedal vàng
     for (const [lx, lz] of [
-      [-0.68, -0.42],
-      [0.68, -0.42],
-      [-0.12, 0.98],
+      [-0.68, -0.38],
+      [0.68, -0.38],
+      [-0.22, 1.02],
     ]) {
       cyl(0.068, 0.042, 0.66, 12, M_PIANO_BLK, lx, 0.35, lz, 0, 0, 0, pg);
       cyl(0.076, 0.076, 0.035, 12, M_GOLD, lx, 0.66, lz, 0, 0, 0, pg);
@@ -578,22 +590,22 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
     box(0.74, 0.03, 0.055, M_GOLD, 0, 1.07, -0.45, -0.25, 0, 0, pg);
     box(0.46, 0.2, 0.012, M_WALL, 0, 1.19, -0.465, -0.25, 0, 0, pg);
 
-    // Ghế đàn bọc nệm da có viền chỉ đồng
-    box(0.76, 0.075, 0.38, M_DRK, 0, 0.49, -0.98, 0, 0, 0, pg);
-    box(0.78, 0.035, 0.4, M_PIANO_BLK, 0, 0.445, -0.98, 0, 0, 0, pg);
-    box(0.79, 0.012, 0.41, M_GOLD, 0, 0.465, -0.98, 0, 0, 0, pg);
+    // Ghế đàn bọc nệm da có viền chỉ đồng đặt thoáng trước bàn phím (localZ = -1.04)
+    box(0.76, 0.075, 0.38, M_DRK, 0, 0.49, -1.04, 0, 0, 0, pg);
+    box(0.78, 0.035, 0.4, M_PIANO_BLK, 0, 0.445, -1.04, 0, 0, 0, pg);
+    box(0.79, 0.012, 0.41, M_GOLD, 0, 0.465, -1.04, 0, 0, 0, pg);
     for (const [bxX, bzZ] of [
-      [-0.33, -1.12],
-      [0.33, -1.12],
-      [-0.33, -0.84],
-      [0.33, -0.84],
+      [-0.33, -1.18],
+      [0.33, -1.18],
+      [-0.33, -0.9],
+      [0.33, -0.9],
     ]) {
       box(0.045, 0.44, 0.045, M_PIANO_BLK, bxX, 0.22, bzZ, 0, 0, 0, pg);
       box(0.052, 0.03, 0.052, M_GOLD, bxX, 0.018, bzZ, 0, 0, 0, pg);
     }
 
     // Bàn phím 88 phím (A0 = MIDI 21 .. C8 = MIDI 108, 52 phím trắng + 36 phím đen) + dải dạ đỏ rượu
-    const kbG = G(pg, 0, 0.76, -0.58);
+    const kbG = G(pg, 0, 0.76, -0.59);
     box(1.52, 0.06, 0.25, M_PIANO_BLK, 0, -0.02, 0, 0, 0, 0, kbG);
     box(0.05, 0.08, 0.26, M_PIANO_BLK, -0.755, 0.01, 0, 0, 0, 0, kbG);
     box(0.05, 0.08, 0.26, M_PIANO_BLK, 0.755, 0.01, 0, 0, 0, 0, kbG);

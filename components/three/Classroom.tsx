@@ -161,7 +161,7 @@ export default function Classroom({
     }
     if (homeworkRef.current) {
       const targets: Record<HomeworkState, [number, number, number]> = {
-        desk: [CLASSROOM.homework.x, 0.8, CLASSROOM.homework.z],
+        desk: [CLASSROOM.homework.x + 0.25, 0.8, CLASSROOM.homework.z],
         hand: [-1.4, 1.1, 1.5], // bay lên tay người chơi (đứng phía nam bàn 1)
         teacher: [CLASSROOM.npc.x, 1.25, CLASSROOM.npc.z + 0.45], // bay tới tay giáo viên
       };

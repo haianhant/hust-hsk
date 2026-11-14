@@ -1199,8 +1199,8 @@ export default function HomePage() {
           if (playerState.seated) {
             getHook()?.standUp?.();
           }
-          if (Math.hypot(playerState.pos.x - -6.963, playerState.pos.z - 2.69) > 3.0) {
-            getHook()?.teleport?.(-6.4, 3.1, -2.76);
+          if (Math.hypot(playerState.pos.x - -6.986, playerState.pos.z - 2.634) > 1.55) {
+            getHook()?.teleport?.(-7.23, 2.02, 0.38 + Math.PI);
           }
           getHook()?.sitAtSeat?.('tqb-6f-piano-bench');
         }
@@ -1700,8 +1700,8 @@ export default function HomePage() {
         if (playerState.seated) {
           getHook()?.standUp?.();
         }
-        if (Math.hypot(playerState.pos.x - -6.963, playerState.pos.z - 2.69) > 3.0) {
-          getHook()?.teleport?.(-6.4, 3.1, -2.76);
+        if (Math.hypot(playerState.pos.x - -6.986, playerState.pos.z - 2.634) > 1.55) {
+          getHook()?.teleport?.(-7.23, 2.02, 0.38 + Math.PI);
         }
         getHook()?.sitAtSeat?.('tqb-6f-piano-bench');
       }
@@ -1752,8 +1752,8 @@ export default function HomePage() {
         if (playerState.seated) {
           getHook()?.standUp?.();
         }
-        if (Math.hypot(playerState.pos.x - -6.963, playerState.pos.z - 2.69) > 3.0) {
-          getHook()?.teleport?.(-6.4, 3.1, -2.76);
+        if (Math.hypot(playerState.pos.x - -6.986, playerState.pos.z - 2.634) > 1.55) {
+          getHook()?.teleport?.(-7.23, 2.02, 0.38 + Math.PI);
         }
         getHook()?.sitAtSeat?.('tqb-6f-piano-bench');
       }

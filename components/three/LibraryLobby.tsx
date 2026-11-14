@@ -1034,7 +1034,8 @@ export default function LibraryLobby({
       {/* Vùng tương tác click chuột vào Đại dương cầm Grand Piano trên Tầng 6 */}
       <group ref={floor6InteractiveRef} visible={false}>
         <mesh
-          position={[-6.6, 1.25, 3.6]}
+          position={[-6.52, 1.35, 3.78]}
+          rotation={[0, 0.38, 0]}
           onClick={(e) => {
             e.stopPropagation();
             onObjectClick?.('piano-6f');
@@ -1052,7 +1053,7 @@ export default function LibraryLobby({
           onPointerOver={hover}
           onPointerOut={leave}
         >
-          <boxGeometry args={[2.1, 1.5, 2.2]} />
+          <boxGeometry args={[1.85, 1.55, 2.25]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
       </group>

@@ -216,8 +216,8 @@ export function queryLibraryGround(location: LibraryLocation): FloorSupportResul
         recommendedFloor: floor,
       };
     }
-    if (platSd.signedDist <= 0.9 && isPointOnF6PlatformStair(x, z)) {
-      const rampT = Math.max(0, Math.min(1, 1 - platSd.signedDist / 0.9));
+    if (platSd.signedDist <= 0.98 && isPointOnF6PlatformStair(x, z)) {
+      const rampT = Math.max(0, Math.min(1, 1 - platSd.signedDist / 0.98));
       return {
         supported: true,
         elevation: Number((BLOCK_B_DIMS.PY * rampT).toFixed(4)),

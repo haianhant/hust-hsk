@@ -135,6 +135,7 @@ export const BLOCK_B_DIMS = {
   PY: 0.6,
   MZ: 5.25,
   H: 9.6,
+  STAIR_S: [0.026, 0.141, 0.526, 0.641] as const,
   DESK: { x: 0, z: -11.2, r: 2.32 },
   PIANO: { x: -6.6, z: 3.6, halfW: 0.95, halfD: 1.05 },
   BOAT: { x: 2.2, z: -1.2, halfW: 3.55, halfD: 1.05 },
@@ -274,13 +275,19 @@ export function signedDistanceToStadium(
   };
 }
 
-const F6_PLATFORM_STAIR_CENTERS = [0.08, 0.42, 0.58, 0.92].map((s) =>
-  stadiumPointAt(s, BLOCK_B_DIMS.L, BLOCK_B_DIMS.PR + 0.35),
+const F6_PLATFORM_STAIR_ANCHORS = BLOCK_B_DIMS.STAIR_S.map((s) =>
+  stadiumPointAt(s, BLOCK_B_DIMS.L, BLOCK_B_DIMS.PR),
 );
 
 /** Returns true when `(x, z)` lies within any of the 4 perimeter stairways leading up to Floor 6's central platform. */
 export function isPointOnF6PlatformStair(x: number, z: number): boolean {
-  return F6_PLATFORM_STAIR_CENTERS.some((c) => Math.hypot(x - c.x, z - c.z) <= 1.25);
+  return F6_PLATFORM_STAIR_ANCHORS.some((c) => {
+    const dx = x - c.x;
+    const dz = z - c.z;
+    const alongTangent = Math.abs(dx * c.tx + dz * c.tz);
+    const outwardDist = dx * c.nx + dz * c.nz;
+    return alongTangent <= 1.15 && outwardDist >= -0.45 && outwardDist <= 1.06;
+  });
 }
 
 export const BLOCK_B_COLUMNS: ReadonlyArray<{ id: string; x: number; z: number; radius: number }> =
@@ -1628,14 +1635,14 @@ function buildFloor6Colliders(): SpatialCollider[] {
       'Đàn Grand Piano T6',
       6,
       'furniture',
-      BLOCK_B_DIMS.PIANO.x - BLOCK_B_DIMS.PIANO.halfW,
-      BLOCK_B_DIMS.PIANO.x + BLOCK_B_DIMS.PIANO.halfW,
-      BLOCK_B_DIMS.PIANO.z - BLOCK_B_DIMS.PIANO.halfD,
-      BLOCK_B_DIMS.PIANO.z + BLOCK_B_DIMS.PIANO.halfD,
+      -7.38,
+      -5.72,
+      3.12,
+      4.88,
       1.6,
       BLOCK_B_DIMS.PY,
     ),
-    makeBoxCollider('f6-piano-bench', 'Ghế đàn Piano T6', 6, 'furniture', -7.4, -6.52, 2.42, 2.96, 0.6, BLOCK_B_DIMS.PY),
+    makeBoxCollider('f6-piano-bench', 'Ghế đàn Piano T6', 6, 'furniture', -7.36, -6.61, 2.45, 2.82, 0.56, BLOCK_B_DIMS.PY),
     makeBoxCollider(
       'f6-boat-island',
       'Đảo thuyền cây xanh T6',

@@ -528,6 +528,7 @@ function SittingStudent({ spec }: { spec: StandingSpec }) {
         lanyard={spec.lanyard}
         wristwatch
         backpack={false}
+        seated
         joints={joints}
       />
       {/* Cuốn giáo trình / sách mở trên tay sinh viên đang đọc ven hồ */}

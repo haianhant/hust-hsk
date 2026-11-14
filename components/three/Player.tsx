@@ -850,6 +850,19 @@ export default function Player() {
     playerState.pos = { ...res.standUpPos };
     playerState.facing = facingRef.current;
     playerState.moving = false;
+    if (playerState.inLibraryLobby) {
+      const gq = queryLibraryGround(
+        createLibraryLocation(
+          playerState.libraryFloor,
+          res.standUpPos.x,
+          res.standUpPos.z,
+          playerState.libraryY,
+        ),
+      );
+      if (gq.supported && gq.elevation !== null) {
+        playerState.libraryY = gq.elevation;
+      }
+    }
     if (groupRef.current) {
       groupRef.current.position.set(
         res.standUpPos.x,
@@ -1085,10 +1098,19 @@ export default function Player() {
         // Đẩy ra khỏi collider (hồ/tòa nhà) để một điểm teleport lỗi không đặt
         // avatar vào trong nước/tường — gameplay thật không bao giờ vào được
         // đó vì va chạm đã chặn lúc di chuyển.
+        const libTargetGround = playerState.inLibraryLobby
+          ? queryLibraryGround(
+              createLibraryLocation(playerState.libraryFloor, x, z, playerState.libraryY),
+            )
+          : null;
+        const libTargetY =
+          libTargetGround && libTargetGround.supported && libTargetGround.elevation !== null
+            ? libTargetGround.elevation
+            : playerState.libraryY;
         const libMove = playerState.inLibraryLobby
           ? resolveLibraryMovement(
-              createLibraryLocation(playerState.libraryFloor, x, z, playerState.libraryY),
-              createLibraryLocation(playerState.libraryFloor, x, z, playerState.libraryY),
+              createLibraryLocation(playerState.libraryFloor, x, z, libTargetY),
+              createLibraryLocation(playerState.libraryFloor, x, z, libTargetY),
               AVATAR.radius,
               AVATAR.height,
             )

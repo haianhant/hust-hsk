@@ -219,9 +219,9 @@ function LibLamp({
   );
 }
 
-function LibBench({ x, z }: { x: number; z: number }) {
+function LibBench({ x, z, rotationY = 0 }: { x: number; z: number; rotationY?: number }) {
   return (
-    <group position={[x, 0, z]}>
+    <group position={[x, 0, z]} rotation-y={rotationY}>
       <mesh position={[0, 0.45, 0]} castShadow>
         <boxGeometry args={[0.5, 0.08, 1.8]} />
         <meshStandardMaterial color={BENCH_WOOD} roughness={0.85} />
@@ -1217,7 +1217,7 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
       <LibPalm x={48.2} z={22.8} />
       <LibBench x={50.6} z={13.4} />
       <LibBench x={50.6} z={16.6} />
-      <LibBench x={25.0} z={14.0} />
+      <LibBench x={25.0} z={14.0} rotationY={Math.PI} />
       <LibLamp x={25.8} z={10.8} balls={5} isNight={isNight} />
       <LibLamp x={30.0} z={10.8} balls={5} isNight={isNight} />
       <LibLamp x={25.8} z={17.5} balls={5} isNight={isNight} />

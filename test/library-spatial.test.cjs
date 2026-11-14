@@ -725,3 +725,105 @@ test('PR10B Stairs & Elevators (9) Curved stair T1↔T2 landing thresholds, side
   disposeObject3D(f10Group);
 });
 
+test('PR10B Floor 6 Platform Stairs & Grand Piano Seating (10) Smooth 4-stair ramp 0->0.60m, non-clipping Grand Piano bench & Beanbag sync', () => {
+  const { stadiumPointAt } = require(path.join(ROOT, 'features/campus/world-data/library-spatial/geometry.ts'));
+  const { queryLibraryGround } = require(path.join(ROOT, 'lib/campus.ts'));
+  const {
+    computeSafeStandUpPosition,
+    createInitialSeatingState,
+    getAnyLibrarySeatDefinition,
+    validateSeatSelection,
+  } = require(path.join(ROOT, 'features/campus/interaction/seat-interaction.ts'));
+
+  // 1. All 4 Floor 6 wooden stairways ascend smoothly from y = 0 to y = 0.60
+  for (const s of BLOCK_B_DIMS.STAIR_S) {
+    const outerPt = stadiumPointAt(s, BLOCK_B_DIMS.L, BLOCK_B_DIMS.PR + 1.35);
+    const midPt = stadiumPointAt(s, BLOCK_B_DIMS.L, BLOCK_B_DIMS.PR + 0.48);
+    const innerPt = stadiumPointAt(s, BLOCK_B_DIMS.L, BLOCK_B_DIMS.PR - 0.45);
+
+    const gOuter = queryLibraryGround(createLibraryLocation(6, outerPt.x, outerPt.z, 0));
+    const gMid = queryLibraryGround(createLibraryLocation(6, midPt.x, midPt.z, 0.3));
+    const gInner = queryLibraryGround(createLibraryLocation(6, innerPt.x, innerPt.z, 0.6));
+
+    assert.equal(gOuter.elevation, 0, `Outer corridor before stair s=${s} must be y=0`);
+    assert.ok(gMid.elevation > 0.15 && gMid.elevation < 0.5, `Mid-stair s=${s} must ramp smoothly, got ${gMid.elevation}`);
+    assert.equal(gInner.elevation, 0.6, `Platform inside stair s=${s} must be y=0.6`);
+
+    const stepUp1 = resolveLibraryMovement(
+      createLibraryLocation(6, outerPt.x, outerPt.z, 0),
+      createLibraryLocation(6, midPt.x, midPt.z, 0),
+      AVATAR.radius,
+      AVATAR.height,
+    );
+    assert.equal(stepUp1.blocked, false, `Walking onto stair s=${s} must not be blocked: ${stepUp1.collisionIds}`);
+    const stepUp2 = resolveLibraryMovement(
+      stepUp1.position,
+      createLibraryLocation(6, innerPt.x, innerPt.z, stepUp1.position.y),
+      AVATAR.radius,
+      AVATAR.height,
+    );
+    assert.equal(stepUp2.blocked, false, `Topping out stair s=${s} onto y=0.6 platform must not be blocked: ${stepUp2.collisionIds}`);
+    assert.equal(stepUp2.position.y, 0.6);
+  }
+
+  // Non-stair platform edge (s = 0.25, z < 0) blocks direct step-up from corridor
+  const edgeOuter = stadiumPointAt(0.25, BLOCK_B_DIMS.L, BLOCK_B_DIMS.PR + 0.8);
+  const edgeInner = stadiumPointAt(0.25, BLOCK_B_DIMS.L, BLOCK_B_DIMS.PR - 0.4);
+  const edgeBlocked = resolveLibraryMovement(
+    createLibraryLocation(6, edgeOuter.x, edgeOuter.z, 0),
+    createLibraryLocation(6, edgeInner.x, edgeInner.z, 0),
+    AVATAR.radius,
+    AVATAR.height,
+  );
+  assert.equal(edgeBlocked.blocked, true, 'Non-stair platform edge must block direct step-up');
+
+  // 2. Grand Piano bench seat & safe stand-up spot are 100% clear of f6-grand-piano and selectable while uiLocked
+  const pianoSeat = getAnyLibrarySeatDefinition('tqb-6f-piano-bench');
+  assert.ok(pianoSeat, 'Missing tqb-6f-piano-bench definition');
+  const f6Colliders = getCollidersForFloor(6);
+  const pianoCol = f6Colliders.find((c) => c.id === 'f6-grand-piano');
+  assert.ok(pianoCol, 'Missing f6-grand-piano collider');
+
+  // Seated avatar circle (radius = AVATAR.radius) at pianoSeat must NOT intersect f6-grand-piano
+  const closestPianoX = Math.max(pianoCol.bounds.minX, Math.min(pianoSeat.x, pianoCol.bounds.maxX));
+  const closestPianoZ = Math.max(pianoCol.bounds.minZ, Math.min(pianoSeat.z, pianoCol.bounds.maxZ));
+  const clearanceToPiano = Math.hypot(pianoSeat.x - closestPianoX, pianoSeat.z - closestPianoZ);
+  assert.ok(
+    clearanceToPiano > AVATAR.radius + 0.04,
+    `Seated avatar at piano bench (${pianoSeat.x}, ${pianoSeat.z}) must stay clear of f6-grand-piano, got clearance=${clearanceToPiano}`,
+  );
+
+  const standSpot = computeSafeStandUpPosition(pianoSeat);
+  const standRes = resolveLibraryMovement(
+    createLibraryLocation(6, standSpot.x, standSpot.z, 0.6),
+    createLibraryLocation(6, standSpot.x, standSpot.z, 0.6),
+    AVATAR.radius,
+    AVATAR.height,
+  );
+  assert.equal(standRes.blocked, false, `Stand-up spot (${standSpot.x}, ${standSpot.z}) from piano bench must be collision-free, got ${standRes.collisionIds}`);
+  assert.equal(standRes.position.y, 0.6);
+
+  const validWhilePianoModalOpen = validateSeatSelection({
+    seatId: 'tqb-6f-piano-bench',
+    playerPos: standSpot,
+    inLibraryLobby: true,
+    inClassroom: false,
+    libraryFloor: 6,
+    bikeRiding: false,
+    uiLocked: true,
+    currentSeating: createInitialSeatingState(),
+  });
+  assert.equal(validWhilePianoModalOpen.ok, true, `Piano bench must allow auto-sit when piano HUD modal is open, got ${validWhilePianoModalOpen.reason}`);
+
+  // 3. Floor 10 beanbag seats match their canonical colliders 1:1
+  const f10Colliders = getCollidersForFloor(10);
+  for (const idx of [1, 2, 3]) {
+    const bbSeat = getAnyLibrarySeatDefinition(`tqb-10f-beanbag-${idx}`);
+    const bbCol = f10Colliders.find((c) => c.id === `f10-beanbag-${idx}`);
+    assert.ok(bbSeat && bbCol && bbCol.cylinder, `Missing beanbag ${idx} seat or collider`);
+    assert.ok(Math.abs(bbSeat.x - bbCol.cylinder.x) < 1e-3, `Beanbag ${idx} X mismatch`);
+    assert.ok(Math.abs(bbSeat.z - bbCol.cylinder.z) < 1e-3, `Beanbag ${idx} Z mismatch`);
+  }
+});
+
+

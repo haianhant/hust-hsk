@@ -38,14 +38,16 @@
       "name": "Quảng trường C1 → Thư viện",
       "pass": true,
       "reason": "đến đích trong 1,5 m",
-      "steps": 2102,
-      "seconds": 35,
-      "distanceM": 140.1,
+      "steps": 2128,
+      "seconds": 35.5,
+      "distanceM": 141.6,
       "endPos": {
-        "x": 23.94,
-        "z": 26.54
+        "x": 24.11,
+        "z": 26.57
       },
-      "hits": {}
+      "hits": {
+        "Thân cây": 16
+      }
     },
     {
       "id": "leg4",

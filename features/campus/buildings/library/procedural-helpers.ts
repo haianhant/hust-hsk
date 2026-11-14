@@ -258,6 +258,23 @@ export function optimizeStaticLibraryGroup(
     mergedMaterialGroups += 1;
   });
 
+  // Dọn các THREE.Group rỗng sau khi đã gộp tĩnh để giảm chi phí duyệt updateMatrixWorld() mỗi frame.
+  const pruneEmptyGroups = (node: THREE.Object3D) => {
+    for (let i = node.children.length - 1; i >= 0; i--) {
+      pruneEmptyGroups(node.children[i]);
+    }
+    if (
+      node !== container &&
+      !preserved.has(node) &&
+      !(node as THREE.Mesh).isMesh &&
+      !(node as THREE.Light).isLight &&
+      node.children.length === 0
+    ) {
+      node.parent?.remove(node);
+    }
+  };
+  pruneEmptyGroups(container);
+
   return { batchedMeshes, instancedGroups, mergedMaterialGroups };
 }
 

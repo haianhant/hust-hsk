@@ -419,14 +419,14 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
     });
   });
 
-  // Grand Piano Bench on Floor 6 (y = 0.6, local [0, 0, -0.98] inside PIANO at [-6.6, 3.6, ry=0.38])
+  // Grand Piano Bench on Floor 6 (y = 0.6, local [0, 0, -1.04] inside PIANO at [-6.6, 3.6, ry=0.38])
   all.push({
     seatId: 'tqb-6f-piano-bench',
     studyRoomId: 'library-lobby',
     tableId: 'f6-grand-piano',
     label: 'Tầng 6 · Ghế Đàn Đại dương cầm Grand Piano',
-    x: -6.963,
-    z: 2.69,
+    x: -6.986,
+    z: 2.634,
     facing: 0.38,
     floor: 6,
     y: BLOCK_B_DIMS.PY,
@@ -529,11 +529,11 @@ function buildAllLibrarySeats(): ExtendedLibrarySeatDefinition[] {
     });
   });
 
-  // Floor 10 Beanbags
+  // Floor 10 Beanbags (khớp 1:1 tọa độ mesh & collider [-16.5, -14.2, -11.8])
   const f10Beanbags: ReadonlyArray<[number, number, string]> = [
-    [-16.8, -1.9, 'Ghế lười Beanbag Cam T10'],
+    [-16.5, -1.9, 'Ghế lười Beanbag Cam T10'],
     [-14.2, -1.9, 'Ghế lười Beanbag Xanh T10'],
-    [-11.6, -1.9, 'Ghế lười Beanbag Đỏ T10'],
+    [-11.8, -1.9, 'Ghế lười Beanbag Đỏ T10'],
   ];
   f10Beanbags.forEach(([bx, bz, label], idx) => {
     all.push({
@@ -776,7 +776,7 @@ export function validateSeatSelection(
     };
   }
 
-  if (uiLocked) {
+  if (uiLocked && seat.seatId !== 'tqb-6f-piano-bench') {
     return {
       ok: false,
       reason: 'ui-locked',

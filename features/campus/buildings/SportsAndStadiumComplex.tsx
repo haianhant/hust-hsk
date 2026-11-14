@@ -251,7 +251,7 @@ function StadiumFloodlightTower({
         </mesh>
         {[-0.45, -0.15, 0.15, 0.45].map((bx, cIdx) =>
           [-0.22, 0, 0.22].map((by, rIdx) => (
-            <mesh key={`lamp-${cIdx}-${rIdx}`} position={[bx, by, 0.09]}>
+            <mesh key={`lamp-${cIdx}-${rIdx}`} position={[bx, by, 0.09]} rotation={[Math.PI / 2, 0, 0]}>
               <cylinderGeometry args={[0.075, 0.075, 0.04, 10]} />
               <meshStandardMaterial
                 color="#FFFBEB"
