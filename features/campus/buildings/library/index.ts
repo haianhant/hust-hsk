@@ -11,4 +11,11 @@ export { buildFloors1To5, type Floors1To5Controller, type ElevatorCarState } fro
 export { buildFloors6To7, type Floors6To7Controller, type PianoKey3D } from './buildFloors6To7';
 export { buildFloor10Rooftop, type Floor10RooftopController } from './buildFloor10Rooftop';
 export { buildRoom401, type Room401Controller } from './buildRoom401';
-export { disposeObject3D } from './procedural-helpers';
+export {
+  LIBRARY_VN_FONT,
+  disposeObject3D,
+  makeBookSpineRowTex,
+  makeLibraryWoodGrainTex,
+  makeMonitorScreenTex,
+  makeVendingFrontTex,
+} from './procedural-helpers';

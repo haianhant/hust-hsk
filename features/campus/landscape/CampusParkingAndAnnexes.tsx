@@ -15,7 +15,7 @@ import {
 import { LabelPlane } from '../../../components/three/TextPlate';
 import { FacultyParkedCar } from '../buildings/C6C7C8Cluster';
 
-function ParkedMotorbike({
+export function ParkedMotorbike({
   x,
   z,
   yaw = 0,
@@ -52,7 +52,7 @@ function ParkedMotorbike({
   );
 }
 
-function BlueParkingSignPost({
+export function BlueParkingSignPost({
   x,
   z,
   rotY = 0,

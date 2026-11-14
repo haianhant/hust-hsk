@@ -11,9 +11,9 @@
   - Bản đồ số chuẩn [`https://hustmap.com/`](https://hustmap.com/).
   - 3 ảnh chụp thực tế tại [`tham-khao/b1-soict/`](../../../tham-khao/b1-soict/README.md) (`b1-soict-01.jpg` .. `b1-soict-03.jpg`).
 - **Invariants (Ràng buộc Bất biến):**
-  1. **Tòa B1 (`SOICT_B1`):** Tâm tại `(112, 14)`, kích thước `22m × 14m` (`box: { minX: 101, maxX: 123, minZ: 7, maxZ: 21 }`), cao `8 tầng × 3.2m`, sơn trắng kiến trúc (`#FFFFFF` / `#F8FAFC`), quay mặt chính có khối sảnh tròn rotunda, thảm cỏ bán nguyệt và biển `"B1"` xanh dương về hướng Bắc (`-Z`).
+  1. **Tòa B1 (`SOICT_B1`) & Sân trước Nhà B1 (`B1_FORECOURT_PLAZA`):** Tâm tòa nhà tại `(115.5, 22.5)`, kích thước `33m × 17m` (`box: { minX: 99, maxX: 132, minZ: 14, maxZ: 31 }`), cao `8 tầng × 3.2m`, sơn trắng kiến trúc (`#FFFFFF` / `#F8FAFC`), quay mặt chính có khối sảnh tròn rotunda (`r = 5.15m`) và biển `"B1"` xanh dương về hướng Bắc (`-Z`) nhìn ra `B1_FORECOURT_PLAZA` (`x = 99..132, z = -2.8..14.5`) gồm thảm cỏ bán nguyệt tại `(115.5, 5.8)`, Nhà xe B1 cánh Tây và làn đỗ xe ô tô giảng viên cánh Đông.
   2. **Cụm công trình phía Đông-Nam B1 (`EAST_CAMPUS_BLOCKS`):**
-     - Chỉ dựng các tòa thuộc khuôn viên ĐHBK Hà Nội trên `https://hustmap.com/`: **`Nhà ăn A1-5`** (`(136, 9)`), **`Nhà A17`** (`(136, 23)`, xoay chéo dọc phố Tạ Quang Bửu), **`Nhà E`** (`(146, 29)`) và **`Nhà T`** (`(157, 20)`, khối nhà lớn chạy chéo ở rìa Đông).
+     - Chỉ dựng các tòa thuộc khuôn viên ĐHBK Hà Nội trên `https://hustmap.com/`: **`Nhà ăn A1-5`** (`(142, 9)`), **`Nhà A17`** (`(142.5, 23)`, xoay chéo dọc phố Tạ Quang Bửu), **`Nhà E`** (`(149.5, 30.5)`) và **`Nhà T`** (`(159, 20)`, khối nhà lớn chạy chéo ở rìa Đông).
      - Tuyệt đối không đưa `H1`, `H3` (thuộc Trường ĐH Xây dựng Hà Nội ở phía Tây-Nam ngoài trường) vào khu vực này.
 
 ---

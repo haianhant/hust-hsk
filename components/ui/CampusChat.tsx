@@ -47,7 +47,34 @@ export default function CampusChat({ hskMode = false }: { hskMode?: boolean }) {
   const [activeEmoteId, setActiveEmoteId] = useState<AvatarEmoteId | null>(null);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const lastSeenCountRef = useRef<number>(multiplayer.snapshot.messages.length);
+  const prevWidthRef = useRef<number>(typeof window !== 'undefined' ? window.innerWidth : 1280);
   const listRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const initW = window.innerWidth;
+    prevWidthRef.current = initW;
+    if (initW < 768) setChatOpen(false);
+    if (initW < 640) setEmotesOpen(false);
+
+    const onResize = () => {
+      const nextW = window.innerWidth;
+      const prevW = prevWidthRef.current;
+      prevWidthRef.current = nextW;
+      if (prevW >= 768 && nextW < 768) {
+        setChatOpen(false);
+      } else if (prevW < 768 && nextW >= 768) {
+        setChatOpen(true);
+      }
+      if (prevW >= 640 && nextW < 640) {
+        setEmotesOpen(false);
+      } else if (prevW < 640 && nextW >= 640) {
+        setEmotesOpen(true);
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     const sync = () => {

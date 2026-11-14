@@ -164,11 +164,11 @@ const WALKING_STUDENTS: WalkerSpec[] = [
     lanyard: false,
     backpack: false,
   },
-  // 8. Sinh viên đi bộ trước Trường CNTT&TT (Nhà B1 — SoICT)
+  // 8. Sinh viên đi bộ trên Sân trước Trường CNTT&TT (Nhà B1 — SoICT)
   {
     id: 'walk-soict-b1',
-    a: [98, 25],
-    b: [124, 25],
+    a: [107.0, 1.6],
+    b: [124.0, 1.6],
     speed: 1.55,
     phaseOffset: 1.5,
     variant: 'windbreaker',
@@ -366,10 +366,10 @@ const STANDING_STUDENTS: StandingSpec[] = [
     lanyard: true,
     backpack: true,
   },
-  // Hai sinh viên trước Nhà B1 SoICT
+  // Hai sinh viên trên Sân trước Nhà B1 SoICT (hai bên sảnh tròn Rotunda)
   {
     id: 'stand-soict-1',
-    pos: [108.0, 3.5],
+    pos: [110.0, 9.2],
     rotY: Math.PI / 2,
     variant: 'windbreaker',
     shirt: '#B5121B',
@@ -382,7 +382,7 @@ const STANDING_STUDENTS: StandingSpec[] = [
   },
   {
     id: 'stand-soict-2',
-    pos: [109.2, 3.5],
+    pos: [121.0, 9.2],
     rotY: -Math.PI / 2,
     variant: 'polo',
     shirt: '#B91D24',

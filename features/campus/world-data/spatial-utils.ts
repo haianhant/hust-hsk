@@ -9,6 +9,7 @@ import { BIKE_RADIUS, BOUNDS, type AABB, type Vec2 } from './bounds';
 import { CLASSROOM, LAKE, LIBRARY_LOBBY } from './buildings';
 import {
   BUILDING_COLLIDERS,
+  CAMPUS_PILLAR_CIRCLES,
   CLASSROOM_COLLIDERS,
   LIBRARY_LOBBY_COLLIDERS,
   NPC_CIRCLES,
@@ -109,6 +110,7 @@ export function resolveCollisions(p: Vec2, radius: number): { pos: Vec2; hit: st
     }
   };
   for (const t of TREE_TRUNKS) pushOutCircle(t.x, t.z, 0.3, 'Thân cây');
+  for (const p of CAMPUS_PILLAR_CIRCLES) pushOutCircle(p.x, p.z, p.radius, p.name);
   for (const n of NPC_CIRCLES) pushOutCircle(n.pos.x, n.pos.z, n.radius, n.name ?? 'Minh (NPC)');
 
   return { pos: { x, z }, hit };

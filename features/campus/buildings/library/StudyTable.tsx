@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import type * as THREE from 'three';
-import { LabelPlane } from '../../../../components/three/TextPlate';
+import { CANVAS_VN_FONT, LabelPlane } from '../../../../components/three/TextPlate';
 
 export interface StudyTableModelProps {
   tableId: string;
@@ -31,8 +31,8 @@ function drawTablePlaque1(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = '#F6D365';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '800 34px Arial, sans-serif';
-  ctx.fillText('BÀN ĐỌC 01', w / 2, h / 2 + 2);
+  ctx.font = `700 32px ${CANVAS_VN_FONT}`;
+  ctx.fillText('BÀN ĐỌC 01'.normalize('NFC'), w / 2, h / 2 + 2);
 }
 
 function drawTablePlaque2(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -44,8 +44,8 @@ function drawTablePlaque2(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = '#F6D365';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '800 34px Arial, sans-serif';
-  ctx.fillText('BÀN ĐỌC 02', w / 2, h / 2 + 2);
+  ctx.font = `700 32px ${CANVAS_VN_FONT}`;
+  ctx.fillText('BÀN ĐỌC 02'.normalize('NFC'), w / 2, h / 2 + 2);
 }
 
 export function StudyTable({
@@ -68,7 +68,7 @@ export function StudyTable({
 
   return (
     <group position={[x, 0, z]} userData={{ studyTableId: tableId }}>
-      {/* Mặt bàn gỗ sồi phủ laminate chống lóa (cao 0.75m) */}
+      {/* Mặt bàn gỗ sồi phủ laminate chống lóa (cao 0.75m) & nẹp óc chó chu vi */}
       <mesh position={[0, h - 0.022, 0]} castShadow receiveShadow>
         <boxGeometry args={[w, 0.044, d]} />
         <meshStandardMaterial
@@ -78,11 +78,40 @@ export function StudyTable({
           metalness={0.04}
         />
       </mesh>
+      {([-1, 1] as const).map((sz) => (
+        <mesh key={`trim-z-${sz}`} position={[0, h - 0.022, sz * (d / 2 - 0.008)]}>
+          <boxGeometry args={[w, 0.045, 0.016]} />
+          <meshStandardMaterial color="#7C4F28" roughness={0.5} />
+        </mesh>
+      ))}
+      {([-1, 1] as const).map((sx) => (
+        <mesh key={`trim-x-${sx}`} position={[sx * (w / 2 - 0.008), h - 0.022, 0]}>
+          <boxGeometry args={[0.016, 0.045, d]} />
+          <meshStandardMaterial color="#7C4F28" roughness={0.5} />
+        </mesh>
+      ))}
+      {/* Hộp ổ cắm điện & cổng USB âm mặt bàn */}
+      {([-w * 0.26, w * 0.26] as const).map((gx, gi) => (
+        <group key={`grommet-${gi}`} position={[gx, h + 0.003, gi === 0 ? 0.09 : -0.09]}>
+          <mesh>
+            <boxGeometry args={[0.085, 0.006, 0.052]} />
+            <meshStandardMaterial color="#475569" roughness={0.32} metalness={0.72} />
+          </mesh>
+          <mesh position={[0, 0.0035, 0]}>
+            <boxGeometry args={[0.056, 0.002, 0.024]} />
+            <meshStandardMaterial color="#0F172A" roughness={0.5} />
+          </mesh>
+        </group>
+      ))}
 
-      {/* Diềm gỗ sẫm bo dưới mặt bàn */}
+      {/* Diềm gỗ sẫm & máng đi dây cáp dưới mặt bàn */}
       <mesh position={[0, h - 0.058, 0]}>
         <boxGeometry args={[w - 0.06, 0.032, d - 0.06]} />
         <meshStandardMaterial color="#8B5E34" map={woodTex} roughness={0.55} />
+      </mesh>
+      <mesh position={[0, h - 0.11, 0]}>
+        <boxGeometry args={[w - 0.28, 0.028, 0.08]} />
+        <meshStandardMaterial color="#1E2633" roughness={0.5} metalness={0.55} />
       </mesh>
 
       {/* Khung chân thép hộp sơn tĩnh điện xám than (chạm sàn y = 0) */}
@@ -93,7 +122,11 @@ export function StudyTable({
               <boxGeometry args={[0.045, legHeight, 0.045]} />
               <meshStandardMaterial color="#262E3B" roughness={0.45} metalness={0.58} />
             </mesh>
-            {/* Đế cao su chống trượt */}
+            {/* Vòng thép chỉnh cân bằng & đế cao su chống trượt */}
+            <mesh position={[0, 0.022, 0]}>
+              <cylinderGeometry args={[0.026, 0.026, 0.016, 12]} />
+              <meshStandardMaterial color="#64748B" roughness={0.32} metalness={0.78} />
+            </mesh>
             <mesh position={[0, 0.008, 0]}>
               <boxGeometry args={[0.056, 0.016, 0.056]} />
               <meshStandardMaterial color="#151921" roughness={0.8} />
@@ -125,12 +158,11 @@ export function StudyTable({
           <meshStandardMaterial color="#2B3340" roughness={0.4} metalness={0.62} />
         </mesh>
       ))}
-      {/* Chụp đèn đọc sách ngang */}
+      {/* Chụp đèn đọc sách ngang & nan tán quang chống chói */}
       <mesh position={[0, h + 0.235, 0]}>
         <boxGeometry args={[w - 0.34, 0.028, 0.076]} />
         <meshStandardMaterial color="#2B3340" roughness={0.4} metalness={0.6} />
       </mesh>
-      {/* Dải đèn LED vàng ấm hắt xuống mặt bàn */}
       <mesh position={[0, h + 0.219, 0]}>
         <boxGeometry args={[w - 0.4, 0.008, 0.048]} />
         <meshStandardMaterial
@@ -140,6 +172,12 @@ export function StudyTable({
           roughness={0.25}
         />
       </mesh>
+      {([-0.36, -0.18, 0, 0.18, 0.36] as const).map((frac) => (
+        <mesh key={`louver-${frac}`} position={[(w - 0.42) * frac, h + 0.212, 0]}>
+          <boxGeometry args={[0.012, 0.012, 0.054]} />
+          <meshStandardMaterial color="#2B3340" roughness={0.45} metalness={0.55} />
+        </mesh>
+      ))}
 
       {/* Biển số bàn đọc hai mặt Bắc & Nam */}
       <LabelPlane

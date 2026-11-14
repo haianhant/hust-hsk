@@ -571,6 +571,12 @@ async function run() {
       { timeout: 5000 },
     );
 
+    await page.locator('[data-testid="toggle-hsk-mode"]').click();
+    await page.waitForFunction(
+      () => document.body.innerText.includes('HSK: Bật'),
+      null,
+      { timeout: 5000 },
+    );
     await page.evaluate(() => window.__bkhn.teleport(2.4, -0.6, -Math.PI / 2));
     await page.waitForFunction(
       () => document.body.innerText.includes('Xem bảng từ vựng Thư viện'),

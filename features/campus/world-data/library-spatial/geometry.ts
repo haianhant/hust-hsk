@@ -137,7 +137,7 @@ export const BLOCK_B_DIMS = {
   H: 9.6,
   DESK: { x: 0, z: -11.2, r: 2.32 },
   PIANO: { x: -6.6, z: 3.6, halfW: 0.95, halfD: 1.05 },
-  BOAT: { x: 2.2, z: -1.2, halfW: 2.55, halfD: 0.92 },
+  BOAT: { x: 2.2, z: -1.2, halfW: 3.55, halfD: 1.05 },
 } as const;
 
 export const BLOCK_D_DIMS = {
@@ -148,7 +148,7 @@ export const BLOCK_D_DIMS = {
   KS: { x0: -5.2, x1: 5.2, z0: -8.2, z1: -3.4, h: 3.6 },
   PG: { x0: -6.8, x1: 6.8, z0: 2.2, z1: 7.4, h: 3.1, tableXs: [-4.2, 0, 4.2] as const, tableZ: 4.8 },
   SD: { x: 14.8, z: 0.4, r: 4.2, y: 0.18 },
-  STAR_MAP: { x: 11.8, z: -2.5, halfW: 0.75, halfD: 0.32 },
+  STAR_MAP: { x: 12.4, z: -1.8, halfW: 0.78, halfD: 0.42 },
   TELESCOPE: { x: 15.4, z: 0.6, r: 0.62 },
 } as const;
 
@@ -272,6 +272,15 @@ export function signedDistanceToStadium(
     dz,
     distFromAxis,
   };
+}
+
+const F6_PLATFORM_STAIR_CENTERS = [0.08, 0.42, 0.58, 0.92].map((s) =>
+  stadiumPointAt(s, BLOCK_B_DIMS.L, BLOCK_B_DIMS.PR + 0.35),
+);
+
+/** Returns true when `(x, z)` lies within any of the 4 perimeter stairways leading up to Floor 6's central platform. */
+export function isPointOnF6PlatformStair(x: number, z: number): boolean {
+  return F6_PLATFORM_STAIR_CENTERS.some((c) => Math.hypot(x - c.x, z - c.z) <= 1.25);
 }
 
 export const BLOCK_B_COLUMNS: ReadonlyArray<{ id: string; x: number; z: number; radius: number }> =
@@ -1213,7 +1222,57 @@ function buildFloor1Colliders(): SpatialCollider[] {
     makeBoxCollider('lobby-magazine-rack', 'Kệ báo & tạp chí Tầng 1', 1, 'furniture', -7.7, -5.9, -12.13, -11.67, 1.55),
     makeBoxCollider('lobby-vending-machine', 'Máy bán nước tự động Tầng 1', 1, 'furniture', 13.72, 14.88, -12.33, -11.47, 1.95),
     makeBoxCollider('f1-elevator-bank', 'Lõi Thang máy T1', 1, 'shaft', XW - 0.3, XW + 2.05, -4.05, 4.05, 3.5),
+    makeBoxCollider('lobby-checkin-kiosk', 'Kiosk Check-in tự động Tầng 1', 1, 'furniture', -16.46, -15.74, -9.52, -8.88, 1.7),
+    makeBoxCollider('lobby-water-dispensers', 'Cây nước uống nóng lạnh Tầng 1', 1, 'furniture', 11.58, 12.72, -12.12, -11.68, 1.6),
   );
+
+  // 4 trụ cổng từ kiểm soát ra vào (giữ 3 lối đi rộng 1.14m thông thoáng) & 2 trụ biển chỉ dẫn Tầng 1
+  const f1TurnstileXs = [-1.95, -0.65, 0.65, 1.95] as const;
+  for (let idx = 0; idx < f1TurnstileXs.length; idx++) {
+    const gx = f1TurnstileXs[idx];
+    cols.push(
+      makeBoxCollider(
+        `f1-turnstile-${idx + 1}`,
+        'Cổng từ kiểm soát ra vào T1',
+        1,
+        'furniture',
+        gx - 0.08,
+        gx + 0.08,
+        10.78,
+        11.52,
+        1.1,
+      ),
+    );
+  }
+  const f1PylonXs = [-6.75, 6.75] as const;
+  for (let idx = 0; idx < f1PylonXs.length; idx++) {
+    const px = f1PylonXs[idx];
+    cols.push(
+      makeBoxCollider(
+        `f1-directory-pylon-${idx + 1}`,
+        'Trụ chỉ dẫn Thư viện T1',
+        1,
+        'furniture',
+        px - 0.42,
+        px + 0.42,
+        6.27,
+        6.63,
+        2.25,
+      ),
+    );
+  }
+  const f1FloorPlants: ReadonlyArray<readonly [number, number]> = [
+    [-17.5, -11.2],
+    [17.5, -11.2],
+    [-17.5, 11.2],
+    [17.5, 11.2],
+    [-8.5, -11.5],
+    [8.5, -11.5],
+  ];
+  for (let idx = 0; idx < f1FloorPlants.length; idx++) {
+    const [px, pz] = f1FloorPlants[idx];
+    cols.push(makeCylinderCollider(`f1-floor-plant-${idx + 1}`, 'Chậu cây cảnh Sảnh T1', 1, 'furniture', px, pz, 0.28, 1.35));
+  }
 
   // 6. PR8 Study Tables (derived directly from LIBRARY_LOBBY.studyTables[].box) & 4 Study Chairs
   for (const table of LIBRARY_LOBBY.studyTables) {
@@ -1576,6 +1635,7 @@ function buildFloor6Colliders(): SpatialCollider[] {
       1.6,
       BLOCK_B_DIMS.PY,
     ),
+    makeBoxCollider('f6-piano-bench', 'Ghế đàn Piano T6', 6, 'furniture', -7.4, -6.52, 2.42, 2.96, 0.6, BLOCK_B_DIMS.PY),
     makeBoxCollider(
       'f6-boat-island',
       'Đảo thuyền cây xanh T6',
@@ -1589,6 +1649,22 @@ function buildFloor6Colliders(): SpatialCollider[] {
       BLOCK_B_DIMS.PY,
     ),
   ];
+
+  const f6MustardChairs: ReadonlyArray<readonly [number, number, number]> = [
+    [-5.2, -3.8, 0.4],
+    [0.4, -5.4, -0.2],
+    [5.4, -3.8, -0.6],
+    [-5.2, 3.8, 2.5],
+    [1.8, 4.8, 3.0],
+    [5.4, 3.2, -2.4],
+  ];
+  for (let idx = 0; idx < f6MustardChairs.length; idx++) {
+    const [ax, az, ry] = f6MustardChairs[idx];
+    cols.push(makeCylinderCollider(`f6-mustard-chair-${idx + 1}`, 'Ghế bành đọc sách T6', 6, 'furniture', ax, az, 0.52, 0.9, BLOCK_B_DIMS.PY));
+    const tx = ax + 0.85 * Math.cos(ry) + 0.2 * Math.sin(ry);
+    const tz = az - 0.85 * Math.sin(ry) + 0.2 * Math.cos(ry);
+    cols.push(makeCylinderCollider(`f6-mustard-table-${idx + 1}`, 'Bàn trà nhỏ T6', 6, 'furniture', tx, tz, 0.38, 0.9, BLOCK_B_DIMS.PY));
+  }
 
   for (const c of BLOCK_B_COLUMNS) {
     cols.push(makeCylinderCollider(`f6-${c.id}`, 'Cột thông tầng T6', 6, 'column', c.x, c.z, c.radius, 9.6, 0.0));
@@ -1605,6 +1681,27 @@ function buildFloor7Colliders(): SpatialCollider[] {
   for (const c of BLOCK_B_COLUMNS) {
     cols.push(
       makeCylinderCollider(`f7-${c.id}`, 'Cột thông tầng T7', 7, 'column', c.x, c.z, c.radius, 4.4, BLOCK_B_DIMS.MZ),
+    );
+  }
+  for (let i = 0; i < 14; i++) {
+    const p = stadiumPointAt((i + 0.5) / 14, BLOCK_B_DIMS.L, BLOCK_B_DIMS.FR + 2.2);
+    if (p.x > BLOCK_B_DIMS.L + 6) continue;
+    const clampedX = Math.max(-BLOCK_B_DIMS.L, Math.min(BLOCK_B_DIMS.L, p.x));
+    const ry = Math.atan2(-(p.x - clampedX), -p.z);
+    const b = computeRotatedBoxBounds(p.x, p.z, ry, -0.82, 0.82, -0.78, 0.78);
+    cols.push(
+      makeBoxCollider(
+        `f7-study-table-${i + 1}`,
+        'Bàn học hành lang T7',
+        7,
+        'furniture',
+        b.minX,
+        b.maxX,
+        b.minZ,
+        b.maxZ,
+        0.85,
+        BLOCK_B_DIMS.MZ,
+      ),
     );
   }
   return cols;
@@ -1647,18 +1744,81 @@ function buildFloor10Colliders(): SpatialCollider[] {
   for (let i = 0; i < PG.tableXs.length; i++) {
     const tx = PG.tableXs[i];
     cols.push(
-      makeCylinderCollider(
+      makeBoxCollider(
         `f10-pergola-table-${i + 1}`,
-        'Bàn trà Vườn Thượng Uyển T10',
+        'Bàn ghế gỗ Pergola T10',
         10,
         'furniture',
-        tx,
-        PG.tableZ,
-        0.58,
+        tx - 1.12,
+        tx + 1.12,
+        PG.tableZ - 0.98,
+        PG.tableZ + 0.98,
         0.85,
         0.0,
       ),
     );
+  }
+
+  const pgPostXs = [PG.x0, -2.2, 2.2, PG.x1] as const;
+  const pgPostZs = [PG.z0, PG.z1] as const;
+  for (let cxIdx = 0; cxIdx < pgPostXs.length; cxIdx++) {
+    const cx = pgPostXs[cxIdx];
+    for (let czIdx = 0; czIdx < pgPostZs.length; czIdx++) {
+      const cz = pgPostZs[czIdx];
+      cols.push(
+        makeBoxCollider(
+          `f10-pergola-post-${cxIdx}-${czIdx}`,
+          'Trụ giàn Pergola T10',
+          10,
+          'column',
+          cx - 0.12,
+          cx + 0.12,
+          cz - 0.12,
+          cz + 0.12,
+          3.1,
+          0.0,
+        ),
+      );
+    }
+  }
+  const f10LoungeXs = [-17.2, -14.2, -11.2] as const;
+  for (let idx = 0; idx < f10LoungeXs.length; idx++) {
+    const lx = f10LoungeXs[idx];
+    cols.push(
+      makeBoxCollider(
+        `f10-sun-lounger-${idx + 1}`,
+        'Ghế tắm nắng Sân thượng T10',
+        10,
+        'furniture',
+        lx - 0.46,
+        lx + 0.46,
+        2.38,
+        4.42,
+        0.68,
+        0.0,
+      ),
+      makeBoxCollider(
+        `f10-daybed-${idx + 1}`,
+        'Giường nệm ngắm sao T10',
+        10,
+        'furniture',
+        lx - 0.76,
+        lx + 0.76,
+        -5.88,
+        -3.72,
+        0.68,
+        0.0,
+      ),
+    );
+  }
+  const f10Beanbags: ReadonlyArray<readonly [number, number]> = [
+    [-16.5, -1.9],
+    [-14.2, -1.9],
+    [-11.8, -1.9],
+  ];
+  for (let idx = 0; idx < f10Beanbags.length; idx++) {
+    const [bx, bz] = f10Beanbags[idx];
+    cols.push(makeCylinderCollider(`f10-beanbag-${idx + 1}`, 'Ghế lười Sân thượng T10', 10, 'furniture', bx, bz, 0.56, 0.62, 0.0));
   }
 
   return cols;

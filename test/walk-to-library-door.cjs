@@ -50,10 +50,10 @@ console.log('stand-on-hust (38,14) ->', JSON.stringify(hust));
 // Diem Đi nhanh thư viện (38, 12,5) nam ngoai mọi collider (trước bệ HUST).
 const ft = campus.resolveCollisions({ x: 38, z: 12.5 }, campus.AVATAR.radius);
 console.log('stand-fast-travel (38,12.5) ->', JSON.stringify(ft));
-// Dung sát mặt bắc cánh tây (30, 29,3 — cách mặt tháp 0,2 m) phai bi day
-// ve z ~29,1 (collider tháp minZ 29,5 - radius 0,4).
-const tower = campus.resolveCollisions({ x: 30, z: 29.3 }, campus.AVATAR.radius);
-console.log('stand-tower-north (30,29.3) ->', JSON.stringify(tower));
+// Dung sát mặt bắc cánh tây (27.5, 29.0 — bên trong biên minZ 28.8) phai bi day
+// ve z ~28.4 (collider tháp minZ 28.8 - radius 0.4), hit = 'Thư viện Tạ Quang Bửu (tháp)'.
+const tower = campus.resolveCollisions({ x: 27.5, z: 29.0 }, campus.AVATAR.radius);
+console.log('stand-tower-north (27.5,29.0) ->', JSON.stringify(tower));
 // Diem giua san nam cu (38, 52) nam ngoai collider (dao co khong co collider).
 const island = campus.resolveCollisions({ x: 38, z: 52 }, campus.AVATAR.radius);
 console.log('stand-island (38,52) ->', JSON.stringify(island));
@@ -61,6 +61,6 @@ const ok = r1.pass
   && Math.abs(near.pos.z - 23.1) < 0.15
   && hust.hit === 'Bệ chữ HUST' && Math.abs(hust.pos.z - 13.0) < 0.15
   && ft.hit === null
-  && tower.hit === 'Thư viện Tạ Quang Bửu (tháp)' && Math.abs(tower.pos.z - 29.1) < 0.15
+  && tower.hit === 'Thư viện Tạ Quang Bửu (tháp)' && Math.abs(tower.pos.z - 28.4) < 0.15
   && island.hit === null;
 process.exit(ok ? 0 : 1);

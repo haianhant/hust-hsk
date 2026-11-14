@@ -1438,3 +1438,133 @@ export function makeLightShaftTexture(): THREE.CanvasTexture {
   tex.needsUpdate = true;
   return tex;
 }
+
+export type LeafCutoutVariant = 'green' | 'golden' | 'willow';
+
+const leafClusterCutoutCache: Partial<Record<LeafCutoutVariant, THREE.CanvasTexture>> = {};
+
+/**
+ * Sinh texture 2D cắt alpha (`alphaTest`) tạo chùm lá tự nhiên (răng cưa & gân lá rõ nét)
+ * giúp tán cây và cành liễu có hình khối thực vật hữu cơ thay vì mảng cầu đặc.
+ */
+export function makeLeafClusterCutoutTexture(variant: LeafCutoutVariant = 'green'): THREE.CanvasTexture {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D không khả dụng');
+
+  ctx.clearRect(0, 0, size, size);
+
+  let s = variant === 'willow' ? 918273 : variant === 'golden' ? 445566 : 135791;
+  const rand = () => {
+    s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+
+  if (variant === 'willow') {
+    // Vẽ chùm lá liễu rủ thuôn dài từ cụm cuống trên đỉnh xuống
+    const strands = 9;
+    for (let st = 0; st < strands; st++) {
+      const startX = size * (0.2 + (st / (strands - 1)) * 0.6 + (rand() - 0.5) * 0.04);
+      const startY = 14 + rand() * 18;
+      const sway = (rand() - 0.5) * 24;
+      const len = size * (0.58 + rand() * 0.28);
+
+      ctx.strokeStyle = 'rgba(130, 145, 105, 0.92)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.quadraticCurveTo(startX + sway * 0.5, startY + len * 0.5, startX + sway, startY + len);
+      ctx.stroke();
+
+      const leafCount = 9;
+      for (let i = 0; i < leafCount; i++) {
+        const t = (i + 0.5) / leafCount;
+        const px = startX + sway * t * (0.65 + 0.35 * t);
+        const py = startY + len * t;
+        const side = i % 2 === 0 ? -1 : 1;
+        const ang = side * (0.45 + rand() * 0.25) + Math.PI / 2;
+        const lw = 19 + rand() * 7;
+        const lh = 4.6 + rand() * 1.8;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(ang);
+        const lum = Math.round(212 + rand() * 38);
+        ctx.fillStyle = `rgb(${lum - 8}, ${lum}, ${lum - 16})`;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, lw, lh, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-lw * 0.85, 0);
+        ctx.lineTo(lw * 0.85, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  } else {
+    // Vẽ chùm lá xoắn 360° cho cây tán rộng (rất sáng để nhân với material.color tự nhiên)
+    ctx.strokeStyle = 'rgba(128, 118, 92, 0.92)';
+    ctx.lineWidth = 3.2;
+    for (let b = 0; b < 5; b++) {
+      const a = (b / 5) * Math.PI * 2 + (rand() - 0.5) * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(size * 0.5, size * 0.54);
+      ctx.lineTo(size * 0.5 + Math.cos(a) * size * 0.28, size * 0.52 + Math.sin(a) * size * 0.28);
+      ctx.stroke();
+    }
+
+    const totalLeaves = variant === 'golden' ? 24 : 26;
+    for (let i = 0; i < totalLeaves; i++) {
+      const ring = i < 8 ? 0.14 : i < 18 ? 0.26 : 0.34;
+      const angle = (i / totalLeaves) * Math.PI * 2 * 2.4 + rand() * 0.45;
+      const dist = size * (ring + rand() * 0.07);
+      const lx = size * 0.5 + Math.cos(angle) * dist;
+      const ly = size * 0.5 + Math.sin(angle) * dist;
+      const rot = angle + (rand() - 0.5) * 0.55;
+      const rx = 20 + rand() * 10;
+      const ry = 10.5 + rand() * 4.5;
+
+      ctx.save();
+      ctx.translate(lx, ly);
+      ctx.rotate(rot);
+      const shade = Math.round(192 + rand() * 58);
+      ctx.fillStyle =
+        variant === 'golden'
+          ? `rgb(${shade}, ${Math.round(shade * 0.96)}, ${Math.round(shade * 0.8)})`
+          : `rgb(${Math.round(shade * 0.9)}, ${shade}, ${Math.round(shade * 0.86)})`;
+      ctx.beginPath();
+      ctx.moveTo(-rx, 0);
+      ctx.quadraticCurveTo(0, -ry * 1.15, rx, 0);
+      ctx.quadraticCurveTo(0, ry * 1.15, -rx, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      // Gân giữa lá tạo độ chi tiết khi nhìn gần
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(-rx * 0.78, 0);
+      ctx.lineTo(rx * 0.78, 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+export function getSharedLeafClusterCutoutTexture(variant: LeafCutoutVariant = 'green'): THREE.CanvasTexture {
+  if (!leafClusterCutoutCache[variant]) {
+    leafClusterCutoutCache[variant] = makeLeafClusterCutoutTexture(variant);
+  }
+  return leafClusterCutoutCache[variant]!;
+}

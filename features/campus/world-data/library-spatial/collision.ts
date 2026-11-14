@@ -23,6 +23,7 @@ import {
   BLOCK_D_DIMS,
   getCollidersForFloor,
   getDoorwaysForFloor,
+  isPointOnF6PlatformStair,
   signedDistanceToStadium,
 } from './geometry';
 import type {
@@ -113,16 +114,18 @@ function resolveStadiumConstraints(
   z: number,
   radius: number,
   floor: LibraryFloor,
+  prevX = x,
+  prevZ = z,
 ): { x: number; z: number; collisionId: string | null } {
-  // 1. Floors 1 & 2: Curved staircase side-rail channel protection when mid-stair,
-  // and under-stair masonry parapet protection when walking on Floor 1 slab (y <= 0.55).
+  // 1. Floors 1 & 2: Curved staircase side-rail channel protection when on the stair
+  // (including bottom & top transitions), and F1 masonry balustrade/under-stair protection.
   if (floor === 1 || floor === 2) {
     const stairHit = evaluateCurvedStairAt(x, z, 0.25);
-    if (stairHit && stairHit.progress > 0.08 && stairHit.progress < 0.92) {
+    if (stairHit && stairHit.progress > 0.015 && stairHit.progress < 0.985) {
       const verticalDelta = Math.abs(y - stairHit.elevation);
-      if (verticalDelta <= 0.65 && y > 0.25 && y < BLOCK_A_DIMS.FH - 0.25) {
+      if (verticalDelta <= 0.65) {
         const minR = stairHit.stair.innerRadius + radius * 0.45;
-        const maxR = stairHit.stair.outerRadius - radius * 0.25;
+        const maxR = stairHit.stair.outerRadius - radius * 0.3;
         const dx = x - stairHit.stair.centerX;
         const dz = z - stairHit.stair.centerZ;
         const r = Math.hypot(dx, dz) || 1e-5;
@@ -141,18 +144,22 @@ function resolveStadiumConstraints(
           };
         }
         return { x, z, collisionId: null };
-      } else if (floor === 1 && y <= 0.55 && stairHit.progress > 0.18) {
-        const dx = x - stairHit.stair.centerX;
-        const dz = z - stairHit.stair.centerZ;
+      }
+    }
+    if (floor === 1 && y <= 0.55) {
+      const slabHit = evaluateCurvedStairAt(x, z, 0.08 + radius);
+      if (slabHit && slabHit.progress > 0.055 && Math.abs(y - slabHit.elevation) > 0.26) {
+        const dx = x - slabHit.stair.centerX;
+        const dz = z - slabHit.stair.centerZ;
         const r = Math.hypot(dx, dz) || 1e-5;
-        const innerLim = stairHit.stair.innerRadius - radius * 0.45;
-        const outerLim = stairHit.stair.outerRadius + radius * 0.45;
+        const innerLim = slabHit.stair.innerRadius - 0.14;
+        const outerLim = slabHit.stair.outerRadius + 0.08 + radius * 0.85;
         if (r > innerLim && r < outerLim) {
-          const targetR = r < stairHit.stair.midRadius ? innerLim : outerLim;
+          const targetR = r < slabHit.stair.midRadius ? innerLim : outerLim;
           return {
-            x: stairHit.stair.centerX + (dx / r) * targetR,
-            z: stairHit.stair.centerZ + (dz / r) * targetR,
-            collisionId: `${stairHit.stair.id}-understair-wall`,
+            x: slabHit.stair.centerX + (dx / r) * targetR,
+            z: slabHit.stair.centerZ + (dz / r) * targetR,
+            collisionId: `${slabHit.stair.id}-understair-wall`,
           };
         }
       }
@@ -162,11 +169,11 @@ function resolveStadiumConstraints(
   // 2. Floors 2–5: Central Stadium Atrium Void (L = 6.5, FR = 7.5)
   if (floor >= 2 && floor <= 5) {
     // On Floor 2, allow entering/exiting the twin curved stairs at the East/West top landings,
-    // while guarding the open stairwell cutout along its outer/bottom parapet when walking on Floor 2.
+    // while guarding the open stairwell cutout along its physical outer parapet (ST_R1 + 0.16).
     if (floor === 2) {
       const stairHit = evaluateCurvedStairAt(x, z, 0.12);
       if (stairHit) {
-        if (stairHit.progress >= 0.82 || Math.abs(y - stairHit.elevation) <= 0.65) {
+        if (stairHit.progress >= 0.88 || Math.abs(y - stairHit.elevation) <= 0.65) {
           return { x, z, collisionId: null };
         }
         const dx = x - stairHit.stair.centerX;
@@ -212,6 +219,31 @@ function resolveStadiumConstraints(
       hitId = `f${floor}-outer-stadium-wall`;
     }
 
+    if (floor === 6 && !isPointOnF6PlatformStair(curX, curZ)) {
+      if (y < BLOCK_B_DIMS.PY - 0.18) {
+        const minR = BLOCK_B_DIMS.PR + radius;
+        const prevRiserSd = signedDistanceToStadium(prevX, prevZ, BLOCK_B_DIMS.L, minR);
+        const riserSd = signedDistanceToStadium(curX, curZ, BLOCK_B_DIMS.L, minR);
+        if (prevRiserSd.signedDist >= -1e-4 && riserSd.signedDist < 0) {
+          const dist = riserSd.distFromAxis || 1e-5;
+          const nx = riserSd.dx / dist;
+          const nz = riserSd.distFromAxis < 1e-5 ? (curZ >= 0 ? 1 : -1) : riserSd.dz / dist;
+          curX = riserSd.clampedX + nx * minR;
+          curZ = nz * minR;
+          hitId = 'f6-platform-riser';
+        }
+      } else {
+        const maxPlatR = BLOCK_B_DIMS.PR - radius * 0.6;
+        const edgeSd = signedDistanceToStadium(curX, curZ, BLOCK_B_DIMS.L, maxPlatR);
+        if (edgeSd.signedDist > 0) {
+          const dist = edgeSd.distFromAxis || 1e-5;
+          curX = edgeSd.clampedX + (edgeSd.dx / dist) * maxPlatR;
+          curZ = (edgeSd.dz / dist) * maxPlatR;
+          hitId = 'f6-platform-edge';
+        }
+      }
+    }
+
     if (floor === 7) {
       const minInnerR = BLOCK_B_DIMS.FR + radius * 0.85;
       const innerSd = signedDistanceToStadium(curX, curZ, BLOCK_B_DIMS.L, minInnerR);
@@ -253,7 +285,7 @@ function resolveSingleStepOnFloor(
 
   // Two relaxation passes ensure clean corner resolution without jitter
   for (let pass = 0; pass < 2; pass++) {
-    const stad = resolveStadiumConstraints(x, y, z, avatarRadius, floor);
+    const stad = resolveStadiumConstraints(x, y, z, avatarRadius, floor, prevX, prevZ);
     if (stad.collisionId) {
       x = stad.x;
       z = stad.z;

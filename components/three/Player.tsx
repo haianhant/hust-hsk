@@ -47,6 +47,7 @@ import {
   BIKE_PARK,
   BIKE_RADIUS,
   BUILDING_COLLIDERS,
+  CAMPUS_PILLAR_CIRCLES,
   C7_DOOR,
   CLASSROOM,
   CLASSROOM_DOOR,
@@ -182,11 +183,11 @@ function usePlayerNameplateTexture(name: string, subtitle = ''): THREE.CanvasTex
 
 const CAM_MIN_DIST = 4;
 const CAM_MAX_DIST = 10;
-const CAM_MIN_PITCH = 0.05; // rad — camera không xuống dưới mặt đất
-const CAM_MAX_PITCH = 1.1; // rad
-const POV_MIN_PITCH = -0.72; // rad — ngẩng lên nhìn mái C1 / Tháp TQB ở góc nhìn thứ 1
-const POV_MAX_PITCH = 0.78;
-const CAM_MIN_Y = 0.6;
+const CAM_MIN_PITCH = -1.35; // rad — cho phép ngẩng sâu (~77°) nhìn bầu trời & ngọn cây ở chế độ góc nhìn thứ 3
+const CAM_MAX_PITCH = 1.22; // rad
+const POV_MIN_PITCH = -1.42; // rad — ngẩng lên gần thiên đỉnh (~81°) ở góc nhìn thứ 1
+const POV_MAX_PITCH = 1.15;
+const CAM_GROUND_CLEARANCE = 0.22;
 const LOOK_SPEED = 0.005;
 
 // --- Hằng số xe máy (đợt 3 giai đoạn 4) --------------------------------------
@@ -216,9 +217,18 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 function pointInBuilding(x: number, z: number): boolean {
-  return BUILDING_COLLIDERS.some(
-    (c) => x >= c.box.minX && x <= c.box.maxX && z >= c.box.minZ && z <= c.box.maxZ,
-  );
+  if (
+    BUILDING_COLLIDERS.some(
+      (c) => x >= c.box.minX && x <= c.box.maxX && z >= c.box.minZ && z <= c.box.maxZ,
+    )
+  ) {
+    return true;
+  }
+  return CAMPUS_PILLAR_CIRCLES.some((p) => {
+    const dx = x - p.x;
+    const dz = z - p.z;
+    return dx * dx + dz * dz <= p.radius * p.radius;
+  });
 }
 
 export default function Player() {
@@ -229,6 +239,7 @@ export default function Player() {
   const nameplateGroupRef = useRef<THREE.Group>(null!);
   // Khớp nhân vật (StudentAvatar lái hình học, Player lái góc quay):
   const bodyRef = useRef<THREE.Group>(null!);
+  const headRef = useRef<THREE.Group>(null!);
   const legLRef = useRef<THREE.Group>(null!);
   const legRRef = useRef<THREE.Group>(null!);
   const kneeLRef = useRef<THREE.Group>(null!);
@@ -241,6 +252,7 @@ export default function Player() {
   const elbowRRef = useRef<THREE.Group>(null!);
   const joints: FigureJoints = {
     body: bodyRef,
+    head: headRef,
     armL: armLRef,
     armR: armRRef,
     elbowL: elbowLRef,
@@ -373,6 +385,10 @@ export default function Player() {
       bodyRef.current.rotation.y = 0;
       bodyRef.current.rotation.z = targets.bodyRollTarget;
     }
+    if (headRef.current) {
+      headRef.current.rotation.x =
+        viewModeRef.current === 'pov' ? 0 : clamp(pitchRef.current * 0.55, -0.58, 0.42);
+    }
     if (groupRef.current) {
       const baseLibY = playerState.inLibraryLobby
         ? playerState.libraryY
@@ -384,7 +400,97 @@ export default function Player() {
     }
   };
 
+  const resolveFollowCamera = (
+    baseGroundOrLibY: number,
+    seatedNow: boolean,
+    stepDistDt: number | null,
+  ): { target: THREE.Vector3; camPos: THREE.Vector3 } => {
+    const upSkyT = clamp(-pitchRef.current / 1.35, 0, 1);
+    const target = new THREE.Vector3(
+      posRef.current.x,
+      (ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2) +
+        upSkyT * (seatedNow ? 0.22 : 0.30) +
+        baseGroundOrLibY,
+      posRef.current.z,
+    );
+    const cp = Math.cos(pitchRef.current);
+    const sp = Math.sin(pitchRef.current);
+    const placeCamera = (d: number): THREE.Vector3 =>
+      new THREE.Vector3(
+        target.x + Math.sin(yawRef.current) * cp * d,
+        target.y + sp * d,
+        target.z + Math.cos(yawRef.current) * cp * d,
+      );
+
+    let d = distRef.current;
+    if (ridingRef.current) d = Math.max(d, 7.5);
+    if (playerState.inClassroom) {
+      d = Math.min(d, 4.5);
+      if (sp > 1e-4) {
+        d = Math.min(d, Math.max(0.55, (2.85 - target.y) / sp));
+      } else if (sp < -1e-4) {
+        d = Math.min(d, Math.max(0.48, (target.y - CAM_GROUND_CLEARANCE) / -sp));
+      }
+      const camPos = placeCamera(d);
+      camPos.x = clamp(camPos.x, -4.3, 4.3);
+      camPos.z = clamp(camPos.z, -2.8, 2.8);
+      camPos.y = clamp(camPos.y, CAM_GROUND_CLEARANCE, 2.85);
+      return { target, camPos };
+    }
+
+    if (playerState.inLibraryLobby) {
+      d = Math.min(d, seatedNow ? 2.6 : 4.2);
+      const desired = placeCamera(d);
+      const occ = resolveLibraryCameraOcclusion({
+        floor: playerState.libraryFloor,
+        target: { x: target.x, y: target.y, z: target.z },
+        desiredPosition: { x: desired.x, y: desired.y, z: desired.z },
+        minDistance: 0.48,
+      });
+      lastLibCamDiagRef.current = occ;
+      if (stepDistDt !== null) {
+        const steppedDist = stepLibraryCameraDistance(
+          libCamDistRef.current,
+          occ.desiredDistance,
+          occ.safeDistance,
+          stepDistDt,
+        );
+        libCamDistRef.current = steppedDist;
+        const camPos = placeCamera(steppedDist);
+        const vBounds = getCameraVerticalBoundsAt(playerState.libraryFloor, camPos.x, camPos.z);
+        camPos.y = clamp(camPos.y, vBounds.minY + CAM_GROUND_CLEARANCE, vBounds.maxY - 0.16);
+        return { target, camPos };
+      }
+      libCamDistRef.current = occ.safeDistance;
+      return { target, camPos: new THREE.Vector3(occ.position.x, occ.position.y, occ.position.z) };
+    }
+
+    // Ngoài sân trường: rút ngắn tay đòn dọc theo tia nhìn khi ngẩng cao để không chúc góc camera.
+    if (sp < -1e-4) {
+      d = Math.min(d, Math.max(0.48, (target.y - (baseGroundOrLibY + CAM_GROUND_CLEARANCE)) / -sp));
+    }
+    let camPos = placeCamera(d);
+    let guard = 0;
+    while (guard < 24 && d > 0.65 && pointInBuilding(camPos.x, camPos.z)) {
+      d *= 0.85;
+      camPos = placeCamera(d);
+      guard += 1;
+    }
+    const camGroundY = getCampusGroundElevation(camPos.x, camPos.z);
+    if (sp < -1e-4 && camPos.y < camGroundY + CAM_GROUND_CLEARANCE) {
+      d = Math.min(d, Math.max(0.48, (target.y - (camGroundY + CAM_GROUND_CLEARANCE)) / -sp));
+      camPos = placeCamera(d);
+    }
+    const finalGroundY = getCampusGroundElevation(camPos.x, camPos.z);
+    camPos.y = Math.max(finalGroundY + CAM_GROUND_CLEARANCE, camPos.y);
+    return { target, camPos };
+  };
+
   const syncCameraTransform = () => {
+    if (headRef.current) {
+      headRef.current.rotation.x =
+        viewModeRef.current === 'pov' ? 0 : clamp(pitchRef.current * 0.55, -0.58, 0.42);
+    }
     if (viewModeRef.current === 'top') {
       camera.position.set(0, 160, 5.01);
       camera.lookAt(0, 0, 5);
@@ -411,52 +517,7 @@ export default function Player() {
       camera.updateMatrixWorld();
       return;
     }
-    const target = new THREE.Vector3(
-      posRef.current.x,
-      (ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2) + libY,
-      posRef.current.z,
-    );
-    const placeCamera = (d: number): THREE.Vector3 => {
-      const cp = Math.cos(pitchRef.current);
-      const sp = Math.sin(pitchRef.current);
-      return new THREE.Vector3(
-        target.x + Math.sin(yawRef.current) * cp * d,
-        target.y + sp * d,
-        target.z + Math.cos(yawRef.current) * cp * d,
-      );
-    };
-    let d = distRef.current;
-    if (ridingRef.current) d = Math.max(d, 7.5);
-    if (playerState.inClassroom) d = Math.min(d, 4.5);
-    if (playerState.inLibraryLobby) d = Math.min(d, seatedNow ? 2.6 : 4.2);
-    let camPos = placeCamera(d);
-    if (playerState.inClassroom) {
-      camPos.x = clamp(camPos.x, -4.3, 4.3);
-      camPos.z = clamp(camPos.z, -2.8, 2.8);
-      camPos.y = Math.min(camPos.y, 2.85);
-    } else if (playerState.inLibraryLobby) {
-      const occ = resolveLibraryCameraOcclusion({
-        floor: playerState.libraryFloor,
-        target: { x: target.x, y: target.y, z: target.z },
-        desiredPosition: { x: camPos.x, y: camPos.y, z: camPos.z },
-      });
-      libCamDistRef.current = occ.safeDistance;
-      lastLibCamDiagRef.current = occ;
-      camPos.set(occ.position.x, occ.position.y, occ.position.z);
-    }
-    let guard = 0;
-    while (
-      guard < 24 &&
-      d > 2.2 &&
-      !playerState.inClassroom &&
-      !playerState.inLibraryLobby &&
-      pointInBuilding(camPos.x, camPos.z)
-    ) {
-      d *= 0.85;
-      camPos = placeCamera(d);
-      guard += 1;
-    }
-    camPos.y = Math.max(CAM_MIN_Y, camPos.y);
+    const { target, camPos } = resolveFollowCamera(libY, seatedNow, null);
     camera.position.copy(camPos);
     camera.lookAt(target);
     camera.updateMatrixWorld();
@@ -1042,7 +1103,7 @@ export default function Player() {
         // mới trong 100 ms (không chờ frame sau — xem mountBike).
         playerState.pos = { ...resolved };
         if (typeof yaw === 'number') yawRef.current = yaw;
-        if (typeof pitch === 'number') pitchRef.current = pitch;
+        if (typeof pitch === 'number') pitchRef.current = clamp(pitch, POV_MIN_PITCH, CAM_MAX_PITCH);
         viewModeRef.current = 'follow';
         playerState.viewMode = 'follow';
         let groundY = 0;
@@ -1150,6 +1211,8 @@ export default function Player() {
       measureAvatar: () => {
         const g = groupRef.current;
         if (!g) return null;
+        const prevHeadRx = headRef.current ? headRef.current.rotation.x : 0;
+        if (headRef.current) headRef.current.rotation.x = 0;
         g.updateWorldMatrix(true, true);
         const inv = new THREE.Matrix4().copy(g.matrixWorld).invert();
         const box = new THREE.Box3();
@@ -1163,6 +1226,8 @@ export default function Player() {
           tmp.copy(geo.boundingBox).applyMatrix4(mesh.matrixWorld).applyMatrix4(inv);
           box.union(tmp);
         });
+        if (headRef.current) headRef.current.rotation.x = prevHeadRx;
+        g.updateWorldMatrix(true, true);
         if (box.isEmpty()) return null;
         const size = new THREE.Vector3();
         box.getSize(size);
@@ -1373,7 +1438,7 @@ export default function Player() {
           playerState.cameraYaw = yaw;
         }
         if (typeof pitch === 'number' && Number.isFinite(pitch)) {
-          pitchRef.current = clamp(pitch, -0.35, 1.25);
+          pitchRef.current = clamp(pitch, POV_MIN_PITCH, 1.25);
           playerState.cameraPitch = pitchRef.current;
         }
         if (typeof dist === 'number' && Number.isFinite(dist)) {
@@ -1770,11 +1835,11 @@ export default function Player() {
         0.2,
       );
       bikeLeanRef.current += (leanTarget - bikeLeanRef.current) * Math.min(1, delta * 5);
-      // Tiến theo hướng đầu xe, chia bước nhỏ ≤ 0,25 m để không xuyên vật cản.
+      // Tiến theo hướng đầu xe, chia bước nhỏ ≤ 0,20 m để không xuyên hàng rào mảnh ở tốc độ cao.
       const fwdX = Math.sin(bikeHeadingRef.current);
       const fwdZ = Math.cos(bikeHeadingRef.current);
       const dist = v * delta;
-      const subSteps = Math.max(1, Math.ceil(Math.abs(dist) / 0.25));
+      const subSteps = Math.max(1, Math.ceil(Math.abs(dist) / 0.2));
       const subDt = delta / subSteps;
       let stopped = false;
       for (let i = 0; i < subSteps; i++) {
@@ -1944,6 +2009,25 @@ export default function Player() {
                 if (!hit) hit = 'Sinh viên (MP)';
               }
             });
+            // Chặn đi xuyên xe máy của chính mình khi đang đi bộ ngoài sân trường
+            const bxFwdX = Math.sin(bikeHeadingRef.current);
+            const bxFwdZ = Math.cos(bikeHeadingRef.current);
+            for (const off of [-0.52, 0, 0.52]) {
+              const pushed = pushOutOfCircle(
+                curPos.x,
+                curPos.z,
+                {
+                  x: bikePosRef.current.x + bxFwdX * off,
+                  z: bikePosRef.current.z + bxFwdZ * off,
+                },
+                0.28,
+                AVATAR.radius,
+              );
+              if (pushed) {
+                curPos = pushed;
+                if (!hit) hit = 'Xe máy';
+              }
+            }
           }
         }
       }
@@ -2162,6 +2246,9 @@ export default function Player() {
     lerp(bodyRef, 'x', bodyLeanTarget);
     lerp(bodyRef, 'y', bodyYawTarget);
     lerp(bodyRef, 'z', bodyRollTarget);
+    const headPitchTarget =
+      viewModeRef.current === 'pov' ? 0 : clamp(pitchRef.current * 0.55, -0.58, 0.42);
+    lerp(headRef, 'x', headPitchTarget);
     if (bodyRef.current) {
       bodyRef.current.position.y += (bodyBobTarget - bodyRef.current.position.y) * poseEase;
     }
@@ -2282,60 +2369,7 @@ export default function Player() {
       camera.lookAt(lookTarget);
       return;
     }
-    const target = new THREE.Vector3(
-      posRef.current.x,
-      (ridingRef.current ? 1.4 : seatedNow ? 0.95 : 1.2) + groundY,
-      posRef.current.z,
-    );
-    const placeCamera = (d: number): THREE.Vector3 => {
-      const cp = Math.cos(pitchRef.current);
-      const sp = Math.sin(pitchRef.current);
-      return new THREE.Vector3(
-        target.x + Math.sin(yawRef.current) * cp * d,
-        target.y + sp * d,
-        target.z + Math.cos(yawRef.current) * cp * d,
-      );
-    };
-    let d = distRef.current;
-    if (ridingRef.current) d = Math.max(d, 7.5);
-    if (playerState.inClassroom) d = Math.min(d, 4.5);
-    if (playerState.inLibraryLobby) d = Math.min(d, seatedNow ? 2.6 : 4.2);
-    let camPos = placeCamera(d);
-    if (playerState.inClassroom) {
-      camPos.x = clamp(camPos.x, -4.3, 4.3);
-      camPos.z = clamp(camPos.z, -2.8, 2.8);
-      camPos.y = Math.min(camPos.y, 2.85);
-    } else if (playerState.inLibraryLobby) {
-      const occ = resolveLibraryCameraOcclusion({
-        floor: playerState.libraryFloor,
-        target: { x: target.x, y: target.y, z: target.z },
-        desiredPosition: { x: camPos.x, y: camPos.y, z: camPos.z },
-      });
-      const steppedDist = stepLibraryCameraDistance(
-        libCamDistRef.current,
-        occ.desiredDistance,
-        occ.safeDistance,
-        rawDelta,
-      );
-      libCamDistRef.current = steppedDist;
-      lastLibCamDiagRef.current = occ;
-      camPos = placeCamera(steppedDist);
-      const vBounds = getCameraVerticalBoundsAt(playerState.libraryFloor, camPos.x, camPos.z);
-      camPos.y = clamp(camPos.y, vBounds.minY + 0.22, vBounds.maxY - 0.22);
-    }
-    let guard = 0;
-    while (
-      guard < 24 &&
-      d > 2.2 &&
-      !playerState.inClassroom &&
-      !playerState.inLibraryLobby &&
-      pointInBuilding(camPos.x, camPos.z)
-    ) {
-      d *= 0.85;
-      camPos = placeCamera(d);
-      guard += 1;
-    }
-    camPos.y = Math.max(CAM_MIN_Y, camPos.y);
+    const { target, camPos } = resolveFollowCamera(groundY, seatedNow, rawDelta);
     camera.position.copy(camPos);
     camera.lookAt(target);
   });

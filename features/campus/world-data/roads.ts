@@ -50,7 +50,15 @@ export const ROADS: RoadSpec[] = [
     width: 6.4,
     points: [
       { x: 94.5, z: -6 },
-      { x: 114, z: -6 },
+      { x: 134.4, z: -6 },
+    ],
+  },
+  {
+    name: 'Lối vào Sân trước Nhà B1 (SoICT)',
+    width: 5.2,
+    points: [
+      { x: 115.5, z: -6 },
+      { x: 115.5, z: 2.2 },
     ],
   },
   {
@@ -120,13 +128,13 @@ export const ROADS: RoadSpec[] = [
   },
 ];
 
-// Hàng cây dọc hai bên đại lộ chính sau nhập làn (z = -6, vỉa hè ngoài biên đường 8.2m).
+// Hàng cây dọc hai bên đại lộ chính sau nhập làn (z = -6, giữ khoảng cách thoáng với C9 và HUST Digital Hub).
 export const LOVE_ROAD_TREES: Vec2[] = [
-  { x: -78, z: -11.0 }, { x: -78, z: -1.0 },
+  { x: -55.5, z: -11.4 }, { x: -78, z: -1.0 },
   { x: -46, z: -11.0 }, { x: -46, z: -1.0 },
   { x: -30, z: -11.0 }, { x: -30, z: -1.0 },
   { x: -14, z: -11.0 }, { x: -14, z: -1.0 },
-  { x: 9.2, z: -11.0 }, { x: 5.2, z: -1.1 },
+  { x: 9.2, z: -11.0 }, { x: -3.8, z: -1.3 },
   { x: 34, z: -11.0 },
 ];
 

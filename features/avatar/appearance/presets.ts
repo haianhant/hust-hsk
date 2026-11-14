@@ -52,6 +52,7 @@ export const AVATAR_COLORS = {
 
 export interface FigureJoints {
   body: RefObject<THREE.Group>;
+  head?: RefObject<THREE.Group>;
   armL: RefObject<THREE.Group>;
   armR: RefObject<THREE.Group>;
   elbowL: RefObject<THREE.Group>;

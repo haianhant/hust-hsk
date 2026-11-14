@@ -24,12 +24,12 @@
       "name": "Nhà C9 → Quảng trường C1",
       "pass": true,
       "reason": "đến đích trong 1,5 m",
-      "steps": 458,
-      "seconds": 7.6,
-      "distanceM": 30.5,
+      "steps": 467,
+      "seconds": 7.8,
+      "distanceM": 31.1,
       "endPos": {
-        "x": -56.65,
-        "z": -35.77
+        "x": -56.7,
+        "z": -35.8
       },
       "hits": {}
     },
@@ -38,9 +38,9 @@
       "name": "Quảng trường C1 → Thư viện",
       "pass": true,
       "reason": "đến đích trong 1,5 m",
-      "steps": 2091,
-      "seconds": 34.9,
-      "distanceM": 139.4,
+      "steps": 2102,
+      "seconds": 35,
+      "distanceM": 140.1,
       "endPos": {
         "x": 23.94,
         "z": 26.54

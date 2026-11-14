@@ -16,6 +16,7 @@ import {
 } from '../world-data';
 import { ExtrudedText3D, FramedSignBox3D } from '../../../components/three/Signage3D';
 import { LabelPlane } from '../../../components/three/TextPlate';
+import { ImprovedTree } from '../../../components/three/Trees';
 
 const WALL_BLUE_LIGHT = '#DCEAF7';
 const HEADER_BLUE = '#3B6E9C';
@@ -801,14 +802,9 @@ export function C7ComplexBuilding({
                 <boxGeometry args={[3.45, 0.04, 2.65]} />
                 <meshStandardMaterial color="#4D7C43" roughness={0.95} />
               </mesh>
-              <mesh position={[0, 1.75, 0]} castShadow>
-                <cylinderGeometry args={[0.14, 0.2, 2.4, 8]} />
-                <meshStandardMaterial color="#5C4430" roughness={0.95} />
-              </mesh>
-              <mesh position={[0, 3.3, 0]} castShadow>
-                <sphereGeometry args={[1.35, 12, 10]} />
-                <meshStandardMaterial color="#3F6E38" roughness={0.9} />
-              </mesh>
+              <group position={[0, 0.55, 0]}>
+                <ImprovedTree x={0} z={0} trunkH={2.0} canopyR={1.55} canopyY={2.75} withTreePit={false} />
+              </group>
             </group>
           ))}
         </group>

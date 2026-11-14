@@ -48,7 +48,6 @@ const INTERIOR_DARK = '#161B22';
 const TRUNK = '#6B5138';
 const LEAF = '#5D7D4A';
 const LAWN = '#688E56';
-const RED_LEAF = '#B03A2E';
 const YARD_GREY = '#C9CAC4';
 const HUST_RED = '#D22630';
 const LAMP_BLACK = '#1A1A1A';
@@ -1351,8 +1350,6 @@ export function LibraryBuilding({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }
         <circleGeometry args={[2.8, 32]} />
         <meshStandardMaterial color={LEAF} roughness={1} />
       </mesh>
-      <LibTree x={30} z={54.5} trunkH={1.8} canopyR={1.2} canopyY={2.6} />
-      <ImprovedTree x={49} z={54.5} trunkH={2.2} canopyR={1.35} canopyY={3.0} canopyColor={RED_LEAF} />
     </group>
   );
 }

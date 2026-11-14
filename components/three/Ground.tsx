@@ -14,7 +14,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { C1, LIBRARY, LOVE_ROAD_TREES, NGA_5_PLAZA, ROADS, TDN_SQUARE, type Vec2 } from '../../lib/campus';
+import { B1_FORECOURT_PLAZA, C1, LIBRARY, LOVE_ROAD_TREES, NGA_5_PLAZA, ROADS, TDN_SQUARE, type Vec2 } from '../../lib/campus';
 import { createAutumnLeafAssets } from '../../features/campus/atmosphere/CampusAtmosphereFX';
 import {
   createSeededRandom,
@@ -48,6 +48,7 @@ const PLAZAS: Array<{ rect: Rect; color: string; kind: 'c1' | 'lib' | 'tdn' }> =
   { rect: NGA_5_PLAZA.rect, color: C1_PLAZA_COLOR, kind: 'c1' },
   { rect: TDN_SQUARE, color: C1_PLAZA_COLOR, kind: 'tdn' },
   { rect: LIBRARY.plaza, color: LIB_PLAZA_COLOR, kind: 'lib' },
+  { rect: B1_FORECOURT_PLAZA, color: C1_PLAZA_COLOR, kind: 'c1' },
 ];
 
 const C1_JOINT_COLOR = '#B2ADA0';
@@ -636,6 +637,8 @@ function CampusStreetscapeDetails() {
     addCrosswalk(56.2, 2.2, 5.2, 'ns');
     addCrosswalk(91.5, -10.4, 5.0, 'ew');
     addCrosswalk(91.5, -1.6, 5.0, 'ew');
+    // 5. Lối rẽ vào Sân trước Nhà B1 (SoICT) trên trục Phố B1 / Tạ Quang Bửu (z = -6)
+    addCrosswalk(115.5, -3.2, 5.2, 'ns');
     return list;
   }, []);
 
@@ -647,7 +650,8 @@ function CampusStreetscapeDetails() {
       [-49.0, -40.5, -6],
       [-31.5, 16.0, -6],
       [32.5, 48.5, -6],
-      [97.5, 112.0, -6],
+      [97.5, 112.5, -6],
+      [118.5, 131.5, -6],
     ];
     for (const [x0, x1, z] of ewSpans) {
       for (let x = x0 + 1.4; x <= x1 - 1.4; x += 3.8) {
@@ -860,7 +864,8 @@ export default function Ground() {
       {/* Các tuyến phố bên ngoài rìa Đông (Trần Đại Nghĩa, Tạ Quang Bửu, Lê Thanh Nghị) và sân trước cầu thang C9 (y = 0,012). */}
       {[
         { cx: 95.5, cz: -18, w: 6.0, d: 112, rotY: 0 }, // Phố Trần Đại Nghĩa phía ngoài cổng trường
-        { cx: 127.8, cz: -18, w: 5.2, d: 108, rotY: 0 }, // Phố Tạ Quang Bửu chia đôi Khu KTX Bách Khoa & B1 / A1-5 – A17
+        { cx: 128.0, cz: -40, w: 5.2, d: 66, rotY: 0 }, // Phố Tạ Quang Bửu đoạn Bắc (chia đôi Khu KTX Bách Khoa)
+        { cx: 134.5, cz: 15, w: 4.8, d: 42, rotY: 0 }, // Phố Tạ Quang Bửu đoạn Nam (giữa Nhà B1 SoICT & Cụm A1-5/A17)
         { cx: 120, cz: 58, w: 58, d: 5.2, rotY: 0.62 }, // Phố Lê Thanh Nghị chéo Tây-Nam → Đông-Bắc tách Khu Thể thao & SVĐ
         { cx: -61.5, cz: -17, w: 7.0, d: 9.0, rotY: 0 }, // Khoảng sân lát đá nối trục C1 vào chân cầu thang đỏ tòa C9
       ].map((p, idx) => (

@@ -189,14 +189,40 @@ const CLOUD_CLUSTERS: Array<{ x: number; y: number; z: number; scale: number; sp
   { x: 120, y: 116, z: 115, scale: 1.1, speed: 0.95 },
 ];
 
+function isSoftwareWebGLRenderer(gl: THREE.WebGLRenderer): boolean {
+  try {
+    const ctx = gl.getContext();
+    if (!ctx) return false;
+    const debugInfo = ctx.getExtension('WEBGL_debug_renderer_info');
+    const unmasked = debugInfo
+      ? String(ctx.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) ?? '')
+      : '';
+    const glRenderer = String(ctx.getParameter(ctx.RENDERER) ?? '');
+    return /swiftshader|llvmpipe|software|basic render/i.test(`${unmasked} ${glRenderer}`);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Tạo bản đồ phản xạ môi trường vật lý (IBL — Image-Based Lighting) bằng THREE.PMREMGenerator
  * từ texture Equirectangular tự sinh để mọi mặt kính, mặt nước Hồ Tiền, kim loại có phản chiếu chân thực.
  */
-function ProceduralEnvironment({ timeOfDay }: { timeOfDay: TimeOfDay }) {
+function ProceduralEnvironment({
+  timeOfDay,
+  enabled,
+}: {
+  timeOfDay: TimeOfDay;
+  enabled: boolean;
+}) {
   const { gl, scene } = useThree();
 
   useEffect(() => {
+    if (!enabled) {
+      scene.environment = null;
+      return;
+    }
+
     const equirect = makeSkyEnvEquirectTexture(timeOfDay);
     const pmrem = new THREE.PMREMGenerator(gl);
     pmrem.compileEquirectangularShader();
@@ -216,7 +242,7 @@ function ProceduralEnvironment({ timeOfDay }: { timeOfDay: TimeOfDay }) {
       equirect.dispose();
       pmrem.dispose();
     };
-  }, [gl, scene, timeOfDay]);
+  }, [gl, scene, timeOfDay, enabled]);
 
   return null;
 }
@@ -399,8 +425,11 @@ function PlayerCenteredSunLight({
   atm: (typeof ATMOSPHERE)['day'];
   isIndoor: boolean;
 }) {
+  const { gl } = useThree();
   const lightRef = useRef<THREE.DirectionalLight>(null!);
   const targetObj = useMemo(() => new THREE.Object3D(), []);
+  const softwareRef = useRef<boolean | null>(null);
+  const frameCountRef = useRef(0);
   const lastSnapRef = useRef<{ x: number; z: number; sx: number; sy: number; sz: number }>({
     x: Number.NaN,
     z: Number.NaN,
@@ -422,7 +451,32 @@ function PlayerCenteredSunLight({
     cam.far = 240;
     cam.updateProjectionMatrix();
     lastSnapRef.current.x = Number.NaN;
-  }, [isIndoor, atm.sunPos]);
+
+    const isSoft = softwareRef.current ?? isSoftwareWebGLRenderer(gl);
+    softwareRef.current = isSoft;
+    if (isSoft) {
+      gl.shadowMap.type = THREE.PCFShadowMap;
+      gl.shadowMap.autoUpdate = false;
+      if (light.shadow.mapSize.width !== 1024 || light.shadow.mapSize.height !== 1024) {
+        light.shadow.mapSize.set(1024, 1024);
+        if (light.shadow.map) {
+          light.shadow.map.dispose();
+          light.shadow.map = null;
+        }
+      }
+      gl.shadowMap.needsUpdate = !isIndoor;
+    } else {
+      gl.shadowMap.type = THREE.PCFSoftShadowMap;
+      gl.shadowMap.autoUpdate = true;
+      if (light.shadow.mapSize.width !== 2048 || light.shadow.mapSize.height !== 2048) {
+        light.shadow.mapSize.set(2048, 2048);
+        if (light.shadow.map) {
+          light.shadow.map.dispose();
+          light.shadow.map = null;
+        }
+      }
+    }
+  }, [gl, isIndoor, atm.sunPos]);
 
   useFrame(() => {
     const light = lightRef.current;
@@ -431,17 +485,24 @@ function PlayerCenteredSunLight({
     const snapZ = isIndoor ? 0 : Math.round(playerState.pos.z / 2) * 2;
     const [ox, oy, oz] = atm.sunPos;
     const prev = lastSnapRef.current;
-    if (prev.x === snapX && prev.z === snapZ && prev.sx === ox && prev.sy === oy && prev.sz === oz) {
-      return;
+    const movedSnap =
+      prev.x !== snapX || prev.z !== snapZ || prev.sx !== ox || prev.sy !== oy || prev.sz !== oz;
+    if (movedSnap) {
+      prev.x = snapX;
+      prev.z = snapZ;
+      prev.sx = ox;
+      prev.sy = oy;
+      prev.sz = oz;
+      light.position.set(snapX + ox, oy, snapZ + oz);
+      targetObj.position.set(snapX, 0, snapZ);
+      targetObj.updateMatrixWorld();
     }
-    prev.x = snapX;
-    prev.z = snapZ;
-    prev.sx = ox;
-    prev.sy = oy;
-    prev.sz = oz;
-    light.position.set(snapX + ox, oy, snapZ + oz);
-    targetObj.position.set(snapX, 0, snapZ);
-    targetObj.updateMatrixWorld();
+    if (softwareRef.current && !isIndoor) {
+      frameCountRef.current += 1;
+      if (movedSnap || frameCountRef.current % 10 === 0) {
+        gl.shadowMap.needsUpdate = true;
+      }
+    }
   });
 
   return (
@@ -453,7 +514,7 @@ function PlayerCenteredSunLight({
         position={atm.sunPos}
         color={atm.sunColor}
         intensity={atm.sunIntensity}
-        castShadow
+        castShadow={!isIndoor}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
         shadow-camera-left={-46}
@@ -519,7 +580,7 @@ export default function CampusScene({
     >
       <color attach="background" args={[activeAtm.bg]} />
       <fog attach="fog" args={[activeAtm.fogColor, activeAtm.fogNear, activeAtm.fogFar]} />
-      <ProceduralEnvironment timeOfDay={timeOfDay} />
+      <ProceduralEnvironment timeOfDay={timeOfDay} enabled={!isIndoor} />
 
       <hemisphereLight args={[activeAtm.hemiSky, activeAtm.hemiGround, activeAtm.hemiIntensity]} />
       <PlayerCenteredSunLight atm={activeAtm} isIndoor={isIndoor} />

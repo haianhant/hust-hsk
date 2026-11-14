@@ -139,8 +139,8 @@ const FENCE_RUNS: FenceRunSpec[] = [
   // 1. Tuyến tường rào mặt đường Trần Đại Nghĩa (x = 92.1) nối sát hai bên Cổng Trần Đại Nghĩa
   { axis: 'z', fixed: 92.1, from: -75.2, to: -31.5 },
   { axis: 'z', fixed: 92.1, from: -25.0, to: -17.2 },
-  { axis: 'z', fixed: 92.1, from: 0.5, to: 9.5 },
-  { axis: 'z', fixed: 92.1, from: 18.5, to: 42.0 },
+  { axis: 'z', fixed: 92.1, from: 0.5, to: 4.5 },
+  { axis: 'z', fixed: 92.1, from: 13.5, to: 42.0 },
 
   // 2. Tuyến biên Bắc — Đường Đại Cồ Việt (z = -75.2)
   { axis: 'x', fixed: -75.2, from: -95.2, to: -70.5 },

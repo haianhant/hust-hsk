@@ -7,6 +7,7 @@
 import type { AABB, Vec2 } from './bounds';
 import {
   ALUMNI_HOUSE,
+  B1_FORECOURT_PLAZA,
   BIKE_PARKING_SHED,
   C1,
   C15_BUILDING,
@@ -62,8 +63,8 @@ export const ZONES: ZoneSpec[] = [
   { name: 'Nhà để xe D3 - D5', center: { x: 83, z: 17 }, radius: 15 },
   { name: 'Cổng Trần Đại Nghĩa (Cổng B8)', center: { x: 92, z: -6 }, radius: 14 },
   { name: 'Đường tình yêu', center: { x: 0, z: -6 }, radius: 11 },
-  { name: 'Nhà B1 (Trường CNTT&TT - SoICT)', center: { x: 112, z: 14 }, radius: 16 },
-  { name: 'Cụm Nhà A1-5 · A17 · Nhà E · Nhà T', center: { x: 146, z: 20 }, radius: 18 },
+  { name: 'Nhà B1 (Trường CNTT&TT - SoICT)', center: { x: 115.5, z: 15.0 }, radius: 19 },
+  { name: 'Cụm Nhà A1-5 · A17 · Nhà E · Nhà T', center: { x: 150, z: 20 }, radius: 18 },
   { name: 'Khu Ký túc xá Bách Khoa (B3 – B13)', center: { x: 122, z: -40 }, radius: 28 },
   { name: 'Bể bơi, Nhà thi đấu & Nhà TC Bách Khoa', center: { x: 110, z: 54 }, radius: 20 },
   { name: 'Sân vận động Bách Khoa', center: { x: 132, z: 80 }, radius: 24 },
@@ -83,6 +84,7 @@ export const CAMPUS_MAP_PLAZAS: CampusMapPlazaSpec[] = [
   { id: 'nga5-plaza', label: 'Quảng trường ngã 5', box: NGA_5_PLAZA.rect, tone: 'stone' },
   { id: 'tdn-square', label: 'Quảng trường Trần Đại Nghĩa', box: TDN_SQUARE, tone: 'memorial' },
   { id: 'lib-plaza', label: 'Sân Thư viện Tạ Quang Bửu', box: LIBRARY.plaza, tone: 'terracotta' },
+  { id: 'b1-forecourt', label: 'Sân trước & Bãi xe Nhà B1 (SoICT)', box: B1_FORECOURT_PLAZA, tone: 'stone' },
 ];
 
 export type CampusMapBuildingKind = 'main' | 'lecture' | 'sport' | 'dorm' | 'gate' | 'parking';

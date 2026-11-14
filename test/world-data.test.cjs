@@ -307,7 +307,8 @@ test('(9) Complete main campus plazas, 9 parking areas & C7 ramps, C10b, C-conne
 
   // 2. Quảng trường ngã 5 has central 5-way junction + southern island + circular planter
   assert.ok(NGA_5_PLAZA.southLawnCenter && NGA_5_PLAZA.itimsRoundPlanter);
-  assert.equal(CAMPUS_MAP_PLAZAS.length, 4);
+  assert.equal(CAMPUS_MAP_PLAZAS.length, 5);
+  assert.ok(CAMPUS_MAP_PLAZAS.some((p) => p.id === 'b1-forecourt'));
 
   // 3. North bank of Tien Lake has 3 separated buildings West -> East: VDZ (4F) -> HUST Digital Hub -> Alumni House
   assert.equal(VDZ_CENTER.floors, 4);

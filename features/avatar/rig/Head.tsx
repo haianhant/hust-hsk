@@ -5,7 +5,7 @@
 // Module ID: avatar.rig
 // ---------------------------------------------------------------------------
 
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type * as THREE from 'three';
 import type { AvatarGender } from '../../../lib/playerState';
@@ -27,12 +27,14 @@ export function Head({
   glasses,
   cap,
   gradCap,
+  headRef,
 }: {
   gender?: AvatarGender;
   hairStyle: HairStyle;
   glasses?: boolean;
   cap?: string;
   gradCap?: boolean;
+  headRef?: RefObject<THREE.Group>;
 }) {
   const isFemale = gender === 'female';
   const eyelidLRef = useRef<THREE.Mesh>(null!);
@@ -49,8 +51,9 @@ export function Head({
   });
 
   return (
-    <group>
-      {/* Cổ nối tự nhiên đầu – thân */}
+    <group position={[0, 1.405, 0]} ref={headRef}>
+      <group position={[0, -1.405, 0]}>
+        {/* Cổ nối tự nhiên đầu – thân */}
       <mesh position={[0, 1.385, 0]} castShadow>
         <cylinderGeometry args={[isFemale ? 0.045 : 0.05, isFemale ? 0.051 : 0.056, 0.11, 14]} />
         <meshStandardMaterial color={SKIN} roughness={0.68} />
@@ -449,6 +452,7 @@ export function Head({
         </group>
       )}
       {gradCap && <GraduationCap />}
+      </group>
     </group>
   );
 }

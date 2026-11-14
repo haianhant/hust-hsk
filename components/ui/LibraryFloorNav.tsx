@@ -183,7 +183,7 @@ export function LibraryFloorNav({
         data-nav-phase={navSnap.phase}
         data-current-floor={currentFloor}
         data-active-preset={activePreset.id}
-        className="pointer-events-auto fixed right-3 top-14 z-20 flex max-w-[calc(100vw-24px)] flex-col items-end gap-1.5"
+        className="pointer-events-auto fixed right-3 top-14 z-40 flex max-w-[calc(100vw-24px)] flex-col items-end gap-1.5 sm:top-32 xl:top-24"
       >
         {/* Thanh trạng thái Tầng hiện tại + nút mở/thu gọn bảng thang máy Tầng 1–10 */}
         <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-amber-400/35 bg-slate-950/85 px-2.5 py-1.5 text-xs text-amber-100 shadow-lg backdrop-blur-md">

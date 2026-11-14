@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import {
+  LIBRARY_VN_FONT,
   canvasTex,
   makeLibraryStuccoWallTex,
   makeLibraryUpholsteryTex,
@@ -340,10 +341,10 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
         c.lineWidth = 6;
         c.strokeRect(0, 4, 2048, 120);
         c.fillStyle = '#fef3c7';
-        c.font = 'bold 48px Segoe UI,sans-serif';
+        c.font = `700 46px ${LIBRARY_VN_FONT}`;
         c.textAlign = 'center';
         c.textBaseline = 'middle';
-        c.fillText('INNOVATE  ·  CONNECT  ·  COLLABORATE  ·  CREATE  ·  HUST LIBRARY  ·', 1024, 64);
+        c.fillText('INNOVATE  ·  CONNECT  ·  COLLABORATE  ·  CREATE  ·  HUST LIBRARY  ·'.normalize('NFC'), 1024, 64);
       },
       3,
       1,
@@ -416,10 +417,31 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
     boatGeo.rotateX(-Math.PI / 2);
     const boatG = G(world, 2.2, PY, -1.2, 0.18);
     mk(boatGeo, M_WOOD_L, 0, 0, 0, 0, 0, 0, boatG);
+    const bLeafGeo = (gCache.bLeaf ??= new THREE.IcosahedronGeometry(0.18, 1));
     for (const ux of [-2.1, 0, 2.1]) {
       cyl(0.04, 0.04, 2.55, 10, M_CHR, ux, 1.5, 0, 0, 0, 0, boatG);
+      cyl(0.065, 0.065, 0.14, 10, M_CHR, ux, 2.52, 0, 0, 0, 0, boatG);
+      for (const ribAng of [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2]) {
+        const ribG = G(boatG, ux, 2.52, 0, ribAng);
+        box(0.02, 0.02, 1.15, M_CHR, 0, 0.08, 0.56, 0.14, 0, 0, ribG);
+      }
       cyl(0.05, 1.25, 0.38, 16, M_WALL, ux, 2.72, 0, 0, 0, 0, boatG);
-      cyl(0.24, 0.18, 0.35, 10, M_LEAF, ux * 0.5, 0.64, 0, 0, 0, 0, boatG);
+      const px = ux * 0.5;
+      // Bồn cây gỗ bo viền đồng đặt khít mặt đảo gỗ & tán lá nhiều tầng
+      cyl(0.28, 0.22, 0.3, 14, M_WOOD_D, px, 0.62, 0, 0, 0, 0, boatG);
+      cyl(0.295, 0.285, 0.04, 14, M_GOLD, px, 0.76, 0, 0, 0, 0, boatG);
+      cyl(0.255, 0.255, 0.02, 12, M_DRK, px, 0.77, 0, 0, 0, 0, boatG);
+      cyl(0.022, 0.032, 0.4, 6, M_WOOD_M, px, 0.96, 0, 0, 0, 0, boatG);
+      cyl(0.016, 0.024, 0.34, 6, M_WOOD_M, px - 0.05, 0.94, 0.04, 0.16, 0, 0.26, boatG);
+      cyl(0.016, 0.024, 0.34, 6, M_WOOD_M, px + 0.05, 0.95, -0.04, -0.16, 0, -0.26, boatG);
+      const tierMain = mk(bLeafGeo, M_LEAF, px, 1.2, 0, 0.08, ux, 0, boatG);
+      tierMain.scale.set(1.15, 0.46, 1.15);
+      const tierL = mk(bLeafGeo, M_LEAF, px - 0.11, 1.07, 0.07, 0.14, ux + 1.1, 0.18, boatG);
+      tierL.scale.set(0.92, 0.44, 0.92);
+      const tierR = mk(bLeafGeo, M_LEAF, px + 0.11, 1.09, -0.07, -0.14, ux + 2.2, -0.18, boatG);
+      tierR.scale.set(0.9, 0.44, 0.9);
+      const tierTop = mk(bLeafGeo, M_LEAF, px, 1.3, 0.02, -0.06, ux + 0.5, 0.08, boatG);
+      tierTop.scale.set(0.76, 0.42, 0.76);
     }
 
     // Cụm ghế bành vàng Mustard + bàn trà tròn có đèn ngủ
@@ -484,12 +506,16 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
       cyl(0.03, 0.03, 0.05, 10, M_GOLD, lx, 0.025, lz, 0, 0, 0, pg);
     }
     box(0.28, 0.52, 0.04, M_PIANO_BLK, 0, 0.42, -0.42, 0, 0, 0, pg);
+    for (const sx of [-0.14, 0.14]) {
+      cyl(0.012, 0.012, 0.52, 8, M_GOLD, sx, 0.4, -0.3, -0.42, 0, 0, pg);
+    }
     for (const px of [-0.08, 0, 0.08]) {
       box(0.03, 0.02, 0.14, M_GOLD, px, 0.12, -0.48, 0, 0, 0, pg);
     }
 
     // Giá để bản nhạc + bản nhạc trắng
     box(0.72, 0.24, 0.02, M_PIANO_BLK, 0, 1.18, -0.48, -0.25, 0, 0, pg);
+    box(0.72, 0.03, 0.055, M_GOLD, 0, 1.07, -0.45, -0.25, 0, 0, pg);
     box(0.46, 0.2, 0.01, M_WALL, 0, 1.19, -0.465, -0.25, 0, 0, pg);
 
     // Ghế đàn bọc nhung đen
@@ -553,7 +579,19 @@ export function buildFloors6To7(world: THREE.Group): Floors6To7Controller {
         [0.42, 0.55],
       ]) {
         box(0.42, 0.05, 0.4, M_RED_CH, cx, 0.44, cz, 0, 0, 0, tg);
-        box(0.4, 0.38, 0.05, M_RED_CH, cx, 0.66, cz + (cz > 0 ? 0.18 : -0.18), 0, 0, 0, tg);
+        const bz = cz + (cz > 0 ? 0.18 : -0.18);
+        box(0.4, 0.38, 0.05, M_RED_CH, cx, 0.66, bz, 0, 0, 0, tg);
+        for (const [lx, lz] of [
+          [-0.17, -0.16],
+          [0.17, -0.16],
+          [-0.17, 0.16],
+          [0.17, 0.16],
+        ]) {
+          cyl(0.014, 0.012, 0.43, 6, M_CHR, cx + lx, 0.215, cz + lz, 0, 0, 0, tg);
+        }
+        for (const bx of [-0.14, 0.14]) {
+          cyl(0.012, 0.012, 0.24, 6, M_CHR, cx + bx, 0.55, bz, 0, 0, 0, tg);
+        }
       }
       if (rng() > 0.4) {
         box(0.32, 0.03, 0.22, M_MUSTARD, 0.2, 0.78, 0, 0, 0.2, 0, tg);

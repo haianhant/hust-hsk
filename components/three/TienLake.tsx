@@ -46,6 +46,7 @@ import * as THREE from 'three';
 import { LAKE, LAKE_BANK, LAKE_BENCHES, LAKE_WILLOWS } from '../../lib/campus';
 import { playerState, type TimeOfDay } from '../../lib/playerState';
 import {
+  getSharedLeafClusterCutoutTexture,
   makeBarkTexture,
   makeFoliageCanopyTexture,
   makeLakeWaterSurfaceTexture,
@@ -588,45 +589,60 @@ type WillowSpec = {
   tilt: number;
   branches: Array<{ az: number; tilt: number; len: number; r: number }>;
   lobes: Array<{ dx: number; dy: number; dz: number; r: number; sy: number; color: string }>;
+  fronds: Array<{ x: number; y: number; z: number; w: number; h: number; ry: number; color: string }>;
 };
 
 const WILLOW_TONES = [WILLOW_LEAF, WILLOW_LEAF_LIGHT, WILLOW_LEAF_GOLD, WILLOW_LEAF_PALE];
+let sharedWillowFrondGeo: THREE.PlaneGeometry | null = null;
+function getSharedWillowFrondGeo() {
+  return (sharedWillowFrondGeo ??= new THREE.PlaneGeometry(1, 1));
+}
 
 function buildWillowSpecs(): WillowSpec[] {
   const rand = mulberry32(20261106);
   return LAKE_WILLOWS.map(() => {
-    const trunkH = 2.6 + rand() * 0.8;
+    const trunkH = 2.6 + rand() * 0.7;
+    const s = 0.92 + rand() * 0.16; // s <= 1.08 => giữ tán liễu gọn maxVisualR <= 3.6m
     const branches = [0, 1, 2, 3].map((k) => ({
-      az: (k / 4) * Math.PI * 2 + rand() * 0.9,
-      tilt: 0.45 + rand() * 0.35,
-      len: 1.2 + rand() * 0.6,
-      r: 0.05 + rand() * 0.03,
+      az: (k / 4) * Math.PI * 2 + (rand() - 0.5) * 0.55,
+      tilt: 0.48 + rand() * 0.25,
+      len: 1.15 + rand() * 0.4,
+      r: 0.05 + rand() * 0.025,
     }));
-    // Tán 7 cụm lệch nhau, dẹt/tròn KHÔNG đều (sy mỗi cụm rút riêng trong
-    // khoảng của nó — không còn dẹt đều 0,55 như bản cũ, nên không đọc
-    // thành đĩa tròn phẳng xếp chồng như mũ nấm). Khối chính + khối đỉnh +
-    // 3 khối bên + 2 khối rìa THẤP (đáy cụm ≈ trunkH − 0,1 m, vẫn cao hơn
-    // đầu người ~0,8 m, khoảng trống dưới tán thoáng, không có collider).
-    // Góc mỗi cụm rút ngẫu nhiên (không chia đều) để silhouette lệch hẳn.
     const a = () => rand() * Math.PI * 2;
     const off = (r: number) => ({ dx: Math.cos(a()) * r, dz: Math.sin(a()) * r });
     const tone = () => WILLOW_TONES[Math.floor(rand() * 4)];
     const lobes = [
-      { ...off(0.15), dy: trunkH + 0.95, r: 1.75, sy: 0.78 + rand() * 0.1, color: WILLOW_TONES[Math.floor(rand() * 2)] },
-      { ...off(0.5), dy: trunkH + 1.6, r: 1.15, sy: 0.88 + rand() * 0.12, color: tone() },
-      { ...off(1.05), dy: trunkH + 0.85, r: 1.0, sy: 0.62 + rand() * 0.1, color: tone() },
-      { ...off(0.95), dy: trunkH + 1.2, r: 0.9, sy: 0.95 + rand() * 0.05, color: tone() },
-      { ...off(1.15), dy: trunkH + 1.45, r: 0.72, sy: 0.7 + rand() * 0.15, color: tone() },
-      { ...off(1.35), dy: trunkH + 0.45, r: 0.62, sy: 0.82 + rand() * 0.12, color: tone() },
-      { ...off(1.2), dy: trunkH + 0.6, r: 0.55, sy: 0.68 + rand() * 0.15, color: tone() },
+      { ...off(0.12), dy: trunkH + 1.0, r: 1.38, sy: 0.62 + rand() * 0.08, color: WILLOW_TONES[Math.floor(rand() * 2)] },
+      { ...off(0.45), dy: trunkH + 1.48, r: 0.96, sy: 0.68 + rand() * 0.1, color: tone() },
+      { ...off(0.82), dy: trunkH + 0.88, r: 0.88, sy: 0.58 + rand() * 0.1, color: tone() },
+      { ...off(0.84), dy: trunkH + 1.12, r: 0.82, sy: 0.66 + rand() * 0.08, color: tone() },
+      { ...off(0.95), dy: trunkH + 1.25, r: 0.68, sy: 0.62 + rand() * 0.12, color: tone() },
+      { ...off(1.02), dy: trunkH + 0.62, r: 0.56, sy: 0.64 + rand() * 0.1, color: tone() },
     ];
+    // 12 thẻ mành lá liễu alphaTest rủ quanh mép tán (cao hơn tầm đầu người, không sợi ống dây)
+    const fronds = Array.from({ length: 12 }, (_, fi) => {
+      const fa = (fi / 12) * Math.PI * 2 + (rand() - 0.5) * 0.35;
+      const fr = 1.22 + rand() * 0.55;
+      const fh = 1.25 + rand() * 0.45;
+      return {
+        x: Math.cos(fa) * fr,
+        y: trunkH + 0.45 - rand() * 0.25,
+        z: Math.sin(fa) * fr,
+        w: 0.92 + rand() * 0.32,
+        h: fh,
+        ry: fa + Math.PI / 2,
+        color: tone(),
+      };
+    });
     return {
-      s: 0.88 + rand() * 0.3,
+      s,
       rotY: rand() * Math.PI * 2,
       trunkH,
-      tilt: (rand() - 0.5) * 0.14,
+      tilt: (rand() - 0.5) * 0.12,
       branches,
       lobes,
+      fronds,
     };
   });
 }
@@ -647,6 +663,8 @@ function LakeWillow({
   shadowTex: THREE.CanvasTexture;
 }) {
   const canopyRef = useRef<THREE.Group>(null!);
+  const willowCutoutTex = useMemo(() => getSharedLeafClusterCutoutTexture('willow'), []);
+  const frondGeo = useMemo(() => getSharedWillowFrondGeo(), []);
   useFrame((state) => {
     if (!canopyRef.current) return;
     const t = state.clock.elapsedTime;
@@ -672,7 +690,7 @@ function LakeWillow({
           roughness={0.92}
         />
       </mesh>
-      {/* 4 cành nhánh từ ngọn thân chĩa ra tán. */}
+      {/* 4 cành chính + nhánh thứ cấp từ ngọn thân vươn ra tán. */}
       {spec.branches.map((b, i) => (
         <group key={`br-${i}`} position={[0, spec.trunkH, 0]} rotation-y={-b.az}>
           <group rotation-z={b.tilt}>
@@ -686,14 +704,18 @@ function LakeWillow({
                 roughness={0.92}
               />
             </mesh>
+            <mesh position={[0.18, b.len * 0.88, 0.14]} rotation={[0.35, 0, -0.45]} castShadow>
+              <cylinderGeometry args={[b.r * 0.3, b.r * 0.5, b.len * 0.55, 5]} />
+              <meshStandardMaterial color={TRUNK} roughness={0.92} />
+            </mesh>
           </group>
         </group>
       ))}
-      {/* 7 cụm tán lệch nhau, dẹt/tròn KHÔNG đều + vân tán lá PBR + đung đưa nhẹ theo gió. */}
+      {/* Tán nhiều tầng gọn + mành lá liễu cắt alphaTest rủ tự nhiên */}
       <group ref={canopyRef}>
         {spec.lobes.map((l, i) => (
           <mesh key={`lobe-${i}`} position={[l.dx, l.dy, l.dz]} scale={[1, l.sy, 1]} castShadow receiveShadow>
-            <sphereGeometry args={[l.r, 16, 12]} />
+            <icosahedronGeometry args={[l.r, 2]} />
             <meshStandardMaterial
               color={l.color}
               map={foliagePbr.map}
@@ -702,6 +724,28 @@ function LakeWillow({
               roughness={0.86}
             />
           </mesh>
+        ))}
+        {spec.fronds.map((f, fi) => (
+          <group key={`frond-${fi}`} position={[f.x, f.y, f.z]} rotation-y={f.ry}>
+            <mesh geometry={frondGeo} scale={[f.w, f.h, 1]}>
+              <meshStandardMaterial
+                color={f.color}
+                map={willowCutoutTex}
+                alphaTest={0.38}
+                side={THREE.DoubleSide}
+                roughness={0.85}
+              />
+            </mesh>
+            <mesh geometry={frondGeo} rotation-y={Math.PI * 0.46} scale={[f.w * 0.9, f.h, 1]}>
+              <meshStandardMaterial
+                color={f.color}
+                map={willowCutoutTex}
+                alphaTest={0.38}
+                side={THREE.DoubleSide}
+                roughness={0.85}
+              />
+            </mesh>
+          </group>
         ))}
       </group>
     </group>

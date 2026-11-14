@@ -254,6 +254,262 @@ export function makeLibraryStuccoWallTex(
   return { map };
 }
 
+export const LIBRARY_VN_FONT = '"Be Vietnam Pro", "Noto Sans", system-ui, sans-serif';
+
+/**
+ * Sinh texture hàng gáy sách đa sắc (bìa vải, dải nhũ vàng, nhãn mã phân loại)
+ * cho kệ sách & kho mở Thư viện — không tạo thêm draw call cho từng quyển sách.
+ */
+export function makeBookSpineRowTex(
+  seed = 202611,
+  rx = 2,
+  ry = 1,
+): { map: THREE.CanvasTexture; bumpMap?: undefined } {
+  const rng = mulberry32(seed);
+  const palette = [
+    '#1e3a5f',
+    '#7c2d12',
+    '#14532d',
+    '#78350f',
+    '#312e81',
+    '#991b1b',
+    '#0f766e',
+    '#475569',
+    '#a16207',
+    '#831843',
+    '#d6c7a9',
+    '#334155',
+  ];
+  const map = canvasTex(
+    256,
+    128,
+    (ctx) => {
+      // Nền hốc tủ tối phía sau gáy sách thấp
+      ctx.fillStyle = '#1f1812';
+      ctx.fillRect(0, 0, 256, 128);
+      let x = 0;
+      let idx = 0;
+      while (x < 256) {
+        const w = Math.min(256 - x, 10 + Math.floor(rng() * 14));
+        const topGap = Math.floor(rng() * 16);
+        const h = 128 - topGap;
+        const base = palette[Math.floor(rng() * palette.length)]!;
+
+        ctx.fillStyle = base;
+        ctx.fillRect(x, topGap, w, h);
+
+        // Bóng vát 2 mép tạo cảm giác gáy cong 3D
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(x, topGap, 2, h);
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.fillRect(x + w - 2, topGap, 2, h);
+
+        // Vạch gân nhũ vàng / kem trên gáy sách
+        const foilColor = idx % 3 === 0 ? '#f6d365' : '#e5e7eb';
+        ctx.fillStyle = foilColor;
+        ctx.globalAlpha = 0.72;
+        ctx.fillRect(x + 2, topGap + 14 + Math.floor(rng() * 8), Math.max(2, w - 4), 3);
+        if (w >= 14) {
+          ctx.fillRect(x + 3, topGap + 24, Math.max(2, w - 6), Math.min(24, 10 + Math.floor(rng() * 14)));
+        }
+        ctx.globalAlpha = 1;
+
+        // Tem nhãn phân loại thư viện màu trắng ở chân gáy sách
+        if (idx % 2 === 0 || w >= 13) {
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(x + 2, 102, Math.max(3, w - 4), 14);
+          ctx.fillStyle = '#334155';
+          ctx.fillRect(x + 3, 106, Math.max(2, w - 6), 2);
+          ctx.fillRect(x + 3, 111, Math.max(2, w - 7), 2);
+        }
+
+        x += w;
+        idx++;
+      }
+    },
+    rx,
+    ry,
+  );
+  return { map };
+}
+
+/**
+ * Sinh texture màn hình OPAC / Quầy thủ thư / Kiosk tự mượn trả tiếng Việt chuẩn NFC.
+ */
+export function makeMonitorScreenTex(kind: 'opac' | 'admin' | 'kiosk' = 'opac'): { map: THREE.CanvasTexture } {
+  const map = canvasTex(256, 160, (ctx, w, h) => {
+    ctx.fillStyle = kind === 'admin' ? '#0f172a' : '#0c1b2e';
+    ctx.fillRect(0, 0, w, h);
+
+    // Thanh tiêu đề ứng dụng
+    ctx.fillStyle = kind === 'kiosk' ? '#991b1b' : '#1d4ed8';
+    ctx.fillRect(0, 0, w, 24);
+    ctx.fillStyle = '#f8fafc';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.font = `700 10px ${LIBRARY_VN_FONT}`;
+    const title =
+      kind === 'admin'
+        ? 'LIB-HUST · QUẢN LÝ MƯỢN TRẢ'.normalize('NFC')
+        : kind === 'kiosk'
+          ? 'TỰ MƯỢN / TRẢ SÁCH · TQB'.normalize('NFC')
+          : 'TRA CỨU OPAC · TẠ QUANG BỬU'.normalize('NFC');
+    ctx.fillText(title, 8, 12);
+
+    if (kind === 'opac') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(10, 32, w - 20, 20);
+      ctx.fillStyle = '#64748b';
+      ctx.font = `500 9px ${LIBRARY_VN_FONT}`;
+      ctx.fillText('Tìm nhan đề, tác giả, mã ISBN...'.normalize('NFC'), 16, 42);
+      ctx.fillStyle = '#2563eb';
+      ctx.fillRect(w - 54, 34, 42, 16);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.fillText('Tìm'.normalize('NFC'), w - 33, 42);
+
+      const cards = [
+        ['Giải tích I & II · ĐHBK Hà Nội', 'Tầng 4 · Sẵn sàng', '#22c55e'],
+        ['Cấu trúc dữ liệu & Thuật toán', 'Tầng 5 · P.501', '#38bdf8'],
+        ['Giáo trình Hán ngữ HSK 1–6', 'Tầng 3 · Sẵn sàng', '#22c55e'],
+      ] as const;
+      cards.forEach(([label, loc, pill], idx) => {
+        const cy = 60 + idx * 30;
+        ctx.fillStyle = '#172a45';
+        ctx.fillRect(10, cy, w - 20, 24);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.textAlign = 'left';
+        ctx.font = `600 9px ${LIBRARY_VN_FONT}`;
+        ctx.fillText(label.normalize('NFC'), 16, cy + 9);
+        ctx.fillStyle = pill;
+        ctx.font = `700 8px ${LIBRARY_VN_FONT}`;
+        ctx.fillText(loc.normalize('NFC'), 16, cy + 19);
+      });
+    } else if (kind === 'admin') {
+      const rows = [
+        ['MSSV 2023xxxx · Mượn 03 cuốn', '#4ade80'],
+        ['Kệ mở R4 · Đã kiểm kê 98%', '#60a5fa'],
+        ['Phòng đọc P.401 · Còn 24 chỗ', '#fbbf24'],
+        ['Trạng thái cổng từ · Hoạt động', '#34d399'],
+      ] as const;
+      rows.forEach(([txt, dot], idx) => {
+        const ry = 34 + idx * 28;
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(10, ry, w - 20, 22);
+        ctx.fillStyle = dot;
+        ctx.beginPath();
+        ctx.arc(20, ry + 11, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#e2e8f0';
+        ctx.textAlign = 'left';
+        ctx.font = `600 9px ${LIBRARY_VN_FONT}`;
+        ctx.fillText(txt.normalize('NFC'), 30, ry + 11);
+      });
+    } else {
+      const steps = [
+        ['1. Quét thẻ Sinh viên / QR', '#fbbf24'],
+        ['2. Đặt sách lên bàn cảm ứng NFC', '#38bdf8'],
+        ['3. Xác nhận & nhận phiếu hẹn', '#4ade80'],
+      ] as const;
+      steps.forEach(([s, col], idx) => {
+        const sy = 36 + idx * 38;
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(12, sy, w - 24, 30);
+        ctx.fillStyle = col;
+        ctx.fillRect(12, sy, 4, 30);
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'left';
+        ctx.font = `700 10px ${LIBRARY_VN_FONT}`;
+        ctx.fillText(s.normalize('NFC'), 24, sy + 15);
+      });
+    }
+  });
+  return { map };
+}
+
+/**
+ * Sinh texture mặt trước máy bán nước tự động (tủ kính hàng lon/chai & bảng chọn QR).
+ */
+export function makeVendingFrontTex(): { map: THREE.CanvasTexture } {
+  const map = canvasTex(256, 512, (ctx, w, h) => {
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(0, 0, w, h);
+
+    // Biển đèn hộp trên cùng
+    ctx.fillStyle = '#b91c1c';
+    ctx.fillRect(10, 10, w - 20, 44);
+    ctx.fillStyle = '#fef08a';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 15px ${LIBRARY_VN_FONT}`;
+    ctx.fillText('HUST VENDING · GIẢI KHÁT'.normalize('NFC'), w / 2, 32);
+
+    // Khoang kính trưng bày bên trái
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(12, 64, 158, 320);
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(12, 64, 158, 320);
+
+    const drinkColors = ['#ef4444', '#22c55e', '#3b82f6', '#f59e0b', '#06b6d4'];
+    for (let r = 0; r < 5; r++) {
+      const sy = 76 + r * 60;
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(16, sy + 44, 150, 5);
+      for (let c = 0; c < 4; c++) {
+        const sx = 24 + c * 36;
+        ctx.fillStyle = drinkColors[(r + c) % drinkColors.length]!;
+        ctx.fillRect(sx, sy + 6, 22, 36);
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.fillRect(sx + 4, sy + 10, 4, 24);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillRect(sx + 2, sy + 45, 18, 8);
+      }
+    }
+
+    // Ánh phản chiếu chéo nhẹ trên kính
+    ctx.fillStyle = 'rgba(186,230,253,0.12)';
+    ctx.beginPath();
+    ctx.moveTo(16, 68);
+    ctx.lineTo(100, 68);
+    ctx.lineTo(42, 380);
+    ctx.lineTo(16, 380);
+    ctx.closePath();
+    ctx.fill();
+
+    // Bảng điều khiển & QR bên phải
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(178, 64, 66, 210);
+    ctx.fillStyle = '#0ea5e9';
+    ctx.fillRect(186, 76, 50, 26);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `700 10px ${LIBRARY_VN_FONT}`;
+    ctx.fillText('QR PAY'.normalize('NFC'), 211, 89);
+
+    for (let kr = 0; kr < 4; kr++) {
+      for (let kc = 0; kc < 3; kc++) {
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(186 + kc * 18, 114 + kr * 18, 13, 13);
+      }
+    }
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(190, 200, 42, 42);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(196, 206, 12, 12);
+    ctx.fillRect(214, 206, 12, 12);
+    ctx.fillRect(196, 224, 12, 12);
+    ctx.fillRect(212, 222, 14, 14);
+
+    // Khay lấy đồ bên dưới
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(20, 404, 180, 74);
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(20, 404, 180, 74);
+  });
+  return { map };
+}
+
 /**
  * Giải phóng toàn bộ BufferGeometry, Material và Texture trong cây Object3D
  * khi unmount component để tránh rò rỉ bộ nhớ WebGL (GEMINI.md Mục 3).

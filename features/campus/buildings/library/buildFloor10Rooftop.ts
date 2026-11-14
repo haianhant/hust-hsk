@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import {
+  LIBRARY_VN_FONT,
   canvasTex,
   makeLibraryUpholsteryTex,
   makeLibraryWoodGrainTex,
@@ -184,6 +185,18 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
   box(0.08, 0.05, RD + 0.1, M_CHR, X0, 1.15, 0);
   box(0.08, 0.05, RD + 0.1, M_CHR, X1, 1.15, 0);
 
+  // Trụ đứng inox lan can kính cường lực 4 cạnh & các góc sân thượng
+  for (let i = 0; i <= 14; i++) {
+    const px = X0 + (i / 14) * RW;
+    box(0.045, 0.75, 0.045, M_CHR, px, 0.78, Z0);
+    box(0.045, 0.75, 0.045, M_CHR, px, 0.78, Z1);
+  }
+  for (let i = 1; i < 6; i++) {
+    const pz = Z0 + (i / 6) * RD;
+    box(0.045, 0.75, 0.045, M_CHR, X0, 0.78, pz);
+    box(0.045, 0.75, 0.045, M_CHR, X1, 0.78, pz);
+  }
+
   // Khối kỹ thuật & Thang máy lên Sân thượng (KS: x ∈ [-5.2, 5.2], z ∈ [-8.2, -3.4])
   {
     const kw = KS.x1 - KS.x0;
@@ -206,9 +219,9 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
       c.lineWidth = 5;
       c.strokeRect(4, 4, 504, 88);
       c.fillStyle = '#fef3c7';
-      c.font = 'bold 30px Segoe UI,sans-serif';
+      c.font = `700 28px ${LIBRARY_VN_FONT}`;
       c.textAlign = 'center';
-      c.fillText('TẦNG 10 · SÂN THƯỢNG NGẮM SAO', 256, 58);
+      c.fillText('TẦNG 10 · SÂN THƯỢNG NGẮM SAO'.normalize('NFC'), 256, 58);
     });
     box(3.4, 0.56, 0.06, new THREE.MeshBasicMaterial({ map: signTex }), 0, 2.78, KS.z1 + 0.08);
   }
@@ -216,8 +229,12 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
   // Đế sàn bê tông kiến trúc đỡ sân thượng Tầng 10 (kết nối liền khối với đỉnh tháp Thư viện Tạ Quang Bửu bên dưới)
   box(RW + 0.6, 0.75, RD + 0.6, M_STONE, 0, -0.38, 0);
 
-  // Thảm cỏ Tây + Ghế tắm nắng đôi (có gối mềm màu) + Đèn bão & Thảm Picnic
+  // Thảm cỏ Tây có bó vỉa đá 4 cạnh + Ghế tắm nắng đôi (có gối mềm màu) + Đèn bão
   box(11.5, 0.06, 6.4, M_LAWN, -14.2, 0.03, 3.2);
+  box(11.74, 0.11, 0.12, M_STONE, -14.2, 0.055, 3.2 - 3.26);
+  box(11.74, 0.11, 0.12, M_STONE, -14.2, 0.055, 3.2 + 3.26);
+  box(0.12, 0.11, 6.64, M_STONE, -14.2 - 5.81, 0.055, 3.2);
+  box(0.12, 0.11, 6.64, M_STONE, -14.2 + 5.81, 0.055, 3.2);
   const loungerPillowColors = [0xf472b6, 0x38bdf8, 0x34d399];
   [-17.2, -14.2, -11.2].forEach((lx, idx) => {
     const lg = G(world, lx, 0.06, 3.4, 0.15);
@@ -309,14 +326,23 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
     for (let x = PG.x0 - 0.1; x <= PG.x1 + 0.1; x += 0.68) {
       box(0.09, 0.14, pd + 0.5, M_WOOD_M, x, PG.h + 0.12, pz);
     }
-    // Bàn ghế gỗ dài dưới giàn Pergola
+    // Bàn ghế gỗ dài dưới giàn Pergola (có chân thép chạm sàn cho toàn bộ 6 băng ghế)
     for (const bxX of [-4.2, 0, 4.2]) {
       const bg = G(world, bxX, 0, pz);
       box(2.2, 0.06, 0.82, M_WOOD_L, 0, 0.74, 0, 0, 0, 0, bg);
       box(0.1, 0.72, 0.72, M_DRK, -0.88, 0.36, 0, 0, 0, 0, bg);
       box(0.1, 0.72, 0.72, M_DRK, 0.88, 0.36, 0, 0, 0, 0, bg);
-      box(2.1, 0.05, 0.36, M_WOOD_L, 0, 0.44, -0.78, 0, 0, 0, bg);
-      box(2.1, 0.05, 0.36, M_WOOD_L, 0, 0.44, 0.78, 0, 0, 0, bg);
+      box(0.16, 0.03, 0.78, M_DRK, -0.88, 0.015, 0, 0, 0, 0, bg);
+      box(0.16, 0.03, 0.78, M_DRK, 0.88, 0.015, 0, 0, 0, 0, bg);
+      box(1.86, 0.05, 0.06, M_DRK, 0, 0.18, 0, 0, 0, 0, bg);
+      for (const sz of [-0.78, 0.78]) {
+        box(2.1, 0.05, 0.36, M_WOOD_L, 0, 0.44, sz, 0, 0, 0, bg);
+        box(0.08, 0.43, 0.32, M_DRK, -0.82, 0.215, sz, 0, 0, 0, bg);
+        box(0.08, 0.43, 0.32, M_DRK, 0.82, 0.215, sz, 0, 0, 0, bg);
+        box(0.14, 0.025, 0.38, M_DRK, -0.82, 0.0125, sz, 0, 0, 0, bg);
+        box(0.14, 0.025, 0.38, M_DRK, 0.82, 0.0125, sz, 0, 0, 0, bg);
+        box(1.72, 0.045, 0.05, M_DRK, 0, 0.16, sz, 0, 0, 0, bg);
+      }
     }
     // Bóng đèn dây võng (String Lights)
     const bulbGeo = new THREE.SphereGeometry(0.045, 8, 8);
@@ -351,9 +377,9 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
       c.lineWidth = 5;
       c.strokeRect(6, 6, 500, 308);
       c.fillStyle = '#fde68a';
-      c.font = 'bold 24px Segoe UI,sans-serif';
+      c.font = `700 22px ${LIBRARY_VN_FONT}`;
       c.textAlign = 'center';
-      c.fillText('BẢN ĐỒ SAO BẦU TRỜI HÀ NỘI', 256, 40);
+      c.fillText('BẢN ĐỒ SAO BẦU TRỜI HÀ NỘI'.normalize('NFC'), 256, 40);
       c.strokeStyle = 'rgba(147,197,253,0.45)';
       c.lineWidth = 2;
       c.beginPath();
@@ -378,7 +404,7 @@ export function buildFloor10Rooftop(world: THREE.Group): Floor10RooftopControlle
         c.fill();
       });
       c.fillStyle = '#93c5fd';
-      c.font = '16px Segoe UI,sans-serif';
+      c.font = `500 15px ${LIBRARY_VN_FONT}`;
       c.fillText('Orion · Cassiopeia · Taurus · Pleiades', 256, 300);
     });
     box(1.65, 1.02, 0.05, new THREE.MeshBasicMaterial({ map: mapTex }), 0, 1.25, 0, -0.15, 0, 0, bg);

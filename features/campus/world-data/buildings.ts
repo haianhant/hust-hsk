@@ -343,40 +343,48 @@ export const ALUMNI_HOUSE = {
   box: { minX: 10.2, maxX: 20.4, minZ: -0.8, maxZ: 2.6 },
 } as const;
 
-// 4. Nhà B1 (Trường Công nghệ Thông tin & Truyền thông — SoICT): tòa nhà góc cong giật cấp 7–8 tầng
-// nằm phía Đông đường Trần Đại Nghĩa, ngay phía Nam khu KTX (theo tham-khao/b1-soict/ & https://hustmap.com/).
+// 4. Nhà B1 (Trường Công nghệ Thông tin & Truyền thông — SoICT): tòa nhà lớn 8 tầng
+// (tỉ lệ thực tế ~33m × 17m đối chiếu https://hustmap.com/) + Sân trước Nhà B1 rộng rãi
+// gồm thảm cỏ bán nguyệt, sảnh tròn Rotunda 3 tầng và Nhà xe / Bãi xe B1.
 export const SOICT_B1 = {
-  center: { x: 112, z: 14 },
-  size: { x: 22, z: 14 },
+  center: { x: 115.5, z: 22.5 },
+  size: { x: 33, z: 17 },
   floors: 8,
   floorHeight: 3.2,
-  box: { minX: 101, maxX: 123, minZ: 7, maxZ: 21 },
+  box: { minX: 99, maxX: 132, minZ: 14, maxZ: 31 },
 } as const;
+
+export const B1_FORECOURT_PLAZA: AABB = {
+  minX: 99.0,
+  maxX: 132.0,
+  minZ: -2.8,
+  maxZ: 14.5,
+};
 
 // 5. Cụm công trình thuộc HUST ở phía Đông-Nam Nhà B1 qua phố Tạ Quang Bửu (theo đúng https://hustmap.com/):
 //    Nhà ăn A1-5, Nhà A17 (xoay chéo dọc Tạ Quang Bửu), Nhà E và Nhà T (khối dài ở rìa Đông).
 //    Đã loại bỏ hoàn toàn H1, H3 (vốn thuộc ĐH Xây dựng Hà Nội ngoài trường).
 export const EAST_CAMPUS_BLOCKS = {
   a15: {
-    center: { x: 136, z: 9 },
+    center: { x: 142, z: 9 },
     size: { x: 10, z: 5.6 },
-    box: { minX: 131, maxX: 141, minZ: 6.2, maxZ: 11.8 },
+    box: { minX: 137, maxX: 147, minZ: 6.2, maxZ: 11.8 },
   },
   a17: {
-    center: { x: 136, z: 23 },
-    size: { x: 11, z: 6.0 },
+    center: { x: 142.5, z: 23 },
+    size: { x: 11, z: 7.6 },
     rotY: -0.55,
-    box: { minX: 130.5, maxX: 141.5, minZ: 19.2, maxZ: 26.8 },
+    box: { minX: 137, maxX: 148, minZ: 19.2, maxZ: 26.8 },
   },
   nhaE: {
-    center: { x: 146, z: 29 },
+    center: { x: 149.5, z: 30.5 },
     size: { x: 7.5, z: 5.5 },
-    box: { minX: 142.25, maxX: 149.75, minZ: 26.25, maxZ: 31.75 },
+    box: { minX: 145.75, maxX: 153.25, minZ: 27.75, maxZ: 33.25 },
   },
   nhaT: {
-    center: { x: 157, z: 20 },
+    center: { x: 159, z: 20 },
     size: { x: 11, z: 22 },
-    box: { minX: 151.5, maxX: 162.5, minZ: 9, maxZ: 31 },
+    box: { minX: 153.5, maxX: 164.5, minZ: 9, maxZ: 31 },
   },
 } as const;
 
@@ -879,7 +887,7 @@ export const C1_BENCHES: Vec2[] = [
 export const LAKE_WILLOWS: Vec2[] = [
   { x: -27.5, z: 18 }, { x: -27.5, z: 54 }, { x: -27.5, z: 80 },
   { x: 22.2, z: 14 }, { x: 22.2, z: 76 },
-  { x: -14, z: 1.5 }, { x: 7.6, z: 2.4 },
+  { x: -14, z: 1.5 }, { x: 8.4, z: 3.0 },
   { x: -10, z: 94.0 }, { x: 10, z: 94.0 },
 ];
 
@@ -1115,7 +1123,7 @@ export const CAMPUS_MEMORY_BOARDS: readonly CampusMemoryBoardSpec[] = [
   {
     id: 'library-board',
     x: 32.2,
-    z: 14.2,
+    z: 11.4,
     rotY: Math.PI,
     label: 'Bảng Lưu bút Thư viện Tạ Quang Bửu',
     promptLabel: 'E — Đọc & Ghim Lưu bút Thư viện TQB',

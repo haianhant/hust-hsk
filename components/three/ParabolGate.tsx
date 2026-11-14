@@ -36,7 +36,6 @@ import * as THREE from 'three';
 import { PARABOL_GATE } from '../../lib/campus';
 import type { TimeOfDay } from '../../lib/playerState';
 import { makeWeatheredConcreteTexture } from './materials';
-import { ImprovedTree } from './Trees';
 
 // --- Màu chốt (reference-visual §0, ước lượng từ ảnh) ------------------------
 const GATE_WHITE = '#F2EFE6'; // bê tông cổng Parabol, trắng ấm
@@ -493,11 +492,6 @@ export function ParabolGate({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         ))}
       </group>
 
-      {/* Cây lớn hai bên cổng sử dụng ImprovedTree có vân vỏ cây + tán lá PBR */}
-      <ImprovedTree x={-93.5} z={PARABOL_GATE.center.z - 6} trunkH={3.4} canopyR={3.2} canopyY={5} />
-      <ImprovedTree x={-93.5} z={PARABOL_GATE.center.z + 6} trunkH={3.4} canopyR={3.2} canopyY={5} />
-      <ImprovedTree x={-82.5} z={PARABOL_GATE.center.z - 7.5} trunkH={3} canopyR={2.6} canopyY={4.4} />
-      <ImprovedTree x={-82.5} z={PARABOL_GATE.center.z + 7.5} trunkH={3} canopyR={2.6} canopyY={4.4} />
     </group>
   );
 }

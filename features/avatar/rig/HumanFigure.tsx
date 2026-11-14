@@ -166,7 +166,14 @@ export function HumanFigure(props: FigureProps) {
               shoulderRef={joints?.armR}
               elbowRef={joints?.elbowR}
             />
-            <Head gender={gender} hairStyle={hairStyle} glasses={glasses} cap={cap} gradCap={gradCap} />
+            <Head
+              gender={gender}
+              hairStyle={hairStyle}
+              glasses={glasses}
+              cap={cap}
+              gradCap={gradCap}
+              headRef={joints?.head}
+            />
             {backpack && showBackpack && <Backpack colors={packColors} />}
           </group>
         </group>

@@ -203,6 +203,15 @@ export function StudyChair({
           <boxGeometry args={[0.43, 0.028, 0.41]} />
           <meshStandardMaterial color={frameColor} map={woodTex} roughness={0.48} />
         </mesh>
+        {/* Mép trước mặt ghế bo tròn công thái học & thanh giằng thép dưới mặt ghế */}
+        <mesh position={[0, 0.42, 0.242]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.014, 0.014, 0.426, 12]} />
+          <meshStandardMaterial color={frameColor} map={woodTex} roughness={0.46} />
+        </mesh>
+        <mesh position={[0, 0.39, 0.05]}>
+          <boxGeometry args={[0.36, 0.022, 0.032]} />
+          <meshStandardMaterial color="#2A3240" roughness={0.48} metalness={0.54} />
+        </mesh>
 
         {/* Đệm ngồi bọc nỉ (mặt trên ở cao độ y = 0.45m) */}
         <mesh position={[0, 0.444, 0.05]} castShadow receiveShadow>
@@ -225,10 +234,16 @@ export function StudyChair({
 
         {/* 2 chân sau nối liền trụ tựa lưng (y = 0 -> 0.81m) */}
         {([-0.18, 0.18] as const).map((lx) => (
-          <mesh key={`rear-leg-${lx}`} position={[lx, 0.405, -0.13]} castShadow>
-            <boxGeometry args={[0.034, 0.81, 0.034]} />
-            <meshStandardMaterial color="#2A3240" roughness={0.46} metalness={0.52} />
-          </mesh>
+          <group key={`rear-leg-${lx}`}>
+            <mesh position={[lx, 0.405, -0.13]} castShadow>
+              <boxGeometry args={[0.034, 0.81, 0.034]} />
+              <meshStandardMaterial color="#2A3240" roughness={0.46} metalness={0.52} />
+            </mesh>
+            <mesh position={[lx, 0.814, -0.13]}>
+              <boxGeometry args={[0.036, 0.01, 0.036]} />
+              <meshStandardMaterial color="#64748B" roughness={0.32} metalness={0.75} />
+            </mesh>
+          </group>
         ))}
 
         {/* Thanh giằng ngang dưới gầm ghế */}
@@ -243,6 +258,10 @@ export function StudyChair({
         <mesh position={[0, 0.71, -0.142]} castShadow>
           <boxGeometry args={[0.42, 0.18, 0.026]} />
           <meshStandardMaterial color={frameColor} map={woodTex} roughness={0.46} />
+        </mesh>
+        <mesh position={[0, 0.805, -0.142]}>
+          <boxGeometry args={[0.42, 0.022, 0.032]} />
+          <meshStandardMaterial color="#8B5A32" map={woodTex} roughness={0.44} />
         </mesh>
 
         {/* Đệm tựa lưng bọc nỉ đồng bộ với đệm ngồi */}

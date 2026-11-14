@@ -15,6 +15,7 @@ import {
   BLOCK_B_DIMS,
   BLOCK_D_DIMS,
   CURVED_STAIRS,
+  isPointOnF6PlatformStair,
   signedDistanceToStadium,
   WALKABLE_SURFACES_BY_FLOOR,
 } from './geometry';
@@ -162,8 +163,8 @@ export function queryLibraryGround(location: LibraryLocation): FloorSupportResul
     const stairHit = evaluateCurvedStairAt(x, z);
     if (stairHit) {
       const verticalDelta = Math.abs(y - stairHit.elevation);
-      const nearBottomOnF1 = floor === 1 && stairHit.progress <= 0.14;
-      const nearTopOnF2 = floor === 2 && stairHit.progress >= 0.86;
+      const nearBottomOnF1 = floor === 1 && stairHit.progress <= 0.085;
+      const nearTopOnF2 = floor === 2 && stairHit.progress >= 0.91;
       if (verticalDelta <= 0.65 || nearBottomOnF1 || nearTopOnF2) {
         // Hysteresis prevents floor-flipping oscillation at the stair midpoint
         let recommendedFloor: LibraryFloor = floor;
@@ -215,16 +216,16 @@ export function queryLibraryGround(location: LibraryLocation): FloorSupportResul
         recommendedFloor: floor,
       };
     }
-    if (platSd.signedDist <= 0.45) {
-      const rampT = 1 - platSd.signedDist / 0.45;
+    if (platSd.signedDist <= 0.9 && isPointOnF6PlatformStair(x, z)) {
+      const rampT = Math.max(0, Math.min(1, 1 - platSd.signedDist / 0.9));
       return {
         supported: true,
         elevation: Number((BLOCK_B_DIMS.PY * rampT).toFixed(4)),
         surfaceId: 'f6-central-platform',
         floor,
         block,
-        onStair: false,
-        stairId: null,
+        onStair: true,
+        stairId: 'f6-platform-stairs',
         recommendedFloor: floor,
       };
     }

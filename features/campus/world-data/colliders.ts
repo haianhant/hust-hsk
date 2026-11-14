@@ -103,10 +103,10 @@ export const BUILDING_COLLIDERS: NamedCollider[] = [
   { name: 'Thư viện Tạ Quang Bửu (khối đế)', box: { minX: 29.8, maxX: 46.2, minZ: 23.5, maxZ: 30.5 } },
   { name: 'Thành bậc tam cấp Thư viện (tây)', box: { minX: 28.9, maxX: 29.8, minZ: 16.8, maxZ: 19.4 } },
   { name: 'Thành bậc tam cấp Thư viện (đông)', box: { minX: 46.2, maxX: 47.1, minZ: 16.8, maxZ: 19.4 } },
-  { name: 'Cột sảnh Thư viện (tây-bắc)', box: { minX: 30.15, maxX: 31.05, minZ: 19.2, maxZ: 20.1 } },
-  { name: 'Cột sảnh Thư viện (đông-bắc)', box: { minX: 44.95, maxX: 45.85, minZ: 19.2, maxZ: 20.1 } },
-  { name: 'Cột sảnh Thư viện (tây-nam)', box: { minX: 30.15, maxX: 31.05, minZ: 22.35, maxZ: 23.25 } },
-  { name: 'Cột sảnh Thư viện (đông-nam)', box: { minX: 44.95, maxX: 45.85, minZ: 22.35, maxZ: 23.25 } },
+  { name: 'Bó vỉa đá granite Tây Thư viện', box: { minX: 29.58, maxX: 29.88, minZ: 19.45, maxZ: 27.0 } },
+  { name: 'Bậc gạch phụ Tây Thư viện', box: { minX: 28.8, maxX: 29.3, minZ: 26.55, maxZ: 28.15 } },
+  { name: 'Ghế đá Thư viện (Đông Bắc)', box: { minX: 49.7, maxX: 51.5, minZ: 13.12, maxZ: 13.68 } },
+  { name: 'Ghế đá Thư viện (Đông Nam)', box: { minX: 49.7, maxX: 51.5, minZ: 16.32, maxZ: 16.88 } },
   { name: 'Bệ chữ HUST', box: HUST_SIGN.plinth },
   { name: 'C9', box: { minX: -85, maxX: -65, minZ: -23, maxZ: -11 } },
   { name: 'Cầu thang C9', box: C9.stairs.box },
@@ -184,18 +184,76 @@ export const BUILDING_COLLIDERS: NamedCollider[] = [
   // Tường rào bao quanh khuôn viên & dọc đường Trần Đại Nghĩa (chừa thông thoáng các cổng)
   { name: 'Tường rào Trần Đại Nghĩa (bắc 1)', box: { minX: 91.85, maxX: 92.35, minZ: -75.2, maxZ: -31.5 } },
   { name: 'Tường rào Trần Đại Nghĩa (bắc 2)', box: { minX: 91.85, maxX: 92.35, minZ: -25.0, maxZ: -17.2 } },
-  { name: 'Tường rào Trần Đại Nghĩa (nam 1)', box: { minX: 91.85, maxX: 92.35, minZ: 0.5, maxZ: 9.5 } },
-  { name: 'Tường rào Trần Đại Nghĩa (nam 2)', box: { minX: 91.85, maxX: 92.35, minZ: 18.5, maxZ: 42.0 } },
+  { name: 'Tường rào Trần Đại Nghĩa (nam 1)', box: { minX: 91.85, maxX: 92.35, minZ: 0.5, maxZ: 4.5 } },
+  { name: 'Tường rào Trần Đại Nghĩa (nam 2)', box: { minX: 91.85, maxX: 92.35, minZ: 13.5, maxZ: 42.0 } },
   { name: 'Tường rào Đại Cồ Việt (tây)', box: { minX: -95.2, maxX: -70.5, minZ: -75.45, maxZ: -74.95 } },
   { name: 'Tường rào Đại Cồ Việt (giữa)', box: { minX: -45.5, maxX: 92.1, minZ: -75.45, maxZ: -74.95 } },
   { name: 'Tường rào Đại Cồ Việt (đông 1)', box: { minX: 98.0, maxX: 120.2, minZ: -75.45, maxZ: -74.95 } },
   { name: 'Tường rào Đại Cồ Việt (đông 2)', box: { minX: 131.8, maxX: 166.0, minZ: -75.45, maxZ: -74.95 } },
   { name: 'Tường rào Giải Phóng (bắc)', box: { minX: -95.45, maxX: -94.95, minZ: -75.2, maxZ: -17.0 } },
   { name: 'Tường rào Parabol (bắc)', box: { minX: -88.25, maxX: -87.75, minZ: -17.0, maxZ: -12.8 } },
-  { name: 'Tường rào Parabol (nam)', box: { minX: -88.25, maxX: -87.75, minZ: 0.8, maxZ: 4.5 } },
+  { name: 'Tường rào Parabol (nam)', box: { minX: -88.25, maxX: -87.75, minZ: 0.8, maxZ: 4.8 } },
+  { name: 'Tường rào cánh Bắc Cổng Parabol', box: { minX: -95.2, maxX: -88.0, minZ: -17.25, maxZ: -16.75 } },
+  { name: 'Tường rào cánh Nam Cổng Parabol', box: { minX: -95.2, maxX: -88.0, minZ: 10.75, maxZ: 11.25 } },
   { name: 'Tường rào Giải Phóng (nam)', box: { minX: -95.45, maxX: -94.95, minZ: 11.0, maxZ: 106.5 } },
   { name: 'Tường rào Lê Thanh Nghị (nam)', box: { minX: -95.2, maxX: 166.0, minZ: 106.25, maxZ: 106.75 } },
   { name: 'Tường rào biên Đông', box: { minX: 165.75, maxX: 166.25, minZ: -75.2, maxZ: 106.5 } },
+
+  // Trụ cổng trường (ĐCV, TQB, Hội Sinh viên)
+  { name: 'Trụ Cổng Đại Cồ Việt (Tây)', box: { minX: -63.98, maxX: -62.42, minZ: -74.28, maxZ: -72.72 } },
+  { name: 'Trụ Cổng Đại Cồ Việt (Đông)', box: { minX: -53.58, maxX: -52.02, minZ: -74.28, maxZ: -72.72 } },
+  { name: 'Trụ Cổng Tạ Quang Bửu (Tây)', box: { minX: 120.95, maxX: 122.05, minZ: -68.55, maxZ: -67.45 } },
+  { name: 'Trụ Cổng Tạ Quang Bửu (Đông)', box: { minX: 129.95, maxX: 131.05, minZ: -68.55, maxZ: -67.45 } },
+  { name: 'Trụ Cổng Hội Sinh viên (Bắc)', box: { minX: 95.42, maxX: 96.18, minZ: -31.18, maxZ: -30.42 } },
+  { name: 'Trụ Cổng Hội Sinh viên (Nam)', box: { minX: 95.42, maxX: 96.18, minZ: -26.58, maxZ: -25.82 } },
+
+  // Cột ngoài cầu nối D7-D9
+  { name: 'Cột cầu nối D7-D9 (Tây)', box: { minX: 51.94, maxX: 52.36, minZ: 60.1, maxZ: 62.3 } },
+  { name: 'Cột cầu nối D7-D9 (Đông)', box: { minX: 59.64, maxX: 60.06, minZ: 60.1, maxZ: 62.3 } },
+
+  // Sân trước Nhà B1 (SoICT): Thảm cỏ bán nguyệt, Nhà xe B1, Ô tô giảng viên & Ghế đá
+  { name: 'Thảm cỏ bán nguyệt sân B1', box: { minX: 111.3, maxX: 119.7, minZ: 4.0, maxZ: 7.6 } },
+  { name: 'Nhà xe Nhà B1 (SoICT)', box: { minX: 100.4, maxX: 105.8, minZ: 1.8, maxZ: 9.2 } },
+  { name: 'Ô tô giảng viên sân B1 (Bắc)', box: { minX: 126.0, maxX: 130.4, minZ: 2.68, maxZ: 4.52 } },
+  { name: 'Ô tô giảng viên sân B1 (Nam)', box: { minX: 126.0, maxX: 130.4, minZ: 6.28, maxZ: 8.12 } },
+  { name: 'Ghế đá sân trước Nhà B1 (Tây)', box: { minX: 106.9, maxX: 108.7, minZ: 10.3, maxZ: 10.9 } },
+  { name: 'Ghế đá sân trước Nhà B1 (Đông)', box: { minX: 122.3, maxX: 124.1, minZ: 10.3, maxZ: 10.9 } },
+
+  // Xe cộ đỗ trong bãi gửi xe C1, C9, D7-D9, D3-D5 & Trạm giao thông công cộng
+  { name: 'Ô tô Bãi xe C1 Tây (1)', box: { minX: -76.42, maxX: -74.58, minZ: -69.4, maxZ: -65.0 } },
+  { name: 'Ô tô Bãi xe C1 Tây (2)', box: { minX: -70.42, maxX: -68.58, minZ: -69.4, maxZ: -65.0 } },
+  { name: 'Ô tô Bãi xe C1 Đông (1)', box: { minX: -47.42, maxX: -45.58, minZ: -69.4, maxZ: -65.0 } },
+  { name: 'Ô tô Bãi xe C1 Đông (2)', box: { minX: -41.42, maxX: -39.58, minZ: -69.4, maxZ: -65.0 } },
+  { name: 'Ô tô Bãi xe C9 (Bắc)', box: { minX: -50.0, maxX: -45.6, minZ: -20.12, maxZ: -18.28 } },
+  { name: 'Ô tô Bãi xe C9 (Nam)', box: { minX: -50.0, maxX: -45.6, minZ: -16.62, maxZ: -14.78 } },
+  { name: 'Chốt bảo vệ giữ xe D7-D9', box: { minX: 32.5, maxX: 33.9, minZ: 53.9, maxZ: 55.3 } },
+  { name: 'Dãy xe máy giữ xe D7-D9 (Bắc)', box: { minX: 34.9, maxX: 45.3, minZ: 52.8, maxZ: 53.78 } },
+  { name: 'Dãy xe máy giữ xe D7-D9 (Nam)', box: { minX: 34.9, maxX: 45.3, minZ: 55.42, maxZ: 56.4 } },
+  { name: 'Giá xe đạp sân D3-D5', box: { minX: 63.9, maxX: 69.1, minZ: 13.6, maxZ: 16.8 } },
+  { name: 'Trạm bảo vệ Nhà xe D3-D5 (Tây)', box: { minX: 80.5, maxX: 81.5, minZ: 2.3, maxZ: 4.5 } },
+  { name: 'Trạm bảo vệ Nhà xe D3-D5 (Đông)', box: { minX: 85.3, maxX: 86.3, minZ: 2.3, maxZ: 4.5 } },
+  { name: 'Trạm xe đạp công cộng TNGo Trần Đại Nghĩa', box: { minX: 93.1, maxX: 94.5, minZ: -23.5, maxZ: -19.2 } },
+  { name: 'Nhà chờ Xe buýt Cổng Parabol', box: { minX: -88.85, maxX: -88.25, minZ: 4.3, maxZ: 9.7 } },
+  { name: 'Nhà chờ Xe buýt Trần Đại Nghĩa', box: { minX: 93.1, maxX: 93.75, minZ: -63.2, maxZ: -59.8 } },
+
+  // Quầy nước, Bảng lưu bút, Ghế đá ngắm sen & Backdrop 70 năm
+  { name: 'Quầy Trà đá & Trà chanh Bách Khoa', box: { minX: -75.05, maxX: -72.95, minZ: 1.65, maxZ: 2.75 } },
+  { name: 'Xe Cà phê Hồ Tiền Bách Khoa', box: { minX: 27.65, maxX: 28.75, minZ: 57.45, maxZ: 59.55 } },
+  { name: 'Bảng Lưu bút Quảng trường C1', box: { minX: -65.98, maxX: -63.62, minZ: -41.68, maxZ: -41.32 } },
+  { name: 'Bảng Lưu bút Bờ Hồ Tiền', box: { minX: 21.62, maxX: 21.98, minZ: 62.82, maxZ: 65.18 } },
+  { name: 'Bảng Lưu bút Thư viện Tạ Quang Bửu', box: { minX: 31.02, maxX: 33.38, minZ: 11.22, maxZ: 11.58 } },
+  { name: 'Ghế đá Ngắm Sen Hồ Tiền', box: { minX: 21.95, maxX: 22.65, minZ: 57.55, maxZ: 59.45 } },
+  { name: 'Backdrop 70 năm Nhà Cựu sinh viên', box: { minX: 6.68, maxX: 9.82, minZ: -0.02, maxZ: 0.92 } },
+
+  // Khán đài & khung thành mở miệng SVĐ Bách Khoa
+  { name: 'Khán đài B SVĐ Bách Khoa (Tây)', box: { minX: 118.1, maxX: 127.5, minZ: 65.8, maxZ: 68.43 } },
+  { name: 'Khán đài B SVĐ Bách Khoa (Đông)', box: { minX: 140.4, maxX: 146.4, minZ: 66.47, maxZ: 68.43 } },
+  { name: 'Khung thành Tây SVĐ (lưới sau)', box: { minX: 116.15, maxX: 116.55, minZ: 77.35, maxZ: 82.65 } },
+  { name: 'Khung thành Tây SVĐ (cạnh Bắc)', box: { minX: 116.15, maxX: 117.65, minZ: 77.35, maxZ: 77.65 } },
+  { name: 'Khung thành Tây SVĐ (cạnh Nam)', box: { minX: 116.15, maxX: 117.65, minZ: 82.35, maxZ: 82.65 } },
+  { name: 'Khung thành Đông SVĐ (lưới sau)', box: { minX: 147.45, maxX: 147.85, minZ: 77.35, maxZ: 82.65 } },
+  { name: 'Khung thành Đông SVĐ (cạnh Bắc)', box: { minX: 146.35, maxX: 147.85, minZ: 77.35, maxZ: 77.65 } },
+  { name: 'Khung thành Đông SVĐ (cạnh Nam)', box: { minX: 146.35, maxX: 147.85, minZ: 82.35, maxZ: 82.65 } },
 ];
 
 /** Collider phòng học (tường/bảng/bàn) — cùng dạng AABB như campus. */
@@ -208,6 +266,8 @@ export const CLASSROOM_COLLIDERS: NamedCollider[] = [
   { name: 'Bàn học 1', box: { minX: -2.8, maxX: -1.6, minZ: 0.3, maxZ: 0.9 } },
   { name: 'Bàn học 2', box: { minX: -0.6, maxX: 0.6, minZ: 0.3, maxZ: 0.9 } },
   { name: 'Bàn học 3', box: { minX: 1.6, maxX: 2.8, minZ: 0.3, maxZ: 0.9 } },
+  { name: 'Tủ sách lớp học', box: { minX: -4.55, maxX: -4.12, minZ: -0.1, maxZ: 1.7 } },
+  { name: 'Giảng viên (NPC)', box: { minX: 1.85, maxX: 2.55, minZ: -2.35, maxZ: -1.65 } },
 ];
 
 /** Collider sảnh tầng 1 Thư viện Tạ Quang Bửu (Đại sảnh thông tầng Stadium Atrium 39m × 26m + Phòng Mượn Sách). */
@@ -234,6 +294,44 @@ export const LIBRARY_LOBBY_COLLIDERS: NamedCollider[] = [
 ];
 
 // Danh sách toàn bộ gốc cây trong khuôn viên (chặn cả người đi bộ lẫn xe máy để không đi xuyên qua thân cây)
+/** Cây bóng mát sân trước Nhà B1 (render trực tiếp trong SoictB1Forecourt — chỉ dùng để tính va chạm thân cây). */
+export const B1_FORECOURT_TREES: Vec2[] = [
+  { x: 101.2, z: -0.8 },
+  { x: 129.8, z: -0.8 },
+];
+
+export type CircleCollider = {
+  x: number;
+  z: number;
+  radius: number;
+  name: string;
+};
+
+/** Hệ thống cột trụ tròn & khối sảnh cong (trượt tiếp tuyến mượt thay vì vuông góc AABB). */
+export const CAMPUS_PILLAR_CIRCLES: CircleCollider[] = [
+  // 6 cột sảnh chính (portico) Thư viện Tạ Quang Bửu
+  { x: 30.6, z: 19.65, radius: 0.34, name: 'Cột sảnh Thư viện' },
+  { x: 34.8, z: 19.65, radius: 0.34, name: 'Cột sảnh Thư viện' },
+  { x: 41.2, z: 19.65, radius: 0.34, name: 'Cột sảnh Thư viện' },
+  { x: 45.4, z: 19.65, radius: 0.34, name: 'Cột sảnh Thư viện' },
+  { x: 30.6, z: 22.8, radius: 0.34, name: 'Cột sảnh Thư viện' },
+  { x: 45.4, z: 22.8, radius: 0.34, name: 'Cột sảnh Thư viện' },
+  // 8 cột hành lang tầng 1 cánh Tây & Đông Thư viện
+  { x: 25.85, z: 29.2, radius: 0.26, name: 'Cột hành lang Thư viện' },
+  { x: 25.85, z: 35.8, radius: 0.26, name: 'Cột hành lang Thư viện' },
+  { x: 25.85, z: 42.4, radius: 0.26, name: 'Cột hành lang Thư viện' },
+  { x: 25.85, z: 49.0, radius: 0.26, name: 'Cột hành lang Thư viện' },
+  { x: 51.75, z: 29.2, radius: 0.26, name: 'Cột hành lang Thư viện' },
+  { x: 51.75, z: 35.8, radius: 0.26, name: 'Cột hành lang Thư viện' },
+  { x: 51.75, z: 42.4, radius: 0.26, name: 'Cột hành lang Thư viện' },
+  { x: 51.75, z: 49.0, radius: 0.26, name: 'Cột hành lang Thư viện' },
+  // 2 cột sảnh Tây Tòa nhà C7
+  { x: 57.9, z: -35.0, radius: 0.24, name: 'Cột sảnh Tây C7' },
+  { x: 57.9, z: -30.6, radius: 0.24, name: 'Cột sảnh Tây C7' },
+  // Khối sảnh tròn (Rotunda) phía Bắc Nhà B1 SoICT
+  { x: 115.5, z: 17.5, radius: 5.2, name: 'Sảnh tròn Nhà B1 (Rotunda)' },
+];
+
 export const TREE_TRUNKS: Vec2[] = [
   ...LOVE_ROAD_TREES,
   ...TDN_MEDIAN_TREES,
@@ -241,6 +339,7 @@ export const TREE_TRUNKS: Vec2[] = [
   ...C1.lipaTrees,
   ...LIBRARY_TREES,
   ...CAMPUS_SHADE_TREES,
+  ...B1_FORECOURT_TREES,
 ];
 
 /** Danh sách NPC đứng/ngồi tĩnh trong sân trường (Minh + các nhóm sinh viên trò chuyện/đọc sách) — không đi xuyên qua người khác. */
@@ -258,8 +357,8 @@ export const NPC_CIRCLES: { pos: Vec2; radius: number; name?: string }[] = [
   { pos: { x: -6.5, z: 2.2 }, radius: 0.42, name: 'Sinh viên (NPC)' },
   { pos: { x: -5.3, z: 2.2 }, radius: 0.42, name: 'Sinh viên (NPC)' },
   // Nhóm 4: 2 sinh viên trước Nhà B1 SoICT
-  { pos: { x: 108.0, z: 3.5 }, radius: 0.42, name: 'Sinh viên (NPC)' },
-  { pos: { x: 109.2, z: 3.5 }, radius: 0.42, name: 'Sinh viên (NPC)' },
+  { pos: { x: 110.0, z: 9.2 }, radius: 0.35, name: 'Sinh viên (NPC)' },
+  { pos: { x: 121.0, z: 9.2 }, radius: 0.35, name: 'Sinh viên (NPC)' },
   // Nhóm 5: 3 sinh viên ngồi đọc sách trên ghế đá ven Hồ Tiền
   { pos: { x: -27.38, z: 34.0 }, radius: 0.45, name: 'Sinh viên (NPC)' },
   { pos: { x: 22.18, z: 24.0 }, radius: 0.45, name: 'Sinh viên (NPC)' },

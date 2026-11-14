@@ -197,6 +197,48 @@ function runDeterministicRaceAndStairChecks() {
   console.log('[PR10B Transition Race] PASS: Deterministic race & stair continuity checks');
 }
 
+async function waitForSettledFloor10Perf(page) {
+  await page.waitForFunction(
+    () =>
+      Boolean(
+        window.__bkhnLibraryPerf &&
+          typeof window.__bkhnLibraryPerf.geometries === 'number' &&
+          window.__bkhnLibraryPerf.floor === 10 &&
+          window.__bkhnLibraryPerf.calls > 100,
+      ),
+    null,
+    { timeout: 20000 },
+  );
+
+  let prev = await page.evaluate(() => ({ ...window.__bkhnLibraryPerf }));
+  let stableCount = 0;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const cur = await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => resolve({ ...window.__bkhnLibraryPerf })),
+          );
+        }),
+    );
+    if (
+      cur.floor === 10 &&
+      cur.calls > 100 &&
+      Math.abs(cur.geometries - prev.geometries) <= 2 &&
+      Math.abs(cur.textures - prev.textures) <= 1
+    ) {
+      stableCount += 1;
+      if (stableCount >= 2) {
+        return cur;
+      }
+    } else {
+      stableCount = 0;
+    }
+    prev = cur;
+  }
+  return prev;
+}
+
 async function runBrowserRaceAndLifecycleSmoke() {
   const pw = loadPlaywright();
   const executablePath = resolveBrowserExecutable();
@@ -248,18 +290,7 @@ async function runBrowserRaceAndLifecycleSmoke() {
         window.__bkhn.navigateLibraryPreset(id);
       }
     }, presetIds);
-    await page.waitForFunction(
-      () =>
-        Boolean(
-          window.__bkhnLibraryPerf &&
-            typeof window.__bkhnLibraryPerf.geometries === 'number' &&
-            window.__bkhnLibraryPerf.floor === 10,
-        ),
-      null,
-      { timeout: 15000 },
-    );
-    await page.waitForTimeout(200);
-    const baselinePerf = await page.evaluate(() => ({ ...window.__bkhnLibraryPerf }));
+    const baselinePerf = await waitForSettledFloor10Perf(page);
 
     // Rapidly cycle through all 11 presets 3 times (33 floor switches) and verify zero geometry/texture growth!
     await page.evaluate((ids) => {
@@ -269,22 +300,12 @@ async function runBrowserRaceAndLifecycleSmoke() {
         }
       }
     }, presetIds);
-    await page.waitForFunction(
-      () =>
-        Boolean(
-          window.__bkhnLibraryPerf &&
-            typeof window.__bkhnLibraryPerf.geometries === 'number' &&
-            window.__bkhnLibraryPerf.floor === 10,
-        ),
-      null,
-      { timeout: 15000 },
-    );
-    await page.waitForTimeout(200);
+    const settledAfterPerf = await waitForSettledFloor10Perf(page);
     const afterCyclesPerf = await page.evaluate(() => ({
-      perf: { ...window.__bkhnLibraryPerf },
       nav: window.__bkhn.getLibraryNavState(),
       diag: window.__bkhn.getLibrarySpatialDiagnostics(),
     }));
+    afterCyclesPerf.perf = settledAfterPerf;
 
     assert.equal(afterCyclesPerf.nav.currentFloor, 10);
     assert.equal(afterCyclesPerf.nav.activePresetId, 'f10-rooftop');

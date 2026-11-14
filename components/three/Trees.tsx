@@ -23,6 +23,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
+  getSharedLeafClusterCutoutTexture,
   makeBarkTexture,
   makeFoliageCanopyTexture,
   makeGraniteStoneTexture,
@@ -54,6 +55,7 @@ let sharedTreeGeos: {
   pitRimGeo: THREE.BufferGeometry;
   pitSoilGeo: THREE.BufferGeometry;
   rootFlareGeo: THREE.BufferGeometry;
+  leafCardGeo: THREE.BufferGeometry;
 } | null = null;
 
 function createOrganicCanopyGeometry(): THREE.BufferGeometry {
@@ -113,7 +115,8 @@ function getSharedTreeGeometries() {
     pitSoilGeo.translate(0, 0.028, 0);
     const rootFlareGeo = new THREE.CylinderGeometry(0.035, 0.14, 0.34, 6);
     rootFlareGeo.translate(0, 0.15, 0);
-    sharedTreeGeos = { canopyGeo, pitRimGeo, pitSoilGeo, rootFlareGeo };
+    const leafCardGeo = new THREE.PlaneGeometry(1, 1);
+    sharedTreeGeos = { canopyGeo, pitRimGeo, pitSoilGeo, rootFlareGeo, leafCardGeo };
   }
   return sharedTreeGeos;
 }
@@ -160,68 +163,131 @@ function leafTones(base: string): [string, string, string] {
 }
 
 type Lobe = { dx: number; dy: number; dz: number; r: number; tone: number; sy: number };
-type Branch = { az: number; tilt: number; len: number; r: number };
+type Branch = { az: number; tilt: number; len: number; r: number; startY: number };
+type LeafCard = {
+  dx: number;
+  dy: number;
+  dz: number;
+  rx: number;
+  ry: number;
+  rz: number;
+  size: number;
+  tone: number;
+};
+
+function clampRadialOffset(dx: number, dz: number, maxReach: number): [number, number] {
+  const dist = Math.hypot(dx, dz);
+  if (dist <= maxReach || dist < 1e-6) return [dx, dz];
+  const scale = maxReach / dist;
+  return [dx * scale, dz * scale];
+}
 
 function buildImprovedSpec(x: number, z: number, trunkH: number, canopyR: number, canopyY: number) {
   const rand = mulberry32(seedFromXZ(x, z));
-  const s = 0.9 + rand() * 0.25; // tỉ lệ tổng thể 0,90-1,15
+  const s = 0.94 + rand() * 0.14; // giới hạn s <= 1.08 để maxVisualR <= 1.15 * canopyR
+  const maxVisualUnscaled = (1.13 * canopyR) / s;
   const rotY = rand() * Math.PI * 2;
-  const trunkTopR = 0.09 + rand() * 0.03;
-  const trunkBotR = 0.17 + rand() * 0.06;
-  const lean = (rand() - 0.5) * 0.1; // nghiêng nhẹ, cây không dựng như cột
-  // Tán: 6 cụm LỆCH HẲN nhau, không còn 1 cầu tròn (đợt r2p-A mục 6).
-  // Khối chính LỆCH TÂM; các khối phụ lệch cao/thấp + lệch ngang ở góc
-  // NGẪU NHIÊN (không chia đều quanh tâm), dẹt/tròn không đều — silhouette
-  // từ xa đọc thành cụm bướu lệch. Bản cũ 5 cụm chia đều góc, dẹt đều
-  // 0,6–0,72, nhìn từ đường tình yêu vẫn đọc như đĩa/cầu xếp chồng.
-  const lobeCount = 6;
+  const trunkTopR = 0.085 + rand() * 0.028;
+  const trunkBotR = 0.17 + rand() * 0.055;
+  const lean = (rand() - 0.5) * 0.08;
+
+  // Tán phân tầng tự nhiên gồm vòm dù trung tâm + 3 nhánh tầng giữa + 3 đỉnh tán vươn sáng
   const lobes: Lobe[] = [];
   const mainA = rand() * Math.PI * 2;
   lobes.push({
-    dx: Math.cos(mainA) * canopyR * 0.3,
-    dy: canopyY + (rand() - 0.5) * canopyR * 0.35,
-    dz: Math.sin(mainA) * canopyR * 0.3,
-    r: canopyR * 0.62,
+    dx: Math.cos(mainA) * canopyR * 0.1,
+    dy: canopyY + canopyR * 0.08,
+    dz: Math.sin(mainA) * canopyR * 0.1,
+    r: canopyR * 0.54,
     tone: 0,
-    sy: 0.72 + rand() * 0.25,
+    sy: 0.58 + rand() * 0.1,
   });
-  for (let k = 1; k < lobeCount; k++) {
-    const a = rand() * Math.PI * 2; // góc ngẫu nhiên, không chia đều
-    const rr = canopyR * (0.32 + rand() * 0.28);
-    const off = canopyR * (0.75 + rand() * 0.4);
+
+  // 3 tầng giữa tỏa ngang gọn bên trong phạm vi tán (không tách rời kiểu kẹo mút)
+  const midPhase = rand() * Math.PI * 2;
+  for (let k = 0; k < 3; k++) {
+    const a = midPhase + (k / 3) * Math.PI * 2 + (rand() - 0.5) * 0.45;
+    const rr = canopyR * (0.36 + rand() * 0.07);
+    const off = canopyR * (0.34 + rand() * 0.14);
+    const [dx, dz] = clampRadialOffset(Math.cos(a) * off, Math.sin(a) * off, Math.max(0.05, maxVisualUnscaled - rr));
     lobes.push({
-      dx: Math.cos(a) * off,
-      dy: canopyY + (rand() - 0.55) * canopyR * 0.9,
-      dz: Math.sin(a) * off,
+      dx,
+      dy: canopyY + (-0.12 + rand() * 0.2) * canopyR,
+      dz,
       r: rr,
-      tone: Math.floor(rand() * 3),
-      sy: 0.55 + rand() * 0.45, // dẹt/tròn không đều
+      tone: (k + Math.floor(rand() * 2)) % 3,
+      sy: 0.52 + rand() * 0.14,
     });
   }
-  // Nhánh: MỘT nhánh cho MỖI cụm tán, NGẮM THẲNG từ ngọn thân tới tâm cụm.
-  // (Đợt 3 tích hợp: 3 nhánh cũ chĩa theo góc cố định ~120°, đầu nhánh
-  // thường hụt tâm cụm 0,6–1,1 m — đo bằng node trên 4 cây mẫu: 4–5/6 cụm
-  // không có nhánh nào chạm tới, tán lơ lửng, nhánh chọc lên khoảng không.
-  // Nay mỗi nhánh đi từ trong thân tới hẳn trong cụm của nó.)
-  // Quy ước hướng (render dùng rotation-y={-az} rồi rotation-z={tilt}):
-  // +Y sau 2 góc xoay = (-sin tilt·cos az, cos tilt, -sin tilt·sin az),
-  // nên với vector ngắm d: tilt = acos(d.y/|d|), az = atan2(-d.z, -d.x).
-  const pivotY = trunkH * 0.92;
-  const branches: Branch[] = lobes.map((l) => {
-    const dx = l.dx;
+
+  // 3 cụm đỉnh tán nhỏ hứng nắng phía trên
+  const topPhase = midPhase + Math.PI / 3;
+  for (let k = 0; k < 3; k++) {
+    const a = topPhase + (k / 3) * Math.PI * 2 + (rand() - 0.5) * 0.4;
+    const rr = canopyR * (0.28 + rand() * 0.06);
+    const off = canopyR * (0.22 + rand() * 0.12);
+    const [dx, dz] = clampRadialOffset(Math.cos(a) * off, Math.sin(a) * off, Math.max(0.05, maxVisualUnscaled - rr));
+    lobes.push({
+      dx,
+      dy: canopyY + (0.22 + rand() * 0.2) * canopyR,
+      dz,
+      r: rr,
+      tone: k === 0 ? 1 : Math.floor(rand() * 3),
+      sy: 0.62 + rand() * 0.12,
+    });
+  }
+
+  // Nhánh chính cắm vào từng tầng tán + cành cấp 2 chẽ nhánh tạo bộ xương tán khi nhìn ngước lên
+  const pivotY = trunkH * 0.9;
+  const branches: Branch[] = [];
+  for (const l of lobes) {
     const dy = l.dy - pivotY;
-    const dz = l.dz;
-    const dist = Math.hypot(dx, dy, dz);
+    const dist = Math.hypot(l.dx, dy, l.dz);
     const tilt = dist > 1e-6 ? Math.acos(Math.min(1, Math.max(-1, dy / dist))) : 0;
-    const az = dist > 1e-6 ? Math.atan2(-dz, -dx) : 0;
-    return {
+    const az = dist > 1e-6 ? Math.atan2(-l.dz, -l.dx) : 0;
+    branches.push({
       az,
       tilt,
-      len: dist * 1.08, // đầu nhánh vượt tâm cụm một chút, nằm hẳn trong tán
-      r: 0.04 + dist * 0.018,
-    };
-  });
-  return { s, rotY, trunkTopR, trunkBotR, lean, pivotY, branches, lobes };
+      len: dist * 0.96,
+      r: 0.036 + dist * 0.016,
+      startY: pivotY,
+    });
+  }
+
+  // 7 thẻ cành lá cắt alphaTest (crossed leaf-sprig cards) ôm rìa vòm tán
+  const leafCards: LeafCard[] = [];
+  const cardPhase = rand() * Math.PI * 2;
+  for (let k = 0; k < 7; k++) {
+    const a = cardPhase + (k / 7) * Math.PI * 2 + (rand() - 0.5) * 0.3;
+    const cardSize = canopyR * (0.62 + rand() * 0.16);
+    const radialReach = Math.max(0.1, maxVisualUnscaled - cardSize * 0.48);
+    const off = Math.min(radialReach, canopyR * (0.44 + rand() * 0.14));
+    const [dx, dz] = clampRadialOffset(Math.cos(a) * off, Math.sin(a) * off, radialReach);
+    const dy = canopyY + (-0.16 + rand() * 0.48) * canopyR;
+    leafCards.push({
+      dx,
+      dy,
+      dz,
+      rx: (rand() - 0.5) * 0.75,
+      ry: a + (k % 2 === 0 ? 0.4 : -0.4),
+      rz: (rand() - 0.5) * 0.55,
+      size: cardSize,
+      tone: k % 3,
+    });
+    if (k < 4) {
+      const twDy = dy - pivotY;
+      const twDist = Math.hypot(dx, twDy, dz);
+      branches.push({
+        az: twDist > 1e-6 ? Math.atan2(-dz, -dx) : 0,
+        tilt: twDist > 1e-6 ? Math.acos(Math.min(1, Math.max(-1, twDy / twDist))) : 0,
+        len: twDist * 0.92,
+        r: 0.02,
+        startY: pivotY + 0.06,
+      });
+    }
+  }
+
+  return { s, rotY, trunkTopR, trunkBotR, lean, branches, lobes, leafCards };
 }
 
 export function ImprovedTree({
@@ -240,6 +306,11 @@ export function ImprovedTree({
   const tones = useMemo(() => leafTones(canopyColor), [canopyColor]);
   const tex = useMemo(() => getSharedTreeTextures(), []);
   const geos = useMemo(() => getSharedTreeGeometries(), []);
+  const isGolden = canopyColor.toLowerCase().startsWith('#e') || canopyColor.toLowerCase().startsWith('#d');
+  const leafCutoutTex = useMemo(
+    () => getSharedLeafClusterCutoutTexture(isGolden ? 'golden' : 'green'),
+    [isGolden],
+  );
   const canopyRef = useRef<THREE.Group>(null!);
   const phase = useMemo(() => (seedFromXZ(x, z) % 1000) * 0.00628, [x, z]);
 
@@ -313,9 +384,9 @@ export function ImprovedTree({
             roughness={0.92}
           />
         </mesh>
-        {/* Nhánh: 1 nhánh/cụm tán, ngắm thẳng từ ngọn thân tới tâm cụm. */}
+        {/* Nhánh chính & cành con chẽ lên các tầng tán. */}
         {spec.branches.map((b, i) => (
-          <group key={`br-${i}`} position={[0, spec.pivotY, 0]} rotation-y={-b.az}>
+          <group key={`br-${i}`} position={[0, b.startY, 0]} rotation-y={-b.az}>
             <group rotation-z={b.tilt}>
               <mesh position={[0, b.len / 2, 0]} castShadow>
                 <cylinderGeometry args={[b.r * 0.55, b.r, b.len, 6]} />
@@ -330,7 +401,7 @@ export function ImprovedTree({
             </group>
           </group>
         ))}
-        {/* Tán nhiều cụm hữu cơ nổi bướu tự nhiên (bỏ hình cầu trơn), 3 sắc xanh + đung đưa nhẹ theo gió. */}
+        {/* Tán dù phân tầng gọn (maxVisualR <= 1.15 * canopyR) + thẻ lá cắt alphaTest + đung đưa nhẹ theo gió. */}
         <group ref={canopyRef}>
           {spec.lobes.map((l, i) => (
             <mesh
@@ -350,6 +421,28 @@ export function ImprovedTree({
                 roughness={0.86}
               />
             </mesh>
+          ))}
+          {spec.leafCards.map((lc, i) => (
+            <group key={`card-${i}`} position={[lc.dx, lc.dy, lc.dz]} rotation={[lc.rx, lc.ry, lc.rz]}>
+              <mesh geometry={geos.leafCardGeo} scale={[lc.size, lc.size, 1]}>
+                <meshStandardMaterial
+                  color={tones[lc.tone]}
+                  map={leafCutoutTex}
+                  alphaTest={0.42}
+                  side={THREE.DoubleSide}
+                  roughness={0.84}
+                />
+              </mesh>
+              <mesh geometry={geos.leafCardGeo} rotation-y={Math.PI * 0.48} scale={[lc.size, lc.size, 1]}>
+                <meshStandardMaterial
+                  color={tones[(lc.tone + 1) % 3]}
+                  map={leafCutoutTex}
+                  alphaTest={0.42}
+                  side={THREE.DoubleSide}
+                  roughness={0.84}
+                />
+              </mesh>
+            </group>
           ))}
         </group>
       </group>
@@ -371,27 +464,31 @@ type DroopArm = {
 
 function buildDroopingSpec(x: number, z: number, trunkH: number, canopyR: number, canopyY: number) {
   const rand = mulberry32(seedFromXZ(x, z) ^ 0x9e3779b9);
-  const s = 0.9 + rand() * 0.25;
+  const s = 0.94 + rand() * 0.14;
+  const maxVisualUnscaled = (1.13 * canopyR) / s;
   const rotY = rand() * Math.PI * 2;
   const arms: DroopArm[] = Array.from({ length: 7 }, (_, k) => {
     const leafCount = 2 + Math.floor(rand() * 2);
+    const len1 = Math.min(maxVisualUnscaled * 0.56, canopyR * (0.44 + rand() * 0.16));
+    const len2 = canopyR * (0.48 + rand() * 0.28);
     return {
-      az: (k / 7) * Math.PI * 2 + rand() * 0.5,
-      tilt1: 0.5 + rand() * 0.35, // vươn ra ngoài
-      len1: canopyR * (0.5 + rand() * 0.25),
-      len2: canopyR * (0.55 + rand() * 0.4), // đoạn rủ xuống, dài hơn
+      az: (k / 7) * Math.PI * 2 + rand() * 0.45,
+      tilt1: 0.45 + rand() * 0.25,
+      len1,
+      len2,
       leafs: Array.from({ length: leafCount }, (_, j) => ({
-        t: 0.35 + (j / Math.max(leafCount - 1, 1)) * 0.6,
-        r: canopyR * (0.16 + rand() * 0.1),
+        t: 0.32 + (j / Math.max(leafCount - 1, 1)) * 0.62,
+        r: canopyR * (0.34 + rand() * 0.1),
         tone: Math.floor(rand() * 3),
       })),
     };
   });
-  // Tán trên: 3 cụm lệch (quả chính + 2 phụ), dẹt.
+  const [l1x, l1z] = clampRadialOffset(canopyR * 0.32, canopyR * 0.16, maxVisualUnscaled - canopyR * 0.44);
+  const [l2x, l2z] = clampRadialOffset(-canopyR * 0.3, -canopyR * 0.22, maxVisualUnscaled - canopyR * 0.4);
   const lobes: Lobe[] = [
-    { dx: 0, dy: canopyY, dz: 0, r: canopyR * 0.7, tone: 0, sy: 0.6 },
-    { dx: canopyR * 0.45, dy: canopyY + canopyR * 0.22, dz: canopyR * 0.2, r: canopyR * 0.5, tone: 1, sy: 0.6 },
-    { dx: -canopyR * 0.4, dy: canopyY + canopyR * 0.1, dz: -canopyR * 0.3, r: canopyR * 0.45, tone: 2, sy: 0.6 },
+    { dx: 0, dy: canopyY + 0.1, dz: 0, r: canopyR * 0.58, tone: 0, sy: 0.58 },
+    { dx: l1x, dy: canopyY + canopyR * 0.18, dz: l1z, r: canopyR * 0.44, tone: 1, sy: 0.58 },
+    { dx: l2x, dy: canopyY + canopyR * 0.08, dz: l2z, r: canopyR * 0.4, tone: 2, sy: 0.6 },
   ];
   return { s, rotY, trunkH, arms, lobes };
 }
@@ -411,10 +508,11 @@ export function DroopingTree({
   const tones = useMemo(() => leafTones(canopyColor), [canopyColor]);
   const tex = useMemo(() => getSharedTreeTextures(), []);
   const geos = useMemo(() => getSharedTreeGeometries(), []);
+  const willowCutoutTex = useMemo(() => getSharedLeafClusterCutoutTexture('willow'), []);
   return (
     <group position={[x, 0, z]} rotation-y={spec.rotY} scale={spec.s}>
       <mesh rotation-x={-Math.PI / 2} position={[0, 0.038 / spec.s, 0]}>
-        <planeGeometry args={[canopyR * 2.2, canopyR * 2.2]} />
+        <planeGeometry args={[canopyR * 2.1, canopyR * 2.1]} />
         <meshBasicMaterial map={tex.shadow} transparent opacity={0.38} depthWrite={false} />
       </mesh>
       {[0, 1, 2, 3].map((ri) => (
@@ -445,7 +543,7 @@ export function DroopingTree({
           roughness={0.92}
         />
       </mesh>
-      {/* Tán trên 3 cụm lệch hữu cơ. */}
+      {/* Tán trên 3 tầng vòm hữu cơ gọn (maxVisualR <= 1.15 * canopyR). */}
       {spec.lobes.map((l, i) => (
         <mesh
           key={`top-${i}`}
@@ -464,36 +562,48 @@ export function DroopingTree({
           />
         </mesh>
       ))}
-      {/* Cành rủ cong: đoạn 1 chéo ra, đoạn 2 gập xuống + cụm lá dọc đoạn 2. */}
+      {/* Cành rủ cong: chùm thẻ lá liễu alphaTest buông dọc nhánh thay cho khối cầu tròn. */}
       {spec.arms.map((a, i) => (
-        <group key={`arm-${i}`} position={[0, canopyY + 0.2, 0]} rotation-y={-a.az}>
+        <group key={`arm-${i}`} position={[0, canopyY + 0.15, 0]} rotation-y={-a.az}>
           <group rotation-z={a.tilt1}>
             <mesh position={[0, a.len1 / 2, 0]} castShadow>
-              <cylinderGeometry args={[0.03, 0.05, a.len1, 5]} />
+              <cylinderGeometry args={[0.028, 0.048, a.len1, 5]} />
               <meshStandardMaterial color={TRUNK} roughness={0.92} />
             </mesh>
-            {/* Khớp cong: đoạn 2 gập thêm ~65° so với đoạn 1 (rủ xuống). */}
             <group position={[0, a.len1, 0]} rotation-z={1.15}>
               <mesh position={[0, a.len2 / 2, 0]} castShadow>
-                <cylinderGeometry args={[0.012, 0.03, a.len2, 5]} />
+                <cylinderGeometry args={[0.012, 0.028, a.len2, 5]} />
                 <meshStandardMaterial color={TRUNK} roughness={0.92} />
               </mesh>
               {a.leafs.map((lf, j) => (
-                <mesh
+                <group
                   key={`lf-${j}`}
                   position={[0, lf.t * a.len2, 0]}
-                  scale={[1, 0.7, 1]}
-                  castShadow
+                  rotation={[0, j * 1.1, -(a.tilt1 + 1.15)]}
                 >
-                  <sphereGeometry args={[lf.r, 10, 8]} />
-                  <meshStandardMaterial
-                    color={tones[lf.tone]}
-                    map={tex.foliage.map}
-                    bumpMap={tex.foliage.bumpMap}
-                    bumpScale={0.025}
-                    roughness={0.86}
-                  />
-                </mesh>
+                  <mesh geometry={geos.leafCardGeo} scale={[lf.r * 1.65, lf.r * 1.9, 1]}>
+                    <meshStandardMaterial
+                      color={tones[lf.tone]}
+                      map={willowCutoutTex}
+                      alphaTest={0.38}
+                      side={THREE.DoubleSide}
+                      roughness={0.84}
+                    />
+                  </mesh>
+                  <mesh
+                    geometry={geos.leafCardGeo}
+                    rotation-y={Math.PI * 0.5}
+                    scale={[lf.r * 1.65, lf.r * 1.9, 1]}
+                  >
+                    <meshStandardMaterial
+                      color={tones[(lf.tone + 1) % 3]}
+                      map={willowCutoutTex}
+                      alphaTest={0.38}
+                      side={THREE.DoubleSide}
+                      roughness={0.84}
+                    />
+                  </mesh>
+                </group>
               ))}
             </group>
           </group>

@@ -8,11 +8,15 @@
 import * as THREE from 'three';
 import { buildRoom401, type Room401Controller } from './buildRoom401';
 import {
+  LIBRARY_VN_FONT,
   canvasTex,
   lin,
+  makeBookSpineRowTex,
   makeLibraryStuccoWallTex,
   makeLibraryUpholsteryTex,
   makeLibraryWoodGrainTex,
+  makeMonitorScreenTex,
+  makeVendingFrontTex,
   mulberry32,
   optimizeStaticLibraryGroup,
 } from './procedural-helpers';
@@ -604,6 +608,62 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     metalness: 0.12,
   });
 
+  const spineTexA = makeBookSpineRowTex(1001, 2, 1);
+  const spineTexB = makeBookSpineRowTex(2002, 2, 1);
+  const spineTexStack = makeBookSpineRowTex(3003, 1, 1);
+  const scrOpacTex = makeMonitorScreenTex('opac');
+  const scrAdminTex = makeMonitorScreenTex('admin');
+  const scrKioskTex = makeMonitorScreenTex('kiosk');
+  const vendTex = makeVendingFrontTex();
+
+  const M_SPINE_A = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: spineTexA.map,
+    roughness: 0.62,
+  });
+  const M_SPINE_B = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: spineTexB.map,
+    roughness: 0.62,
+  });
+  const M_SPINE_STACK = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: spineTexStack.map,
+    roughness: 0.62,
+  });
+  const M_SCR_OPAC = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: scrOpacTex.map,
+    emissiveMap: scrOpacTex.map,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.42,
+    roughness: 0.25,
+  });
+  const M_SCR_ADMIN = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: scrAdminTex.map,
+    emissiveMap: scrAdminTex.map,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.4,
+    roughness: 0.25,
+  });
+  const M_SCR_KIOSK = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: scrKioskTex.map,
+    emissiveMap: scrKioskTex.map,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.45,
+    roughness: 0.24,
+  });
+  const M_VEND_FRONT = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: vendTex.map,
+    emissiveMap: vendTex.map,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.24,
+    roughness: 0.3,
+  });
+
   const tileTex = (bg: string, gr: string, a: string, b: string, rep: number) =>
     canvasTex(
       256,
@@ -1025,10 +1085,10 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
           ct.lineWidth = 6;
           ct.strokeRect(5, 5, 502, 102);
           ct.fillStyle = '#fff';
-          ct.font = 'bold 34px Segoe UI,sans-serif';
+          ct.font = `700 32px ${LIBRARY_VN_FONT}`;
           ct.textAlign = 'center';
           ct.textBaseline = 'middle';
-          ct.fillText(lbl, 256, 56);
+          ct.fillText(lbl.normalize('NFC'), 256, 56);
         });
         box(Math.min(w * 0.9, 2.3), 0.42, 0.05, new THREE.MeshBasicMaterial({ map: tx }), 0, dh + 0.34, t / 2 + 0.03, 0, 0, 0, fg);
       }
@@ -1103,9 +1163,9 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
             c.lineWidth = 6;
             c.strokeRect(4, 4, 504, 88);
             c.fillStyle = '#fff5d6';
-            c.font = 'bold 34px Segoe UI,sans-serif';
+            c.font = `700 32px ${LIBRARY_VN_FONT}`;
             c.textAlign = 'center';
-            c.fillText('THƯ VIỆN TẠ QUANG BỬU', 256, 58);
+            c.fillText('THƯ VIỆN TẠ QUANG BỬU'.normalize('NFC'), 256, 58);
           }),
         }), 0, 3.68, ZF - 0.18);
       } else {
@@ -1264,9 +1324,9 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       c.fillStyle = '#1e293b';
       c.fillRect(0, 0, 512, 80);
       c.fillStyle = '#fbbf24';
-      c.font = 'bold 30px Segoe UI,sans-serif';
+      c.font = `700 28px ${LIBRARY_VN_FONT}`;
       c.textAlign = 'center';
-      c.fillText('THANG MÁY · TẦNG 1 - 10', 256, 50);
+      c.fillText('THANG MÁY · TẦNG 1 - 10'.normalize('NFC'), 256, 50);
     }),
   }), EX - 0.12, 3.25, 0, 0, -Math.PI / 2);
 
@@ -1349,26 +1409,36 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     pBox(0.05, h, d, M_WOOD_D, -w / 2, h / 2, 0);
     pBox(0.05, h, d, M_WOOD_D, w / 2, h / 2, 0);
     pBox(0.04, h, d - 0.02, M_WOOD_D, 0, h / 2, 0);
-    const rng = mulberry32(77);
+    pBox(w - 0.04, 0.07, d - 0.03, M_WOOD_D, 0, 0.035, 0);
     for (let l = 0; l <= 5; l++) {
       const sy = 0.1 + l * ((h - 0.18) / 5);
       pBox(w, 0.035, d, M_WOOD_D, 0, sy, 0);
       if (l < 5) {
         for (const side of [-1, 1]) {
-          const bw = w / 2 - 0.12;
+          const bw = w / 2 - 0.14;
           const bh = 0.24 + (l % 2) * 0.04;
-          pBox(bw, bh, 0.23, mat(BOOK_PAL[Math.floor(rng() * BOOK_PAL.length)], 0.55), side * (w / 4), sy + 0.02 + bh / 2, 0.02);
+          const bx = side * (w / 4);
+          const mSpine = (l + (side > 0 ? 1 : 0)) % 2 === 0 ? M_SPINE_A : M_SPINE_B;
+          pBox(bw, bh, 0.23, mSpine, bx, sy + 0.02 + bh / 2, 0.015);
+          pBox(0.018, 0.15, 0.19, M_DRK, bx + side * (bw / 2 + 0.012), sy + 0.095, 0.02);
         }
       }
     }
   });
   defineProp('plant', () => {
-    pCyl(0.26, 0.2, 0.46, 10, M_POT, 0, 0.23, 0);
-    pCyl(0.035, 0.05, 0.65, 6, M_WOOD_D, 0, 0.62, 0);
-    const sph = (gCache.sph1 ??= new THREE.SphereGeometry(0.36, 9, 7));
-    pMesh(sph, M_LEAF, 0, 1.05, 0);
-    pMesh(sph, M_LEAF, 0.16, 0.9, 0.1, 0, 0, 0, 0.72, 0.72, 0.72);
-    pMesh(sph, M_LEAF, -0.15, 0.92, -0.1, 0, 0, 0, 0.72, 0.72, 0.72);
+    pCyl(0.26, 0.2, 0.44, 12, M_POT, 0, 0.22, 0);
+    pCyl(0.275, 0.262, 0.045, 12, M_BRZ, 0, 0.435, 0);
+    pCyl(0.235, 0.235, 0.02, 10, M_WOOD_D, 0, 0.445, 0);
+    // Thân phân nhánh & tán lá tầng dẹt bất đối xứng (tránh khối cầu lollipop)
+    pCyl(0.024, 0.034, 0.52, 6, M_WOOD_D, 0, 0.68, 0, -0.05, 0, -0.06);
+    pCyl(0.018, 0.026, 0.44, 6, M_WOOD_D, -0.05, 0.64, 0.04, 0.14, 0, 0.24);
+    pCyl(0.018, 0.026, 0.44, 6, M_WOOD_D, 0.06, 0.65, -0.04, -0.14, 0, -0.24);
+    const leafGeo = (gCache.leafCluster ??= new THREE.IcosahedronGeometry(0.175, 1));
+    pMesh(leafGeo, M_LEAF, 0, 1.06, 0, 0.08, 0.3, 0, 1.08, 0.48, 1.08);
+    pMesh(leafGeo, M_LEAF, -0.08, 0.9, 0.06, 0.16, 1.1, 0.18, 0.92, 0.46, 0.92);
+    pMesh(leafGeo, M_LEAF, 0.08, 0.92, -0.06, -0.14, 2.0, -0.16, 0.9, 0.46, 0.9);
+    pMesh(leafGeo, M_LEAF, -0.05, 0.78, -0.07, -0.12, 0.7, 0.1, 0.82, 0.42, 0.82);
+    pMesh(leafGeo, M_LEAF, 0.05, 0.8, 0.07, 0.12, 1.8, -0.12, 0.82, 0.42, 0.82);
   });
   defineProp('gate', () => {
     pBox(0.09, 1.08, 0.72, M_CHR, 0, 0.54, 0);
@@ -1382,18 +1452,21 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     c.lineWidth = 6;
     c.strokeRect(8, 8, 240, 624);
     c.fillStyle = '#fef3c7';
-    c.font = 'bold 34px Segoe UI,sans-serif';
+    c.font = `700 32px ${LIBRARY_VN_FONT}`;
     c.textAlign = 'center';
     c.fillText('HUST', 128, 70);
-    c.font = 'bold 20px Segoe UI,sans-serif';
+    c.font = `700 18px ${LIBRARY_VN_FONT}`;
     c.fillStyle = '#fff';
     ['THƯ VIỆN', 'TẠ QUANG BỬU', '───────', 'T1 · Sảnh & Mượn', 'T2-3 · Tự học', 'T4 · Phòng đọc', 'T5 · Học nhóm', 'T6-7 · Sáng tạo', 'T10 · Sân thượng'].forEach((t, i) =>
-      c.fillText(t, 128, 130 + i * 50),
+      c.fillText(t.normalize('NFC'), 128, 130 + i * 50),
     );
   });
   defineProp('pylon', () => {
     pBox(0.68, 2.25, 0.16, new THREE.MeshBasicMaterial({ map: pyTx }), 0, 1.2, 0);
     pBox(0.82, 0.12, 0.34, M_DRK, 0, 0.06, 0);
+    pBox(0.72, 0.05, 0.22, M_GOLD, 0, 2.34, 0);
+    pBox(0.03, 2.24, 0.18, M_CHR, -0.355, 1.2, 0);
+    pBox(0.03, 2.24, 0.18, M_CHR, 0.355, 1.2, 0);
   });
 
   // Chi tiết Sảnh tầng 1 xung quanh khu vực trung tâm
@@ -1409,8 +1482,11 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     const top = new THREE.CylinderGeometry(2.74, 2.74, 0.07, 32, 1, false, -Math.PI * 0.43, Math.PI * 0.86);
     mk(top, M_TRIM, 0, 1.07, 0, 0, Math.PI / 2, 0, dg);
     for (const x of [-0.9, 0.9]) {
-      box(0.46, 0.3, 0.04, M_DRK, x, 1.26, -2.2, 0, 0, 0, dg);
-      box(0.42, 0.25, 0.045, M_SCR, x, 1.26, -2.18, 0, 0, 0, dg);
+      box(0.18, 0.022, 0.14, M_DRK, x, 1.11, -2.2, 0, 0, 0, dg);
+      box(0.036, 0.13, 0.036, M_CHR, x, 1.18, -2.21, 0, 0, 0, dg);
+      box(0.46, 0.3, 0.036, M_DRK, x, 1.28, -2.2, 0, 0, 0, dg);
+      box(0.42, 0.25, 0.016, M_SCR_ADMIN, x, 1.28, -2.172, 0, 0, 0, dg);
+      box(0.32, 0.016, 0.11, M_DRK, x, 1.112, -2.02, 0, 0, 0, dg);
     }
     place('chairR', -0.9, 0, 7.85, 0);
     place('chairR', 0.9, 0, 7.85, 0);
@@ -1457,12 +1533,12 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       c.lineWidth = 5;
       c.strokeRect(6, 6, 500, 148);
       c.fillStyle = '#fde68a';
-      c.font = 'bold 28px Georgia,serif';
+      c.font = `700 26px ${LIBRARY_VN_FONT}`;
       c.textAlign = 'center';
-      c.fillText('GIÁO SƯ TẠ QUANG BỬU', 256, 58);
-      c.font = '20px Segoe UI,sans-serif';
+      c.fillText('GIÁO SƯ TẠ QUANG BỬU'.normalize('NFC'), 256, 58);
+      c.font = `600 19px ${LIBRARY_VN_FONT}`;
       c.fillStyle = '#f5e6c8';
-      c.fillText('1910 – 1986 · Hiệu trưởng đầu tiên ĐHBK Hà Nội', 256, 108);
+      c.fillText('1910 – 1986 · Hiệu trưởng đầu tiên ĐHBK Hà Nội'.normalize('NFC'), 256, 108);
     });
     box(3.4, 0.9, 0.05, new THREE.MeshBasicMaterial({ map: tx }), 0, 3.35, 0.22, 0, 0, 0, sg);
   }
@@ -1473,46 +1549,69 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     box(1.1, 0.06, 2.6, M_WOOD_L, 0, 0.95, 0, 0, 0, 0, og);
     box(0.95, 0.92, 2.4, M_WOOD_D, 0, 0.46, 0, 0, 0, 0, og);
     for (const dz of [-0.8, 0, 0.8]) {
-      box(0.38, 0.26, 0.03, M_DRK, 0.1, 1.15, dz, 0, Math.PI / 2, 0, og);
-      box(0.34, 0.22, 0.035, M_SCR, 0.11, 1.15, dz, 0, Math.PI / 2, 0, og);
+      box(0.14, 0.018, 0.18, M_DRK, 0.09, 0.988, dz, 0, 0, 0, og);
+      box(0.036, 0.16, 0.04, M_CHR, 0.075, 1.06, dz, 0, 0, 0, og);
+      box(0.38, 0.26, 0.03, M_DRK, 0.1, 1.18, dz, 0, Math.PI / 2, 0, og);
+      box(0.34, 0.22, 0.016, M_SCR_OPAC, 0.122, 1.18, dz, 0, Math.PI / 2, 0, og);
       box(0.28, 0.02, 0.14, M_DRK, 0.32, 0.99, dz, 0, Math.PI / 2, 0, og);
+      box(0.09, 0.015, 0.06, M_DRK, 0.32, 0.99, dz + 0.2, 0, 0, 0, og);
     }
   }
   {
     const kg = G(world, -16.1, 0, -9.2, Math.PI / 6);
     box(0.7, 0.08, 0.6, M_DRK, 0, 0.04, 0, 0, 0, 0, kg);
     box(0.55, 1.65, 0.12, M_CHAR, 0, 0.9, 0, -0.12, 0, 0, kg);
-    box(0.46, 0.78, 0.02, M_SCR, 0, 1.12, 0.06, -0.12, 0, 0, kg);
+    box(0.58, 0.06, 0.14, M_CHR, 0, 1.72, -0.1, -0.12, 0, 0, kg);
+    box(0.46, 0.78, 0.02, M_SCR_KIOSK, 0, 1.12, 0.065, -0.12, 0, 0, kg);
+    box(0.16, 0.04, 0.18, M_DRK, 0, 0.64, 0.12, -0.12, 0, 0, kg);
   }
   for (const dx of [-14.6, -10.6]) {
     const cg = G(world, dx, 0, -11.9);
     box(2.2, 0.85, 0.9, M_WOOD_D, 0, 0.425, 0, 0, 0, 0, cg);
     box(2.14, 0.55, 0.84, M_GLS, 0, 1.12, 0, 0, 0, 0, cg);
+    box(2.08, 0.02, 0.78, M_GLS, 0, 1.14, 0, 0, 0, 0, cg);
+    for (const mx of [-1.06, 1.06]) {
+      for (const mz of [-0.41, 0.41]) {
+        box(0.035, 0.57, 0.035, M_WOOD_D, mx, 1.13, mz, 0, 0, 0, cg);
+      }
+    }
     box(2.2, 0.05, 0.9, M_WOOD_D, 0, 1.42, 0, 0, 0, 0, cg);
+    box(0.95, 0.12, 0.025, M_GOLD, 0, 0.66, 0.46, 0, 0, 0, cg);
     for (const bxX of [-0.65, 0, 0.65]) {
       box(0.38, 0.05, 0.28, M_HUST, bxX, 0.9, 0, -0.25, 0.15, 0, cg);
       box(0.34, 0.04, 0.24, M_GOLD, bxX, 0.94, 0.02, -0.25, -0.1, 0, cg);
+      box(0.3, 0.04, 0.22, M_WOOD_L, bxX, 1.2, 0, -0.2, 0.08, 0, cg);
     }
   }
   {
     const mg = G(world, -6.8, 0, -11.9);
     box(1.8, 1.55, 0.45, M_WOOD_M, 0, 0.775, 0, 0, 0, 0, mg);
+    box(0.05, 1.58, 0.52, M_WOOD_D, -0.9, 0.79, 0.02, 0, 0, 0, mg);
+    box(0.05, 1.58, 0.52, M_WOOD_D, 0.9, 0.79, 0.02, 0, 0, 0, mg);
+    box(1.86, 0.06, 0.52, M_WOOD_D, 0, 1.57, 0.02, 0, 0, 0, mg);
     for (let r = 0; r < 3; r++) {
+      box(1.74, 0.035, 0.12, M_WOOD_L, 0, 0.27 + r * 0.42, 0.25, 0.12, 0, 0, mg);
       for (let c = 0; c < 5; c++) {
-        box(0.24, 0.32, 0.03, mat(BOOK_PAL[(r * 5 + c) % BOOK_PAL.length], 0.5), -0.6 + c * 0.3, 0.42 + r * 0.42, 0.22, -0.2, 0, 0, mg);
+        box(0.24, 0.32, 0.03, mat(BOOK_PAL[(r * 5 + c) % BOOK_PAL.length], 0.5), -0.6 + c * 0.3, 0.42 + r * 0.42, 0.23, -0.2, 0, 0, mg);
       }
     }
   }
   for (let i = 0; i < 2; i++) {
     const wg = G(world, 11.8 + i * 0.7, 0, -11.9);
     box(0.42, 1.15, 0.42, M_CHR, 0, 0.575, 0, 0, 0, 0, wg);
-    cyl(0.16, 0.16, 0.42, 12, M_GLS, 0, 1.36, 0, 0, 0, 0, wg);
+    box(0.3, 0.22, 0.06, M_DRK, 0, 0.84, 0.19, 0, 0, 0, wg);
+    box(0.32, 0.025, 0.09, M_STL, 0, 0.72, 0.22, 0, 0, 0, wg);
+    box(0.03, 0.05, 0.04, M_HUST, -0.07, 0.91, 0.2, 0, 0, 0, wg);
+    box(0.03, 0.05, 0.04, M_SCR, 0.07, 0.91, 0.2, 0, 0, 0, wg);
+    cyl(0.07, 0.16, 0.14, 12, M_GLS, 0, 1.22, 0, 0, 0, 0, wg);
+    cyl(0.16, 0.16, 0.42, 12, M_GLS, 0, 1.46, 0, 0, 0, 0, wg);
   }
   {
     const vg = G(world, 14.3, 0, -11.9);
     box(1.15, 1.95, 0.85, M_HUST, 0, 0.975, 0, 0, 0, 0, vg);
-    box(0.78, 1.25, 0.04, M_GLS, -0.1, 1.12, 0.43, 0, 0, 0, vg);
-    box(0.72, 1.18, 0.02, M_LGT, -0.1, 1.12, 0.38, 0, 0, 0, vg);
+    box(1.18, 0.06, 0.88, M_DRK, 0, 1.95, 0, 0, 0, 0, vg);
+    box(0.96, 1.72, 0.03, M_VEND_FRONT, 0, 0.98, 0.435, 0, 0, 0, vg);
+    box(0.68, 0.22, 0.05, M_DRK, -0.1, 0.34, 0.44, 0, 0, 0, vg);
   }
 
   // Phòng Mượn Sách (Book-Lending Room) bên tường Tây tầng 1
@@ -1542,8 +1641,11 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
     for (const dz of [-1.0, 0, 1.0]) {
       box(0.06, 0.72, 0.06, M_CHR, cX + 0.34, 1.44, cZ + dz);
       if (dz !== 0) {
-        box(0.05, 0.32, 0.46, M_DRK, cX - 0.08, 1.26, cZ + dz);
-        box(0.055, 0.27, 0.41, M_SCR, cX - 0.05, 1.26, cZ + dz);
+        box(0.16, 0.02, 0.18, M_DRK, cX - 0.08, 1.112, cZ + dz);
+        box(0.036, 0.13, 0.04, M_CHR, cX - 0.06, 1.18, cZ + dz);
+        box(0.04, 0.32, 0.46, M_DRK, cX - 0.08, 1.28, cZ + dz);
+        box(0.064, 0.27, 0.41, M_SCR_ADMIN, cX - 0.08, 1.28, cZ + dz);
+        box(0.12, 0.016, 0.3, M_DRK, cX - 0.27, 1.112, cZ + dz);
         place('chairR', cX - 0.85, 0, cZ + dz, Math.PI / 2);
       }
     }
@@ -1659,7 +1761,8 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
       pBox(w, h, 0.05, M_WOOD_D, 0, h / 2, d / 2);
       pBox(0.03, h - 0.06, d - 0.1, M_WOOD_M, 0, h / 2, 0);
       pBox(w + 0.03, 0.05, d, M_WOOD_D, 0, h + 0.02, 0);
-      const rng = mulberry32(419);
+      pBox(0.36, 0.22, 0.02, M_TRIM, 0, 1.58, -d / 2 - 0.035);
+      pBox(0.36, 0.22, 0.02, M_TRIM, 0, 1.58, d / 2 + 0.035);
       for (let lv = 0; lv < 5; lv++) {
         const sy = 0.16 + lv * 0.42;
         pBox(w - 0.02, 0.03, d - 0.1, M_WOOD_L, 0, sy, 0);
@@ -1667,7 +1770,7 @@ export function buildFloors1To5(world: THREE.Group): Floors1To5Controller {
           for (let b = 0; b < 6; b++) {
             const bz = -d / 2 + 0.5 + b * 0.82;
             const bh = 0.22 + (lv % 2) * 0.04;
-            pBox(0.22, bh, 0.68, mat(BOOK_PAL[Math.floor(rng() * BOOK_PAL.length)], 0.6), s * 0.17, sy + 0.02 + bh / 2, bz);
+            pBox(0.22, bh, 0.68, M_SPINE_STACK, s * 0.17, sy + 0.02 + bh / 2, bz);
           }
         }
       }
