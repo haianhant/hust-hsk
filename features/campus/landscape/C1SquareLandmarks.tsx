@@ -453,22 +453,173 @@ export function WhiteRock() {
   );
 }
 
+function createWaterStreamTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 64;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = 'rgba(224, 247, 255, 0.52)';
+    ctx.fillRect(0, 0, 256, 64);
+    for (let i = 0; i < 18; i++) {
+      const sx = (i * 37) % 256;
+      const sy = (i * 19) % 56;
+      const len = 28 + (i % 4) * 14;
+      const g = ctx.createLinearGradient(sx, 0, sx + len, 0);
+      g.addColorStop(0, 'rgba(255, 255, 255, 0)');
+      g.addColorStop(0.5, 'rgba(255, 255, 255, 0.92)');
+      g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(sx, sy, len, 4 + (i % 3));
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 1);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function createFountainBasinWaterTexture(): {
+  map: THREE.CanvasTexture;
+  bumpMap: THREE.CanvasTexture;
+} {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+
+  const bc = document.createElement('canvas');
+  bc.width = 256;
+  bc.height = 256;
+  const bctx = bc.getContext('2d');
+
+  if (ctx && bctx) {
+    ctx.fillStyle = '#E6FAFF';
+    ctx.fillRect(0, 0, 256, 256);
+    bctx.fillStyle = '#808080';
+    bctx.fillRect(0, 0, 256, 256);
+
+    for (let i = 0; i < 42; i++) {
+      const x = ((i * 61) % 256);
+      const y = ((i * 97) % 256);
+      const r = 14 + (i % 5) * 8;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      bctx.strokeStyle = i % 2 === 0 ? '#A8A8A8' : '#5E5E5E';
+      bctx.lineWidth = 3;
+      bctx.beginPath();
+      bctx.arc(x, y, r, 0, Math.PI * 2);
+      bctx.stroke();
+    }
+  }
+
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = THREE.RepeatWrapping;
+  map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(3, 2);
+  map.needsUpdate = true;
+
+  const bumpMap = new THREE.CanvasTexture(bc);
+  bumpMap.wrapS = THREE.RepeatWrapping;
+  bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.repeat.set(3, 2);
+  bumpMap.needsUpdate = true;
+
+  return { map, bumpMap };
+}
+
 export function C1Fountain({ isNight = false }: { isNight?: boolean }) {
   const centerPlumeRef = useRef<THREE.Group>(null!);
   const outerRingRef = useRef<THREE.Group>(null!);
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    if (centerPlumeRef.current) {
-      centerPlumeRef.current.scale.y = 0.94 + Math.sin(t * 4.4) * 0.08;
-      centerPlumeRef.current.rotation.y = t * 0.55;
-    }
-    if (outerRingRef.current) {
-      outerRingRef.current.scale.y = 0.95 + Math.cos(t * 3.6) * 0.06;
-    }
-  });
+  const rippleRefs = useRef<Array<THREE.Mesh | null>>([]);
+  const cascadeRef = useRef<THREE.Mesh>(null);
 
   const basinW = C1_FOUNTAIN.size.x; // 9.6 m
   const basinD = C1_FOUNTAIN.size.z; // 5.6 m
+
+  const fountainAssets = useMemo(() => {
+    const streamTex = createWaterStreamTexture();
+    const basinWaterPbr = createFountainBasinWaterTexture();
+
+    // 12 tia nước ngoài: mỗi vòi tạo 1 đường parabol mượt hướng đúng tới lòng đĩa tầng giữa
+    const outerNozzles = Array.from({ length: 12 }, (_, k) => {
+      const ang = (k / 12) * Math.PI * 2;
+      const rx = Math.cos(ang) * 3.55;
+      const rz = Math.sin(ang) * 1.88;
+      const inwardYaw = Math.atan2(-rx, -rz);
+      const radialDist = Math.hypot(rx, rz);
+      const landDist = Math.max(0.85, radialDist - 1.0);
+      const apexH = 1.38 + (radialDist - 1.88) * 0.22;
+      const curve = new THREE.QuadraticBezierCurve3(
+        new THREE.Vector3(0, 0.05, 0),
+        new THREE.Vector3(0, apexH, landDist * 0.55),
+        new THREE.Vector3(0, 0.86, landDist),
+      );
+      const tubeGeo = new THREE.TubeGeometry(curve, 18, 0.032, 8, false);
+      return { k, rx, rz, inwardYaw, tubeGeo };
+    });
+
+    // 8 tia phun tầng 2 uốn parabol đổ gọn xuống đĩa tràn tầng giữa
+    const upperCurve = new THREE.QuadraticBezierCurve3(
+      new THREE.Vector3(0, 0.02, 0),
+      new THREE.Vector3(0.45, 0.55, 0),
+      new THREE.Vector3(0.95, -0.5, 0),
+    );
+    const upperJetGeo = new THREE.TubeGeometry(upperCurve, 16, 0.026, 8, false);
+
+    return {
+      streamTex,
+      basinWaterPbr,
+      outerNozzles,
+      upperJetGeo,
+    };
+  }, []);
+
+  useEffect(
+    () => () => {
+      fountainAssets.streamTex.dispose();
+      fountainAssets.basinWaterPbr.map.dispose();
+      fountainAssets.basinWaterPbr.bumpMap.dispose();
+      fountainAssets.outerNozzles.forEach((n) => n.tubeGeo.dispose());
+      fountainAssets.upperJetGeo.dispose();
+    },
+    [fountainAssets],
+  );
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    // Dòng bọt nước chảy liên tục dọc theo các tia parabol & màn nước tràn
+    fountainAssets.streamTex.offset.x = -((t * 1.65) % 1);
+    fountainAssets.basinWaterPbr.bumpMap.offset.set((t * 0.04) % 1, (t * 0.03) % 1);
+
+    if (centerPlumeRef.current) {
+      centerPlumeRef.current.scale.y = 0.94 + Math.sin(t * 4.4) * 0.08;
+      centerPlumeRef.current.rotation.y = t * 0.45;
+    }
+    if (outerRingRef.current) {
+      outerRingRef.current.scale.y = 0.96 + Math.cos(t * 3.6) * 0.05;
+    }
+    if (cascadeRef.current) {
+      cascadeRef.current.rotation.y = -t * 0.25;
+    }
+    for (let i = 0; i < 4; i++) {
+      const m = rippleRefs.current[i];
+      if (!m) continue;
+      const phase = ((t * 0.48 + i * 0.25) % 1 + 1) % 1;
+      const sc = 0.65 + phase * 0.95;
+      m.scale.set(sc, sc * 0.72, 1);
+      const mat = m.material as THREE.MeshBasicMaterial;
+      mat.opacity = (1 - phase) * 0.36;
+    }
+  });
 
   // Đặt chính tâm trục đối xứng Quảng trường C1 (-58, -30.8) giữa I ❤ BK và Khối đá trắng theo đúng https://hustmap.com/
   return (
@@ -514,22 +665,32 @@ export function C1Fountain({ isNight = false }: { isNight?: boolean }) {
         )),
       )}
 
-      {/* Lòng nước xanh ngọc bích rộng lớn (8,76 × 4,76 m — phát sáng lung linh vào ban đêm) */}
+      {/* Lòng nước xanh ngọc bích rộng lớn có vân sóng caustic chuyển động */}
       <mesh position={[0, 0.43, 0]} receiveShadow>
         <boxGeometry args={[basinW - 0.84, 0.14, basinD - 0.84]} />
         <meshStandardMaterial
           color={isNight ? '#38BDF8' : '#1F7A8C'}
+          map={fountainAssets.basinWaterPbr.map}
+          bumpMap={fountainAssets.basinWaterPbr.bumpMap}
+          bumpScale={0.012}
           emissive={isNight ? '#0284C7' : '#0E4D5C'}
-          emissiveIntensity={isNight ? 0.72 : 0.15}
+          emissiveIntensity={isNight ? 0.72 : 0.16}
           roughness={0.14}
           metalness={0.22}
         />
       </mesh>
-      {/* Các vòng gợn sóng nước trắng mảnh quanh chân tia phun */}
-      {[1.15, 2.05, 3.05].map((rr, idx) => (
-        <mesh key={`fountain-ripple-${idx}`} position={[0, 0.506, 0]} rotation-x={-Math.PI / 2}>
-          <ringGeometry args={[rr - 0.05, rr, 36]} />
-          <meshBasicMaterial color="#E0F7FF" transparent opacity={0.34 - idx * 0.07} />
+      {/* 4 vòng gợn sóng nước lan tỏa động quanh chân đài phun */}
+      {[0, 1, 2, 3].map((idx) => (
+        <mesh
+          key={`fountain-ripple-${idx}`}
+          ref={(el) => {
+            rippleRefs.current[idx] = el;
+          }}
+          position={[0, 0.506, 0]}
+          rotation-x={-Math.PI / 2}
+        >
+          <ringGeometry args={[1.45, 1.54, 40]} />
+          <meshBasicMaterial color="#E0F7FF" transparent opacity={0.3} depthWrite={false} />
         </mesh>
       ))}
 
@@ -547,15 +708,22 @@ export function C1Fountain({ isNight = false }: { isNight?: boolean }) {
         <cylinderGeometry args={[1.15, 0.48, 0.24, 24]} />
         <meshStandardMaterial color="#EAE6DC" roughness={0.62} />
       </mesh>
-      {/* Màn nước đổ tràn quanh đĩa tầng giữa */}
-      <mesh position={[0, 0.88, 0]}>
+      {/* Lòng nước nhỏ trong đĩa tầng giữa */}
+      <mesh position={[0, 1.404, 0]} rotation-x={-Math.PI / 2}>
+        <circleGeometry args={[1.08, 24]} />
+        <meshStandardMaterial color={isNight ? '#7DD3FC' : '#3898AC'} roughness={0.15} metalness={0.2} />
+      </mesh>
+      {/* Màn nước đổ tràn có vệt bọt trắng quanh đĩa tầng giữa */}
+      <mesh ref={cascadeRef} position={[0, 0.88, 0]}>
         <cylinderGeometry args={[1.12, 1.2, 0.72, 24, 1, true]} />
         <meshStandardMaterial
           color="#E0F7FF"
+          map={fountainAssets.streamTex}
           transparent
-          opacity={0.36}
-          roughness={0.15}
+          opacity={0.44}
+          roughness={0.14}
           side={THREE.DoubleSide}
+          depthWrite={false}
         />
       </mesh>
       {/* Tháp vòi phun đỉnh trung tâm */}
@@ -568,67 +736,83 @@ export function C1Fountain({ isNight = false }: { isNight?: boolean }) {
         <meshStandardMaterial color="#B45309" metalness={0.72} roughness={0.28} />
       </mesh>
 
-      {/* Vòng ngoài 12 vòi phun đồng & tia nước cầu vồng hướng từ mép bể vào tâm */}
+      {/* Vòng ngoài 12 vòi phun đồng & tia nước parabol cong mượt hướng từ mép bể vào đĩa giữa */}
       <group ref={outerRingRef} position={[0, 0.52, 0]}>
-        {Array.from({ length: 12 }, (_, k) => {
-          const ang = (k / 12) * Math.PI * 2;
-          const rx = Math.cos(ang) * 3.55;
-          const rz = Math.sin(ang) * 1.88;
-          const inwardYaw = Math.atan2(-rx, -rz);
-          return (
-            <group key={`outer-jet-${k}`} position={[rx, 0, rz]} rotation={[0, inwardYaw, 0]}>
-              {/* Đầu vòi phun đồng + đèn âm nước LED */}
-              <mesh position={[0, 0.02, 0]}>
-                <cylinderGeometry args={[0.055, 0.075, 0.1, 10]} />
-                <meshStandardMaterial
-                  color={isNight ? '#FDE047' : '#B45309'}
-                  emissive={isNight ? '#FACC15' : '#000000'}
-                  emissiveIntensity={isNight ? 1.2 : 0}
-                  metalness={0.65}
-                  roughness={0.3}
-                />
-              </mesh>
-              {/* Tia nước vồng parabol phun cao vào đĩa trung tâm */}
-              <mesh position={[0, 0.56, 0.52]} rotation={[0.68, 0, 0]}>
-                <cylinderGeometry args={[0.024, 0.052, 1.42, 8]} />
-                <meshStandardMaterial color="#F0FAFF" transparent opacity={0.66} roughness={0.16} />
-              </mesh>
-            </group>
-          );
-        })}
+        {fountainAssets.outerNozzles.map(({ k, rx, rz, inwardYaw, tubeGeo }) => (
+          <group key={`outer-jet-${k}`} position={[rx, 0, rz]} rotation={[0, inwardYaw, 0]}>
+            {/* Đầu vòi phun đồng + đèn âm nước LED */}
+            <mesh position={[0, 0.02, 0]}>
+              <cylinderGeometry args={[0.055, 0.075, 0.1, 10]} />
+              <meshStandardMaterial
+                color={isNight ? '#FDE047' : '#B45309'}
+                emissive={isNight ? '#FACC15' : '#000000'}
+                emissiveIntensity={isNight ? 1.2 : 0}
+                metalness={0.65}
+                roughness={0.3}
+              />
+            </mesh>
+            {/* Tia nước parabol cong mượt có bọt trắng chảy dọc thân tia */}
+            <mesh geometry={tubeGeo}>
+              <meshStandardMaterial
+                color="#F0FAFF"
+                map={fountainAssets.streamTex}
+                emissive={isNight ? '#BAE6FD' : '#E0F7FF'}
+                emissiveIntensity={isNight ? 0.35 : 0.12}
+                transparent
+                opacity={0.74}
+                roughness={0.14}
+                depthWrite={false}
+              />
+            </mesh>
+          </group>
+        ))}
       </group>
 
-      {/* Cột nước trung tâm cao 2,6 m & chùm 8 tia phun tầng 2 xoay nhẹ sinh động */}
+      {/* Cột nước trung tâm cao & chùm 8 tia phun parabol tầng 2 xoay nhẹ sinh động */}
       <group ref={centerPlumeRef} position={[0, 1.9, 0]}>
         <mesh position={[0, 0.52, 0]}>
-          <coneGeometry args={[0.52, 1.15, 18, 1, true]} />
+          <coneGeometry args={[0.46, 1.15, 18, 1, true]} />
           <meshStandardMaterial
             color="#E6F7FF"
+            map={fountainAssets.streamTex}
             emissive={isNight ? '#BAE6FD' : '#000000'}
             emissiveIntensity={isNight ? 0.55 : 0}
             transparent
             opacity={0.62}
             roughness={0.18}
             side={THREE.DoubleSide}
+            depthWrite={false}
           />
         </mesh>
-        <mesh position={[0, 0.44, 0]}>
-          <cylinderGeometry args={[0.1, 0.22, 1.05, 12]} />
-          <meshStandardMaterial color="#FFFFFF" transparent opacity={0.78} roughness={0.15} />
+        <mesh position={[0, 0.46, 0]}>
+          <cylinderGeometry args={[0.09, 0.2, 1.08, 12]} />
+          <meshStandardMaterial
+            color="#FFFFFF"
+            map={fountainAssets.streamTex}
+            transparent
+            opacity={0.82}
+            roughness={0.14}
+            depthWrite={false}
+          />
         </mesh>
-        {Array.from({ length: 8 }, (_, k) => {
-          const ang = (k / 8) * Math.PI * 2;
-          return (
-            <mesh
-              key={`upper-jet-${k}`}
-              position={[Math.cos(ang) * 0.58, -0.22, Math.sin(ang) * 0.58]}
-              rotation={[0, -ang, 0.52]}
-            >
-              <cylinderGeometry args={[0.025, 0.05, 0.88, 8]} />
-              <meshStandardMaterial color="#F0FAFF" transparent opacity={0.68} roughness={0.18} />
-            </mesh>
-          );
-        })}
+        {Array.from({ length: 8 }, (_, k) => (
+          <mesh
+            key={`upper-jet-${k}`}
+            geometry={fountainAssets.upperJetGeo}
+            rotation={[0, (k / 8) * Math.PI * 2, 0]}
+          >
+            <meshStandardMaterial
+              color="#F0FAFF"
+              map={fountainAssets.streamTex}
+              emissive={isNight ? '#BAE6FD' : '#E0F7FF'}
+              emissiveIntensity={isNight ? 0.3 : 0.1}
+              transparent
+              opacity={0.74}
+              roughness={0.14}
+              depthWrite={false}
+            />
+          </mesh>
+        ))}
       </group>
     </group>
   );

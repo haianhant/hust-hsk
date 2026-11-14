@@ -7,33 +7,272 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo } from 'react';
+import * as THREE from 'three';
 import { SPORTS_COMPLEX } from '../world-data';
 import { LabelPlane } from '../../../components/three/TextPlate';
 import {
   makeFootballFieldTexture,
+  makeGraniteStoneTexture,
   makeSportsCourtTexture,
   makeSwimmingPoolTexture,
 } from '../../../components/three/materials';
 
-export function FootballGoalpost({ x, z, rotY }: { x: number; z: number; rotY: number }) {
+function createGoalNetTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, 128, 128);
+    ctx.strokeStyle = 'rgba(248, 250, 252, 0.85)';
+    ctx.lineWidth = 2.4;
+    const step = 16;
+    for (let i = 0; i <= 128; i += step) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, 128);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(128, i);
+      ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 3);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+export function FootballGoalpost({
+  x,
+  z,
+  rotY,
+  netTex,
+}: {
+  x: number;
+  z: number;
+  rotY: number;
+  netTex: THREE.CanvasTexture;
+}) {
   return (
     <group position={[x, 0, z]} rotation-y={rotY}>
       {/* 2 cột dọc + xà ngang khung thành sơn trắng */}
       {[-2.6, 2.6].map((gx) => (
         <mesh key={`post-${gx}`} position={[gx, 1.2, 0]} castShadow>
-          <cylinderGeometry args={[0.06, 0.06, 2.4, 10]} />
-          <meshStandardMaterial color="#FFFFFF" roughness={0.4} metalness={0.3} />
+          <cylinderGeometry args={[0.06, 0.06, 2.4, 12]} />
+          <meshStandardMaterial color="#FFFFFF" roughness={0.35} metalness={0.25} />
         </mesh>
       ))}
       <mesh position={[0, 2.4, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[0.06, 0.06, 5.32, 10]} />
-        <meshStandardMaterial color="#FFFFFF" roughness={0.4} metalness={0.3} />
+        <cylinderGeometry args={[0.06, 0.06, 5.32, 12]} />
+        <meshStandardMaterial color="#FFFFFF" roughness={0.35} metalness={0.25} />
       </mesh>
-      {/* Khung lưới phía sau khung thành */}
-      <mesh position={[0, 1.2, -0.75]}>
-        <boxGeometry args={[5.2, 2.35, 1.4]} />
-        <meshStandardMaterial color="#F8FAFC" wireframe transparent opacity={0.45} />
+      {/* Thanh giằng đáy chữ U + 2 thanh chống góc sau */}
+      {[-2.6, 2.6].map((gx) => (
+        <group key={`support-${gx}`}>
+          <mesh position={[gx, 0.04, -0.7]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.032, 0.032, 1.4, 8]} />
+            <meshStandardMaterial color="#CBD5E1" roughness={0.45} metalness={0.4} />
+          </mesh>
+          <mesh position={[gx, 1.2, -0.7]} rotation={[0.53, 0, 0]}>
+            <cylinderGeometry args={[0.025, 0.025, 2.74, 8]} />
+            <meshStandardMaterial color="#CBD5E1" roughness={0.45} metalness={0.4} />
+          </mesh>
+        </group>
+      ))}
+      <mesh position={[0, 0.04, -1.4]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.032, 0.032, 5.2, 8]} />
+        <meshStandardMaterial color="#CBD5E1" roughness={0.45} metalness={0.4} />
       </mesh>
+      {/* Lưới đan ô trắng bọc mặt sau, nóc và 2 hông */}
+      <mesh position={[0, 1.2, -1.4]}>
+        <planeGeometry args={[5.2, 2.4]} />
+        <meshStandardMaterial map={netTex} transparent alphaTest={0.12} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0, 2.4, -0.7]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[5.2, 1.4]} />
+        <meshStandardMaterial map={netTex} transparent alphaTest={0.12} side={THREE.DoubleSide} />
+      </mesh>
+      {[-2.6, 2.6].map((gx) => (
+        <mesh key={`sidenet-${gx}`} position={[gx, 1.2, -0.7]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[1.4, 2.4]} />
+          <meshStandardMaterial map={netTex} transparent alphaTest={0.12} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function StadiumGrandstand({
+  position,
+  width,
+  tiers,
+  hasCanopy,
+  stonePbr,
+}: {
+  position: [number, number, number];
+  width: number;
+  tiers: number;
+  hasCanopy: boolean;
+  stonePbr: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+}) {
+  const seatStepZ = 0.65;
+  const seatStepY = 0.42;
+  const seatCount = Math.max(4, Math.floor((width - 1.2) / 0.72));
+
+  return (
+    <group position={position}>
+      {/* Bậc thềm bê tông giật cấp */}
+      {Array.from({ length: tiers }, (_, tIdx) => {
+        const h = (tIdx + 1) * seatStepY;
+        const zCenter = -tIdx * seatStepZ;
+        return (
+          <group key={`tier-${tIdx}`}>
+            <mesh position={[0, h / 2, zCenter]} castShadow receiveShadow>
+              <boxGeometry args={[width, h, seatStepZ]} />
+              <meshStandardMaterial
+                color="#94A3B8"
+                map={stonePbr.map}
+                bumpMap={stonePbr.bumpMap}
+                bumpScale={0.01}
+                roughness={0.86}
+              />
+            </mesh>
+            {/* Dãy ghế khán đài Bách Khoa Đỏ–Trắng xen lối bậc cầu thang giữa */}
+            {Array.from({ length: seatCount }, (_, sIdx) => {
+              const sx = -width / 2 + 0.6 + ((width - 1.2) * sIdx) / (seatCount - 1);
+              if (Math.abs(sx) < 0.48) return null; // chừa lối đi giữa
+              const isWhite = (sIdx + tIdx) % 3 === 0;
+              return (
+                <group key={`seat-${tIdx}-${sIdx}`} position={[sx, h + 0.04, zCenter - 0.02]}>
+                  <mesh castShadow>
+                    <boxGeometry args={[0.42, 0.08, 0.34]} />
+                    <meshStandardMaterial color={isWhite ? '#F1F5F9' : '#B91C1C'} roughness={0.48} />
+                  </mesh>
+                  <mesh position={[0, 0.14, -0.14]} castShadow>
+                    <boxGeometry args={[0.42, 0.24, 0.06]} />
+                    <meshStandardMaterial color={isWhite ? '#E2E8F0' : '#991B1B'} roughness={0.48} />
+                  </mesh>
+                </group>
+              );
+            })}
+            {/* Bậc cầu thang vàng ở trục giữa */}
+            <mesh position={[0, h + 0.02, zCenter]} receiveShadow>
+              <boxGeometry args={[0.78, 0.04, seatStepZ - 0.08]} />
+              <meshStandardMaterial color="#FACC15" roughness={0.78} />
+            </mesh>
+          </group>
+        );
+      })}
+      {/* Lan can thép bảo vệ phía sau & hai đầu hồi */}
+      <mesh position={[0, tiers * seatStepY + 0.45, -(tiers - 1) * seatStepZ - 0.28]}>
+        <boxGeometry args={[width, 0.06, 0.06]} />
+        <meshStandardMaterial color="#CBD5E1" metalness={0.6} roughness={0.35} />
+      </mesh>
+      {Array.from({ length: 5 }, (_, ri) => {
+        const rx = -width / 2 + 0.2 + ((width - 0.4) * ri) / 4;
+        return (
+          <mesh
+            key={`rail-post-${ri}`}
+            position={[rx, tiers * seatStepY + 0.22, -(tiers - 1) * seatStepZ - 0.28]}
+          >
+            <cylinderGeometry args={[0.03, 0.03, 0.48, 8]} />
+            <meshStandardMaterial color="#94A3B8" metalness={0.6} roughness={0.35} />
+          </mesh>
+        );
+      })}
+      {/* Mái che thép hiện đại cho khán đài chính */}
+      {hasCanopy && (
+        <group>
+          {[-width * 0.4, -width * 0.14, width * 0.14, width * 0.4].map((px, pi) => (
+            <mesh
+              key={`canopy-col-${pi}`}
+              position={[px, tiers * seatStepY + 0.9, -(tiers - 1) * seatStepZ - 0.24]}
+              castShadow
+            >
+              <cylinderGeometry args={[0.06, 0.07, 1.9, 8]} />
+              <meshStandardMaterial color="#1E293B" metalness={0.65} roughness={0.4} />
+            </mesh>
+          ))}
+          <mesh
+            position={[0, tiers * seatStepY + 1.9, -((tiers - 1) * seatStepZ) / 2 + 0.15]}
+            rotation={[-0.12, 0, 0]}
+            castShadow
+          >
+            <boxGeometry args={[width + 0.5, 0.12, tiers * seatStepZ + 1.25]} />
+            <meshStandardMaterial color="#1E3A5F" metalness={0.45} roughness={0.48} />
+          </mesh>
+          {/* Viền đỏ Bách Khoa mặt trước mái che */}
+          <mesh
+            position={[0, tiers * seatStepY + 2.09, 0.78]}
+            castShadow
+          >
+            <boxGeometry args={[width + 0.5, 0.14, 0.08]} />
+            <meshStandardMaterial color="#B91C1C" roughness={0.55} />
+          </mesh>
+        </group>
+      )}
+    </group>
+  );
+}
+
+function StadiumFloodlightTower({
+  x,
+  z,
+  isNight,
+}: {
+  x: number;
+  z: number;
+  isNight: boolean;
+}) {
+  const yaw = Math.atan2(-x, -z);
+  return (
+    <group position={[x, 0, z]} rotation={[0, yaw, 0]}>
+      {/* Chân đế bê tông + trụ thép thuôn */}
+      <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.26, 0.32, 0.5, 10]} />
+        <meshStandardMaterial color="#64748B" roughness={0.85} />
+      </mesh>
+      <mesh position={[0, 4.9, 0]} castShadow>
+        <cylinderGeometry args={[0.09, 0.16, 9.2, 10]} />
+        <meshStandardMaterial color="#334155" roughness={0.45} metalness={0.65} />
+      </mesh>
+      {/* Giá đỡ đầu đèn + giàn 12 bóng pha LED hướng nghiêng xuống mặt sân */}
+      <group position={[0, 9.5, 0]} rotation={[0.42, 0, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[1.45, 0.78, 0.16]} />
+          <meshStandardMaterial color="#1E293B" roughness={0.5} metalness={0.6} />
+        </mesh>
+        {[-0.45, -0.15, 0.15, 0.45].map((bx, cIdx) =>
+          [-0.22, 0, 0.22].map((by, rIdx) => (
+            <mesh key={`lamp-${cIdx}-${rIdx}`} position={[bx, by, 0.09]}>
+              <cylinderGeometry args={[0.075, 0.075, 0.04, 10]} />
+              <meshStandardMaterial
+                color="#FFFBEB"
+                emissive="#FEF08A"
+                emissiveIntensity={isNight ? 1.8 : 0.45}
+              />
+            </mesh>
+          )),
+        )}
+        {isNight && (
+          <mesh position={[0, 0, 4.8]} rotation={[-Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[3.4, 9.6, 16, 1, true]} />
+            <meshBasicMaterial
+              color="#FEF9C3"
+              transparent
+              opacity={0.07}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        )}
+      </group>
     </group>
   );
 }
@@ -59,14 +298,19 @@ export function HustSportsAndStadiumComplex({ isNight }: { isNight: boolean }) {
   const courtTex = useMemo(() => makeSportsCourtTexture(), []);
   const fieldTex = useMemo(() => makeFootballFieldTexture(), []);
   const poolTex = useMemo(() => makeSwimmingPoolTexture(), []);
+  const goalNetTex = useMemo(() => createGoalNetTexture(), []);
+  const stonePbr = useMemo(() => makeGraniteStoneTexture(4, 2), []);
 
   useEffect(
     () => () => {
       courtTex.dispose();
       fieldTex.dispose();
       poolTex.dispose();
+      goalNetTex.dispose();
+      stonePbr.map.dispose();
+      stonePbr.bumpMap.dispose();
     },
-    [courtTex, fieldTex, poolTex],
+    [courtTex, fieldTex, poolTex, goalNetTex, stonePbr],
   );
 
   return (
@@ -198,35 +442,43 @@ export function HustSportsAndStadiumComplex({ isNight }: { isNight: boolean }) {
           <planeGeometry args={[footballFieldSize.x, footballFieldSize.z]} />
           <meshStandardMaterial map={fieldTex} roughness={0.85} />
         </mesh>
-        {/* 2 Khung thành bóng đá ở 2 đầu Đông / Tây sân */}
-        <FootballGoalpost x={-footballFieldSize.x / 2 + 2.6} z={0} rotY={Math.PI / 2} />
-        <FootballGoalpost x={footballFieldSize.x / 2 - 2.6} z={0} rotY={-Math.PI / 2} />
-        {/* Khán đài đỏ dọc rìa Bắc sân vận động (hướng ra đường Lê Thanh Nghị) */}
-        <mesh position={[0, 0.65, -footballFieldSize.z / 2 - 1.4]} castShadow receiveShadow>
-          <boxGeometry args={[24, 1.3, 2.2]} />
-          <meshStandardMaterial color="#B83B32" roughness={0.82} />
-        </mesh>
-        <mesh position={[0, 1.45, -footballFieldSize.z / 2 - 2.2]} castShadow receiveShadow>
-          <boxGeometry args={[24, 1.8, 1.4]} />
-          <meshStandardMaterial color="#9E2A22" roughness={0.82} />
-        </mesh>
-        {/* 4 Cột đèn pha cao áp SVĐ Bách Khoa */}
+        {/* 2 Khung thành bóng đá lưới trắng dệt ô ở 2 đầu Đông / Tây sân */}
+        <FootballGoalpost
+          x={-footballFieldSize.x / 2 + 2.6}
+          z={0}
+          rotY={Math.PI / 2}
+          netTex={goalNetTex}
+        />
+        <FootballGoalpost
+          x={footballFieldSize.x / 2 - 2.6}
+          z={0}
+          rotY={-Math.PI / 2}
+          netTex={goalNetTex}
+        />
+        {/* Hai cụm khán đài giật cấp hai bên lối vào Sân bóng rổ (tránh giao nhau với courtCenter) */}
+        <StadiumGrandstand
+          position={[-9.2, 0, -footballFieldSize.z / 2 - 0.9]}
+          width={9.4}
+          tiers={4}
+          hasCanopy
+          stonePbr={stonePbr}
+        />
+        <StadiumGrandstand
+          position={[11.4, 0, -footballFieldSize.z / 2 - 0.9]}
+          width={6.0}
+          tiers={3}
+          hasCanopy={false}
+          stonePbr={stonePbr}
+        />
+        {/* 4 Cột đèn pha cao áp giàn 12 bóng SVĐ Bách Khoa */}
         {[-15, 15].map((lx) =>
           [-footballFieldSize.z / 2 - 0.8, footballFieldSize.z / 2 + 0.8].map((lz) => (
-            <group key={`stadium-flood-${lx}-${lz}`} position={[lx, 0, lz]}>
-              <mesh position={[0, 4.5, 0]} castShadow>
-                <cylinderGeometry args={[0.08, 0.12, 9.0, 8]} />
-                <meshStandardMaterial color="#374151" roughness={0.5} metalness={0.6} />
-              </mesh>
-              <mesh position={[0, 9.1, 0]}>
-                <boxGeometry args={[0.9, 0.4, 0.4]} />
-                <meshStandardMaterial
-                  color="#FFFBEB"
-                  emissive="#FFE599"
-                  emissiveIntensity={isNight ? 1.2 : 0.45}
-                />
-              </mesh>
-            </group>
+            <StadiumFloodlightTower
+              key={`stadium-flood-${lx}-${lz}`}
+              x={lx}
+              z={lz}
+              isNight={isNight}
+            />
           )),
         )}
       </group>

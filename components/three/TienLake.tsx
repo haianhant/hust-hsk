@@ -100,25 +100,170 @@ function mulberry32(seed: number) {
 }
 
 // --- Hình học lá/cánh (dựng một lần, dùng chung cho mọi instance) -----------
-// Lá súng: phiến tròn bán kính 0,5 có KHE KHUYẾT hình nêm về tâm — cung tròn
-// khuyết một góc (notch) rồi khép về tâm, không phải đĩa tròn đều.
+// Lá súng: phiến tròn bán kính 0,5 có KHE KHUYẾT hình nêm về tâm + UV tâm phiến lá
+// để áp texture gân lá tỏa tròn (radial veins + bumpMap).
 function makeLeafGeometry(notch: number): THREE.ShapeGeometry {
   const shape = new THREE.Shape();
   const half = notch / 2;
   shape.absarc(0, 0, 0.5, half, Math.PI * 2 - half, false);
   shape.lineTo(0, 0);
   shape.closePath();
-  return new THREE.ShapeGeometry(shape, 24);
+  const geo = new THREE.ShapeGeometry(shape, 24);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    uv[i * 2] = pos.getX(i) + 0.5;
+    uv[i * 2 + 1] = pos.getY(i) + 0.5;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return geo;
 }
 
-// Cánh hoa: NÓN DẸT có thể tích (đợt r2p-A mục 4) — nón cao 0,3 m, đáy
-// r 0,085, gốc ở đáy, đầu nhọn ở +Y; 8 cánh ngoài xòe + 5 cánh trong dựng
-// đứng khép thành chén hoa. Bản cũ là phiến phẳng (ShapeGeometry) xếp sao
-// 8 cánh nên ở tầm mắt đọc thành "chong chóng hồng nhỏ" trên cọng.
-function makePetalGeometry(): THREE.ConeGeometry {
-  const g = new THREE.ConeGeometry(0.085, 0.3, 10);
-  g.translate(0, 0.15, 0); // gốc cánh ở y = 0, đầu nhọn ở y = 0,3
-  return g;
+// Cánh hoa súng/sen: phiến cánh hình thìa khum (cupped spoon-petal) bằng BufferGeometry,
+// gốc hẹp ở y = 0, bụng bầu rộng ở y = 0,14, đầu khum nhọn dịu ở y = 0,27; lòng cánh
+// uốn lõm vào tâm hoa (-Z) và chóp hơi ngả nhẹ tự nhiên thay vì khối nón nhọn thô.
+function makePetalGeometry(): THREE.BufferGeometry {
+  const uSteps = 8;
+  const vSteps = 4;
+  const cols = vSteps + 1;
+  const height = 0.27;
+  const maxHalfW = 0.088;
+
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  for (let iu = 0; iu <= uSteps; iu++) {
+    const t = iu / uSteps;
+    const widthProfile =
+      t === 0
+        ? 0.2
+        : t === 1
+          ? 0.0
+          : Math.pow(Math.sin(Math.pow(t, 0.72) * Math.PI), 0.75);
+    const halfW = maxHalfW * widthProfile;
+    const y = t * height;
+    // Khum bụng nhẹ ra ngoài (+Z) ở giữa cánh và hơi cụp vào trong ở chóp
+    const bellyZ = Math.sin(t * Math.PI) * 0.022 - Math.pow(Math.max(0, t - 0.65), 2) * 0.02;
+
+    for (let iv = 0; iv <= vSteps; iv++) {
+      const s = (iv / vSteps) * 2 - 1; // -1..1
+      const x = s * halfW;
+      // Hai mép cánh uốn vào lòng hoa (-Z) tạo độ khum chén sâu tự nhiên
+      const cupZ = bellyZ - s * s * 0.026 * (1 - t * 0.35);
+      positions.push(x, y, cupZ);
+      uvs.push(0.5 + s * 0.45 * Math.max(0.2, widthProfile), t);
+    }
+  }
+
+  for (let iu = 0; iu < uSteps; iu++) {
+    for (let iv = 0; iv < vSteps; iv++) {
+      const a = iu * cols + iv;
+      const b = a + 1;
+      const c = (iu + 1) * cols + iv;
+      const d = c + 1;
+      indices.push(a, b, c, b, d, c);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function makeLilypadPbrTextures(): {
+  map: THREE.CanvasTexture;
+  bumpMap: THREE.CanvasTexture;
+} {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+
+  const bc = document.createElement('canvas');
+  bc.width = 256;
+  bc.height = 256;
+  const bctx = bc.getContext('2d');
+
+  if (ctx && bctx) {
+    const grad = ctx.createRadialGradient(128, 128, 4, 128, 128, 126);
+    grad.addColorStop(0, '#D9F2C6');
+    grad.addColorStop(0.55, '#F2FBE8');
+    grad.addColorStop(0.92, '#E2EFC8');
+    grad.addColorStop(1, '#4C7A34');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 256, 256);
+
+    bctx.fillStyle = '#787878';
+    bctx.fillRect(0, 0, 256, 256);
+
+    // Tâm cuống lá & 14 tia gân tỏa tròn ra mép phiến lá súng
+    for (let k = 0; k < 14; k++) {
+      const ang = (k / 14) * Math.PI * 2;
+      const ex = 128 + Math.cos(ang) * 120;
+      const ey = 128 + Math.sin(ang) * 120;
+      ctx.strokeStyle = 'rgba(180, 220, 140, 0.45)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(128, 128);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+
+      bctx.strokeStyle = '#C4C4C4';
+      bctx.lineWidth = 3;
+      bctx.beginPath();
+      bctx.moveTo(128, 128);
+      bctx.lineTo(ex, ey);
+      bctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255, 250, 210, 0.55)';
+    ctx.beginPath();
+    ctx.arc(128, 128, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 4;
+  map.needsUpdate = true;
+
+  const bumpMap = new THREE.CanvasTexture(bc);
+  bumpMap.needsUpdate = true;
+  return { map, bumpMap };
+}
+
+function makeLotusPetalTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    // FlipY mặc định: đỉnh canvas (y = 0) tương ứng chóp cánh (v = 1)
+    const grad = ctx.createLinearGradient(0, 256, 0, 0);
+    grad.addColorStop(0.0, '#FFFDF5');
+    grad.addColorStop(0.32, '#FCE7F3');
+    grad.addColorStop(0.76, '#F472B6');
+    grad.addColorStop(1.0, '#DB2777');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 256);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+    ctx.lineWidth = 1.6;
+    for (let k = -3; k <= 3; k++) {
+      ctx.beginPath();
+      ctx.moveTo(64 + k * 6, 252);
+      ctx.quadraticCurveTo(64 + k * 14, 128, 64 + k * 5, 10);
+      ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
 }
 
 const LEAF_TONES = [LOTUS_LEAF, LOTUS_LEAF_2, LOTUS_LEAF_3];
@@ -211,6 +356,20 @@ export function LotusField() {
   const leafGeoA = useMemo(() => makeLeafGeometry(0.55), []);
   const leafGeoB = useMemo(() => makeLeafGeometry(1.05), []);
   const petalGeo = useMemo(() => makePetalGeometry(), []);
+  const lilypadPbr = useMemo(() => makeLilypadPbrTextures(), []);
+  const petalTex = useMemo(() => makeLotusPetalTexture(), []);
+
+  useEffect(
+    () => () => {
+      leafGeoA.dispose();
+      leafGeoB.dispose();
+      petalGeo.dispose();
+      lilypadPbr.map.dispose();
+      lilypadPbr.bumpMap.dispose();
+      petalTex.dispose();
+    },
+    [leafGeoA, leafGeoB, petalGeo, lilypadPbr, petalTex],
+  );
 
   const leafRefA = useRef<THREE.InstancedMesh>(null);
   const leafRefB = useRef<THREE.InstancedMesh>(null);
@@ -284,19 +443,16 @@ export function LotusField() {
         m.compose(v, q, s);
         stemRef.current!.setMatrixAt(fi, m);
         // 13 cánh/bông: 8 cánh ngoài xòe thành chén + 5 cánh trong dựng
-        // đứng ôm nhị. Cánh là nón dẹt theo phương tiếp tuyến (scale z
-        // 0,5) nên các cánh kề nhau chồng lên nhau thành vách chén liền,
-        // không còn khe hình sao như bản cũ.
+        // đứng ôm nhị; cánh hình thìa khum lõm tự nhiên nên giữ tỉ lệ 3D chuẩn.
         for (let k = 0; k < 8; k++) {
           const az = p.rot + (k / 8) * Math.PI * 2 + (rand() - 0.5) * 0.12;
-          // Bông nở xòe 0,85–1,15 rad (~50–65° khỏi phương đứng); nụ khép
-          // 0,25–0,5 rad, cánh gần như dựng đứng ôm lấy lõi.
-          const tilt = p.bud ? 0.25 + rand() * 0.25 : 0.85 + rand() * 0.3;
+          // Bông nở xòe 0,78–1,08 rad; nụ khép 0,2–0,42 rad ôm lấy lõi.
+          const tilt = p.bud ? 0.2 + rand() * 0.22 : 0.78 + rand() * 0.3;
           e.set(tilt, az, 0, 'YXZ');
           q.setFromEuler(e);
           v.set(p.x, topY, p.z);
           const ps = p.s * (0.9 + rand() * 0.2);
-          s.set(ps, ps, ps * 0.5);
+          s.set(ps, ps, ps);
           m.compose(v, q, s);
           petalRef.current!.setMatrixAt(fi * 13 + k, m);
           col.set(PETAL_TONES[(fi + k) % PETAL_TONES.length]);
@@ -304,12 +460,12 @@ export function LotusField() {
         }
         for (let j = 0; j < 5; j++) {
           const az = p.rot + ((j + 0.5) / 5) * Math.PI * 2 + (rand() - 0.5) * 0.12;
-          const tilt = p.bud ? 0.15 + rand() * 0.2 : 0.3 + rand() * 0.25;
+          const tilt = p.bud ? 0.12 + rand() * 0.16 : 0.28 + rand() * 0.22;
           e.set(tilt, az, 0, 'YXZ');
           q.setFromEuler(e);
           v.set(p.x, topY, p.z);
-          const ps = p.s * 0.62 * (0.9 + rand() * 0.2);
-          s.set(ps, ps, ps * 0.5);
+          const ps = p.s * 0.68 * (0.9 + rand() * 0.2);
+          s.set(ps, ps, ps);
           m.compose(v, q, s);
           petalRef.current!.setMatrixAt(fi * 13 + 8 + j, m);
           col.set(PETAL_TONES[(fi + j + 1) % PETAL_TONES.length]);
@@ -373,24 +529,39 @@ export function LotusField() {
           độ phủ thật đo ở trên, mục tiêu ~50% để xen khoảng nước nhìn thấy
           được (trước đây ~73%). */}
       <instancedMesh ref={leafRefA} args={[leafGeoA, undefined, leavesA.length]}>
-        <meshStandardMaterial color="#FFFFFF" roughness={0.9} />
+        <meshStandardMaterial
+          color="#FFFFFF"
+          map={lilypadPbr.map}
+          bumpMap={lilypadPbr.bumpMap}
+          bumpScale={0.012}
+          roughness={0.82}
+        />
       </instancedMesh>
       <instancedMesh ref={leafRefB} args={[leafGeoB, undefined, leavesB.length]}>
-        <meshStandardMaterial color="#FFFFFF" roughness={0.9} />
+        <meshStandardMaterial
+          color="#FFFFFF"
+          map={lilypadPbr.map}
+          bumpMap={lilypadPbr.bumpMap}
+          bumpScale={0.012}
+          roughness={0.82}
+        />
       </instancedMesh>
       {/* Mảng bèo xanh non xen kẽ (phiến nhỏ có khe khuyết). */}
       <instancedMesh ref={weedRef} args={[leafGeoB, undefined, weeds.length]}>
         <meshStandardMaterial color="#FFFFFF" roughness={0.9} />
       </instancedMesh>
-      {/* Hoa: cuống mảnh xanh-nâu cao 0,30 m + 13 cánh/bông (8 ngoài + 5
-          trong, nón dẹt khép thành chén) + tâm. Không còn phiến phẳng
-          hình sao. */}
+      {/* Hoa: cuống mảnh xanh-nâu cao 0,30 m + 13 cánh/bông hình thìa khum mềm mại + tâm. */}
       <instancedMesh ref={stemRef} args={[undefined, undefined, flowers.length]}>
         <cylinderGeometry args={[0.012, 0.02, 0.3, 6]} />
         <meshStandardMaterial color={STEM_GREEN} roughness={1} />
       </instancedMesh>
       <instancedMesh ref={petalRef} args={[petalGeo, undefined, flowers.length * 13]}>
-        <meshStandardMaterial color="#FFFFFF" roughness={0.75} side={THREE.DoubleSide} />
+        <meshStandardMaterial
+          color="#FFFFFF"
+          map={petalTex}
+          roughness={0.62}
+          side={THREE.DoubleSide}
+        />
       </instancedMesh>
       <instancedMesh ref={centerRef} args={[undefined, undefined, flowers.length]}>
         <sphereGeometry args={[0.07, 8, 6]} />

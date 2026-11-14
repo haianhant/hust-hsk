@@ -28,13 +28,15 @@
 // nhúng 0,02–0,05 m thay vì đặt khít mặt.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { C1, C1_BENCHES } from '../../lib/campus';
 import type { TimeOfDay } from '../../lib/playerState';
 import { ExtrudedText3D, FramedSignBox3D } from './Signage3D';
 import { LabelPlane } from './TextPlate';
 import {
+  createSeededRandom,
+  makeFoliageCanopyTexture,
   makeGraniteStoneTexture,
   makeWeatheredConcreteTexture,
   makeWoodGrainTexture,
@@ -51,7 +53,6 @@ const STEP_STONE = '#3A3A3A'; // bậc tam cấp, đá xám-đen
 const PORCH_STONE = '#C9C7C0'; // bệ sảnh + lề bồn cỏ, đá xám nhạt
 const PATH_STONE = '#B7B0A2'; // đường lát dẫn vào sảnh
 const LAWN_GREEN = '#6F9A52'; // cỏ bồn
-const FLOWER_PINK = '#D63384'; // hoa giấy
 const TRUNK = '#6B5138';
 const LAMP_GREEN = '#14532D'; // cột đèn xanh đậm
 const BENCH_WOOD = '#7A5230'; // ghế gỗ nâu
@@ -402,32 +403,246 @@ function LocalLamp({ x, z, isNight = false }: { x: number; z: number; isNight?: 
   );
 }
 
-// --- Chậu hoa giấy hồng hai bên bậc thềm -----------------------------------------
-function LocalFlowerPot({ x, z }: { x: number; z: number }) {
+function makeOrganicShrubGeometry(): THREE.BufferGeometry {
+  const g = new THREE.IcosahedronGeometry(1, 2);
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const bump =
+      1 +
+      0.16 * Math.sin(3.4 * x + 2.7 * y) * Math.cos(3.1 * z) +
+      0.09 * Math.cos(5.3 * x - 4.1 * z);
+    pos.setXYZ(i, x * bump, y * bump, z * bump);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+// --- Hàng khóm hoa giấy hữu cơ dọc 2 bồn cỏ Quảng trường C1 (thay cho khối hộp hồng cũ) ---
+function BougainvilleaHedgeRow({
+  shrubGeo,
+  foliagePbr,
+}: {
+  shrubGeo: THREE.BufferGeometry;
+  foliagePbr: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+}) {
+  const stemRef = useRef<THREE.InstancedMesh>(null);
+  const leafRef = useRef<THREE.InstancedMesh>(null);
+  const blossomRef = useRef<THREE.InstancedMesh>(null);
+
+  const layout = useMemo(() => {
+    const rnd = createSeededRandom(19560101);
+    const stems: Array<{ x: number; y: number; z: number; rx: number; rz: number }> = [];
+    const leaves: Array<{ x: number; y: number; z: number; sx: number; sy: number; sz: number; rot: number; color: string }> = [];
+    const blossoms: Array<{ x: number; y: number; z: number; sx: number; sy: number; sz: number; rot: number; color: string }> = [];
+    const leafColors = ['#4D7C0F', '#5A8F3D', '#65A30D'];
+    const blossomColors = ['#DB2777', '#EC4899', '#F472B6', '#BE185D', '#F9A8D4'];
+
+    for (const fx of [-68.6, -47.4]) {
+      for (let i = 0; i < 7; i++) {
+        const fz = -42 + i * 1.5;
+        stems.push({
+          x: fx,
+          y: 0.24,
+          z: fz,
+          rx: (rnd() - 0.5) * 0.22,
+          rz: (rnd() - 0.5) * 0.22,
+        });
+        for (let l = 0; l < 3; l++) {
+          const ang = rnd() * Math.PI * 2;
+          const dist = l === 0 ? 0 : 0.1 + rnd() * 0.1;
+          leaves.push({
+            x: fx + Math.cos(ang) * dist,
+            y: 0.34 + (l === 0 ? 0.04 : rnd() * 0.05),
+            z: fz + Math.sin(ang) * dist,
+            sx: 0.18 + rnd() * 0.07,
+            sy: 0.13 + rnd() * 0.05,
+            sz: 0.18 + rnd() * 0.07,
+            rot: rnd() * Math.PI * 2,
+            color: leafColors[(i + l) % leafColors.length],
+          });
+        }
+        for (let b = 0; b < 6; b++) {
+          const ang = (b / 6) * Math.PI * 2 + rnd() * 0.5;
+          const dist = 0.07 + rnd() * 0.14;
+          blossoms.push({
+            x: fx + Math.cos(ang) * dist,
+            y: 0.37 + rnd() * 0.13,
+            z: fz + Math.sin(ang) * dist,
+            sx: 0.09 + rnd() * 0.045,
+            sy: 0.075 + rnd() * 0.035,
+            sz: 0.09 + rnd() * 0.045,
+            rot: rnd() * Math.PI * 2,
+            color: blossomColors[(i * 3 + b) % blossomColors.length],
+          });
+        }
+      }
+    }
+    return { stems, leaves, blossoms };
+  }, []);
+
+  useLayoutEffect(() => {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const v = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    const col = new THREE.Color();
+
+    if (stemRef.current) {
+      layout.stems.forEach((st, idx) => {
+        e.set(st.rx, 0, st.rz);
+        q.setFromEuler(e);
+        v.set(st.x, st.y, st.z);
+        s.set(1, 1, 1);
+        m.compose(v, q, s);
+        stemRef.current!.setMatrixAt(idx, m);
+      });
+      stemRef.current.instanceMatrix.needsUpdate = true;
+    }
+    if (leafRef.current) {
+      layout.leaves.forEach((lf, idx) => {
+        e.set(0, lf.rot, 0);
+        q.setFromEuler(e);
+        v.set(lf.x, lf.y, lf.z);
+        s.set(lf.sx, lf.sy, lf.sz);
+        m.compose(v, q, s);
+        leafRef.current!.setMatrixAt(idx, m);
+        col.set(lf.color);
+        leafRef.current!.setColorAt(idx, col);
+      });
+      leafRef.current.instanceMatrix.needsUpdate = true;
+      if (leafRef.current.instanceColor) leafRef.current.instanceColor.needsUpdate = true;
+    }
+    if (blossomRef.current) {
+      layout.blossoms.forEach((bl, idx) => {
+        e.set(0, bl.rot, 0);
+        q.setFromEuler(e);
+        v.set(bl.x, bl.y, bl.z);
+        s.set(bl.sx, bl.sy, bl.sz);
+        m.compose(v, q, s);
+        blossomRef.current!.setMatrixAt(idx, m);
+        col.set(bl.color);
+        blossomRef.current!.setColorAt(idx, col);
+      });
+      blossomRef.current.instanceMatrix.needsUpdate = true;
+      if (blossomRef.current.instanceColor) blossomRef.current.instanceColor.needsUpdate = true;
+    }
+  }, [layout]);
+
+  return (
+    <group>
+      <instancedMesh ref={stemRef} args={[undefined, undefined, layout.stems.length]} castShadow>
+        <cylinderGeometry args={[0.022, 0.036, 0.28, 6]} />
+        <meshStandardMaterial color={TRUNK} roughness={0.92} />
+      </instancedMesh>
+      <instancedMesh ref={leafRef} args={[shrubGeo, undefined, layout.leaves.length]} castShadow receiveShadow>
+        <meshStandardMaterial
+          color="#FFFFFF"
+          map={foliagePbr.map}
+          bumpMap={foliagePbr.bumpMap}
+          bumpScale={0.015}
+          roughness={0.88}
+        />
+      </instancedMesh>
+      <instancedMesh ref={blossomRef} args={[shrubGeo, undefined, layout.blossoms.length]} castShadow>
+        <meshStandardMaterial
+          color="#FFFFFF"
+          bumpMap={foliagePbr.bumpMap}
+          bumpScale={0.012}
+          roughness={0.72}
+        />
+      </instancedMesh>
+    </group>
+  );
+}
+
+// --- Chậu hoa giấy gốm có vành miệng & tán lá/hoa xốp hữu cơ ---
+function LocalFlowerPot({
+  x,
+  z,
+  shrubGeo,
+  foliagePbr,
+}: {
+  x: number;
+  z: number;
+  shrubGeo: THREE.BufferGeometry;
+  foliagePbr: { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture };
+}) {
   return (
     <group position={[x, 0, z]}>
-      <mesh position={[0, 0.25, 0]} castShadow>
-        <cylinderGeometry args={[0.3, 0.22, 0.5, 12]} />
-        <meshStandardMaterial color={POT_BROWN} roughness={0.9} />
+      {/* Thân chậu gốm đất nung */}
+      <mesh position={[0, 0.24, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.31, 0.21, 0.48, 16]} />
+        <meshStandardMaterial color={POT_BROWN} roughness={0.76} />
       </mesh>
-      {/* Hoa giấy: cụm 3 khóm hồng lệch nhau trên nền lá xanh — không còn
-          1 cầu hồng trơn đọc thành "nấm hồng" ở góc nhìn người chơi. */}
-      <mesh position={[0, 0.5, 0]} scale={[1, 0.6, 1]} castShadow>
-        <sphereGeometry args={[0.34, 12, 10]} />
-        <meshStandardMaterial color={LAWN_GREEN} roughness={1} />
+      {/* Vành miệng chậu đúc nổi */}
+      <mesh position={[0, 0.46, 0]} castShadow>
+        <cylinderGeometry args={[0.345, 0.33, 0.085, 16]} />
+        <meshStandardMaterial color="#9C6644" roughness={0.72} />
       </mesh>
-      <mesh position={[0, 0.68, 0]} scale={[1, 0.55, 1]} castShadow>
-        <sphereGeometry args={[0.42, 12, 10]} />
-        <meshStandardMaterial color={FLOWER_PINK} roughness={1} />
+      {/* Đất trồng sẫm màu bên trong miệng chậu */}
+      <mesh position={[0, 0.485, 0]} receiveShadow>
+        <cylinderGeometry args={[0.295, 0.285, 0.035, 14]} />
+        <meshStandardMaterial color="#3E2723" roughness={0.96} />
       </mesh>
-      <mesh position={[0.32, 0.58, 0.12]} scale={[1, 0.5, 1]} castShadow>
-        <sphereGeometry args={[0.26, 10, 8]} />
-        <meshStandardMaterial color={FLOWER_PINK} roughness={1} />
+      {/* Nền tán lá xanh xốp nhiều tầng */}
+      <mesh
+        position={[0, 0.56, 0]}
+        scale={[0.34, 0.2, 0.32]}
+        rotation={[0, 0.3, 0]}
+        geometry={shrubGeo}
+        castShadow
+      >
+        <meshStandardMaterial
+          color="#5A8F3D"
+          map={foliagePbr.map}
+          bumpMap={foliagePbr.bumpMap}
+          bumpScale={0.015}
+          roughness={0.86}
+        />
       </mesh>
-      <mesh position={[-0.3, 0.6, -0.1]} scale={[1, 0.5, 1]} castShadow>
-        <sphereGeometry args={[0.24, 10, 8]} />
-        <meshStandardMaterial color={FLOWER_PINK} roughness={1} />
+      <mesh
+        position={[-0.14, 0.62, 0.1]}
+        scale={[0.22, 0.16, 0.22]}
+        rotation={[0.2, 1.1, 0]}
+        geometry={shrubGeo}
+        castShadow
+      >
+        <meshStandardMaterial
+          color="#4D7C0F"
+          map={foliagePbr.map}
+          bumpMap={foliagePbr.bumpMap}
+          bumpScale={0.015}
+          roughness={0.88}
+        />
       </mesh>
+      {/* 5 chùm hoa giấy đa sắc nở xốp bất đối xứng (loại bỏ dáng "nấm hồng" cũ) */}
+      {[
+        { p: [0.02, 0.72, -0.02] as [number, number, number], s: [0.22, 0.16, 0.21] as [number, number, number], c: '#DB2777', r: 0.4 },
+        { p: [0.24, 0.63, 0.1] as [number, number, number], s: [0.16, 0.13, 0.15] as [number, number, number], c: '#EC4899', r: 1.5 },
+        { p: [-0.22, 0.65, -0.08] as [number, number, number], s: [0.15, 0.12, 0.15] as [number, number, number], c: '#F472B6', r: 2.3 },
+        { p: [-0.08, 0.64, 0.21] as [number, number, number], s: [0.14, 0.11, 0.14] as [number, number, number], c: '#BE185D', r: 3.1 },
+        { p: [0.12, 0.68, -0.18] as [number, number, number], s: [0.13, 0.11, 0.13] as [number, number, number], c: '#F9A8D4', r: 4.2 },
+      ].map((b, bi) => (
+        <mesh
+          key={`pot-blossom-${bi}`}
+          position={b.p}
+          scale={b.s}
+          rotation={[0, b.r, 0]}
+          geometry={shrubGeo}
+          castShadow
+        >
+          <meshStandardMaterial
+            color={b.c}
+            bumpMap={foliagePbr.bumpMap}
+            bumpScale={0.012}
+            roughness={0.74}
+          />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -601,6 +816,8 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
   const concretePbr = useMemo(() => makeWeatheredConcreteTexture(6, 3), []);
   const granitePbr = useMemo(() => makeGraniteStoneTexture(4, 4), []);
   const woodTex = useMemo(() => makeWoodGrainTexture(2, 1), []);
+  const foliagePbr = useMemo(() => makeFoliageCanopyTexture(2, 2), []);
+  const shrubGeo = useMemo(() => makeOrganicShrubGeometry(), []);
   const geos = useMemo(() => {
     const white: BoxSpec[] = [];
     const rails: BoxSpec[] = [];
@@ -611,7 +828,6 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
     const shadow: BoxSpec[] = []; // bóng dưới sàn các tầng + dưới mái sảnh
     const stone: BoxSpec[] = [];
     const green: BoxSpec[] = [];
-    const pink: BoxSpec[] = [];
 
     // --- Hai dải mặt đứng bên: cột mảnh + mép sàn + lan can từng tầng -------
     const wings: Array<{ x0: number; x1: number; cols: number[] }> = [
@@ -718,14 +934,6 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       stone.push({ w: 0.15, h: 0.18, d: 12.0, x: bed.cx + 4.875, y: 0.09, z: -37 });
       green.push({ w: 9.6, h: 0.12, d: 12, x: bed.cx, y: 0.06, z: -37 });
     }
-    // Hoa giấy dọc mép trong hai bồn cỏ (không chắn trục quảng trường rộng ở giữa).
-    for (const fx of [-68.6, -47.4]) {
-      for (let i = 0; i < 7; i++) {
-        const fz = -42 + i * 1.5;
-        pink.push({ w: 0.24, h: 0.2, d: 0.24, x: fx, y: 0.32, z: fz });
-        green.push({ w: 0.06, h: 0.24, d: 0.06, x: fx, y: 0.18, z: fz });
-      }
-    }
 
     // --- Mái 9 vòm nông: VỎ có bề dày 0,28 m (mặt trên + mặt dưới + cạnh
     // trước/sau đọc được), đúng 9 nhịp; đáy vỏ nhúng vào tấm mái --------
@@ -762,7 +970,6 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       shadowGeo: mergeBoxes(shadow),
       stoneGeo: mergeBoxes(stone),
       greenGeo: mergeBoxes(green),
-      pinkGeo: mergeBoxes(pink),
       wavesGeo,
       fasciaGeo,
     };
@@ -777,16 +984,18 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       geos.shadowGeo.dispose();
       geos.stoneGeo.dispose();
       geos.greenGeo.dispose();
-      geos.pinkGeo.dispose();
       geos.wavesGeo.dispose();
       geos.fasciaGeo.dispose();
+      shrubGeo.dispose();
       concretePbr.map.dispose();
       concretePbr.bumpMap.dispose();
       granitePbr.map.dispose();
       granitePbr.bumpMap.dispose();
       woodTex.dispose();
+      foliagePbr.map.dispose();
+      foliagePbr.bumpMap.dispose();
     },
-    [geos, concretePbr, granitePbr, woodTex],
+    [geos, shrubGeo, concretePbr, granitePbr, woodTex, foliagePbr],
   );
 
   return (
@@ -857,15 +1066,13 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
         />
       </mesh>
 
-      {/* Cỏ bồn + thân hoa giấy. */}
+      {/* Cỏ bồn. */}
       <mesh geometry={geos.greenGeo} receiveShadow>
         <meshStandardMaterial color={LAWN_GREEN} roughness={1} />
       </mesh>
 
-      {/* Hoa giấy hồng. */}
-      <mesh geometry={geos.pinkGeo} castShadow>
-        <meshStandardMaterial color={FLOWER_PINK} roughness={1} />
-      </mesh>
+      {/* Hàng hoa giấy hữu cơ dọc 2 bồn cỏ Quảng trường C1. */}
+      <BougainvilleaHedgeRow shrubGeo={shrubGeo} foliagePbr={foliagePbr} />
 
       {/* Trục sân lát đá nghi lễ trung tâm rộng 16,8 m của Quảng trường C1 (mặt trên y = 0,045,
           ôm trọn Đài phun nước lớn & cụm chữ I ❤ BK, cao hơn sàn quảng trường 0,03 m — không z-fighting). */}
@@ -1039,11 +1246,11 @@ export function C1Building({ timeOfDay = 'day' }: { timeOfDay?: TimeOfDay }) {
       {C1_BENCHES.map((b, i) => (
         <LocalBench key={`c1-bench-${i}`} x={b.x} z={b.z} woodTex={woodTex} />
       ))}
-      <LocalFlowerPot x={-67.8} z={-45.5} />
-      <LocalFlowerPot x={-48.2} z={-45.5} />
-      <LocalFlowerPot x={-80} z={-51.2} />
-      <LocalFlowerPot x={-70} z={-51.2} />
-      <LocalFlowerPot x={-40.5} z={-51.2} />
+      <LocalFlowerPot x={-67.8} z={-45.5} shrubGeo={shrubGeo} foliagePbr={foliagePbr} />
+      <LocalFlowerPot x={-48.2} z={-45.5} shrubGeo={shrubGeo} foliagePbr={foliagePbr} />
+      <LocalFlowerPot x={-80} z={-51.2} shrubGeo={shrubGeo} foliagePbr={foliagePbr} />
+      <LocalFlowerPot x={-70} z={-51.2} shrubGeo={shrubGeo} foliagePbr={foliagePbr} />
+      <LocalFlowerPot x={-40.5} z={-51.2} shrubGeo={shrubGeo} foliagePbr={foliagePbr} />
     </group>
   );
 }

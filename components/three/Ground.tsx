@@ -14,6 +14,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { C1, LIBRARY, LOVE_ROAD_TREES, NGA_5_PLAZA, ROADS, TDN_SQUARE, type Vec2 } from '../../lib/campus';
+import { createAutumnLeafAssets } from '../../features/campus/atmosphere/CampusAtmosphereFX';
 import {
   createSeededRandom,
   makeAsphaltTexture,
@@ -76,20 +77,49 @@ const C1_GRASS_BEDS: Array<{ cx: number; cz: number; w: number; d: number }> = [
   { cx: -42.8, cz: -26.8, w: 9.6, d: 3.2 },
 ];
 
-// Lá vàng Lipa rụng quanh 2 cây cổ thụ sân C1 (reference-visual §2)
+function getFallenLeafGroundY(x: number, z: number): number {
+  for (const b of C1_GRASS_BEDS) {
+    if (Math.abs(x - b.cx) <= b.w / 2 + 0.12 && Math.abs(z - b.cz) <= b.d / 2 + 0.12) {
+      return 0.206;
+    }
+  }
+  if ((Math.abs(x - -73.2) <= 4.95 || Math.abs(x - -42.8) <= 4.95) && z >= -43.15 && z <= -30.85) {
+    return 0.126;
+  }
+  if (x >= -66.7 && x <= -49.3 && z >= -44.5 && z <= -23.9) {
+    return 0.052;
+  }
+  return 0.032;
+}
+
+// Lá vàng Lipa rụng quanh 2 cây cổ thụ sân C1 (dùng phiến lá 3D hữu cơ bám đúng cao độ từng bề mặt)
 const FALLEN_LEAVES = (() => {
   const rnd = createSeededRandom(19862024);
-  const items: Array<{ x: number; z: number; r: number; rot: number; color: string }> = [];
-  const colors = ['#D9A419', '#E2B42E', '#C88A14', '#B89B28'];
+  const items: Array<{
+    x: number;
+    y: number;
+    z: number;
+    r: number;
+    rotY: number;
+    tiltX: number;
+    tiltZ: number;
+    color: string;
+  }> = [];
+  const colors = ['#FDE047', '#EAB308', '#D97706', '#CA8A04'];
   for (const tree of C1.lipaTrees) {
-    for (let i = 0; i < 22; i++) {
+    for (let i = 0; i < 24; i++) {
       const ang = rnd() * Math.PI * 2;
       const dist = 0.8 + rnd() * 3.8;
+      const x = tree.x + Math.cos(ang) * dist;
+      const z = tree.z + Math.sin(ang) * dist;
       items.push({
-        x: tree.x + Math.cos(ang) * dist,
-        z: tree.z + Math.sin(ang) * dist,
+        x,
+        y: getFallenLeafGroundY(x, z),
+        z,
         r: 0.09 + rnd() * 0.08,
-        rot: rnd() * Math.PI * 2,
+        rotY: rnd() * Math.PI * 2,
+        tiltX: (rnd() - 0.5) * 0.05,
+        tiltZ: (rnd() - 0.5) * 0.05,
         color: colors[i % colors.length],
       });
     }
@@ -370,6 +400,51 @@ function GrassAndFlowerTufts() {
   );
 }
 
+function FallenLipaLeaves() {
+  const ref = useRef<THREE.InstancedMesh>(null);
+  const assets = useMemo(
+    () => createAutumnLeafAssets({ curvature: 0.45, minYFloor: 0.002, roughness: 0.85 }),
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      assets.geo.dispose();
+      assets.mat.dispose();
+      assets.map.dispose();
+      assets.bumpMap.dispose();
+    },
+    [assets],
+  );
+
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const v = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    const col = new THREE.Color();
+
+    FALLEN_LEAVES.forEach((lf, idx) => {
+      e.set(lf.tiltX, lf.rotY, lf.tiltZ);
+      q.setFromEuler(e);
+      v.set(lf.x, lf.y, lf.z);
+      const scale = lf.r / 0.095;
+      s.set(scale, scale, scale);
+      m.compose(v, q, s);
+      mesh.setMatrixAt(idx, m);
+      col.set(lf.color);
+      mesh.setColorAt(idx, col);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }, []);
+
+  return <instancedMesh ref={ref} args={[assets.geo, assets.mat, FALLEN_LEAVES.length]} receiveShadow />;
+}
+
 export default function Ground() {
   const textures = useMemo(() => {
     const grass = makeGrassTexture(28, 24);
@@ -493,18 +568,8 @@ export default function Ground() {
         </mesh>
       ))}
 
-      {/* Lá vàng Lipa rụng rải rác trên sân C1 (y = 0,065, trên mặt bồn/sân). */}
-      {FALLEN_LEAVES.map((lf, i) => (
-        <mesh
-          key={`lipa-leaf-${i}`}
-          rotation-x={-Math.PI / 2}
-          rotation-z={lf.rot}
-          position={[lf.x, 0.13, lf.z]}
-        >
-          <circleGeometry args={[lf.r, 6]} />
-          <meshStandardMaterial color={lf.color} roughness={0.9} />
-        </mesh>
-      ))}
+      {/* Lá vàng Lipa 3D rụng rải rác bám sát bề mặt bồn cỏ & mặt sân C1. */}
+      <FallenLipaLeaves />
 
       {/* Các bồn cỏ đối xứng trên Quảng trường C1: viền bê tông + hộp cỏ thấp. */}
       {C1_GRASS_BEDS.map((b, i) => (
