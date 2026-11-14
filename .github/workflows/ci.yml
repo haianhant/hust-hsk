@@ -64,6 +64,8 @@ jobs:
             echo "::error::CLOUDFLARE_API_TOKEN secret is not configured in GitHub Actions Secrets."
             exit 1
           fi
-          npx --yes wrangler@3 deploy
+          node scripts/deploy-ci.mjs
           curl -fsS https://hust-hsk-rooms.hunganhz179.workers.dev/health
+          echo ""
+          curl -fsS https://hust-hsk-rooms.hunganhz179.workers.dev/api/boardgame/matches
           echo ""
