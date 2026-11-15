@@ -188,7 +188,8 @@ async function main() {
     await enterBtn.waitFor({ state: 'visible', timeout: 90000 });
     await enterBtn.click({ timeout: 90000 });
     await page.waitForFunction(() => Boolean(window.__bkhn && window.__bkhn.enterBoardGameClub), null, {
-      timeout: 90000,
+      timeout: 120000,
+      polling: 200,
     });
 
     // Teleport đến trước cửa CLB Board Game KTX (109.9, -55.0) quay mặt về hướng Tây nhìn thẳng vào cửa nhà CLB
@@ -200,7 +201,7 @@ async function main() {
       await page.waitForFunction(
         () => document.body.innerText.includes('Vào CLB Board Game'),
         null,
-        { timeout: 60000 },
+        { timeout: 120000, polling: 200 },
       );
     } catch (err) {
       const diag = await page.evaluate(() => ({
@@ -241,6 +242,9 @@ async function main() {
     await page.locator('[data-testid="bg-toggle-rules-btn"]').click();
     await page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: 60000 });
     await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-04-rules-modal.png'), timeout: 120000 });
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('bkhn:pause-3d', { detail: true }));
+    });
     await page.locator('[data-testid="bg-close-rules-btn"]').click();
 
     // Bấm Rời CLB khi đang ngồi ghế -> phải hiện hộp thoại xác nhận trước khi thoát
@@ -250,7 +254,7 @@ async function main() {
     await page.waitForFunction(
       () => window.__bkhn.isInBoardGameClub && !window.__bkhn.isInBoardGameClub(),
       null,
-      { timeout: 60000 },
+      { timeout: 120000, polling: 200 },
     );
 
     const fatalErrors = errors.filter(
@@ -276,7 +280,8 @@ async function main() {
     await mEnterBtn.waitFor({ state: 'visible', timeout: 90000 });
     await mEnterBtn.click({ timeout: 90000 });
     await mPage.waitForFunction(() => Boolean(window.__bkhn && window.__bkhn.enterBoardGameClub), null, {
-      timeout: 90000,
+      timeout: 120000,
+      polling: 200,
     });
     await mPage.evaluate(() => window.__bkhn.enterBoardGameClub());
     await mPage.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 60000 });

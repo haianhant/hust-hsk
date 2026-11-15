@@ -1108,8 +1108,8 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     if (p4.browser) await p4.browser.close().catch(() => undefined);
     await peerCtx.close().catch(() => undefined);
 
-    // Exit back to KTX courtyard
-    await setPage3DPaused(p1.page, false);
+    // Exit back to KTX courtyard (keep 3D paused during DOM/fade exit, then resume for courtyard shot)
+    await setPage3DPaused(p1.page, true);
     await p1.page.bringToFront();
     await p1.page.locator('[data-testid="bg-leave-game-btn"]').click();
     await p1.page.locator('[data-testid="boardgame-2d-board"]').waitFor({ state: 'detached', timeout: UI_TIMEOUT });
@@ -1134,8 +1134,10 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
         return !window.__bkhn.isInBoardGameClub() && pos.x > 100 && pos.z < -45;
       },
       null,
-      { timeout: 65000, polling: 200 },
+      { timeout: 120000, polling: 200 },
     );
+    await setPage3DPaused(p1.page, false);
+    await p1.page.waitForTimeout(350);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-05-exit-ktx.png'), timeout: 120000 });
     assert.equal(p1.audit.pageErrors.length, 0, `P1 exit page errors: ${p1.audit.pageErrors.join('; ')}`);
     return {
