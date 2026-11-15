@@ -1,706 +1,573 @@
 'use client';
 
 // ---------------------------------------------------------------------------
-// features/boardgame/ui/BoardGameArt.tsx — Hệ thống Đồ họa Bàn Cờ Minh Họa
-// (100% vector SVG thủ tục nguyên bản): Chân dung 9 lớp nhân vật, Huy hiệu 3 phe,
-// Bản đồ 6 khu vực KTX, Mặt sau 3 bộ thẻ & Quân cờ Token theo đồng phục HUST.
+// features/boardgame/ui/BoardGameArt.tsx — Hệ thống Đồ họa Bàn Cờ Bóng Đêm KTX v4
+// Minh họa SVG nguyên bản 3 Cụm / 6 Khu vực Đánh số Xúc xắc, Quân cờ 8 màu,
+// Xúc xắc 1d6 / 1d4 và Chồng bài Khám Phá / Cung Ứng / Đột Kích.
 // ---------------------------------------------------------------------------
 
-import { useId } from 'react';
-import { OUTFIT_PRESETS } from '../../avatar/appearance/presets';
+import React from 'react';
 import type {
   BoardGameDeckId,
   BoardGameFactionId,
   BoardGameLocationId,
-  BoardGamePublicPlayerView,
   BoardGameRoleId,
-} from '../network/contracts';
+  BoardGameZoneClusterId,
+} from '@/shared/contracts/boardgame';
 
 export const FACTION_THEME: Record<
   BoardGameFactionId,
   {
     label: string;
     shortLabel: string;
-    badgeClasses: string;
-    cardBorder: string;
-    accentHex: string;
-    glowHex: string;
-    shortGoal: string;
+    accent: string;
+    badgeBg: string;
+    borderClass: string;
+    textClass: string;
+    cardGlow: string;
   }
 > = {
   'lantern-guard': {
-    label: 'Đội Gác Đèn',
-    shortLabel: 'Gác Đèn',
-    badgeClasses: 'border-amber-400/60 bg-amber-950/75 text-amber-200',
-    cardBorder: 'border-amber-400/50',
-    accentHex: '#F59E0B',
-    glowHex: '#FDE68A',
-    shortGoal: 'Xác minh danh tính và hạ hết Hội Màn Sương (hoặc giữ lợi thế chốt trực tới Rạng Sáng)',
+    label: 'Đội Săn Đêm',
+    shortLabel: 'Săn Đêm',
+    accent: '#34d399',
+    badgeBg: 'bg-emerald-500/20 text-emerald-100 border-emerald-400/50',
+    borderClass: 'border-emerald-400/55',
+    textClass: 'text-emerald-200',
+    cardGlow: 'shadow-[0_12px_36px_rgba(16,185,129,0.22)]',
   },
   'mist-order': {
-    label: 'Hội Màn Sương',
-    shortLabel: 'Màn Sương',
-    badgeClasses: 'border-violet-400/60 bg-violet-950/75 text-violet-200',
-    cardBorder: 'border-violet-400/50',
-    accentHex: '#A855F7',
-    glowHex: '#E9D5FF',
-    shortGoal: 'Che giấu tung tích, loại hết Đội Gác Đèn hoặc áp đảo kiểm soát cuối đêm',
+    label: 'Hội Bóng Đêm',
+    shortLabel: 'Bóng Đêm',
+    accent: '#fb7185',
+    badgeBg: 'bg-rose-500/20 text-rose-100 border-rose-400/50',
+    borderClass: 'border-rose-400/55',
+    textClass: 'text-rose-200',
+    cardGlow: 'shadow-[0_12px_36px_rgba(244,63,94,0.22)]',
   },
   wanderer: {
-    label: 'Kẻ Lang Thang',
-    shortLabel: 'Lang Thang',
-    badgeClasses: 'border-emerald-400/60 bg-emerald-950/75 text-emerald-200',
-    cardBorder: 'border-emerald-400/50',
-    accentHex: '#10B981',
-    glowHex: '#A7F3D0',
-    shortGoal: 'Hoàn thành mục tiêu độc lập hoặc đồng thắng (trang bị, nhân chứng, bảo hộ)',
+    label: 'Kẻ Độc Hành',
+    shortLabel: 'Độc Hành',
+    accent: '#fbbf24',
+    badgeBg: 'bg-amber-500/20 text-amber-100 border-amber-400/50',
+    borderClass: 'border-amber-400/55',
+    textClass: 'text-amber-200',
+    cardGlow: 'shadow-[0_12px_36px_rgba(245,158,11,0.22)]',
   },
 };
 
 export interface RoleVisualMeta {
-  heroName: string;
-  archetype: string;
-  emblem: string;
-  skillChips: readonly string[];
-  winShort: string;
-  bgFrom: string;
-  bgTo: string;
-  cloakHex: string;
-  trimHex: string;
+  codeName: string;
+  title: string;
+  accentHex: string;
+  motif: string;
+  shortAbility: string;
 }
 
 export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   'gac-ky-thuat': {
-    heroName: 'Minh',
-    archetype: 'Kỹ Thuật Viên · 13 HP',
-    emblem: '🔧',
-    skillChips: ['Lật: +1 🛡️ & +1 Trang bị', 'CD 2v: Hồi 2 & +1/+2 🛡️', 'Miễn ST Sự kiện khi có đồ'],
-    winShort: 'Hạ toàn bộ Hội Màn Sương hoặc giữ lợi thế chốt trực tới Rạng Sáng',
-    bgFrom: '#451A03',
-    bgTo: '#92400E',
-    cloakHex: '#D97706',
-    trimHex: '#FDE68A',
+    codeName: 'Minh "Kỹ Thuật"',
+    title: 'Đội trưởng Xung Kích',
+    accentHex: '#34d399',
+    motif: 'Cờ lê & Ánh đèn pha',
+    shortAbility: '1 lần/trận: Gây 4 sát thương cùng Cụm',
   },
   'gac-truc-ban': {
-    heroName: 'Lan',
-    archetype: 'Trực Ban Nội Trú · 12 HP',
-    emblem: '📋',
-    skillChips: ['Lật: Hồi 1 & +1 Điều tra', 'CD 2v: Bảo hộ không tụt < 1 HP', 'Soi thêm số bài tay'],
-    winShort: 'Hạ toàn bộ Hội Màn Sương hoặc giữ lợi thế chốt trực tới Rạng Sáng',
-    bgFrom: '#422006',
-    bgTo: '#78350F',
-    cloakHex: '#B45309',
-    trimHex: '#FEF08A',
+    codeName: 'Lan "Trực Ban"',
+    title: 'Điều Phối Y Tế KTX',
+    accentHex: '#10b981',
+    motif: 'Sổ trực & Bộ sơ cứu',
+    shortAbility: '1 lần/trận: Hồi đầy máu cho 1 người',
   },
   'gac-radio': {
-    heroName: 'Khánh',
-    archetype: 'Phát Thanh Viên KTX · 11 HP',
-    emblem: '🎙️',
-    skillChips: ['Lật: Soi toàn khu & +1 🛡️', 'CD 2v: Gắn Hở sườn +1 ST', 'Điều tra mọi vị trí'],
-    winShort: 'Hạ toàn bộ Hội Màn Sương hoặc giữ lợi thế chốt trực tới Rạng Sáng',
-    bgFrom: '#431407',
-    bgTo: '#9A3412',
-    cloakHex: '#EA580C',
-    trimHex: '#FED7AA',
+    codeName: 'Vy "Radio"',
+    title: 'Trinh Sát Tần Số',
+    accentHex: '#38bdf8',
+    motif: 'Tai nghe & Sóng phát',
+    shortAbility: '2 vòng: Soi phe thật + 1 dmg nếu Bóng Đêm',
   },
   'suong-an-danh': {
-    heroName: 'Tú',
-    archetype: 'Cư Dân Vô Hình · 12 HP',
-    emblem: '🔌',
-    skillChips: ['Lật: +1 🛡️ & Đánh kề', 'CD 2v: Đổi chỗ + 2 ST phục kích', 'Xuyên Thủ · Lướt B7'],
-    winShort: 'Hạ hết Đội Gác Đèn hoặc duy trì ẩn danh áp đảo tới Rạng Sáng',
-    bgFrom: '#2E1065',
-    bgTo: '#581C87',
-    cloakHex: '#6D28D9',
-    trimHex: '#DDD6FE',
+    codeName: 'Tú "Ẩn Danh"',
+    title: 'Bóng Đêm Hút Sinh Lực',
+    accentHex: '#fb7185',
+    motif: 'Bóng áo choàng đêm',
+    shortAbility: 'Nội tại: Đánh trúng hồi lại 2 máu',
   },
   'suong-tin-gia': {
-    heroName: 'Vy',
-    archetype: 'Người Gửi Tin Đồn · 11 HP',
-    emblem: '🎭',
-    skillChips: ['Lật: +1 Sự kiện & +1 🛡️', 'CD 2v: Xóa 1 🛡️ · 1 ST · Đẩy', 'Che số bài trước DEFEND'],
-    winShort: 'Hạ hết Đội Gác Đèn hoặc duy trì ẩn danh áp đảo tới Rạng Sáng',
-    bgFrom: '#3B0764',
-    bgTo: '#701A75',
-    cloakHex: '#A21CAF',
-    trimHex: '#F5D0FE',
+    codeName: 'Khánh "Tin Giả"',
+    title: 'Kẻ Tung Sấm Chớp',
+    accentHex: '#f43f5e',
+    motif: 'Tia sét điện áp cao',
+    shortAbility: '1 lần/trận: Tung 1d6 giật sát thương toàn bàn',
   },
   'suong-gac-cong': {
-    heroName: 'Dũng',
-    archetype: 'Bóng Đêm Hành Lang · 13 HP',
-    emblem: '🔒',
-    skillChips: ['Lật: Tầm đánh kề phòng', 'CD 2v: Áp sát 3 ST người thương/lật', 'Đánh người ≥3 thương +1 ST'],
-    winShort: 'Hạ hết Đội Gác Đèn hoặc duy trì kiểm soát tới Rạng Sáng',
-    bgFrom: '#1E1B4B',
-    bgTo: '#4C1D95',
-    cloakHex: '#4338CA',
-    trimHex: '#C7D2FE',
+    codeName: 'Dũng "Gác Cổng"',
+    title: 'Thủ Lĩnh Phản Đòn',
+    accentHex: '#a78bfa',
+    motif: 'Ổ khóa sắt & Khiên gai',
+    shortAbility: 'Nội tại: Bị đánh trúng & sống → phản 2 dmg',
   },
   'lang-anh-san': {
-    heroName: 'Hải',
-    archetype: 'Người Săn Gói Tin · 12 HP',
-    emblem: '💎',
-    skillChips: ['Lật: +1 🛡️ & +1 Trang bị', 'V5+ đủ 2 Đồ & 3 Soi: Thắng ngay!', 'Sống + ≥2 Đồ & ≥2 Soi: Đồng thắng'],
-    winShort: 'Đạt ≥ 2 Trang bị & ≥ 3 Điều tra kích hoạt từ Vòng 5+ để THẮNG ĐƠN ĐỘC (hoặc ≥ 2/2 đồng thắng)',
-    bgFrom: '#022C22',
-    bgTo: '#065F46',
-    cloakHex: '#047857',
-    trimHex: '#6EE7B7',
+    codeName: 'Hải "Sưu Tầm"',
+    title: 'Thợ Săn Trang Bị',
+    accentHex: '#fbbf24',
+    motif: 'Túi đồ nghề KTX',
+    shortAbility: 'Thắng khi đủ 3 Trang bị · Kỹ năng: Cướp đồ cùng Cụm',
   },
   'lang-quan-sat': {
-    heroName: 'Trang',
-    archetype: 'Người Ghi Chép · 11 HP',
-    emblem: '📓',
-    skillChips: ['Lật: Hồi 1 & +1 🛡️', 'CD 2v: Cùng nhận +1 🛡️ & +1 Điều tra', 'Còn ≤2 sống & đã lật: Thắng ngay!'],
-    winShort: 'Sống sót tới khi ≤ 2 người & đã lật (≥ 2 ngã) để THẮNG ĐƠN ĐỘC, hoặc trụ khi ≥ 2 người gục',
-    bgFrom: '#042F2E',
-    bgTo: '#115E59',
-    cloakHex: '#0F766E',
-    trimHex: '#99F6E4',
+    codeName: 'Trang "Kiên Cường"',
+    title: 'Người Sống Sót Cuối',
+    accentHex: '#f59e0b',
+    motif: 'Khiên bất hoại',
+    shortAbility: '1 lần/trận: Bật khiên bất tử 1 vòng',
   },
   'lang-cuu-ho': {
-    heroName: 'Bình',
-    archetype: 'Người Bảo Hộ · 13 HP',
-    emblem: '🩺',
-    skillChips: ['Lật: Hồi 1 & +1 🛡️', 'CD 2v: Hồi 1 & +2 🛡️ đồng hành', 'Báo thù kẻ hạ mục tiêu'],
-    winShort: 'Giữ Mục tiêu Bảo hộ sống sót (hoặc kết liễu kẻ hạ họ / lọt top 2 cuối ván)',
-    bgFrom: '#052E16',
-    bgTo: '#166534',
-    cloakHex: '#15803D',
-    trimHex: '#86EFAC',
+    codeName: 'Bình "Bảo Vệ"',
+    title: 'Vệ Sĩ Thầm Lặng',
+    accentHex: '#2dd4bf',
+    motif: 'Dây bảo hộ',
+    shortAbility: '2 vòng: Hồi 2 máu cho đồng đội cùng Cụm',
   },
 };
 
 export interface LocationVisualMeta {
-  icon: string;
+  name: string;
+  shortName: string;
+  clusterId: BoardGameZoneClusterId;
+  clusterTitle: string;
+  diceLabel: string;
+  accentHex: string;
+  bgGradient: string;
+  actionTitle: string;
+  actionDesc: string;
   badgeText: string;
-  frameAccent: string;
-  pillClasses: string;
 }
 
 export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMeta> = {
-  lobby: {
-    icon: '🏮',
-    badgeText: 'Sơ cứu (+1 ❤️/+1 🛡️) · Sự kiện',
-    frameAccent: '#F59E0B',
-    pillClasses: 'bg-amber-950/80 text-amber-200 ring-amber-400/40',
-  },
-  canteen: {
-    icon: '🍜',
-    badgeText: 'Tiếp tế Trang bị · Sự kiện',
-    frameAccent: '#FB923C',
-    pillClasses: 'bg-orange-950/80 text-orange-200 ring-orange-400/40',
-  },
-  court: {
-    icon: '🏀',
-    badgeText: 'Tầm đánh kề +1 ST · Trang bị',
-    frameAccent: '#38BDF8',
-    pillClasses: 'bg-sky-950/80 text-sky-200 ring-sky-400/40',
+  radio: {
+    name: 'Trạm Radio KTX',
+    shortName: 'Radio',
+    clusterId: 'north',
+    clusterTitle: 'Cụm Bắc',
+    diceLabel: '2–3',
+    accentHex: '#10b981',
+    bgGradient: 'from-emerald-950/90 via-slate-900/95 to-slate-950',
+    actionTitle: 'Rút Thẻ Khám Phá',
+    actionDesc: 'Rút 1 Thẻ Khám Phá (đưa kín 1-đối-1)',
+    badgeText: 'Khám Phá',
   },
   breaker: {
-    icon: '⚡',
-    badgeText: 'Chốt Bảo Vệ (+1 🛡️) · Điều tra/Đồ',
-    frameAccent: '#C084FC',
-    pillClasses: 'bg-purple-950/80 text-purple-200 ring-purple-400/40',
+    name: 'Tủ Cầu Dao Tổng',
+    shortName: 'Cầu Dao',
+    clusterId: 'north',
+    clusterTitle: 'Cụm Bắc',
+    diceLabel: '4–5',
+    accentHex: '#f43f5e',
+    bgGradient: 'from-rose-950/85 via-slate-900/95 to-slate-950',
+    actionTitle: 'Rút Thẻ Đột Kích',
+    actionDesc: 'Rút 1 Thẻ Đột Kích (Vũ khí / Sự kiện)',
+    badgeText: 'Đột Kích',
+  },
+  lobby: {
+    name: 'Sảnh Tầng 1',
+    shortName: 'Sảnh',
+    clusterId: 'central',
+    clusterTitle: 'Cụm Trung Tâm',
+    diceLabel: '6',
+    accentHex: '#06b6d4',
+    bgGradient: 'from-cyan-950/90 via-slate-900/95 to-slate-950',
+    actionTitle: 'Rút Thẻ Cung Ứng',
+    actionDesc: 'Rút 1 Thẻ Cung Ứng (Giáp / Hồi sức)',
+    badgeText: 'Cung Ứng',
+  },
+  canteen: {
+    name: 'Căng Tin Đêm',
+    shortName: 'Căng Tin',
+    clusterId: 'central',
+    clusterTitle: 'Cụm Trung Tâm',
+    diceLabel: '8',
+    accentHex: '#f59e0b',
+    bgGradient: 'from-amber-950/85 via-slate-900/95 to-slate-950',
+    actionTitle: 'Tự Chọn 1 Chồng Bài',
+    actionDesc: 'Chọn rút 1 thẻ Khám Phá, Cung Ứng hoặc Đột Kích',
+    badgeText: 'Tự Chọn',
   },
   corridor: {
-    icon: '🧭',
-    badgeText: 'Nối 5 khu (+1 🛡️) · Điều tra/Sự kiện',
-    frameAccent: '#34D399',
-    pillClasses: 'bg-emerald-950/80 text-emerald-200 ring-emerald-400/40',
+    name: 'Hành Lang Tầng 4',
+    shortName: 'Hành Lang',
+    clusterId: 'south',
+    clusterTitle: 'Cụm Nam',
+    diceLabel: '9',
+    accentHex: '#8b5cf6',
+    bgGradient: 'from-violet-950/85 via-slate-900/95 to-slate-950',
+    actionTitle: 'Hồi 1 hoặc Gây 2 Dmg',
+    actionDesc: 'Chọn 1 người bất kỳ: Hồi 1 máu HOẶC Gây 2 sát thương',
+    badgeText: 'Sơ Cứu / Bẫy',
   },
-  radio: {
-    icon: '📡',
-    badgeText: 'Sóng toàn KTX · Điều tra/Sự kiện',
-    frameAccent: '#FBBF24',
-    pillClasses: 'bg-yellow-950/80 text-yellow-200 ring-yellow-400/40',
+  court: {
+    name: 'Sân Bóng Rổ Đêm',
+    shortName: 'Sân Bóng',
+    clusterId: 'south',
+    clusterTitle: 'Cụm Nam',
+    diceLabel: '10',
+    accentHex: '#38bdf8',
+    bgGradient: 'from-sky-950/90 via-slate-900/95 to-slate-950',
+    actionTitle: 'Cướp 1 Trang Bị',
+    actionDesc: 'Lấy 1 Trang bị đang đeo từ đối thủ bất kỳ',
+    badgeText: 'Cướp Đồ',
   },
 };
 
-/** Bố cục phẳng 3×2 đặt Hành Lang B7 ở trung tâm dưới nối thẳng tới 5 khu vực xung quanh. */
-export const BOARD_GRID_ORDER: readonly BoardGameLocationId[] = [
-  'lobby',
-  'canteen',
-  'court',
-  'breaker',
-  'corridor',
-  'radio',
+export const BOARD_CLUSTERS_ORDER: readonly {
+  clusterId: BoardGameZoneClusterId;
+  title: string;
+  subtitle: string;
+  ringClass: string;
+  badgeClass: string;
+  locations: readonly [BoardGameLocationId, BoardGameLocationId];
+}[] = [
+  {
+    clusterId: 'north',
+    title: 'Cụm Bắc',
+    subtitle: '2–3 Radio · 4–5 Cầu Dao (Đánh chung cụm)',
+    ringClass: 'border-emerald-400/35 bg-emerald-950/20',
+    badgeClass: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40',
+    locations: ['radio', 'breaker'],
+  },
+  {
+    clusterId: 'central',
+    title: 'Cụm Trung Tâm',
+    subtitle: '6 Sảnh · 8 Căng Tin (Đánh chung cụm)',
+    ringClass: 'border-cyan-400/35 bg-cyan-950/20',
+    badgeClass: 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40',
+    locations: ['lobby', 'canteen'],
+  },
+  {
+    clusterId: 'south',
+    title: 'Cụm Nam',
+    subtitle: '9 Hành Lang · 10 Sân Bóng (Đánh chung cụm)',
+    ringClass: 'border-violet-400/35 bg-violet-950/20',
+    badgeClass: 'bg-violet-500/20 text-violet-200 border-violet-400/40',
+    locations: ['corridor', 'court'],
+  },
 ];
 
-export const SEAT_RING_PALETTE = [
-  '#F59E0B',
-  '#38BDF8',
-  '#34D399',
-  '#F472B6',
-  '#A78BFA',
-  '#FB923C',
-  '#2DD4BF',
-  '#FACC15',
-] as const;
+export const BOARD_GRID_ORDER: readonly BoardGameLocationId[] = [
+  'radio',
+  'breaker',
+  'lobby',
+  'canteen',
+  'corridor',
+  'court',
+];
+
+export const SEAT_RING_PALETTE: readonly string[] = [
+  '#38bdf8', // seat 0 - sky
+  '#fbbf24', // seat 1 - amber
+  '#a78bfa', // seat 2 - violet
+  '#34d399', // seat 3 - emerald
+  '#fb7185', // seat 4 - rose
+  '#f472b6', // seat 5 - pink
+  '#2dd4bf', // seat 6 - teal
+  '#fb923c', // seat 7 - orange
+];
 
 export function FactionCrestSvg({
   faction,
-  className = 'h-4 w-4',
+  size = 24,
 }: {
-  faction: BoardGameFactionId;
-  className?: string;
+  faction: BoardGameFactionId | null;
+  size?: number;
 }) {
   if (faction === 'lantern-guard') {
     return (
-      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
         <path
-          d="M12 2L14 4H10L12 2ZM8 6H16L17 9V17L15 19H9L7 17V9L8 6Z"
-          fill="#F59E0B"
-          stroke="#FEF3C7"
-          strokeWidth="1.2"
+          d="M16 3L27 8V16.5C27 23.2 22.1 27.6 16 29.5C9.9 27.6 5 23.2 5 16.5V8L16 3Z"
+          fill="#064e3b"
+          stroke="#34d399"
+          strokeWidth="2.2"
         />
-        <circle cx="12" cy="12.5" r="2.6" fill="#FEF08A" />
-        <path d="M9 21H15" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="16" cy="16" r="5" fill="#6ee7b7" />
+        <path d="M16 7.5V10.5M16 21.5V24.5M9.5 16H12.5M19.5 16H22.5" stroke="#a7f3d0" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     );
   }
   if (faction === 'mist-order') {
     return (
-      <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <circle cx="16" cy="16" r="13" fill="#4c0519" stroke="#fb7185" strokeWidth="2.2" />
         <path
-          d="M12 3C7 3 4 7 4 11.5C4 16 7.5 19.5 12 21C16.5 19.5 20 16 20 11.5C20 7 17 3 12 3Z"
-          fill="#581C87"
-          stroke="#D8B4FE"
-          strokeWidth="1.3"
+          d="M19.5 9.5C15.8 10 13 13 13 16.5C13 20 15.8 22.8 19.8 23.2C14.8 24.4 9.5 21.2 9.5 16C9.5 10.8 14.5 7.8 19.5 9.5Z"
+          fill="#fda4af"
         />
-        <path
-          d="M6.5 11.5C8 10 9.5 10 11 11.5C12.5 13 14 13 17.5 11"
-          fill="none"
-          stroke="#E9D5FF"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-        <path
-          d="M7.5 15C9 14 11 14 12.5 15C14 16 15.5 15.5 16.8 14.5"
-          fill="none"
-          stroke="#C084FC"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
+        <circle cx="21.5" cy="13" r="2" fill="#ffe4e6" />
+      </svg>
+    );
+  }
+  if (faction === 'wanderer') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <polygon points="16,3 29,16 16,29 3,16" fill="#451a03" stroke="#fbbf24" strokeWidth="2.2" />
+        <circle cx="16" cy="16" r="4.5" fill="#fde68a" />
       </svg>
     );
   }
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <circle cx="12" cy="12" r="9" fill="#064E3B" stroke="#6EE7B7" strokeWidth="1.3" />
-      <polygon points="12,5 14.2,10.5 19,12 14.2,13.5 12,19 9.8,13.5 5,12 9.8,10.5" fill="#34D399" />
-      <circle cx="12" cy="12" r="1.6" fill="#ECFDF5" />
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <circle cx="16" cy="16" r="13" fill="#1e293b" stroke="#64748b" strokeWidth="2" strokeDasharray="3 2" />
+      <text x="16" y="21" textAnchor="middle" fill="#94a3b8" fontSize="14" fontWeight="800">
+        ?
+      </text>
     </svg>
   );
 }
 
 export function RolePortraitSvg({
   roleId,
-  size = 'md',
+  faction,
+  size = 44,
 }: {
-  roleId: BoardGameRoleId;
-  size?: 'sm' | 'md' | 'lg';
+  roleId: BoardGameRoleId | null;
+  faction: BoardGameFactionId | null;
+  size?: number;
 }) {
-  const uid = useId().replace(/:/g, '');
-  const meta = ROLE_VISUAL_META[roleId];
-  const dimClass =
-    size === 'sm' ? 'h-10 w-10' : size === 'lg' ? 'h-20 w-20' : 'h-16 w-16';
-  const isFemale = roleId === 'gac-truc-ban' || roleId === 'suong-tin-gia' || roleId === 'lang-quan-sat';
-  const hasHood = roleId === 'suong-an-danh' || roleId === 'suong-gac-cong' || roleId === 'lang-anh-san';
+  const accent =
+    roleId && ROLE_VISUAL_META[roleId]
+      ? ROLE_VISUAL_META[roleId].accentHex
+      : faction
+        ? FACTION_THEME[faction].accent
+        : '#94a3b8';
 
   return (
-    <svg
-      viewBox="0 0 96 96"
-      className={`${dimClass} shrink-0 rounded-xl shadow-inner`}
-      aria-label={meta.archetype}
-    >
-      <defs>
-        <linearGradient id={`bg_${uid}`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor={meta.bgFrom} />
-          <stop offset="100%" stopColor={meta.bgTo} />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="96" height="96" rx="16" fill={`url(#bg_${uid})`} />
-      <circle cx="48" cy="44" r="34" fill={meta.trimHex} opacity="0.12" />
-      <circle cx="48" cy="44" r="33" fill="none" stroke={meta.trimHex} strokeOpacity="0.35" strokeWidth="1.5" />
-
-      {/* Mũ trùm hoặc vầng tóc sau */}
-      {hasHood ? (
-        <path
-          d="M23 54C23 26 35 16 48 16C61 16 73 26 73 54L68 62H28L23 54Z"
-          fill="#0F172A"
-          stroke={meta.trimHex}
-          strokeOpacity="0.55"
-          strokeWidth="1.6"
-        />
-      ) : isFemale ? (
-        <path d="M27 42C27 25 36 18 48 18C60 18 69 25 69 42L72 60H24L27 42Z" fill="#1E1B18" />
-      ) : (
-        <path d="M29 38C29 24 37 18 48 18C59 18 67 24 67 38Z" fill="#1E1B18" />
-      )}
-
-      {/* Vai & Áo đặc trưng lớp nhân vật */}
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      <rect width="48" height="48" rx="14" fill="#0f172a" stroke={accent} strokeWidth="2.2" />
+      <circle cx="24" cy="18" r="7.5" fill={accent} fillOpacity="0.28" stroke={accent} strokeWidth="2" />
       <path
-        d="M16 94C18 71 30 62 48 62C66 62 78 71 80 94Z"
-        fill={meta.cloakHex}
-        stroke={meta.trimHex}
-        strokeWidth="1.6"
+        d="M11 40C12.2 32.8 17.5 29 24 29C30.5 29 35.8 32.8 37 40"
+        fill={accent}
+        fillOpacity="0.22"
+        stroke={accent}
+        strokeWidth="2"
+        strokeLinecap="round"
       />
-      <path d="M37 64L48 77L59 64" fill="none" stroke={meta.trimHex} strokeWidth="2.2" />
-
-      {/* Đầu & Cổ */}
-      <rect x="42" y="51" width="12" height="14" rx="5" fill="#EAC09E" />
-      <circle cx="48" cy="39" r="15" fill="#F2CBA9" />
-
-      {/* Tóc mái / Tai nghe */}
-      {!hasHood && (
-        <path
-          d="M33 36C34 25 42 22 48 22C54 22 62 25 63 36C58 30 39 30 33 36Z"
-          fill="#1B1918"
-        />
-      )}
-
-      {/* Mắt & Phụ kiện riêng theo từng class */}
-      {roleId === 'lang-anh-san' ? (
-        <>
-          <rect x="36" y="34" width="24" height="7" rx="3" fill="#0F172A" stroke="#34D399" strokeWidth="1.5" />
-          <line x1="40" y1="37.5" x2="56" y2="37.5" stroke="#6EE7B7" strokeWidth="1.8" />
-        </>
-      ) : roleId === 'suong-tin-gia' ? (
-        <>
-          <path d="M35 35H61L57 42H49L48 40L47 42H39Z" fill="#311042" stroke="#F5D0FE" strokeWidth="1" />
-          <circle cx="42.5" cy="38.2" r="1.5" fill="#F0ABFC" />
-          <circle cx="53.5" cy="38.2" r="1.5" fill="#F0ABFC" />
-        </>
-      ) : (
-        <>
-          <circle cx="42.5" cy="39" r="1.8" fill="#1E293B" />
-          <circle cx="53.5" cy="39" r="1.8" fill="#1E293B" />
-          <path d="M44 46.5Q48 49 52 46.5" fill="none" stroke="#9A6B52" strokeWidth="1.5" strokeLinecap="round" />
-        </>
-      )}
-
-      {/* Trang bị nhận diện từng nhân vật */}
-      {roleId === 'gac-ky-thuat' && (
-        <>
-          {/* Mũ bảo hộ & đèn pin trán */}
-          <path d="M31 31C32 20 39 16 48 16C57 16 64 20 65 31Z" fill="#F59E0B" stroke="#FEF3C7" strokeWidth="1.4" />
-          <rect x="43" y="21" width="10" height="6" rx="2" fill="#FEF08A" stroke="#78350F" strokeWidth="1.2" />
-          {/* Cờ lê bên vai phải */}
-          <path d="M68 79L76 70" stroke="#E2E8F0" strokeWidth="3.5" strokeLinecap="round" />
-          <circle cx="77" cy="69" r="4" fill="none" stroke="#E2E8F0" strokeWidth="2.2" />
-        </>
-      )}
-
-      {roleId === 'gac-truc-ban' && (
-        <>
-          {/* Kính thanh lịch + Sổ trực + Băng tay đỏ */}
-          <rect x="38" y="36" width="8" height="5.5" rx="1.5" fill="none" stroke="#1E293B" strokeWidth="1.3" />
-          <rect x="50" y="36" width="8" height="5.5" rx="1.5" fill="none" stroke="#1E293B" strokeWidth="1.3" />
-          <rect x="24" y="68" width="14" height="17" rx="2" fill="#FEF3C7" stroke="#78350F" strokeWidth="1.4" />
-          <line x1="27" y1="73" x2="35" y2="73" stroke="#92400E" strokeWidth="1.4" />
-          <line x1="27" y1="77" x2="35" y2="77" stroke="#92400E" strokeWidth="1.4" />
-        </>
-      )}
-
       {roleId === 'gac-radio' && (
-        <>
-          {/* Tai nghe chụp đầu + micro thu âm */}
-          <path d="M31 38C31 23 39 18 48 18C57 18 65 23 65 38" fill="none" stroke="#F8FAFC" strokeWidth="3" />
-          <rect x="28" y="33" width="6" height="12" rx="3" fill="#EA580C" stroke="#FEF3C7" strokeWidth="1.2" />
-          <rect x="62" y="33" width="6" height="12" rx="3" fill="#EA580C" stroke="#FEF3C7" strokeWidth="1.2" />
-          <path d="M64 43L52 48" stroke="#CBD5E1" strokeWidth="1.8" strokeLinecap="round" />
-          <circle cx="51" cy="48.5" r="2.2" fill="#FDE047" />
-        </>
+        <path d="M16 18C16 12.5 32 12.5 32 18" stroke="#e0f2fe" strokeWidth="2.2" strokeLinecap="round" />
       )}
-
-      {roleId === 'suong-an-danh' && (
-        <>
-          {/* Biểu tượng cầu dao ngắt điện */}
-          <rect x="64" y="67" width="14" height="18" rx="3" fill="#1E1B4B" stroke="#C4B5FD" strokeWidth="1.4" />
-          <path d="M72 70L68 76H73L69 82" fill="none" stroke="#F472B6" strokeWidth="2" strokeLinecap="round" />
-        </>
-      )}
-
       {roleId === 'suong-tin-gia' && (
-        <>
-          {/* Sóng nhiễu bên góc */}
-          <path d="M64 69L70 65L74 71L80 67" fill="none" stroke="#F0ABFC" strokeWidth="2" strokeLinecap="round" />
-          <circle cx="71" cy="79" r="5" fill="#701A75" stroke="#F5D0FE" strokeWidth="1.4" />
-        </>
+        <path d="M25 8L20 17H26L22 25" stroke="#fecdd3" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
       )}
-
-      {roleId === 'suong-gac-cong' && (
-        <>
-          {/* Khăn choàng cổ & ổ khóa */}
-          <rect x="33" y="58" width="30" height="8" rx="4" fill="#312E81" stroke="#A5B4FC" strokeWidth="1.2" />
-          <rect x="65" y="72" width="13" height="11" rx="2.5" fill="#C7D2FE" stroke="#1E1B4B" strokeWidth="1.4" />
-          <path d="M68 72V68.5C68 66.5 75 66.5 75 68.5V72" fill="none" stroke="#C7D2FE" strokeWidth="1.8" />
-        </>
-      )}
-
       {roleId === 'lang-anh-san' && (
-        <>
-          {/* Viên Mảnh Tin Đen phát sáng */}
-          <polygon points="71,65 78,74 71,83 64,74" fill="#34D399" stroke="#ECFDF5" strokeWidth="1.4" />
-        </>
-      )}
-
-      {roleId === 'lang-quan-sat' && (
-        <>
-          {/* Kính tròn + Sổ tay & Bút */}
-          <circle cx="42.5" cy="39" r="4.3" fill="none" stroke="#99F6E4" strokeWidth="1.3" />
-          <circle cx="53.5" cy="39" r="4.3" fill="none" stroke="#99F6E4" strokeWidth="1.3" />
-          <rect x="23" y="68" width="15" height="18" rx="2.5" fill="#0F172A" stroke="#5EEAD4" strokeWidth="1.4" />
-          <circle cx="30.5" cy="77" r="3" fill="none" stroke="#5EEAD4" strokeWidth="1.3" />
-        </>
-      )}
-
-      {roleId === 'lang-cuu-ho' && (
-        <>
-          {/* Khiên chữ thập y tế KTX */}
-          <path
-            d="M71 66L79 69V76C79 81 75 84 71 86C67 84 63 81 63 76V69L71 66Z"
-            fill="#ECFDF5"
-            stroke="#10B981"
-            strokeWidth="1.5"
-          />
-          <path d="M71 71V79M67 75H75" stroke="#EF4444" strokeWidth="2.4" strokeLinecap="round" />
-        </>
+        <rect x="28" y="29" width="9" height="7" rx="2" fill="#fbbf24" />
       )}
     </svg>
   );
 }
 
 export function LocationSceneSvg({
-  locationId,
-  isBlackout = false,
+  location,
+  size = 44,
 }: {
-  locationId: BoardGameLocationId;
-  isBlackout?: boolean;
+  location: BoardGameLocationId;
+  size?: number;
 }) {
-  const uid = useId().replace(/:/g, '');
-  const skyTop = isBlackout ? '#1E1033' : '#0F172A';
-  const glow = isBlackout ? '#7C3AED' : LOCATION_VISUAL_META[locationId].frameAccent;
+  const accent = LOCATION_VISUAL_META[location].accentHex;
+  switch (location) {
+    case 'radio':
+      return (
+        <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect width="48" height="48" rx="12" fill="#052e2b" stroke={accent} strokeWidth="1.8" />
+          <path d="M24 38V18M17 38H31" stroke="#6ee7b7" strokeWidth="2.5" strokeLinecap="round" />
+          <circle cx="24" cy="15" r="3.5" fill="#34d399" />
+          <path d="M16 12C12.5 15.5 12.5 21.5 16 25M32 12C35.5 15.5 35.5 21.5 32 25" stroke="#a7f3d0" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'breaker':
+      return (
+        <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect width="48" height="48" rx="12" fill="#2f0a17" stroke={accent} strokeWidth="1.8" />
+          <rect x="13" y="10" width="22" height="28" rx="3" fill="#4c0519" stroke="#fb7185" strokeWidth="2" />
+          <path d="M26 15L19 25H25L22 33" stroke="#fde047" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'lobby':
+      return (
+        <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect width="48" height="48" rx="12" fill="#082f49" stroke={accent} strokeWidth="1.8" />
+          <rect x="11" y="13" width="26" height="24" rx="2.5" fill="#0c4a6e" stroke="#38bdf8" strokeWidth="2" />
+          <rect x="18" y="21" width="12" height="16" fill="#0284c7" />
+          <circle cx="24" cy="17" r="2.2" fill="#fde68a" />
+        </svg>
+      );
+    case 'canteen':
+      return (
+        <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect width="48" height="48" rx="12" fill="#3b2004" stroke={accent} strokeWidth="1.8" />
+          <path d="M14 21H30V31C30 34.5 27 37 22 37C17 37 14 34.5 14 31V21Z" fill="#f59e0b" />
+          <path d="M30 23H33.5C35.2 23 36.5 24.3 36.5 26C36.5 27.7 35.2 29 33.5 29H30" stroke="#fde68a" strokeWidth="2.2" />
+          <path d="M19 13V17M24 12V17" stroke="#fef3c7" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'corridor':
+      return (
+        <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect width="48" height="48" rx="12" fill="#1e1b4b" stroke={accent} strokeWidth="1.8" />
+          <path d="M24 11V37M14 24H34" stroke="#34d399" strokeWidth="4.5" strokeLinecap="round" />
+          <circle cx="35" cy="14" r="4.5" fill="#f43f5e" />
+        </svg>
+      );
+    case 'court':
+      return (
+        <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect width="48" height="48" rx="12" fill="#0f2942" stroke={accent} strokeWidth="1.8" />
+          <circle cx="24" cy="24" r="11" fill="#ea580c" stroke="#fdba74" strokeWidth="2" />
+          <path d="M13 24H35M24 13V35M17 16C21 20 21 28 17 32M31 16C27 20 27 28 31 32" stroke="#431407" strokeWidth="1.6" />
+        </svg>
+      );
+  }
+}
 
+export function DeckCardBackSvg({
+  deck,
+  size = 44,
+}: {
+  deck: BoardGameDeckId;
+  size?: number;
+}) {
+  const palette =
+    deck === 'investigation'
+      ? { bg: '#064e3b', border: '#10b981', glyph: '🔍' }
+      : deck === 'equipment'
+        ? { bg: '#0c4a6e', border: '#38bdf8', glyph: '🛡️' }
+        : { bg: '#4c0519', border: '#f43f5e', glyph: '⚡' };
+  const h = Math.round(size * 1.32);
   return (
-    <svg
-      viewBox="0 0 200 62"
-      className="h-12 w-full rounded-lg border border-slate-800/80 object-cover sm:h-14"
+    <div
+      style={{
+        width: size,
+        height: h,
+        backgroundColor: palette.bg,
+        borderColor: palette.border,
+      }}
+      className="shrink-0 rounded-xl border-2 flex flex-col items-center justify-center shadow-md select-none"
       aria-hidden="true"
     >
-      <defs>
-        <linearGradient id={`loc_${uid}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={skyTop} />
-          <stop offset="100%" stopColor="#020617" />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="200" height="62" fill={`url(#loc_${uid})`} />
-      {/* Sao đêm */}
-      <circle cx="24" cy="11" r="1" fill="#E2E8F0" opacity="0.65" />
-      <circle cx="88" cy="8" r="1.2" fill="#FEF08A" opacity="0.55" />
-      <circle cx="172" cy="14" r="1" fill="#E2E8F0" opacity="0.6" />
-      <rect x="0" y="50" width="200" height="12" fill="#0B1220" />
+      <span className="text-lg leading-none">{palette.glyph}</span>
+    </div>
+  );
+}
 
-      {locationId === 'lobby' && (
-        <>
-          <rect x="52" y="18" width="96" height="32" rx="3" fill="#1E293B" stroke="#475569" strokeWidth="1.2" />
-          <polygon points="46,18 100,7 154,18" fill="#334155" />
-          <rect x="88" y="30" width="24" height="20" fill="#F59E0B" opacity={isBlackout ? '0.2' : '0.6'} />
-          <circle cx="100" cy="24" r="7" fill={glow} opacity="0.25" />
-          <circle cx="100" cy="24" r="2.8" fill={glow} />
-          <rect x="64" y="25" width="12" height="10" rx="1.5" fill="#FDE68A" opacity={isBlackout ? '0.2' : '0.75'} />
-          <rect x="124" y="25" width="12" height="10" rx="1.5" fill="#FDE68A" opacity={isBlackout ? '0.2' : '0.75'} />
-        </>
-      )}
-
-      {locationId === 'canteen' && (
-        <>
-          <rect x="44" y="22" width="112" height="28" rx="3" fill="#1E293B" />
-          <path d="M40 22L54 13H146L160 22Z" fill="#EA580C" />
-          <path d="M60 13V22M80 13V22M100 13V22M120 13V22M140 13V22" stroke="#FEF3C7" strokeWidth="3" opacity="0.7" />
-          <rect x="58" y="33" width="84" height="5" fill="#FDBA74" opacity="0.75" />
-          <circle cx="72" cy="27" r="2.6" fill="#FDE047" />
-          <circle cx="100" cy="27" r="2.6" fill="#FDE047" />
-          <circle cx="128" cy="27" r="2.6" fill="#FDE047" />
-        </>
-      )}
-
-      {locationId === 'court' && (
-        <>
-          {/* Đèn pha sân bóng rổ & bảng rổ */}
-          <line x1="34" y1="50" x2="34" y2="14" stroke="#64748B" strokeWidth="2.5" />
-          <polygon points="34,15 70,48 20,48" fill={glow} opacity="0.12" />
-          <circle cx="34" cy="14" r="3.5" fill="#BAE6FD" />
-          <rect x="136" y="18" width="20" height="14" rx="2" fill="#F8FAFC" stroke="#38BDF8" strokeWidth="1.5" />
-          <line x1="146" y1="32" x2="146" y2="50" stroke="#94A3B8" strokeWidth="2.5" />
-          <ellipse cx="141" cy="29" rx="5.5" ry="2" fill="none" stroke="#FB923C" strokeWidth="2" />
-          <path d="M65 50Q100 37 135 50" fill="none" stroke="#38BDF8" strokeWidth="1.5" strokeOpacity="0.65" />
-          <circle cx="96" cy="43" r="4" fill="#F97316" />
-        </>
-      )}
-
-      {locationId === 'breaker' && (
-        <>
-          <rect x="64" y="15" width="72" height="35" rx="4" fill="#1E1B4B" stroke="#7E22CE" strokeWidth="1.5" />
-          <rect x="74" y="22" width="22" height="20" rx="2" fill="#0F172A" stroke="#A855F7" strokeWidth="1.2" />
-          <path d="M87 24L82 32H87L83 39" fill="none" stroke="#FACC15" strokeWidth="2" strokeLinecap="round" />
-          <circle cx="114" cy="27" r="3" fill={isBlackout ? '#EF4444' : '#34D399'} />
-          <circle cx="124" cy="27" r="3" fill="#F59E0B" />
-          <line x1="108" y1="36" x2="128" y2="36" stroke="#C084FC" strokeWidth="2.5" strokeLinecap="round" />
-        </>
-      )}
-
-      {locationId === 'corridor' && (
-        <>
-          {/* Hành lang phối cảnh B7 */}
-          <rect x="36" y="14" width="128" height="36" fill="#0F172A" stroke="#334155" strokeWidth="1.2" />
-          <line x1="36" y1="14" x2="80" y2="27" stroke="#34D399" strokeOpacity="0.45" strokeWidth="1.4" />
-          <line x1="164" y1="14" x2="120" y2="27" stroke="#34D399" strokeOpacity="0.45" strokeWidth="1.4" />
-          <rect x="80" y="25" width="40" height="25" fill="#064E3B" stroke="#34D399" strokeWidth="1.5" />
-          <circle cx="100" cy="20" r="3" fill="#6EE7B7" />
-          <polygon points="100,32 104,37 100,42 96,37" fill="#A7F3D0" />
-        </>
-      )}
-
-      {locationId === 'radio' && (
-        <>
-          {/* Tháp phát thanh & sóng đồng tâm */}
-          <polygon points="90,50 100,18 110,50" fill="none" stroke="#CBD5E1" strokeWidth="2" />
-          <line x1="94" y1="38" x2="106" y2="38" stroke="#94A3B8" strokeWidth="1.5" />
-          <circle cx="100" cy="17" r="3.5" fill={glow} />
-          <path d="M84 19C82 13 86 8 92 7" fill="none" stroke={glow} strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M116 19C118 13 114 8 108 7" fill="none" stroke={glow} strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M77 24C73 14 80 5 90 3" fill="none" stroke={glow} strokeOpacity="0.55" strokeWidth="1.5" strokeLinecap="round" />
-          <path d="M123 24C127 14 120 5 110 3" fill="none" stroke={glow} strokeOpacity="0.55" strokeWidth="1.5" strokeLinecap="round" />
-        </>
-      )}
+export function DiceD6Svg({ value, size = 44 }: { value: number; size?: number }) {
+  const v = Math.max(1, Math.min(6, Math.round(value)));
+  const pips: Record<number, readonly [number, number][]> = {
+    1: [[24, 24]],
+    2: [
+      [15, 15],
+      [33, 33],
+    ],
+    3: [
+      [15, 15],
+      [24, 24],
+      [33, 33],
+    ],
+    4: [
+      [15, 15],
+      [33, 15],
+      [15, 33],
+      [33, 33],
+    ],
+    5: [
+      [15, 15],
+      [33, 15],
+      [24, 24],
+      [15, 33],
+      [33, 33],
+    ],
+    6: [
+      [15, 13],
+      [33, 13],
+      [15, 24],
+      [33, 24],
+      [15, 35],
+      [33, 35],
+    ],
+  };
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-label={`1d6 ra ${v}`}>
+      <rect x="3" y="3" width="42" height="42" rx="10" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="2.5" />
+      {(pips[v] ?? pips[1]).map(([cx, cy], idx) => (
+        <circle key={idx} cx={cx} cy={cy} r="3.8" fill={v === 1 ? '#e11d48' : '#0f172a'} />
+      ))}
     </svg>
   );
 }
 
-export function DeckCardBackSvg({ deck }: { deck: BoardGameDeckId }) {
-  const palette =
-    deck === 'investigation'
-      ? { bg: '#451A03', border: '#F59E0B', fg: '#FDE68A' }
-      : deck === 'event'
-        ? { bg: '#4C0519', border: '#F43F5E', fg: '#FECDD3' }
-        : { bg: '#082F49', border: '#38BDF8', fg: '#BAE6FD' };
-
+export function DiceD4Svg({ value, size = 44 }: { value: number; size?: number }) {
+  const v = Math.max(1, Math.min(4, Math.round(value)));
   return (
-    <svg viewBox="0 0 36 48" className="h-10 w-8 shrink-0 rounded-md shadow" aria-hidden="true">
-      <rect x="1" y="1" width="34" height="46" rx="5" fill={palette.bg} stroke={palette.border} strokeWidth="2" />
-      <rect x="4.5" y="4.5" width="27" height="39" rx="3" fill="none" stroke={palette.fg} strokeOpacity="0.35" strokeDasharray="2 2" />
-      {deck === 'investigation' && (
-        <>
-          <circle cx="16.5" cy="21" r="6" fill="none" stroke={palette.fg} strokeWidth="2.2" />
-          <line x1="21" y1="25.5" x2="26" y2="31" stroke={palette.fg} strokeWidth="2.5" strokeLinecap="round" />
-        </>
-      )}
-      {deck === 'event' && (
-        <path d="M19 12L12 24H18L15 36L25 22H19L22 12Z" fill={palette.fg} />
-      )}
-      {deck === 'equipment' && (
-        <>
-          <path d="M18 13L26 16.5V23.5C26 28.5 22.5 32 18 34C13.5 32 10 28.5 10 23.5V16.5L18 13Z" fill="none" stroke={palette.fg} strokeWidth="2" />
-          <circle cx="18" cy="23" r="2.8" fill={palette.fg} />
-        </>
-      )}
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-label={`1d4 ra ${v}`}>
+      <polygon
+        points="24,4 44,41 4,41"
+        fill="#f59e0b"
+        stroke="#fef3c7"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+      />
+      <text
+        x="24"
+        y="34"
+        textAnchor="middle"
+        fill="#1e1b4b"
+        fontSize="18"
+        fontWeight="900"
+      >
+        {v}
+      </text>
     </svg>
   );
 }
 
 export function PlayerPawnToken({
-  player,
+  displayName,
+  seatIndex,
+  alive,
+  isActive,
   isSelf,
-  isActiveTurn,
+  revealedFaction,
+  compact = false,
 }: {
-  player: BoardGamePublicPlayerView;
+  displayName: string;
+  seatIndex: number;
+  alive: boolean;
+  isActive: boolean;
   isSelf: boolean;
-  isActiveTurn: boolean;
+  revealedFaction: BoardGameFactionId | null;
+  compact?: boolean;
 }) {
-  const outfitId = player.appearance?.outfit ?? 'windbreaker-hust';
-  const preset = OUTFIT_PRESETS[outfitId] ?? OUTFIT_PRESETS['windbreaker-hust'];
-  const ringHex = player.revealedFaction
-    ? FACTION_THEME[player.revealedFaction].accentHex
-    : SEAT_RING_PALETTE[player.seatIndex % SEAT_RING_PALETTE.length];
-  const isFemale = player.appearance?.gender === 'female';
+  const ringHex = SEAT_RING_PALETTE[seatIndex % SEAT_RING_PALETTE.length];
+  const initial = displayName.trim().slice(0, 2).toUpperCase() || `P${seatIndex + 1}`;
+  const sizeClass = compact ? 'w-7 h-7 text-[11px]' : 'w-9 h-9 text-xs';
+  const factionBg =
+    revealedFaction === 'lantern-guard'
+      ? 'bg-emerald-700'
+      : revealedFaction === 'mist-order'
+        ? 'bg-rose-700'
+        : revealedFaction === 'wanderer'
+          ? 'bg-amber-700'
+          : 'bg-slate-800';
 
   return (
     <div
-      className={`inline-flex items-center gap-1.5 rounded-xl border px-1.5 py-1 text-[11px] transition motion-reduce:transition-none ${
-        !player.alive
-          ? 'border-slate-800 bg-slate-950/65 text-slate-500 opacity-65 line-through'
-          : isActiveTurn
-            ? 'border-amber-400 bg-amber-950/70 text-amber-50 shadow-[0_0_12px_rgba(251,191,36,0.35)]'
-            : isSelf
-              ? 'border-emerald-400/60 bg-emerald-950/45 text-emerald-50'
-              : 'border-slate-700/90 bg-slate-950/85 text-slate-100'
-      }`}
+      style={{ borderColor: alive ? ringHex : '#475569' }}
+      className={`relative rounded-full border-2 ${sizeClass} ${factionBg} ${
+        !alive ? 'opacity-45 grayscale' : ''
+      } ${isActive ? 'ring-2 ring-amber-300 ring-offset-2 ring-offset-slate-950 scale-105' : ''} flex items-center justify-center font-black text-white shadow-md select-none transition-transform`}
+      title={displayName}
     >
-      {/* Quân cờ Avatar thu nhỏ */}
-      <svg viewBox="0 0 28 28" className="h-6 w-6 shrink-0" aria-hidden="true">
-        <circle cx="14" cy="14" r="12.5" fill="#0F172A" stroke={ringHex} strokeWidth="2.2" />
-        {/* Áo theo đúng preset đồng phục */}
-        <path d="M6 25C7 19.5 10 17 14 17C18 17 21 19.5 22 25Z" fill={preset.shirt} />
-        {preset.upperYokeColor && (
-          <path d="M8.5 19L14 23L19.5 19" fill="none" stroke={preset.upperYokeColor} strokeWidth="2" />
-        )}
-        {/* Tóc & Mặt */}
-        <circle cx="14" cy="11.2" r="4.6" fill="#F2CBA9" />
-        <path
-          d={
-            isFemale
-              ? 'M8.8 11.5C8.8 7.5 11.2 6 14 6C16.8 6 19.2 7.5 19.2 11.5V15H17.6V10.5H10.4V15H8.8Z'
-              : 'M9.3 10.5C9.5 7 11.5 6 14 6C16.5 6 18.5 7 18.7 10.5C16.5 9 11.5 9 9.3 10.5Z'
-          }
-          fill="#1B1918"
-        />
-      </svg>
-
-      <div className="min-w-0 leading-tight">
-        <div className="flex items-center gap-1 truncate font-semibold">
-          {isActiveTurn && player.alive && <span className="text-amber-300">▶</span>}
-          <span className="max-w-[76px] truncate sm:max-w-[92px]">{player.displayName}</span>
-          {player.revealedFaction && (
-            <FactionCrestSvg faction={player.revealedFaction} className="h-3.5 w-3.5 shrink-0" />
-          )}
-        </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px]">
-          <span
-            className={`font-semibold ${
-              player.woundsTaken > 0 ? 'text-rose-300' : 'text-slate-300'
-            }`}
-            title="Số vết thương đã nhận công khai"
-          >
-            🩹{player.woundsTaken}
-          </span>
-          {player.tempShield > 0 && (
-            <span className="font-semibold text-sky-300" title="Giáp tạm đang có">
-              🛡️{player.tempShield}
-            </span>
-          )}
-          {player.equipped.length > 0 && (
-            <span
-              className="font-semibold text-cyan-300"
-              title={`Trang bị đang mang: ${player.equipped.map((e) => e.title).join(', ')}`}
-            >
-              🎒{player.equipped.length}
-            </span>
-          )}
-          {player.exposedMark > 0 && (
-            <span className="font-semibold text-orange-300" title="Đang bị Hở sườn (+1 ST đòn kế)">
-              🎯
-            </span>
-          )}
-          {player.wardedUntilRound > 0 && (
-            <span className="font-semibold text-emerald-300" title="Đang được Lan bảo hộ">
-              🛡️L
-            </span>
-          )}
-          {!player.connected && <span className="text-rose-400">📡✕</span>}
-        </div>
-      </div>
+      <span>{alive ? initial : '✕'}</span>
+      {isSelf && (
+        <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-cyan-400 border-2 border-slate-950" />
+      )}
     </div>
   );
 }

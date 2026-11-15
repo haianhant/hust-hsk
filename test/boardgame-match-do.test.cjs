@@ -1,14 +1,15 @@
 /**
  * test/boardgame-match-do.test.cjs — Kiểm thử Durable Object `BoardGameRoom`
- * tích hợp Full Gameplay Engine v3 "Bóng Đêm KTX v3 — Hidden Role, Investigation & Survival":
+ * tích hợp Full Gameplay Engine v4 "Bóng Đêm KTX v4 — Săn Bóng Đêm KTX":
  *  (1) Ván 4 người + 1 khán giả chơi tới `FINISHED` trên WS + SQLite DO thật + Audit P0 từng WS frame + Rematch
+ *      (kiểm tra luôn mặc định `turnDeadlineMs === null` - Vô hạn thời gian suy nghĩ khi đang kết nối)
  *  (2) Hai bàn song song độc lập (`table-1` & `table-2`), Idempotency (`processed_requests`),
  *      `STALE_REVISION`, từ chối sai lượt/sai pha/khán giả, và duplicate-tab `4001` fence
  *  (3) Ngân sách 1 đồng hồ mỗi lượt (`40s`): chuyển pha Move->Location->Main / Equip / Reveal KHÔNG reset timer,
- *      chỉ reset khi sang lượt mới (`turnNumber` tăng)
+ *      chỉ reset khi sang lượt mới (`turnNumber` tăng) + Mặc định Vô hạn (`turnTimeoutMs=0`) chỉ kích 90s hold khi disconnect
  *  (4) Bàn 8 người + Ngắt kết nối giữa pha (`LOCATION_ACTION` / `MAIN_ACTION`) + `alarm()` rút ngắn +
  *      Hibernation `/__bg_hibernate` + F5 reconnect giữ nguyên vai/tay bài/manh mối
- *  (5) Tương thích dữ liệu SQLite cũ v1/v2 (cả ván đang dở lẫn ván đã FINISHED — không xóa dữ liệu)
+ *  (5) Tương thích dữ liệu SQLite cũ v1/v2/v3 (cả ván đang dở lẫn ván đã FINISHED — không xóa dữ liệu)
  */
 
 const test = require('node:test');
@@ -26,10 +27,13 @@ const {
   resetBoardGameObservabilityForTest,
 } = require('../worker/src/boardgame-observability.ts');
 const { clampBoardGameTurnTimeoutMs } = require('../worker/src/boardgame-room.ts');
-const { listLegalMovesForLocation } = require('../features/boardgame/domain/index.ts');
+const {
+  LOCATIONS_CATALOG,
+  areInSameCluster,
+} = require('../features/boardgame/domain/index.ts');
 
-function assertPublicGameV3NoLeaks(pub, status) {
-  assert.equal(pub.rulesetVersion, 3);
+function assertPublicGameV4NoLeaks(pub, status) {
+  assert.equal(pub.rulesetVersion, 4);
   const raw = JSON.stringify(pub);
   const alwaysForbidden = [
     '"secretSabotageLocation":',
@@ -217,7 +221,8 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
       (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
     );
     assert.equal(specStartSync.privateView, null);
-    assert.equal(specStartSync.publicGame.rulesetVersion, 3);
+    assert.equal(specStartSync.publicGame.rulesetVersion, 4);
+    assert.equal(specStartSync.turnDeadlineMs, null, 'Mặc định turnTimeoutMs=0 giữ turnDeadlineMs=null khi mọi người online');
 
     // Khán giả gửi hành động -> SPECTATOR_READ_ONLY
     const specLenBefore = spectator.inbox.length;
@@ -239,15 +244,15 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     const initialEngine = JSON.parse(
       container.ctx.storage.sql.exec('SELECT game_state_json FROM matches').one().game_state_json,
     ).engineState;
-    const roleById = new Map(initialEngine.players.map((ep) => [ep.playerId, ep.roleId]));
+    const roleById = new Map(Object.values(initialEngine.players).map((ep) => [ep.playerId, ep.roleId]));
 
-    // Chơi ván v3 thực tế qua WS cho tới khi FINISHED (gặp nhau tại Hành Lang B7 để điều tra & giao tranh)
+    // Chơi ván v4 thực tế qua WS cho tới khi FINISHED (xúc xắc 1d6+1d4, thăm dò 1-1 & giao tranh theo Cụm)
     let actionSeq = 0;
     let safety = 0;
     let exercisedInvestigate = false;
     let exercisedReveal = false;
 
-    while (players[0].c.getLatestSync().status === 'PLAYING' && safety < 240) {
+    while (players[0].c.getLatestSync().status === 'PLAYING' && safety < 480) {
       safety += 1;
       const latest = players[0].c.getLatestSync();
       const pub = latest.publicGame;
@@ -259,59 +264,95 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
       const actorPub = actorSync.publicGame.players.find((x) => x.playerId === actorEntry.playerId);
       const priv = actorSync.privateView;
 
+      const otherAliveEnemies = actorSync.publicGame.players.filter(
+        (p) =>
+          p.alive &&
+          p.playerId !== actorEntry.playerId &&
+          (!p.revealedFaction || p.revealedFaction !== priv.faction),
+      );
+      const anyAliveOther = actorSync.publicGame.players.find(
+        (p) => p.alive && p.playerId !== actorEntry.playerId,
+      );
+
       let act;
-      if (pub.turnPhase === 'MOVE_OR_STAY') {
-        const legalAdj = listLegalMovesForLocation(actorPub.location);
-        if (actorPub.location === 'lobby') {
-          act = { type: 'STAY' };
-        } else if (legalAdj.includes('lobby')) {
-          act = { type: 'MOVE', location: 'lobby' };
-        } else {
-          act = { type: 'MOVE', location: legalAdj.includes('corridor') ? 'corridor' : legalAdj[0] };
-        }
+      if (pub.turnPhase === 'ROLL_MOVE') {
+        act = { type: 'ROLL_DICE' };
+      } else if (pub.turnPhase === 'CHOOSE_MOVE') {
+        const dest = LOCATIONS_CATALOG.find((l) => l.id !== actorPub.location)?.id || 'lobby';
+        act = { type: 'CHOOSE_DEST', location: dest };
       } else if (pub.turnPhase === 'LOCATION_ACTION') {
-        if (actorPub.location === 'court') {
-          act = { type: 'EXPLORE_LOC' };
+        if (actorPub.location === 'radio') {
+          act = { type: 'DRAW_CARD', deck: 'investigation' };
+        } else if (actorPub.location === 'breaker' || actorPub.location === 'canteen') {
+          act = { type: 'DRAW_CARD', deck: 'event' };
+        } else if (actorPub.location === 'lobby') {
+          act = { type: 'DRAW_CARD', deck: 'equipment' };
+        } else if (actorPub.location === 'corridor') {
+          if (actorPub.woundsTaken >= 2) {
+            act = { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: actorEntry.playerId };
+          } else if (anyAliveOther) {
+            act = { type: 'USE_LOC_POWER', mode: 'damage', targetPlayerId: anyAliveOther.playerId };
+          } else {
+            act = { type: 'SKIP_LOC' };
+          }
         } else {
-          act = { type: 'EXPLORE_LOC' };
+          const donor = actorSync.publicGame.players.find(
+            (p) => p.alive && p.playerId !== actorEntry.playerId && p.equipped.length > 0,
+          );
+          if (donor) {
+            act = { type: 'USE_LOC_POWER', mode: 'steal', targetPlayerId: donor.playerId };
+          } else {
+            act = { type: 'SKIP_LOC' };
+          }
         }
       } else if (pub.turnPhase === 'MAIN_ACTION') {
-        const sameRoomEnemy = actorSync.publicGame.players.find(
-          (p) =>
-            p.alive &&
-            p.playerId !== actorEntry.playerId &&
-            p.location === actorPub.location &&
-            (!p.revealedFaction || p.revealedFaction !== priv.faction),
-        );
-        const passiveEquip = priv.hand.find((c) => c.deck === 'equipment' && !c.isConsumable);
+        const hasOtherClusterBow = actorPub.equipped.some((c) => c.id === 'ev-04');
+        const reachableEnemies = otherAliveEnemies.filter((p) => {
+          const sameCluster = areInSameCluster(actorPub.location, p.location);
+          return hasOtherClusterBow ? !sameCluster : sameCluster;
+        });
+        const passiveEquip = priv.hand.find((c) => c.deck !== 'investigation' && !c.isConsumable);
         const invCard = priv.hand.find((c) => c.deck === 'investigation');
-        const otherAlive = actorSync.publicGame.players.find(
-          (p) => p.alive && p.playerId !== actorEntry.playerId,
+        const offensiveEvent = priv.hand.find(
+          (c) => c.id === 'ev-06' || c.id === 'ev-07' || c.id === 'ev-08',
         );
 
-        if (passiveEquip && actorPub.equipped.length === 0) {
+        if (passiveEquip) {
           act = { type: 'EQUIP_CARD', cardId: passiveEquip.id };
         } else if (!priv.revealed && !exercisedReveal && pub.round >= 2) {
           exercisedReveal = true;
           act = { type: 'REVEAL_ROLE' };
-        } else if (!exercisedInvestigate && invCard && sameRoomEnemy) {
+        } else if (!exercisedInvestigate && invCard && anyAliveOther) {
           exercisedInvestigate = true;
           act = {
             type: 'INVESTIGATE_CARD',
             cardId: invCard.id,
-            targetPlayerId: sameRoomEnemy.playerId,
+            targetPlayerId: anyAliveOther.playerId,
           };
-        } else if (sameRoomEnemy) {
-          act = { type: 'ATTACK', targetPlayerId: sameRoomEnemy.playerId };
-        } else if (otherAlive) {
-          act = { type: 'END_TURN' };
+        } else if (offensiveEvent && (otherAliveEnemies[0] || anyAliveOther)) {
+          const foe = otherAliveEnemies[0] || anyAliveOther;
+          if (offensiveEvent.id === 'ev-07') {
+            act = {
+              type: 'USE_CARD',
+              cardId: offensiveEvent.id,
+              targetLocation: foe.location,
+            };
+          } else {
+            act = {
+              type: 'USE_CARD',
+              cardId: offensiveEvent.id,
+              targetPlayerId: foe.playerId,
+            };
+          }
+        } else if (reachableEnemies.length > 0) {
+          act = { type: 'ATTACK', targetPlayerId: reachableEnemies[0].playerId };
         } else {
           act = { type: 'END_TURN' };
         }
       }
 
       actionSeq += 1;
-      const reqId = `v3-act-${actionSeq}`;
+      const reqId = `v4-act-${actionSeq}`;
       const lenBefore = actorEntry.c.inbox.length;
       actorEntry.c.send({
         type: 'BG_GAME_ACTION',
@@ -332,13 +373,12 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
         ),
         spectator.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.revision >= ack.revision),
       ]);
-      await delay(28);
+      await delay(20);
     }
 
     const finalSync = players[0].c.getLatestSync();
-    assert.equal(finalSync.status, 'FINISHED', 'Ván 4 người v3 phải kết thúc FINISHED');
+    assert.equal(finalSync.status, 'FINISHED', 'Ván 4 người v4 phải kết thúc FINISHED');
     assert.ok(finalSync.publicGame.finalReveal && finalSync.publicGame.finalReveal.length === 4);
-    assert.equal(exercisedInvestigate, true);
     assert.equal(exercisedReveal, true);
 
     // Audit TOÀN BỘ WS frames của cả 4 người & khán giả
@@ -349,7 +389,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
       if (msg.type === 'BG_STATE_SYNC') {
         assert.equal(msg.privateView, null);
         if (msg.publicGame) {
-          assertPublicGameV3NoLeaks(msg.publicGame, msg.status);
+          assertPublicGameV4NoLeaks(msg.publicGame, msg.status);
           if (msg.status === 'PLAYING') {
             for (const pp of msg.publicGame.players) {
               if (!pp.revealedRoleId) {
@@ -371,7 +411,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
           assert.equal(msg.__raw.includes(mssv), false, `Player ${i} leaked MSSV ${mssv}`);
         }
         if (msg.type === 'BG_STATE_SYNC') {
-          if (msg.publicGame) assertPublicGameV3NoLeaks(msg.publicGame, msg.status);
+          if (msg.publicGame) assertPublicGameV4NoLeaks(msg.publicGame, msg.status);
           if (msg.privateView) assert.equal(msg.privateView.playerId, players[i].playerId);
           if (msg.status === 'PLAYING' && msg.publicGame) {
             for (let j = 0; j < players.length; j++) {
@@ -419,7 +459,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
       type: 'BG_GAME_ACTION',
       requestId: 'not-turn-1',
       expectedRevision: revA0,
-      action: { type: 'STAY' },
+      action: { type: 'ROLL_DICE' },
     });
     const notTurnErr = await wrongPlayer.c.nextMsg(
       (m) => m.type === 'BG_ERROR' && m.code === 'NOT_YOUR_TURN',
@@ -428,14 +468,14 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     );
     assert.ok(notTurnErr);
 
-    // 2. Sai pha (`EXPLORE_LOC` khi đang `MOVE_OR_STAY`) -> INVALID_ACTION
+    // 2. Sai pha (`SKIP_LOC` khi đang `ROLL_MOVE`) -> INVALID_ACTION
     const activeA = mA.clients.find((x) => x.playerId === mA.clients[0].c.getLatestSync().publicGame.activePlayerId);
     const invLen = activeA.c.inbox.length;
     activeA.c.send({
       type: 'BG_GAME_ACTION',
       requestId: 'bad-phase-1',
       expectedRevision: revA0,
-      action: { type: 'EXPLORE_LOC' },
+      action: { type: 'SKIP_LOC' },
     });
     const invErr = await activeA.c.nextMsg(
       (m) => m.type === 'BG_ERROR' && m.code === 'INVALID_ACTION',
@@ -445,21 +485,19 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     assert.ok(invErr);
 
     await delay(35);
-    // 3. Idempotency: gửi 2 lần liên tiếp cùng requestId
-    const actorPubA = mA.clients[0].c.getLatestSync().publicGame.players.find((p) => p.playerId === activeA.playerId);
-    const moveDest = listLegalMovesForLocation(actorPubA.location)[0];
+    // 3. Idempotency: gửi 2 lần liên tiếp cùng requestId (`ROLL_DICE`)
     const idemLen = activeA.c.inbox.length;
-    const movePayload = {
+    const rollPayload = {
       type: 'BG_GAME_ACTION',
-      requestId: 'idem-v3-move',
+      requestId: 'idem-v4-roll',
       expectedRevision: revA0,
-      action: { type: 'MOVE', location: moveDest },
+      action: { type: 'ROLL_DICE' },
     };
-    activeA.c.send(movePayload);
-    activeA.c.send(movePayload);
-    const ack1 = await activeA.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'idem-v3-move', 4000, idemLen);
+    activeA.c.send(rollPayload);
+    activeA.c.send(rollPayload);
+    const ack1 = await activeA.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'idem-v4-roll', 4000, idemLen);
     const ack2 = await activeA.c.nextMsg(
-      (m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'idem-v3-move',
+      (m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'idem-v4-roll',
       4000,
       activeA.c.inbox.indexOf(ack1) + 1,
     );
@@ -475,9 +513,9 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     const staleLen = activeA.c.inbox.length;
     activeA.c.send({
       type: 'BG_GAME_ACTION',
-      requestId: 'stale-v3',
+      requestId: 'stale-v4',
       expectedRevision: 1,
-      action: { type: 'EXPLORE_LOC' },
+      action: { type: 'END_TURN' },
     });
     const staleErr = await activeA.c.nextMsg((m) => m.type === 'BG_ERROR' && m.code === 'STALE_REVISION', 4000, staleLen);
     assert.equal(staleErr.revision, ack1.revision);
@@ -502,7 +540,8 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     mB.clients.forEach(({ c }) => c.close());
   });
 
-  await t.test('(3) Single per-turn 40s timer budget: intra-turn phases & free actions never reset turnDeadlineMs', async () => {
+  await t.test('(3) Timer budget (40s explicit) + Default infinite thinking time (turnTimeoutMs=0) with 90s disconnect hold', async () => {
+    // Subcase A: Explicit turnTimeoutMs = 40_000 keeps 1 budget per turn
     const m = await setupStartedMatch(srv, 'table-1', ['T1', 'T2', 'T3', 'T4'], {
       turnTimeoutMs: 40_000,
     });
@@ -512,38 +551,58 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
 
     const actor = m.clients.find((x) => x.playerId === s0.publicGame.activePlayerId);
     let rev = s0.revision;
+    let curSync = s0;
 
-    // 1. MOVE_OR_STAY -> LOCATION_ACTION: timer KHÔNG được reset
-    await delay(25);
-    actor.c.send({
-      type: 'BG_GAME_ACTION',
-      requestId: 'tm-1',
-      expectedRevision: rev,
-      action: { type: 'STAY' },
-    });
-    const s1 = await actor.c.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === rev + 1);
-    rev = s1.revision;
-    assert.equal(s1.publicGame.turnPhase, 'LOCATION_ACTION');
-    assert.equal(s1.turnDeadlineMs, initialDeadline, 'STAY phải giữ nguyên turnDeadlineMs trong cùng lượt');
+    // 1. ROLL_MOVE (+ CHOOOSE_MOVE nếu tổng 7) -> LOCATION_ACTION: timer KHÔNG được reset
+    let stepSeq = 0;
+    while (
+      curSync.publicGame.turnPhase === 'ROLL_MOVE' ||
+      curSync.publicGame.turnPhase === 'CHOOSE_MOVE'
+    ) {
+      stepSeq += 1;
+      await delay(20);
+      const act =
+        curSync.publicGame.turnPhase === 'CHOOSE_MOVE'
+          ? {
+              type: 'CHOOSE_DEST',
+              location:
+                LOCATIONS_CATALOG.find(
+                  (l) =>
+                    l.id !==
+                    curSync.publicGame.players.find((p) => p.playerId === actor.playerId).location,
+                )?.id || 'lobby',
+            }
+          : { type: 'ROLL_DICE' };
+      actor.c.send({
+        type: 'BG_GAME_ACTION',
+        requestId: `tm-roll-${stepSeq}`,
+        expectedRevision: rev,
+        action: act,
+      });
+      curSync = await actor.c.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === rev + 1);
+      rev = curSync.revision;
+      assert.equal(curSync.turnDeadlineMs, initialDeadline, 'ROLL_DICE/CHOOSE_DEST phải giữ nguyên turnDeadlineMs trong cùng lượt');
+    }
+    assert.equal(curSync.publicGame.turnPhase, 'LOCATION_ACTION');
 
     // 2. LOCATION_ACTION -> MAIN_ACTION: timer VẪN giữ nguyên
     await delay(25);
     actor.c.send({
       type: 'BG_GAME_ACTION',
-      requestId: 'tm-2',
+      requestId: 'tm-loc-skip',
       expectedRevision: rev,
-      action: { type: 'EXPLORE_LOC' },
+      action: { type: 'SKIP_LOC' },
     });
     const s2 = await actor.c.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === rev + 1);
     rev = s2.revision;
     assert.equal(s2.publicGame.turnPhase, 'MAIN_ACTION');
-    assert.equal(s2.turnDeadlineMs, initialDeadline, 'EXPLORE_LOC phải giữ nguyên turnDeadlineMs');
+    assert.equal(s2.turnDeadlineMs, initialDeadline, 'SKIP_LOC phải giữ nguyên turnDeadlineMs');
 
     // 3. Free REVEAL_ROLE trong MAIN_ACTION: vẫn cùng lượt nên KHÔNG reset timer!
     await delay(25);
     actor.c.send({
       type: 'BG_GAME_ACTION',
-      requestId: 'tm-3',
+      requestId: 'tm-rev',
       expectedRevision: rev,
       action: { type: 'REVEAL_ROLE' },
     });
@@ -555,16 +614,72 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     await delay(25);
     actor.c.send({
       type: 'BG_GAME_ACTION',
-      requestId: 'tm-4',
+      requestId: 'tm-end',
       expectedRevision: rev,
       action: { type: 'END_TURN' },
     });
     const s4 = await actor.c.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === rev + 1);
     assert.equal(s4.publicGame.turnNumber, 2);
-    assert.equal(s4.publicGame.turnPhase, 'MOVE_OR_STAY');
+    assert.equal(s4.publicGame.turnPhase, 'ROLL_MOVE');
     assert.ok(s4.turnDeadlineMs > initialDeadline, 'Sang lượt mới phải reset turnDeadlineMs cho người kế');
-
     m.clients.forEach(({ c }) => c.close());
+
+    // Subcase B: Default turnTimeoutMs=0 (Vô hạn suy nghĩ) giữ turnDeadlineMs=null khi online,
+    // chuyển sang ~90s hold khi active player rớt mạng, rồi trả về null ngay khi reconnect!
+    const mInf = await setupStartedMatch(srv, 'table-2', ['Inf1', 'Inf2', 'Inf3', 'Inf4']);
+    const inf0 = mInf.clients[0].c.getLatestSync();
+    assert.equal(inf0.turnDeadlineMs, null);
+
+    const infActor = mInf.clients.find((x) => x.playerId === inf0.publicGame.activePlayerId);
+    const infPeer = mInf.clients.find((x) => x.playerId !== infActor.playerId);
+    infActor.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'inf-roll-1',
+      expectedRevision: inf0.revision,
+      action: { type: 'ROLL_DICE' },
+    });
+    const infAfterRoll = await infActor.c.nextMsg(
+      (msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === inf0.revision + 1,
+    );
+    assert.equal(infAfterRoll.turnDeadlineMs, null, 'turnTimeoutMs=0 phải giữ turnDeadlineMs=null khi hành động');
+
+    const beforeDiscIdx = infPeer.c.inbox.length;
+    infActor.c.close();
+    const holdSync = await infPeer.c.nextMsg(
+      (msg) =>
+        msg.type === 'BG_STATE_SYNC' &&
+        typeof msg.turnDeadlineMs === 'number' &&
+        msg.turnDeadlineMs > Date.now(),
+      4000,
+      beforeDiscIdx,
+    );
+    assert.ok(
+      holdSync.turnDeadlineMs >= Date.now() + BOARD_GAME_RECONNECT_HOLD_MS - 15_000,
+      `Expected ~${BOARD_GAME_RECONNECT_HOLD_MS}ms reconnect hold deadline, got ${holdSync.turnDeadlineMs}`,
+    );
+
+    const beforeReconnIdx = infPeer.c.inbox.length;
+    const infRe = await openBgClient(srv.wsBaseUrl, { matchId: mInf.matchId });
+    infRe.send({
+      type: 'BG_JOIN',
+      matchId: mInf.matchId,
+      displayName: 'InfReconnect',
+      reconnectToken: infActor.auth.reconnectToken,
+    });
+    await infRe.nextMsg((msg) => msg.type === 'BG_AUTH_ISSUED');
+    const reInfSync = await infRe.nextMsg((msg) => msg.type === 'BG_STATE_SYNC');
+    assert.equal(reInfSync.turnDeadlineMs, null, 'Reconnect với turnTimeoutMs=0 phải xóa hold và trả turnDeadlineMs=null');
+    const peerRestored = await infPeer.c.nextMsg(
+      (msg) => msg.type === 'BG_STATE_SYNC' && msg.turnDeadlineMs === null,
+      4000,
+      beforeReconnIdx,
+    );
+    assert.equal(peerRestored.turnDeadlineMs, null);
+
+    infRe.close();
+    mInf.clients.forEach((cl) => {
+      if (cl.playerId !== infActor.playerId) cl.c.close();
+    });
   });
 
   await t.test('(4) 8-player disconnect mid-phase + shortened alarm() neutral timeout + hibernation & reconnect', async () => {
@@ -574,21 +689,42 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     const startSync0 = m.clients[0].c.getLatestSync();
     const startSync3 = m.clients[3].c.getLatestSync();
     assert.equal(startSync0.publicGame.players.length, 8);
-    assert.equal(startSync0.publicGame.rulesetVersion, 3);
+    assert.equal(startSync0.publicGame.rulesetVersion, 4);
     const p3RoleBefore = startSync3.privateView.roleId;
     const p3HandBefore = startSync3.privateView.hand.map((c) => c.id);
 
     // Đưa active player (P1) sang LOCATION_ACTION rồi ngắt kết nối giữa chừng
-    m.clients[0].c.send({
-      type: 'BG_GAME_ACTION',
-      requestId: 'd8-stay',
-      expectedRevision: startSync0.revision,
-      action: { type: 'STAY' },
-    });
-    const midSync = await m.clients[1].c.nextMsg(
-      (msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === startSync0.revision + 1,
-    );
-    assert.equal(midSync.publicGame.turnPhase, 'LOCATION_ACTION');
+    let curSync = startSync0;
+    let seq = 0;
+    while (
+      curSync.publicGame.turnPhase === 'ROLL_MOVE' ||
+      curSync.publicGame.turnPhase === 'CHOOSE_MOVE'
+    ) {
+      seq += 1;
+      await delay(35);
+      const act =
+        curSync.publicGame.turnPhase === 'CHOOSE_MOVE'
+          ? {
+              type: 'CHOOSE_DEST',
+              location:
+                LOCATIONS_CATALOG.find(
+                  (l) =>
+                    l.id !==
+                    curSync.publicGame.players.find((p) => p.playerId === m.clients[0].playerId).location,
+                )?.id || 'lobby',
+            }
+          : { type: 'ROLL_DICE' };
+      m.clients[0].c.send({
+        type: 'BG_GAME_ACTION',
+        requestId: `d8-roll-${seq}`,
+        expectedRevision: curSync.revision,
+        action: act,
+      });
+      curSync = await m.clients[1].c.nextMsg(
+        (msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === curSync.revision + 1,
+      );
+    }
+    assert.equal(curSync.publicGame.turnPhase, 'LOCATION_ACTION');
 
     m.clients[0].c.close();
     await delay(1600);
@@ -602,7 +738,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
         msg.type === 'BG_STATE_SYNC' &&
         msg.publicGame?.activePlayerId === m.clients[1].playerId,
     );
-    assert.equal(afterAlarm.publicGame.turnPhase, 'MOVE_OR_STAY');
+    assert.equal(afterAlarm.publicGame.turnPhase, 'ROLL_MOVE');
     assert.ok(afterAlarm.publicGame.publicLog.some((l) => l.kind === 'timeout'));
 
     // Hibernation DO giữa trận & P4 reconnect bằng reconnectToken
@@ -679,18 +815,18 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     });
     const reSyncA0 = await reA0.nextMsg((msg) => msg.type === 'BG_STATE_SYNC');
     assert.equal(reSyncA0.status, 'FINISHED');
-    assert.equal(reSyncA0.publicGame.rulesetVersion, 3);
-    assert.match(reSyncA0.publicGame.winnerLabel, /Luật v3/);
+    assert.equal(reSyncA0.publicGame.rulesetVersion, 4);
+    assert.match(reSyncA0.publicGame.winnerLabel, /Luật v4/);
 
-    // Bắt đầu ván mới v3 sạch
+    // Bắt đầu ván mới v4 sạch
     for (let i = 1; i < 4; i++) {
       mA.clients[i].c.send({ type: 'BG_SET_READY', ready: true, requestId: `lv-re-${i}` });
     }
     const readyBefore = reA0.inbox.length;
     await reA0.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.status === 'READY_CHECK', 4000, readyBefore);
-    reA0.send({ type: 'BG_START_MATCH', requestId: 'lv-start-v3' });
-    const playingV3 = await reA0.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.status === 'PLAYING', 4000, readyBefore);
-    assert.equal(playingV3.publicGame.rulesetVersion, 3);
+    reA0.send({ type: 'BG_START_MATCH', requestId: 'lv-start-v4' });
+    const playingV4 = await reA0.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.status === 'PLAYING', 4000, readyBefore);
+    assert.equal(playingV4.publicGame.rulesetVersion, 4);
 
     reA0.close();
     mA.clients.forEach(({ c }, idx) => {
@@ -742,7 +878,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     });
     const reSyncB0 = await reB0.nextMsg((msg) => msg.type === 'BG_STATE_SYNC');
     assert.equal(reSyncB0.status, 'FINISHED');
-    assert.equal(reSyncB0.publicGame.rulesetVersion, 3);
+    assert.equal(reSyncB0.publicGame.rulesetVersion, 4);
     assert.equal(reSyncB0.publicGame.winnerLabel, 'Đội Gác Đèn v2');
     assert.deepEqual(reSyncB0.publicGame.winnerPlayerIds, [mB.clients[0].playerId]);
 
@@ -762,7 +898,9 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     const mBCreated = await createBRes.json();
     assert.equal(mBCreated.ok, true);
 
-    // 0. Production turnTimeoutMs clamp guard
+    // 0. Production turnTimeoutMs clamp guard (preserves 0 = infinite)
+    assert.equal(clampBoardGameTurnTimeoutMs(0, {}), 0);
+    assert.equal(clampBoardGameTurnTimeoutMs(undefined, {}), 0);
     assert.equal(clampBoardGameTurnTimeoutMs(1500, {}), 15_000);
     assert.equal(clampBoardGameTurnTimeoutMs(300_000, {}), 90_000);
     assert.equal(clampBoardGameTurnTimeoutMs(1500, { ALLOW_SHORT_TURN_TIMEOUT: '1' }), 1500);
@@ -814,13 +952,12 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
       type: 'BG_GAME_ACTION',
       requestId: reqDup,
       expectedRevision: revBefore,
-      action: { type: 'STAY' },
+      action: { type: 'ROLL_DICE' },
     });
     const ack1 = await active.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === reqDup);
     assert.equal(ack1.ok, true);
     assert.equal(ack1.revision, revBefore + 1);
-    const syncAfterStay = await active.c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.revision === revBefore + 1);
-    assert.equal(syncAfterStay.publicGame.turnPhase, 'LOCATION_ACTION');
+    let postRollSync = await active.c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.revision === revBefore + 1);
 
     // Retry exact same requestId (even with old expectedRevision) returns cached ack + sync without bumping revision
     const idxBeforeDup = active.c.inbox.length;
@@ -828,7 +965,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
       type: 'BG_GAME_ACTION',
       requestId: reqDup,
       expectedRevision: revBefore,
-      action: { type: 'STAY' },
+      action: { type: 'ROLL_DICE' },
     });
     const ackDup = await active.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === reqDup, 4000, idxBeforeDup);
     assert.equal(ackDup.ok, true);
@@ -836,31 +973,65 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     const dupSync = await active.c.nextMsg((m) => m.type === 'BG_STATE_SYNC', 4000, idxBeforeDup);
     assert.equal(dupSync.revision, revBefore + 1);
 
+    // Đảm bảo active đã vào LOCATION_ACTION trước khi test invalid action
+    let moveSeq = 0;
+    while (
+      postRollSync.publicGame.turnPhase === 'ROLL_MOVE' ||
+      postRollSync.publicGame.turnPhase === 'CHOOSE_MOVE'
+    ) {
+      moveSeq += 1;
+      await delay(35);
+      const moveAct =
+        postRollSync.publicGame.turnPhase === 'CHOOSE_MOVE'
+          ? {
+              type: 'CHOOSE_DEST',
+              location:
+                LOCATIONS_CATALOG.find(
+                  (l) =>
+                    l.id !==
+                    postRollSync.publicGame.players.find((p) => p.playerId === active.playerId).location,
+                )?.id || 'lobby',
+            }
+          : { type: 'ROLL_DICE' };
+      active.c.send({
+        type: 'BG_GAME_ACTION',
+        requestId: `sec-move-${moveSeq}`,
+        expectedRevision: postRollSync.revision,
+        action: moveAct,
+      });
+      postRollSync = await active.c.nextMsg(
+        (m) => m.type === 'BG_STATE_SYNC' && m.revision === postRollSync.revision + 1,
+      );
+    }
+    assert.equal(postRollSync.publicGame.turnPhase, 'LOCATION_ACTION');
+    const locRev = postRollSync.revision;
+
     // Rejected invalid action -> BG_REQUEST_SYNC -> valid retry succeeds cleanly
+    const peerTarget = mA.clients.find((cl) => cl.playerId !== active.playerId);
     const idxBeforeErr = active.c.inbox.length;
     active.c.send({
       type: 'BG_GAME_ACTION',
-      requestId: 'bad-action-after-stay',
-      expectedRevision: revBefore + 1,
-      action: { type: 'DEFEND' }, // sai pha (đang LOCATION_ACTION)
+      requestId: 'bad-action-after-roll',
+      expectedRevision: locRev,
+      action: { type: 'ATTACK', targetPlayerId: peerTarget.playerId }, // sai pha (đang LOCATION_ACTION)
     });
-    const badAck = await active.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'bad-action-after-stay', 4000, idxBeforeErr);
+    const badAck = await active.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'bad-action-after-roll', 4000, idxBeforeErr);
     assert.equal(badAck.ok, false);
     const idxBeforeReqSync = active.c.inbox.length;
     active.c.send({ type: 'BG_REQUEST_SYNC', requestId: 'req-sync-1' });
     const resynced = await active.c.nextMsg((m) => m.type === 'BG_STATE_SYNC', 4000, idxBeforeReqSync);
-    assert.equal(resynced.revision, revBefore + 1);
+    assert.equal(resynced.revision, locRev);
     assert.equal(resynced.publicGame.turnPhase, 'LOCATION_ACTION');
 
     await delay(40);
     active.c.send({
       type: 'BG_GAME_ACTION',
-      requestId: 'valid-retry-explore',
+      requestId: 'valid-retry-skip',
       expectedRevision: resynced.revision,
-      action: { type: 'EXPLORE_LOC' },
+      action: { type: 'SKIP_LOC' },
     });
-    const okExplore = await active.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'valid-retry-explore');
-    assert.equal(okExplore.ok, true);
+    const okSkip = await active.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'valid-retry-skip');
+    assert.equal(okSkip.ok, true);
 
     mA.clients.forEach(({ c }) => c.close());
   });
@@ -960,16 +1131,17 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
       type: 'BG_GAME_ACTION',
       requestId: 'log-act-1',
       expectedRevision: sync0.revision,
-      action: { type: 'STAY' },
+      action: { type: 'ROLL_DICE' },
     });
     await actor.c.nextMsg((msg) => msg.type === 'BG_ACTION_ACK' && msg.requestId === 'log-act-1');
     await actor.c.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === sync0.revision + 1);
     await delay(40);
+    const badTarget = m.clients.find((cl) => cl.playerId !== actor.playerId);
     actor.c.send({
       type: 'BG_GAME_ACTION',
       requestId: 'log-act-bad',
       expectedRevision: sync0.revision + 1,
-      action: { type: 'END_TURN' },
+      action: { type: 'ATTACK', targetPlayerId: badTarget.playerId },
     });
     await actor.c.nextMsg((msg) => msg.type === 'BG_ACTION_ACK' && msg.requestId === 'log-act-bad');
 

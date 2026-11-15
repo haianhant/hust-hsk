@@ -86,12 +86,15 @@ export function clampBoardGameTurnTimeoutMs(
   rawTimeout: unknown,
   env?: Pick<BoardGameEnv, 'ALLOW_SHORT_TURN_TIMEOUT'>,
 ): number {
-  const allowShort = env?.ALLOW_SHORT_TURN_TIMEOUT === '1';
-  const minMs = allowShort ? TEST_MIN_TURN_TIMEOUT_MS : PROD_MIN_TURN_TIMEOUT_MS;
-  const maxMs = allowShort ? TEST_MAX_TURN_TIMEOUT_MS : PROD_MAX_TURN_TIMEOUT_MS;
   if (typeof rawTimeout !== 'number' || !Number.isFinite(rawTimeout)) {
     return BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
   }
+  if (rawTimeout <= 0) {
+    return 0;
+  }
+  const allowShort = env?.ALLOW_SHORT_TURN_TIMEOUT === '1';
+  const minMs = allowShort ? TEST_MIN_TURN_TIMEOUT_MS : PROD_MIN_TURN_TIMEOUT_MS;
+  const maxMs = allowShort ? TEST_MAX_TURN_TIMEOUT_MS : PROD_MAX_TURN_TIMEOUT_MS;
   return Math.max(minMs, Math.min(maxMs, Math.floor(rawTimeout)));
 }
 
@@ -239,7 +242,7 @@ export class BoardGameRoom {
         status TEXT NOT NULL,
         revision INTEGER NOT NULL,
         turn_deadline_ms INTEGER,
-        turn_timeout_ms INTEGER NOT NULL DEFAULT 45000,
+        turn_timeout_ms INTEGER NOT NULL DEFAULT 0,
         created_at_ms INTEGER NOT NULL,
         updated_at_ms INTEGER NOT NULL,
         game_state_json TEXT
@@ -988,14 +991,18 @@ export class BoardGameRoom {
       this.promoteNextConnectedHost(player.player_id);
     }
 
-    // If active turn holder disconnects mid-PLAYING, cap remaining deadline cleanly
+    // If active turn holder disconnects mid-PLAYING, start/cap reconnect hold timer cleanly
     if (match.status === 'PLAYING') {
       const engineState = this.loadEngineState(match);
       const active = engineState ? getActivePlayer(engineState) : null;
       if (active && active.playerId === player.player_id) {
+        const holdWindow =
+          match.turn_timeout_ms <= 0
+            ? BOARD_GAME_RECONNECT_HOLD_MS
+            : BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS;
         const capped = Math.min(
-          match.turn_deadline_ms ?? nowMs + BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
-          nowMs + BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
+          match.turn_deadline_ms ?? nowMs + holdWindow,
+          nowMs + holdWindow,
         );
         this.sql.exec('UPDATE matches SET turn_deadline_ms = ? WHERE match_id = ?', capped, match.match_id);
       }
@@ -1278,6 +1285,17 @@ export class BoardGameRoom {
           isSpectator: existing.is_spectator === 1,
           seatIndex: existing.seat_index,
         });
+        if (latestMatch.status === 'PLAYING') {
+          const postRows = this.listPlayerRows();
+          const engineState = this.loadEngineState(latestMatch, postRows);
+          const active = engineState ? getActivePlayer(engineState) : null;
+          if (active && active.playerId === existing.player_id && latestMatch.turn_timeout_ms <= 0) {
+            this.sql.exec(
+              'UPDATE matches SET turn_deadline_ms = NULL WHERE match_id = ?',
+              latestMatch.match_id,
+            );
+          }
+        }
         this.bumpMatchRevisionOnly(nowMs);
         await this.scheduleNextAlarm(nowMs);
         logBoardGameEvent(this.env, 'PLAYER_RECONNECTED', {
@@ -1621,7 +1639,7 @@ export class BoardGameRoom {
     }
 
     const timeoutMs = turnTimeoutOverrideMs ?? match.turn_timeout_ms ?? BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
-    const deadlineMs = nowMs + timeoutMs;
+    const deadlineMs = timeoutMs <= 0 ? null : nowMs + timeoutMs;
 
     const seedArr = new Uint32Array(1);
     globalThis.crypto.getRandomValues(seedArr);
@@ -1844,8 +1862,8 @@ export class BoardGameRoom {
       nowMs,
     );
     if (!res.ok) {
-      const reason = res.reason || 'Hành động không hợp lệ ở pha hiện tại.';
-      const errCode = reason.includes('Chưa tới lượt') ? 'NOT_YOUR_TURN' : 'INVALID_ACTION';
+      const reason = res.reason || res.error || 'Hành động không hợp lệ ở pha hiện tại.';
+      const errCode = reason.toLowerCase().includes('chưa tới lượt') ? 'NOT_YOUR_TURN' : 'INVALID_ACTION';
       logBoardGameEvent(this.env, 'ACTION_REJECTED', {
         matchId: match.match_id,
         tableId: match.table_id,
@@ -1872,7 +1890,7 @@ export class BoardGameRoom {
     const turnChanged = engineState.turnNumber !== prevTurnNumber;
     const nextDeadline = engineState.finished
       ? null
-      : turnChanged
+      : match.turn_timeout_ms <= 0 || turnChanged
         ? this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs)
         : match.turn_deadline_ms ??
           this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs);
@@ -1987,9 +2005,13 @@ export class BoardGameRoom {
     const engineState = this.loadEngineState(match);
     const active = engineState ? getActivePlayer(engineState) : null;
     if (active && active.playerId === player.player_id) {
+      const holdWindow =
+        match.turn_timeout_ms <= 0
+          ? BOARD_GAME_RECONNECT_HOLD_MS
+          : BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS;
       const capped = Math.min(
-        match.turn_deadline_ms ?? nowMs + BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
-        nowMs + BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
+        match.turn_deadline_ms ?? nowMs + holdWindow,
+        nowMs + holdWindow,
       );
       this.sql.exec('UPDATE matches SET turn_deadline_ms = ? WHERE match_id = ?', capped, match.match_id);
     }
@@ -2146,8 +2168,15 @@ export class BoardGameRoom {
     playerRows?: readonly MatchPlayerDbRow[],
   ): AuthoritativeGameState {
     const fallbackRole = ROLES_BY_ID['gac-ky-thuat'];
-    const rawPlayers = Array.isArray(rawEngine.players) ? rawEngine.players : [];
-    const mappedPlayers: AuthoritativePlayerState[] = rawPlayers.map((entry, idx) => {
+    const rawPlayers = Array.isArray(rawEngine.players)
+      ? rawEngine.players
+      : rawEngine.players && typeof rawEngine.players === 'object'
+        ? Object.values(rawEngine.players as Record<string, unknown>)
+        : [];
+    const playersRecord: Record<string, AuthoritativePlayerState> = {};
+    const turnOrder: string[] = [];
+
+    rawPlayers.forEach((entry, idx) => {
       const p = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>;
       const rawRoleId =
         typeof p.roleId === 'string' && Object.hasOwn(ROLES_BY_ID, p.roleId)
@@ -2156,10 +2185,12 @@ export class BoardGameRoom {
       const roleDef = ROLES_BY_ID[rawRoleId as keyof typeof ROLES_BY_ID] ?? fallbackRole;
       const maxHp = typeof p.maxHp === 'number' && p.maxHp > 0 ? p.maxHp : roleDef.maxHp;
       const hp = typeof p.hp === 'number' ? Math.max(0, Math.min(maxHp, p.hp)) : maxHp;
+      const woundsTaken =
+        typeof p.woundsTaken === 'number' ? Math.max(0, p.woundsTaken) : Math.max(0, maxHp - hp);
       const loc =
         typeof p.location === 'string' && isValidLocationId(p.location) ? p.location : 'lobby';
       const playerId = typeof p.playerId === 'string' ? p.playerId : `legacy-${idx}`;
-      return {
+      playersRecord[playerId] = {
         playerId,
         displayName: typeof p.displayName === 'string' ? p.displayName : `Sinh viên ${idx + 1}`,
         seatIndex: typeof p.seatIndex === 'number' ? p.seatIndex : idx,
@@ -2168,38 +2199,27 @@ export class BoardGameRoom {
         faction: roleDef.faction,
         hp,
         maxHp,
-        tempShield: typeof p.tempShield === 'number' ? p.tempShield : typeof p.shield === 'number' ? p.shield : 0,
+        woundsTaken,
         location: loc,
-        visitedLocations: [loc],
-        recentTrail: [loc],
-        alive: typeof p.alive === 'boolean' ? p.alive : hp > 0,
-        connected: Boolean(p.connected),
-        revealed: true,
-        skillCooldown: 0,
-        stayedLastTurn: false,
-        stayedCount: 0,
-        movesMade: 0,
-        attacksMade: typeof p.attacksMade === 'number' ? p.attacksMade : 0,
-        investigationsCount: typeof p.investigationsCount === 'number' ? p.investigationsCount : 0,
-        actedThisRound: false,
-        extendedRangeThisTurn: false,
-        courtAttackBonusThisTurn: false,
-        globalInvestigateThisTurn: false,
-        equipUsedThisTurn: false,
-        wardedUntilRound: 0,
-        exposedMark: 0,
-        gainedShieldThisTurn: false,
-        protegePlayerId: null,
-        protectedProtegeCount: 0,
-        eliminatedByPlayerId: null,
-        eliminatedPlayerIds: [],
-        avengedProtegeKiller: false,
-        investigatedTargetIds: [],
         hand: [],
         equipped: [],
+        revealed: true,
+        alive: typeof p.alive === 'boolean' ? p.alive : hp > 0,
+        connected: Boolean(p.connected),
+        skillCooldown: 0,
+        skillUsedOnce: false,
+        guardianShieldActive: false,
+        attacksMade: typeof p.attacksMade === 'number' ? p.attacksMade : 0,
+        investigationsCount: typeof p.investigationsCount === 'number' ? p.investigationsCount : 0,
+        consecutiveSameZoneRolls: 0,
+        eliminatedRound: null,
+        eliminatedByPlayerId: null,
+        protegePlayerId: null,
+        avengedProtegeKiller: false,
+        investigatedTargetIds: [],
         privateClues: [],
-        privateNotes: [],
       };
+      turnOrder.push(playerId);
     });
 
     if (playerRows) {
@@ -2207,7 +2227,7 @@ export class BoardGameRoom {
       for (const row of playerRows) {
         connById.set(row.player_id, row.connected === 1);
       }
-      for (const ep of mappedPlayers) {
+      for (const ep of Object.values(playersRecord)) {
         const isConn = connById.get(ep.playerId);
         if (typeof isConn === 'boolean') ep.connected = isConn;
       }
@@ -2217,11 +2237,11 @@ export class BoardGameRoom {
     const preservedWinnerLabel =
       wasFinished && typeof rawEngine.winnerLabel === 'string'
         ? rawEngine.winnerLabel
-        : 'Phiên v1/v2 đã khép — Sẵn sàng Luật v3';
+        : 'Phiên cũ đã khép — Sẵn sàng Luật v4';
     const preservedWinReason =
       wasFinished && typeof rawEngine.winReason === 'string'
         ? rawEngine.winReason
-        : 'Bóng Đêm KTX đã nâng cấp lên Luật v3 (Hidden Role, Investigation & Survival). Phiên cũ đã được khép an toàn; hãy bấm Sẵn sàng để bắt đầu ván v3!';
+        : 'Bóng Đêm KTX đã nâng cấp lên Luật v4 (Săn Bóng Đêm KTX với xúc xắc 1d6+1d4 & 3 Cụm). Phiên cũ đã được khép an toàn; hãy bấm Sẵn sàng để bắt đầu ván mới!';
     const preservedWinnerFaction =
       wasFinished &&
       (rawEngine.winnerFaction === 'lantern-guard' ||
@@ -2234,6 +2254,7 @@ export class BoardGameRoom {
       wasFinished && Array.isArray(rawEngine.winnerPlayerIds)
         ? rawEngine.winnerPlayerIds.filter((id): id is string => typeof id === 'string')
         : [];
+    const winnerSet = new Set(preservedWinnerPlayerIds);
     const mappedLogs = Array.isArray(rawEngine.publicLog)
       ? rawEngine.publicLog
           .slice(-20)
@@ -2253,28 +2274,40 @@ export class BoardGameRoom {
       seed: typeof rawEngine.seed === 'number' ? rawEngine.seed : 1,
       rngState: typeof rawEngine.rngState === 'number' ? rawEngine.rngState : 1,
       round: typeof rawEngine.round === 'number' ? rawEngine.round : 1,
-      maxRounds: typeof rawEngine.maxRounds === 'number' ? rawEngine.maxRounds : 9,
+      maxRounds: typeof rawEngine.maxRounds === 'number' ? rawEngine.maxRounds : 30,
       turnNumber: typeof rawEngine.turnNumber === 'number' ? rawEngine.turnNumber : 1,
-      turnStartedAtMs: match.updated_at_ms,
-      turnOrder: mappedPlayers.map((p) => p.playerId),
-      activeTurnIdx: 0,
       turnPhase: 'ENDED',
-      curfewPressureActive: false,
-      courtRangeJammedRound: 0,
-      lastInvestigation: null,
-      lastRevealEvent: null,
-      players: mappedPlayers,
+      activePlayerId: null,
+      turnOrder,
+      players: playersRecord,
       decks: { investigation: [], equipment: [], event: [] },
       discards: { investigation: [], equipment: [], event: [] },
+      lastDiceRoll: null,
+      lastInvestigation: null,
+      lastRevealEvent: null,
       publicLog: mappedLogs,
       highlights: [],
+      finished: true,
       winnerLabel: preservedWinnerLabel,
       winnerFaction: preservedWinnerFaction,
       winnerPlayerIds: preservedWinnerPlayerIds,
       winReason: preservedWinReason,
-      finished: true,
-      publicLogSeq: mappedLogs.length,
-      seqCounter: typeof rawEngine.seqCounter === 'number' ? rawEngine.seqCounter : 0,
+      finalReveal: turnOrder.map((pid) => {
+        const ep = playersRecord[pid];
+        const roleDef = ROLES_BY_ID[ep.roleId] ?? fallbackRole;
+        return {
+          playerId: ep.playerId,
+          displayName: ep.displayName,
+          roleId: ep.roleId,
+          roleName: roleDef.name,
+          faction: ep.faction,
+          won: winnerSet.has(ep.playerId),
+          alive: ep.alive,
+          hp: ep.hp,
+          maxHp: ep.maxHp,
+          woundsTaken: ep.woundsTaken,
+        };
+      }),
     };
   }
 
@@ -2294,12 +2327,15 @@ export class BoardGameRoom {
       return this.adaptLegacyEngineState(match, rawRecord, playerRows);
     }
     const engineState = rawEngine as AuthoritativeGameState;
-    if (playerRows && Array.isArray(engineState.players)) {
+    if (playerRows && engineState.players && typeof engineState.players === 'object') {
       const connById = new Map<string, boolean>();
       for (const row of playerRows) {
         connById.set(row.player_id, row.connected === 1);
       }
-      for (const ep of engineState.players) {
+      const list = Array.isArray(engineState.players)
+        ? engineState.players
+        : Object.values(engineState.players);
+      for (const ep of list) {
         const isConn = connById.get(ep.playerId);
         if (typeof isConn === 'boolean') {
           ep.connected = isConn;
@@ -2320,6 +2356,9 @@ export class BoardGameRoom {
     if (!active) return null;
     const row = playerRows.find((r) => r.player_id === active.playerId);
     const isConnected = row ? row.connected === 1 : active.connected;
+    if (turnTimeoutMs <= 0) {
+      return isConnected ? null : nowMs + BOARD_GAME_RECONNECT_HOLD_MS;
+    }
     const dur = isConnected
       ? turnTimeoutMs
       : Math.min(turnTimeoutMs, BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS);

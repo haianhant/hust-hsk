@@ -522,48 +522,48 @@ export default function BoardGameLobby({
             </div>
             <div className="flex-1 space-y-3 overflow-y-auto p-4 text-xs leading-relaxed text-slate-200 sm:text-sm">
               <p className="rounded-xl bg-slate-800/70 p-3 text-amber-100">
-                <strong>Bối cảnh v3 (Suy luận vai ẩn &amp; Sinh tồn):</strong> Đêm mất điện tại khu KTX Bách Khoa,
-                mỗi sinh viên nhận một <strong>Nhân vật bí mật</strong> (máu tối đa <strong>11 / 12 / 13 HP</strong>) được{' '}
-                <strong>giấu kín tuyệt đối</strong> cùng <strong>bài trên tay &amp; tên kỹ năng</strong> khi thẻ vai đang úp mặt!
+                <strong>Bối cảnh v4 (Săn Bóng Đêm KTX — Xúc xắc 1d6+1d4 &amp; 3 Cụm):</strong> Đêm mất điện tại KTX Bách Khoa,
+                mỗi sinh viên giữ 1 <strong>Nhân vật bí mật</strong> (máu tối đa <strong>11 / 12 / 14 HP</strong> được giấu kín
+                cho tới khi lật vai) và chiến đấu theo nhịp bàn cờ 6 khu vực đánh số xúc xắc!
               </p>
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <div className="rounded-xl border border-sky-500/35 bg-sky-950/30 p-2.5">
-                  <div className="font-bold text-sky-300">🔦 Đội Gác Đèn</div>
+                <div className="rounded-xl border border-emerald-500/35 bg-emerald-950/30 p-2.5">
+                  <div className="font-bold text-emerald-300">🔦 Đội Săn Đêm</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Suy luận ra phe ẩn và loại hết <strong>Hội Màn Sương</strong>, hoặc giữ đa số lực lượng sau 9–10 vòng tới Rạng Sáng.
+                    Xác minh phe ẩn bằng Thẻ Khám Phá Kín và loại sạch toàn bộ <strong>Hội Bóng Đêm</strong>.
                   </p>
                 </div>
                 <div className="rounded-xl border border-rose-500/35 bg-rose-950/30 p-2.5">
-                  <div className="font-bold text-rose-300">🌫️ Hội Màn Sương</div>
+                  <div className="font-bold text-rose-300">🌙 Hội Bóng Đêm</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Ẩn mình đánh lạc hướng, loại hết <strong>Đội Gác Đèn</strong> hoặc kích hoạt thắng Giới Nghiêm / Rạng Sáng.
+                    Giả danh ẩn mình giữa đám đông và hạ gục toàn bộ thành viên <strong>Đội Săn Đêm</strong>.
                   </p>
                 </div>
                 <div className="rounded-xl border border-amber-500/35 bg-amber-950/30 p-2.5">
-                  <div className="font-bold text-amber-300">🧭 Kẻ Lang Thang</div>
+                  <div className="font-bold text-amber-300">🧭 Kẻ Độc Hành</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Mục tiêu riêng: <strong>Hải</strong> đeo 2 Trang bị &amp; &gt;= 2 Điều tra, <strong>Trang</strong> điều tra &gt;= 2 &amp; chứng kiến &gt;= 2–3 người ngã, <strong>Bình</strong> che chắn bảo vệ mục tiêu bí mật.
+                    Mục tiêu riêng: <strong>Hải</strong> đeo đủ 3 Trang bị, <strong>Trang</strong> trụ lại top 2 cuối (đã lật vai &amp; &gt;= 2 người ngã), <strong>Bình</strong> bảo vệ Người được chọn thắng hoặc báo thù.
                   </p>
                 </div>
               </div>
 
               <div>
-                <h4 className="font-bold text-amber-200">Cấu trúc 1 lượt chơi (tối đa 40 giây / lượt, 9–10 vòng tới Phiên Trực Cuối Đêm):</h4>
+                <h4 className="font-bold text-amber-200">Cấu trúc 1 lượt chơi (∞ Thời gian suy nghĩ tự do — xong mới sang lượt người kế):</h4>
                 <ol className="mt-1 list-inside list-decimal space-y-1 text-slate-300">
                   <li>
-                    <strong>Pha 1 · Di chuyển hoặc Ở lại (MOVE_OR_STAY):</strong> Bước sang khu vực kề cận hoặc chọn Ở lại chỗ cũ để khai thác sâu hơn.
+                    <strong>Pha 1 · Tung xúc xắc di chuyển (ROLL_MOVE):</strong> Tung đồng thời <strong>1d6 + 1d4</strong> để tới ô tương ứng (2–3 Radio, 4–5 Cầu Dao, 6 Sảnh, 8 Căng Tin, 9 Hành Lang, 10 Sân Bóng). Nếu tung ra <strong>7</strong>: tự do chọn ô bất kỳ; nếu trùng ô đang đứng: được quyền <strong>ĐỔ LẠI</strong>!
                   </li>
                   <li>
-                    <strong>Pha 2 · Khám phá khu vực hoặc Rút thẻ (LOCATION_ACTION):</strong> Kích hoạt hiệu ứng đặc thù phòng KTX, hoặc rút từ 1 trong 3 chồng bài: <strong>Điều tra</strong>, <strong>Trang bị</strong>, <strong>Sự kiện</strong>.
+                    <strong>Pha 2 · Hành động khu vực (LOCATION_ACTION):</strong> Rút thẻ tương ứng (ô 2–3 Khám Phá Kín, ô 4–5 Đột Kích, ô 6 Cung Ứng, ô 8 chọn bất kỳ), Hồi 1 / Gây 2 sát thương tại ô 9, Cướp 1 Trang bị tại ô 10, hoặc Bỏ qua khu vực.
                   </li>
                   <li>
-                    <strong>Pha 3 · Hành động chính &amp; Lật vai (MAIN_ACTION):</strong> Điều tra có điều kiện (chỉ định mục tiêu — kết quả ghép từ ít nhất 2 phe để suy luận), dùng thẻ/trang bị, Phòng thủ (+1 Giáp tạm &amp; quan sát cùng phòng), Công kích (cùng phòng — người đã lật vai Gác Đèn hạ nhầm đồng đội chịu Kỷ luật Nội Trú công khai), hoặc tự nguyện <strong>Lật vai</strong> mở khóa kỹ năng đặc biệt trước khi Kết thúc lượt.
+                    <strong>Pha 3 · Hành động chính &amp; Lật vai (MAIN_ACTION):</strong> Đưa Thẻ Thăm Dò Kín 1-đối-1, trang bị vũ khí/giáp, lật vai kích hoạt kỹ năng riêng, tung đòn tấn công <strong>|1d6 - 1d4|</strong> cùng Cụm (chỉ đánh hụt khi ra 0), hoặc bấm Kết thúc lượt.
                   </li>
                 </ol>
               </div>
               <p className="rounded-xl border border-emerald-400/30 bg-emerald-950/30 p-2.5 text-xs text-emerald-100">
-                🔒 <strong>Bảo mật màn hình:</strong> Khi chia sẻ phòng chơi cùng chỗ, giữ thẻ vai ở trạng thái <strong>Úp mặt</strong> để tự động che cả <strong>Bài trên tay</strong> lẫn <strong>Tên kỹ năng chưa lật</strong>; bấm mở thẻ khi thao tác riêng tư.
+                🔒 <strong>Bảo mật màn hình:</strong> Khi chia sẻ thiết bị hoặc ngồi cạnh nhau, giữ thẻ vai ở trạng thái <strong>Úp mặt</strong> để che vai trò &amp; bài trên tay; chỉ mở xem khi thao tác riêng tư.
               </p>
             </div>
           </div>

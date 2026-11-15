@@ -1,128 +1,116 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/projections.ts — Tách biệt tuyệt đối P0 giữa
-// dữ liệu công khai (`getPublicGameView`) và bí mật (`getPrivateGameView`).
-// Khán giả / socket chưa xác thực luôn nhận `privateView: null`.
-// Tuyệt đối không gửi `hp`, `maxHp`, vai chưa lật, bài trên tay hay
-// `protegePlayerId` ra kênh công khai.
+// features/boardgame/domain/projections.ts — Tách bạch tuyệt đối kênh Công khai
+// và kênh Riêng tư (P0 isolation) cho Bóng Đêm KTX v4.
 // ---------------------------------------------------------------------------
 
-import {
-  BOARD_GAME_RULESET_VERSION,
-  type BoardGameCardPublicMeta,
-  type BoardGamePrivateGameView,
-  type BoardGamePublicGameView,
-  type BoardGamePublicPlayerView,
+import type {
+  BoardGameCardPublicMeta,
+  BoardGamePrivateGameView,
+  BoardGamePublicGameView,
+  BoardGamePublicPlayerView,
 } from '../../../shared/contracts/boardgame';
-import { getRoleById, ROLES_BY_ID } from './roles';
-import type { AuthoritativeGameState, GameCard } from './types';
-import { buildFinalRevealSummary } from './victory';
+import { getCardById, toCardPublicMeta } from './cards';
+import { getRoleDesign } from './roles';
+import type { AuthoritativeGameState, AuthoritativePlayerState } from './types';
 
-function serializeCardMeta(card: GameCard): BoardGameCardPublicMeta {
+function mapCardIdsToMeta(cardIds: readonly string[]): BoardGameCardPublicMeta[] {
+  const metas: BoardGameCardPublicMeta[] = [];
+  for (const id of cardIds) {
+    const card = getCardById(id);
+    if (card) metas.push(toCardPublicMeta(card));
+  }
+  return metas;
+}
+
+export function getPublicPlayerView(
+  player: AuthoritativePlayerState,
+  matchFinished: boolean,
+): BoardGamePublicPlayerView {
+  const showRole = player.revealed || matchFinished;
   return {
-    id: card.id,
-    deck: card.deck,
-    title: card.title,
-    summary: card.summary,
-    conditionText: card.conditionText,
-    effectId: card.effectId,
-    targetMode: card.targetMode,
-    isConsumable: card.isConsumable,
-    value: card.value,
+    playerId: player.playerId,
+    displayName: player.displayName,
+    seatIndex: player.seatIndex,
+    location: player.location,
+    woundsTaken: player.woundsTaken,
+    handCount: player.hand.length,
+    equipped: mapCardIdsToMeta(player.equipped),
+    attacksMade: player.attacksMade,
+    investigationsCount: player.investigationsCount,
+    guardianShieldActive: player.guardianShieldActive,
+    alive: player.alive,
+    connected: player.connected,
+    revealedRoleId: showRole ? player.roleId : null,
+    revealedFaction: showRole ? player.faction : null,
+    revealedMaxHp: showRole ? player.maxHp : null,
+    revealedSkillCooldown: showRole ? player.skillCooldown : 0,
+    revealedSkillUsedOnce: showRole ? player.skillUsedOnce : false,
+    appearance: player.appearance,
   };
 }
 
 export function getPublicGameView(state: AuthoritativeGameState): BoardGamePublicGameView {
-  const activePlayerId =
-    !state.finished && state.turnOrder.length > 0
-      ? state.turnOrder[state.activeTurnIdx] ?? null
-      : null;
-
-  const players: BoardGamePublicPlayerView[] = state.players.map((p) => ({
-    playerId: p.playerId,
-    displayName: p.displayName,
-    seatIndex: p.seatIndex,
-    location: p.location,
-    woundsTaken: Math.max(0, p.maxHp - p.hp),
-    tempShield: p.tempShield,
-    handCount: p.revealed && p.roleId === 'suong-tin-gia' ? null : p.hand.length,
-    equipped: p.equipped.map(serializeCardMeta),
-    attacksMade: p.attacksMade,
-    investigationsCount: p.investigationsCount,
-    stayedLastTurn: p.stayedLastTurn,
-    wardedUntilRound: p.wardedUntilRound >= state.turnNumber ? state.round : 0,
-    exposedMark: p.exposedMark,
-    alive: p.alive,
-    connected: p.connected,
-    // BẢO MẬT P0: Chỉ hiện vai, phe, maxHp & cooldown sau khi lật vai hoặc trận FINISHED!
-    revealedRoleId: p.revealed ? p.roleId : null,
-    revealedFaction: p.revealed ? p.faction : null,
-    revealedMaxHp: p.revealed ? p.maxHp : null,
-    revealedSkillCooldown: p.revealed ? p.skillCooldown : 0,
-    appearance: p.appearance,
-  }));
+  const orderedPlayers = state.turnOrder
+    .map((pid) => state.players[pid])
+    .filter((p): p is AuthoritativePlayerState => Boolean(p))
+    .map((player) => getPublicPlayerView(player, state.finished));
 
   return {
-    rulesetVersion: BOARD_GAME_RULESET_VERSION,
+    rulesetVersion: 4,
     matchId: state.matchId,
     round: state.round,
     maxRounds: state.maxRounds,
     turnNumber: state.turnNumber,
     turnPhase: state.turnPhase,
-    activePlayerId,
-    turnOrder: state.turnOrder.slice(),
-    curfewPressureActive: state.curfewPressureActive,
-    players,
+    activePlayerId: state.activePlayerId,
+    turnOrder: [...state.turnOrder],
+    players: orderedPlayers,
     deckCounts: {
       investigation: state.decks.investigation.length,
       equipment: state.decks.equipment.length,
       event: state.decks.event.length,
     },
+    lastDiceRoll: state.lastDiceRoll,
     lastInvestigation: state.lastInvestigation,
     lastRevealEvent: state.lastRevealEvent,
-    publicLog: state.publicLog.slice(-45),
-    highlights: state.highlights.slice(-12),
+    publicLog: [...state.publicLog],
+    highlights: [...state.highlights],
     winnerLabel: state.winnerLabel,
     winnerFaction: state.winnerFaction,
-    winnerPlayerIds: state.winnerPlayerIds.slice(),
+    winnerPlayerIds: [...state.winnerPlayerIds],
     winReason: state.winReason,
-    finalReveal: state.finished ? buildFinalRevealSummary(state) : null,
+    finalReveal: state.finished ? state.finalReveal : null,
   };
 }
 
 export function getPrivateGameView(
   state: AuthoritativeGameState,
-  authenticatedPlayerId: string | null | undefined,
+  playerId: string,
 ): BoardGamePrivateGameView | null {
-  if (!authenticatedPlayerId) return null;
-  const player = state.players.find((p) => p.playerId === authenticatedPlayerId);
+  const player = state.players[playerId];
   if (!player) return null;
-
-  const roleDef = getRoleById(player.roleId) ?? ROLES_BY_ID['gac-ky-thuat'];
-  const protege = player.protegePlayerId
-    ? state.players.find((p) => p.playerId === player.protegePlayerId) ?? null
-    : null;
+  const role = getRoleDesign(player.roleId);
+  const protege =
+    player.protegePlayerId ? state.players[player.protegePlayerId] ?? null : null;
 
   return {
     playerId: player.playerId,
     roleId: player.roleId,
-    roleName: roleDef.name,
+    roleName: role.name,
     faction: player.faction,
     hp: player.hp,
     maxHp: player.maxHp,
-    woundsTaken: Math.max(0, player.maxHp - player.hp),
-    tempShield: player.tempShield,
+    woundsTaken: player.woundsTaken,
     skillCooldown: player.skillCooldown,
+    skillUsedOnce: player.skillUsedOnce,
     revealed: player.revealed,
-    secretGoalText: roleDef.secretObjective,
-    protegePlayerId: protege?.playerId ?? null,
-    protegeDisplayName: protege?.displayName ?? null,
-    protectedProtegeCount: player.protectedProtegeCount,
+    secretGoalText: role.secretGoalText,
+    protegePlayerId: player.protegePlayerId,
+    protegeDisplayName: protege ? protege.displayName : null,
     avengedProtegeKiller: player.avengedProtegeKiller,
-    investigatedTargetIds: player.investigatedTargetIds.slice(),
-    visitedLocations: player.visitedLocations.slice(),
-    hand: player.hand.map(serializeCardMeta),
-    equipped: player.equipped.map(serializeCardMeta),
-    privateClues: player.privateClues.slice(-24),
-    privateNotes: player.privateNotes.slice(-18),
+    investigatedTargetIds: [...player.investigatedTargetIds],
+    hand: mapCardIdsToMeta(player.hand),
+    equipped: mapCardIdsToMeta(player.equipped),
+    privateClues: [...player.privateClues],
   };
 }

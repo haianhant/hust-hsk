@@ -58,6 +58,10 @@ export default function BoardGameHUD({
   onRequestExit,
 }: BoardGameHUDProps) {
   const [copiedInvite, setCopiedInvite] = useState(false);
+  if (gameActive) {
+    // Ẩn thanh HUD ngoài sảnh khi GameBoard đang mở toàn màn hình để không đè tab/header trên Mobile & Desktop.
+    return null;
+  }
   const activeSeat = getBoardGameSeatById(seatId);
   const showDirectControls = Boolean(inviteCode && !gameActive);
 
@@ -150,7 +154,7 @@ export default function BoardGameHUD({
       {showDirectControls && inviteCode && (
         <div
           data-testid="bg-hud-match-bar"
-          className="pointer-events-auto flex w-auto max-w-[calc(100vw-16px)] flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-emerald-400/40 bg-slate-950/92 px-3 py-1.5 text-xs text-slate-100 shadow-xl backdrop-blur-md sm:gap-2"
+          className="pointer-events-auto flex w-auto max-w-[calc(100vw-16px)] flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-emerald-400/40 bg-slate-950/95 px-3 py-1.5 text-xs text-slate-100 shadow-xl backdrop-blur-md sm:gap-2"
         >
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-950/85 px-2 py-0.5 text-[11px] text-amber-100 ring-1 ring-amber-400/40">
             <span className="text-amber-300/90">Mã mời:</span>

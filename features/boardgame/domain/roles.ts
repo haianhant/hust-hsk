@@ -1,268 +1,155 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/roles.ts — 3 Phe nguyên bản & 9 Nhân vật v3
-// ("Bóng Đêm KTX v3 — Hidden Role, Investigation & Survival").
-//
-// Cân bằng đối xứng: cả 3 phe đều sở hữu đúng 1 nhân vật ở mỗi ngưỡng HP
-// tối đa (`11 / 12 / 13 HP`), không để lộ phe từ thông số ban đầu.
-// Mọi kỹ năng chủ động công khai đều yêu cầu TỰ LẬT VAI trước khi sử dụng.
+// features/boardgame/domain/roles.ts — 9 Nhân vật nguyên bản Bóng Đêm KTX v4
+// chia 3 phe (Đội Săn Đêm / Hội Bóng Đêm / Kẻ Độc Hành).
 // ---------------------------------------------------------------------------
 
-import type { BoardGameFactionId, BoardGameRoleId } from '../../../shared/contracts/boardgame';
+import type {
+  BoardGameFactionId,
+  BoardGameRoleId,
+} from '../../../shared/contracts/boardgame';
 import type { CharacterDesign } from './types';
 
 export const FACTION_LABELS: Record<BoardGameFactionId, string> = {
-  'lantern-guard': 'Đội Gác Đèn',
-  'mist-order': 'Hội Màn Sương',
-  wanderer: 'Kẻ Lang Thang',
+  'lantern-guard': 'Đội Săn Đêm',
+  'mist-order': 'Hội Bóng Đêm',
+  wanderer: 'Kẻ Độc Hành',
 };
 
 export const ROLES_CATALOG: readonly CharacterDesign[] = [
+  // -------------------- ĐỘI SĂN ĐÊM (3 nhân vật) --------------------
   {
     id: 'gac-ky-thuat',
-    name: 'Minh — Kỹ Thuật Viên',
+    name: 'Minh "Kỹ Thuật"',
+    title: 'Đội trưởng Xung Kích',
     faction: 'lantern-guard',
-    maxHp: 13,
-    secretObjective:
-      'Xác định và hạ toàn bộ thành viên Hội Màn Sương (hoặc giữ lợi thế kiểm soát tới Rạng Sáng).',
-    activeAbility: {
-      id: 'skill-minh-fortify',
-      name: 'Gia Cố Chốt Trực',
-      cooldownRounds: 2,
-      summary:
-        'Chọn bản thân hoặc 1 người cùng/kề phòng: hồi 2 vết thương và tặng +1 Giáp tạm (+2 nếu họ chưa bị thương).',
-    },
-    passiveAbility: {
-      id: 'passive-minh-gear',
-      name: 'Tay Nghề Xưởng Thực Tập',
-      cooldownRounds: 0,
-      summary:
-        'Sau khi lật vai: miễn nhiễm sát thương từ thẻ Sự kiện khi đang mang ít nhất 1 Trang bị.',
-    },
-    revealBenefit: 'Nhận ngay +1 Giáp tạm và rút 1 thẻ Trang bị.',
-    weaknesses: [
-      'HP tối đa 13 khiến một số Thẻ Điều tra nhầm lẫn với Dũng hoặc Bình.',
-      'Kỹ năng hỗ trợ đồng đội mạnh nhưng dễ bị tập trung sau khi lật vai.',
-    ],
+    maxHp: 14,
+    skillName: 'Đòn Phá Giáp Toàn Lực',
+    skillSummary: '1 lần/trận (sau khi lật vai): Gây ngay 4 sát thương trực tiếp lên 1 người cùng Cụm.',
+    cooldownRounds: 0,
+    oncePerMatch: true,
+    targetMode: 'same-cluster',
+    secretGoalText:
+      'Phe Đội Săn Đêm thắng khi toàn bộ Hội Bóng Đêm bị loại khỏi KTX.',
   },
   {
     id: 'gac-truc-ban',
-    name: 'Lan — Trực Ban Nội Trú',
+    name: 'Lan "Trực Ban"',
+    title: 'Điều Phối Y Tế KTX',
     faction: 'lantern-guard',
     maxHp: 12,
-    secretObjective:
-      'Xác định và hạ toàn bộ thành viên Hội Màn Sương (hoặc giữ lợi thế kiểm soát tới Rạng Sáng).',
-    activeAbility: {
-      id: 'skill-lan-ward',
-      name: 'Lệnh Bảo Hộ Trực Đêm',
-      cooldownRounds: 2,
-      summary:
-        'Bảo hộ 1 người khác cùng/kề phòng tới đầu lượt sau của Lan: giảm 1 ST nhận vào và chặn không rơi xuống dưới 1 HP.',
-    },
-    passiveAbility: {
-      id: 'passive-lan-ledger',
-      name: 'Sổ Quản Lý Balo',
-      cooldownRounds: 0,
-      summary:
-        'Sau khi lật vai: mỗi lần dùng Thẻ Điều tra đọc thêm chính xác số bài trên tay mục tiêu.',
-    },
-    revealBenefit: 'Hồi ngay 1 vết thương và rút 1 thẻ Điều tra.',
-    weaknesses: [
-      'Kỹ năng bảo hộ không thể đặt lên chính bản thân.',
-      'Cần manh mối rõ trước khi che chắn để tránh bảo vệ nhầm Màn Sương.',
-    ],
+    skillName: 'Hiệu Lệnh Hồi Sức',
+    skillSummary: '1 lần/trận (sau khi lật vai): Hồi đầy toàn bộ thương tích cho 1 người bất kỳ.',
+    cooldownRounds: 0,
+    oncePerMatch: true,
+    targetMode: 'any-player',
+    secretGoalText:
+      'Phe Đội Săn Đêm thắng khi toàn bộ Hội Bóng Đêm bị loại khỏi KTX.',
   },
   {
     id: 'gac-radio',
-    name: 'Khánh — Phát Thanh Viên KTX',
+    name: 'Vy "Radio"',
+    title: 'Trinh Sát Tần Số',
     faction: 'lantern-guard',
     maxHp: 11,
-    secretObjective:
-      'Xác định và hạ toàn bộ thành viên Hội Màn Sương (hoặc giữ lợi thế kiểm soát tới Rạng Sáng).',
-    activeAbility: {
-      id: 'skill-khanh-broadcast',
-      name: 'Phát Sóng Kiểm Chứng',
-      cooldownRounds: 2,
-      summary:
-        'Kiểm tra công khai 1 người ở bất kỳ đâu: nếu từng Tấn công hoặc đeo Trang bị sẽ gắn dấu Hở sườn (+1 ST đòn kế).',
-    },
-    passiveAbility: {
-      id: 'passive-khanh-radar',
-      name: 'Đài Liên Lạc Toàn Khu',
-      cooldownRounds: 0,
-      summary:
-        'Sau khi lật vai: dùng Thẻ Điều tra nhắm tới mọi khu vực không cần đứng gần.',
-    },
-    revealBenefit: 'Mở tầm điều tra toàn bản đồ ngay lượt này và nhận +1 Giáp tạm.',
-    weaknesses: [
-      'Ngưỡng máu 11 dễ gục nếu lật vai sớm khi chưa có áo khoác hoặc giáp.',
-      'Khả năng gắn dấu hở sườn khiến Hội Màn Sương ưu tiên truy tìm.',
-    ],
+    skillName: 'Soi Tần Số Thật',
+    skillSummary: 'Hồi chiêu 2 vòng (sau khi lật vai): Soi bí mật phe thật của 1 người; nếu là Hội Bóng Đêm, gây 1 sát thương.',
+    cooldownRounds: 2,
+    oncePerMatch: false,
+    targetMode: 'any-other',
+    secretGoalText:
+      'Phe Đội Săn Đêm thắng khi toàn bộ Hội Bóng Đêm bị loại khỏi KTX.',
   },
+
+  // -------------------- HỘI BÓNG ĐÊM (3 nhân vật) --------------------
   {
     id: 'suong-an-danh',
-    name: 'Tú — Cư Dân Vô Hình',
+    name: 'Tú "Ẩn Danh"',
+    title: 'Bóng Đêm Hút Sinh Lực',
     faction: 'mist-order',
-    maxHp: 12,
-    secretObjective:
-      'Hạ toàn bộ Đội Gác Đèn hoặc duy trì ẩn danh / áp lực kiểm soát vượt trội tới hết Vòng cuối.',
-    activeAbility: {
-      id: 'skill-tu-ambush',
-      name: 'Đánh Tráo Bóng Tối',
-      cooldownRounds: 2,
-      summary:
-        'Chọn 1 người cùng/kề phòng: hoán đổi vị trí với họ (nếu ở ô kề) và gây 2 ST phục kích (tính giáp/áo).',
-    },
-    passiveAbility: {
-      id: 'passive-tu-slip',
-      name: 'Đột Kích Im Lặng',
-      cooldownRounds: 0,
-      summary:
-        'Sau khi lật vai: đòn ATTACK bỏ qua giảm thương Bình Tĩnh Tự Vệ và đi xa hơn khi xuất phát từ Hành Lang B7.',
-    },
-    revealBenefit: 'Nhận +1 Giáp tạm và mở tầm đánh kề phòng ngay lượt này.',
-    weaknesses: [
-      'Không biết mặt đồng đội Màn Sương lúc đầu, cần giữ bí mật trước khi đánh úp.',
-      'Đòn Đánh Tráo đưa bản thân vào vị trí mới có thể bị vây ngược.',
-    ],
+    maxHp: 14,
+    skillName: 'Hấp Thụ Đêm Khuya',
+    skillSummary: 'Nội tại sau khi lật vai: Mỗi khi đánh thường trúng địch (> 0), bạn hồi lại 2 thương tích.',
+    cooldownRounds: 0,
+    oncePerMatch: false,
+    targetMode: 'passive',
+    secretGoalText:
+      'Phe Hội Bóng Đêm thắng khi toàn bộ Đội Săn Đêm bị loại khỏi KTX.',
   },
   {
     id: 'suong-tin-gia',
-    name: 'Vy — Người Gửi Tin Đồn',
+    name: 'Khánh "Tin Giả"',
+    title: 'Kẻ Tung Sấm Chớp',
     faction: 'mist-order',
-    maxHp: 11,
-    secretObjective:
-      'Hạ toàn bộ Đội Gác Đèn hoặc duy trì ẩn danh / áp lực kiểm soát vượt trội tới hết Vòng cuối.',
-    activeAbility: {
-      id: 'skill-vy-smoke',
-      name: 'Tung Hỏa Mù Hành Lang',
-      cooldownRounds: 2,
-      summary:
-        'Chọn 1 người cùng/kề phòng: xóa 1 Giáp tạm, gây 1 ST và đẩy họ dạt sang 1 khu vực kề cận.',
-    },
-    passiveAbility: {
-      id: 'passive-vy-jam',
-      name: 'Nhiễu Sóng Quan Sát',
-      cooldownRounds: 0,
-      summary:
-        'Sau khi lật vai: đối thủ dùng DEFEND cùng phòng không đọc được số bài trên tay Vy.',
-    },
-    revealBenefit: 'Rút ngay 1 thẻ Sự kiện và nhận +1 Giáp tạm.',
-    weaknesses: [
-      '11 HP tối đa mỏng manh trong giao tranh trực diện kéo dài.',
-      'Dễ lộ hành tung nếu liên tục gây nhiễu trước khi xác nhận đồng đội.',
-    ],
+    maxHp: 12,
+    skillName: 'Sấm Chớp Ký Túc',
+    skillSummary: '1 lần/trận (sau khi lật vai): Chọn 1 người bất kỳ toàn bàn, tung 1d6 gây sát thương trực tiếp đúng bằng mặt xúc xắc.',
+    cooldownRounds: 0,
+    oncePerMatch: true,
+    targetMode: 'any-other',
+    secretGoalText:
+      'Phe Hội Bóng Đêm thắng khi toàn bộ Đội Săn Đêm bị loại khỏi KTX.',
   },
   {
     id: 'suong-gac-cong',
-    name: 'Dũng — Bóng Đêm Hành Lang',
+    name: 'Dũng "Gác Cổng"',
+    title: 'Thủ Lĩnh Phản Đòn',
     faction: 'mist-order',
-    maxHp: 13,
-    secretObjective:
-      'Hạ toàn bộ Đội Gác Đèn hoặc duy trì ẩn danh / áp lực kiểm soát vượt trội tới hết Vòng cuối.',
-    activeAbility: {
-      id: 'skill-dung-pounce',
-      name: 'Áp Sát Bất Ngờ',
-      cooldownRounds: 2,
-      summary:
-        'Lao vào phòng 1 mục tiêu cùng/kề phòng đang bị thương (>= 1 vết) hoặc đã lật vai và tung đòn 3 ST cơ bản.',
-    },
-    passiveAbility: {
-      id: 'passive-dung-hunter',
-      name: 'Truy Kích Thương Tích',
-      cooldownRounds: 0,
-      summary:
-        'Sau khi lật vai: đòn ATTACK vào mục tiêu có >= 3 vết thương gây thêm +1 ST.',
-    },
-    revealBenefit: 'Mở tầm đánh kề phòng ngay trong lượt lật vai.',
-    weaknesses: [
-      'Kỹ năng chủ động không dùng được lên người chưa lật và chưa từng bị thương.',
-      'Lộ diện quá sớm khiến Gác Đèn dồn thẻ Điều tra và Còi báo động.',
-    ],
+    maxHp: 11,
+    skillName: 'Phản Đòn Gai Góc',
+    skillSummary: 'Nội tại sau khi lật vai: Mỗi khi bị đánh trúng và còn sống, kẻ tấn công chịu phản lại 2 sát thương.',
+    cooldownRounds: 0,
+    oncePerMatch: false,
+    targetMode: 'passive',
+    secretGoalText:
+      'Phe Hội Bóng Đêm thắng khi toàn bộ Đội Săn Đêm bị loại khỏi KTX.',
   },
+
+  // -------------------- KẺ ĐỘC HÀNH (3 nhân vật) --------------------
   {
     id: 'lang-anh-san',
-    name: 'Hải — Người Săn Gói Tin',
+    name: 'Hải "Sưu Tầm"',
+    title: 'Thợ Săn Trang Bị',
     faction: 'wanderer',
-    maxHp: 12,
-    secretObjective:
-      'Đồng thắng nếu sống tới cuối trận với >= 2 Trang bị & >= 2 lần điều tra; hoặc từ Vòng 5+ lật vai kích hoạt kỹ năng với >= 2 Trang bị & >= 3 lần điều tra để THẮNG ĐƠN ĐỘC!',
-    activeAbility: {
-      id: 'skill-hai-packet',
-      name: 'Chốt Gói Tin Đêm',
-      cooldownRounds: 2,
-      summary:
-        'Từ Vòng 5+ với >= 2 Trang bị và >= 3 lần điều tra -> thắng ngay! Nếu chưa đủ: rút 1 thẻ Điều tra & +1 Giáp tạm.',
-    },
-    passiveAbility: {
-      id: 'passive-hai-scavenger',
-      name: 'Thợ Săn Tài Nguyên',
-      cooldownRounds: 0,
-      summary:
-        'Tận dụng Căng tin và Phòng Phát Thanh để tích lũy trang bị và điều tra âm thầm.',
-    },
-    revealBenefit: 'Nhận +1 Giáp tạm và rút ngay 1 thẻ Trang bị.',
-    weaknesses: [
-      'Đeo đủ 2 trang bị rất thu hút sự chú ý của thẻ Kiểm tra tủ đồ và cả 2 phe.',
-      'Phải cân bằng giữa tích lũy Điều tra và sinh tồn qua Vòng 5.',
-    ],
+    maxHp: 11,
+    skillName: 'Thu Thập Nhanh',
+    skillSummary: 'Hồi chiêu 2 vòng (sau khi lật vai): Cướp 1 Trang bị đang đeo của 1 người cùng Cụm.',
+    cooldownRounds: 2,
+    oncePerMatch: false,
+    targetMode: 'same-cluster',
+    secretGoalText:
+      'Độc hành thắng ngay từ vòng 3 trở đi khi đã lật vai và sở hữu từ 3 Trang bị đang đeo trở lên (hoặc sống sót tới cuối trận với >= 2 Trang bị).',
   },
   {
     id: 'lang-quan-sat',
-    name: 'Trang — Người Ghi Chép',
+    name: 'Trang "Kiên Cường"',
+    title: 'Người Sống Sót Cuối Cùng',
     faction: 'wanderer',
-    maxHp: 11,
-    secretObjective:
-      'Đồng thắng nếu sống sót tới cuối trận với >= 2 lần điều tra khi đã có >= 3 người bị loại (hoặc đã tự lật vai với >= 2 người bị loại); THẮNG ĐƠN ĐỘC tức thì nếu đã lật vai khi cả bàn chỉ còn <= 2 người sống (và >= 2 người bị loại).',
-    activeAbility: {
-      id: 'skill-trang-deposition',
-      name: 'Biên Bản Đối Chất',
-      cooldownRounds: 2,
-      summary:
-        'Chọn 1 người cùng/kề phòng: cả Trang và người đó nhận +1 Giáp tạm, đồng thời Trang rút 1 thẻ Điều tra.',
-    },
-    passiveAbility: {
-      id: 'passive-trang-notes',
-      name: 'Nhân Chứng Kiên Nhẫn',
-      cooldownRounds: 0,
-      summary:
-        'Hợp tác phòng thủ với người có nguy cơ thấp để kéo dài trận tới cuối ván.',
-    },
-    revealBenefit: 'Hồi ngay 1 vết thương và nhận +1 Giáp tạm.',
-    weaknesses: [
-      'HP tối đa 11 thấp nhất nhóm Lang Thang nếu bị hai phe ép góc.',
-      'Không có sát thương kỹ năng chủ động, phải khéo léo thương lượng giữ thế cân bằng.',
-    ],
+    maxHp: 12,
+    skillName: 'Khiên Bất Hoại',
+    skillSummary: '1 lần/trận (sau khi lật vai): Kích hoạt miễn nhiễm mọi sát thương cho tới đầu lượt kế tiếp của bạn.',
+    cooldownRounds: 0,
+    oncePerMatch: true,
+    targetMode: 'self',
+    secretGoalText:
+      'Độc hành thắng khi lật vai và còn sống đến khi kết thúc giao tranh với >= 2 người đã ngã xuống, hoặc trụ lại <= 2 người cuối.',
   },
   {
     id: 'lang-cuu-ho',
-    name: 'Bình — Người Bảo Hộ',
+    name: 'Bình "Bảo Vệ"',
+    title: 'Vệ Sĩ Thầm Lặng',
     faction: 'wanderer',
     maxHp: 13,
-    secretObjective:
-      'Bảo vệ Mục tiêu Bảo hộ bí mật cùng sống sót tới hết ván (với >= 1 lần che chắn mục tiêu); nếu Mục tiêu gục, vẫn thắng nếu sống sót cuối ván VÀ đã kết liễu kẻ hạ Mục tiêu.',
-    activeAbility: {
-      id: 'skill-binh-shield',
-      name: 'Lá Chắn Thân Mình',
-      cooldownRounds: 2,
-      summary:
-        'Chọn 1 người cùng/kề phòng: hồi 1 thương & tặng +2 Giáp tạm cho họ, Bình nhận +1 Giáp tạm (tính tiến độ bảo hộ nếu đúng mục tiêu).',
-    },
-    passiveAbility: {
-      id: 'passive-binh-guardian',
-      name: 'Lời Hứa Trực Đêm',
-      cooldownRounds: 0,
-      summary:
-        'Khả năng chịu đòn 13 HP giúp bám sát khu vực trung tâm bảo vệ mục tiêu bí mật.',
-    },
-    revealBenefit: 'Hồi ngay 1 vết thương và nhận +1 Giáp tạm.',
-    weaknesses: [
-      'Lộ hướng di chuyển bám theo 1 người dễ bị đoán ra mục tiêu bảo hộ.',
-      'Nếu mục tiêu bảo hộ liều lĩnh chết sớm, phải chuyển hướng trả thù hoặc sinh tồn cuối ván.',
-    ],
+    skillName: 'Che Chắn Sinh Tử',
+    skillSummary: 'Hồi chiêu 2 vòng (sau khi lật vai): Hồi 2 thương tích cho 1 người cùng Cụm, đổi lại bạn tự chịu 1 sát thương.',
+    cooldownRounds: 2,
+    oncePerMatch: false,
+    targetMode: 'same-cluster',
+    secretGoalText:
+      'Độc hành thắng nếu còn sống khi Người được bảo hộ ngầm còn sống hoặc thuộc phe chiến thắng, HOẶC lật vai tự tay hạ sát kẻ đã loại người đó.',
   },
 ];
 
-export const ROLES_BY_ID: Record<BoardGameRoleId, CharacterDesign> = Object.freeze({
+export const ROLES_BY_ID: Record<BoardGameRoleId, CharacterDesign> = {
   'gac-ky-thuat': ROLES_CATALOG[0],
   'gac-truc-ban': ROLES_CATALOG[1],
   'gac-radio': ROLES_CATALOG[2],
@@ -272,12 +159,10 @@ export const ROLES_BY_ID: Record<BoardGameRoleId, CharacterDesign> = Object.free
   'lang-anh-san': ROLES_CATALOG[6],
   'lang-quan-sat': ROLES_CATALOG[7],
   'lang-cuu-ho': ROLES_CATALOG[8],
-});
+};
 
-export function getRoleById(roleId: string): CharacterDesign | undefined {
-  return Object.hasOwn(ROLES_BY_ID, roleId)
-    ? ROLES_BY_ID[roleId as BoardGameRoleId]
-    : undefined;
+export function getRoleDesign(id: BoardGameRoleId): CharacterDesign {
+  return ROLES_BY_ID[id];
 }
 
 export interface FactionCountSplit {

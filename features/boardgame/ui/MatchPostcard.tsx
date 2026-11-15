@@ -155,14 +155,13 @@ export function renderMatchPostcardDataUrl(
   ctx.textBaseline = 'middle';
   ctx.fillText('HUSTVerse — CLB Board Game KTX'.normalize('NFC'), 74, 65);
 
-  const safeRound = Math.min(publicGame.round, publicGame.maxRounds);
   const totalInvestigations = publicGame.players.reduce(
     (sum, p) => sum + p.investigationsCount,
     0,
   );
   const aliveCount = publicGame.players.filter((p) => p.alive).length;
   const statsText =
-    `Vòng ${safeRound}/${publicGame.maxRounds}  ·  Điều tra ${totalInvestigations}  ·  Sống sót ${aliveCount}/${publicGame.players.length}`.normalize(
+    `Vòng ${publicGame.round}  ·  Điều tra ${totalInvestigations}  ·  Sống sót ${aliveCount}/${publicGame.players.length}`.normalize(
       'NFC',
     );
   ctx.textAlign = 'right';

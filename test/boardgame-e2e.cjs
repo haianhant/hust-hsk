@@ -264,8 +264,8 @@ function auditBoardGameFrameText(label, text, audit, forbiddenMssvs = ALL_TEST_M
 
     if (msg.publicGame) {
       const pg = msg.publicGame;
-      if (pg.rulesetVersion !== 3) {
-        audit.auditErrors.push(`${label}: expected rulesetVersion 3, got ${String(pg.rulesetVersion)}`);
+      if (pg.rulesetVersion !== 4) {
+        audit.auditErrors.push(`${label}: expected rulesetVersion 4, got ${String(pg.rulesetVersion)}`);
       }
       const rawPg = JSON.stringify(pg);
       for (const forbidden of FORBIDDEN_PUBLIC_KEYS) {
@@ -552,30 +552,131 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
   }
 
   async function stepFullTurnIfActive(preferExplore = true) {
+    const clusterOf = (locId) => {
+      if (locId === 'radio' || locId === 'breaker') return 'north';
+      if (locId === 'lobby' || locId === 'canteen') return 'central';
+      return 'south';
+    };
+
     const st = await getState();
     const sync = st.sync;
     if (!sync || sync.status !== 'PLAYING' || sync.publicGame?.activePlayerId !== st.auth?.playerId) {
       return false;
     }
     const turnBefore = sync.publicGame.turnNumber;
-    const phase = sync.publicGame.turnPhase;
-    if (phase === 'MOVE_OR_STAY') {
-      await sendAction({ type: 'STAY' });
-      await new Promise((r) => setTimeout(r, 75));
-    }
-    const st2 = await getState();
-    if (st2.sync?.status === 'PLAYING' && st2.sync.publicGame?.activePlayerId === st2.auth?.playerId && st2.sync.publicGame.turnPhase === 'LOCATION_ACTION') {
-      await sendAction(preferExplore ? { type: 'EXPLORE_LOC' } : { type: 'DRAW_CARD', deck: 'event' });
-      await new Promise((r) => setTimeout(r, 75));
-    }
-    const st3 = await getState();
-    if (st3.sync?.status === 'PLAYING' && st3.sync.publicGame?.activePlayerId === st3.auth?.playerId && st3.sync.publicGame.turnPhase === 'MAIN_ACTION') {
-      const res = await sendAction({ type: 'DEFEND' });
-      if (!res.ok) {
-        await sendAction({ type: 'END_TURN' });
+
+    // 1. ROLL_MOVE / CHOOSE_MOVE
+    for (let rollStep = 0; rollStep < 4; rollStep++) {
+      const sNow = await getState();
+      const pubNow = sNow.sync?.publicGame;
+      if (
+        !sNow.sync ||
+        sNow.sync.status !== 'PLAYING' ||
+        pubNow?.activePlayerId !== sNow.auth?.playerId ||
+        pubNow.turnNumber !== turnBefore
+      ) {
+        break;
       }
-      await new Promise((r) => setTimeout(r, 75));
+      if (pubNow.turnPhase === 'ROLL_MOVE') {
+        await sendAction({ type: 'ROLL_DICE' });
+        await new Promise((r) => setTimeout(r, 80));
+      } else if (pubNow.turnPhase === 'CHOOSE_MOVE') {
+        const selfP = pubNow.players.find((p) => p.playerId === sNow.auth.playerId);
+        const dest = selfP?.location !== 'corridor' ? 'corridor' : 'lobby';
+        await sendAction({ type: 'CHOOSE_DEST', location: dest });
+        await new Promise((r) => setTimeout(r, 80));
+      } else {
+        break;
+      }
     }
+
+    // 2. LOCATION_ACTION
+    const st2 = await getState();
+    const pub2 = st2.sync?.publicGame;
+    if (
+      st2.sync?.status === 'PLAYING' &&
+      pub2?.activePlayerId === st2.auth?.playerId &&
+      pub2.turnNumber === turnBefore &&
+      pub2.turnPhase === 'LOCATION_ACTION'
+    ) {
+      const self2 = pub2.players.find((p) => p.playerId === st2.auth.playerId);
+      const otherAlive = pub2.players.find((p) => p.alive && p.playerId !== st2.auth.playerId);
+      let locAct = { type: 'SKIP_LOC' };
+      if (preferExplore && self2) {
+        if (self2.location === 'radio') locAct = { type: 'DRAW_CARD', deck: 'investigation' };
+        else if (self2.location === 'lobby') locAct = { type: 'DRAW_CARD', deck: 'equipment' };
+        else if (self2.location === 'breaker' || self2.location === 'canteen') locAct = { type: 'DRAW_CARD', deck: 'event' };
+        else if (self2.location === 'corridor') {
+          if (self2.woundsTaken >= 2) locAct = { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: self2.playerId };
+          else if (otherAlive) locAct = { type: 'USE_LOC_POWER', mode: 'damage', targetPlayerId: otherAlive.playerId };
+        } else if (self2.location === 'court') {
+          const donor = pub2.players.find((p) => p.alive && p.playerId !== st2.auth.playerId && p.equipped.length > 0);
+          if (donor) locAct = { type: 'USE_LOC_POWER', mode: 'steal', targetPlayerId: donor.playerId };
+        }
+      }
+      const locRes = await sendAction(locAct);
+      await new Promise((r) => setTimeout(r, 80));
+      if (!locRes.ok && locAct.type !== 'SKIP_LOC') {
+        await sendAction({ type: 'SKIP_LOC' });
+        await new Promise((r) => setTimeout(r, 80));
+      }
+    }
+
+    // 3. MAIN_ACTION (equip / investigate / reveal / attack -> auto ends turn, else END_TURN)
+    for (let mainStep = 0; mainStep < 4; mainStep++) {
+      const st3 = await getState();
+      const pub3 = st3.sync?.publicGame;
+      const priv3 = st3.sync?.privateView;
+      if (
+        st3.sync?.status !== 'PLAYING' ||
+        pub3?.activePlayerId !== st3.auth?.playerId ||
+        pub3.turnNumber !== turnBefore ||
+        pub3.turnPhase !== 'MAIN_ACTION'
+      ) {
+        break;
+      }
+      const self3 = pub3.players.find((p) => p.playerId === st3.auth.playerId);
+      const enemies = pub3.players.filter(
+        (p) =>
+          p.alive &&
+          p.playerId !== st3.auth.playerId &&
+          (!p.revealedFaction || priv3?.faction === 'wanderer' || p.revealedFaction !== priv3?.faction),
+      );
+      const otherAlive = enemies[0] || pub3.players.find((p) => p.alive && p.playerId !== st3.auth.playerId);
+      const gear = priv3?.hand?.find((c) => c.deck !== 'investigation' && !c.isConsumable);
+      const invCard = priv3?.hand?.find((c) => c.deck === 'investigation');
+      const offCard = priv3?.hand?.find((c) => c.id === 'ev-06' || c.id === 'ev-07' || c.id === 'ev-08');
+      const hasBow = self3?.equipped?.some((c) => c.id === 'ev-04');
+      const reachable = enemies.filter((p) =>
+        hasBow ? clusterOf(p.location) !== clusterOf(self3.location) : clusterOf(p.location) === clusterOf(self3.location),
+      );
+
+      let act = { type: 'END_TURN' };
+      if (gear) {
+        act = { type: 'EQUIP_CARD', cardId: gear.id };
+      } else if (priv3 && !priv3.revealed && pub3.round >= 2) {
+        act = { type: 'REVEAL_ROLE' };
+      } else if (invCard && otherAlive) {
+        act = { type: 'INVESTIGATE_CARD', cardId: invCard.id, targetPlayerId: otherAlive.playerId };
+      } else if (offCard && otherAlive) {
+        act =
+          offCard.id === 'ev-07'
+            ? { type: 'USE_CARD', cardId: 'ev-07', targetLocation: otherAlive.location }
+            : { type: 'USE_CARD', cardId: offCard.id, targetPlayerId: otherAlive.playerId };
+      } else if (reachable.length > 0) {
+        act = { type: 'ATTACK', targetPlayerId: reachable[0].playerId };
+      }
+
+      const res = await sendAction(act);
+      await new Promise((r) => setTimeout(r, 80));
+      if (!res.ok && act.type !== 'END_TURN') {
+        await sendAction({ type: 'END_TURN' });
+        await new Promise((r) => setTimeout(r, 80));
+        break;
+      }
+      if (act.type === 'ATTACK' || act.type === 'END_TURN') break;
+    }
+
     const stAfter = await getState();
     return (
       stAfter.sync?.status === 'FINISHED' ||
@@ -638,11 +739,13 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
       const rawStatus = (statusBar?.textContent || '').replace(/\s+/g, ' ');
       const turnMatch = rawStatus.match(/Lượt\s*#\d+/);
       const turnNumStr = turnMatch ? turnMatch[0] : rawStatus.slice(0, 48);
-      const phaseTag = enabledIds.includes('bg-stay-btn')
+      const phaseTag = enabledIds.includes('bg-roll-dice-btn')
         ? 'P1'
-        : enabledIds.includes('bg-explore-loc')
-          ? 'P2'
-          : 'P3';
+        : enabledIds.some((id) => id.startsWith('bg-choose-dest-'))
+          ? 'P1B'
+          : enabledIds.includes('bg-skip-loc-btn')
+            ? 'P2'
+            : 'P3';
       const turnKey = `${turnNumStr}::${phaseTag}`;
       return { mode: 'panel', turnKey, enabledIds };
     })
@@ -657,7 +760,7 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
   }
   if (snap.mode !== 'panel' || snap.enabledIds.length === 0) return false;
 
-  const NON_BLOCKABLE = new Set(['bg-stay-btn', 'bg-explore-loc', 'bg-defend-btn', 'bg-end-turn-btn']);
+  const NON_BLOCKABLE = new Set(['bg-roll-dice-btn', 'bg-skip-loc-btn', 'bg-end-turn-btn']);
   const isFresh = (id) => NON_BLOCKABLE.has(id) || !triedSet.has(`${snap.turnKey}::${id}`);
   const enabledSet = new Set(snap.enabledIds);
 
@@ -693,14 +796,22 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
     return true;
   };
 
-  for (const id of ['bg-move-canteen', 'bg-move-corridor']) {
+  if (await pickAndClick('bg-roll-dice-btn')) return true;
+  for (const id of ['bg-choose-dest-corridor', 'bg-choose-dest-lobby']) {
     if (await pickAndClick(id)) return true;
   }
-  const anyMove = snap.enabledIds.find((id) => id.startsWith('bg-move-') && isFresh(id));
-  if (anyMove && (await pickAndClick(anyMove))) return true;
-  if (await pickAndClick('bg-stay-btn')) return true;
+  const anyDest = snap.enabledIds.find((id) => id.startsWith('bg-choose-dest-') && isFresh(id));
+  if (anyDest && (await pickAndClick(anyDest))) return true;
 
-  const p2Order = ['bg-draw-investigation', 'bg-draw-equipment', 'bg-draw-event', 'bg-explore-loc'];
+  const p2Order = [
+    'bg-draw-investigation-btn',
+    'bg-draw-equipment-btn',
+    'bg-draw-event-btn',
+    'bg-loc-steal-btn',
+    'bg-loc-damage-btn',
+    'bg-loc-heal-btn',
+    'bg-skip-loc-btn',
+  ];
   for (let i = 0; i < p2Order.length; i++) {
     if (await pickAndClick(p2Order[(stepIndex + i) % p2Order.length])) return true;
   }
@@ -711,7 +822,6 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
   const anyCard = snap.enabledIds.find((id) => id.startsWith('bg-use-card-') && isFresh(id));
   if (anyCard && (await pickAndClick(anyCard))) return true;
   if (await pickAndClick('bg-attack-btn')) return true;
-  if (await pickAndClick('bg-defend-btn')) return true;
   if (await pickAndClick('bg-end-turn-btn')) return true;
 
   return false;
@@ -946,12 +1056,17 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     // Rules modal, sound toggle, emote toast, hand mask & HP leak check on P1 & P4
     await p1.page.bringToFront();
     await p1.page.waitForSelector('[data-testid="bg-v3-status-bar"]', { timeout: UI_TIMEOUT });
+    const timerText = await p1.page.locator('[data-testid="bg-turn-timer"]').innerText();
+    assert.ok(
+      timerText.includes('Suy nghĩ tự do') || timerText.includes('∞'),
+      `Default turn timer must show infinite thinking mode, got: ${timerText}`,
+    );
     await p1.page.locator('[data-testid="bg-board-rules-btn"]').click();
     await p1.page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: UI_TIMEOUT });
     const rulesModalText = await p1.page.locator('[data-testid="boardgame-rules-modal"]').innerText();
     assert.ok(
-      rulesModalText.includes('Bối cảnh v3') && rulesModalText.includes('Bảo mật màn hình'),
-      'Rules modal must reflect v3 mechanics',
+      rulesModalText.includes('Bối cảnh v4') && rulesModalText.includes('Bảo mật màn hình'),
+      'Rules modal must reflect v4 mechanics',
     );
     await p1.page.locator('[data-testid="bg-close-rules-btn"]').click();
 
@@ -976,9 +1091,11 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     }
     assert.ok(activePlayer, 'Either P1 or P4 must display ActionPanel');
     await activePlayer.page.bringToFront();
-    await playFirstValidStepOnPage(activePlayer.page, 0);
-    await activePlayer.page.waitForTimeout(180);
-    await playFirstValidStepOnPage(activePlayer.page, 0);
+    for (let s = 0; s < 5; s++) {
+      if ((await activePlayer.page.locator('[data-testid="bg-end-turn-btn"]').count()) > 0) break;
+      await playFirstValidStepOnPage(activePlayer.page, 0);
+      await activePlayer.page.waitForTimeout(160);
+    }
     await activePlayer.page.waitForSelector('[data-testid="bg-hand-masked-banner"]', { timeout: UI_TIMEOUT });
     await activePlayer.page.locator('[data-testid="bg-unmask-hand-btn"]').click();
     await activePlayer.page.waitForSelector('[data-testid^="bg-use-card-"]', { timeout: UI_TIMEOUT });
@@ -1452,11 +1569,17 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       'Checkpoint 3: secret role restored during opponent turn',
     );
 
-    // Advance back to P1 -> reach MAIN_ACTION -> REVEAL_ROLE -> Checkpoint 4
+    // Advance back to P1 -> reach LOCATION_ACTION/MAIN_ACTION -> REVEAL_ROLE -> Checkpoint 4
     await advancePeersUntilP1Active();
-    await p1.page.locator('[data-testid="bg-stay-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-explore-loc"]', { timeout: UI_TIMEOUT });
-    await p1.page.locator('[data-testid="bg-explore-loc"]').click();
+    for (let s = 0; s < 5; s++) {
+      if ((await p1.page.locator('[data-testid="bg-reveal-role-btn"]').count()) > 0) break;
+      if ((await p1.page.locator('[data-testid="bg-roll-dice-btn"]').count()) > 0) {
+        await p1.page.locator('[data-testid="bg-roll-dice-btn"]').click();
+      } else if ((await p1.page.locator('[data-testid^="bg-choose-dest-"]').count()) > 0) {
+        await p1.page.locator('[data-testid^="bg-choose-dest-"]').first().click();
+      }
+      await p1.page.waitForTimeout(180);
+    }
     await p1.page.waitForSelector('[data-testid="bg-reveal-role-btn"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-reveal-role-btn"]').click();
     await p1.page.waitForSelector('[data-testid="bg-confirm-reveal-btn"]', { timeout: UI_TIMEOUT });
@@ -1470,9 +1593,9 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     const roleCardTextC4 = await p1.page.locator('[data-testid="bg-role-card-secret"]').innerText();
     assert.equal(
-      roleCardTextC4.includes('Mở khóa sau khi lật'),
+      roleCardTextC4.includes('Cần lật vai'),
       false,
-      'Checkpoint 4: unlocked skill status must persist across reload after REVEAL_ROLE',
+      'Checkpoint 4: revealed skill status must persist across reload after REVEAL_ROLE',
     );
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-reconnect-check.png') });
 
@@ -1529,7 +1652,7 @@ async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)
     assert.equal(healthRes.status, 200);
     const healthJson = await healthRes.json();
     assert.equal(healthJson.ok, true);
-    assert.equal(healthJson.rulesetVersion, 3);
+    assert.equal(healthJson.rulesetVersion, 4);
     assert.equal(healthJson.protocolVersion, 1);
 
     const hostA = await setupPlayerContext(
@@ -1710,8 +1833,8 @@ async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)
 
     // Send prototype-key action & wrong-phase action from authenticated peer without crashing Match A DO
     const peerProtoRes = await peersA[0].sendAction({
-      type: 'PLAY_EVENT',
-      cardId: 'ev-03',
+      type: 'USE_CARD',
+      cardId: 'ev-07',
       targetLocation: 'toString',
     });
     assert.equal(peerProtoRes.ok, false);

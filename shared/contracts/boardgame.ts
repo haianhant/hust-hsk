@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // shared/contracts/boardgame.ts — Single Source of Truth cho Hợp đồng Mạng,
-// Máy trạng thái Lobby/Trận đấu & DTO của "Bóng Đêm KTX v3 — Hidden Role,
-// Investigation & Survival". Không phụ thuộc React, Three.js hay DOM.
+// Máy trạng thái Lobby/Trận đấu & DTO của "Bóng Đêm KTX v4 — Săn Bóng Đêm KTX".
+// Không phụ thuộc React, Three.js hay DOM.
 //
 // Bảo mật P0:
 // - Tuyệt đối KHÔNG định nghĩa hoặc truyền `mssv`, `reconnectTokenHash`, `hp`,
@@ -26,14 +26,15 @@ export type BoardGameMatchStatus =
   | 'FINISHED'
   | 'CLOSED';
 
-export const BOARD_GAME_RULESET_VERSION = 3 as const;
+export const BOARD_GAME_RULESET_VERSION = 4 as const;
 export const BOARD_GAME_PROTOCOL_VERSION = 1 as const;
 export const BOARD_GAME_MIN_PLAYERS = 4;
 export const BOARD_GAME_MAX_PLAYERS = 8;
 export const BOARD_GAME_TABLE_SEAT_COUNT = 8;
 export const BOARD_GAME_MAX_SPECTATORS = 8;
 export const BOARD_GAME_MAX_DIRECTORY_MATCHES = 16;
-export const BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS = 40_000;
+/** Mặc định 0 = thời gian suy nghĩ vô hạn khi người chơi đang online; chỉ tự kết thúc lượt nếu rớt mạng quá hạn. */
+export const BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS = 0;
 export const BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS = 12_000;
 export const BOARD_GAME_RECONNECT_HOLD_MS = 90_000;
 export const BOARD_GAME_ABANDONED_MATCH_TTL_MS = 5 * 60_000;
@@ -80,10 +81,13 @@ export type BoardGameLocationId =
   | 'corridor'
   | 'breaker';
 
+export type BoardGameZoneClusterId = 'north' | 'central' | 'south';
+
 export type BoardGameDeckId = 'investigation' | 'equipment' | 'event';
 
 export type BoardGameTurnPhase =
-  | 'MOVE_OR_STAY'
+  | 'ROLL_MOVE'
+  | 'CHOOSE_MOVE'
   | 'LOCATION_ACTION'
   | 'MAIN_ACTION'
   | 'ENDED';
@@ -115,12 +119,29 @@ export interface BoardGameCardPublicMeta {
   targetMode:
     | 'self'
     | 'single-player'
-    | 'adjacent-or-same'
-    | 'same-location'
+    | 'same-cluster'
+    | 'other-cluster'
     | 'global'
     | 'location';
   isConsumable?: boolean;
   value: number;
+}
+
+export interface BoardGameDiceRollEvent {
+  id: string;
+  round: number;
+  atMs: number;
+  playerId: string;
+  displayName: string;
+  kind: 'move' | 'attack';
+  d6: number;
+  d4: number;
+  total: number;
+  rerollRequired: boolean;
+  freeChoice: boolean;
+  resolvedLocation: BoardGameLocationId | null;
+  targetPlayerId?: string;
+  damageDealt?: number;
 }
 
 export interface BoardGameInvestigationOutcome {
@@ -191,24 +212,22 @@ export interface BoardGamePublicPlayerView {
   displayName: string;
   seatIndex: number;
   location: BoardGameLocationId;
-  /** Sức khỏe bí mật được tách khỏi kênh công khai: chỉ lộ vết thương và Giáp tạm hiện có. */
+  /** Thang thương tích công khai (0..14); HP tối đa giữ bí mật đến khi lật vai. */
   woundsTaken: number;
-  tempShield: number;
-  /** `null` khi nhân vật (ví dụ Vy sau khi lật vai) đang kích hoạt Nhiễu Sóng ẩn số bài trên tay. */
-  handCount: number | null;
+  handCount: number;
   equipped: readonly BoardGameCardPublicMeta[];
   attacksMade: number;
   investigationsCount: number;
-  stayedLastTurn: boolean;
-  wardedUntilRound: number;
-  exposedMark: number;
+  /** Trạng thái khiên che chắn 1 vòng sau khi Trang lật vai/kích hoạt bảo vệ. */
+  guardianShieldActive: boolean;
   alive: boolean;
   connected: boolean;
-  // BẢO MẬT P0: Chỉ hiện vai, phe, maxHp & cooldown kỹ năng khi đã lật vai công khai hoặc FINISHED!
+  // BẢO MẬT P0: Chỉ hiện vai, phe, maxHp & trạng thái kỹ năng khi đã lật vai công khai hoặc FINISHED!
   revealedRoleId: BoardGameRoleId | null;
   revealedFaction: BoardGameFactionId | null;
   revealedMaxHp: number | null;
   revealedSkillCooldown: number;
+  revealedSkillUsedOnce: boolean;
   appearance: RemoteAppearance;
 }
 
@@ -218,16 +237,15 @@ export interface BoardGamePublicLogEntry {
   atMs: number;
   kind:
     | 'system'
+    | 'dice'
     | 'move'
-    | 'stay'
-    | 'explore'
     | 'draw'
     | 'investigate'
     | 'equipment'
     | 'event'
+    | 'steal'
     | 'skill'
     | 'attack'
-    | 'defend'
     | 'reveal'
     | 'elimination'
     | 'timeout'
@@ -257,7 +275,7 @@ export interface BoardGameRevealRecord {
 }
 
 export interface BoardGamePublicGameView {
-  rulesetVersion: 3;
+  rulesetVersion: 4;
   matchId: string;
   round: number;
   maxRounds: number;
@@ -265,9 +283,9 @@ export interface BoardGamePublicGameView {
   turnPhase: BoardGameTurnPhase;
   activePlayerId: string | null;
   turnOrder: readonly string[];
-  curfewPressureActive: boolean;
   players: readonly BoardGamePublicPlayerView[];
   deckCounts: Record<BoardGameDeckId, number>;
+  lastDiceRoll: BoardGameDiceRollEvent | null;
   lastInvestigation: BoardGameInvestigationOutcome | null;
   lastRevealEvent: BoardGameRevealEvent | null;
   publicLog: readonly BoardGamePublicLogEntry[];
@@ -280,13 +298,6 @@ export interface BoardGamePublicGameView {
   finalReveal: readonly BoardGameRevealRecord[] | null;
 }
 
-export interface BoardGamePrivateNote {
-  id: string;
-  atMs: number;
-  round: number;
-  text: string;
-}
-
 export interface BoardGamePrivateGameView {
   playerId: string;
   roleId: BoardGameRoleId;
@@ -295,38 +306,38 @@ export interface BoardGamePrivateGameView {
   hp: number;
   maxHp: number;
   woundsTaken: number;
-  tempShield: number;
   skillCooldown: number;
+  skillUsedOnce: boolean;
   revealed: boolean;
   secretGoalText: string;
   protegePlayerId: string | null;
   protegeDisplayName: string | null;
-  protectedProtegeCount: number;
   avengedProtegeKiller: boolean;
   investigatedTargetIds: readonly string[];
-  visitedLocations: readonly BoardGameLocationId[];
   hand: readonly BoardGameCardPublicMeta[];
   equipped: readonly BoardGameCardPublicMeta[];
   privateClues: readonly BoardGamePrivateClueEntry[];
-  privateNotes: readonly BoardGamePrivateNote[];
 }
 
 export type BoardGameActionPayload =
-  | { type: 'MOVE'; location: BoardGameLocationId }
-  | { type: 'STAY' }
-  | { type: 'EXPLORE_LOC' }
+  | { type: 'ROLL_DICE' }
+  | { type: 'CHOOSE_DEST'; location: BoardGameLocationId }
   | { type: 'DRAW_CARD'; deck: BoardGameDeckId }
-  | { type: 'EQUIP_CARD'; cardId: string }
-  | { type: 'USE_EQUIPMENT'; cardId: string; targetPlayerId?: string }
-  | { type: 'INVESTIGATE_CARD'; cardId: string; targetPlayerId: string }
   | {
-      type: 'PLAY_EVENT';
+      type: 'USE_LOC_POWER';
+      targetPlayerId?: string;
+      mode?: 'heal' | 'damage' | 'steal';
+    }
+  | { type: 'SKIP_LOC' }
+  | { type: 'EQUIP_CARD'; cardId: string }
+  | {
+      type: 'USE_CARD';
       cardId: string;
       targetPlayerId?: string;
       targetLocation?: BoardGameLocationId;
     }
+  | { type: 'INVESTIGATE_CARD'; cardId: string; targetPlayerId: string }
   | { type: 'ATTACK'; targetPlayerId: string }
-  | { type: 'DEFEND' }
   | { type: 'REVEAL_ROLE' }
   | {
       type: 'USE_SKILL';
@@ -730,20 +741,21 @@ export function isValidContractDeckId(raw: unknown): raw is BoardGameDeckId {
 }
 
 const ACTION_ALLOWED_KEYS: Record<BoardGameActionPayload['type'], ReadonlySet<string>> = {
-  MOVE: new Set(['type', 'location']),
-  STAY: new Set(['type']),
-  EXPLORE_LOC: new Set(['type']),
+  ROLL_DICE: new Set(['type']),
+  CHOOSE_DEST: new Set(['type', 'location']),
   DRAW_CARD: new Set(['type', 'deck']),
+  USE_LOC_POWER: new Set(['type', 'targetPlayerId', 'mode']),
+  SKIP_LOC: new Set(['type']),
   EQUIP_CARD: new Set(['type', 'cardId']),
-  USE_EQUIPMENT: new Set(['type', 'cardId', 'targetPlayerId']),
+  USE_CARD: new Set(['type', 'cardId', 'targetPlayerId', 'targetLocation']),
   INVESTIGATE_CARD: new Set(['type', 'cardId', 'targetPlayerId']),
-  PLAY_EVENT: new Set(['type', 'cardId', 'targetPlayerId', 'targetLocation']),
   ATTACK: new Set(['type', 'targetPlayerId']),
-  DEFEND: new Set(['type']),
   REVEAL_ROLE: new Set(['type']),
   USE_SKILL: new Set(['type', 'targetPlayerId', 'targetLocation']),
   END_TURN: new Set(['type']),
 };
+
+const VALID_LOC_POWER_MODES = new Set(['heal', 'damage', 'steal']);
 
 export function validateBoardGameActionPayload(
   raw: unknown,
@@ -761,41 +773,64 @@ export function validateBoardGameActionPayload(
   }
 
   switch (actionType as BoardGameActionPayload['type']) {
-    case 'MOVE': {
+    case 'ROLL_DICE':
+      return { ok: true, action: { type: 'ROLL_DICE' } };
+    case 'CHOOSE_DEST': {
       if (!isValidContractLocationId(raw.location)) {
-        return { ok: false, error: 'Khu vực di chuyển không hợp lệ.' };
+        return { ok: false, error: 'Khu vực điểm đến không hợp lệ.' };
       }
-      return { ok: true, action: { type: 'MOVE', location: raw.location } };
+      return { ok: true, action: { type: 'CHOOSE_DEST', location: raw.location } };
     }
-    case 'STAY':
-      return { ok: true, action: { type: 'STAY' } };
-    case 'EXPLORE_LOC':
-      return { ok: true, action: { type: 'EXPLORE_LOC' } };
     case 'DRAW_CARD': {
       if (!isValidContractDeckId(raw.deck)) {
         return { ok: false, error: 'Bộ bài rút không hợp lệ.' };
       }
       return { ok: true, action: { type: 'DRAW_CARD', deck: raw.deck } };
     }
+    case 'USE_LOC_POWER': {
+      if (raw.targetPlayerId !== undefined && !isValidBoardGamePlayerIdSyntax(raw.targetPlayerId)) {
+        return { ok: false, error: 'Mục tiêu quyền năng khu vực không hợp lệ.' };
+      }
+      if (
+        raw.mode !== undefined &&
+        (typeof raw.mode !== 'string' || !VALID_LOC_POWER_MODES.has(raw.mode))
+      ) {
+        return { ok: false, error: 'Chế độ quyền năng khu vực không hợp lệ.' };
+      }
+      return {
+        ok: true,
+        action: {
+          type: 'USE_LOC_POWER',
+          ...(raw.targetPlayerId !== undefined ? { targetPlayerId: raw.targetPlayerId } : {}),
+          ...(raw.mode !== undefined ? { mode: raw.mode as 'heal' | 'damage' | 'steal' } : {}),
+        },
+      };
+    }
+    case 'SKIP_LOC':
+      return { ok: true, action: { type: 'SKIP_LOC' } };
     case 'EQUIP_CARD': {
       if (!isValidBoardGameCardIdSyntax(raw.cardId)) {
         return { ok: false, error: 'Mã thẻ trang bị không hợp lệ.' };
       }
       return { ok: true, action: { type: 'EQUIP_CARD', cardId: raw.cardId } };
     }
-    case 'USE_EQUIPMENT': {
+    case 'USE_CARD': {
       if (!isValidBoardGameCardIdSyntax(raw.cardId)) {
-        return { ok: false, error: 'Mã thẻ trang bị không hợp lệ.' };
+        return { ok: false, error: 'Mã thẻ bài không hợp lệ.' };
       }
       if (raw.targetPlayerId !== undefined && !isValidBoardGamePlayerIdSyntax(raw.targetPlayerId)) {
-        return { ok: false, error: 'Mục tiêu sử dụng trang bị không hợp lệ.' };
+        return { ok: false, error: 'Mục tiêu thẻ bài không hợp lệ.' };
+      }
+      if (raw.targetLocation !== undefined && !isValidContractLocationId(raw.targetLocation)) {
+        return { ok: false, error: 'Khu vực mục tiêu của thẻ bài không hợp lệ.' };
       }
       return {
         ok: true,
         action: {
-          type: 'USE_EQUIPMENT',
+          type: 'USE_CARD',
           cardId: raw.cardId,
           ...(raw.targetPlayerId !== undefined ? { targetPlayerId: raw.targetPlayerId } : {}),
+          ...(raw.targetLocation !== undefined ? { targetLocation: raw.targetLocation } : {}),
         },
       };
     }
@@ -815,26 +850,6 @@ export function validateBoardGameActionPayload(
         },
       };
     }
-    case 'PLAY_EVENT': {
-      if (!isValidBoardGameCardIdSyntax(raw.cardId)) {
-        return { ok: false, error: 'Mã thẻ sự kiện không hợp lệ.' };
-      }
-      if (raw.targetPlayerId !== undefined && !isValidBoardGamePlayerIdSyntax(raw.targetPlayerId)) {
-        return { ok: false, error: 'Mục tiêu thẻ sự kiện không hợp lệ.' };
-      }
-      if (raw.targetLocation !== undefined && !isValidContractLocationId(raw.targetLocation)) {
-        return { ok: false, error: 'Khu vực mục tiêu của thẻ sự kiện không hợp lệ.' };
-      }
-      return {
-        ok: true,
-        action: {
-          type: 'PLAY_EVENT',
-          cardId: raw.cardId,
-          ...(raw.targetPlayerId !== undefined ? { targetPlayerId: raw.targetPlayerId } : {}),
-          ...(raw.targetLocation !== undefined ? { targetLocation: raw.targetLocation } : {}),
-        },
-      };
-    }
     case 'ATTACK': {
       if (!isValidBoardGamePlayerIdSyntax(raw.targetPlayerId)) {
         return { ok: false, error: 'Mục tiêu tấn công không hợp lệ.' };
@@ -844,8 +859,6 @@ export function validateBoardGameActionPayload(
         action: { type: 'ATTACK', targetPlayerId: raw.targetPlayerId },
       };
     }
-    case 'DEFEND':
-      return { ok: true, action: { type: 'DEFEND' } };
     case 'REVEAL_ROLE':
       return { ok: true, action: { type: 'REVEAL_ROLE' } };
     case 'USE_SKILL': {
@@ -1057,13 +1070,13 @@ export function validateBoardGameClientMessage(
       };
     }
     case 'BG_START_MATCH': {
-      if (
-        raw.turnTimeoutMs !== undefined &&
-        (typeof raw.turnTimeoutMs !== 'number' ||
-          !Number.isFinite(raw.turnTimeoutMs) ||
-          raw.turnTimeoutMs < 500 ||
-          raw.turnTimeoutMs > 600_000)
-      ) {
+      const validTimeout =
+        raw.turnTimeoutMs === 0 ||
+        (typeof raw.turnTimeoutMs === 'number' &&
+          Number.isFinite(raw.turnTimeoutMs) &&
+          raw.turnTimeoutMs >= 500 &&
+          raw.turnTimeoutMs <= 600_000);
+      if (raw.turnTimeoutMs !== undefined && !validTimeout) {
         return {
           ok: false,
           code: 'INVALID_ACTION',

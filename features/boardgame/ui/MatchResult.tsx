@@ -71,7 +71,7 @@ export default function MatchResult({
           <p className="mt-1.5 text-xs text-slate-200">{publicGame.winReason}</p>
           <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-300">
             <span>
-              ⏱️ Vòng: <strong>{Math.min(publicGame.round, publicGame.maxRounds)}/{publicGame.maxRounds}</strong>
+              ⏱️ Vòng: <strong>{publicGame.round}</strong>
             </span>
             <span>
               🔎 Lượt điều tra: <strong>{totalInvestigations}</strong>
@@ -102,7 +102,7 @@ export default function MatchResult({
                     }`}
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
-                      <RolePortraitSvg roleId={r.roleId} size="sm" />
+                      <RolePortraitSvg roleId={r.roleId} faction={r.faction} size={38} />
                       <div className="min-w-0">
                         <div className="truncate font-bold text-slate-100">
                           {r.displayName}
@@ -111,9 +111,9 @@ export default function MatchResult({
                         <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-300">
                           <span className="truncate">{r.roleName}</span>
                           <span
-                            className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-semibold border ${ft.badgeClasses}`}
+                            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${ft.badgeBg}`}
                           >
-                            <FactionCrestSvg faction={r.faction} className="h-3 w-3" />
+                            <FactionCrestSvg faction={r.faction} size={14} />
                             {ft.shortLabel}
                           </span>
                         </div>

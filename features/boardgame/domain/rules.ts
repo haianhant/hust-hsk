@@ -1,204 +1,220 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/rules.ts — Luật bản đồ 6 khu vực KTX,
-// tầm di chuyển / tầm đánh / tầm điều tra & PRNG tất định v3.
+// features/boardgame/domain/rules.ts — Luật không gian bàn cờ 3 Cụm / 6 Ô Xúc xắc,
+// kiểm tra tầm đánh & PRNG Mulberry32 cho Bóng Đêm KTX v4.
 // ---------------------------------------------------------------------------
 
-import type { BoardGameLocationId } from '../../../shared/contracts/boardgame';
+import type {
+  BoardGameLocationId,
+  BoardGameZoneClusterId,
+} from '../../../shared/contracts/boardgame';
 import type {
   AuthoritativeGameState,
   AuthoritativePlayerState,
   LocationDefinition,
+  ZoneClusterDefinition,
 } from './types';
 
-export const BOARD_GAME_MAX_SHIELD = 2;
-export const BOARD_GAME_MAX_HAND = 4;
-export const BOARD_GAME_MAX_EQUIPPED = 2;
+export const BOARD_GAME_MAX_HAND = 3;
+export const BOARD_GAME_MAX_EQUIPPED = 3;
+export const BOARD_GAME_SAFETY_MAX_ROUNDS = 30;
 
-export const KTX_LOCATIONS: readonly LocationDefinition[] = [
+export const ZONE_CLUSTERS: readonly ZoneClusterDefinition[] = [
   {
-    id: 'lobby',
-    name: 'Sảnh Ký Túc Xá',
-    shortLabel: 'Sảnh KTX',
-    description: 'Sơ cứu trực đêm: hồi 1 vết thương (hoặc +1 Giáp tạm nếu chưa bị thương).',
-    actionLabel: 'Sơ cứu Sảnh KTX (+1 HP hoặc +1 🛡️)',
-    allowedDecks: ['event'],
-    adjacent: ['canteen', 'corridor', 'breaker'],
+    id: 'north',
+    name: 'Cụm Bắc',
+    subtitle: 'Tín hiệu & Nguồn điện',
+    locationIds: ['radio', 'breaker'],
   },
   {
-    id: 'canteen',
-    name: 'Căng Tin B5–B9',
-    shortLabel: 'Căng tin',
-    description: 'Tiếp tế đồ dùng: rút ngay 1 thẻ Trang bị vào tay.',
-    actionLabel: 'Tiếp tế Căng tin (+1 Trang bị)',
-    allowedDecks: ['equipment', 'event'],
-    adjacent: ['lobby', 'court', 'corridor'],
+    id: 'central',
+    name: 'Cụm Trung Tâm',
+    subtitle: 'Sảnh KTX & Căng tin',
+    locationIds: ['lobby', 'canteen'],
   },
   {
-    id: 'court',
-    name: 'Sân Bóng Rổ KTX',
-    shortLabel: 'Sân bóng rổ',
-    description: 'Tầm nhìn thoáng: lượt này mở tầm đánh/điều tra sang ô kề & +1 ST mục tiêu bị thương/đã lật.',
-    actionLabel: 'Quan sát Sân bóng rổ (Mở tầm kề +1 ST)',
-    allowedDecks: ['equipment'],
-    adjacent: ['canteen', 'radio', 'corridor'],
-  },
-  {
-    id: 'radio',
-    name: 'Phòng Phát Thanh',
-    shortLabel: 'Phát thanh',
-    description: 'Sóng toàn khu: rút 1 thẻ Điều tra & được dùng thẻ Điều tra tới mọi vị trí trong lượt.',
-    actionLabel: 'Phát sóng toàn KTX (+1 Điều tra & Soi toàn bản đồ)',
-    allowedDecks: ['investigation', 'event'],
-    adjacent: ['court', 'breaker', 'corridor'],
-  },
-  {
-    id: 'corridor',
-    name: 'Hành Lang B7',
-    shortLabel: 'Hành lang B7',
-    description: 'Trục nối 5 khu: nhận +1 Giáp tạm cơ động chuẩn bị cho pha hành động chính.',
-    actionLabel: 'Cơ động Hành lang (+1 🛡️)',
-    allowedDecks: ['investigation', 'event'],
-    adjacent: ['lobby', 'canteen', 'court', 'radio', 'breaker'],
-  },
-  {
-    id: 'breaker',
-    name: 'Phòng Bảo Vệ & Cầu Dao',
-    shortLabel: 'Bảo vệ',
-    description: 'Chốt trực an ninh: nhận +1 Giáp tạm và xóa dấu hở sườn.',
-    actionLabel: 'Trực chốt Bảo vệ (+1 🛡️ & Xóa hở sườn)',
-    allowedDecks: ['investigation', 'equipment'],
-    adjacent: ['lobby', 'radio', 'corridor'],
+    id: 'south',
+    name: 'Cụm Nam',
+    subtitle: 'Hành lang & Sân thể thao',
+    locationIds: ['corridor', 'court'],
   },
 ];
 
-export const KTX_LOCATION_MAP: Record<BoardGameLocationId, LocationDefinition> = Object.freeze({
-  lobby: KTX_LOCATIONS[0],
-  canteen: KTX_LOCATIONS[1],
-  court: KTX_LOCATIONS[2],
-  radio: KTX_LOCATIONS[3],
-  corridor: KTX_LOCATIONS[4],
-  breaker: KTX_LOCATIONS[5],
-});
+export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
+  {
+    id: 'radio',
+    name: 'Trạm Radio KTX',
+    shortName: 'Radio (2–3)',
+    clusterId: 'north',
+    diceNumbers: [2, 3],
+    diceLabel: '2–3',
+    subtitle: 'Rút 1 thẻ Khám Phá (Kín)',
+    deckHint: 'investigation',
+    actionSummary: 'Rút 1 Thẻ Khám Phá (đặt kín cho 1 người đọc).',
+    accentColor: '#10b981',
+  },
+  {
+    id: 'breaker',
+    name: 'Tủ Cầu Dao Tổng',
+    shortName: 'Cầu Dao (4–5)',
+    clusterId: 'north',
+    diceNumbers: [4, 5],
+    diceLabel: '4–5',
+    subtitle: 'Rút 1 thẻ Đột Kích',
+    deckHint: 'event',
+    actionSummary: 'Rút 1 Thẻ Đột Kích (Vũ khí / Sự kiện hắc ám).',
+    accentColor: '#f43f5e',
+  },
+  {
+    id: 'lobby',
+    name: 'Sảnh Tầng 1',
+    shortName: 'Sảnh (6)',
+    clusterId: 'central',
+    diceNumbers: [6],
+    diceLabel: '6',
+    subtitle: 'Rút 1 thẻ Cung Ứng',
+    deckHint: 'equipment',
+    actionSummary: 'Rút 1 Thẻ Cung Ứng (Giáp bảo hộ / Hồi sức).',
+    accentColor: '#06b6d4',
+  },
+  {
+    id: 'canteen',
+    name: 'Căng Tin Đêm',
+    shortName: 'Căng Tin (8)',
+    clusterId: 'central',
+    diceNumbers: [8],
+    diceLabel: '8',
+    subtitle: 'Rút 1 thẻ Bất Kỳ',
+    deckHint: 'any',
+    actionSummary: 'Tự chọn rút 1 thẻ từ Khám Phá, Cung Ứng hoặc Đột Kích.',
+    accentColor: '#f59e0b',
+  },
+  {
+    id: 'corridor',
+    name: 'Hành Lang Tầng 4',
+    shortName: 'Hành Lang (9)',
+    clusterId: 'south',
+    diceNumbers: [9],
+    diceLabel: '9',
+    subtitle: 'Hồi 1 hoặc Gây 2 sát thương',
+    deckHint: 'power-9',
+    actionSummary: 'Chọn 1 người bất kỳ: Hồi 1 thương tích HOẶC Gây 2 sát thương.',
+    accentColor: '#8b5cf6',
+  },
+  {
+    id: 'court',
+    name: 'Sân Bóng Rổ Đêm',
+    shortName: 'Sân Bóng (10)',
+    clusterId: 'south',
+    diceNumbers: [10],
+    diceLabel: '10',
+    subtitle: 'Cướp 1 Trang bị đối thủ',
+    deckHint: 'power-10',
+    actionSummary: 'Cướp 1 Trang bị đang đeo từ 1 người chơi bất kỳ.',
+    accentColor: '#38bdf8',
+  },
+];
 
-export function getLocationDefinition(loc: string): LocationDefinition | undefined {
-  return Object.hasOwn(KTX_LOCATION_MAP, loc)
-    ? KTX_LOCATION_MAP[loc as BoardGameLocationId]
-    : undefined;
-}
+export const LOCATIONS_BY_ID: Record<BoardGameLocationId, LocationDefinition> = {
+  radio: LOCATIONS_CATALOG[0],
+  breaker: LOCATIONS_CATALOG[1],
+  lobby: LOCATIONS_CATALOG[2],
+  canteen: LOCATIONS_CATALOG[3],
+  corridor: LOCATIONS_CATALOG[4],
+  court: LOCATIONS_CATALOG[5],
+};
 
-export function getLocationName(loc: BoardGameLocationId): string {
-  return getLocationDefinition(loc)?.name ?? loc;
-}
-
-export function getLocationShortLabel(loc: BoardGameLocationId): string {
-  return getLocationDefinition(loc)?.shortLabel ?? loc;
-}
-
-export function getMaxRoundsForPlayerCount(playerCount: number): number {
-  return playerCount <= 5 ? 9 : 10;
+export function getLocationDefinition(id: BoardGameLocationId): LocationDefinition {
+  return LOCATIONS_BY_ID[id];
 }
 
 export function isValidLocationId(raw: unknown): raw is BoardGameLocationId {
-  return (
-    raw === 'lobby' ||
-    raw === 'canteen' ||
-    raw === 'radio' ||
-    raw === 'court' ||
-    raw === 'corridor' ||
-    raw === 'breaker'
-  );
+  return typeof raw === 'string' && Object.hasOwn(LOCATIONS_BY_ID, raw);
 }
 
-export function isAdjacentLocation(a: BoardGameLocationId, b: BoardGameLocationId): boolean {
-  if (!isValidLocationId(a) || !isValidLocationId(b)) return false;
-  if (a === b) return true;
-  return getLocationDefinition(a)?.adjacent.includes(b) ?? false;
-}
-
-export function listLegalMovesForLocation(loc: BoardGameLocationId): BoardGameLocationId[] {
-  return getLocationDefinition(loc)?.adjacent.slice() ?? [];
-}
-
-export function hasEquippedEffect(
-  player: Pick<AuthoritativePlayerState, 'equipped'>,
-  effectKind: string,
+export function areInSameCluster(
+  locA: BoardGameLocationId,
+  locB: BoardGameLocationId,
 ): boolean {
-  return player.equipped.some((c) => c.effectKind === effectKind);
+  return LOCATIONS_BY_ID[locA].clusterId === LOCATIONS_BY_ID[locB].clusterId;
 }
 
-export function listLegalMovesForPlayer(player: AuthoritativePlayerState): BoardGameLocationId[] {
-  const oneStep = listLegalMovesForLocation(player.location);
-  const extraSteps =
-    hasEquippedEffect(player, 'eq-sneakers') ||
-    (player.revealed && player.roleId === 'suong-an-danh' && player.location === 'corridor');
-  if (!extraSteps) return oneStep;
-  const dest = new Set<BoardGameLocationId>(oneStep);
-  for (const mid of oneStep) {
-    for (const two of listLegalMovesForLocation(mid)) {
-      if (two !== player.location) dest.add(two);
-    }
-  }
-  return Array.from(dest);
+export function resolveLocationForDiceTotal(
+  total: number,
+): BoardGameLocationId | 'choose-any' {
+  if (total === 7) return 'choose-any';
+  const match = LOCATIONS_CATALOG.find((loc) => loc.diceNumbers.includes(total));
+  return match ? match.id : 'lobby';
 }
 
-export function canPlayerInvestigateTarget(
+export function listReachableAttackTargets(
   state: AuthoritativeGameState,
-  actor: AuthoritativePlayerState,
-  target: AuthoritativePlayerState,
-): boolean {
-  if (!actor.alive || !target.alive || actor.playerId === target.playerId) return false;
-  if (
-    actor.location === 'radio' ||
-    actor.globalInvestigateThisTurn ||
-    hasEquippedEffect(actor, 'eq-walkie-talkie') ||
-    (actor.revealed && actor.roleId === 'gac-radio')
-  ) {
-    return true;
+  attacker: AuthoritativePlayerState,
+): AuthoritativePlayerState[] {
+  const others = Object.values(state.players).filter(
+    (p) => p.alive && p.playerId !== attacker.playerId,
+  );
+  const hasLongCable = attacker.equipped.includes('ev-04');
+  if (hasLongCable) {
+    const remoteTargets = others.filter(
+      (p) => !areInSameCluster(attacker.location, p.location),
+    );
+    // Nếu mọi đối thủ đều đang đứng chung cụm với mình, vẫn cho phép đánh gần để không kẹt lượt cuối trận.
+    return remoteTargets.length > 0 ? remoteTargets : others;
   }
-  if (actor.location === target.location) return true;
-  return isAdjacentLocation(actor.location, target.location);
+  return others.filter((p) => areInSameCluster(attacker.location, p.location));
 }
 
 export function canPlayerAttackTarget(
   state: AuthoritativeGameState,
-  actor: AuthoritativePlayerState,
+  attacker: AuthoritativePlayerState,
   target: AuthoritativePlayerState,
 ): boolean {
-  if (!actor.alive || !target.alive || actor.playerId === target.playerId) return false;
-  if (actor.location === target.location) return true;
-  const courtBoost = actor.extendedRangeThisTurn && state.courtRangeJammedRound !== state.round;
-  const batonBoost = hasEquippedEffect(actor, 'eq-baton');
-  if (courtBoost || batonBoost) {
-    return isAdjacentLocation(actor.location, target.location);
+  if (!attacker.alive || !target.alive || attacker.playerId === target.playerId) {
+    return false;
   }
-  return false;
+  return listReachableAttackTargets(state, attacker).some(
+    (candidate) => candidate.playerId === target.playerId,
+  );
 }
 
-export function canPlayerUseSkillRange(
-  actor: AuthoritativePlayerState,
-  target: AuthoritativePlayerState,
-): boolean {
-  if (!target.alive) return false;
-  if (actor.roleId === 'gac-radio') return true;
-  return isAdjacentLocation(actor.location, target.location);
-}
-
-/** PRNG tất định kiểu Mulberry32 — lưu trực tiếp trong `state.rngState`. */
-export function nextDeterministicRandom(state: AuthoritativeGameState): number {
-  let t = (state.rngState + 0x6d2b79f5) | 0;
-  state.rngState = t >>> 0;
+/** Deterministic PRNG step (Mulberry32). Never mutates Math.random. */
+export function nextDeterministicRandom(rngState: number): {
+  value: number;
+  nextState: number;
+} {
+  let t = (rngState + 0x6d2b79f5) | 0;
+  const nextState = t;
   t = Math.imul(t ^ (t >>> 15), t | 1);
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  const value = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  return { value, nextState };
 }
 
-export function shuffleWithRng<T>(items: readonly T[], state: AuthoritativeGameState): T[] {
-  const out = items.slice();
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(nextDeterministicRandom(state) * (i + 1));
-    const tmp = out[i];
-    out[i] = out[j];
-    out[j] = tmp;
+export function nextRandomInt(state: { rngState: number }, maxExclusive: number): number {
+  const { value, nextState } = nextDeterministicRandom(state.rngState);
+  state.rngState = nextState;
+  return Math.floor(value * maxExclusive);
+}
+
+export function rollD6(state: { rngState: number }): number {
+  return 1 + nextRandomInt(state, 6);
+}
+
+export function rollD4(state: { rngState: number }): number {
+  return 1 + nextRandomInt(state, 4);
+}
+
+export function shuffleWithRng<T>(items: readonly T[], rngState: number): {
+  shuffled: T[];
+  nextState: number;
+} {
+  const copy = [...items];
+  const cursor = { rngState };
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = nextRandomInt(cursor, i + 1);
+    const tmp = copy[i];
+    copy[i] = copy[j];
+    copy[j] = tmp;
   }
-  return out;
+  return { shuffled: copy, nextState: cursor.rngState };
 }

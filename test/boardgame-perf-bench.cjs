@@ -1,16 +1,16 @@
 /**
  * test/boardgame-perf-bench.cjs — Benchmark hiệu năng Worker/Durable Object SQLite
- * cho Bóng Đêm KTX v3.1:
- *  - Đo p50/p95/p99 latency (ms) cho createMatch, join+auth, action->commit+broadcast, BG_REQUEST_SYNC
- *  - Đo kích thước trung bình & cực đại của payload `BG_STATE_SYNC` (KB)
- *  - Đo kích thước row `matches.game_state_json` trong SQLite (bytes) ở bàn 4p và 8p
+ * cho Bóng Đêm KTX v4:
+ *  - Đo p50/p95/p99 latency (ms) cho createMatch, join+auth, ROLL_DICE/SKIP_LOC/END_TURN, BG_REQUEST_SYNC
+ *  - Đo kích thước payload `BG_STATE_SYNC` (KB) và row `matches.game_state_json` (bytes) ở bàn 4p & 8p
  */
 
 const { performance } = require('node:perf_hooks');
 const assert = require('node:assert/strict');
 const { WebSocket } = require('./ws-shim/mini-ws');
 const { startStandaloneBoardGameTestServer } = require('./ws-shim/boardgame-do-harness.cjs');
-const { listLegalMovesForLocation } = require('../features/boardgame/domain/index.ts');
+require('./register-ts.cjs');
+const { LOCATIONS_CATALOG } = require('../features/boardgame/domain/index.ts');
 
 function percentile(sorted, p) {
   if (sorted.length === 0) return 0;
@@ -82,6 +82,30 @@ async function openBgClient(wsBaseUrl, matchId) {
   };
 }
 
+async function sendBenchAction(actor, reqId, expectedRev, action, actionSamples) {
+  const at0 = performance.now();
+  const idxBefore = actor.c.getInboxLen();
+  actor.c.send({
+    type: 'BG_GAME_ACTION',
+    requestId: reqId,
+    expectedRevision: expectedRev,
+    action,
+  });
+  const ack = await actor.c.nextMsg(
+    (m) => m.type === 'BG_ACTION_ACK' && m.requestId === reqId,
+    4000,
+    idxBefore,
+  );
+  assert.equal(ack.ok, true, `Bench action rejected: ${ack.code} ${ack.reason}`);
+  const nextSync = await actor.c.nextMsg(
+    (m) => m.type === 'BG_STATE_SYNC' && m.revision > expectedRev,
+    4000,
+    idxBefore,
+  );
+  actionSamples.push(performance.now() - at0);
+  return nextSync;
+}
+
 async function runBenchForTable(srv, playerCount, turnBudget = 16) {
   const createSamples = [];
   const joinSamples = [];
@@ -92,7 +116,7 @@ async function runBenchForTable(srv, playerCount, turnBudget = 16) {
   const createRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tableId: playerCount <= 4 ? 'table-1' : 'table-2', hostName: 'BenchHost', turnTimeoutMs: 40000 }),
+    body: JSON.stringify({ tableId: playerCount <= 4 ? 'table-1' : 'table-2', hostName: 'BenchHost' }),
   });
   const created = await createRes.json();
   createSamples.push(performance.now() - t0);
@@ -119,44 +143,33 @@ async function runBenchForTable(srv, playerCount, turnBudget = 16) {
     clients[i].c.send({ type: 'BG_SET_READY', ready: true, requestId: `rdy-${i}` });
   }
   await clients[0].c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.status === 'READY_CHECK');
-  clients[0].c.send({ type: 'BG_START_MATCH', requestId: 'bench-start', turnTimeoutMs: 40000 });
+  clients[0].c.send({ type: 'BG_START_MATCH', requestId: 'bench-start' });
   await clients[0].c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING');
 
   for (let step = 0; step < turnBudget; step++) {
-    const sync = clients[0].c.getSync();
+    let sync = clients[0].c.getSync();
     if (!sync || sync.status !== 'PLAYING' || !sync.publicGame?.activePlayerId) break;
     const actor = clients.find((x) => x.playerId === sync.publicGame.activePlayerId);
     if (!actor) break;
-    const curLoc = sync.publicGame.players.find((p) => p.playerId === actor.playerId).location;
-    const moves = listLegalMovesForLocation(curLoc);
 
-    const actions = [
-      { type: 'MOVE', location: moves[step % moves.length] || curLoc },
-      { type: 'EXPLORE_LOC' },
-      { type: 'DEFEND' },
-    ];
-
-    let rev = actor.c.getSync().revision;
-    for (let k = 0; k < actions.length; k++) {
-      if (k > 0) {
-        // Respect DO MIN_ACTION_INTERVAL_MS (25ms) anti-burst guard before timing the next action
-        await new Promise((r) => setTimeout(r, 30));
-      }
-      const at0 = performance.now();
-      const idxBefore = actor.c.getInboxLen();
-      const reqId = `b-${step}-${k}`;
-      actor.c.send({
-        type: 'BG_GAME_ACTION',
-        requestId: reqId,
-        expectedRevision: rev,
-        action: actions[k],
-      });
-      const ack = await actor.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === reqId, 4000, idxBefore);
-      assert.equal(ack.ok, true, `Bench action rejected: ${ack.code} ${ack.reason}`);
-      const nextSync = await actor.c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.revision > rev, 4000, idxBefore);
-      actionSamples.push(performance.now() - at0);
-      rev = nextSync.revision;
-      if (nextSync.status === 'FINISHED') break;
+    sync = actor.c.getSync();
+    for (let r = 0; r < 4 && sync.status === 'PLAYING' && sync.publicGame.turnPhase === 'ROLL_MOVE'; r++) {
+      await new Promise((res) => setTimeout(res, 30));
+      sync = await sendBenchAction(actor, `b-${step}-roll-${r}`, sync.revision, { type: 'ROLL_DICE' }, actionSamples);
+    }
+    if (sync.status === 'PLAYING' && sync.publicGame.turnPhase === 'CHOOSE_MOVE') {
+      await new Promise((res) => setTimeout(res, 30));
+      const curLoc = sync.publicGame.players.find((p) => p.playerId === actor.playerId).location;
+      const dest = LOCATIONS_CATALOG.find((l) => l.id !== curLoc).id;
+      sync = await sendBenchAction(actor, `b-${step}-dest`, sync.revision, { type: 'CHOOSE_DEST', location: dest }, actionSamples);
+    }
+    if (sync.status === 'PLAYING' && sync.publicGame.turnPhase === 'LOCATION_ACTION') {
+      await new Promise((res) => setTimeout(res, 30));
+      sync = await sendBenchAction(actor, `b-${step}-skip`, sync.revision, { type: 'SKIP_LOC' }, actionSamples);
+    }
+    if (sync.status === 'PLAYING' && sync.publicGame.turnPhase === 'MAIN_ACTION') {
+      await new Promise((res) => setTimeout(res, 30));
+      sync = await sendBenchAction(actor, `b-${step}-end`, sync.revision, { type: 'END_TURN' }, actionSamples);
     }
 
     const st0 = performance.now();
@@ -192,18 +205,20 @@ async function runBenchForTable(srv, playerCount, turnBudget = 16) {
 async function main() {
   const srv = await startStandaloneBoardGameTestServer(0);
   try {
-    const res4p = await runBenchForTable(srv, 4, 16);
-    const res8p = await runBenchForTable(srv, 8, 24);
+    const res4p = await runBenchForTable(srv, 4, 12);
+    const res8p = await runBenchForTable(srv, 8, 16);
     const report = {
-      benchmark: 'boardgame-v3.1-worker-do',
+      benchmark: 'boardgame-v4-worker-do',
       p4: res4p,
       p8: res8p,
     };
     console.log(JSON.stringify(report, null, 2));
-    assert.ok(res4p.actionCommitBroadcast.p95Ms < 200, '4p action p95 should stay well under 200ms');
-    assert.ok(res8p.actionCommitBroadcast.p95Ms < 200, '8p action p95 should stay well under 200ms');
-    assert.ok(res8p.wsStateSyncKb.maxKb < 64, '8p WS state sync payload should stay compact (<64 KB)');
-    assert.ok(res8p.sqliteGameStateBytes < 128 * 1024, '8p SQLite state blob should stay <128 KB');
+
+    assert.ok(res4p.actionCommitBroadcast.p95Ms < 50, `4p p95 action latency too high: ${res4p.actionCommitBroadcast.p95Ms}ms`);
+    assert.ok(res8p.actionCommitBroadcast.p95Ms < 50, `8p p95 action latency too high: ${res8p.actionCommitBroadcast.p95Ms}ms`);
+    assert.ok(res8p.wsStateSyncKb.maxKb < 64, `8p WS sync payload > 64KB: ${res8p.wsStateSyncKb.maxKb}KB`);
+    assert.ok(res8p.sqliteGameStateBytes < 65536, `8p SQLite game_state_json > 64KB: ${res8p.sqliteGameStateBytes}B`);
+    console.log('PASS: Worker DO v4 latency & payload benchmark within budgets.');
   } finally {
     await srv.close();
   }

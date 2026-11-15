@@ -1,314 +1,282 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/victory.ts — Điều kiện thắng & phân giải xung đột v3
-// ("Bóng Đêm KTX v3 — Hidden Role, Investigation & Survival").
-//
-// Quy tắc:
-// - Không dùng điểm Tín hiệu/Màn sương.
-// - Không dùng tổng HP đội làm tiêu chí phân thắng bại cuối trận.
-// - Hỗ trợ thắng đơn độc (Hải / Trang), thắng phe (Gác Đèn / Màn Sương / Lang Thang),
-//   đồng thắng Kẻ Lang Thang, và Phiên Trực Cuối Đêm chống hòa kẹt.
+// features/boardgame/domain/victory.ts — Đánh giá điều kiện thắng bại cho
+// Đội Săn Đêm, Hội Bóng Đêm và Kẻ Độc Hành (Bóng Đêm KTX v4).
 // ---------------------------------------------------------------------------
 
 import type {
   BoardGameFactionId,
   BoardGameRevealRecord,
+  BoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
-import { FACTION_LABELS, ROLES_BY_ID } from './roles';
-import type { AuthoritativeGameState, AuthoritativePlayerState } from './types';
+import { FACTION_LABELS, getRoleDesign } from './roles';
+import type {
+  AuthoritativeGameState,
+  AuthoritativePlayerState,
+  VictoryEvaluation,
+} from './types';
+
+function qualifiesWandererVictory(
+  state: AuthoritativeGameState,
+  player: AuthoritativePlayerState,
+  primaryTeamWinners: ReadonlySet<string>,
+  alivePlayers: readonly AuthoritativePlayerState[],
+  deadCount: number,
+  isFinalFallback = false,
+): boolean {
+  if (!player.alive || player.faction !== 'wanderer') return false;
+  switch (player.roleId) {
+    case 'lang-anh-san':
+      return isFinalFallback
+        ? player.equipped.length >= 2
+        : state.round >= 3 && player.revealed && player.equipped.length >= 3;
+    case 'lang-quan-sat':
+      if (isFinalFallback) return true;
+      return alivePlayers.length === 1 || (player.revealed && deadCount >= 2);
+    case 'lang-cuu-ho': {
+      if (player.avengedProtegeKiller) return true;
+      const prot = player.protegePlayerId ? state.players[player.protegePlayerId] : null;
+      return Boolean(
+        (prot && prot.alive) ||
+          (player.protegePlayerId && primaryTeamWinners.has(player.protegePlayerId)),
+      );
+    }
+    default:
+      return false;
+  }
+}
+
+export function evaluateVictory(state: AuthoritativeGameState): VictoryEvaluation {
+  const allPlayers = Object.values(state.players);
+  const alivePlayers = allPlayers.filter((p) => p.alive);
+  const deadCount = allPlayers.length - alivePlayers.length;
+
+  const hunterPlayers = allPlayers.filter((p) => p.faction === 'lantern-guard');
+  const shadowPlayers = allPlayers.filter((p) => p.faction === 'mist-order');
+  const wanderers = allPlayers.filter((p) => p.faction === 'wanderer');
+
+  const huntersAlive = hunterPlayers.filter((p) => p.alive).length;
+  const shadowsAlive = shadowPlayers.filter((p) => p.alive).length;
+
+  // 1. Hải (vòng 3+, lật vai + 3+ Trang bị) hoặc Bình (đã lật vai & báo thù) thắng tức thì.
+  for (const w of wanderers) {
+    if (!w.alive) continue;
+    if (w.roleId === 'lang-anh-san' && state.round >= 3 && w.revealed && w.equipped.length >= 3) {
+      const winnerSet = new Set<string>([w.playerId]);
+      for (const other of wanderers) {
+        if (
+          other.playerId !== w.playerId &&
+          qualifiesWandererVictory(state, other, winnerSet, alivePlayers, deadCount)
+        ) {
+          winnerSet.add(other.playerId);
+        }
+      }
+      const winnerIds = Array.from(winnerSet);
+      const design = getRoleDesign(w.roleId);
+      return {
+        finished: true,
+        winnerFaction: 'wanderer-solo',
+        winnerLabel: `Kẻ Độc Hành — ${w.displayName} (${design.name})`,
+        winnerPlayerIds: winnerIds,
+        winReason: `${w.displayName} thu thập đủ ${w.equipped.length} Trang bị — hoàn thành mục tiêu Độc Hành!`,
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      };
+    }
+    if (w.roleId === 'lang-cuu-ho' && w.revealed && w.avengedProtegeKiller) {
+      const winnerSet = new Set<string>([w.playerId]);
+      for (const other of wanderers) {
+        if (
+          other.playerId !== w.playerId &&
+          qualifiesWandererVictory(state, other, winnerSet, alivePlayers, deadCount)
+        ) {
+          winnerSet.add(other.playerId);
+        }
+      }
+      const winnerIds = Array.from(winnerSet);
+      return {
+        finished: true,
+        winnerFaction: 'wanderer-solo',
+        winnerLabel: `Kẻ Độc Hành — ${w.displayName} (Báo thù thành công)`,
+        winnerPlayerIds: winnerIds,
+        winReason: `${w.displayName} đã hạ gục kẻ loại Người được bảo hộ và sống sót!`,
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      };
+    }
+  }
+
+  // 2. Xóa sổ toàn bộ Hội Bóng Đêm hoặc Đội Săn Đêm.
+  const allShadowsDead = shadowPlayers.length > 0 && shadowsAlive === 0;
+  const allHuntersDead = hunterPlayers.length > 0 && huntersAlive === 0;
+
+  if (allShadowsDead && allHuntersDead) {
+    const primarySet = new Set<string>();
+    const wandererWinners = wanderers
+      .filter((w) => qualifiesWandererVictory(state, w, primarySet, alivePlayers, deadCount, true))
+      .map((w) => w.playerId);
+    if (wandererWinners.length > 0) {
+      return {
+        finished: true,
+        winnerFaction: 'wanderer',
+        winnerLabel: 'Kẻ Độc Hành sống sót cuối cùng',
+        winnerPlayerIds: wandererWinners,
+        winReason: 'Cả hai phe Săn Đêm và Bóng Đêm đều kiệt quệ — Kẻ Độc Hành trụ lại sau cùng!',
+        winningRoleIds: wandererWinners.map((id) => state.players[id].roleId),
+      };
+    }
+    const activeActor = state.activePlayerId ? state.players[state.activePlayerId] : null;
+    const tiebreakFaction: BoardGameFactionId =
+      activeActor && (activeActor.faction === 'lantern-guard' || activeActor.faction === 'mist-order')
+        ? activeActor.faction
+        : hunterPlayers.reduce((s, p) => s + p.woundsTaken, 0) <=
+            shadowPlayers.reduce((s, p) => s + p.woundsTaken, 0)
+          ? 'lantern-guard'
+          : 'mist-order';
+    const baseWinners =
+      tiebreakFaction === 'lantern-guard' ? hunterPlayers : shadowPlayers;
+    const winnerSet = new Set<string>(baseWinners.map((p) => p.playerId));
+    for (const w of wanderers) {
+      if (qualifiesWandererVictory(state, w, winnerSet, alivePlayers, deadCount, true)) {
+        winnerSet.add(w.playerId);
+      }
+    }
+    const winnerIds = Array.from(winnerSet);
+    return {
+      finished: true,
+      winnerFaction: tiebreakFaction,
+      winnerLabel: `${FACTION_LABELS[tiebreakFaction]} (Đòn quyết tử)`,
+      winnerPlayerIds: winnerIds,
+      winReason: `Đòn quyết tử đồng quy — ${FACTION_LABELS[tiebreakFaction]} giành chiến thắng chung cuộc!`,
+      winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+    };
+  }
+
+  if (allShadowsDead) {
+    const winnerSet = new Set<string>(hunterPlayers.map((p) => p.playerId));
+    for (const w of wanderers) {
+      if (qualifiesWandererVictory(state, w, winnerSet, alivePlayers, deadCount)) {
+        winnerSet.add(w.playerId);
+      }
+    }
+    const winnerIds = Array.from(winnerSet);
+    return {
+      finished: true,
+      winnerFaction: 'lantern-guard',
+      winnerLabel: FACTION_LABELS['lantern-guard'],
+      winnerPlayerIds: winnerIds,
+      winReason: 'Toàn bộ Hội Bóng Đêm đã bị loại khỏi KTX!',
+      winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+    };
+  }
+
+  if (allHuntersDead) {
+    const winnerSet = new Set<string>(shadowPlayers.map((p) => p.playerId));
+    for (const w of wanderers) {
+      if (qualifiesWandererVictory(state, w, winnerSet, alivePlayers, deadCount)) {
+        winnerSet.add(w.playerId);
+      }
+    }
+    const winnerIds = Array.from(winnerSet);
+    return {
+      finished: true,
+      winnerFaction: 'mist-order',
+      winnerLabel: FACTION_LABELS['mist-order'],
+      winnerPlayerIds: winnerIds,
+      winReason: 'Toàn bộ Đội Săn Đêm đã gục ngã — Hội Bóng Đêm làm chủ KTX!',
+      winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+    };
+  }
+
+  // 3. Trang "Kiên Cường" solo survivor (khi bàn đã có >=3 người bị loại & chỉ còn <=2 sống sót).
+  for (const w of wanderers) {
+    if (
+      w.roleId === 'lang-quan-sat' &&
+      w.alive &&
+      (alivePlayers.length === 1 || (w.revealed && deadCount >= 3 && alivePlayers.length <= 2))
+    ) {
+      const winnerSet = new Set<string>([w.playerId]);
+      for (const other of wanderers) {
+        if (
+          other.playerId !== w.playerId &&
+          qualifiesWandererVictory(state, other, winnerSet, alivePlayers, deadCount)
+        ) {
+          winnerSet.add(other.playerId);
+        }
+      }
+      const winnerIds = Array.from(winnerSet);
+      return {
+        finished: true,
+        winnerFaction: 'wanderer-solo',
+        winnerLabel: `Kẻ Độc Hành — ${w.displayName} (Trang "Kiên Cường")`,
+        winnerPlayerIds: winnerIds,
+        winReason: `${w.displayName} sống sót ngoạn mục đến phút cuối (${alivePlayers.length} người còn lại)!`,
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      };
+    }
+  }
+
+  // 4. Giới hạn an toàn maxRounds (chỉ dùng nếu trận kéo dài bất thường > 30 vòng).
+  if (state.round > state.maxRounds) {
+    const hunterRatio =
+      hunterPlayers.length === 0
+        ? -1
+        : huntersAlive * 100 -
+          hunterPlayers.reduce((sum, p) => sum + p.woundsTaken, 0);
+    const shadowRatio =
+      shadowPlayers.length === 0
+        ? -1
+        : shadowsAlive * 100 -
+          shadowPlayers.reduce((sum, p) => sum + p.woundsTaken, 0);
+    const topFaction: BoardGameFactionId =
+      hunterRatio >= shadowRatio ? 'lantern-guard' : 'mist-order';
+    const baseWinners =
+      topFaction === 'lantern-guard' ? hunterPlayers : shadowPlayers;
+    const winnerSet = new Set<string>(baseWinners.map((p) => p.playerId));
+    for (const w of wanderers) {
+      if (qualifiesWandererVictory(state, w, winnerSet, alivePlayers, deadCount, true)) {
+        winnerSet.add(w.playerId);
+      }
+    }
+    const winnerIds = Array.from(winnerSet);
+    return {
+      finished: true,
+      winnerFaction: topFaction,
+      winnerLabel: `${FACTION_LABELS[topFaction]} (Ưu thế sinh tồn)`,
+      winnerPlayerIds: winnerIds,
+      winReason: `Hết ${state.maxRounds} vòng an toàn — ${FACTION_LABELS[topFaction]} chiếm ưu thế sinh tồn!`,
+      winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+    };
+  }
+
+  return {
+    finished: false,
+    winnerFaction: null,
+    winnerLabel: null,
+    winnerPlayerIds: [],
+    winReason: null,
+    winningRoleIds: [],
+  };
+}
 
 export function buildFinalRevealSummary(
   state: AuthoritativeGameState,
+  winnerPlayerIds: readonly string[],
 ): BoardGameRevealRecord[] {
-  const winnerSet = new Set(state.winnerPlayerIds);
-  return state.players.map((p) => {
-    const roleDef = ROLES_BY_ID[p.roleId];
-    return {
-      playerId: p.playerId,
-      displayName: p.displayName,
-      roleId: p.roleId,
-      roleName: roleDef?.name ?? p.roleId,
-      faction: p.faction,
-      won: winnerSet.has(p.playerId),
-      alive: p.alive,
-      hp: p.hp,
-      maxHp: p.maxHp,
-      woundsTaken: Math.max(0, p.maxHp - p.hp),
-    };
-  });
-}
-
-export function qualifiesWandererCoWin(
-  p: AuthoritativePlayerState,
-  allPlayers: readonly AuthoritativePlayerState[],
-  currentRound = 1,
-): boolean {
-  if (p.faction !== 'wanderer') return false;
-  const eliminatedCount = allPlayers.filter((x) => !x.alive).length;
-  const aliveCount = allPlayers.length - eliminatedCount;
-
-  if (p.roleId === 'lang-anh-san') {
-    return p.alive && p.equipped.length >= 2 && p.investigationsCount >= 2;
-  }
-
-  if (p.roleId === 'lang-quan-sat') {
-    if (!p.alive) return false;
-    return (
-      p.investigationsCount >= 2 &&
-      (eliminatedCount >= 3 || (p.revealed && eliminatedCount >= 2))
-    );
-  }
-
-  if (p.roleId === 'lang-cuu-ho') {
-    const protege = p.protegePlayerId
-      ? allPlayers.find((x) => x.playerId === p.protegePlayerId) ?? null
-      : null;
-    if (!protege) return p.alive;
-    if (protege.alive) {
-      return p.alive && p.protectedProtegeCount >= 1;
-    }
-    return p.alive && p.avengedProtegeKiller;
-  }
-
-  return false;
-}
-
-export function finalizeMatchOutcome(
-  state: AuthoritativeGameState,
-  nowMs: number,
-  winnerFaction: BoardGameFactionId | 'wanderer-solo' | 'wanderer',
-  winnerLabel: string,
-  reason: string,
-  primaryWinnerIds: string[],
-  highlightTitle: string,
-): true {
-  if (state.finished) return true;
-  const winnerSet = new Set<string>(primaryWinnerIds);
-  for (const p of state.players) {
-    if (qualifiesWandererCoWin(p, state.players, state.round)) {
-      winnerSet.add(p.playerId);
-    }
-    p.revealed = true;
-  }
-
-  const coWinners = state.players
-    .filter(
-      (p) =>
-        p.faction === 'wanderer' &&
-        winnerSet.has(p.playerId) &&
-        !primaryWinnerIds.includes(p.playerId),
-    )
-    .map((p) => p.displayName);
-
-  const finalReason =
-    coWinners.length > 0
-      ? `${reason} (Đồng thắng cùng Kẻ Lang Thang: ${coWinners.join(', ')})`
-      : reason;
-
-  state.finished = true;
-  state.turnPhase = 'ENDED';
-  state.winnerFaction = winnerFaction;
-  state.winnerPlayerIds = Array.from(winnerSet);
-  state.winnerLabel = winnerLabel;
-  state.winReason = finalReason;
-
-  state.seqCounter += 1;
-  state.highlights.push({
-    round: Math.min(state.round, state.maxRounds),
-    title: highlightTitle,
-    detail: finalReason,
-    atMs: nowMs,
-  });
-
-  state.publicLogSeq += 1;
-  state.publicLog.push({
-    id: `log-win-${state.publicLogSeq}`,
-    round: Math.min(state.round, state.maxRounds),
-    atMs: nowMs,
-    kind: 'victory',
-    text: finalReason,
-  });
-
-  return true;
-}
-
-/** Đánh giá toàn bộ điều kiện thắng v3 theo thứ tự ưu tiên tất định. */
-export function evaluateVictoryState(
-  state: AuthoritativeGameState,
-  nowMs: number,
-  isRoundCapReached = false,
-): boolean {
-  if (state.finished) return true;
-
-  const alivePlayers = state.players.filter((p) => p.alive);
-  const eliminatedCount = state.players.length - alivePlayers.length;
-
-  const aliveGuards = alivePlayers.filter((p) => p.faction === 'lantern-guard');
-  const aliveMists = alivePlayers.filter((p) => p.faction === 'mist-order');
-  const aliveWanderers = alivePlayers.filter((p) => p.faction === 'wanderer');
-
-  // 1. Thắng đơn độc tức thì của Trang nếu đã lật vai & trụ tới nhóm 2 người cuối
-  const revealedTrangWinner = aliveWanderers.find(
-    (p) =>
-      p.roleId === 'lang-quan-sat' &&
-      p.revealed &&
-      alivePlayers.length <= 2 &&
-      eliminatedCount >= 2,
-  );
-  if (revealedTrangWinner) {
-    return finalizeMatchOutcome(
-      state,
-      nowMs,
-      'wanderer-solo',
-      `${revealedTrangWinner.displayName} (Trang — Kẻ Lang Thang)`,
-      `${revealedTrangWinner.displayName} đã lật vai làm nhân chứng cuối cùng giữa đêm KTX hỗn loạn và giành chiến thắng độc lập!`,
-      [revealedTrangWinner.playerId],
-      'Nhân Chứng Sống Sót Cuối Đêm',
-    );
-  }
-
-  // 2. Đội Gác Đèn thắng khi toàn bộ Hội Màn Sương bị loại
-  if (aliveMists.length === 0 && aliveGuards.length > 0) {
-    const guardIds = state.players
-      .filter((p) => p.faction === 'lantern-guard')
-      .map((p) => p.playerId);
-    return finalizeMatchOutcome(
-      state,
-      nowMs,
-      'lantern-guard',
-      FACTION_LABELS['lantern-guard'],
-      'Toàn bộ thành viên Hội Màn Sương đã bị hạ gục — Đội Gác Đèn bảo vệ an toàn ký túc xá!',
-      guardIds,
-      'Đội Gác Đèn Quét Sạch Màn Sương',
-    );
-  }
-
-  // 3. Hội Màn Sương thắng khi toàn bộ Đội Gác Đèn bị loại
-  if (aliveGuards.length === 0 && aliveMists.length > 0) {
-    const mistIds = state.players
-      .filter((p) => p.faction === 'mist-order')
-      .map((p) => p.playerId);
-    return finalizeMatchOutcome(
-      state,
-      nowMs,
-      'mist-order',
-      FACTION_LABELS['mist-order'],
-      'Toàn bộ Đội Gác Đèn đã ngã gục — Hội Màn Sương chiếm trọn bóng đêm KTX!',
-      mistIds,
-      'Hội Màn Sương Áp Đảo Ký Túc Xá',
-    );
-  }
-
-  // 4. Cùng triệt tiêu cả hai phe chính
-  if (aliveGuards.length === 0 && aliveMists.length === 0) {
-    if (aliveWanderers.length > 0) {
-      return finalizeMatchOutcome(
-        state,
-        nowMs,
-        'wanderer',
-        FACTION_LABELS.wanderer,
-        'Cả Đội Gác Đèn lẫn Hội Màn Sương đều kiệt sức — những Kẻ Lang Thang trụ lại giành chiến thắng!',
-        aliveWanderers.map((p) => p.playerId),
-        'Kẻ Lang Thang Chiếm Lĩnh Sân Đêm',
-      );
-    }
-    const guardIds = state.players
-      .filter((p) => p.faction === 'lantern-guard')
-      .map((p) => p.playerId);
-    return finalizeMatchOutcome(
-      state,
-      nowMs,
-      'lantern-guard',
-      FACTION_LABELS['lantern-guard'],
-      'Toàn bộ hai phe đều ngã xuống cùng lúc — kỷ luật Đội Gác Đèn giữ được trạm gác KTX.',
-      guardIds,
-      'Trạm Gác Giữ Vững Phút Cuối',
-    );
-  }
-
-  // 5. Hết Vòng tối đa: Phiên Trực Cuối Đêm (không cộng tổng HP để phân thắng bại!)
-  if (isRoundCapReached || state.round > state.maxRounds) {
-    const eliminatedMists = state.players.filter(
-      (p) => p.faction === 'mist-order' && !p.alive,
-    ).length;
-    const eliminatedGuards = state.players.filter(
-      (p) => p.faction === 'lantern-guard' && !p.alive,
-    ).length;
-
-    if (eliminatedMists > eliminatedGuards) {
-      const guardIds = state.players
-        .filter((p) => p.faction === 'lantern-guard')
-        .map((p) => p.playerId);
-      return finalizeMatchOutcome(
-        state,
-        nowMs,
-        'lantern-guard',
-        FACTION_LABELS['lantern-guard'],
-        `Hết ${state.maxRounds} vòng: Đội Gác Đèn loại được nhiều đối thủ hơn (${eliminatedMists} so với ${eliminatedGuards}) và kiểm soát KTX tới rạng sáng!`,
-        guardIds,
-        'Phiên Trực Cuối Đêm — Gác Đèn Thắng Thế',
-      );
-    }
-
-    if (eliminatedGuards > eliminatedMists) {
-      const mistIds = state.players
-        .filter((p) => p.faction === 'mist-order')
-        .map((p) => p.playerId);
-      return finalizeMatchOutcome(
-        state,
-        nowMs,
-        'mist-order',
-        FACTION_LABELS['mist-order'],
-        `Hết ${state.maxRounds} vòng: Hội Màn Sương hạ gục được nhiều mục tiêu hơn (${eliminatedGuards} so với ${eliminatedMists}) và phá vỡ chốt tuần tra!`,
-        mistIds,
-        'Phiên Trực Cuối Đêm — Màn Sương Thắng Thế',
-      );
-    }
-
-    // Hòa số người bị loại -> so điểm kiểm soát chốt trực & ẩn danh chiến thuật
-    const guardWatchControl =
-      aliveGuards.filter((p) =>
-        p.location === 'lobby' || p.location === 'radio' || p.location === 'breaker',
-      ).length *
-        2 +
-      state.players.filter(
-        (p) => p.faction === 'lantern-guard' && p.investigationsCount >= 2,
-      ).length;
-
-    const mistStealthControl =
-      aliveMists.filter((p) => !p.revealed).length * 2 +
-      aliveMists.filter((p) =>
-        p.location === 'corridor' || p.location === 'canteen' || p.location === 'radio',
-      ).length *
-        2;
-
-    if (mistStealthControl > guardWatchControl) {
-      const mistIds = state.players
-        .filter((p) => p.faction === 'mist-order')
-        .map((p) => p.playerId);
-      return finalizeMatchOutcome(
-        state,
-        nowMs,
-        'mist-order',
-        FACTION_LABELS['mist-order'],
-        `Hết ${state.maxRounds} vòng: Hội Màn Sương giữ kín tung tích và áp đảo điểm kiểm soát khu trung tâm (${mistStealthControl} vs ${guardWatchControl})!`,
-        mistIds,
-        'Phiên Trực Cuối Đêm — Màn Sương Ẩn Mình',
-      );
-    }
-
-    const guardIds = state.players
-      .filter((p) => p.faction === 'lantern-guard')
-      .map((p) => p.playerId);
-    return finalizeMatchOutcome(
-      state,
-      nowMs,
-      'lantern-guard',
-      FACTION_LABELS['lantern-guard'],
-      `Hết ${state.maxRounds} vòng: Đội Gác Đèn giữ vững chốt trực và tổng số điều tra (${guardWatchControl} vs ${mistStealthControl}) tới khi trời sáng!`,
-      guardIds,
-      'Phiên Trực Cuối Đêm — An Toàn Rạng Sáng',
-    );
-  }
-
-  return false;
+  const winnerSet = new Set(winnerPlayerIds);
+  return state.turnOrder
+    .map((pid) => state.players[pid])
+    .filter((p): p is AuthoritativePlayerState => Boolean(p))
+    .map((player) => {
+      const role = getRoleDesign(player.roleId);
+      return {
+        playerId: player.playerId,
+        displayName: player.displayName,
+        roleId: player.roleId,
+        roleName: role.name,
+        faction: player.faction,
+        won: winnerSet.has(player.playerId),
+        alive: player.alive,
+        hp: player.hp,
+        maxHp: player.maxHp,
+        woundsTaken: player.woundsTaken,
+      };
+    });
 }

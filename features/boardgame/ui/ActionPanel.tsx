@@ -1,741 +1,642 @@
 'use client';
 
 // ---------------------------------------------------------------------------
-// features/boardgame/ui/ActionPanel.tsx — Bảng điều khiển lượt v3 (3 pha):
-// ① MOVE_OR_STAY (Di chuyển hoặc Đứng yên)
-// -> ② LOCATION_ACTION (Khảo sát hiệu ứng khu vực hoặc Rút 1 lá bài hợp lệ)
-// -> ③ MAIN_ACTION (Trang bị miễn phí, Dùng Thẻ Điều tra có điều kiện,
-//     Dùng Trang bị tiêu hao / Sự kiện, Công kích, Phòng thủ, Lật vai & Kỹ năng).
-// Bảo mật P0: Tuyệt đối không hiển thị HP gốc hay tên bài/kỹ năng ẩn khi Thẻ đang ÚP.
+// features/boardgame/ui/ActionPanel.tsx — Bảng Hành Động Theo Pha Xúc Xắc v4
+// Đứng ngay dưới bàn cờ, chữ to rõ ràng, mỗi nút đúng pha hiện tại, zero wall of text.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { getRoleDesign } from '@/features/boardgame/domain/roles';
+import { getLocationDefinition, LOCATIONS_CATALOG } from '@/features/boardgame/domain/rules';
 import type {
   BoardGameActionPayload,
-  BoardGameDeckId,
   BoardGameLocationId,
   BoardGamePrivateGameView,
   BoardGamePublicGameView,
-} from '../network/contracts';
-import { ROLES_BY_ID } from '../domain/roles';
-import {
-  KTX_LOCATIONS,
-  KTX_LOCATION_MAP,
-  isAdjacentLocation,
-  listLegalMovesForLocation,
-} from '../domain/rules';
-import { DeckCardBackSvg, LOCATION_VISUAL_META } from './BoardGameArt';
+  BoardGamePublicPlayerView,
+} from '@/shared/contracts/boardgame';
+import { LOCATION_VISUAL_META } from './BoardGameArt';
 
 export interface ActionPanelProps {
   publicGame: BoardGamePublicGameView;
   privateView: BoardGamePrivateGameView | null;
   selfPlayerId: string | null;
   isSpectator: boolean;
-  pendingAction: boolean;
-  hiddenOnScreen?: boolean;
-  onToggleHidden?: () => void;
+  selectedTargetId: string | null;
+  onSelectTarget: (playerId: string | null) => void;
   onAction: (action: BoardGameActionPayload) => void;
+  handMaskLocked: boolean;
+  onToggleHandMask: () => void;
 }
 
-const PHASE_STEPS = [
-  { id: 'MOVE_OR_STAY', label: '① Di chuyển / Đứng yên' },
-  { id: 'LOCATION_ACTION', label: '② Khảo sát / Rút thẻ' },
-  { id: 'MAIN_ACTION', label: '③ Hành động chính' },
-] as const;
+function getClusterForPlayer(p: BoardGamePublicPlayerView) {
+  return LOCATION_VISUAL_META[p.location].clusterId;
+}
 
-const DECK_META: Record<
-  BoardGameDeckId,
-  { label: string; desc: string; classes: string; textClass: string }
-> = {
-  investigation: {
-    label: 'Điều tra',
-    desc: 'Thẻ điều kiện · Soi dấu',
-    classes: 'border-amber-500/50 bg-amber-950/40 hover:border-amber-400 hover:bg-amber-900/55',
-    textClass: 'text-amber-200',
-  },
-  equipment: {
-    label: 'Trang bị',
-    desc: 'Vật phẩm · Giáp & Tiêu hao',
-    classes: 'border-sky-500/50 bg-sky-950/40 hover:border-sky-400 hover:bg-sky-900/55',
-    textClass: 'text-sky-200',
-  },
-  event: {
-    label: 'Sự kiện',
-    desc: 'Biến cố & Đổi vị trí',
-    classes: 'border-rose-500/50 bg-rose-950/40 hover:border-rose-400 hover:bg-rose-900/55',
-    textClass: 'text-rose-200',
-  },
-};
-
-export default function ActionPanel({
+export function ActionPanel({
   publicGame,
   privateView,
   selfPlayerId,
   isSpectator,
-  pendingAction,
-  hiddenOnScreen = false,
-  onToggleHidden,
+  selectedTargetId,
+  onSelectTarget,
   onAction,
+  handMaskLocked,
+  onToggleHandMask,
 }: ActionPanelProps) {
-  const activePlayer =
-    publicGame.players.find((p) => p.playerId === publicGame.activePlayerId) ?? null;
-  const selfPublic = selfPlayerId
-    ? publicGame.players.find((p) => p.playerId === selfPlayerId) ?? null
-    : null;
-  const isMyTurn = Boolean(
-    !isSpectator &&
-      selfPlayerId &&
-      selfPublic?.alive &&
-      publicGame.activePlayerId === selfPlayerId &&
-      publicGame.turnPhase !== 'ENDED',
-  );
+  const [confirmingReveal, setConfirmingReveal] = useState(false);
+  const [blastLocation, setBlastLocation] = useState<BoardGameLocationId>('lobby');
 
-  const aliveTargets = useMemo(
-    () =>
-      publicGame.players.filter(
-        (p) => p.alive && (!selfPlayerId || p.playerId !== selfPlayerId),
-      ),
+  const selfPlayer = useMemo(
+    () => publicGame.players.find((p) => p.playerId === selfPlayerId) ?? null,
     [publicGame.players, selfPlayerId],
   );
+  const alivePlayers = useMemo(
+    () => publicGame.players.filter((p) => p.alive),
+    [publicGame.players],
+  );
+  const aliveOthers = useMemo(
+    () => alivePlayers.filter((p) => p.playerId !== selfPlayerId),
+    [alivePlayers, selfPlayerId],
+  );
 
-  const inSameOrAdjacentTargets = useMemo(() => {
-    if (!selfPublic) return [];
-    return aliveTargets.filter((p) => isAdjacentLocation(selfPublic.location, p.location));
-  }, [aliveTargets, selfPublic]);
-
-  const [selectedTargetId, setSelectedTargetId] = useState<string>('');
-  const [cardDestinationLoc, setCardDestinationLoc] = useState<BoardGameLocationId>('lobby');
-  const [confirmRevealOpen, setConfirmRevealOpen] = useState(false);
-  const [equippedTurnNumber, setEquippedTurnNumber] = useState<number>(-1);
-
-  useEffect(() => {
-    const preferred = inSameOrAdjacentTargets[0]?.playerId ?? aliveTargets[0]?.playerId ?? '';
-    if (!selectedTargetId || !aliveTargets.some((t) => t.playerId === selectedTargetId)) {
-      setSelectedTargetId(preferred);
+  // Tầm đánh chuẩn kiểu Shadow Hunters: cùng Cụm Khu Vực, trừ khi mang Dây Cáp Đàn Hồi (ev-04).
+  const attackableTargets = useMemo(() => {
+    if (!selfPlayer) return [];
+    const selfCluster = getClusterForPlayer(selfPlayer);
+    const hasLongCable = selfPlayer.equipped.some((eq) => eq.id === 'ev-04');
+    if (hasLongCable) {
+      const remote = aliveOthers.filter((p) => getClusterForPlayer(p) !== selfCluster);
+      return remote.length > 0 ? remote : aliveOthers;
     }
-  }, [inSameOrAdjacentTargets, aliveTargets, selectedTargetId]);
+    return aliveOthers.filter((p) => getClusterForPlayer(p) === selfCluster);
+  }, [aliveOthers, selfPlayer]);
 
-  useEffect(() => {
-    if (!isMyTurn) setConfirmRevealOpen(false);
-  }, [isMyTurn]);
-
-  if (publicGame.winnerLabel || publicGame.turnPhase === 'ENDED') {
-    return null;
-  }
-
-  if (isSpectator || !selfPublic) {
+  if (isSpectator || !selfPlayer || !privateView) {
     return (
-      <div
+      <section
         data-testid="bg-action-spectator-banner"
-        className="rounded-2xl border border-slate-800 bg-slate-900/90 px-4 py-3 text-xs text-slate-300"
+        className="rounded-2xl border border-slate-700/80 bg-slate-900/95 p-4 text-sm font-semibold text-slate-200 flex items-center justify-between gap-3"
       >
-        👁️ Bạn đang theo dõi trận đấu ở chế độ khán giả. Lượt hiện tại:{' '}
-        <strong className="text-amber-200">{activePlayer?.displayName ?? 'Đang cập nhật'}</strong>.
-      </div>
+        <span>👀 Bạn đang theo dõi bàn đấu ở chế độ khán giả.</span>
+        <span className="text-xs text-cyan-300 font-bold">
+          Vòng {publicGame.round} · Lượt #{publicGame.turnNumber}
+        </span>
+      </section>
     );
   }
 
-  if (!selfPublic.alive) {
+  if (!selfPlayer.alive) {
     return (
-      <div className="rounded-2xl border border-rose-500/40 bg-rose-950/35 px-4 py-3 text-xs text-rose-200">
-        🕯️ Bạn đã kiệt sức — hãy theo dõi diễn biến tới khi trận đấu ngã ngũ.
-      </div>
+      <section
+        data-testid="bg-eliminated-banner"
+        className="rounded-2xl border border-rose-500/40 bg-rose-950/35 p-4"
+      >
+        <p className="text-sm font-bold text-rose-200">
+          💀 Bạn đã bị loại khỏi ván này. Có thể tiếp tục theo dõi bàn đấu cho tới khi kết thúc!
+        </p>
+      </section>
     );
   }
+
+  const isMyTurn =
+    !publicGame.winnerLabel &&
+    publicGame.turnPhase !== 'ENDED' &&
+    publicGame.activePlayerId === selfPlayer.playerId;
+
+  const activePlayer = publicGame.players.find(
+    (p) => p.playerId === publicGame.activePlayerId,
+  );
 
   if (!isMyTurn) {
     return (
-      <div
+      <section
         data-testid="bg-waiting-turn-banner"
-        className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-900/90 px-4 py-3 text-xs text-slate-300"
+        className="rounded-2xl border border-slate-700/80 bg-slate-900/95 p-4 flex flex-wrap items-center justify-between gap-3"
       >
-        <div>
+        <p className="text-sm sm:text-base font-bold text-slate-100">
           ⏳ Đang chờ lượt của{' '}
-          <strong className="text-amber-300">{activePlayer?.displayName ?? 'sinh viên khác'}</strong>{' '}
-          <span className="text-slate-400">
-            (
-            {publicGame.turnPhase === 'MOVE_OR_STAY'
-              ? 'Pha ① Di chuyển'
-              : publicGame.turnPhase === 'LOCATION_ACTION'
-                ? 'Pha ② Khảo sát / Rút thẻ'
-                : 'Pha ③ Hành động chính'}
-            )
+          <span className="text-amber-300">
+            {activePlayer?.displayName ?? 'người chơi khác'}
           </span>
-        </div>
-        {privateView && privateView.hand.length > 0 && (
-          <span className="rounded-lg bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">
-            🃏 Thẻ trên tay: {privateView.hand.length}
-          </span>
-        )}
-      </div>
+        </p>
+        <span className="text-xs sm:text-sm font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/35 px-3 py-1.5 rounded-xl">
+          ∞ Không giới hạn thời gian — tự động tới lượt bạn ngay khi xong
+        </span>
+      </section>
     );
   }
 
-  const currentLoc = selfPublic.location;
-  const locDef = KTX_LOCATION_MAP[currentLoc];
+  const currentLoc = getLocationDefinition(selfPlayer.location);
+  const roleDesign = getRoleDesign(privateView.roleId);
+  const validAttackTarget =
+    attackableTargets.find((p) => p.playerId === selectedTargetId) ??
+    attackableTargets[0] ??
+    null;
+  const validOtherTarget =
+    aliveOthers.find((p) => p.playerId === selectedTargetId) ??
+    aliveOthers[0] ??
+    null;
+  const validAnyTarget =
+    alivePlayers.find((p) => p.playerId === selectedTargetId) ?? selfPlayer;
+  const equippedTargets = aliveOthers.filter((p) => p.equipped.length > 0);
+  const validStealTarget =
+    equippedTargets.find((p) => p.playerId === selectedTargetId) ??
+    equippedTargets[0] ??
+    null;
 
-  // Danh sách ô di chuyển hợp lệ (kể cả Giày Thể Thao / Tú lướt từ Hành Lang B7)
-  const legalMoveIds = (() => {
-    const oneStep = listLegalMovesForLocation(currentLoc);
-    const hasTwoStep =
-      Boolean(privateView?.equipped.some((c) => c.effectId === 'eq-sneakers')) ||
-      (selfPublic.revealedRoleId === 'suong-an-danh' && currentLoc === 'corridor');
-    if (!hasTwoStep) return oneStep;
-    const dest = new Set<BoardGameLocationId>(oneStep);
-    for (const mid of oneStep) {
-      for (const two of listLegalMovesForLocation(mid)) {
-        if (two !== currentLoc) dest.add(two);
-      }
-    }
-    return Array.from(dest);
-  })();
-  const moveOptions = KTX_LOCATIONS.filter((loc) => legalMoveIds.includes(loc.id));
+  const sameClusterOthers = aliveOthers.filter(
+    (p) => getClusterForPlayer(p) === getClusterForPlayer(selfPlayer),
+  );
+  const canUseSkillNow =
+    privateView.revealed &&
+    roleDesign.targetMode !== 'passive' &&
+    privateView.skillCooldown === 0 &&
+    !(roleDesign.oncePerMatch && privateView.skillUsedOnce) &&
+    (publicGame.turnPhase === 'LOCATION_ACTION' || publicGame.turnPhase === 'MAIN_ACTION');
 
-  const activeTargetObj =
-    aliveTargets.find((t) => t.playerId === selectedTargetId) ?? aliveTargets[0] ?? null;
+  const skillTarget =
+    roleDesign.targetMode === 'self'
+      ? selfPlayer
+      : roleDesign.targetMode === 'any-player'
+        ? validAnyTarget
+        : roleDesign.targetMode === 'any-other'
+          ? validOtherTarget
+          : sameClusterOthers.find((p) => p.playerId === selectedTargetId) ??
+            sameClusterOthers[0] ??
+            null;
 
-  const isSameRoom = Boolean(activeTargetObj && activeTargetObj.location === currentLoc);
-  const isAdjacentRoom = Boolean(
-    activeTargetObj && !isSameRoom && isAdjacentLocation(currentLoc, activeTargetObj.location),
-  );
-  const hasBaton = Boolean(privateView?.equipped.some((c) => c.effectId === 'eq-baton'));
-  const hasWalkie = Boolean(
-    privateView?.equipped.some((c) => c.effectId === 'eq-walkie-talkie'),
-  );
-  const canAttackTarget = Boolean(
-    activeTargetObj &&
-      (isSameRoom ||
-        (isAdjacentRoom &&
-          (hasBaton ||
-            currentLoc === 'court' ||
-            selfPublic.revealedRoleId === 'suong-an-danh' ||
-            selfPublic.revealedRoleId === 'suong-gac-cong'))),
-  );
-  const canInvestigateTarget = Boolean(
-    activeTargetObj &&
-      (isSameRoom ||
-        isAdjacentRoom ||
-        currentLoc === 'radio' ||
-        hasWalkie ||
-        (privateView?.revealed && privateView.roleId === 'gac-radio')),
-  );
+  const rerollPrompt =
+    publicGame.turnPhase === 'ROLL_MOVE' &&
+    publicGame.lastDiceRoll?.rerollRequired &&
+    publicGame.lastDiceRoll.playerId === selfPlayer.playerId;
 
-  const roleDef = privateView ? ROLES_BY_ID[privateView.roleId] : null;
-  const isInSkillRange = Boolean(activeTargetObj && (isSameRoom || isAdjacentRoom));
-  const canUseSkillNow = Boolean(
-    privateView?.revealed &&
-      privateView.skillCooldown === 0 &&
-      (privateView.roleId === 'lang-anh-san' ||
-        privateView.roleId === 'gac-ky-thuat' ||
-        (privateView.roleId === 'gac-radio' && Boolean(activeTargetObj)) ||
-        (privateView.roleId === 'suong-gac-cong' &&
-          isInSkillRange &&
-          Boolean(
-            activeTargetObj &&
-              (activeTargetObj.revealedRoleId !== null || activeTargetObj.woundsTaken > 0),
-          )) ||
-        isInSkillRange),
-  );
+  const equippedPreciseStick = selfPlayer.equipped.some((eq) => eq.id === 'ev-01');
 
   return (
-    <div
+    <section
       data-testid="bg-action-panel"
-      className="space-y-3 rounded-2xl border border-amber-500/45 bg-gradient-to-b from-slate-900/95 to-slate-950/95 p-3.5 text-xs text-slate-100 shadow-2xl"
+      className="rounded-2xl border border-amber-400/50 bg-slate-900/95 p-4 shadow-[0_12px_36px_rgba(245,158,11,0.12)] space-y-4"
     >
-      {/* Thanh bước lượt trực quan */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {PHASE_STEPS.map((step) => {
-            const active = publicGame.turnPhase === step.id;
-            return (
-              <span
-                key={step.id}
-                className={`rounded-lg px-2 py-1 text-[11px] font-bold transition motion-reduce:transition-none ${
-                  active
-                    ? 'bg-amber-400 text-slate-950 shadow'
-                    : 'bg-slate-800/80 text-slate-400'
-                }`}
-              >
-                {step.label}
-              </span>
-            );
-          })}
+      {/* Thanh trạng thái lượt của tôi */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs sm:text-sm font-black">
+            🎯 LƯỢT CỦA BẠN
+          </span>
+          <span className="text-sm font-bold text-slate-100">
+            Đang đứng tại:{' '}
+            <span className="text-cyan-300">
+              Ô {currentLoc.diceLabel} · {currentLoc.name}
+            </span>
+          </span>
         </div>
-        <span className="text-[11px] font-semibold text-emerald-300">
-          ✨ Lượt của bạn ({locDef.shortLabel})
-        </span>
-      </div>
 
-      {/* Pha 1: MOVE_OR_STAY */}
-      {publicGame.turnPhase === 'MOVE_OR_STAY' && (
-        <div className="space-y-2">
-          <div className="text-[11px] text-slate-300">
-            Chọn khu vực kế tiếp để di chuyển (hoặc bấm trực tiếp ô có đường nối trên bàn cờ), hay đứng yên tại{' '}
-            <strong className="text-amber-200">{locDef.shortLabel}</strong>:
-          </div>
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-            {moveOptions.map((loc) => {
-              const vis = LOCATION_VISUAL_META[loc.id];
-              const occCount = publicGame.players.filter((p) => p.location === loc.id && p.alive).length;
-              return (
-                <button
-                  key={loc.id}
-                  type="button"
-                  data-testid={`bg-move-${loc.id}`}
-                  disabled={pendingAction}
-                  title={loc.description}
-                  onClick={() => onAction({ type: 'MOVE', location: loc.id })}
-                  className="flex flex-col items-start rounded-xl border border-slate-700 bg-slate-950/85 p-2 text-left transition hover:border-amber-400 hover:bg-amber-950/40 disabled:opacity-45 motion-reduce:transition-none"
-                >
-                  <div className="flex w-full items-center justify-between gap-1 font-bold text-amber-100">
-                    <span className="truncate">
-                      {vis.icon} {loc.shortLabel}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {occCount > 0 ? `👥${occCount}` : ''}
-                    </span>
-                  </div>
-                  <span className="mt-1 truncate text-[10px] font-medium text-amber-300/90">
-                    {vis.badgeText}
-                  </span>
-                </button>
-              );
-            })}
+        <div className="flex items-center gap-2 flex-wrap">
+          {!privateView.revealed &&
+            (confirmingReveal ? (
+              <button
+                type="button"
+                data-testid="bg-confirm-reveal-btn"
+                onClick={() => {
+                  setConfirmingReveal(false);
+                  onAction({ type: 'REVEAL_ROLE' });
+                }}
+                className="px-4 py-2 min-h-[42px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-black transition cursor-pointer"
+              >
+                ✅ Xác nhận Lật Vai Công Khai
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-testid="bg-reveal-role-btn"
+                onClick={() => setConfirmingReveal(true)}
+                className="px-3.5 py-2 min-h-[42px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/50 text-amber-200 text-sm font-bold transition cursor-pointer"
+              >
+                🎭 Lật vai
+              </button>
+            ))}
+
+          {canUseSkillNow && (
             <button
               type="button"
-              data-testid="bg-stay-btn"
-              disabled={pendingAction}
-              onClick={() => onAction({ type: 'STAY' })}
-              className="flex flex-col items-start rounded-xl border border-emerald-600/60 bg-emerald-950/40 p-2 text-left transition hover:border-emerald-400 hover:bg-emerald-900/50 disabled:opacity-45 motion-reduce:transition-none"
+              data-testid="bg-use-skill-btn"
+              disabled={roleDesign.targetMode !== 'self' && !skillTarget}
+              onClick={() => {
+                if (roleDesign.targetMode === 'self') {
+                  onAction({ type: 'USE_SKILL' });
+                } else if (skillTarget) {
+                  onAction({ type: 'USE_SKILL', targetPlayerId: skillTarget.playerId });
+                }
+              }}
+              className="px-3.5 py-2 min-h-[42px] rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-45 text-white text-sm font-bold transition cursor-pointer"
             >
-              <div className="font-bold text-emerald-200">⏸️ Đứng yên</div>
-              <span className="mt-1 text-[10px] text-emerald-300/85">
-                Giữ vị trí tại {locDef.shortLabel}
-              </span>
+              ✨ {roleDesign.skillName}
+              {skillTarget && roleDesign.targetMode !== 'self' ? ` (${skillTarget.displayName})` : ''}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* PHA 1: TUNG XÚC XẮC DI CHUYỂN */}
+      {publicGame.turnPhase === 'ROLL_MOVE' && (
+        <div className="space-y-3">
+          <p className="text-sm sm:text-base text-slate-200 font-semibold">
+            {rerollPrompt
+              ? `🎲 Bạn vừa tung trùng ô ${currentLoc.name} (${currentLoc.diceLabel}) — hãy bấm ĐỔ LẠI xúc xắc ngay!`
+              : 'Bước 1: Tung đồng thời 1d6 + 1d4 để di chuyển sang khu vực kế tiếp (tổng 7 được tự chọn).'}
+          </p>
+          <button
+            type="button"
+            data-testid="bg-roll-dice-btn"
+            onClick={() => onAction({ type: 'ROLL_DICE' })}
+            className="w-full sm:w-auto px-6 py-3 min-h-[48px] rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-base font-black shadow-lg transition cursor-pointer"
+          >
+            {rerollPrompt
+              ? '🎲 ĐỔ LẠI XÚC XẮC DI CHUYỂN (1d6 + 1d4)'
+              : '🎲 TUNG XÚC XẮC DI CHUYỂN (1d6 + 1d4)'}
+          </button>
+        </div>
+      )}
+
+      {/* PHA 1B: CHỌN KHU VỰC TỰ DO KHI TỔNG XÚC XẮC = 7 */}
+      {publicGame.turnPhase === 'CHOOSE_MOVE' && (
+        <div className="space-y-3">
+          <p className="text-sm sm:text-base font-bold text-amber-200">
+            ✨ Tổng xúc xắc bằng 7! Hãy chọn bất kỳ khu vực nào khác để tới:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {LOCATIONS_CATALOG.filter((l) => l.id !== selfPlayer.location).map((loc) => (
+              <button
+                key={loc.id}
+                type="button"
+                data-testid={`bg-choose-dest-${loc.id}`}
+                onClick={() => onAction({ type: 'CHOOSE_DEST', location: loc.id })}
+                className="flex items-center justify-between gap-2 px-4 py-3 min-h-[48px] rounded-xl border border-amber-400/50 bg-amber-950/40 hover:bg-amber-900/55 text-left transition cursor-pointer"
+              >
+                <div>
+                  <p className="text-sm font-black text-white">
+                    Ô {loc.diceLabel} · {loc.name}
+                  </p>
+                  <p className="text-xs text-amber-100/90">{loc.subtitle}</p>
+                </div>
+                <span className="text-sm font-black text-amber-300">→</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* PHA 2: HÀNH ĐỘNG KHU VỰC */}
+      {publicGame.turnPhase === 'LOCATION_ACTION' && (
+        <div className="space-y-3">
+          <p className="text-sm sm:text-base font-bold text-cyan-200">
+            Bước 2 — Quyền năng {currentLoc.name} (Ô {currentLoc.diceLabel}):{' '}
+            <span className="font-normal text-slate-200">{currentLoc.actionSummary}</span>
+          </p>
+
+          {(currentLoc.deckHint === 'investigation' || currentLoc.deckHint === 'any') && (
+            <button
+              type="button"
+              data-testid="bg-draw-investigation-btn"
+              onClick={() => onAction({ type: 'DRAW_CARD', deck: 'investigation' })}
+              className="mr-2 mb-1 px-5 py-3 min-h-[46px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black transition cursor-pointer"
+            >
+              🔍 Rút 1 Thẻ Khám Phá ({publicGame.deckCounts.investigation})
+            </button>
+          )}
+          {(currentLoc.deckHint === 'equipment' || currentLoc.deckHint === 'any') && (
+            <button
+              type="button"
+              data-testid="bg-draw-equipment-btn"
+              onClick={() => onAction({ type: 'DRAW_CARD', deck: 'equipment' })}
+              className="mr-2 mb-1 px-5 py-3 min-h-[46px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-black transition cursor-pointer"
+            >
+              🛡️ Rút 1 Thẻ Cung Ứng ({publicGame.deckCounts.equipment})
+            </button>
+          )}
+          {(currentLoc.deckHint === 'event' || currentLoc.deckHint === 'any') && (
+            <button
+              type="button"
+              data-testid="bg-draw-event-btn"
+              onClick={() => onAction({ type: 'DRAW_CARD', deck: 'event' })}
+              className="mr-2 mb-1 px-5 py-3 min-h-[46px] rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-black transition cursor-pointer"
+            >
+              ⚡ Rút 1 Thẻ Đột Kích ({publicGame.deckCounts.event})
+            </button>
+          )}
+
+          {currentLoc.deckHint === 'power-9' && (
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap gap-2">
+                {alivePlayers.map((p) => {
+                  const selected = validAnyTarget.playerId === p.playerId;
+                  return (
+                    <button
+                      key={p.playerId}
+                      type="button"
+                      onClick={() => onSelectTarget(p.playerId)}
+                      className={`px-3 py-2 min-h-[40px] rounded-xl border text-xs sm:text-sm font-bold transition cursor-pointer ${
+                        selected
+                          ? 'bg-violet-600 border-violet-300 text-white'
+                          : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                      }`}
+                    >
+                      {p.displayName} ({p.woundsTaken} vết)
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  data-testid="bg-loc-heal-btn"
+                  onClick={() =>
+                    onAction({
+                      type: 'USE_LOC_POWER',
+                      targetPlayerId: validAnyTarget.playerId,
+                      mode: 'heal',
+                    })
+                  }
+                  className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black transition cursor-pointer"
+                >
+                  💚 Hồi 1 cho {validAnyTarget.displayName}
+                </button>
+                <button
+                  type="button"
+                  data-testid="bg-loc-damage-btn"
+                  onClick={() =>
+                    onAction({
+                      type: 'USE_LOC_POWER',
+                      targetPlayerId: validAnyTarget.playerId,
+                      mode: 'damage',
+                    })
+                  }
+                  className="px-4 py-2.5 min-h-[44px] rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-black transition cursor-pointer"
+                >
+                  💥 Gây 2 dmg lên {validAnyTarget.displayName}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {currentLoc.deckHint === 'power-10' && (
+            <div className="space-y-2">
+              {equippedTargets.length === 0 ? (
+                <p className="text-sm text-amber-200">
+                  Hiện chưa có ai đeo Trang bị trên bàn — bạn có thể Bỏ qua khu vực để sang pha đánh/kết thúc.
+                </p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  {equippedTargets.map((p) => {
+                    const selected = validStealTarget?.playerId === p.playerId;
+                    return (
+                      <button
+                        key={p.playerId}
+                        type="button"
+                        onClick={() => onSelectTarget(p.playerId)}
+                        className={`px-3 py-2 min-h-[40px] rounded-xl border text-xs sm:text-sm font-bold transition cursor-pointer ${
+                          selected
+                            ? 'bg-sky-600 border-sky-300 text-white'
+                            : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                        }`}
+                      >
+                        {p.displayName} ({p.equipped.length} đồ)
+                      </button>
+                    );
+                  })}
+                  {validStealTarget && (
+                    <button
+                      type="button"
+                      data-testid="bg-loc-steal-btn"
+                      onClick={() =>
+                        onAction({
+                          type: 'USE_LOC_POWER',
+                          targetPlayerId: validStealTarget.playerId,
+                          mode: 'steal',
+                        })
+                      }
+                      className="px-4 py-2.5 min-h-[44px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-black transition cursor-pointer"
+                    >
+                      🧤 Cướp 1 Trang bị của {validStealTarget.displayName}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-1">
+            <button
+              type="button"
+              data-testid="bg-skip-loc-btn"
+              onClick={() => onAction({ type: 'SKIP_LOC' })}
+              className="px-4 py-2 min-h-[40px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-sm font-bold transition cursor-pointer"
+            >
+              ⏭️ Bỏ qua khu vực → Pha Hành Động
             </button>
           </div>
         </div>
       )}
 
-      {/* Pha 2: LOCATION_ACTION */}
-      {publicGame.turnPhase === 'LOCATION_ACTION' && (
-        <div className="space-y-2.5">
-          <button
-            type="button"
-            data-testid="bg-explore-loc"
-            disabled={pendingAction}
-            onClick={() => onAction({ type: 'EXPLORE_LOC' })}
-            className="w-full rounded-xl border border-teal-500/60 bg-teal-950/55 px-3 py-2 text-left font-bold text-teal-100 transition hover:bg-teal-900/70 disabled:opacity-45 motion-reduce:transition-none"
-          >
-            <div>🔍 Khảo sát khu vực: {locDef.actionLabel}</div>
-            <div className="mt-0.5 text-[10px] font-normal text-teal-200/85">
-              {locDef.description}
-            </div>
-          </button>
-
-          <div className="text-[11px] font-semibold text-slate-300">
-            Hoặc rút 1 thẻ thuộc khu vực {locDef.shortLabel}:
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {(['investigation', 'equipment', 'event'] as const).map((deck) => {
-              const allowed = locDef.allowedDecks.includes(deck);
-              const meta = DECK_META[deck];
-              return (
-                <button
-                  key={deck}
-                  type="button"
-                  data-testid={`bg-draw-${deck}`}
-                  disabled={pendingAction || !allowed}
-                  onClick={() => onAction({ type: 'DRAW_CARD', deck })}
-                  className={`flex items-center gap-2.5 rounded-xl border p-2 text-left transition disabled:cursor-not-allowed disabled:opacity-35 motion-reduce:transition-none ${meta.classes}`}
-                >
-                  <DeckCardBackSvg deck={deck} />
-                  <div className="min-w-0">
-                    <div className={`font-bold ${meta.textClass}`}>
-                      {meta.label} ({publicGame.deckCounts[deck]})
-                    </div>
-                    <div className="text-[10px] text-slate-200/80">
-                      {allowed ? meta.desc : 'Không có tại ô này'}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Pha 3: MAIN_ACTION */}
+      {/* PHA 3: DÙNG BÀI / TẤN CÔNG / KẾT THÚC LƯỢT */}
       {publicGame.turnPhase === 'MAIN_ACTION' && (
-        <div className="space-y-2.5">
-          {/* Chọn mục tiêu (CHỈ HIỂN THỊ DỮ LIỆU CÔNG KHAI) */}
-          <div className="space-y-1.5 rounded-xl border border-slate-800 bg-slate-950/75 p-2.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-slate-300">
-                🎯 Chọn mục tiêu ({inSameOrAdjacentTargets.length} người trong vùng gần):
-              </span>
-              <select
-                data-testid="bg-target-select"
-                aria-label="Chọn sinh viên mục tiêu"
-                value={selectedTargetId}
-                onChange={(e) => setSelectedTargetId(e.target.value)}
-                className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-100"
-              >
-                {aliveTargets.map((t) => (
-                  <option key={t.playerId} value={t.playerId}>
-                    {t.displayName} ({KTX_LOCATION_MAP[t.location].shortLabel} · 🩹{t.woundsTaken}
-                    {t.tempShield > 0 ? ` · 🛡️${t.tempShield}` : ''}
-                    {t.equipped.length > 0 ? ` · 🎒${t.equipped.length}` : ''})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              {aliveTargets.map((t) => {
-                const same = t.location === currentLoc;
-                const adj = !same && isAdjacentLocation(currentLoc, t.location);
-                const selected = (activeTargetObj?.playerId ?? '') === t.playerId;
+        <div className="space-y-4">
+          {/* Chọn mục tiêu nhanh cho Thẻ & Đòn Đánh */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+              Chọn mục tiêu hành động / tấn công:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {aliveOthers.map((p) => {
+                const inRange = attackableTargets.some((t) => t.playerId === p.playerId);
+                const selected = (selectedTargetId ?? validOtherTarget?.playerId) === p.playerId;
                 return (
                   <button
-                    key={t.playerId}
+                    key={p.playerId}
                     type="button"
-                    onClick={() => setSelectedTargetId(t.playerId)}
-                    className={`rounded-lg border px-2 py-1 text-[11px] font-semibold transition motion-reduce:transition-none ${
+                    onClick={() => onSelectTarget(p.playerId)}
+                    className={`px-3 py-2 min-h-[40px] rounded-xl border text-xs sm:text-sm font-bold transition cursor-pointer flex items-center gap-1.5 ${
                       selected
-                        ? 'border-amber-400 bg-amber-500/20 text-amber-100 shadow-sm'
-                        : same || adj
-                          ? 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500'
-                          : 'border-slate-800/80 bg-slate-950 text-slate-500 hover:text-slate-300'
+                        ? 'bg-rose-600/85 border-rose-300 text-white'
+                        : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
                     }`}
                   >
-                    {t.displayName} · 🩹{t.woundsTaken}
-                    {t.tempShield > 0 ? ` · 🛡️${t.tempShield}` : ''}
-                    {same ? ' (cùng phòng)' : adj ? ' (kề)' : ' (xa)'}
+                    <span>{p.displayName}</span>
+                    {inRange && (
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-black/30 text-amber-200">
+                        🎯 Tầm đánh
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Hàng nút Chiến đấu / Phòng thủ / Kỹ năng */}
-          <div className="flex flex-wrap gap-1.5">
+          {/* Bài trên tay (kèm lớp che chống nhìn trộm màn hình) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+                🃏 Bài trên tay ({privateView.hand.length}/3):
+              </p>
+              {privateView.hand.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onToggleHandMask}
+                  className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 cursor-pointer"
+                >
+                  {handMaskLocked ? '👁️ Hiện bài trên tay' : '🙈 Che bài'}
+                </button>
+              )}
+            </div>
+
+            {privateView.hand.length === 0 ? (
+              <p className="text-sm text-slate-400">Chưa có thẻ nào trên tay.</p>
+            ) : handMaskLocked ? (
+              <div
+                data-testid="bg-hand-masked-banner"
+                className="rounded-xl border border-dashed border-amber-400/45 bg-slate-950/85 p-4 flex flex-wrap items-center justify-between gap-3"
+              >
+                <p className="text-sm font-semibold text-amber-100">
+                  🙈 Bài trên tay đang được che để chống nhìn màn hình ({privateView.hand.length} lá).
+                </p>
+                <button
+                  type="button"
+                  data-testid="bg-unmask-hand-btn"
+                  onClick={onToggleHandMask}
+                  className="px-4 py-2 min-h-[40px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-black cursor-pointer"
+                >
+                  👁️ Mở xem bài của tôi
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                {privateView.hand.map((card, idx) => {
+                  const isInv = card.deck === 'investigation';
+                  const isGear = !isInv && !card.isConsumable;
+                  const isLocBlast = card.effectId === 'ev-07';
+
+                  return (
+                    <div
+                      key={`${card.id}-${idx}`}
+                      className={`rounded-xl border p-3 flex flex-col justify-between gap-2.5 ${
+                        isInv
+                          ? 'border-emerald-500/45 bg-emerald-950/35'
+                          : card.deck === 'equipment'
+                            ? 'border-sky-500/45 bg-sky-950/35'
+                            : 'border-rose-500/45 bg-rose-950/35'
+                      }`}
+                    >
+                      <div>
+                        <p className="text-sm font-black text-white">{card.title}</p>
+                        <p className="text-xs sm:text-sm text-slate-200 mt-1 leading-snug">
+                          {card.summary}
+                        </p>
+                      </div>
+
+                      {isLocBlast && (
+                        <select
+                          value={blastLocation}
+                          onChange={(e) => setBlastLocation(e.target.value as BoardGameLocationId)}
+                          className="w-full rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-xs font-bold text-slate-100"
+                          aria-label="Chọn khu vực ném thẻ Mất Điện"
+                        >
+                          {LOCATIONS_CATALOG.map((l) => (
+                            <option key={l.id} value={l.id}>
+                              Ô {l.diceLabel} · {l.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      <button
+                        type="button"
+                        data-testid={`bg-use-card-${card.id}`}
+                        disabled={isInv && !validOtherTarget}
+                        onClick={() => {
+                          if (isInv && validOtherTarget) {
+                            onAction({
+                              type: 'INVESTIGATE_CARD',
+                              cardId: card.id,
+                              targetPlayerId: validOtherTarget.playerId,
+                            });
+                          } else if (isGear) {
+                            onAction({ type: 'EQUIP_CARD', cardId: card.id });
+                          } else if (isLocBlast) {
+                            onAction({
+                              type: 'USE_CARD',
+                              cardId: card.id,
+                              targetLocation: blastLocation,
+                            });
+                          } else if (card.targetMode === 'single-player') {
+                            const tgt =
+                              card.deck === 'equipment'
+                                ? validAnyTarget.playerId
+                                : validOtherTarget?.playerId;
+                            if (tgt) {
+                              onAction({
+                                type: 'USE_CARD',
+                                cardId: card.id,
+                                targetPlayerId: tgt,
+                              });
+                            }
+                          } else {
+                            onAction({ type: 'USE_CARD', cardId: card.id });
+                          }
+                        }}
+                        className="w-full px-3 py-2 min-h-[40px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/15 text-xs sm:text-sm font-black text-white transition cursor-pointer"
+                      >
+                        {isInv
+                          ? `🔍 Đưa kín → ${validOtherTarget?.displayName ?? '?'}`
+                          : isGear
+                            ? '🎒 Trang bị ngay'
+                            : isLocBlast
+                              ? `💥 Nổ tại Ô ${LOCATION_VISUAL_META[blastLocation].diceLabel}`
+                              : card.deck === 'equipment' && card.targetMode === 'single-player'
+                                ? `💚 Hồi → ${validAnyTarget.displayName}`
+                                : card.targetMode === 'single-player'
+                                  ? `⚡ Kích hoạt → ${validOtherTarget?.displayName ?? '?'}`
+                                  : '⚡ Kích hoạt ngay'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Hàng nút chính cuối pha: Tấn công hoặc Kết thúc lượt */}
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800">
             <button
               type="button"
               data-testid="bg-attack-btn"
-              disabled={pendingAction || !canAttackTarget}
-              onClick={() =>
-                activeTargetObj &&
-                onAction({ type: 'ATTACK', targetPlayerId: activeTargetObj.playerId })
-              }
-              title={
-                canAttackTarget
-                  ? 'Gây 2 ST cơ bản (giảm 1 nếu mục tiêu chưa từng tấn công & chưa lật vai)'
-                  : 'Cần đứng cùng phòng (hoặc có Gậy Bảo Vệ / Tầm Sân Bóng Rổ)'
-              }
-              className="rounded-lg border border-rose-500/60 bg-rose-950/65 px-2.5 py-1.5 font-semibold text-rose-100 hover:bg-rose-900/80 disabled:opacity-40"
-            >
-              ⚔️ Công kích (2 ST)
-            </button>
-
-            <button
-              type="button"
-              data-testid="bg-defend-btn"
-              disabled={pendingAction}
-              onClick={() => onAction({ type: 'DEFEND' })}
-              className="rounded-lg border border-sky-500/60 bg-sky-950/65 px-2.5 py-1.5 font-semibold text-sky-100 hover:bg-sky-900/80 disabled:opacity-45"
-            >
-              🛡️ Phòng thủ (+1 🛡️ &amp; Quan sát)
-            </button>
-
-            <button
-              type="button"
-              data-testid="bg-use-skill-btn"
-              disabled={pendingAction || !canUseSkillNow}
+              disabled={!validAttackTarget}
               onClick={() => {
-                const omitTarget =
-                  privateView?.roleId === 'lang-anh-san' ||
-                  (privateView?.roleId === 'gac-ky-thuat' && !isInSkillRange);
-                onAction({
-                  type: 'USE_SKILL',
-                  targetPlayerId: omitTarget ? undefined : activeTargetObj?.playerId,
-                });
+                if (validAttackTarget) {
+                  onAction({ type: 'ATTACK', targetPlayerId: validAttackTarget.playerId });
+                }
               }}
-              title={
-                !privateView?.revealed
-                  ? 'Hãy Lật vai công khai trước để mở khóa Kỹ năng riêng'
-                  : privateView.skillCooldown > 0
-                    ? `Đang hồi chiêu (${privateView.skillCooldown} vòng)`
-                    : hiddenOnScreen
-                      ? 'Kích hoạt kỹ năng riêng'
-                      : roleDef?.activeAbility.summary
-              }
-              className="rounded-lg border border-fuchsia-500/60 bg-fuchsia-950/65 px-2.5 py-1.5 font-semibold text-fuchsia-100 hover:bg-fuchsia-900/80 disabled:opacity-40"
+              className="px-5 py-3 min-h-[46px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-sm sm:text-base font-black shadow transition cursor-pointer"
             >
-              {!privateView?.revealed
-                ? '⚡ Kỹ năng riêng (Cần lật vai)'
-                : privateView.skillCooldown > 0
-                  ? `⚡ Hồi chiêu (${privateView.skillCooldown}v)`
-                  : hiddenOnScreen
-                    ? '⚡ Kích hoạt Kỹ năng'
-                    : `⚡ ${roleDef?.activeAbility.name ?? 'Kỹ năng'}`}
+              {validAttackTarget
+                ? `⚔️ Tấn công ${validAttackTarget.displayName} (${equippedPreciseStick ? '1d4' : '|1d6-1d4|'})`
+                : '⚔️ Chưa có mục tiêu cùng Cụm'}
             </button>
-          </div>
-
-          {/* Bài trên tay (Ẩn hoàn toàn tên & nội dung khi Thẻ vai đang ÚP chống nhìn trộm!) */}
-          {privateView && privateView.hand.length > 0 && (
-            <div className="space-y-1.5">
-              {hiddenOnScreen ? (
-                <div
-                  data-testid="bg-hand-masked-banner"
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-amber-500/45 bg-slate-950/85 px-3 py-2 text-[11px] text-amber-100"
-                >
-                  <span>
-                    🃏 Đang giữ <strong>{privateView.hand.length}</strong> lá bài trên tay (đã ẩn
-                    chống nhìn trộm màn hình).
-                  </span>
-                  {onToggleHidden && (
-                    <button
-                      type="button"
-                      data-testid="bg-unmask-hand-btn"
-                      onClick={onToggleHidden}
-                      className="rounded-lg bg-amber-500/20 px-2.5 py-1 font-bold text-amber-200 ring-1 ring-amber-400/50 hover:bg-amber-500/30"
-                    >
-                      👁️ Lật xem bài &amp; vai
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
-                      🃏 Bài trên tay ({privateView.hand.length}/4)
-                    </div>
-                    {privateView.hand.some((c) => c.targetMode === 'location') && (
-                      <select
-                        data-testid="bg-card-location-select"
-                        value={cardDestinationLoc}
-                        onChange={(e) =>
-                          setCardDestinationLoc(e.target.value as BoardGameLocationId)
-                        }
-                        className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] text-slate-200"
-                      >
-                        {KTX_LOCATIONS.map((loc) => (
-                          <option key={loc.id} value={loc.id}>
-                            Khu vực: {loc.shortLabel}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {privateView.hand.map((card, cardIdx) => {
-                      const isInv = card.deck === 'investigation';
-                      const isEquip = card.deck === 'equipment';
-                      const isPassiveEquip = isEquip && !card.isConsumable;
-                      const isSelfHealFallbackCard =
-                        card.effectId === 'eq-thermos' || card.effectId === 'ev-calm-tea';
-                      const needsTarget =
-                        card.targetMode === 'single-player' ||
-                        card.targetMode === 'adjacent-or-same' ||
-                        (card.targetMode === 'same-location' && !isSelfHealFallbackCard);
-                      const targetWithinRange =
-                        card.targetMode === 'same-location'
-                          ? isSameRoom
-                          : card.targetMode === 'adjacent-or-same'
-                            ? isSameRoom || isAdjacentRoom
-                            : Boolean(activeTargetObj);
-                      const equipLockedThisTurn =
-                        isPassiveEquip && equippedTurnNumber === publicGame.turnNumber;
-                      const noEquippedTargetForAudit =
-                        card.effectId === 'ev-locker-audit' &&
-                        !publicGame.players.some(
-                          (p) => p.alive && p.playerId !== selfPlayerId && p.equipped.length > 0,
-                        );
-                      const invalidCorridorTarget =
-                        card.effectId === 'ev-power-flicker' && cardDestinationLoc === 'corridor';
-                      const disabled =
-                        pendingAction ||
-                        equipLockedThisTurn ||
-                        noEquippedTargetForAudit ||
-                        invalidCorridorTarget ||
-                        (isInv && (!activeTargetObj || !canInvestigateTarget)) ||
-                        (needsTarget && !isInv && (!activeTargetObj || !targetWithinRange));
-
-                      const handlePlayCard = () => {
-                        if (isInv && activeTargetObj) {
-                          onAction({
-                            type: 'INVESTIGATE_CARD',
-                            cardId: card.id,
-                            targetPlayerId: activeTargetObj.playerId,
-                          });
-                          return;
-                        }
-                        if (isPassiveEquip) {
-                          setEquippedTurnNumber(publicGame.turnNumber);
-                          onAction({ type: 'EQUIP_CARD', cardId: card.id });
-                          return;
-                        }
-                        if (isEquip) {
-                          onAction({
-                            type: 'USE_EQUIPMENT',
-                            cardId: card.id,
-                            targetPlayerId: isSelfHealFallbackCard
-                              ? isSameRoom
-                                ? activeTargetObj?.playerId
-                                : undefined
-                              : needsTarget
-                                ? activeTargetObj?.playerId
-                                : undefined,
-                          });
-                          return;
-                        }
-                        const auditTarget =
-                          card.effectId === 'ev-locker-audit'
-                            ? activeTargetObj && activeTargetObj.equipped.length > 0
-                              ? activeTargetObj.playerId
-                              : publicGame.players.find(
-                                  (p) =>
-                                    p.alive && p.playerId !== selfPlayerId && p.equipped.length > 0,
-                                )?.playerId
-                            : isSelfHealFallbackCard
-                              ? isSameRoom
-                                ? activeTargetObj?.playerId
-                                : undefined
-                              : needsTarget
-                                ? activeTargetObj?.playerId
-                                : undefined;
-                        onAction({
-                          type: 'PLAY_EVENT',
-                          cardId: card.id,
-                          targetPlayerId: auditTarget,
-                          targetLocation:
-                            card.targetMode === 'location' ? cardDestinationLoc : undefined,
-                        });
-                      };
-
-                      return (
-                        <button
-                          key={`${card.id}-${cardIdx}`}
-                          type="button"
-                          data-testid={`bg-use-card-${card.id}`}
-                          disabled={disabled}
-                          onClick={handlePlayCard}
-                          className={`flex flex-col justify-between rounded-xl border p-2.5 text-left transition disabled:opacity-45 motion-reduce:transition-none ${
-                            isInv
-                              ? 'border-amber-500/50 bg-amber-950/30 hover:border-amber-400 hover:bg-amber-950/55'
-                              : isEquip
-                                ? 'border-cyan-500/50 bg-cyan-950/25 hover:border-cyan-400 hover:bg-cyan-950/50'
-                                : 'border-rose-500/50 bg-rose-950/25 hover:border-rose-400 hover:bg-rose-950/50'
-                          }`}
-                        >
-                          <div>
-                            <div className="flex items-center justify-between gap-1 font-bold text-amber-100">
-                              <span className="truncate">{card.title}</span>
-                              <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[9px] uppercase text-slate-200">
-                                {isInv
-                                  ? '🔎 Soi'
-                                  : isPassiveEquip
-                                    ? '🎒 Đeo (Free)'
-                                    : isEquip
-                                      ? '🧪 Tiêu hao'
-                                      : '⚡ Sự kiện'}
-                              </span>
-                            </div>
-                            {card.conditionText && (
-                              <div className="mt-1 inline-block rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-400/30">
-                                ĐK: {card.conditionText}
-                              </div>
-                            )}
-                            <p className="mt-1 text-[10px] leading-snug text-slate-300">
-                              {card.summary}
-                            </p>
-                          </div>
-                          {isInv && activeTargetObj && (
-                            <div className="mt-1.5 text-[10px] font-semibold text-amber-300">
-                              {canInvestigateTarget
-                                ? `→ Soi lên ${activeTargetObj.displayName}`
-                                : '→ Ngoài tầm soi (cần đứng kề / Phát thanh)'}
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Hộp xác nhận trước khi Lật vai công khai */}
-          {confirmRevealOpen && (
-            <div
-              data-testid="bg-reveal-confirm-modal"
-              className="rounded-xl border border-orange-400/70 bg-orange-950/75 p-2.5 text-[11px] text-orange-100 shadow-lg"
-            >
-              <div className="font-bold text-amber-200">
-                ⚠️ Xác nhận Lật vai công khai vĩnh viễn?
-              </div>
-              <p className="mt-0.5 text-orange-200/90">
-                Mọi sinh viên tại bàn sẽ thấy nhân vật &amp; phe thật của bạn ngay lập tức, kích
-                hoạt thưởng lật vai và mở khóa Kỹ năng riêng (không làm kết thúc lượt).
-                {!hiddenOnScreen && roleDef ? ` Thưởng riêng: ${roleDef.revealBenefit}` : ''}
-              </p>
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  data-testid="bg-confirm-reveal-btn"
-                  disabled={pendingAction}
-                  onClick={() => {
-                    setConfirmRevealOpen(false);
-                    onAction({ type: 'REVEAL_ROLE' });
-                  }}
-                  className="rounded-lg bg-orange-600 px-3 py-1 font-bold text-white hover:bg-orange-500"
-                >
-                  Xác nhận Lật vai
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmRevealOpen(false)}
-                  className="rounded-lg bg-slate-800 px-3 py-1 font-semibold text-slate-200 hover:bg-slate-700"
-                >
-                  Hủy (giữ ẩn danh)
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Lật vai / Kết thúc lượt */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-2">
-            {!privateView?.revealed ? (
-              <button
-                type="button"
-                data-testid="bg-reveal-role-btn"
-                disabled={pendingAction}
-                onClick={() => setConfirmRevealOpen(true)}
-                className="rounded-lg border border-orange-500/60 bg-orange-950/60 px-2.5 py-1.5 font-semibold text-orange-200 hover:bg-orange-900/75 disabled:opacity-45"
-              >
-                📢 Lật vai (Mở kỹ năng &amp; Thưởng)
-              </button>
-            ) : (
-              <span className="text-[11px] font-semibold text-emerald-300">
-                ✅ Đã công khai danh tính
-              </span>
-            )}
 
             <button
               type="button"
               data-testid="bg-end-turn-btn"
-              disabled={pendingAction}
               onClick={() => onAction({ type: 'END_TURN' })}
-              className="rounded-xl bg-amber-400 px-4 py-1.5 font-extrabold text-slate-950 shadow hover:bg-amber-300 disabled:opacity-45"
+              className="px-5 py-3 min-h-[46px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm sm:text-base font-black shadow transition cursor-pointer"
             >
-              ⏭️ Kết thúc lượt
+              ✔️ Kết thúc lượt
             </button>
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }
+
+export default ActionPanel;
