@@ -2012,6 +2012,19 @@ export class BoardGameRoom {
       match.status === 'PLAYING' || match.status === 'FINISHED'
         ? this.loadEngineState(match, rows)
         : null;
+    if (match.status === 'PLAYING' && engineState?.finished) {
+      const nowMs = Date.now();
+      this.sql.exec('UPDATE match_players SET ready = 0');
+      this.sql.exec(
+        `UPDATE matches
+         SET status = 'FINISHED', revision = revision + 1, turn_deadline_ms = NULL, updated_at_ms = ?, game_state_json = ?
+         WHERE match_id = ?`,
+        nowMs,
+        JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
+        match.match_id,
+      );
+    }
+    const effectiveMatch = this.getMatchRow() ?? match;
     const publicGame: BoardGamePublicGameView | null = engineState
       ? getPublicGameView(engineState)
       : null;
@@ -2022,15 +2035,15 @@ export class BoardGameRoom {
 
     return {
       type: 'BG_STATE_SYNC',
-      matchId: match.match_id,
-      inviteCode: match.invite_code,
-      tableId: match.table_id,
-      status: match.status,
-      revision: match.revision,
-      hostPlayerId: match.host_player_id,
+      matchId: effectiveMatch.match_id,
+      inviteCode: effectiveMatch.invite_code,
+      tableId: effectiveMatch.table_id,
+      status: effectiveMatch.status,
+      revision: effectiveMatch.revision,
+      hostPlayerId: effectiveMatch.host_player_id,
       players,
       spectatorCount: spectators.length,
-      turnDeadlineMs: match.turn_deadline_ms,
+      turnDeadlineMs: effectiveMatch.turn_deadline_ms,
       publicGame,
       privateView,
     };

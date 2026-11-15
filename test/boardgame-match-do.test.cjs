@@ -1,12 +1,14 @@
 /**
  * test/boardgame-match-do.test.cjs — Kiểm thử Durable Object `BoardGameRoom`
- * tích hợp Full Gameplay Engine "Bóng Đêm KTX — Secrets After Dark" (BG3):
- *  (1) Ván 4 người + 1 khán giả chơi tới `FINISHED` trên WS + SQLite DO thật;
- *      kiểm toán TỪNG WS frame đảm bảo P0 isolation (khán giả `privateView === null`,
- *      tuyệt đối không lộ vai chưa lật / tay bài / ghi chú / token / MSSV sang người khác)
- *  (2) Idempotency theo `requestId` (`processed_requests`) + `STALE_REVISION` resync
- *  (3) Bàn 8 người với `alarm()` timeout auto-turn + Hibernation `/__bg_hibernate`
- *      + F5/reconnect khôi phục nguyên vẹn vai bí mật & bài trên tay + Chơi ván mới
+ * tích hợp Full Gameplay Engine v3 "Bóng Đêm KTX v3 — Hidden Role, Investigation & Survival":
+ *  (1) Ván 4 người + 1 khán giả chơi tới `FINISHED` trên WS + SQLite DO thật + Audit P0 từng WS frame + Rematch
+ *  (2) Hai bàn song song độc lập (`table-1` & `table-2`), Idempotency (`processed_requests`),
+ *      `STALE_REVISION`, từ chối sai lượt/sai pha/khán giả, và duplicate-tab `4001` fence
+ *  (3) Ngân sách 1 đồng hồ mỗi lượt (`40s`): chuyển pha Move->Location->Main / Equip / Reveal KHÔNG reset timer,
+ *      chỉ reset khi sang lượt mới (`turnNumber` tăng)
+ *  (4) Bàn 8 người + Ngắt kết nối giữa pha (`LOCATION_ACTION` / `MAIN_ACTION`) + `alarm()` rút ngắn +
+ *      Hibernation `/__bg_hibernate` + F5 reconnect giữ nguyên vai/tay bài/manh mối
+ *  (5) Tương thích dữ liệu SQLite cũ v1/v2 (cả ván đang dở lẫn ván đã FINISHED — không xóa dữ liệu)
  */
 
 const test = require('node:test');
@@ -17,14 +19,17 @@ const {
 } = require('./ws-shim/boardgame-do-harness.cjs');
 const { listLegalMovesForLocation } = require('../features/boardgame/domain/index.ts');
 
-function assertPublicGameNoV1OrSecretLeaks(pub, status) {
-  assert.equal(pub.rulesetVersion, 2);
+function assertPublicGameV3NoLeaks(pub, status) {
+  assert.equal(pub.rulesetVersion, 3);
   const raw = JSON.stringify(pub);
   const alwaysForbidden = [
     '"secretSabotageLocation":',
     '"signalProgress":',
     '"mistProgress":',
     '"maxTrackValue":',
+    '"protegePlayerId":',
+    '"privateClues":',
+    '"privateNotes":',
   ];
   if (status === 'PLAYING') {
     alwaysForbidden.push('"maxHp":', '"hp":');
@@ -42,6 +47,7 @@ async function openBgClient(wsBaseUrl, params) {
   const inbox = [];
   const waiters = [];
   let latestSync = null;
+  let closedEvent = null;
 
   ws.on('message', (raw) => {
     const rawStr = raw.toString();
@@ -59,6 +65,10 @@ async function openBgClient(wsBaseUrl, params) {
         w.resolve(msg);
       }
     }
+  });
+
+  ws.on('close', (code, reason) => {
+    closedEvent = { code, reason: reason ? reason.toString() : '' };
   });
 
   await new Promise((resolve, reject) => {
@@ -99,16 +109,64 @@ async function openBgClient(wsBaseUrl, params) {
     send,
     close,
     getLatestSync: () => latestSync,
+    getClosedEvent: () => closedEvent,
   };
 }
 
-test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
+async function setupStartedMatch(srv, tableId, names, extraStartPayload = {}) {
+  const createRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tableId,
+      hostName: names[0],
+      turnTimeoutMs: extraStartPayload.turnTimeoutMs,
+    }),
+  });
+  assert.equal(createRes.status, 201);
+  const { matchId, inviteCode } = await createRes.json();
+
+  const clients = [];
+  for (let i = 0; i < names.length; i++) {
+    const c = await openBgClient(srv.wsBaseUrl, { matchId });
+    c.send({
+      type: 'BG_JOIN',
+      matchId,
+      inviteCode,
+      displayName: names[i],
+    });
+    const auth = await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
+    clients.push({ c, auth, playerId: auth.playerId });
+  }
+
+  for (let i = 1; i < clients.length; i++) {
+    const lenBefore = clients[0].c.inbox.length;
+    clients[i].c.send({ type: 'BG_SET_READY', ready: true, requestId: `rdy-${matchId}-${i}` });
+    await clients[0].c.nextMsg((m) => m.type === 'BG_STATE_SYNC', 4000, lenBefore);
+  }
+
+  clients[0].c.send({
+    type: 'BG_START_MATCH',
+    requestId: `start-${matchId}`,
+    ...extraStartPayload,
+  });
+  for (const entry of clients) {
+    await entry.c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING');
+  }
+
+  return { matchId, inviteCode, clients };
+}
+
+test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) => {
   const srv = await startStandaloneBoardGameTestServer(0);
   t.after(async () => {
     await srv.close();
   });
 
-  await t.test('(1) Full 4p + Spectator match to FINISHED + per-frame P0 secret & zero-MSSV audit', async () => {
+  await t.test('(1) Full 4p + Spectator v3 match to FINISHED + per-frame P0 & zero-MSSV audit + rematch', async () => {
+    const rawNames = ['Minh 20221111', 'Lan 20222222', 'Khánh 20223333', 'Hải 20224444'];
+    const mssvList = ['20221111', '20222222', '20223333', '20224444'];
+
     const createRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -118,24 +176,13 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
     const { matchId, inviteCode } = await createRes.json();
 
     const players = [];
-    const tokens = [];
-    const rawNames = ['Minh 20221111', 'Lan 20222222', 'Khánh 20223333', 'Hải 20224444'];
-    const mssvList = ['20221111', '20222222', '20223333', '20224444', '20229999'];
-
     for (let i = 0; i < 4; i++) {
       const c = await openBgClient(srv.wsBaseUrl, { matchId });
-      c.send({
-        type: 'BG_JOIN',
-        matchId,
-        inviteCode,
-        displayName: rawNames[i],
-      });
+      c.send({ type: 'BG_JOIN', matchId, inviteCode, displayName: rawNames[i] });
       const auth = await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
-      tokens.push(auth.reconnectToken);
       players.push({ c, auth, playerId: auth.playerId });
     }
 
-    // Khán giả tham gia chỉ xem
     const spectator = await openBgClient(srv.wsBaseUrl, { matchId });
     spectator.send({
       type: 'BG_JOIN',
@@ -147,14 +194,13 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
     const specAuth = await spectator.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
     assert.equal(specAuth.isSpectator, true);
 
-    // 3 người không phải host bấm sẵn sàng -> Host bắt đầu
     for (let i = 1; i < 4; i++) {
       const lenBefore = players[0].c.inbox.length;
       players[i].c.send({ type: 'BG_SET_READY', ready: true, requestId: `rdy-${i}` });
       await players[0].c.nextMsg((m) => m.type === 'BG_STATE_SYNC', 4000, lenBefore);
     }
 
-    players[0].c.send({ type: 'BG_START_MATCH', requestId: 'start-4p' });
+    players[0].c.send({ type: 'BG_START_MATCH', requestId: 'start-v3-4p' });
     for (const p of players) {
       await p.c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING');
     }
@@ -162,12 +208,13 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
       (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
     );
     assert.equal(specStartSync.privateView, null);
+    assert.equal(specStartSync.publicGame.rulesetVersion, 3);
 
-    // Khán giả thử gửi lệnh chơi -> SPECTATOR_READ_ONLY
+    // Khán giả gửi hành động -> SPECTATOR_READ_ONLY
     const specLenBefore = spectator.inbox.length;
     spectator.send({
       type: 'BG_GAME_ACTION',
-      requestId: 'spec-cheat',
+      requestId: 'spec-cheat-v3',
       expectedRevision: specStartSync.revision,
       action: { type: 'END_TURN' },
     });
@@ -178,18 +225,20 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
     );
     assert.ok(specErr);
 
-    // Ghi nhận vai/bài thật khởi đầu của từng người từ server DO SQLite để audit rò rỉ frame
+    // Lấy role thật ban đầu từ DO SQLite để audit zero-leak trên từng frame
     const container = srv.containers.get(matchId);
     const initialEngine = JSON.parse(
       container.ctx.storage.sql.exec('SELECT game_state_json FROM matches').one().game_state_json,
     ).engineState;
     const roleById = new Map(initialEngine.players.map((ep) => [ep.playerId, ep.roleId]));
 
-    // Chơi ván v2 hợp lệ qua WS cho tới khi FINISHED
+    // Chơi ván v3 thực tế qua WS cho tới khi FINISHED (gặp nhau tại Hành Lang B7 để điều tra & giao tranh)
     let actionSeq = 0;
     let safety = 0;
-    let plantedRound = null;
-    while (players[0].c.getLatestSync().status === 'PLAYING' && safety < 180) {
+    let exercisedInvestigate = false;
+    let exercisedReveal = false;
+
+    while (players[0].c.getLatestSync().status === 'PLAYING' && safety < 240) {
       safety += 1;
       const latest = players[0].c.getLatestSync();
       const pub = latest.publicGame;
@@ -199,46 +248,61 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
       assert.ok(actorEntry, 'Active player must exist');
       const actorSync = actorEntry.c.getLatestSync();
       const actorPub = actorSync.publicGame.players.find((x) => x.playerId === actorEntry.playerId);
+      const priv = actorSync.privateView;
 
       let act;
-      if (pub.turnPhase === 'MOVE') {
-        const adj = listLegalMovesForLocation(actorPub.location);
-        const preferred =
-          actorSync.privateView?.secretSabotageLocation &&
-          adj.includes(actorSync.privateView.secretSabotageLocation)
-            ? actorSync.privateView.secretSabotageLocation
-            : adj.find((id) => id === 'corridor' || id === 'radio' || id === 'breaker') ?? adj[0];
-        act = { type: 'MOVE', location: preferred };
-      } else if (pub.turnPhase === 'DRAW_OR_EXPLORE') {
-        if (
-          actorSync.privateView?.secretSabotageLocation === actorPub.location &&
-          !pub.sabotageArmed &&
-          plantedRound === null &&
-          pub.blackoutLocation !== actorPub.location
-        ) {
-          plantedRound = pub.round;
-          act = { type: 'INTERACT_LOC', mode: 'sabotage' };
-        } else if (pub.blackoutLocation !== actorPub.location) {
-          act = { type: 'INTERACT_LOC', mode: 'scan' };
+      if (pub.turnPhase === 'MOVE_OR_STAY') {
+        const legalAdj = listLegalMovesForLocation(actorPub.location);
+        if (actorPub.location === 'lobby') {
+          act = { type: 'STAY' };
+        } else if (legalAdj.includes('lobby')) {
+          act = { type: 'MOVE', location: 'lobby' };
         } else {
-          act = { type: 'DRAW_CARD', deck: 'clue' };
+          act = { type: 'MOVE', location: legalAdj.includes('corridor') ? 'corridor' : legalAdj[0] };
         }
-      } else if (pub.turnPhase === 'TACTICAL_ACTION') {
-        if (
-          actorSync.privateView?.faction === 'mist-order' &&
-          pub.sabotageArmed &&
-          plantedRound !== null &&
-          pub.round > plantedRound &&
-          actorPub.location === actorSync.privateView.secretSabotageLocation
-        ) {
-          act = { type: 'DETONATE_PLOT' };
+      } else if (pub.turnPhase === 'LOCATION_ACTION') {
+        if (actorPub.location === 'court') {
+          act = { type: 'EXPLORE_LOC' };
+        } else {
+          act = { type: 'EXPLORE_LOC' };
+        }
+      } else if (pub.turnPhase === 'MAIN_ACTION') {
+        const sameRoomEnemy = actorSync.publicGame.players.find(
+          (p) =>
+            p.alive &&
+            p.playerId !== actorEntry.playerId &&
+            p.location === actorPub.location &&
+            (!p.revealedFaction || p.revealedFaction !== priv.faction),
+        );
+        const passiveEquip = priv.hand.find((c) => c.deck === 'equipment' && !c.isConsumable);
+        const invCard = priv.hand.find((c) => c.deck === 'investigation');
+        const otherAlive = actorSync.publicGame.players.find(
+          (p) => p.alive && p.playerId !== actorEntry.playerId,
+        );
+
+        if (passiveEquip && actorPub.equipped.length === 0) {
+          act = { type: 'EQUIP_CARD', cardId: passiveEquip.id };
+        } else if (!priv.revealed && !exercisedReveal && pub.round >= 2) {
+          exercisedReveal = true;
+          act = { type: 'REVEAL_ROLE' };
+        } else if (!exercisedInvestigate && invCard && sameRoomEnemy) {
+          exercisedInvestigate = true;
+          act = {
+            type: 'INVESTIGATE_CARD',
+            cardId: invCard.id,
+            targetPlayerId: sameRoomEnemy.playerId,
+          };
+        } else if (sameRoomEnemy) {
+          act = { type: 'ATTACK', targetPlayerId: sameRoomEnemy.playerId };
+        } else if (otherAlive) {
+          act = { type: 'END_TURN' };
         } else {
           act = { type: 'END_TURN' };
         }
       }
 
       actionSeq += 1;
-      const reqId = `act-${actionSeq}`;
+      const reqId = `v3-act-${actionSeq}`;
       const lenBefore = actorEntry.c.inbox.length;
       actorEntry.c.send({
         type: 'BG_GAME_ACTION',
@@ -253,7 +317,6 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
       );
       assert.equal(ack.ok, true, `Action ${JSON.stringify(act)} failed: ${ack.reason}`);
 
-      // Đợi cả 4 người & khán giả đồng bộ revision mới nhất
       await Promise.all([
         ...players.map((p) =>
           p.c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.revision >= ack.revision),
@@ -264,30 +327,29 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
     }
 
     const finalSync = players[0].c.getLatestSync();
-    assert.equal(finalSync.status, 'FINISHED', 'Ván 4 người phải đạt trạng thái FINISHED');
+    assert.equal(finalSync.status, 'FINISHED', 'Ván 4 người v3 phải kết thúc FINISHED');
     assert.ok(finalSync.publicGame.finalReveal && finalSync.publicGame.finalReveal.length === 4);
+    assert.equal(exercisedInvestigate, true);
+    assert.equal(exercisedReveal, true);
 
-    // Audit TOÀN BỘ WS frame nhận được của cả 4 người chơi & khán giả:
-    // - Zero MSSV trong tất cả frame
-    // - Khán giả luôn có privateView === null
-    // - Trong khi status === 'PLAYING', không frame nào gửi tới player i chứa roleId chưa lật của player j != i
+    // Audit TOÀN BỘ WS frames của cả 4 người & khán giả
     for (const msg of spectator.inbox) {
-      for (const mssv of mssvList) {
+      for (const mssv of [...mssvList, '20229999']) {
         assert.equal(msg.__raw.includes(mssv), false, `Spectator leaked MSSV ${mssv}`);
       }
       if (msg.type === 'BG_STATE_SYNC') {
-        assert.equal(msg.privateView, null, 'Khán giả không bao giờ nhận privateView');
+        assert.equal(msg.privateView, null);
         if (msg.publicGame) {
-          assertPublicGameNoV1OrSecretLeaks(msg.publicGame, msg.status);
-        }
-        if (msg.status === 'PLAYING' && msg.publicGame) {
-          for (const pp of msg.publicGame.players) {
-            if (!pp.revealedRoleId) {
-              assert.equal(
-                msg.__raw.includes(roleById.get(pp.playerId)),
-                false,
-                `Spectator frame during PLAYING leaked hidden role ${roleById.get(pp.playerId)}`,
-              );
+          assertPublicGameV3NoLeaks(msg.publicGame, msg.status);
+          if (msg.status === 'PLAYING') {
+            for (const pp of msg.publicGame.players) {
+              if (!pp.revealedRoleId) {
+                assert.equal(
+                  msg.__raw.includes(roleById.get(pp.playerId)),
+                  false,
+                  `Spectator leaked hidden role ${roleById.get(pp.playerId)}`,
+                );
+              }
             }
           }
         }
@@ -296,16 +358,12 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
 
     for (let i = 0; i < players.length; i++) {
       for (const msg of players[i].c.inbox) {
-        for (const mssv of mssvList) {
-          assert.equal(msg.__raw.includes(mssv), false, `Player ${i} frame leaked MSSV ${mssv}`);
+        for (const mssv of [...mssvList, '20229999']) {
+          assert.equal(msg.__raw.includes(mssv), false, `Player ${i} leaked MSSV ${mssv}`);
         }
         if (msg.type === 'BG_STATE_SYNC') {
-          if (msg.publicGame) {
-            assertPublicGameNoV1OrSecretLeaks(msg.publicGame, msg.status);
-          }
-          if (msg.privateView) {
-            assert.equal(msg.privateView.playerId, players[i].playerId);
-          }
+          if (msg.publicGame) assertPublicGameV3NoLeaks(msg.publicGame, msg.status);
+          if (msg.privateView) assert.equal(msg.privateView.playerId, players[i].playerId);
           if (msg.status === 'PLAYING' && msg.publicGame) {
             for (let j = 0; j < players.length; j++) {
               if (j === i) continue;
@@ -323,274 +381,365 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
       }
     }
 
-    // Kiểm tra luồng Chơi lại ("Sẵn sàng ván mới": FINISHED -> WAITING -> READY_CHECK -> PLAYING)
+    // Luồng Sẵn sàng ván mới: FINISHED -> WAITING
     const beforeRematchLen = players[0].c.inbox.length;
-    players[0].c.send({ type: 'BG_SET_READY', ready: true, requestId: 'rematch-0' });
-    const waitingAfterFinish = await players[0].c.nextMsg(
+    players[0].c.send({ type: 'BG_SET_READY', ready: true, requestId: 'rematch-v3-0' });
+    const waitingSync = await players[0].c.nextMsg(
       (m) => m.type === 'BG_STATE_SYNC' && m.status === 'WAITING',
       4000,
       beforeRematchLen,
     );
-    assert.equal(waitingAfterFinish.publicGame, null);
+    assert.equal(waitingSync.publicGame, null);
 
     spectator.close();
     players.forEach(({ c }) => c.close());
   });
 
-  await t.test('(2) Idempotency (processed_requests) & STALE_REVISION resync', async () => {
-    const createRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tableId: 'table-2', hostName: 'Chủ Bàn' }),
-    });
-    const { matchId, inviteCode } = await createRes.json();
+  await t.test('(2) 2 Simultaneous matches + Idempotency + STALE_REVISION + Invalid Action + Duplicate Tab 4001', async () => {
+    const mA = await setupStartedMatch(srv, 'table-1', ['A1', 'A2', 'A3', 'A4']);
+    const mB = await setupStartedMatch(srv, 'table-2', ['B1', 'B2', 'B3', 'B4']);
 
-    const clients = [];
-    for (let i = 0; i < 4; i++) {
-      const c = await openBgClient(srv.wsBaseUrl, { matchId });
-      c.send({ type: 'BG_JOIN', matchId, inviteCode, displayName: `SV${i}` });
-      await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
-      clients.push(c);
-    }
-    for (let i = 1; i < 4; i++) {
-      const idxBefore = clients[0].inbox.length;
-      clients[i].send({ type: 'BG_SET_READY', ready: true, requestId: `r2-${i}` });
-      await clients[0].nextMsg((m) => m.type === 'BG_STATE_SYNC', 4000, idxBefore);
-    }
-    clients[0].send({ type: 'BG_START_MATCH', requestId: 'start-idem' });
-    const startSync = await clients[0].nextMsg(
-      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
-    );
-    const revAtStart = startSync.revision;
-    const startActor = startSync.publicGame.players.find(
-      (p) => p.playerId === startSync.publicGame.activePlayerId,
-    );
-    const adjMoveDest = listLegalMovesForLocation(startActor.location)[0];
+    const revA0 = mA.clients[0].c.getLatestSync().revision;
+    const revB0 = mB.clients[0].c.getLatestSync().revision;
 
-    // Gửi trùng lặp 1 requestId hai lần liên tiếp (không delay -> kiểm chứng chạy trước rate limit!)
-    const lenBefore = clients[0].inbox.length;
-    const payload = {
+    // 1. Out-of-turn action ở Bàn A -> NOT_YOUR_TURN
+    const wrongIdx = mA.clients.findIndex((x) => x.playerId !== mA.clients[0].c.getLatestSync().publicGame.activePlayerId);
+    const wrongPlayer = mA.clients[wrongIdx];
+    const wrongLen = wrongPlayer.c.inbox.length;
+    wrongPlayer.c.send({
       type: 'BG_GAME_ACTION',
-      requestId: 'idem-move-1',
-      expectedRevision: revAtStart,
-      action: { type: 'MOVE', location: adjMoveDest },
-    };
-    clients[0].send(payload);
-    clients[0].send(payload);
-
-    const ack1 = await clients[0].nextMsg(
-      (m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'idem-move-1',
+      requestId: 'not-turn-1',
+      expectedRevision: revA0,
+      action: { type: 'STAY' },
+    });
+    const notTurnErr = await wrongPlayer.c.nextMsg(
+      (m) => m.type === 'BG_ERROR' && m.code === 'NOT_YOUR_TURN',
       4000,
-      lenBefore,
+      wrongLen,
+    );
+    assert.ok(notTurnErr);
+
+    // 2. Sai pha (`EXPLORE_LOC` khi đang `MOVE_OR_STAY`) -> INVALID_ACTION
+    const activeA = mA.clients.find((x) => x.playerId === mA.clients[0].c.getLatestSync().publicGame.activePlayerId);
+    const invLen = activeA.c.inbox.length;
+    activeA.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'bad-phase-1',
+      expectedRevision: revA0,
+      action: { type: 'EXPLORE_LOC' },
+    });
+    const invErr = await activeA.c.nextMsg(
+      (m) => m.type === 'BG_ERROR' && m.code === 'INVALID_ACTION',
+      4000,
+      invLen,
+    );
+    assert.ok(invErr);
+
+    await delay(35);
+    // 3. Idempotency: gửi 2 lần liên tiếp cùng requestId
+    const actorPubA = mA.clients[0].c.getLatestSync().publicGame.players.find((p) => p.playerId === activeA.playerId);
+    const moveDest = listLegalMovesForLocation(actorPubA.location)[0];
+    const idemLen = activeA.c.inbox.length;
+    const movePayload = {
+      type: 'BG_GAME_ACTION',
+      requestId: 'idem-v3-move',
+      expectedRevision: revA0,
+      action: { type: 'MOVE', location: moveDest },
+    };
+    activeA.c.send(movePayload);
+    activeA.c.send(movePayload);
+    const ack1 = await activeA.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'idem-v3-move', 4000, idemLen);
+    const ack2 = await activeA.c.nextMsg(
+      (m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'idem-v3-move',
+      4000,
+      activeA.c.inbox.indexOf(ack1) + 1,
     );
     assert.equal(ack1.ok, true);
-    assert.equal(ack1.revision, revAtStart + 1);
+    assert.equal(ack2.revision, ack1.revision);
+    assert.equal(ack1.revision, revA0 + 1);
 
-    const ack1Idx = clients[0].inbox.indexOf(ack1);
-    const ack2 = await clients[0].nextMsg(
-      (m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'idem-move-1',
-      4000,
-      ack1Idx + 1,
-    );
-    assert.equal(ack2.ok, true);
-    assert.equal(ack2.revision, ack1.revision, 'Retry trùng requestId phải trả đúng revision cũ, không tăng thêm');
-
-    const afterSync = clients[0].getLatestSync();
-    assert.equal(afterSync.revision, revAtStart + 1);
-    assert.equal(afterSync.publicGame.turnPhase, 'DRAW_OR_EXPLORE');
+    // Bàn B hoàn toàn cô lập, revision vẫn nguyên vẹn revB0!
+    assert.equal(mB.clients[0].c.getLatestSync().revision, revB0);
 
     await delay(30);
-    // Gửi lệnh với expectedRevision lỗi thời (1) -> nhận STALE_REVISION + resync
-    const staleLen = clients[0].inbox.length;
-    clients[0].send({
+    // 4. STALE_REVISION check
+    const staleLen = activeA.c.inbox.length;
+    activeA.c.send({
       type: 'BG_GAME_ACTION',
-      requestId: 'stale-req-1',
+      requestId: 'stale-v3',
       expectedRevision: 1,
-      action: { type: 'DRAW_CARD', deck: 'event' },
+      action: { type: 'EXPLORE_LOC' },
     });
-    const staleErr = await clients[0].nextMsg(
-      (m) => m.type === 'BG_ERROR' && m.code === 'STALE_REVISION',
-      4000,
-      staleLen,
-    );
-    assert.equal(staleErr.revision, revAtStart + 1);
+    const staleErr = await activeA.c.nextMsg((m) => m.type === 'BG_ERROR' && m.code === 'STALE_REVISION', 4000, staleLen);
+    assert.equal(staleErr.revision, ack1.revision);
 
-    clients.forEach((c) => c.close());
+    // 5. Duplicate tab supersede fence (4001)
+    const dupClient = await openBgClient(srv.wsBaseUrl, { matchId: mA.matchId });
+    dupClient.send({
+      type: 'BG_JOIN',
+      matchId: mA.matchId,
+      displayName: 'A1 Tab 2',
+      reconnectToken: mA.clients[0].auth.reconnectToken,
+    });
+    const dupSync = await dupClient.nextMsg((m) => m.type === 'BG_STATE_SYNC');
+    assert.equal(dupSync.revision, ack1.revision + 1);
+    await delay(50);
+    assert.equal(mA.clients[0].c.getClosedEvent()?.code, 4001);
+
+    dupClient.close();
+    mA.clients.forEach(({ c }, idx) => {
+      if (idx !== 0) c.close();
+    });
+    mB.clients.forEach(({ c }) => c.close());
   });
 
-  await t.test('(3) 8-player alarm() timeout auto-turn + mid-game hibernation & reconnect preserves role/hand', async () => {
-    const createRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tableId: 'table-1', hostName: 'Bàn 8 Người', turnTimeoutMs: 1500 }),
+  await t.test('(3) Single per-turn 40s timer budget: intra-turn phases & free actions never reset turnDeadlineMs', async () => {
+    const m = await setupStartedMatch(srv, 'table-1', ['T1', 'T2', 'T3', 'T4'], {
+      turnTimeoutMs: 40_000,
     });
-    const { matchId, inviteCode } = await createRes.json();
+    const s0 = m.clients[0].c.getLatestSync();
+    const initialDeadline = s0.turnDeadlineMs;
+    assert.ok(typeof initialDeadline === 'number');
 
-    const clients = [];
-    const auths = [];
-    for (let i = 0; i < 8; i++) {
-      const c = await openBgClient(srv.wsBaseUrl, { matchId });
-      c.send({ type: 'BG_JOIN', matchId, inviteCode, displayName: `P${i + 1}` });
-      const auth = await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
-      clients.push(c);
-      auths.push(auth);
-    }
+    const actor = m.clients.find((x) => x.playerId === s0.publicGame.activePlayerId);
+    let rev = s0.revision;
 
-    for (let i = 1; i < 8; i++) {
-      const idxBefore = clients[0].inbox.length;
-      clients[i].send({ type: 'BG_SET_READY', ready: true, requestId: `r8-${i}` });
-      await clients[0].nextMsg((m) => m.type === 'BG_STATE_SYNC', 4000, idxBefore);
-    }
+    // 1. MOVE_OR_STAY -> LOCATION_ACTION: timer KHÔNG được reset
+    await delay(25);
+    actor.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'tm-1',
+      expectedRevision: rev,
+      action: { type: 'STAY' },
+    });
+    const s1 = await actor.c.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === rev + 1);
+    rev = s1.revision;
+    assert.equal(s1.publicGame.turnPhase, 'LOCATION_ACTION');
+    assert.equal(s1.turnDeadlineMs, initialDeadline, 'STAY phải giữ nguyên turnDeadlineMs trong cùng lượt');
 
-    clients[0].send({ type: 'BG_START_MATCH', requestId: 'start-8p', turnTimeoutMs: 1500 });
-    const startSync0 = await clients[0].nextMsg(
-      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
-    );
-    const startSync3 = await clients[3].nextMsg(
-      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
-    );
+    // 2. LOCATION_ACTION -> MAIN_ACTION: timer VẪN giữ nguyên
+    await delay(25);
+    actor.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'tm-2',
+      expectedRevision: rev,
+      action: { type: 'EXPLORE_LOC' },
+    });
+    const s2 = await actor.c.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === rev + 1);
+    rev = s2.revision;
+    assert.equal(s2.publicGame.turnPhase, 'MAIN_ACTION');
+    assert.equal(s2.turnDeadlineMs, initialDeadline, 'EXPLORE_LOC phải giữ nguyên turnDeadlineMs');
+
+    // 3. Free REVEAL_ROLE trong MAIN_ACTION: vẫn cùng lượt nên KHÔNG reset timer!
+    await delay(25);
+    actor.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'tm-3',
+      expectedRevision: rev,
+      action: { type: 'REVEAL_ROLE' },
+    });
+    const s3 = await actor.c.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === rev + 1);
+    rev = s3.revision;
+    assert.equal(s3.turnDeadlineMs, initialDeadline, 'REVEAL_ROLE không được gia hạn đồng hồ lượt');
+
+    // 4. END_TURN chuyển sang người kế -> lúc này turnDeadlineMs MỚI được làm mới!
+    await delay(25);
+    actor.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'tm-4',
+      expectedRevision: rev,
+      action: { type: 'END_TURN' },
+    });
+    const s4 = await actor.c.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === rev + 1);
+    assert.equal(s4.publicGame.turnNumber, 2);
+    assert.equal(s4.publicGame.turnPhase, 'MOVE_OR_STAY');
+    assert.ok(s4.turnDeadlineMs > initialDeadline, 'Sang lượt mới phải reset turnDeadlineMs cho người kế');
+
+    m.clients.forEach(({ c }) => c.close());
+  });
+
+  await t.test('(4) 8-player disconnect mid-phase + shortened alarm() neutral timeout + hibernation & reconnect', async () => {
+    const names8 = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'];
+    const m = await setupStartedMatch(srv, 'table-2', names8, { turnTimeoutMs: 1500 });
+
+    const startSync0 = m.clients[0].c.getLatestSync();
+    const startSync3 = m.clients[3].c.getLatestSync();
     assert.equal(startSync0.publicGame.players.length, 8);
+    assert.equal(startSync0.publicGame.rulesetVersion, 3);
     const p3RoleBefore = startSync3.privateView.roleId;
     const p3HandBefore = startSync3.privateView.hand.map((c) => c.id);
 
-    // Chờ hết turnTimeoutMs (1500ms) và kích hoạt DO alarm()
+    // Đưa active player (P1) sang LOCATION_ACTION rồi ngắt kết nối giữa chừng
+    m.clients[0].c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'd8-stay',
+      expectedRevision: startSync0.revision,
+      action: { type: 'STAY' },
+    });
+    const midSync = await m.clients[1].c.nextMsg(
+      (msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === startSync0.revision + 1,
+    );
+    assert.equal(midSync.publicGame.turnPhase, 'LOCATION_ACTION');
+
+    m.clients[0].c.close();
     await delay(1600);
-    const alarmRes = await fetch(`${srv.httpBaseUrl}/__bg_trigger_alarm?matchId=${matchId}`, {
+    const alarmRes = await fetch(`${srv.httpBaseUrl}/__bg_trigger_alarm?matchId=${m.matchId}`, {
       method: 'POST',
     });
     assert.equal(alarmRes.status, 200);
 
-    const afterAlarmSync = await clients[1].nextMsg(
-      (m) =>
-        m.type === 'BG_STATE_SYNC' &&
-        m.revision > startSync0.revision &&
-        m.publicGame?.activePlayerId === auths[1].playerId,
+    const afterAlarm = await m.clients[1].c.nextMsg(
+      (msg) =>
+        msg.type === 'BG_STATE_SYNC' &&
+        msg.publicGame?.activePlayerId === m.clients[1].playerId,
     );
-    assert.equal(afterAlarmSync.publicGame.turnPhase, 'MOVE');
-    assert.ok(
-      afterAlarmSync.publicGame.publicLog.some((l) => l.kind === 'timeout'),
-      'Phải ghi nhận timeout auto-turn trong nhật ký công khai',
-    );
+    assert.equal(afterAlarm.publicGame.turnPhase, 'MOVE_OR_STAY');
+    assert.ok(afterAlarm.publicGame.publicLog.some((l) => l.kind === 'timeout'));
 
-    // Hibernation DO giữa ván + Người chơi #3 đóng tab cũ & reconnect bằng reconnectToken
-    const hibRes = await fetch(`${srv.httpBaseUrl}/__bg_hibernate?matchId=${matchId}`, {
+    // Hibernation DO giữa trận & P4 reconnect bằng reconnectToken
+    const hibRes = await fetch(`${srv.httpBaseUrl}/__bg_hibernate?matchId=${m.matchId}`, {
       method: 'POST',
     });
     assert.equal(hibRes.status, 200);
 
-    clients[3].close();
+    m.clients[3].c.close();
     await delay(40);
 
-    const p3Reconn = await openBgClient(srv.wsBaseUrl, { matchId });
+    const p3Reconn = await openBgClient(srv.wsBaseUrl, { matchId: m.matchId });
     p3Reconn.send({
       type: 'BG_JOIN',
-      matchId,
-      displayName: 'P4 Quay Lại',
-      reconnectToken: auths[3].reconnectToken,
+      matchId: m.matchId,
+      displayName: 'P4 Reconn',
+      reconnectToken: m.clients[3].auth.reconnectToken,
     });
-    const reAuth = await p3Reconn.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
-    assert.equal(reAuth.playerId, auths[3].playerId);
-    assert.equal(reAuth.seatIndex, 3);
-
-    const reSync = await p3Reconn.nextMsg((m) => m.type === 'BG_STATE_SYNC');
+    const reAuth = await p3Reconn.nextMsg((msg) => msg.type === 'BG_AUTH_ISSUED');
+    assert.equal(reAuth.playerId, m.clients[3].playerId);
+    const reSync = await p3Reconn.nextMsg((msg) => msg.type === 'BG_STATE_SYNC');
     assert.equal(reSync.status, 'PLAYING');
     assert.equal(reSync.privateView.roleId, p3RoleBefore);
-    assert.deepEqual(
-      reSync.privateView.hand.map((c) => c.id),
-      p3HandBefore,
-    );
+    assert.deepEqual(reSync.privateView.hand.map((c) => c.id), p3HandBefore);
 
     p3Reconn.close();
-    clients.forEach((c, idx) => {
-      if (idx !== 3) c.close();
+    m.clients.forEach(({ c }, idx) => {
+      if (idx !== 0 && idx !== 3) c.close();
     });
   });
 
-  await t.test('(4) Legacy v1 SQLite row graceful adaptation & clean v2 rematch', async () => {
-    const createRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tableId: 'table-2', hostName: 'LegacyCheck' }),
-    });
-    const { matchId, inviteCode } = await createRes.json();
-
-    const clients = [];
-    const auths = [];
-    for (let i = 0; i < 4; i++) {
-      const c = await openBgClient(srv.wsBaseUrl, { matchId });
-      c.send({ type: 'BG_JOIN', matchId, inviteCode, displayName: `LV${i + 1}` });
-      const auth = await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
-      clients.push(c);
-      auths.push(auth);
-    }
-    for (let i = 1; i < 4; i++) {
-      const lenBefore = clients[0].inbox.length;
-      clients[i].send({ type: 'BG_SET_READY', ready: true, requestId: `lv-rdy-${i}` });
-      await clients[0].nextMsg((m) => m.type === 'BG_STATE_SYNC', 4000, lenBefore);
-    }
-    clients[0].send({ type: 'BG_START_MATCH', requestId: 'lv-start' });
-    const startSync = await clients[0].nextMsg(
-      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
-    );
-
-    // Overwrite DO SQLite row with legacy v1 shape (no rulesetVersion, deprecated keys)
-    const container = srv.containers.get(matchId);
-    const legacyBlob = JSON.stringify({
+  await t.test('(5) Legacy v2 in-progress & finished SQLite rows migrate/read safely without data loss', async () => {
+    // Subcase A: In-progress v2 row safely closes to v3 FINISHED & supports rematch
+    const mA = await setupStartedMatch(srv, 'table-1', ['LV1', 'LV2', 'LV3', 'LV4']);
+    const containerA = srv.containers.get(mA.matchId);
+    const legacyPlayingBlob = JSON.stringify({
+      rulesetVersion: 2,
       engineState: {
-        matchId,
-        round: 3,
+        rulesetVersion: 2,
+        matchId: mA.matchId,
+        round: 4,
         maxRounds: 7,
-        signalProgress: 4,
-        mistProgress: 2,
-        players: auths.map((a, idx) => ({
-          playerId: a.playerId,
+        secretSabotageLocation: 'radio',
+        sabotagePlanted: true,
+        players: mA.clients.map((cl, idx) => ({
+          playerId: cl.playerId,
           displayName: `LV${idx + 1}`,
           seatIndex: idx,
-          roleId: 'hieu-minh',
+          roleId: idx < 2 ? 'gac-ky-thuat' : 'suong-an-danh',
           location: 'lobby',
           alive: true,
           connected: true,
           hp: 10,
-          maxHp: 10,
+          maxHp: 11,
         })),
       },
     });
-    container.ctx.storage.sql.exec(
+    containerA.ctx.storage.sql.exec(
       'UPDATE matches SET game_state_json = ? WHERE match_id = ?',
-      legacyBlob,
-      matchId,
+      legacyPlayingBlob,
+      mA.matchId,
     );
 
-    // Hibernating & reconnecting or sending action cleanly transitions legacy match to FINISHED without crash
-    const beforeActLen = clients[0].inbox.length;
-    clients[0].send({
-      type: 'BG_GAME_ACTION',
-      requestId: 'lv-act-1',
-      expectedRevision: startSync.revision,
-      action: { type: 'END_TURN' },
+    // Hibernate + reconnect P1: nhận ngay FINISHED với rulesetVersion=3, không crash
+    await fetch(`${srv.httpBaseUrl}/__bg_hibernate?matchId=${mA.matchId}`, { method: 'POST' });
+    mA.clients[0].c.close();
+    await delay(30);
+    const reA0 = await openBgClient(srv.wsBaseUrl, { matchId: mA.matchId });
+    reA0.send({
+      type: 'BG_JOIN',
+      matchId: mA.matchId,
+      displayName: 'LV1',
+      reconnectToken: mA.clients[0].auth.reconnectToken,
     });
-    const legacyFinished = await clients[0].nextMsg(
-      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'FINISHED',
-      4000,
-      beforeActLen,
-    );
-    assert.equal(legacyFinished.publicGame.rulesetVersion, 2);
-    assert.match(legacyFinished.publicGame.winnerLabel, /Luật v2/);
+    const reSyncA0 = await reA0.nextMsg((msg) => msg.type === 'BG_STATE_SYNC');
+    assert.equal(reSyncA0.status, 'FINISHED');
+    assert.equal(reSyncA0.publicGame.rulesetVersion, 3);
+    assert.match(reSyncA0.publicGame.winnerLabel, /Luật v3/);
 
-    // Players can immediately ready up & start a clean v2 rematch
-    const beforeReady = clients[0].inbox.length;
+    // Bắt đầu ván mới v3 sạch
     for (let i = 1; i < 4; i++) {
-      clients[i].send({ type: 'BG_SET_READY', ready: true, requestId: `lv-re-${i}` });
+      mA.clients[i].c.send({ type: 'BG_SET_READY', ready: true, requestId: `lv-re-${i}` });
     }
-    await clients[0].nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.status === 'READY_CHECK', 4000, beforeReady);
-    clients[0].send({ type: 'BG_START_MATCH', requestId: 'lv-rematch' });
-    const rematchPlaying = await clients[0].nextMsg(
-      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
-      4000,
-      beforeReady,
-    );
-    assert.equal(rematchPlaying.publicGame.rulesetVersion, 2);
+    const readyBefore = reA0.inbox.length;
+    await reA0.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.status === 'READY_CHECK', 4000, readyBefore);
+    reA0.send({ type: 'BG_START_MATCH', requestId: 'lv-start-v3' });
+    const playingV3 = await reA0.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.status === 'PLAYING', 4000, readyBefore);
+    assert.equal(playingV3.publicGame.rulesetVersion, 3);
 
-    clients.forEach((c) => c.close());
+    reA0.close();
+    mA.clients.forEach(({ c }, idx) => {
+      if (idx !== 0) c.close();
+    });
+
+    // Subcase B: Finished v2 row preserves historical winnerLabel & winnerPlayerIds
+    const mB = await setupStartedMatch(srv, 'table-2', ['HF1', 'HF2', 'HF3', 'HF4']);
+    const containerB = srv.containers.get(mB.matchId);
+    const legacyFinishedBlob = JSON.stringify({
+      rulesetVersion: 2,
+      engineState: {
+        rulesetVersion: 2,
+        matchId: mB.matchId,
+        round: 5,
+        maxRounds: 7,
+        finished: true,
+        winnerFaction: 'lantern-guard',
+        winnerLabel: 'Đội Gác Đèn v2',
+        winnerPlayerIds: [mB.clients[0].playerId],
+        winReason: 'Niêm phong an toàn v2.',
+        players: mB.clients.map((cl, idx) => ({
+          playerId: cl.playerId,
+          displayName: `HF${idx + 1}`,
+          seatIndex: idx,
+          roleId: idx < 2 ? 'gac-ky-thuat' : 'suong-an-danh',
+          location: 'lobby',
+          alive: idx < 2,
+          connected: true,
+          hp: idx < 2 ? 8 : 0,
+          maxHp: 11,
+        })),
+      },
+    });
+    containerB.ctx.storage.sql.exec(
+      "UPDATE matches SET status = 'FINISHED', turn_deadline_ms = NULL, game_state_json = ? WHERE match_id = ?",
+      legacyFinishedBlob,
+      mB.matchId,
+    );
+    await fetch(`${srv.httpBaseUrl}/__bg_hibernate?matchId=${mB.matchId}`, { method: 'POST' });
+    mB.clients[0].c.close();
+    await delay(30);
+    const reB0 = await openBgClient(srv.wsBaseUrl, { matchId: mB.matchId });
+    reB0.send({
+      type: 'BG_JOIN',
+      matchId: mB.matchId,
+      displayName: 'HF1',
+      reconnectToken: mB.clients[0].auth.reconnectToken,
+    });
+    const reSyncB0 = await reB0.nextMsg((msg) => msg.type === 'BG_STATE_SYNC');
+    assert.equal(reSyncB0.status, 'FINISHED');
+    assert.equal(reSyncB0.publicGame.rulesetVersion, 3);
+    assert.equal(reSyncB0.publicGame.winnerLabel, 'Đội Gác Đèn v2');
+    assert.deepEqual(reSyncB0.publicGame.winnerPlayerIds, [mB.clients[0].playerId]);
+
+    reB0.close();
+    mB.clients.forEach(({ c }, idx) => {
+      if (idx !== 0) c.close();
+    });
   });
 });

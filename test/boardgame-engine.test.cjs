@@ -22,6 +22,7 @@ const {
   applyPlayerGameAction,
   applyTimeoutAutoTurn,
   createInitialGameState,
+  evaluateVictoryState,
   getActivePlayer,
   getMaxRoundsForPlayerCount,
   getPrivateGameView,
@@ -29,6 +30,7 @@ const {
   getRoleDistribution,
   isAdjacentLocation,
   listLegalMovesForLocation,
+  qualifiesWandererCoWin,
 } = require('../features/boardgame/domain/index.ts');
 
 function makePlayers(n) {
@@ -733,5 +735,221 @@ test('GV3.2 — Anti-Leakage (§18): zero HP/role/hand leak, publicLogSeq liền
   const ids = afterPrivateLogs.map((l) => Number(l.id.replace('log-', '')));
   for (let i = 1; i < ids.length; i++) {
     assert.equal(ids[i], ids[i - 1] + 1, 'publicLog IDs phải liên tiếp không để lộ private event');
+  }
+});
+
+// ===========================================================================
+// GV3.3 — Toán học Chiến đấu, Chống Đánh Bừa & Toàn bộ Điều kiện Thắng v3
+// ===========================================================================
+
+test('GV3.3 — Chiến đấu: Bình Tĩnh Tự Vệ, Kỷ luật Gác Đèn, Trang bị chiến đấu, Bảo hộ Lan & Bị loại', () => {
+  // 1. Bình Tĩnh Tự Vệ (Unprovoked Composure) + Còi báo động đẩy lùi + Gậy Bảo Vệ đánh kề phòng
+  {
+    const { state, now } = createForcedMatch(['gac-ky-thuat', 'suong-an-danh', 'gac-radio', 'suong-gac-cong'], 4001);
+    const actor = setActiveTurnPhase(state, 'p_1', 'MAIN_ACTION', 'lobby');
+    const target = state.players[1];
+    target.location = 'lobby';
+    target.tempShield = 0;
+    target.attacksMade = 0;
+    target.equipped = [CARDS_BY_ID['eq-05']]; // Còi Báo Động Cầm Tay
+
+    const targetHpBefore = target.hp;
+    // p_1 chưa điều tra p_2 & p_2 chưa đánh ai & chưa lật -> giảm 2->1 ST & p_2 nhận +1 Giáp tạm & đẩy p_1
+    const res1 = applyPlayerGameAction(state, 'p_1', { type: 'ATTACK', targetPlayerId: 'p_2' }, now);
+    assert.equal(res1.ok, true);
+    assert.equal(target.hp, targetHpBefore - 1);
+    assert.equal(target.tempShield, 1);
+    assert.notEqual(actor.location, 'lobby'); // Còi báo động đẩy sang ô kề!
+
+    // Lần 2: khi target đeo Áo Khoác (eq-01) và Đèn Pin (eq-02) + Hở sườn (exposedMark=1) + Bình Tĩnh bị bỏ qua sau khi đã điều tra
+    actor.investigatedTargetIds.push('p_2');
+    actor.equipped = [CARDS_BY_ID['eq-02'], CARDS_BY_ID['eq-07']]; // Đèn Pin + Gậy Bảo Vệ (tầm kề)
+    target.location = 'canteen'; // kề với lobby hoặc corridor
+    actor.location = 'lobby'; // kề canteen
+    target.exposedMark = 1;
+    target.tempShield = 0;
+    target.hp = target.maxHp - 2; // >= 2 vết thương kích Đèn Pin (+1)
+    target.equipped = [CARDS_BY_ID['eq-01']]; // Áo Khoác (-1 ST)
+    setActiveTurnPhase(state, 'p_1', 'MAIN_ACTION', 'lobby');
+    const hp2 = target.hp;
+    // base 2 + min(2, 1 flashlight + 1 exposed) = 4, trừ 1 Áo Khoác = 3 ST!
+    const res2 = applyPlayerGameAction(state, 'p_1', { type: 'ATTACK', targetPlayerId: 'p_2' }, now + 100);
+    assert.equal(res2.ok, true);
+    assert.equal(target.hp, hp2 - 3);
+    assert.equal(target.exposedMark, 0);
+  }
+
+  // 2. Bảo hộ Lan chặn không rơi xuống dưới 1 HP + Minh/Trang bị Kính eq-06 chặn sát thương áp lực Điều tra
+  {
+    const { state, now } = createForcedMatch(['suong-gac-cong', 'gac-radio', 'gac-truc-ban', 'suong-tin-gia'], 4002);
+    const attacker = setActiveTurnPhase(state, 'p_1', 'MAIN_ACTION', 'lobby');
+    attacker.revealed = true;
+    attacker.equipped = [CARDS_BY_ID['eq-02']];
+    const khanh = state.players[1];
+    khanh.location = 'lobby';
+    khanh.hp = 2;
+    khanh.tempShield = 0;
+    khanh.revealed = true;
+    khanh.wardedUntilRound = state.turnNumber + 5; // Lan đang bảo hộ
+    khanh.equipped = [CARDS_BY_ID['eq-06']]; // Kính chắn bụi
+
+    assert.equal(applyPlayerGameAction(state, 'p_1', { type: 'ATTACK', targetPlayerId: 'p_2' }, now).ok, true);
+    assert.equal(khanh.hp, 1); // Bảo hộ giữ ở >= 1 HP
+    assert.equal(khanh.alive, true);
+
+    // Dùng Sổ Trực Đêm (inv-01) hay Tiếng Còi (inv-04) gây áp lực -> Kính Chắn Bụi chặn 0 ST
+    attacker.hand = [CARDS_BY_ID['inv-01']];
+    setActiveTurnPhase(state, 'p_1', 'MAIN_ACTION', 'lobby');
+    assert.equal(applyPlayerGameAction(state, 'p_1', { type: 'INVESTIGATE_CARD', cardId: 'inv-01', targetPlayerId: 'p_2' }, now + 10).ok, true);
+    assert.equal(khanh.hp, 1);
+  }
+
+  // 3. Kỷ luật Đội Gác Đèn khi hạ nhầm đồng đội Gác Đèn + Bị loại lộ vai & rơi sạch đồ
+  {
+    const { state, now } = createForcedMatch(['gac-ky-thuat', 'gac-radio', 'suong-an-danh', 'suong-tin-gia'], 4003);
+    const minh = setActiveTurnPhase(state, 'p_1', 'MAIN_ACTION', 'lobby');
+    minh.equipped = [CARDS_BY_ID['eq-01']];
+    const khanh = state.players[1];
+    khanh.location = 'lobby';
+    khanh.hp = 1;
+    khanh.tempShield = 0;
+    khanh.hand = [CARDS_BY_ID['inv-02']];
+    khanh.equipped = [CARDS_BY_ID['eq-03']];
+
+    const minhHpBefore = minh.hp;
+    assert.equal(applyPlayerGameAction(state, 'p_1', { type: 'ATTACK', targetPlayerId: 'p_2' }, now).ok, true);
+    assert.equal(khanh.alive, false);
+    assert.equal(khanh.revealed, true);
+    assert.equal(khanh.hand.length, 0);
+    assert.equal(khanh.equipped.length, 0);
+    assert.equal(state.lastRevealEvent.reason, 'eliminated');
+    // Minh chịu 2 vết thương sốc tâm lý & rơi Áo Khoác vào discard
+    assert.equal(minh.hp, minhHpBefore - 2);
+    assert.equal(minh.equipped.length, 0);
+    assert.ok(state.discards.equipment.includes('eq-01'));
+  }
+});
+
+test('GV3.3 — Toàn bộ Điều kiện thắng v3, Đồng thắng Lang Thang, Thắng đơn độc Hải/Trang, Giới nghiêm & Hết vòng', () => {
+  // 1. Đội Gác Đèn thắng khi toàn bộ Màn Sương ngã + Kẻ Lang Thang Bình đồng thắng khi bảo vệ được Mục tiêu
+  {
+    const { state, now } = createForcedMatch(['gac-ky-thuat', 'suong-an-danh', 'suong-tin-gia', 'gac-truc-ban', 'lang-cuu-ho'], 5001);
+    state.players[1].alive = false;
+    state.players[1].hp = 0;
+    state.players[2].location = 'lobby';
+    state.players[2].hp = 1;
+    const binh = state.players[4];
+    binh.protegePlayerId = 'p_1'; // bảo hộ Minh (sống)
+
+    const guard = setActiveTurnPhase(state, 'p_1', 'MAIN_ACTION', 'lobby');
+    guard.revealed = true;
+    assert.equal(applyPlayerGameAction(state, 'p_1', { type: 'ATTACK', targetPlayerId: 'p_3' }, now).ok, true);
+    assert.equal(state.finished, true);
+    assert.equal(state.winnerFaction, 'lantern-guard');
+    assert.ok(state.winnerPlayerIds.includes('p_1'));
+    assert.ok(state.winnerPlayerIds.includes('p_4'));
+    assert.ok(state.winnerPlayerIds.includes('p_5')); // Bình đồng thắng!
+  }
+
+  // 2. Hải thắng ĐƠN ĐỘC từ Vòng 5+ với >=2 Trang bị & >=3 Điều tra
+  {
+    const { state, now } = createForcedMatch(['lang-anh-san', 'gac-ky-thuat', 'suong-an-danh', 'gac-radio', 'suong-tin-gia'], 5002);
+    const hai = setActiveTurnPhase(state, 'p_1', 'MAIN_ACTION', 'radio');
+    state.round = 5;
+    hai.revealed = true;
+    hai.equipped = [CARDS_BY_ID['eq-01'], CARDS_BY_ID['eq-04']];
+    hai.investigationsCount = 3;
+
+    const res = applyPlayerGameAction(state, 'p_1', { type: 'USE_SKILL' }, now);
+    assert.equal(res.ok, true);
+    assert.equal(state.finished, true);
+    assert.equal(state.winnerFaction, 'wanderer-solo');
+    assert.ok(state.winnerPlayerIds.includes('p_1'));
+    assert.equal(state.winnerPlayerIds.includes('p_2'), false);
+  }
+
+  // 3. Trang thắng ĐƠN ĐỘC tức thì nếu đã lật vai khi bàn chỉ còn <= 2 người sống (>= 2 người ngã)
+  {
+    const { state, now } = createForcedMatch(['lang-quan-sat', 'gac-ky-thuat', 'suong-an-danh', 'gac-radio', 'suong-tin-gia'], 5003);
+    state.players[1].alive = false;
+    state.players[2].alive = false;
+    state.players[3].alive = false;
+    const trang = setActiveTurnPhase(state, 'p_1', 'MAIN_ACTION', 'lobby');
+    // Khi Trang tự lật vai -> evaluateVictoryState kiểm tra thắng ngay
+    const res = applyPlayerGameAction(state, 'p_1', { type: 'REVEAL_ROLE' }, now);
+    assert.equal(res.ok, true);
+    assert.equal(state.finished, true);
+    assert.equal(state.winnerFaction, 'wanderer-solo');
+    assert.deepEqual(state.winnerPlayerIds, ['p_1']);
+    assert.equal(trang.revealed, true);
+  }
+
+  // 4. Hội Màn Sương thắng khi hạ hết Gác Đèn + Bình báo thù thành công vẫn được đồng thắng dù Mục tiêu gục
+  {
+    const { state, now } = createForcedMatch(['suong-gac-cong', 'gac-ky-thuat', 'suong-an-danh', 'gac-radio', 'lang-cuu-ho'], 5004);
+    state.players[3].alive = false; // p_4 đã ngã
+    state.players[3].hp = 0;
+    const binh = state.players[4];
+    binh.protegePlayerId = 'p_4';
+    binh.avengedProtegeKiller = true;
+    assert.equal(qualifiesWandererCoWin(binh, state.players, 4), true);
+
+    const g1 = state.players[1];
+    g1.location = 'lobby';
+    g1.hp = 1;
+    const mist = setActiveTurnPhase(state, 'p_1', 'MAIN_ACTION', 'lobby');
+    mist.revealed = true;
+    assert.equal(applyPlayerGameAction(state, 'p_1', { type: 'ATTACK', targetPlayerId: 'p_2' }, now).ok, true);
+    assert.equal(state.finished, true);
+    assert.equal(state.winnerFaction, 'mist-order');
+    assert.ok(state.winnerPlayerIds.includes('p_5'));
+  }
+
+  // 5. Mutual wipeout có Wanderer sống sót -> Wanderer thắng
+  {
+    const { state, now } = createForcedMatch(['gac-ky-thuat', 'suong-an-danh', 'suong-tin-gia', 'gac-radio', 'lang-anh-san'], 5005);
+    state.players[0].alive = false;
+    state.players[1].alive = false;
+    state.players[2].alive = false;
+    state.players[3].alive = false;
+    assert.equal(evaluateVictoryState(state, now, false), true);
+    assert.equal(state.winnerFaction, 'wanderer');
+    assert.deepEqual(state.winnerPlayerIds, ['p_5']);
+  }
+
+  // 6. Áp lực Giới Nghiêm cuối vòng + Hết Vòng tối đa (Phiên Trực Cuối Đêm — KHÔNG cộng tổng HP)
+  {
+    const { state, now } = createForcedMatch(['gac-ky-thuat', 'suong-an-danh', 'gac-radio', 'suong-tin-gia'], 5006);
+    state.round = state.maxRounds - 1; // Vòng áp chót (8/9)
+    // p_1 ở một mình tại court chưa hành động, có 1 Giáp tạm -> qua hết lượt cuối vòng phải mất giáp & -1 HP
+    state.players[0].location = 'court';
+    state.players[0].tempShield = 1;
+    state.players[0].actedThisRound = false;
+    const p0HpBefore = state.players[0].hp;
+
+    state.players[1].location = 'lobby';
+    state.players[2].location = 'lobby';
+    state.players[3].location = 'canteen';
+
+    // Kết thúc lượt người cuối (p_4) -> wrap sang Vòng 9 & kích hoạt curfew fatigue lên p_1
+    setActiveTurnPhase(state, 'p_4', 'MAIN_ACTION', 'canteen');
+    assert.equal(applyPlayerGameAction(state, 'p_4', { type: 'END_TURN' }, now).ok, true);
+    assert.equal(state.round, state.maxRounds);
+    assert.equal(state.curfewPressureActive, true);
+    assert.equal(state.players[0].tempShield, 0);
+    assert.equal(state.players[0].hp, p0HpBefore - 1);
+
+    // Chỉnh tổng HP hai bên ngược lại với kiểm soát chốt để chứng minh Phiên Trực Cuối Đêm KHÔNG dùng tổng HP!
+    state.players[0].hp = 1; // Gác Đèn tổng HP RẤT THẤP
+    state.players[2].hp = 1;
+    state.players[0].investigationsCount = 4; // Gác Đèn điều tra & giữ lobby/radio
+    state.players[2].location = 'radio';
+    state.players[1].hp = 12; // Màn Sương gần như đầy máu nhưng đã bị lộ vai & đứng canteen
+    state.players[1].revealed = true;
+    state.players[3].hp = 11;
+    state.players[3].revealed = true;
+    state.players[3].location = 'lobby';
+    assert.equal(evaluateVictoryState(state, now + 1000, true), true);
+    assert.equal(state.winnerFaction, 'lantern-guard');
   }
 });
