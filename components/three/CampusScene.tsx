@@ -711,7 +711,7 @@ export default function CampusScene({
   return (
     <Canvas
       shadows
-      frameloop={suspend3D ? 'demand' : 'always'}
+      frameloop={suspend3D ? 'never' : 'always'}
       dpr={[1, 1.75]}
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.06 }}
       camera={{ fov: 55, near: 0.1, far: 600, position: [-70, 10, 26] }}

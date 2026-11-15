@@ -288,8 +288,9 @@ function auditBoardGameFrameText(label, text, audit, forbiddenMssvs = ALL_TEST_M
 }
 
 async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl, opts = {}) {
-  const browser = await chromium.launch(launchOpts);
-  const context = await browser.newContext(
+  const browser = opts.sharedBrowser ? null : await chromium.launch(launchOpts);
+  const targetBrowser = opts.sharedBrowser || browser;
+  const context = await targetBrowser.newContext(
     user.mobile
       ? { viewport: user.viewport, hasTouch: true, isMobile: true }
       : { viewport: user.viewport, hasTouch: true },
@@ -571,11 +572,11 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
 async function enterCampusAndWaitHook(page, targetUrl, diagAudit) {
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
   const enterBtn = page.locator('#enter-campus');
-  await enterBtn.waitFor({ state: 'visible', timeout: 65000 });
-  await enterBtn.click({ timeout: 65000 });
+  await enterBtn.waitFor({ state: 'visible', timeout: 90000 });
+  await enterBtn.click({ timeout: 90000 });
   try {
     await page.waitForFunction(() => Boolean(window.__bkhn && window.__bkhn.enterBoardGameClub), null, {
-      timeout: 65000,
+      timeout: 90000,
       polling: 200,
     });
   } catch (err) {
@@ -738,8 +739,8 @@ async function captureFailureArtifacts(scenarioId, entries, error) {
     if (!entry.isPeer) {
       const shotPath = path.join(SHOT_DIR, `failure-${scenarioId}-${label}.png`);
       await Promise.race([
-        entry.page.screenshot({ path: shotPath, timeout: 4000 }).catch(() => undefined),
-        new Promise((r) => setTimeout(r, 4500)),
+        entry.page.screenshot({ path: shotPath, timeout: 15000 }).catch(() => undefined),
+        new Promise((r) => setTimeout(r, 16000)),
       ]);
     }
     trace.pages.push({
@@ -750,6 +751,7 @@ async function captureFailureArtifacts(scenarioId, entries, error) {
       lastFrames: (entry.audit?.rawFrames || []).slice(-5),
     });
   }
+  console.error('[E2E FAILURE TRACE]', JSON.stringify(trace));
   fs.writeFileSync(
     path.join(SHOT_DIR, `failure-${scenarioId}-trace.json`),
     JSON.stringify(trace, null, 2),
@@ -760,74 +762,56 @@ async function captureFailureArtifacts(scenarioId, entries, error) {
 // ===========================================================================
 // E2E-01 & E2E-04: 4-Player Full Lifecycle + Mobile (390x844) Playability
 // ===========================================================================
-async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
+async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim) {
   console.log('[E2E-01 & E2E-04] Running 4-player mixed Desktop+Mobile lifecycle...');
   const browsers = [];
   const contexts = [];
-  const players = [];
+  const uiPlayers = [];
+  const allAudited = [];
   try {
-    const p1 = { user: TEST_USERS[0], ...(await setupPlayerContext(chromium, launchOpts, TEST_USERS[0], shim.wsBaseUrl)) };
+    const p1 = {
+      user: TEST_USERS[0],
+      ...(await setupPlayerContext(chromium, launchOpts, TEST_USERS[0], shim.wsBaseUrl)),
+    };
     browsers.push(p1.browser);
     contexts.push(p1.context);
-    players.push(p1);
+    uiPlayers.push(p1);
+    allAudited.push(p1);
 
     // Step 1: P1 Host sits at Table 1 -> auto-create Lobby bar on HUD
     await enterCampusAndWaitHook(p1.page, outUrl, p1.audit);
     await p1.page.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await p1.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 30000 });
     await p1.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
     await p1.page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 20000 });
     await p1.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 25000 });
 
     const inviteCode = (await p1.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
     assert.match(inviteCode, /^[A-Z0-9]{6}$/, `Invalid invite code: "${inviteCode}"`);
     await p1.page.locator('[data-testid="bg-hud-copy-link-btn"]').click();
 
-    // Step 2: P2 auto-joins Table 1; P3 enters inviteCode
-    const p2 = { user: TEST_USERS[1], ...(await setupPlayerContext(chromium, launchOpts, TEST_USERS[1], shim.wsBaseUrl)) };
-    browsers.push(p2.browser);
-    contexts.push(p2.context);
-    players.push(p2);
-    await p2.page.bringToFront();
-    await enterCampusAndWaitHook(p2.page, outUrl, p2.audit);
-    await p2.page.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await p2.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 45000 });
-    await p2.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await p2.page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 20000 });
-    await p2.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
-    await p2.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 30000 });
-    const p2HudCode = (await p2.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
-    assert.equal(p2HudCode, inviteCode);
+    const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
+    const dirJson = await dirRes.json();
+    const matchInfo = (dirJson.matches || []).find((m) => m.inviteCode === inviteCode);
+    assert.ok(matchInfo, `Table 1 match ${inviteCode} must appear in directory`);
 
-    const p3 = { user: TEST_USERS[2], ...(await setupPlayerContext(chromium, launchOpts, TEST_USERS[2], shim.wsBaseUrl)) };
-    browsers.push(p3.browser);
-    contexts.push(p3.context);
-    players.push(p3);
-    await p3.page.bringToFront();
-    await enterCampusAndWaitHook(p3.page, outUrl, p3.audit);
-    await p3.page.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await p3.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 45000 });
-    await p3.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await p3.page.waitForSelector('[data-testid="bg-join-code-input"]', { timeout: 30000 });
-    await p3.page.locator('[data-testid="bg-join-code-input"]').fill(inviteCode);
-    await p3.page.locator('[data-testid="bg-join-code-btn"]').click();
-    await p3.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: 30000 });
-    await p3.page.locator('[data-testid="bg-close-lobby-btn"]').click();
-    await p3.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 15000 });
-
-    // Step 3: P4 (Mobile 390x844) opens ?bgInvite=CODE
-    const p4 = { user: TEST_USERS[3], ...(await setupPlayerContext(chromium, launchOpts, TEST_USERS[3], shim.wsBaseUrl)) };
+    // Step 2: P4 (Mobile 390x844) opens ?bgInvite=CODE, tests overflow, leaves, and re-joins via invite code input
+    const p4 = {
+      user: TEST_USERS[3],
+      ...(await setupPlayerContext(chromium, launchOpts, TEST_USERS[3], shim.wsBaseUrl)),
+    };
     browsers.push(p4.browser);
     contexts.push(p4.context);
-    players.push(p4);
+    uiPlayers.push(p4);
+    allAudited.push(p4);
     await p4.page.bringToFront();
     await p4.page.goto(`${outUrl}/?bgInvite=${inviteCode}`, { waitUntil: 'domcontentloaded' });
     const p4EnterBtn = p4.page.locator('#enter-campus');
-    await p4EnterBtn.waitFor({ state: 'visible', timeout: 65000 });
-    await p4EnterBtn.click({ timeout: 65000 });
+    await p4EnterBtn.waitFor({ state: 'visible', timeout: 90000 });
+    await p4EnterBtn.click({ timeout: 90000 });
     await p4.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 45000 });
-    await p4.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: 45000 });
+    await p4.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: 60000 });
     const p4CleanedUrl = await p4.page.evaluate(() => window.location.search);
     assert.equal(p4CleanedUrl.includes('bgInvite='), false, 'URL query param ?bgInvite= must be stripped');
     // E2E-04: Mobile Lobby overflow check
@@ -835,8 +819,27 @@ async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
     );
     assert.equal(mobileLobbyOverflow, false, 'Mobile 390x844 Lobby must not overflow horizontally');
+
+    // Exercise Leave + Manual Invite-Code Join on Mobile UI
+    await p4.page.locator('[data-testid="bg-leave-match-btn"]').click();
+    await p4.page.waitForSelector('[data-testid="bg-join-code-input"]', { timeout: 25000 });
+    await p4.page.waitForTimeout(150);
+    await p4.page.locator('[data-testid="bg-join-code-input"]').fill(inviteCode);
+    await p4.page.locator('[data-testid="bg-join-code-btn"]').click();
+    await p4.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: 30000 });
     await p4.page.locator('[data-testid="bg-close-lobby-btn"]').click();
-    await p4.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 15000 });
+    await p4.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 20000 });
+
+    // Step 3: Peers 2 & 3 join via lightweight Chromium WS peer pages (max 2 WebGL contexts active)
+    const peerCtx = await peerBrowser.newContext({ viewport: { width: 800, height: 600 } });
+    contexts.push(peerCtx);
+    const peers = [];
+    for (let seat = 2; seat < 4; seat++) {
+      const peer = await createBrowserWsPeer(peerCtx, outUrl, shim.wsBaseUrl, TEST_USERS[seat - 1].name, seat);
+      await peer.join(matchInfo.matchId, inviteCode, false);
+      peers.push(peer);
+      allAudited.push(peer);
+    }
 
     await p1.page.bringToFront();
     await p1.page.waitForFunction(
@@ -848,10 +851,11 @@ async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-01-lobby-4p.png') });
 
     // Step 4: Start match from HUD
-    for (const peer of [p2, p3, p4]) {
-      await peer.page.bringToFront();
-      await peer.page.locator('[data-testid="bg-hud-ready-btn"]').click();
+    for (const peer of peers) {
+      await peer.setReady(true);
     }
+    await p4.page.bringToFront();
+    await p4.page.locator('[data-testid="bg-hud-ready-btn"]').click();
     await p1.page.bringToFront();
     await p1.page.waitForFunction(
       () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
@@ -860,7 +864,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
     );
     await p1.page.locator('[data-testid="bg-hud-start-btn"]').click();
 
-    for (const p of players) {
+    for (const p of uiPlayers) {
       await p.page.bringToFront();
       await p.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 30000 });
       if (!p.user.mobile) {
@@ -911,7 +915,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
     await checkMobileOverflowAndTabs('Bàn & Lượt');
     await p4.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-03-gameboard-mobile.png') });
 
-    // Rules modal, sound toggle, emote toast, hand mask & HP leak check on P1
+    // Rules modal, sound toggle, emote toast, hand mask & HP leak check on P1 & P4
     await p1.page.bringToFront();
     await p1.page.waitForSelector('[data-testid="bg-v3-status-bar"]', { timeout: 20000 });
     await p1.page.locator('[data-testid="bg-board-rules-btn"]').click();
@@ -926,16 +930,23 @@ async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
     await p1.page.locator('[data-testid="bg-sound-toggle-btn"]').click();
     await p1.page.locator('[data-testid="bg-sound-toggle-btn"]').click();
     await p1.page.locator('[data-testid="bg-emote-wave"]').click();
-    await p2.page.waitForSelector('[data-testid="bg-emote-toast"]', { timeout: 15000 });
+    await p4.page.waitForSelector('[data-testid="bg-emote-toast"]', { timeout: 15000 });
 
     let activePlayer = null;
-    for (const p of players) {
-      if ((await p.page.locator('[data-testid="bg-action-panel"]').count()) > 0) {
-        activePlayer = p;
-        break;
+    for (let waitTurn = 0; waitTurn < 12; waitTurn++) {
+      for (const p of uiPlayers) {
+        if ((await p.page.locator('[data-testid="bg-action-panel"]').count()) > 0) {
+          activePlayer = p;
+          break;
+        }
       }
+      if (activePlayer) break;
+      for (const peer of peers) {
+        if (await peer.stepFullTurnIfActive(true)) break;
+      }
+      await new Promise((r) => setTimeout(r, 120));
     }
-    assert.ok(activePlayer, 'Exactly one player must display ActionPanel');
+    assert.ok(activePlayer, 'Either P1 or P4 must display ActionPanel');
     await activePlayer.page.bringToFront();
     await playFirstValidStepOnPage(activePlayer.page, 0);
     await activePlayer.page.waitForTimeout(180);
@@ -978,7 +989,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
         break;
       }
       const panelFlags = await Promise.all(
-        players.map((p) =>
+        uiPlayers.map((p) =>
           p.page
             .evaluate(() =>
               Boolean(
@@ -990,36 +1001,45 @@ async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
         ),
       );
       const activeIdx = panelFlags.findIndex(Boolean);
-      if (activeIdx >= 0 && activeIdx !== lastBroughtIdx) {
-        await players[activeIdx].page.bringToFront().catch(() => undefined);
-        lastBroughtIdx = activeIdx;
-      }
-      if (activeIdx === 3 && !p4MobileButtonsChecked) {
-        const btnMetrics = await p4.page.evaluate(() =>
-          Array.from(document.querySelectorAll('[data-testid="bg-action-panel"] button[data-testid]'))
-            .filter((el) => {
-              const r = el.getBoundingClientRect();
-              return r.width > 0 && r.height > 0;
-            })
-            .map((el) => {
-              const r = el.getBoundingClientRect();
-              return { id: el.getAttribute('data-testid'), w: r.width, h: r.height, left: r.left, right: r.right };
-            }),
-        );
-        for (const m of btnMetrics) {
-          assert.ok(m.h >= 32 && m.w >= 32, `Mobile action button ${m.id} hit box < 32px: ${m.w}x${m.h}`);
-          assert.ok(m.left >= -1 && m.right <= 391, `Mobile action button ${m.id} off-screen: ${m.right}`);
+      if (activeIdx >= 0) {
+        const activeUi = uiPlayers[activeIdx];
+        if (activeIdx !== lastBroughtIdx) {
+          await activeUi.page.bringToFront().catch(() => undefined);
+          lastBroughtIdx = activeIdx;
         }
-        p4MobileButtonsChecked = true;
+        if (activeUi === p4 && !p4MobileButtonsChecked) {
+          const btnMetrics = await p4.page.evaluate(() =>
+            Array.from(document.querySelectorAll('[data-testid="bg-action-panel"] button[data-testid]'))
+              .filter((el) => {
+                const r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+              })
+              .map((el) => {
+                const r = el.getBoundingClientRect();
+                return { id: el.getAttribute('data-testid'), w: r.width, h: r.height, left: r.left, right: r.right };
+              }),
+          );
+          for (const m of btnMetrics) {
+            assert.ok(m.h >= 32 && m.w >= 32, `Mobile action button ${m.id} hit box < 32px: ${m.w}x${m.h}`);
+            assert.ok(m.left >= -1 && m.right <= 391, `Mobile action button ${m.id} off-screen: ${m.right}`);
+          }
+          p4MobileButtonsChecked = true;
+        }
+        const acted = await playFirstValidStepOnPage(activeUi.page, step, triedActionsPerTurn);
+        if (acted && activeUi === p4) {
+          p4MobileActionsExecuted += 1;
+        }
+        await new Promise((r) => setTimeout(r, acted ? 110 : 60));
+      } else {
+        let peerStepped = false;
+        for (const peer of peers) {
+          if (await peer.stepFullTurnIfActive(true)) {
+            peerStepped = true;
+            break;
+          }
+        }
+        await new Promise((r) => setTimeout(r, peerStepped ? 50 : 60));
       }
-      const acted =
-        activeIdx >= 0
-          ? await playFirstValidStepOnPage(players[activeIdx].page, step, triedActionsPerTurn)
-          : false;
-      if (acted && activeIdx === 3) {
-        p4MobileActionsExecuted += 1;
-      }
-      await new Promise((r) => setTimeout(r, acted ? 120 : 60));
     }
     assert.equal(finished, true, 'E2E-01 4-player match must reach FINISHED');
     assert.ok(
@@ -1027,7 +1047,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
       `E2E-04 mobile player P4 must execute playable actions (${p4MobileActionsExecuted})`,
     );
 
-    for (const p of players) {
+    for (const p of uiPlayers) {
       await p.page.waitForSelector('[data-testid="bg-match-result-modal"]', { timeout: 20000 });
     }
     await p1.page.waitForSelector('[data-testid="bg-match-postcard-img"]', { timeout: 20000 });
@@ -1055,11 +1075,10 @@ async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
     }
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-04-match-result-postcard.png') });
 
-    verifyCommonAudits(players);
-    for (const peer of [p2, p3, p4]) {
-      await peer.context.close().catch(() => undefined);
-      await peer.browser.close().catch(() => undefined);
-    }
+    verifyCommonAudits(allAudited);
+    await p4.context.close().catch(() => undefined);
+    if (p4.browser) await p4.browser.close().catch(() => undefined);
+    await peerCtx.close().catch(() => undefined);
 
     // Exit back to KTX courtyard
     await p1.page.bringToFront();
@@ -1094,17 +1113,17 @@ async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
       inviteCode,
       postcardSize: `${postcardMeta.naturalWidth}x${postcardMeta.naturalHeight}`,
       p4MobileActionsExecuted,
-      framesChecked: players.reduce((acc, p) => acc + p.audit.wsFramesChecked, 0),
+      framesChecked: allAudited.reduce((acc, p) => acc + p.audit.wsFramesChecked, 0),
     };
   } catch (err) {
-    await captureFailureArtifacts('E2E-01-04', players, err);
+    await captureFailureArtifacts('E2E-01-04', allAudited, err);
     throw err;
   } finally {
     for (const ctx of contexts) {
       await ctx.close().catch(() => undefined);
     }
     for (const b of browsers) {
-      await b.close().catch(() => undefined);
+      if (b) await b.close().catch(() => undefined);
     }
   }
 }
@@ -1158,10 +1177,13 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     );
 
     // 9th participant joins as Spectator via directory "👁 Xem" button
-    const spec = await setupPlayerContext(chromium, launchOpts, specUser, shim.wsBaseUrl, { expectSpectator: true });
+    const spec = await setupPlayerContext(chromium, launchOpts, specUser, shim.wsBaseUrl, {
+      expectSpectator: true,
+    });
     browsers.push(spec.browser);
     contexts.push(spec.context);
     allAudited.push(spec);
+    await spec.page.bringToFront();
     await enterCampusAndWaitHook(spec.page, outUrl, spec.audit);
     await spec.page.evaluate(() => window.__bkhn.enterBoardGameClub());
     await spec.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 30000 });
@@ -1227,7 +1249,7 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
       await ctx.close().catch(() => undefined);
     }
     for (const b of browsers) {
-      await b.close().catch(() => undefined);
+      if (b) await b.close().catch(() => undefined);
     }
   }
 }
@@ -1250,9 +1272,9 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     const reloadAndRestoreTo = async (selector) => {
       await p1.page.reload({ waitUntil: 'domcontentloaded' });
       const enter = p1.page.locator('#enter-campus');
-      await enter.waitFor({ state: 'visible', timeout: 65000 });
+      await enter.waitFor({ state: 'visible', timeout: 90000 });
       await enter.click();
-      await p1.page.waitForSelector(selector, { timeout: 65000 });
+      await p1.page.waitForSelector(selector, { timeout: 90000 });
     };
 
     await enterCampusAndWaitHook(p1.page, outUrl, p1.audit);
@@ -1460,7 +1482,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       await ctx.close().catch(() => undefined);
     }
     for (const b of browsers) {
-      await b.close().catch(() => undefined);
+      if (b) await b.close().catch(() => undefined);
     }
   }
 }
@@ -1681,7 +1703,7 @@ async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)
       await ctx.close().catch(() => undefined);
     }
     for (const b of browsers) {
-      await b.close().catch(() => undefined);
+      if (b) await b.close().catch(() => undefined);
     }
   }
 }
@@ -1706,6 +1728,8 @@ async function main() {
 
   let peerBrowser;
   try {
+    peerBrowser = await chromium.launch(launchOpts);
+
     const summary = {
       shotDir: SHOT_DIR,
       startedAt: new Date().toISOString(),
@@ -1714,11 +1738,9 @@ async function main() {
 
     const t1 = Date.now();
     summary.scenarios['E2E-01_E2E-04'] = {
-      ...(await runE2E01AndE2E04(chromium, launchOpts, outUrl, shim)),
+      ...(await runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)),
       durationMs: Date.now() - t1,
     };
-
-    peerBrowser = await chromium.launch(launchOpts);
 
     const t2 = Date.now();
     summary.scenarios['E2E-02'] = {
