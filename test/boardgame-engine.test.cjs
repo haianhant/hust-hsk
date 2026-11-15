@@ -840,6 +840,9 @@ test('GV3.3 — Toàn bộ Điều kiện thắng v3, Đồng thắng Lang Thang
     state.players[2].hp = 1;
     const binh = state.players[4];
     binh.protegePlayerId = 'p_1'; // bảo hộ Minh (sống)
+    assert.equal(qualifiesWandererCoWin(binh, state.players, 4), false); // chưa che chắn lần nào -> chưa đủ
+    binh.protectedProtegeCount = 1;
+    assert.equal(qualifiesWandererCoWin(binh, state.players, 4), true);
 
     const guard = setActiveTurnPhase(state, 'p_1', 'MAIN_ACTION', 'lobby');
     guard.revealed = true;
@@ -882,6 +885,17 @@ test('GV3.3 — Toàn bộ Điều kiện thắng v3, Đồng thắng Lang Thang
     assert.equal(state.winnerFaction, 'wanderer-solo');
     assert.deepEqual(state.winnerPlayerIds, ['p_1']);
     assert.equal(trang.revealed, true);
+
+    // Kiểm tra đồng thắng Trang khi bàn còn nhiều người hơn: yêu cầu >= 2 điều tra + (>= 3 người ngã hoặc tự lật với >= 2 ngã)
+    trang.revealed = false;
+    trang.investigationsCount = 1;
+    assert.equal(qualifiesWandererCoWin(trang, state.players, 6), false);
+    trang.investigationsCount = 2;
+    assert.equal(qualifiesWandererCoWin(trang, state.players, 6), true);
+    state.players[3].alive = true; // còn đúng 2 người ngã (p_2, p_3)
+    assert.equal(qualifiesWandererCoWin(trang, state.players, 6), false);
+    trang.revealed = true;
+    assert.equal(qualifiesWandererCoWin(trang, state.players, 6), true);
   }
 
   // 4. Hội Màn Sương thắng khi hạ hết Gác Đèn + Bình báo thù thành công vẫn được đồng thắng dù Mục tiêu gục

@@ -53,8 +53,8 @@ export function qualifiesWandererCoWin(
   if (p.roleId === 'lang-quan-sat') {
     if (!p.alive) return false;
     return (
-      eliminatedCount >= 2 ||
-      (currentRound >= 6 && eliminatedCount >= 1 && p.investigationsCount >= 2)
+      p.investigationsCount >= 2 &&
+      (eliminatedCount >= 3 || (p.revealed && eliminatedCount >= 2))
     );
   }
 
@@ -64,9 +64,9 @@ export function qualifiesWandererCoWin(
       : null;
     if (!protege) return p.alive;
     if (protege.alive) {
-      return p.alive || p.protectedProtegeCount >= 1;
+      return p.alive && p.protectedProtegeCount >= 1;
     }
-    return p.alive && (p.avengedProtegeKiller || aliveCount <= 2);
+    return p.alive && p.avengedProtegeKiller;
   }
 
   return false;
@@ -270,15 +270,16 @@ export function evaluateVictoryState(
         p.location === 'lobby' || p.location === 'radio' || p.location === 'breaker',
       ).length *
         2 +
-      state.players
-        .filter((p) => p.faction === 'lantern-guard')
-        .reduce((acc, p) => acc + p.investigationsCount, 0);
+      state.players.filter(
+        (p) => p.faction === 'lantern-guard' && p.investigationsCount >= 2,
+      ).length;
 
     const mistStealthControl =
       aliveMists.filter((p) => !p.revealed).length * 2 +
       aliveMists.filter((p) =>
         p.location === 'corridor' || p.location === 'canteen' || p.location === 'radio',
-      ).length;
+      ).length *
+        2;
 
     if (mistStealthControl > guardWatchControl) {
       const mistIds = state.players

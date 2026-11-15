@@ -162,11 +162,11 @@ Thay vì soi thẳng phe thật, mỗi thẻ **Điều tra có điều kiện** 
    - Cuối 2 vòng cuối (`maxRounds - 2`, `maxRounds - 1`), ai đứng một mình mà cả vòng đó không tấn công lẫn không điều tra chịu `1` vết thương mệt mỏi (tối đa tới `1 HP`).
    - Nếu hết vòng `maxRounds` mà cả Gác Đèn lẫn Màn Sương đều còn người sống (**không bao giờ cộng tổng HP để phân thắng thua!**):
      - So số thành viên đối địch đã bị hạ gục (`loại Màn Sương` vs `loại Gác Đèn`).
-     - Nếu hòa, so **Điểm Kiểm Soát Trực Đêm**: Gác Đèn tính `số người Gác Đèn còn sống đang giữ Phát Thanh/Bảo Vệ/Sảnh + tổng số lần điều tra toàn đội` đối đầu với Màn Sương tính `số Màn Sương còn sống chưa bị lật × 2 + số Màn Sương còn sống ở khu trung tâm`. Đội nào cao hơn giành chiến thắng (nếu vẫn ngang bằng tuyệt đối, Đội Gác Đèn giữ được kỷ luật KTX tới rạng sáng thắng).
+     - Nếu hòa, so **Điểm Kiểm Soát Trực Đêm**: Gác Đèn tính `số người Gác Đèn còn sống đang giữ Sảnh/Phát Thanh/Bảo Vệ × 2 + số Gác Đèn có >= 2 lần điều tra` đối đầu với Màn Sương tính `số Màn Sương còn sống chưa bị lật × 2 + số Màn Sương còn sống ở Hành Lang/Căng Tin/Phát Thanh × 2`. Đội nào cao hơn giành chiến thắng (nếu vẫn ngang bằng tuyệt đối, Đội Gác Đèn giữ được kỷ luật KTX tới rạng sáng thắng).
 6. **Đồng thắng (Shared Victory) cho Kẻ Lang Thang:** Bất kỳ lúc nào một phe thắng (hoặc kết thúc ván), máy chủ xét thêm những Kẻ Lang Thang hoàn thành mục tiêu:
    - **Hải:** Còn sống khi hết trận, đang mang `>= 2 Trang bị` và có `>= 2` lần điều tra.
-   - **Trang:** Còn sống khi hết trận với `>= 2` người đã bị loại (hoặc từ Vòng 6+ có `>= 1` người bị loại và `>= 2` lần điều tra).
-   - **Bình:** Nếu *Mục tiêu Bảo hộ* còn sống tới cuối trận và (Bình còn sống hoặc Bình đã dùng *Lá Chắn Thân Mình* bảo vệ họ `>= 1` lần) -> Bình đồng thắng! Nếu *Mục tiêu Bảo hộ* bị loại, Bình vẫn đồng thắng nếu Bình sống sót tới cuối trận **VÀ** đã kết liễu kẻ hạ *Mục tiêu Bảo hộ* (hoặc sống trong nhóm `<= 2` người cuối cùng).
+   - **Trang:** Còn sống khi hết trận với `>= 2` lần điều tra và đã có `>= 3` người bị loại (hoặc đã tự lật vai với `>= 2` người bị loại).
+   - **Bình:** Còn sống tới cuối trận và (*Mục tiêu Bảo hộ* còn sống với `>= 1` lần được Bình che chắn bằng *Lá Chắn Thân Mình*, **HOẶC** nếu *Mục tiêu Bảo hộ* gục, Bình đã kết liễu kẻ hạ *Mục tiêu Bảo hộ*).
 
 ---
 

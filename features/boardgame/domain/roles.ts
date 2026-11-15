@@ -212,7 +212,7 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
     faction: 'wanderer',
     maxHp: 11,
     secretObjective:
-      'Đồng thắng nếu sống sót tới cuối trận khi đã có >= 2 người bị loại (hoặc từ Vòng 6+ có >= 1 người bị loại & >= 2 lần điều tra); THẮNG ĐƠN ĐỘC tức thì nếu đã lật vai khi cả bàn chỉ còn <= 2 người sống (và >= 2 người bị loại).',
+      'Đồng thắng nếu sống sót tới cuối trận với >= 2 lần điều tra khi đã có >= 3 người bị loại (hoặc đã tự lật vai với >= 2 người bị loại); THẮNG ĐƠN ĐỘC tức thì nếu đã lật vai khi cả bàn chỉ còn <= 2 người sống (và >= 2 người bị loại).',
     activeAbility: {
       id: 'skill-trang-deposition',
       name: 'Biên Bản Đối Chất',
@@ -239,7 +239,7 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
     faction: 'wanderer',
     maxHp: 13,
     secretObjective:
-      'Bảo vệ Mục tiêu Bảo hộ bí mật sống sót tới hết ván (cùng sống hoặc đã che chắn >= 1 lần); nếu Mục tiêu gục, vẫn thắng nếu sống sót cuối ván VÀ đã kết liễu kẻ hạ Mục tiêu hoặc sống trong top 2 người cuối cùng.',
+      'Bảo vệ Mục tiêu Bảo hộ bí mật cùng sống sót tới hết ván (với >= 1 lần che chắn mục tiêu); nếu Mục tiêu gục, vẫn thắng nếu sống sót cuối ván VÀ đã kết liễu kẻ hạ Mục tiêu.',
     activeAbility: {
       id: 'skill-binh-shield',
       name: 'Lá Chắn Thân Mình',

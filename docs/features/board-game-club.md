@@ -1,7 +1,12 @@
 # HUSTVerse Board Game Club & “Bóng Đêm KTX — Secrets After Dark”
 
 > **Module IDs:** `feature.board-game-club`, `feature.bong-dem-ktx`, `worker.board-game-room`  
-> **Trạng thái triển khai:** Hoàn thiện BG1–BG4 và **Nâng cấp Luật v2 (`BOARD_GAME_RULESET_VERSION = 2` — Hidden Role & Deduction Rework)** (`feat/boardgame-v2-deduction`), xem đặc tả chi tiết tại [`docs/features/boardgame-v2-rules.md`](./boardgame-v2-rules.md).  
+> **Trạng thái triển khai:** Hoàn thiện BG1–BG4 và **Nâng cấp Luật v3 (`BOARD_GAME_RULESET_VERSION = 3` — Hidden Role, Investigation & Survival)** (`feat/boardgame-v2-deduction`).  
+> **Tài liệu đặc tả & kiểm chứng v3:**
+> - Quyết định thiết kế & rà soát v2 → v3: [`docs/features/boardgame-v3-design-decisions.md`](./boardgame-v3-design-decisions.md)
+> - Bộ luật đầy đủ v3: [`docs/features/boardgame-v3-rules.md`](./boardgame-v3-rules.md)
+> - Báo cáo cân bằng 4.500 ván (8 bot): [`docs/features/boardgame-v3-balance-report.md`](./boardgame-v3-balance-report.md)
+> - Báo cáo kiểm thử tổng hợp v3: [`docs/features/boardgame-v3-test-report.md`](./boardgame-v3-test-report.md)  
 > **Bản quyền:** 100% IP, bối cảnh, nhân vật, luật chơi, bộ thẻ và giao diện nguyên bản lấy cảm hứng từ thể loại *social deduction / hidden-role tactical board game*; không sao chép tên thương mại, luật chi tiết hay lời văn của bất kỳ sản phẩm nào khác.
 
 ---
@@ -68,21 +73,25 @@ worker/src/
 
 ---
 
-## 3. Thiết kế Trò chơi “Bóng Đêm KTX — Secrets After Dark” (Luật v2 — Hidden Role & Deduction)
+## 3. Thiết kế Trò chơi “Bóng Đêm KTX — Secrets After Dark” (Luật v3 — Hidden Role, Investigation & Survival)
 
-> Tài liệu quy tắc & mô hình suy luận chi tiết được tách thành đặc tả riêng tại **[`docs/features/boardgame-v2-rules.md`](./boardgame-v2-rules.md)** (`BOARD_GAME_RULESET_VERSION = 2`).
+> Tài liệu quy tắc & bảng chân trị chi tiết được lưu tại **[`docs/features/boardgame-v3-rules.md`](./boardgame-v3-rules.md)** (`BOARD_GAME_RULESET_VERSION = 3`).
 
-### 3.1. Tóm tắt cơ chế v2 (Loại bỏ hoàn toàn đua điểm Tín hiệu/Màn sương)
+### 3.1. Tóm tắt cơ chế v3 (Hidden Role, Điều tra Có điều kiện & Sinh tồn)
 
-- **Số người chơi & Số vòng hữu hạn:** `4 – 8` người/bàn; tối đa `6 vòng` (`4–5` người) hoặc `7 vòng` (`6–8` người) kết thúc bằng **Phiên Họp Rạng Sáng (Dawn Inquest)**.
-- **Bảo mật P0 tuyệt đối:** `hp` và `maxHp` luôn ẩn hoàn toàn trong `getPublicGameView()`; người chơi khác chỉ thấy `woundsTaken`, `visibleShield`, `detained` và `handCount`. Thẻ vai 2D mặc định **ÚP (`hiddenOnScreen = true`)**.
-- **Ma trận 3×3 Trực giao (`accessTag × traceTag`):** Mỗi đặc điểm đơn lẻ luôn khớp đúng `{1 Đội Gác Đèn, 1 Hội Màn Sương, 1 Kẻ Lang Thang}`, buộc người chơi ghép ít nhất 2 manh mối (`INVESTIGATE`, quét phòng, thẻ Điều tra `clue-01..08`) trước khi kết luận.
-- **Bản đồ 6 khu vực có giới hạn di chuyển kề cận (`isAdjacentLocation`):** Sảnh KTX (`lobby`), Căng tin B5–B9 (`canteen`), Phòng Phát Thanh (`radio`), Sân Bóng Rổ (`court`), Hành Lang B7 (`corridor` nối cả 5 ô), và Phòng Bảo Vệ & Cầu Dao (`breaker`).
-- **Luồng 1 lượt & Điều kiện thắng bất đối xứng:**
-  1. `MOVE`: Di chuyển tới 1 ô kề cận.
-  2. `DRAW_OR_EXPLORE`: Quét thiết bị / Gỡ mạch (`INTERACT_LOC scan`, giúp niêm phong `breaker`/`radio`), hoặc Hội Màn Sương bí mật gài Mạch Quá Tải (`INTERACT_LOC sabotage` tại `secretSabotageLocation`, nhật ký công khai y hệt quét phòng), hoặc rút 1 trong 3 bộ bài (`clue` / `event` / `tactic`, 24 lá).
-  3. `TACTICAL_ACTION`: `INVESTIGATE` (`equipment`/`activity`), `CONFRONT` từ Vòng 3+ (tạm giữ đúng Màn Sương hoặc phản chấn 2 vết thương trực tiếp), `ATTACK`, `USE_SKILL` (hoặc Vy `Gieo Nhiễu Giả` ẩn danh), `DETONATE_PLOT` (Màn Sương từ vòng sau khi gài), `PUBLISH_DOSSIER` (Hải V4+ ở Phát Thanh), `RECORD_HYPOTHESIS`, `REVEAL_ROLE` (kèm hộp xác nhận), `END_TURN`.
-- **Hết giờ trung lập (`DO alarm()`):** `applyTimeoutAutoTurn()` không đọc `faction`/`roleId`, tự cộng `+1 Khiên` nếu đang ở pha `MOVE` và chuyển lượt.
+- **Số người chơi & Số vòng hữu hạn:** `4 – 8` người/bàn; tối đa `9 vòng` (`4–5` người) hoặc `10 vòng` (`6–8` người), kèm áp lực Giới Nghiêm ở 2 vòng cuối và **Phiên Trực Cuối Đêm** (tuyệt đối không cộng tổng HP để phân thắng thua).
+- **Bảo mật P0 & Cân bằng Khung máu:** Cả 3 phe (`Đội Gác Đèn`, `Hội Màn Sương`, `Kẻ Lang Thang`) đều có đủ 3 mức máu tối đa đối xứng **`11 / 12 / 13 HP`**, xuất phát tại `Sảnh KTX` với `woundsTaken = 0`. `getPublicGameView()` **không** chứa `hp`, `maxHp`, vai chưa lật, bài trên tay hay `protegePlayerId`. Thẻ vai 2D mặc định **ÚP (`hiddenOnScreen = true`)** để tự động che cả bài trên tay và tên kỹ năng chưa lật.
+- **26 Thẻ bài theo 3 Bộ (`investigation`, `equipment`, `event`):**
+  - `9` thẻ **Điều tra có điều kiện (`inv-01..inv-09`)**: mọi lá đơn lẻ luôn khớp ít nhất 2–3 phe, người chơi phải ghép manh mối công khai + báo cáo kín (`PrivateClues`) để khoanh vùng nghi phạm.
+  - `9` thẻ **Trang bị (`eq-01..eq-09`)**: tối đa `2` trang bị công khai trước mặt (`7` bị động + `2` tiêu hao).
+  - `8` thẻ **Sự kiện (`ev-01..ev-08`)**: tạo biến động chiến thuật toàn khu vực KTX.
+- **Bản đồ 6 khu vực nối đồ thị (`KTX_GRAPH`):** `Sảnh KTX (lobby)`, `Căng tin B5–B9 (canteen)`, `Phòng Phát Thanh (radio)`, `Sân Bóng Rổ (court)`, `Hành Lang B7 (corridor)` (trung tâm nối cả 5 ô), và `Phòng Bảo Vệ (breaker)`. Mỗi nơi có `EXPLORE_LOC` riêng và 1–2 chồng bài được phép rút.
+- **Vòng lặp lượt 3 pha dưới 1 đồng hồ duy nhất (`40s` / `12s` mất kết nối):**
+  1. `MOVE_OR_STAY`: `MOVE` tới khu vực kề (hoặc 2 bước khi có *Giày Thể Thao*) hoặc `STAY`.
+  2. `LOCATION_ACTION`: Chọn `EXPLORE_LOC` (hiệu ứng khu vực) hoặc `DRAW_CARD` (rút 1 lá từ bộ bài của phòng).
+  3. `MAIN_ACTION`: Thực hiện tối đa 1 lượt miễn phí `EQUIP_CARD` / `REVEAL_ROLE` (kèm xác nhận không hoàn tác, nhận ngay thưởng lật vai & mở `USE_SKILL`), rồi chọn 1 hành động chính (`INVESTIGATE_CARD`, `PLAY_EVENT`, `USE_EQUIPMENT`, `ATTACK`, `DEFEND`, `USE_SKILL`, `END_TURN`).
+- **Chống đánh bừa & Chiến thắng đa chiều:** Đòn đánh mù vào người chưa lật, chưa từng đánh ai và chưa được điều tra kích hoạt *Bình Tĩnh Tự Vệ* (`-1 ST` & nạn nhân `+1 Giáp tạm`). Đội Gác Đèn hạ nhầm đồng đội chịu *Kỷ Luật Nội Trú* (`2` vết thương & rơi `1` trang bị). Kẻ Lang Thang (`Hải`, `Trang`, `Bình`) có mục tiêu độc lập hoặc đồng thắng.
+- **Hết giờ trung lập (`DO alarm()`):** `applyTimeoutAutoTurn()` không đọc `faction`/`roleId`, tự động giữ vị trí và phòng thủ với log đồng nhất.
 - **Chia sẻ & Hậu kỳ:** Link mời `?bgInvite=CODE`, âm thanh WebAudio (`sound.ts`), Bưu thiếp PNG 1200×675 (`MatchPostcard.tsx`, không MSSV).
 
 ---
@@ -102,7 +111,7 @@ worker/src/
   - `GET /ws/boardgame?matchId=...&playerId=...&seatIndex=...`: Nâng cấp WebSocket trực tiếp vào `BoardGameRoom` DO tương ứng (`idFromName(matchId)` hoặc `idFromName('__lounge_directory__')` nếu `mode=directory`).
 - **Luồng ngồi ghế -> Sẵn sàng / Bắt đầu trực tiếp trên HUD & Đồ họa bàn cờ (`BoardGameArt.tsx`):**
   - Ngồi xuống ghế 3D ở `Bàn 1` hoặc `Bàn 2` tự động gọi `joinOrCreateTableMatch` và hiển thị ngay thanh `[data-testid="bg-hud-match-bar"]` ngoài HUD với mã mời, nút chép link, bộ đếm sẵn sàng, nút `Sẵn sàng` (người chơi) và `▶ Bắt đầu ván đấu` (Host) mà không cần mở modal Sảnh. Đứng dậy khi đang ở phòng chờ sẽ rời phòng chờ sạch sẽ (`leaveMatch()`).
-  - Màn hình bàn cờ 2D dùng đồ họa SVG tùy biến (`FactionCrestSvg`, `RolePortraitSvg` cho 9 lớp nhân vật, `LocationSceneSvg` cho 6 địa điểm KTX nối đường đi, `DeckCardBackSvg`, `PlayerPawnToken` theo trang phục HUST và thước 6 nấc Tín hiệu/Màn sương) thay thế các khối chữ đơn thuần.
+  - Màn hình bàn cờ 2D dùng đồ họa SVG tùy biến (`FactionCrestSvg`, `RolePortraitSvg` cho 9 lớp nhân vật, `LocationSceneSvg` cho 6 địa điểm KTX nối đường đi, `DeckCardBackSvg`, và `PlayerPawnToken` theo trang phục HUST cùng huy hiệu giáp/trang bị công khai) thay thế các khối chữ đơn thuần.
 
 ### 4.2. Lược đồ SQLite trong `BoardGameRoom`
 
@@ -160,15 +169,15 @@ CREATE TABLE IF NOT EXISTS directory_matches (
 - Khi `BoardGameRoom` thức dậy sau hibernation (`constructor` / `webSocketMessage`), DO nạp lại `matches` + `match_players` từ SQLite và đối chiếu `attachment`.
 - **Token bảo mật 256-bit:** Client nhận `reconnectToken` một lần duy nhất qua frame riêng tư (`BG_AUTH_ISSUED`) lúc tham gia lần đầu và lưu ở `sessionStorage`. Reconnect phải gửi `reconnectToken`; server băm SHA-256 đối chiếu `reconnect_token_hash`.
 - **Fencing tab cũ:** Nếu cùng `playerId` mở kết nối mới hợp lệ với `reconnectToken`, socket cũ đang mở nhận close code `4001` (`"Replaced by newer connection"`) và bị ngắt sạch.
-- **Mất kết nối giữa trận:** Đánh dấu `connected = 0`; nếu là host ở lobby, tự động chuyển host cho người ngồi ghế nhỏ nhất còn kết nối; giữ chỗ `90 giây` để reconnect; trong lúc `PLAYING`, nếu đến lượt người mất kết nối thì `alarm()` chạy đúng hạn `15 giây` (rút gọn cho người mất kết nối) để không kẹt bàn.
+- **Mất kết nối giữa trận:** Đánh dấu `connected = 0`; nếu là host ở lobby, tự động chuyển host cho người ngồi ghế nhỏ nhất còn kết nối; giữ chỗ `90 giây` để reconnect; trong lúc `PLAYING`, nếu đến lượt người mất kết nối thì `alarm()` chạy đúng hạn `12 giây` (rút gọn cho người mất kết nối, so với `40 giây` mặc định) để không kẹt bàn; bản ghi v1/v2 cũ trong SQLite tự động chốt sạch `FINISHED` khi nâng cấp v3.
 
 ---
 
 ## 5. Bảo mật Thông tin Bí mật (P0 Hidden-Info Controls)
 
 1. **Tách biệt tuyệt đối 2 hàm chiếu (Projections):**
-   - `getPublicGameView(state)`: Chỉ chứa danh sách người chơi (tên, ghế, trang phục, `hp`, `maxHp`, `shield`, `location`, `revealedRoleId` — chỉ khác `null` khi đã lật vai công khai, `handCount` dạng số nguyên, `alive`), thanh tiến trình chung (`signalProgress`, `mistProgress`, `round`, `maxRounds`, `turnPhase`, `activePlayerId`, `turnDeadlineMs`), và nhật ký công khai đã được làm sạch (`publicLog`, không lộ tên vai hay nội dung thẻ riêng).
-   - `getPrivateGameView(state, authenticatedPlayerId)`: Chỉ trả riêng cho `WebSocket` gắn đúng `authenticatedPlayerId` qua kênh unicast (`ws.send`). Chứa `roleId`, `faction`, `secretGoal`, `wardId` (nếu có), `hand` (danh sách `GameCard` trên tay), `privateNotes` (kết quả soi vai riêng cho người chơi đó).
+   - `getPublicGameView(state)`: Chỉ chứa danh sách người chơi công khai (`displayName`, `seatIndex`, `appearance`, `location`, `woundsTaken`, `tempShield`, `handCount`, `equipped`, `attacksMade`, `investigationsCount`, `wardedUntilRound`, `exposedMark`, `alive`, `revealedRoleId` / `revealedFaction` / `revealedMaxHp` — tất cả `null` khi chưa lật vai hoặc chưa `FINISHED`), trạng thái bàn (`round`, `maxRounds`, `turnPhase`, `activePlayerId`, `curfewPressureActive`, `deckCounts`, `lastInvestigation`, `lastRevealEvent`), và nhật ký công khai (`publicLog`, không lộ danh tính hành động bí mật).
+   - `getPrivateGameView(state, authenticatedPlayerId)`: Chỉ trả riêng cho `WebSocket` gắn đúng `authenticatedPlayerId` qua kênh unicast (`ws.send`). Chứa `roleId`, `roleName`, `faction`, `hp`, `maxHp`, `secretGoalText`, `protegePlayerId`, `hand` (danh sách thẻ trên tay), `equipped`, `privateClues` và `privateNotes`.
 2. **Spectator Strictly Read-Only:** Kết nối khán giả luôn nhận `privateView: null`, không thể gửi lệnh thay đổi trạng thái ván (`REJECTED_SPECTATOR`).
 3. **Không bao giờ trả `game_state_json`, `reconnect_token_hash`, vai bí mật chưa lật, hoặc MSSV** trong `/api/boardgame/matches`, `MatchPostcard`, hay log lỗi.
 4. **Rate limiting & Idempotency Guard:** Kiểm tra `Origin` header với allowlist, giới hạn độ dài `displayName <= 24`, chặn spam chat/emote (`1.5s` cooldown trên server). Với `BG_GAME_ACTION`, kiểm tra bảng `processed_requests` (idempotency theo `requestId`) **trước**, sau đó mới áp dụng ngưỡng tần suất `MIN_ACTION_INTERVAL_MS = 25ms` và kiểm tra `expectedRevision` (`STALE_REVISION` resync nếu lệch phiên bản).
@@ -184,8 +193,8 @@ Chạy gộp nhanh toàn bộ kiểm thử tự động Board Game qua `npm run 
 | **BG1 Spatial & Lounge Unit** | `node --test test/boardgame-lounge.test.cjs` | Tọa độ nhà CLB không đè KTX/cây, 16 ghế, camera clamp indoor, collider phòng |
 | **BG1 Browser Smoke** | `node test/boardgame-bg1-smoke.cjs` | Playwright desktop `1280×800` & mobile `390×844`: vào phòng, ngồi ghế, xem bảng luật, thoát sạch |
 | **BG2 DO SQLite & Lobby** | `node --test test/boardgame-lobby-do.test.cjs` | `BoardGameRoom` SQLite thực: 4/8 người chơi, từ chối người thứ 9, 2 trận song song, reconnect, hibernation, host thoát |
-| **BG3 Pure Engine Unit** | `node --test test/boardgame-engine.test.cjs` | 9 vai, chia vai 4–8 người, 32 thẻ data-driven, thắng Gác Đèn / Màn Sương / Kẻ Lang Thang, giới hạn vòng |
-| **BG3 3,000-Game Balance Sim** | `node test/boardgame-sim.cjs` | Chạy `>= 3.000` ván bot offline (4–8p), tỷ lệ kẹt `= 0%`, cân bằng tỷ lệ thắng hợp lý |
+| **BG3 Pure Engine Unit** | `node --test test/boardgame-engine.test.cjs` | 9 vai, chia vai 4–8 người, 26 thẻ (9 Điều tra, 9 Trang bị, 8 Sự kiện), bảng chân trị & anti-leakage P0 |
+| **BG3 4,500-Game Balance Sim** | `node test/boardgame-sim.cjs` | Chạy `4.500` ván (8 bot, `4–8p`), tỷ lệ kẹt `0%`, hòa `0%`, kiểm tra mọi ngưỡng cân bằng vai/phe |
 | **BG3 Full Match DO Test** | `node --test test/boardgame-match-do.test.cjs` | Chơi hết ván qua WS + SQLite DO, xác minh 0 rò rỉ vai bí mật trên mọi frame WS/khán giả, `alarm()` timeout, refresh reconnect |
 | **BG4 E2E Multi-Context** | `node test/boardgame-e2e.cjs` | 4 trình duyệt Playwright thật (desktop + `390×844` mobile), `?bgInvite=CODE`, chơi 2D, inspect frame WS, xuất `MatchPostcard`, thoát về campus |
 | **Hồi quy toàn hệ thống** | `typecheck`, `test:learn`, `test:contracts`, `test:nav`, `test:mp`, `npm test`, `build`, `library-seating-smoke.cjs`, `test:pr10b` | 100% PASS, không hỏng campus / thư viện / HSK / Pomodoro |

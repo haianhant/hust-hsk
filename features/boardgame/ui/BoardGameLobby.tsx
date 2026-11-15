@@ -542,7 +542,7 @@ export default function BoardGameLobby({
                 <div className="rounded-xl border border-amber-500/35 bg-amber-950/30 p-2.5">
                   <div className="font-bold text-amber-300">🧭 Kẻ Lang Thang</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Mục tiêu riêng: <strong>Hải</strong> đeo 2 Trang bị &amp; &gt;= 2 Điều tra, <strong>Trang</strong> sống sót khi &gt;= 2 người bị loại, <strong>Bình</strong> bảo vệ mục tiêu bí mật hoặc đồng thắng cuối trận.
+                    Mục tiêu riêng: <strong>Hải</strong> đeo 2 Trang bị &amp; &gt;= 2 Điều tra, <strong>Trang</strong> điều tra &gt;= 2 &amp; chứng kiến &gt;= 2–3 người ngã, <strong>Bình</strong> che chắn bảo vệ mục tiêu bí mật.
                   </p>
                 </div>
               </div>
