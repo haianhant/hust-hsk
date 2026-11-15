@@ -106,6 +106,7 @@ export default function ActionPanel({
   const [selectedTargetId, setSelectedTargetId] = useState<string>('');
   const [cardDestinationLoc, setCardDestinationLoc] = useState<BoardGameLocationId>('lobby');
   const [confirmRevealOpen, setConfirmRevealOpen] = useState(false);
+  const [equippedTurnNumber, setEquippedTurnNumber] = useState<number>(-1);
 
   useEffect(() => {
     const preferred = inSameOrAdjacentTargets[0]?.playerId ?? aliveTargets[0]?.playerId ?? '';
@@ -220,7 +221,21 @@ export default function ActionPanel({
   );
 
   const roleDef = privateView ? ROLES_BY_ID[privateView.roleId] : null;
-  const canUseSkillNow = Boolean(privateView?.revealed && privateView.skillCooldown === 0);
+  const isInSkillRange = Boolean(activeTargetObj && (isSameRoom || isAdjacentRoom));
+  const canUseSkillNow = Boolean(
+    privateView?.revealed &&
+      privateView.skillCooldown === 0 &&
+      (privateView.roleId === 'lang-anh-san' ||
+        privateView.roleId === 'gac-ky-thuat' ||
+        (privateView.roleId === 'gac-radio' && Boolean(activeTargetObj)) ||
+        (privateView.roleId === 'suong-gac-cong' &&
+          isInSkillRange &&
+          Boolean(
+            activeTargetObj &&
+              (activeTargetObj.revealedRoleId !== null || activeTargetObj.woundsTaken > 0),
+          )) ||
+        isInSkillRange),
+  );
 
   return (
     <div
@@ -437,12 +452,15 @@ export default function ActionPanel({
               type="button"
               data-testid="bg-use-skill-btn"
               disabled={pendingAction || !canUseSkillNow}
-              onClick={() =>
+              onClick={() => {
+                const omitTarget =
+                  privateView?.roleId === 'lang-anh-san' ||
+                  (privateView?.roleId === 'gac-ky-thuat' && !isInSkillRange);
                 onAction({
                   type: 'USE_SKILL',
-                  targetPlayerId: activeTargetObj?.playerId,
-                })
-              }
+                  targetPlayerId: omitTarget ? undefined : activeTargetObj?.playerId,
+                });
+              }}
               title={
                 !privateView?.revealed
                   ? 'Hãy Lật vai công khai trước để mở khóa Kỹ năng riêng'
@@ -516,18 +534,32 @@ export default function ActionPanel({
                       const isInv = card.deck === 'investigation';
                       const isEquip = card.deck === 'equipment';
                       const isPassiveEquip = isEquip && !card.isConsumable;
+                      const isSelfHealFallbackCard =
+                        card.effectId === 'eq-thermos' || card.effectId === 'ev-calm-tea';
                       const needsTarget =
                         card.targetMode === 'single-player' ||
                         card.targetMode === 'adjacent-or-same' ||
-                        card.targetMode === 'same-location';
+                        (card.targetMode === 'same-location' && !isSelfHealFallbackCard);
                       const targetWithinRange =
                         card.targetMode === 'same-location'
                           ? isSameRoom
                           : card.targetMode === 'adjacent-or-same'
                             ? isSameRoom || isAdjacentRoom
                             : Boolean(activeTargetObj);
+                      const equipLockedThisTurn =
+                        isPassiveEquip && equippedTurnNumber === publicGame.turnNumber;
+                      const noEquippedTargetForAudit =
+                        card.effectId === 'ev-locker-audit' &&
+                        !publicGame.players.some(
+                          (p) => p.alive && p.playerId !== selfPlayerId && p.equipped.length > 0,
+                        );
+                      const invalidCorridorTarget =
+                        card.effectId === 'ev-power-flicker' && cardDestinationLoc === 'corridor';
                       const disabled =
                         pendingAction ||
+                        equipLockedThisTurn ||
+                        noEquippedTargetForAudit ||
+                        invalidCorridorTarget ||
                         (isInv && (!activeTargetObj || !canInvestigateTarget)) ||
                         (needsTarget && !isInv && (!activeTargetObj || !targetWithinRange));
 
@@ -541,6 +573,7 @@ export default function ActionPanel({
                           return;
                         }
                         if (isPassiveEquip) {
+                          setEquippedTurnNumber(publicGame.turnNumber);
                           onAction({ type: 'EQUIP_CARD', cardId: card.id });
                           return;
                         }
@@ -548,14 +581,35 @@ export default function ActionPanel({
                           onAction({
                             type: 'USE_EQUIPMENT',
                             cardId: card.id,
-                            targetPlayerId: needsTarget ? activeTargetObj?.playerId : undefined,
+                            targetPlayerId: isSelfHealFallbackCard
+                              ? isSameRoom
+                                ? activeTargetObj?.playerId
+                                : undefined
+                              : needsTarget
+                                ? activeTargetObj?.playerId
+                                : undefined,
                           });
                           return;
                         }
+                        const auditTarget =
+                          card.effectId === 'ev-locker-audit'
+                            ? activeTargetObj && activeTargetObj.equipped.length > 0
+                              ? activeTargetObj.playerId
+                              : publicGame.players.find(
+                                  (p) =>
+                                    p.alive && p.playerId !== selfPlayerId && p.equipped.length > 0,
+                                )?.playerId
+                            : isSelfHealFallbackCard
+                              ? isSameRoom
+                                ? activeTargetObj?.playerId
+                                : undefined
+                              : needsTarget
+                                ? activeTargetObj?.playerId
+                                : undefined;
                         onAction({
                           type: 'PLAY_EVENT',
                           cardId: card.id,
-                          targetPlayerId: needsTarget ? activeTargetObj?.playerId : undefined,
+                          targetPlayerId: auditTarget,
                           targetLocation:
                             card.targetMode === 'location' ? cardDestinationLoc : undefined,
                         });

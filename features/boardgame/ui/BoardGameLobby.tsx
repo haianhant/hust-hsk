@@ -521,46 +521,49 @@ export default function BoardGameLobby({
             </div>
             <div className="flex-1 space-y-3 overflow-y-auto p-4 text-xs leading-relaxed text-slate-200 sm:text-sm">
               <p className="rounded-xl bg-slate-800/70 p-3 text-amber-100">
-                <strong>Bối cảnh v2 (Suy luận vai ẩn):</strong> Đêm mất điện tại khu KTX Bách Khoa,
-                một <strong>Trạm Mục Tiêu</strong> trong hạ tầng đang bị nhắm phá hoại. Máu tối đa &amp;
-                phe của từng sinh viên được <strong>giấu kín tuyệt đối</strong> cho tới khi lật vai hoặc hết trận!
+                <strong>Bối cảnh v3 (Suy luận vai ẩn &amp; Sinh tồn):</strong> Đêm mất điện tại khu KTX Bách Khoa,
+                mỗi sinh viên nhận một <strong>Nhân vật bí mật</strong> (máu tối đa <strong>11 / 12 / 13 HP</strong>) được{' '}
+                <strong>giấu kín tuyệt đối</strong> cùng <strong>bài trên tay &amp; tên kỹ năng</strong> khi thẻ vai đang úp mặt!
               </p>
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div className="rounded-xl border border-sky-500/35 bg-sky-950/30 p-2.5">
                   <div className="font-bold text-sky-300">🔦 Đội Gác Đèn</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Quét &amp; gỡ Mạch Quá Tải, niêm phong Cầu Dao &amp; Phát Thanh, hoặc Đối chất đúng từ Vòng 3 để Tạm giữ hết Màn Sương.
+                    Suy luận ra phe ẩn và loại hết <strong>Hội Màn Sương</strong>, hoặc giữ đa số lực lượng khi qua 8 vòng tới Rạng Sáng.
                   </p>
                 </div>
                 <div className="rounded-xl border border-rose-500/35 bg-rose-950/30 p-2.5">
                   <div className="font-bold text-rose-300">🌫️ Hội Màn Sương</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Bí mật gài Mạch Quá Tải tại Trạm Mục Tiêu rồi kích nổ từ vòng sau, hoặc lén lọt tuần tra qua Rạng Sáng.
+                    Ẩn mình đánh lạc hướng, loại hết <strong>Đội Gác Đèn</strong> hoặc kích hoạt thắng Giới Nghiêm / Rạng Sáng.
                   </p>
                 </div>
                 <div className="rounded-xl border border-amber-500/35 bg-amber-950/30 p-2.5">
                   <div className="font-bold text-amber-300">🧭 Kẻ Lang Thang</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Hải công bố hồ sơ ở Phát Thanh (V4+), Trang chốt đúng giả thuyết phe, Bình bảo vệ mục tiêu bí mật.
+                    Mục tiêu riêng: <strong>Hải</strong> đeo 2 Trang bị &amp; &gt;= 2 Điều tra, <strong>Trang</strong> sống sót khi &gt;= 2 người bị loại, <strong>Bình</strong> bảo vệ mục tiêu bí mật hoặc đồng thắng cuối trận.
                   </p>
                 </div>
               </div>
 
               <div>
-                <h4 className="font-bold text-amber-200">Cấu trúc 1 lượt chơi (6–7 vòng tới Rạng Sáng):</h4>
+                <h4 className="font-bold text-amber-200">Cấu trúc 1 lượt chơi (tối đa 40 giây / lượt, 9–10 vòng tới Phiên Trực Cuối Đêm):</h4>
                 <ol className="mt-1 list-inside list-decimal space-y-1 text-slate-300">
                   <li>
-                    <strong>Di chuyển kề cận:</strong> Bước sang 1 khu vực có đường nối trực tiếp trên bản đồ KTX.
+                    <strong>Pha 1 · Di chuyển hoặc Ở lại (MOVE_OR_STAY):</strong> Bước sang khu vực kề cận hoặc chọn Ở lại chỗ cũ để khai thác sâu hơn.
                   </li>
                   <li>
-                    <strong>Khảo sát / Rút thẻ:</strong> Quét thiết bị phòng (hoặc Màn Sương lén gài mạch), hay rút thẻ Điều tra / Sự kiện / Chiến thuật.
+                    <strong>Pha 2 · Khám phá khu vực hoặc Rút thẻ (LOCATION_ACTION):</strong> Kích hoạt hiệu ứng đặc thù phòng KTX, hoặc rút từ 1 trong 3 chồng bài: <strong>Điều tra</strong>, <strong>Trang bị</strong>, <strong>Sự kiện</strong>.
                   </li>
                   <li>
-                    <strong>Suy luận &amp; Chiến thuật:</strong> Điều tra Dụng cụ / Hành tung (luôn khớp 3 phe nên phải ghép manh mối), ghi Sổ Giả Thuyết, Dùng thẻ, Công kích, Đối chất (V3+ — sai chịu 2 vết thương trực tiếp!) hoặc Kích nổ / Công bố hồ sơ.
+                    <strong>Pha 3 · Hành động chính &amp; Lật vai (MAIN_ACTION):</strong> Điều tra có điều kiện (chỉ định mục tiêu — kết quả ghép từ ít nhất 2 phe để suy luận), dùng thẻ/trang bị, Phòng thủ (+1 Giáp tạm &amp; quan sát cùng phòng), Công kích (cùng phòng — chú ý Kỷ luật Gác Đèn khi bắn nhầm phe), hoặc tự nguyện <strong>Lật vai</strong> mở khóa kỹ năng đặc biệt trước khi Kết thúc lượt.
                   </li>
                 </ol>
               </div>
+              <p className="rounded-xl border border-emerald-400/30 bg-emerald-950/30 p-2.5 text-xs text-emerald-100">
+                🔒 <strong>Bảo mật màn hình:</strong> Khi chia sẻ phòng chơi cùng chỗ, giữ thẻ vai ở trạng thái <strong>Úp mặt</strong> để tự động che cả <strong>Bài trên tay</strong> lẫn <strong>Tên kỹ năng chưa lật</strong>; bấm mở thẻ khi thao tác riêng tư.
+              </p>
             </div>
           </div>
         </div>

@@ -219,9 +219,9 @@ async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl) {
 
       if (msg.type === 'BG_STATE_SYNC' && msg.publicGame) {
         const pg = msg.publicGame;
-        if (pg.rulesetVersion !== 2) {
+        if (pg.rulesetVersion !== 3) {
           audit.auditErrors.push(
-            `${user.label}: expected rulesetVersion 2, got ${String(pg.rulesetVersion)}`,
+            `${user.label}: expected rulesetVersion 3, got ${String(pg.rulesetVersion)}`,
           );
         }
         const rawPg = JSON.stringify(pg);
@@ -232,10 +232,13 @@ async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl) {
           '"secretSabotageLocation"',
           '"sabotagePlanted"',
           '"sabotageCanDetonate"',
+          '"sabotageProgress"',
+          '"activeArmor"',
+          '"attackBonus"',
         ]) {
           if (rawPg.includes(forbidden)) {
             audit.auditErrors.push(
-              `${user.label}: v1/secret field ${forbidden} leaked in publicGame!`,
+              `${user.label}: forbidden v1/v2/secret field ${forbidden} leaked in publicGame!`,
             );
           }
         }
@@ -256,9 +259,13 @@ async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl) {
         for (const pl of pg.players || []) {
           if (pl.playerId !== audit.selfPlayerId && !pl.revealedRoleId) {
             const rawPlayer = JSON.stringify(pl);
-            if (rawPlayer.includes('secretGoalText') || rawPlayer.includes('"hand"')) {
+            if (
+              rawPlayer.includes('secretGoalText') ||
+              rawPlayer.includes('"hand"') ||
+              rawPlayer.includes('"skillName"')
+            ) {
               audit.auditErrors.push(
-                `${user.label}: hidden secretGoal/hand exposed for ${pl.playerId}`,
+                `${user.label}: hidden secretGoal/hand/skill exposed for ${pl.playerId}`,
               );
             }
           }
@@ -278,6 +285,7 @@ async function enterCampusAndWaitHook(page, targetUrl, diagAudit) {
   try {
     await page.waitForFunction(() => Boolean(window.__bkhn && window.__bkhn.enterBoardGameClub), null, {
       timeout: 45000,
+      polling: 200,
     });
   } catch (err) {
     const diag = await page.evaluate(() => ({
@@ -292,39 +300,96 @@ async function enterCampusAndWaitHook(page, targetUrl, diagAudit) {
   }
 }
 
-async function playFirstValidStepOnPage(page) {
-  const panel = page.locator('[data-testid="bg-action-panel"]');
-  if ((await panel.count()) === 0) return false;
-  if (!(await panel.isVisible().catch(() => false))) return false;
+async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set()) {
+  const snap = await page
+    .evaluate(() => {
+      const confirmBtn = document.querySelector('[data-testid="bg-confirm-reveal-btn"]');
+      if (confirmBtn && !confirmBtn.disabled) {
+        return { mode: 'confirm-reveal', turnKey: '', enabledIds: [] };
+      }
+      const panel = document.querySelector('[data-testid="bg-action-panel"]');
+      if (!panel) return { mode: 'none', turnKey: '', enabledIds: [] };
+      const statusBar = document.querySelector('[data-testid="bg-v3-status-bar"]');
+      const turnKey = (statusBar?.textContent || '').replace(/\s+/g, ' ').slice(0, 120);
+      const btns = Array.from(panel.querySelectorAll('button[data-testid]'));
+      const enabledIds = btns
+        .filter((b) => {
+          if (b.disabled) return false;
+          const r = b.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        })
+        .map((b) => b.getAttribute('data-testid'))
+        .filter(Boolean);
+      return { mode: 'panel', turnKey, enabledIds };
+    })
+    .catch(() => ({ mode: 'none', turnKey: '', enabledIds: [] }));
 
-  const tryClick = async (selector) => {
-    const loc = page.locator(selector).first();
-    if ((await loc.count()) > 0 && (await loc.isVisible().catch(() => false))) {
-      const disabled = await loc.isDisabled().catch(() => true);
-      if (!disabled) {
-        await loc.click();
-        return true;
+  if (snap.mode === 'confirm-reveal') {
+    const ok = await page
+      .locator('[data-testid="bg-confirm-reveal-btn"]')
+      .click({ timeout: 4000 })
+      .then(() => true)
+      .catch(() => false);
+    return ok;
+  }
+  if (snap.mode !== 'panel' || snap.enabledIds.length === 0) return false;
+
+  const isFresh = (id) => id === 'bg-end-turn-btn' || !triedSet.has(`${snap.turnKey}::${id}`);
+  const enabledSet = new Set(snap.enabledIds);
+
+  const pickAndClick = async (id) => {
+    if (!id || !enabledSet.has(id) || !isFresh(id)) return false;
+    if (id !== 'bg-end-turn-btn') {
+      triedSet.add(`${snap.turnKey}::${id}`);
+    }
+    const loc = page.locator(`[data-testid="${id}"]`).first();
+    const clicked = await loc
+      .click({ timeout: 4000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!clicked) return false;
+    if (id === 'bg-reveal-role-btn') {
+      const confirmBtn = page.locator('[data-testid="bg-confirm-reveal-btn"]');
+      if (
+        await confirmBtn
+          .waitFor({ state: 'visible', timeout: 1500 })
+          .then(() => true)
+          .catch(() => false)
+      ) {
+        await confirmBtn.click({ timeout: 4000 }).catch(() => undefined);
       }
     }
-    return false;
+    return true;
   };
 
-  // Pha 1: MOVE -> ưu tiên vị trí có tương tác chiến thuật, fallback bất kỳ ô kề hợp lệ
-  if (await tryClick('[data-testid="bg-move-radio"]')) return true;
-  if (await tryClick('[data-testid="bg-move-breaker"]')) return true;
-  if (await tryClick('[data-testid="bg-move-corridor"]')) return true;
-  if (await tryClick('[data-testid^="bg-move-"]')) return true;
+  // Pha 1 (MOVE_OR_STAY)
+  for (const id of ['bg-move-canteen', 'bg-move-corridor']) {
+    if (await pickAndClick(id)) return true;
+  }
+  const anyMove = snap.enabledIds.find((id) => id.startsWith('bg-move-') && isFresh(id));
+  if (anyMove && (await pickAndClick(anyMove))) return true;
+  if (await pickAndClick('bg-stay-btn')) return true;
 
-  // Pha 2: DRAW_OR_EXPLORE -> ưu tiên gài phá hoại / tương tác địa điểm, fallback Rút thẻ
-  if (await tryClick('[data-testid="bg-plant-sabotage"]')) return true;
-  if (await tryClick('[data-testid="bg-interact-location"]')) return true;
-  if (await tryClick('[data-testid="bg-draw-clue"]')) return true;
-  if (await tryClick('[data-testid="bg-draw-event"]')) return true;
-  if (await tryClick('[data-testid="bg-draw-tactic"]')) return true;
+  // Pha 2 (LOCATION_ACTION)
+  const p2Order = [
+    'bg-draw-investigation',
+    'bg-draw-equipment',
+    'bg-draw-event',
+    'bg-explore-loc',
+  ];
+  for (let i = 0; i < p2Order.length; i++) {
+    if (await pickAndClick(p2Order[(stepIndex + i) % p2Order.length])) return true;
+  }
 
-  // Pha 3: TACTICAL_ACTION -> Kích nổ nếu đủ điều kiện hoặc Kết thúc lượt
-  if (await tryClick('[data-testid="bg-detonate-btn"]')) return true;
-  if (await tryClick('[data-testid="bg-end-turn-btn"]')) return true;
+  // Pha 3 (MAIN_ACTION)
+  if (await pickAndClick('bg-unmask-hand-btn')) return true;
+  if (await pickAndClick('bg-reveal-role-btn')) return true;
+  if (await pickAndClick('bg-use-skill-btn')) return true;
+  const anyCard = snap.enabledIds.find((id) => id.startsWith('bg-use-card-') && isFresh(id));
+  if (anyCard && (await pickAndClick(anyCard))) return true;
+  if (await pickAndClick('bg-attack-btn')) return true;
+  if (await pickAndClick('bg-defend-btn')) return true;
+  if (await pickAndClick('bg-end-turn-btn')) return true;
 
   return false;
 }
@@ -437,7 +502,7 @@ async function main() {
           .querySelector('[data-testid="bg-hud-match-bar"]')
           ?.textContent?.includes('/4 sẵn sàng'),
       null,
-      { timeout: 25000 },
+      { timeout: 25000, polling: 200 },
     );
     await p1.page.waitForTimeout(350);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-01-lobby-4p.png') });
@@ -455,7 +520,7 @@ async function main() {
         return Boolean(btn && !btn.hasAttribute('disabled'));
       },
       null,
-      { timeout: 30000 },
+      { timeout: 30000, polling: 200 },
     );
     await p1.page.locator('[data-testid="bg-hud-start-btn"]').click();
 
@@ -467,33 +532,78 @@ async function main() {
         await p.page.waitForSelector('[data-testid="bg-role-card"]', { timeout: 25000 });
       }
     }
-    // Trên Mobile 390x844 (P4), kiểm tra chuyển tab "Vai bí mật", lật thẻ vai rồi quay lại tab "Bàn & Lượt"
+    // Trên Mobile 390x844 (P4), kiểm tra chuyển tab "Vai bí mật", lật thẻ vai, úp lại để giữ riêng tư, rồi quay lại tab "Bàn & Lượt"
     await p4.page.bringToFront();
     await p4.page.locator('button:has-text("Vai bí mật")').click();
     await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
     await p4.page.locator('[data-testid="bg-toggle-role-card"]').click();
     await p4.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
+    await p4.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
     await p4.page.locator('button:has-text("Bàn & Lượt")').click();
-    await p4.page.waitForSelector('[data-testid="bg-loc-lobby"]', { timeout: 20000 });
+    await p4.page.waitForSelector('[data-testid="bg-loc-corridor"]', { timeout: 20000 });
 
-    await p2.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
-    await p2.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    await p2.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
-    const p2RoleBeforeReload = (
-      await p2.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()
-    ).trim();
-    assert.ok(p2RoleBeforeReload.length > 0, 'P2 phải thấy thẻ vai bí mật của mình');
+    // Kiểm tra Mobile 390x844 không tràn ngang trước khi thao tác tiếp
+    const mobileOverflow = await p4.page.evaluate(() => {
+      const board = document.querySelector('[data-testid="boardgame-2d-board"]');
+      return {
+        docOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+        boardOverflow: board ? board.scrollWidth > board.clientWidth + 1 : false,
+        scrollW: document.documentElement.scrollWidth,
+        innerW: window.innerWidth,
+      };
+    });
+    assert.equal(
+      mobileOverflow.docOverflow || mobileOverflow.boardOverflow,
+      false,
+      `Mobile 390x844 bị tràn ngang: ${JSON.stringify(mobileOverflow)}`,
+    );
+    await p4.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-03-gameboard-mobile.png') });
+
+    // Kiểm tra hướng dẫn v3 (Rules Modal) ngay trong ván
+    await p1.page.bringToFront();
+    await p1.page.waitForSelector('[data-testid="bg-v3-status-bar"]', { timeout: 20000 });
+    await p1.page.locator('[data-testid="bg-board-rules-btn"]').click();
+    await p1.page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: 15000 });
+    const rulesModalText = await p1.page.locator('[data-testid="boardgame-rules-modal"]').innerText();
+    assert.ok(
+      rulesModalText.includes('Bối cảnh v3') && rulesModalText.includes('Bảo mật màn hình'),
+      'Rules modal phải cập nhật đúng luật Bóng Đêm KTX v3',
+    );
+    await p1.page.locator('[data-testid="bg-close-rules-btn"]').click();
 
     // Test âm thanh toggle + biểu cảm toast real-time
-    await p1.page.bringToFront();
     await p1.page.locator('[data-testid="bg-sound-toggle-btn"]').click();
     await p1.page.locator('[data-testid="bg-sound-toggle-btn"]').click();
     await p1.page.locator('[data-testid="bg-emote-wave"]').click();
     await p2.page.waitForSelector('[data-testid="bg-emote-toast"]', { timeout: 15000 });
 
+    // Kiểm tra bảo mật màn hình (úc thẻ -> ẩn bài trên tay; bấm mở -> hiện bài & kỹ năng) trên người đang giữ lượt
+    let activePlayer = null;
+    for (const p of players) {
+      if ((await p.page.locator('[data-testid="bg-action-panel"]').count()) > 0) {
+        activePlayer = p;
+        break;
+      }
+    }
+    assert.ok(activePlayer, 'Phải có đúng 1 người chơi đang giữ lượt hiển thị ActionPanel');
+    await activePlayer.page.bringToFront();
+    // Pha 1 -> Pha 2 -> Pha 3 (MAIN_ACTION)
+    await playFirstValidStepOnPage(activePlayer.page, 0);
+    await activePlayer.page.waitForTimeout(180);
+    await playFirstValidStepOnPage(activePlayer.page, 0);
+    await activePlayer.page.waitForSelector('[data-testid="bg-hand-masked-banner"]', { timeout: 20000 });
+    await activePlayer.page.locator('[data-testid="bg-unmask-hand-btn"]').click();
+    await activePlayer.page.waitForSelector('[data-testid^="bg-use-card-"]', { timeout: 20000 });
+    // Đóng lượt đầu nhẹ nhàng bằng END_TURN (hoặc giữ nguyên sẵn sàng cho vòng lặp Bước 6)
+    await activePlayer.page.locator('[data-testid="bg-end-turn-btn"]').click();
+
+    // Đảm bảo P1 không rò rỉ HP ra ngoài thẻ vai bí mật, rồi mở thẻ vai P1 chụp bg4-02-gameboard-desktop.png
     await p1.page.bringToFront();
-    await p1.page.waitForSelector('[data-testid="bg-incident-status-bar"]', { timeout: 20000 });
-    await p1.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
+    if ((await p1.page.locator('[data-testid="bg-role-card-facedown"]').count()) > 0) {
+      await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    }
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
     const leakedHpText = await p1.page.evaluate(() => {
       const board = document.querySelector('[data-testid="boardgame-2d-board"]');
       if (!board) return 'MISSING_BOARD';
@@ -510,34 +620,19 @@ async function main() {
       null,
       `Public board/action-panel không được lộ HP (phát hiện: ${leakedHpText})`,
     );
-    const selfMoveCountAtLobby = await p1.page.locator('[data-testid="bg-move-lobby"]').count();
-    assert.equal(
-      selfMoveCountAtLobby,
-      0,
-      'ActionPanel không được hiển thị nút di chuyển tới chính vị trí đang đứng (lobby)',
-    );
-    await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
     await p1.page.waitForTimeout(300);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-02-gameboard-desktop.png') });
 
-    // Kiểm tra Mobile 390x844 không tràn ngang
-    await p4.page.bringToFront();
-    const mobileOverflow = await p4.page.evaluate(() => {
-      const board = document.querySelector('[data-testid="boardgame-2d-board"]');
-      return {
-        docOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
-        boardOverflow: board ? board.scrollWidth > board.clientWidth + 1 : false,
-        scrollW: document.documentElement.scrollWidth,
-        innerW: window.innerWidth,
-      };
-    });
-    assert.equal(
-      mobileOverflow.docOverflow || mobileOverflow.boardOverflow,
-      false,
-      `Mobile 390x844 bị tràn ngang: ${JSON.stringify(mobileOverflow)}`,
-    );
-    await p4.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-03-gameboard-mobile.png') });
+    // Đọc vai bí mật của P2 trước khi thử F5 reconnect
+    await p2.page.bringToFront();
+    if ((await p2.page.locator('[data-testid="bg-role-card-facedown"]').count()) > 0) {
+      await p2.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    }
+    await p2.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
+    const p2RoleBeforeReload = (
+      await p2.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()
+    ).trim();
+    assert.ok(p2RoleBeforeReload.length > 0, 'P2 phải thấy thẻ vai bí mật của mình');
 
     // 5. F5 (page.reload) giữa trận ở P2 -> khôi phục tự động đúng bàn & đúng vai bí mật
     console.log('[BG4 E2E] Step 5: Testing mid-match F5 reconnect on P2...');
@@ -561,24 +656,38 @@ async function main() {
     // 6. Chơi hết ván tới FINISHED bằng điều khiển UI thật trên cả 4 trình duyệt
     console.log('[BG4 E2E] Step 6: Playing turns to FINISHED...');
     let finished = false;
-    for (let step = 0; step < 320; step++) {
-      if (
-        await p1.page
-          .locator('[data-testid="bg-match-result-modal"]')
-          .isVisible()
-          .catch(() => false)
-      ) {
+    let lastBroughtIdx = -1;
+    const triedActionsPerTurn = new Set();
+    for (let step = 0; step < 520; step++) {
+      const modalVisible = await p1.page
+        .evaluate(() => Boolean(document.querySelector('[data-testid="bg-match-result-modal"]')))
+        .catch(() => false);
+      if (modalVisible) {
         finished = true;
         break;
       }
-      let acted = false;
-      for (const p of players) {
-        if (await playFirstValidStepOnPage(p.page)) {
-          acted = true;
-          break;
-        }
+      const panelFlags = await Promise.all(
+        players.map((p) =>
+          p.page
+            .evaluate(() =>
+              Boolean(
+                document.querySelector('[data-testid="bg-action-panel"]') ||
+                  document.querySelector('[data-testid="bg-confirm-reveal-btn"]'),
+              ),
+            )
+            .catch(() => false),
+        ),
+      );
+      const activeIdx = panelFlags.findIndex(Boolean);
+      if (activeIdx >= 0 && activeIdx !== lastBroughtIdx) {
+        await players[activeIdx].page.bringToFront().catch(() => undefined);
+        lastBroughtIdx = activeIdx;
       }
-      await p1.page.waitForTimeout(acted ? 160 : 120);
+      const acted =
+        activeIdx >= 0
+          ? await playFirstValidStepOnPage(players[activeIdx].page, step, triedActionsPerTurn)
+          : false;
+      await new Promise((r) => setTimeout(r, acted ? 70 : 60));
     }
     if (!finished) {
       const diagText = await p1.page
@@ -656,7 +765,7 @@ async function main() {
         return !window.__bkhn.isInBoardGameClub() && pos.x > 100 && pos.z < -45;
       },
       null,
-      { timeout: 25000 },
+      { timeout: 40000, polling: 200 },
     );
     await p1.page.waitForTimeout(500);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-05-exit-ktx.png') });
