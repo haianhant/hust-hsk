@@ -1544,11 +1544,12 @@ export class BoardGameRoom {
         requestId: reqId,
         ok: false,
         revision: nextRev,
-        reason: engineState.winReason ?? 'Phiên ván cũ đã được khép để nâng cấp Luật v2.',
+        reason: engineState.winReason ?? 'Phiên ván cũ đã được khép an toàn khi nâng cấp lên Luật v3.',
       });
       return;
     }
 
+    const prevTurnNumber = engineState.turnNumber;
     const res = applyPlayerGameAction(
       engineState,
       player.player_id,
@@ -1573,9 +1574,13 @@ export class BoardGameRoom {
     }
 
     const nextStatus: BoardGameMatchStatus = engineState.finished ? 'FINISHED' : 'PLAYING';
+    const turnChanged = engineState.turnNumber !== prevTurnNumber;
     const nextDeadline = engineState.finished
       ? null
-      : this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs);
+      : turnChanged
+        ? this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs)
+        : match.turn_deadline_ms ??
+          this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs);
     const newRevision = match.revision + 1;
 
     if (engineState.finished) {
@@ -1824,32 +1829,36 @@ export class BoardGameRoom {
         faction: roleDef.faction,
         hp,
         maxHp,
-        shield: typeof p.shield === 'number' ? p.shield : 0,
-        accessTag: roleDef.accessTag,
-        traceTag: roleDef.traceTag,
+        tempShield: typeof p.tempShield === 'number' ? p.tempShield : typeof p.shield === 'number' ? p.shield : 0,
         location: loc,
         visitedLocations: [loc],
-        recentMoves: [],
-        technicalActionRounds: [],
-        plantedDecoyRounds: [],
-        dealtDamageRounds: [],
-        metPlayerIds: [],
-        verifiedSceneLocations: [],
+        recentTrail: [loc],
         alive: typeof p.alive === 'boolean' ? p.alive : hp > 0,
-        detained: false,
         connected: Boolean(p.connected),
         revealed: true,
-        skillUsed: Boolean(p.skillUsed),
-        covertSkillUsed: false,
-        confrontUsed: false,
-        healBlockedNextTurn: false,
-        bodyguardActive: false,
-        wardPlayerId: null,
-        wardProtectionsCount: 0,
-        sacrificedForWard: false,
-        hypotheses: [],
+        skillCooldown: 0,
+        stayedLastTurn: false,
+        stayedCount: 0,
+        movesMade: 0,
+        attacksMade: typeof p.attacksMade === 'number' ? p.attacksMade : 0,
+        investigationsCount: typeof p.investigationsCount === 'number' ? p.investigationsCount : 0,
+        actedThisRound: false,
+        extendedRangeThisTurn: false,
+        courtAttackBonusThisTurn: false,
+        globalInvestigateThisTurn: false,
+        equipUsedThisTurn: false,
+        wardedUntilRound: 0,
+        exposedMark: 0,
+        gainedShieldThisTurn: false,
+        protegePlayerId: null,
+        protectedProtegeCount: 0,
+        eliminatedByPlayerId: null,
+        eliminatedPlayerIds: [],
+        avengedProtegeKiller: false,
+        investigatedTargetIds: [],
         hand: [],
-        evidenceList: [],
+        equipped: [],
+        privateClues: [],
         privateNotes: [],
       };
     });
@@ -1865,59 +1874,67 @@ export class BoardGameRoom {
       }
     }
 
+    const wasFinished = match.status === 'FINISHED' || Boolean(rawEngine.finished);
+    const preservedWinnerLabel =
+      wasFinished && typeof rawEngine.winnerLabel === 'string'
+        ? rawEngine.winnerLabel
+        : 'Phiên v1/v2 đã khép — Sẵn sàng Luật v3';
+    const preservedWinReason =
+      wasFinished && typeof rawEngine.winReason === 'string'
+        ? rawEngine.winReason
+        : 'Bóng Đêm KTX đã nâng cấp lên Luật v3 (Hidden Role, Investigation & Survival). Phiên cũ đã được khép an toàn; hãy bấm Sẵn sàng để bắt đầu ván v3!';
+    const preservedWinnerFaction =
+      wasFinished &&
+      (rawEngine.winnerFaction === 'lantern-guard' ||
+        rawEngine.winnerFaction === 'mist-order' ||
+        rawEngine.winnerFaction === 'wanderer-solo' ||
+        rawEngine.winnerFaction === 'wanderer')
+        ? rawEngine.winnerFaction
+        : null;
+    const preservedWinnerPlayerIds =
+      wasFinished && Array.isArray(rawEngine.winnerPlayerIds)
+        ? rawEngine.winnerPlayerIds.filter((id): id is string => typeof id === 'string')
+        : [];
+    const mappedLogs = Array.isArray(rawEngine.publicLog)
+      ? rawEngine.publicLog
+          .slice(-20)
+          .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === 'object'))
+          .map((entry, idx) => ({
+            id: typeof entry.id === 'string' ? entry.id : `legacy-log-${idx + 1}`,
+            round: typeof entry.round === 'number' ? entry.round : 1,
+            atMs: typeof entry.atMs === 'number' ? entry.atMs : match.updated_at_ms,
+            kind: 'system' as const,
+            text: typeof entry.text === 'string' ? entry.text : '',
+          }))
+      : [];
+
     return {
-      rulesetVersion: 2,
+      rulesetVersion: BOARD_GAME_RULESET_VERSION,
       matchId: typeof rawEngine.matchId === 'string' ? rawEngine.matchId : match.match_id,
       seed: typeof rawEngine.seed === 'number' ? rawEngine.seed : 1,
       rngState: typeof rawEngine.rngState === 'number' ? rawEngine.rngState : 1,
       round: typeof rawEngine.round === 'number' ? rawEngine.round : 1,
-      maxRounds: typeof rawEngine.maxRounds === 'number' ? rawEngine.maxRounds : 6,
-      secretSabotageLocation: 'breaker',
-      sabotagePlanted: false,
-      sabotagePlantedRound: null,
-      sabotagePlantedByPlayerId: null,
-      sabotageArmed: false,
-      plotDetonated: false,
-      disarmedCount: 0,
-      breakerSealed: false,
-      radioSealed: false,
-      falseAccusationCount: 0,
-      dossierPublishedBy: null,
-      tamperedLocations: [],
-      tamperHistoryByLocation: {
-        lobby: [],
-        radio: [],
-        breaker: [],
-        canteen: [],
-        corridor: [],
-        court: [],
-      },
+      maxRounds: typeof rawEngine.maxRounds === 'number' ? rawEngine.maxRounds : 9,
+      turnNumber: typeof rawEngine.turnNumber === 'number' ? rawEngine.turnNumber : 1,
+      turnStartedAtMs: match.updated_at_ms,
       turnOrder: mappedPlayers.map((p) => p.playerId),
       activeTurnIdx: 0,
       turnPhase: 'ENDED',
-      actionUsedThisTurn: true,
-      hypothesisUpdatedThisTurn: true,
-      blackoutLocation: null,
-      blackoutRoundsLeft: 0,
-      lastVisitorByLocation: {
-        lobby: null,
-        radio: null,
-        breaker: null,
-        canteen: null,
-        corridor: null,
-        court: null,
-      },
+      curfewPressureActive: false,
+      courtRangeJammedRound: 0,
+      lastInvestigation: null,
+      lastRevealEvent: null,
       players: mappedPlayers,
-      decks: { clue: [], event: [], tactic: [] },
-      discards: { clue: [], event: [], tactic: [] },
-      publicLog: Array.isArray(rawEngine.publicLog) ? rawEngine.publicLog.slice(-20) : [],
+      decks: { investigation: [], equipment: [], event: [] },
+      discards: { investigation: [], equipment: [], event: [] },
+      publicLog: mappedLogs,
       highlights: [],
-      winnerLabel: 'Phiên v1 đã khép — Sẵn sàng Luật v2',
-      winnerFaction: null,
-      winnerPlayerIds: [],
-      winReason:
-        'Bóng Đêm KTX vừa nâng cấp lên Luật v2 (Suy luận vai ẩn). Phiên cũ đã được khép an toàn; hãy bấm Ván mới để chơi theo luật mới.',
+      winnerLabel: preservedWinnerLabel,
+      winnerFaction: preservedWinnerFaction,
+      winnerPlayerIds: preservedWinnerPlayerIds,
+      winReason: preservedWinReason,
       finished: true,
+      publicLogSeq: mappedLogs.length,
       seqCounter: typeof rawEngine.seqCounter === 'number' ? rawEngine.seqCounter : 0,
     };
   }

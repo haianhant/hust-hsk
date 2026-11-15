@@ -1,11 +1,11 @@
 // ---------------------------------------------------------------------------
 // shared/contracts/boardgame.ts — Single Source of Truth cho Hợp đồng Mạng,
-// Máy trạng thái Lobby/Trận đấu & DTO của "Bóng Đêm KTX — Secrets After Dark".
-// Không phụ thuộc React, Three.js hay DOM để chạy đồng bộ Frontend ↔ Worker DO.
+// Máy trạng thái Lobby/Trận đấu & DTO của "Bóng Đêm KTX v3 — Hidden Role,
+// Investigation & Survival". Không phụ thuộc React, Three.js hay DOM.
 //
 // Bảo mật P0:
-// - Tuyệt đối KHÔNG định nghĩa hoặc truyền `mssv`, `reconnectTokenHash` hay
-//   thông tin vai bí mật trong DTO công khai / danh sách sảnh / MatchPostcard.
+// - Tuyệt đối KHÔNG định nghĩa hoặc truyền `mssv`, `reconnectTokenHash`, `hp`,
+//   `maxHp`, vai chưa lật, bài trên tay hay `protegePlayerId` trong DTO công khai.
 // - `getPublicGameView` và `getPrivateGameView` chia tách rõ kênh công khai
 //   vs kênh unicast riêng cho `authenticatedPlayerId`.
 // ---------------------------------------------------------------------------
@@ -26,14 +26,14 @@ export type BoardGameMatchStatus =
   | 'FINISHED'
   | 'CLOSED';
 
-export const BOARD_GAME_RULESET_VERSION = 2 as const;
+export const BOARD_GAME_RULESET_VERSION = 3 as const;
 export const BOARD_GAME_MIN_PLAYERS = 4;
 export const BOARD_GAME_MAX_PLAYERS = 8;
 export const BOARD_GAME_TABLE_SEAT_COUNT = 8;
 export const BOARD_GAME_MAX_SPECTATORS = 8;
 export const BOARD_GAME_MAX_DIRECTORY_MATCHES = 16;
-export const BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS = 45_000;
-export const BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS = 15_000;
+export const BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS = 40_000;
+export const BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS = 12_000;
 export const BOARD_GAME_RECONNECT_HOLD_MS = 90_000;
 export const BOARD_GAME_FINISHED_TTL_MS = 10 * 60_000;
 
@@ -63,43 +63,12 @@ export type BoardGameLocationId =
   | 'corridor'
   | 'breaker';
 
-export type BoardGameDeckId = 'clue' | 'event' | 'tactic';
-
-export type BoardGameAccessTag = 'tech-key' | 'broadcast-gear' | 'patrol-badge';
-
-export type BoardGameTraceTag = 'insulated-gloves' | 'signal-meter' | 'magnetic-card';
-
-export type BoardGameEvidenceKind =
-  | 'equipment'
-  | 'activity'
-  | 'scene'
-  | 'comparison'
-  | 'grid';
-
-export interface BoardGameEvidenceEntry {
-  id: string;
-  round: number;
-  atMs: number;
-  kind: BoardGameEvidenceKind;
-  subjectLabel: string;
-  targetPlayerId?: string | null;
-  locationId?: BoardGameLocationId | null;
-  summary: string;
-  sourceLabel: string;
-  compatibleHint?: string;
-}
-
-export interface BoardGameHypothesisEntry {
-  targetPlayerId: string;
-  targetName: string;
-  predictedFaction: BoardGameFactionId;
-  recordedRound: number;
-}
+export type BoardGameDeckId = 'investigation' | 'equipment' | 'event';
 
 export type BoardGameTurnPhase =
-  | 'MOVE'
-  | 'DRAW_OR_EXPLORE'
-  | 'TACTICAL_ACTION'
+  | 'MOVE_OR_STAY'
+  | 'LOCATION_ACTION'
+  | 'MAIN_ACTION'
   | 'ENDED';
 
 export type BoardGameEmoteId =
@@ -124,16 +93,55 @@ export interface BoardGameCardPublicMeta {
   deck: BoardGameDeckId;
   title: string;
   summary: string;
+  conditionText?: string;
   effectId: string;
   targetMode:
     | 'self'
     | 'single-player'
-    | 'same-location'
     | 'adjacent-or-same'
-    | 'pair-players'
+    | 'same-location'
     | 'global'
     | 'location';
+  isConsumable?: boolean;
   value: number;
+}
+
+export interface BoardGameInvestigationOutcome {
+  id: string;
+  round: number;
+  atMs: number;
+  cardId: string;
+  cardTitle: string;
+  conditionLabel: string;
+  investigatorId: string;
+  investigatorName: string;
+  targetPlayerId: string;
+  targetName: string;
+  outcome: 'condition-met' | 'no-reaction';
+  publicMessage: string;
+}
+
+export interface BoardGameRevealEvent {
+  id: string;
+  round: number;
+  atMs: number;
+  playerId: string;
+  displayName: string;
+  roleId: BoardGameRoleId;
+  roleName: string;
+  faction: BoardGameFactionId;
+  reason: 'voluntary' | 'eliminated';
+}
+
+export interface BoardGamePrivateClueEntry {
+  id: string;
+  round: number;
+  atMs: number;
+  cardTitle: string;
+  targetPlayerId: string;
+  targetName: string;
+  outcome: 'condition-met' | 'no-reaction';
+  detail: string;
 }
 
 export interface BoardGameLobbyPlayerView {
@@ -166,18 +174,23 @@ export interface BoardGamePublicPlayerView {
   displayName: string;
   seatIndex: number;
   location: BoardGameLocationId;
-  /** Sức khỏe bí mật được tách khỏi kênh công khai: chỉ lộ số vết thương và khiên hiện có. */
+  /** Sức khỏe bí mật được tách khỏi kênh công khai: chỉ lộ vết thương và Giáp tạm hiện có. */
   woundsTaken: number;
-  visibleShield: number;
+  tempShield: number;
   handCount: number;
+  equipped: readonly BoardGameCardPublicMeta[];
+  attacksMade: number;
+  investigationsCount: number;
+  stayedLastTurn: boolean;
+  wardedUntilRound: number;
+  exposedMark: number;
   alive: boolean;
-  detained: boolean;
   connected: boolean;
-  // BẢO MẬT P0: Chỉ hiện vai, phe, maxHp & trạng thái kỹ năng khi người chơi tự lật, bị bắt giữ, bị loại hoặc trận FINISHED!
+  // BẢO MẬT P0: Chỉ hiện vai, phe, maxHp & cooldown kỹ năng khi đã lật vai công khai hoặc FINISHED!
   revealedRoleId: BoardGameRoleId | null;
   revealedFaction: BoardGameFactionId | null;
   revealedMaxHp: number | null;
-  revealedSkillUsed: boolean;
+  revealedSkillCooldown: number;
   appearance: RemoteAppearance;
 }
 
@@ -188,15 +201,16 @@ export interface BoardGamePublicLogEntry {
   kind:
     | 'system'
     | 'move'
+    | 'stay'
+    | 'explore'
     | 'draw'
-    | 'scene'
     | 'investigate'
-    | 'tactic'
+    | 'equipment'
+    | 'event'
     | 'skill'
     | 'attack'
-    | 'confront'
+    | 'defend'
     | 'reveal'
-    | 'incident'
     | 'elimination'
     | 'timeout'
     | 'victory';
@@ -219,33 +233,29 @@ export interface BoardGameRevealRecord {
   faction: BoardGameFactionId;
   won: boolean;
   alive: boolean;
-  detained: boolean;
   hp: number;
   maxHp: number;
   woundsTaken: number;
 }
 
 export interface BoardGamePublicGameView {
-  rulesetVersion: 2;
+  rulesetVersion: 3;
   matchId: string;
   round: number;
   maxRounds: number;
-  sabotageArmed: boolean;
-  disarmedCount: number;
-  breakerSealed: boolean;
-  radioSealed: boolean;
-  falseAccusationCount: number;
-  tamperedLocations: readonly BoardGameLocationId[];
+  turnNumber: number;
   turnPhase: BoardGameTurnPhase;
   activePlayerId: string | null;
   turnOrder: readonly string[];
-  blackoutLocation: BoardGameLocationId | null;
+  curfewPressureActive: boolean;
   players: readonly BoardGamePublicPlayerView[];
   deckCounts: Record<BoardGameDeckId, number>;
+  lastInvestigation: BoardGameInvestigationOutcome | null;
+  lastRevealEvent: BoardGameRevealEvent | null;
   publicLog: readonly BoardGamePublicLogEntry[];
   highlights: readonly BoardGameHighlightEntry[];
   winnerLabel: string | null;
-  winnerFaction: BoardGameFactionId | 'wanderer-solo' | null;
+  winnerFaction: BoardGameFactionId | 'wanderer-solo' | 'wanderer' | null;
   winnerPlayerIds: readonly string[];
   winReason: string | null;
   /** Chỉ điền đầy đủ sau khi trận đấu kết thúc (`FINISHED`). */
@@ -267,65 +277,44 @@ export interface BoardGamePrivateGameView {
   hp: number;
   maxHp: number;
   woundsTaken: number;
-  shield: number;
-  skillUsed: boolean;
-  covertSkillUsed: boolean;
-  confrontUsed: boolean;
+  tempShield: number;
+  skillCooldown: number;
   revealed: boolean;
-  detained: boolean;
-  accessTag: BoardGameAccessTag;
-  traceTag: BoardGameTraceTag;
   secretGoalText: string;
-  /** Chỉ điền cho thành viên Hội Màn Sương (null với Gác Đèn, Lang Thang và Khán giả). */
-  secretSabotageLocation: BoardGameLocationId | null;
-  /** Chỉ bật true cho Hội Màn Sương khi Mạch Quá Tải đã được gài ngầm (luôn false với phe khác). */
-  sabotagePlanted: boolean;
-  /** Chỉ bật true cho Hội Màn Sương khi Mạch Quá Tải đã đủ điều kiện kích nổ ở vòng hiện tại. */
-  sabotageCanDetonate: boolean;
-  verifiedSceneLocations: readonly BoardGameLocationId[];
-  wardPlayerId: string | null;
-  wardDisplayName: string | null;
-  wardProtectionsCount: number;
-  sacrificedForWard: boolean;
-  hypotheses: readonly BoardGameHypothesisEntry[];
-  metPlayerIds: readonly string[];
+  protegePlayerId: string | null;
+  protegeDisplayName: string | null;
+  protectedProtegeCount: number;
+  avengedProtegeKiller: boolean;
+  investigatedTargetIds: readonly string[];
+  visitedLocations: readonly BoardGameLocationId[];
   hand: readonly BoardGameCardPublicMeta[];
-  evidenceList: readonly BoardGameEvidenceEntry[];
+  equipped: readonly BoardGameCardPublicMeta[];
+  privateClues: readonly BoardGamePrivateClueEntry[];
   privateNotes: readonly BoardGamePrivateNote[];
 }
 
 export type BoardGameActionPayload =
   | { type: 'MOVE'; location: BoardGameLocationId }
+  | { type: 'STAY' }
+  | { type: 'EXPLORE_LOC' }
   | { type: 'DRAW_CARD'; deck: BoardGameDeckId }
-  | { type: 'INTERACT_LOC'; mode?: 'scan' | 'sabotage' }
+  | { type: 'EQUIP_CARD'; cardId: string }
+  | { type: 'USE_EQUIPMENT'; cardId: string; targetPlayerId?: string }
+  | { type: 'INVESTIGATE_CARD'; cardId: string; targetPlayerId: string }
   | {
-      type: 'USE_CARD';
+      type: 'PLAY_EVENT';
       cardId: string;
       targetPlayerId?: string;
-      targetSecondPlayerId?: string;
       targetLocation?: BoardGameLocationId;
     }
   | { type: 'ATTACK'; targetPlayerId: string }
-  | {
-      type: 'INVESTIGATE';
-      targetPlayerId: string;
-      focus?: 'equipment' | 'activity';
-    }
-  | { type: 'CONFRONT'; targetPlayerId: string }
-  | { type: 'DETONATE_PLOT' }
-  | { type: 'PUBLISH_DOSSIER' }
-  | {
-      type: 'RECORD_HYPOTHESIS';
-      targetPlayerId: string;
-      predictedFaction: BoardGameFactionId;
-    }
+  | { type: 'DEFEND' }
+  | { type: 'REVEAL_ROLE' }
   | {
       type: 'USE_SKILL';
       targetPlayerId?: string;
-      targetSecondPlayerId?: string;
       targetLocation?: BoardGameLocationId;
     }
-  | { type: 'REVEAL_ROLE' }
   | { type: 'END_TURN' };
 
 export interface BoardGameStateSyncMessage {
@@ -544,7 +533,6 @@ export function generateInviteCode(randomByteFn?: () => number): string {
 
 export function sanitizeBoardGameName(raw: unknown): string {
   if (typeof raw !== 'string') return 'Sinh viên';
-  // Loại bỏ ký tự điều khiển và làm sạch; đồng thời che dãy 8 số giống MSSV nếu lỡ nhập vào tên
   const cleaned = raw
     .replace(/[\u0000-\u001F\u007F<>`]/g, '')
     .replace(/\b\d{8}\b/g, 'HUST')

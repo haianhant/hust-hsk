@@ -1,67 +1,77 @@
 // ---------------------------------------------------------------------------
 // features/boardgame/domain/types.ts — Kiểu dữ liệu nội bộ (server-authoritative)
-// của động cơ Bóng Đêm KTX v2 (rulesetVersion = 2). Không phụ thuộc React/DOM/Three.js.
+// của động cơ Bóng Đêm KTX v3 (`rulesetVersion = 3`: Hidden Role, Investigation & Survival).
+// Không phụ thuộc React / DOM / Three.js.
 // ---------------------------------------------------------------------------
 
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
 import type {
-  BoardGameAccessTag,
   BoardGameCardPublicMeta,
   BoardGameDeckId,
-  BoardGameEvidenceEntry,
   BoardGameFactionId,
   BoardGameHighlightEntry,
-  BoardGameHypothesisEntry,
+  BoardGameInvestigationOutcome,
   BoardGameLocationId,
+  BoardGamePrivateClueEntry,
   BoardGamePrivateNote,
   BoardGamePublicLogEntry,
+  BoardGameRevealEvent,
   BoardGameRoleId,
-  BoardGameTraceTag,
   BoardGameTurnPhase,
 } from '../../../shared/contracts/boardgame';
 
 export type GameCardEffectKind =
-  | 'scene-last-operator'
-  | 'inspect-access-tag'
-  | 'inspect-trace-tag'
-  | 'compare-alignment'
-  | 'inspect-movement-history'
-  | 'radar-adjacent-overload'
-  | 'verify-decoy-tamper'
-  | 'exclude-safe-facility'
-  | 'local-blackout-shield'
-  | 'canteen-ginger-tea'
-  | 'surprise-rollcall'
-  | 'corridor-chill-draw'
-  | 'floodlight-clear-blackout'
-  | 'urgent-step-shield'
-  | 'cabinet-spark-trace'
-  | 'warden-supply-unlock'
-  | 'shield-self'
-  | 'heal-target'
-  | 'damage-target-trace'
-  | 'relocate-self'
-  | 'relocate-target'
-  | 'block-heal'
-  | 'plant-decoy-trace'
-  | 'handheld-scanner';
+  // 9 Conditional Investigation cards
+  | 'inv-mist-or-13'
+  | 'inv-guard-or-12'
+  | 'inv-wanderer-or-11'
+  | 'inv-non-guard-le12'
+  | 'inv-guard-dung-trang'
+  | 'inv-pair-resonance'
+  | 'inv-footsteps'
+  | 'inv-scuffle-trace'
+  | 'inv-locker-check'
+  // 9 Equipment cards (7 persistent + 2 consumable)
+  | 'eq-windbreaker'
+  | 'eq-flashlight'
+  | 'eq-sneakers'
+  | 'eq-walkie-talkie'
+  | 'eq-alarm-whistle'
+  | 'eq-goggles'
+  | 'eq-baton'
+  | 'eq-thermos'
+  | 'eq-magnetic-pass'
+  // 8 Event cards
+  | 'ev-power-flicker'
+  | 'ev-midnight-noodles'
+  | 'ev-loudspeaker'
+  | 'ev-rain-shower'
+  | 'ev-locker-audit'
+  | 'ev-calm-tea'
+  | 'ev-rumor-wave'
+  | 'ev-curfew-bell';
 
 export interface GameCard extends BoardGameCardPublicMeta {
   effectKind: GameCardEffectKind;
 }
 
-export interface RoleDefinition {
+export interface AbilityDefinition {
+  id: string;
+  name: string;
+  cooldownRounds: number;
+  summary: string;
+}
+
+export interface CharacterDesign {
   id: BoardGameRoleId;
   name: string;
   faction: BoardGameFactionId;
   maxHp: number;
-  accessTag: BoardGameAccessTag;
-  traceTag: BoardGameTraceTag;
-  skillName: string;
-  skillSummary: string;
-  covertSummary: string;
-  revealBenefitSummary: string;
-  goalSummary: string;
+  secretObjective: string;
+  activeAbility: AbilityDefinition;
+  passiveAbility: AbilityDefinition;
+  revealBenefit: string;
+  weaknesses: readonly string[];
 }
 
 export interface LocationDefinition {
@@ -70,16 +80,8 @@ export interface LocationDefinition {
   shortLabel: string;
   description: string;
   actionLabel: string;
-  isInfrastructure: boolean;
+  allowedDecks: readonly BoardGameDeckId[];
   adjacent: readonly BoardGameLocationId[];
-}
-
-export interface SceneTraceRecord {
-  round: number;
-  playerId: string;
-  displayName: string;
-  traceTag: BoardGameTraceTag;
-  wasSabotage: boolean;
 }
 
 export interface AuthoritativePlayerState {
@@ -91,72 +93,65 @@ export interface AuthoritativePlayerState {
   faction: BoardGameFactionId;
   hp: number;
   maxHp: number;
-  shield: number;
-  accessTag: BoardGameAccessTag;
-  traceTag: BoardGameTraceTag;
+  tempShield: number;
   location: BoardGameLocationId;
   visitedLocations: BoardGameLocationId[];
-  recentMoves: { round: number; location: BoardGameLocationId }[];
-  technicalActionRounds: number[];
-  plantedDecoyRounds: number[];
-  dealtDamageRounds: number[];
-  metPlayerIds: string[];
-  verifiedSceneLocations: BoardGameLocationId[];
+  recentTrail: BoardGameLocationId[];
   alive: boolean;
-  detained: boolean;
   connected: boolean;
   revealed: boolean;
-  skillUsed: boolean;
-  covertSkillUsed: boolean;
-  confrontUsed: boolean;
-  healBlockedNextTurn: boolean;
-  bodyguardActive: boolean;
-  wardPlayerId: string | null;
-  wardProtectionsCount: number;
-  sacrificedForWard: boolean;
-  hypotheses: BoardGameHypothesisEntry[];
+  skillCooldown: number;
+  stayedLastTurn: boolean;
+  stayedCount: number;
+  movesMade: number;
+  attacksMade: number;
+  investigationsCount: number;
+  actedThisRound: boolean;
+  extendedRangeThisTurn: boolean;
+  courtAttackBonusThisTurn: boolean;
+  globalInvestigateThisTurn: boolean;
+  equipUsedThisTurn: boolean;
+  wardedUntilRound: number;
+  exposedMark: number;
+  gainedShieldThisTurn: boolean;
+  protegePlayerId: string | null;
+  protectedProtegeCount: number;
+  eliminatedByPlayerId: string | null;
+  eliminatedPlayerIds: string[];
+  avengedProtegeKiller: boolean;
+  investigatedTargetIds: string[];
   hand: GameCard[];
-  evidenceList: BoardGameEvidenceEntry[];
+  equipped: GameCard[];
+  privateClues: BoardGamePrivateClueEntry[];
   privateNotes: BoardGamePrivateNote[];
 }
 
 export interface AuthoritativeGameState {
-  rulesetVersion: 2;
+  rulesetVersion: 3;
   matchId: string;
   seed: number;
   rngState: number;
   round: number;
   maxRounds: number;
-  secretSabotageLocation: BoardGameLocationId;
-  sabotagePlanted: boolean;
-  sabotagePlantedRound: number | null;
-  sabotagePlantedByPlayerId: string | null;
-  sabotageArmed: boolean;
-  plotDetonated: boolean;
-  disarmedCount: number;
-  breakerSealed: boolean;
-  radioSealed: boolean;
-  falseAccusationCount: number;
-  dossierPublishedBy: string | null;
-  tamperedLocations: BoardGameLocationId[];
-  tamperHistoryByLocation: Record<BoardGameLocationId, SceneTraceRecord[]>;
+  turnNumber: number;
+  turnStartedAtMs: number;
   turnOrder: string[];
   activeTurnIdx: number;
   turnPhase: BoardGameTurnPhase;
-  actionUsedThisTurn: boolean;
-  hypothesisUpdatedThisTurn: boolean;
-  blackoutLocation: BoardGameLocationId | null;
-  blackoutRoundsLeft: number;
-  lastVisitorByLocation: Record<BoardGameLocationId, string | null>;
+  curfewPressureActive: boolean;
+  courtRangeJammedRound: number;
+  lastInvestigation: BoardGameInvestigationOutcome | null;
+  lastRevealEvent: BoardGameRevealEvent | null;
   players: AuthoritativePlayerState[];
   decks: Record<BoardGameDeckId, string[]>;
   discards: Record<BoardGameDeckId, string[]>;
   publicLog: BoardGamePublicLogEntry[];
   highlights: BoardGameHighlightEntry[];
   winnerLabel: string | null;
-  winnerFaction: BoardGameFactionId | 'wanderer-solo' | null;
+  winnerFaction: BoardGameFactionId | 'wanderer-solo' | 'wanderer' | null;
   winnerPlayerIds: string[];
   winReason: string | null;
   finished: boolean;
+  publicLogSeq: number;
   seqCounter: number;
 }

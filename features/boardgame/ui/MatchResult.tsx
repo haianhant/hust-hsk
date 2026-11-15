@@ -31,6 +31,11 @@ export default function MatchResult({
   onLeaveMatch,
 }: MatchResultProps) {
   const reveals = publicGame.finalReveal ?? [];
+  const totalInvestigations = publicGame.players.reduce(
+    (sum, p) => sum + p.investigationsCount,
+    0,
+  );
+  const survivorsCount = reveals.filter((r) => r.alive).length;
   const selfWon = Boolean(
     selfPlayerId && publicGame.winnerPlayerIds.includes(selfPlayerId),
   );
@@ -69,16 +74,11 @@ export default function MatchResult({
               ⏱️ Vòng: <strong>{Math.min(publicGame.round, publicGame.maxRounds)}/{publicGame.maxRounds}</strong>
             </span>
             <span>
-              🛡️ Gỡ mạch: <strong>{publicGame.disarmedCount}</strong>
+              🔎 Lượt điều tra: <strong>{totalInvestigations}</strong>
             </span>
             <span>
-              🔒 Niêm phong: <strong>{publicGame.breakerSealed ? 'Cầu Dao✓' : 'Cầu Dao✕'} · {publicGame.radioSealed ? 'Phát Thanh✓' : 'Phát Thanh✕'}</strong>
+              🧍 Sống sót: <strong>{survivorsCount}/{reveals.length}</strong>
             </span>
-            {publicGame.falseAccusationCount > 0 && (
-              <span>
-                ❌ Đối chất sai: <strong>{publicGame.falseAccusationCount}</strong>
-              </span>
-            )}
           </div>
         </div>
 
@@ -124,11 +124,9 @@ export default function MatchResult({
                         {r.won ? '🏆 Thắng' : '—'}
                       </div>
                       <div className="text-[11px] text-slate-400">
-                        {r.detained
-                          ? '🔒 Tạm giữ'
-                          : r.alive
-                            ? `❤️ ${r.hp}/${r.maxHp} HP`
-                            : '💤 Đã loại'}
+                        {r.alive
+                          ? `❤️ ${r.hp}/${r.maxHp} HP`
+                          : '💤 Đã loại'}
                       </div>
                     </div>
                   </div>

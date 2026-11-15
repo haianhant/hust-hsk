@@ -1,80 +1,72 @@
 // ---------------------------------------------------------------------------
 // features/boardgame/domain/rules.ts — Luật bản đồ 6 khu vực KTX,
-// giới hạn di chuyển kề cận, giới hạn vòng Rạng Sáng & PRNG tất định.
+// tầm di chuyển / tầm đánh / tầm điều tra & PRNG tất định v3.
 // ---------------------------------------------------------------------------
 
 import type { BoardGameLocationId } from '../../../shared/contracts/boardgame';
-import type { AuthoritativeGameState, LocationDefinition } from './types';
+import type {
+  AuthoritativeGameState,
+  AuthoritativePlayerState,
+  LocationDefinition,
+} from './types';
 
-export const BOARD_GAME_MAX_SHIELD = 6;
-export const BOARD_GAME_COURT_MAX_SHIELD = 2;
+export const BOARD_GAME_MAX_SHIELD = 2;
 export const BOARD_GAME_MAX_HAND = 4;
-
-export const BOARD_GAME_INFRASTRUCTURE_LOCATIONS: readonly BoardGameLocationId[] = [
-  'radio',
-  'breaker',
-  'canteen',
-];
+export const BOARD_GAME_MAX_EQUIPPED = 2;
 
 export const KTX_LOCATIONS: readonly LocationDefinition[] = [
   {
     id: 'lobby',
     name: 'Sảnh Ký Túc Xá',
     shortLabel: 'Sảnh KTX',
-    description:
-      'Trạm sơ cứu & phòng Đối chất chính thức (từ Vòng 3): Khảo sát để hồi 1 vết thương & +1 Khiên.',
-    actionLabel: 'Sơ cứu & Khảo sát Sảnh',
-    isInfrastructure: false,
+    description: 'Sơ cứu trực đêm: hồi 1 vết thương (hoặc +1 Giáp tạm nếu chưa bị thương).',
+    actionLabel: 'Sơ cứu Sảnh KTX (+1 HP hoặc +1 🛡️)',
+    allowedDecks: ['event'],
     adjacent: ['canteen', 'corridor', 'breaker'],
   },
   {
     id: 'canteen',
     name: 'Căng Tin B5–B9',
     shortLabel: 'Căng tin',
-    description:
-      'Khu tiếp tế & đường dây điện phụ: Kiểm tra thiết bị để đọc dấu gần nhất (+1 Khiên nếu an toàn), hoặc gỡ mạch gài.',
-    actionLabel: 'Kiểm tra thiết bị Căng tin',
-    isInfrastructure: true,
+    description: 'Tiếp tế đồ dùng: rút ngay 1 thẻ Trang bị vào tay.',
+    actionLabel: 'Tiếp tế Căng tin (+1 Trang bị)',
+    allowedDecks: ['equipment', 'event'],
     adjacent: ['lobby', 'court', 'corridor'],
-  },
-  {
-    id: 'radio',
-    name: 'Phòng Phát Thanh',
-    shortLabel: 'Phát thanh',
-    description:
-      'Trạm sóng trung tâm: Quét an toàn để bật Niêm phong Phát Thanh (cần thiết cho Rạng Sáng); nơi Hải công bố hồ sơ.',
-    actionLabel: 'Kiểm tra & Niêm phong Phát Thanh',
-    isInfrastructure: true,
-    adjacent: ['corridor', 'breaker'],
   },
   {
     id: 'court',
     name: 'Sân Bóng Rổ KTX',
     shortLabel: 'Sân bóng rổ',
-    description:
-      'Điểm cao thoáng gió: Cho phép Điều tra người ở khu kề cận (Căng tin / Hành lang B7), đổi lại Khiên tối đa tại đây là 2.',
-    actionLabel: 'Quan sát sân & Khu kề cận',
-    isInfrastructure: false,
-    adjacent: ['canteen', 'corridor'],
+    description: 'Tầm nhìn thoáng: lượt này mở tầm đánh/điều tra sang ô kề & +1 ST mục tiêu bị thương/đã lật.',
+    actionLabel: 'Quan sát Sân bóng rổ (Mở tầm kề +1 ST)',
+    allowedDecks: ['equipment'],
+    adjacent: ['canteen', 'radio', 'corridor'],
+  },
+  {
+    id: 'radio',
+    name: 'Phòng Phát Thanh',
+    shortLabel: 'Phát thanh',
+    description: 'Sóng toàn khu: rút 1 thẻ Điều tra & được dùng thẻ Điều tra tới mọi vị trí trong lượt.',
+    actionLabel: 'Phát sóng toàn KTX (+1 Điều tra & Soi toàn bản đồ)',
+    allowedDecks: ['investigation', 'event'],
+    adjacent: ['court', 'breaker', 'corridor'],
   },
   {
     id: 'corridor',
     name: 'Hành Lang B7',
     shortLabel: 'Hành lang B7',
-    description:
-      'Trục nối cả 5 khu vực: Khảo sát để nghe ngóng những khu vực vừa có thao tác kỹ thuật (+1 Khiên nếu đứng một mình).',
-    actionLabel: 'Nghe ngóng dấu vết toàn KTX',
-    isInfrastructure: false,
-    adjacent: ['lobby', 'canteen', 'radio', 'court', 'breaker'],
+    description: 'Trục nối 5 khu: nhận +1 Giáp tạm cơ động chuẩn bị cho pha hành động chính.',
+    actionLabel: 'Cơ động Hành lang (+1 🛡️)',
+    allowedDecks: ['investigation', 'event'],
+    adjacent: ['lobby', 'canteen', 'court', 'radio', 'breaker'],
   },
   {
     id: 'breaker',
     name: 'Phòng Bảo Vệ & Cầu Dao',
-    shortLabel: 'Cầu dao',
-    description:
-      'Tủ điện tổng & địa điểm Đối chất: Kiểm tra đọc tên + dấu vết người thao tác gần nhất và bật Niêm phong Cầu Dao nếu an toàn.',
-    actionLabel: 'Kiểm tra & Niêm phong Cầu Dao',
-    isInfrastructure: true,
+    shortLabel: 'Bảo vệ',
+    description: 'Chốt trực an ninh: nhận +1 Giáp tạm và xóa dấu hở sườn.',
+    actionLabel: 'Trực chốt Bảo vệ (+1 🛡️ & Xóa hở sườn)',
+    allowedDecks: ['investigation', 'equipment'],
     adjacent: ['lobby', 'radio', 'corridor'],
   },
 ];
@@ -82,8 +74,8 @@ export const KTX_LOCATIONS: readonly LocationDefinition[] = [
 export const KTX_LOCATION_MAP: Record<BoardGameLocationId, LocationDefinition> = {
   lobby: KTX_LOCATIONS[0],
   canteen: KTX_LOCATIONS[1],
-  radio: KTX_LOCATIONS[2],
-  court: KTX_LOCATIONS[3],
+  court: KTX_LOCATIONS[2],
+  radio: KTX_LOCATIONS[3],
   corridor: KTX_LOCATIONS[4],
   breaker: KTX_LOCATIONS[5],
 };
@@ -97,7 +89,7 @@ export function getLocationShortLabel(loc: BoardGameLocationId): string {
 }
 
 export function getMaxRoundsForPlayerCount(playerCount: number): number {
-  return playerCount <= 5 ? 6 : 7;
+  return playerCount <= 5 ? 9 : 10;
 }
 
 export function isValidLocationId(raw: unknown): raw is BoardGameLocationId {
@@ -113,11 +105,75 @@ export function isValidLocationId(raw: unknown): raw is BoardGameLocationId {
 
 export function isAdjacentLocation(a: BoardGameLocationId, b: BoardGameLocationId): boolean {
   if (a === b) return true;
-  return KTX_LOCATION_MAP[a].adjacent.includes(b);
+  return KTX_LOCATION_MAP[a]?.adjacent.includes(b) ?? false;
 }
 
-export function listAdjacentDestinations(loc: BoardGameLocationId): BoardGameLocationId[] {
+export function listLegalMovesForLocation(loc: BoardGameLocationId): BoardGameLocationId[] {
   return KTX_LOCATION_MAP[loc]?.adjacent.slice() ?? [];
+}
+
+export function hasEquippedEffect(
+  player: Pick<AuthoritativePlayerState, 'equipped'>,
+  effectKind: string,
+): boolean {
+  return player.equipped.some((c) => c.effectKind === effectKind);
+}
+
+export function listLegalMovesForPlayer(player: AuthoritativePlayerState): BoardGameLocationId[] {
+  const oneStep = listLegalMovesForLocation(player.location);
+  const extraSteps =
+    hasEquippedEffect(player, 'eq-sneakers') ||
+    (player.revealed && player.roleId === 'suong-an-danh' && player.location === 'corridor');
+  if (!extraSteps) return oneStep;
+  const dest = new Set<BoardGameLocationId>(oneStep);
+  for (const mid of oneStep) {
+    for (const two of listLegalMovesForLocation(mid)) {
+      if (two !== player.location) dest.add(two);
+    }
+  }
+  return Array.from(dest);
+}
+
+export function canPlayerInvestigateTarget(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  target: AuthoritativePlayerState,
+): boolean {
+  if (!actor.alive || !target.alive || actor.playerId === target.playerId) return false;
+  if (
+    actor.location === 'radio' ||
+    actor.globalInvestigateThisTurn ||
+    hasEquippedEffect(actor, 'eq-walkie-talkie') ||
+    (actor.revealed && actor.roleId === 'gac-radio')
+  ) {
+    return true;
+  }
+  if (actor.location === target.location) return true;
+  return isAdjacentLocation(actor.location, target.location);
+}
+
+export function canPlayerAttackTarget(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  target: AuthoritativePlayerState,
+): boolean {
+  if (!actor.alive || !target.alive || actor.playerId === target.playerId) return false;
+  if (actor.location === target.location) return true;
+  const courtBoost = actor.extendedRangeThisTurn && state.courtRangeJammedRound !== state.round;
+  const batonBoost = hasEquippedEffect(actor, 'eq-baton');
+  if (courtBoost || batonBoost) {
+    return isAdjacentLocation(actor.location, target.location);
+  }
+  return false;
+}
+
+export function canPlayerUseSkillRange(
+  actor: AuthoritativePlayerState,
+  target: AuthoritativePlayerState,
+): boolean {
+  if (!target.alive) return false;
+  if (actor.roleId === 'gac-radio') return true;
+  return isAdjacentLocation(actor.location, target.location);
 }
 
 /** PRNG tất định kiểu Mulberry32 — lưu trực tiếp trong `state.rngState`. */

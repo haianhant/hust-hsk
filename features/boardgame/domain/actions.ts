@@ -1,257 +1,153 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/actions.ts — Bộ xử lý lệnh hợp lệ Bóng Đêm KTX v2
-// (MOVE kề cận -> DRAW_OR_EXPLORE [INTERACT_LOC / DRAW_CARD] -> TACTICAL_ACTION
-// [INVESTIGATE / USE_CARD / USE_SKILL / ATTACK / CONFRONT / DETONATE_PLOT /
-// PUBLISH_DOSSIER / RECORD_HYPOTHESIS / REVEAL_ROLE / END_TURN]).
+// features/boardgame/domain/actions.ts — Bộ xử lý lệnh hợp lệ Bóng Đêm KTX v3
+// (`MOVE_OR_STAY` -> `LOCATION_ACTION` -> `MAIN_ACTION` -> chuyển lượt).
+// Bao gồm `applyTimeoutAutoTurn` trung lập tuyệt đối (không đọc phe/vai).
 // ---------------------------------------------------------------------------
 
 import type {
   BoardGameActionPayload,
-  BoardGameLocationId,
+  BoardGameDeckId,
 } from '../../../shared/contracts/boardgame';
 import {
-  addCardToHand,
-  appendEvidence,
+  addTempShield,
   appendPrivateNote,
   appendPublicLog,
-  applyDamage,
-  applyDirectWounds,
-  applyHeal,
-  clampShieldForLocation,
-  createActivityEvidence,
-  createEquipmentTraitEvidence,
   drawCardFromDeck,
-  grantShield,
-  performLocationScanOrDisarm,
-  pickInspectionTarget,
-  recordCoPresenceForPlayer,
-  resolveCardImmediateEffect,
+  executeExploreLocation,
+  resolveAttackStrike,
+  resolveEquipCard,
+  resolveEventCard,
+  resolveInvestigationCard,
+  resolveRevealedSkill,
+  resolveUseConsumableEquipment,
+  resolveVoluntaryReveal,
 } from './effects';
-import { FACTION_LABELS, ROLES_BY_ID } from './roles';
 import {
+  KTX_LOCATION_MAP,
+  canPlayerAttackTarget,
   getLocationName,
-  getLocationShortLabel,
-  isAdjacentLocation,
   isValidLocationId,
-  listAdjacentDestinations,
+  listLegalMovesForPlayer,
 } from './rules';
 import type { AuthoritativeGameState, AuthoritativePlayerState } from './types';
 import { evaluateVictoryState } from './victory';
 
-export interface ActionApplyResult {
+const DECK_LABELS: Record<BoardGameDeckId, string> = {
+  investigation: 'Điều tra',
+  equipment: 'Trang bị',
+  event: 'Sự kiện',
+};
+
+export interface ApplyActionResult {
   ok: boolean;
   reason?: string;
 }
 
-export function getActivePlayer(state: AuthoritativeGameState): AuthoritativePlayerState | null {
+export function getActivePlayer(
+  state: AuthoritativeGameState,
+): AuthoritativePlayerState | null {
   if (state.finished || state.turnOrder.length === 0) return null;
   const activeId = state.turnOrder[state.activeTurnIdx];
   if (!activeId) return null;
   return state.players.find((p) => p.playerId === activeId) ?? null;
 }
 
-export function advanceTurnPointer(state: AuthoritativeGameState, nowMs: number): void {
-  if (evaluateVictoryState(state, nowMs, false)) return;
+export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void {
+  if (state.finished) return;
+
+  const outgoing = getActivePlayer(state);
+  if (outgoing) {
+    if (!outgoing.gainedShieldThisTurn && outgoing.tempShield > 0) {
+      outgoing.tempShield = Math.max(0, outgoing.tempShield - 1);
+    }
+    outgoing.gainedShieldThisTurn = false;
+    outgoing.extendedRangeThisTurn = false;
+    outgoing.courtAttackBonusThisTurn = false;
+    outgoing.globalInvestigateThisTurn = false;
+    outgoing.equipUsedThisTurn = false;
+    outgoing.exposedMark = 0;
+  }
 
   const total = state.turnOrder.length;
-  if (total === 0) {
+  if (total === 0) return;
+
+  let nextIdx = state.activeTurnIdx;
+  let wrappedRound = false;
+  let found = false;
+
+  for (let offset = 1; offset <= total; offset++) {
+    const candidateIdx = (state.activeTurnIdx + offset) % total;
+    if (candidateIdx <= state.activeTurnIdx && offset > 0 && state.activeTurnIdx + offset >= total) {
+      wrappedRound = true;
+    }
+    const candidateId = state.turnOrder[candidateIdx];
+    const p = state.players.find((x) => x.playerId === candidateId);
+    if (p && p.alive) {
+      nextIdx = candidateIdx;
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
     evaluateVictoryState(state, nowMs, true);
     return;
   }
 
-  let nextIdx = state.activeTurnIdx;
-  let wrapped = false;
-
-  for (let step = 0; step < total; step++) {
-    nextIdx += 1;
-    if (nextIdx >= total) {
-      nextIdx = 0;
-      wrapped = true;
-    }
-    const candidateId = state.turnOrder[nextIdx];
-    const candidate = state.players.find((p) => p.playerId === candidateId);
-    if (candidate && candidate.alive && !candidate.detained) {
-      if (wrapped) {
-        state.round += 1;
-        if (state.blackoutRoundsLeft > 0) {
-          state.blackoutRoundsLeft -= 1;
-          if (state.blackoutRoundsLeft <= 0) {
-            state.blackoutLocation = null;
-          }
-        }
-        // Sang vòng mới: Mạch Quá Tải gài từ vòng trước chính thức phát cảnh báo toàn KTX (không nêu tên phòng)
-        if (state.sabotagePlanted && !state.sabotageArmed) {
-          state.sabotageArmed = true;
-          appendPublicLog(
-            state,
-            'incident',
-            `⚠️ CẢNH BÁO ĐÊM KHUYA (V${state.round}): Hệ thống KTX phát hiện 1 Mạch Quá Tải đang chờ kích nổ! Hãy mau tìm & gỡ trước khi bị kích hoạt!`,
-            nowMs,
-          );
-          state.highlights.push({
-            round: state.round,
-            title: 'Báo động Mạch Quá Tải',
-            detail: 'Phát hiện mạch gài ngầm trong hạ tầng KTX — chưa rõ khu vực nào!',
-            atMs: nowMs,
-          });
-        }
-        if (state.round > state.maxRounds) {
-          evaluateVictoryState(state, nowMs, true);
-          return;
+  if (wrappedRound) {
+    // Kiểm tra áp lực Giới Nghiêm ở cuối 2 vòng chót (trước khi bước sang vòng mới)
+    if (state.round >= state.maxRounds - 2) {
+      const fatiguedNames: string[] = [];
+      for (const p of state.players) {
+        if (!p.alive) continue;
+        const roomPeers = state.players.filter(
+          (other) => other.alive && other.location === p.location,
+        ).length;
+        if (!p.actedThisRound && roomPeers === 1) {
+          p.tempShield = 0;
+          if (p.hp > 1) p.hp -= 1;
+          fatiguedNames.push(p.displayName);
         }
       }
-      state.activeTurnIdx = nextIdx;
-      state.turnPhase = 'MOVE';
-      state.actionUsedThisTurn = false;
-      state.hypothesisUpdatedThisTurn = false;
-      candidate.healBlockedNextTurn = false;
+      if (fatiguedNames.length > 0) {
+        appendPublicLog(
+          state,
+          'system',
+          `🌙 Áp lực Giới Nghiêm cuối đêm: ${fatiguedNames.join(', ')} đứng tách lẻ không hành động — mất Giáp tạm & chịu 1 vết thương mệt mỏi.`,
+          nowMs,
+        );
+      }
+    }
+
+    state.round += 1;
+    state.curfewPressureActive = state.round >= state.maxRounds - 1;
+    for (const p of state.players) {
+      p.actedThisRound = false;
+    }
+
+    if (state.round > state.maxRounds) {
+      evaluateVictoryState(state, nowMs, true);
       return;
     }
+
+    appendPublicLog(
+      state,
+      'system',
+      `🕒 Bước sang Vòng ${state.round}/${state.maxRounds}${
+        state.curfewPressureActive ? ' (Cảnh báo Giới Nghiêm Khẩn Cấp)' : ''
+      }.`,
+      nowMs,
+    );
   }
 
-  evaluateVictoryState(state, nowMs, true);
-}
+  state.activeTurnIdx = nextIdx;
+  state.turnNumber += 1;
+  state.turnStartedAtMs = nowMs;
+  state.turnPhase = 'MOVE_OR_STAY';
 
-function executeRevealedRoleSkill(
-  state: AuthoritativeGameState,
-  actor: AuthoritativePlayerState,
-  targetPlayer: AuthoritativePlayerState | null,
-  nowMs: number,
-): void {
-  const roleDef = ROLES_BY_ID[actor.roleId];
-  actor.skillUsed = true;
-  actor.revealed = true;
-
-  appendPublicLog(
-    state,
-    'skill',
-    `${actor.displayName} LẬT VAI [${roleDef.name}] và kích hoạt "${roleDef.skillName}"!`,
-    nowMs,
-    actor.playerId,
-  );
-  state.highlights.push({
-    round: state.round,
-    title: `${actor.displayName} lật vai`,
-    detail: `Công khai ${roleDef.name} (${roleDef.skillName}).`,
-    atMs: nowMs,
-  });
-
-  switch (actor.roleId) {
-    case 'gac-ky-thuat': {
-      // Sửa lưới điện xuyên mất điện tại vị trí đang đứng + hồi 2 thương cho đồng đội cùng phòng
-      performLocationScanOrDisarm(state, actor, actor.location, 'scan', nowMs, roleDef.skillName);
-      const ally =
-        targetPlayer && targetPlayer.alive && targetPlayer.location === actor.location
-          ? targetPlayer
-          : actor;
-      applyHeal(ally, 2);
-      return;
-    }
-    case 'gac-truc-ban': {
-      grantShield(actor, 2);
-      const target = pickInspectionTarget(state, actor, targetPlayer, true) ?? pickInspectionTarget(state, actor, targetPlayer, false);
-      if (target) {
-        createActivityEvidence(state, actor, target, roleDef.skillName, nowMs);
-      }
-      return;
-    }
-    case 'gac-radio': {
-      grantShield(actor, 1);
-      const card = drawCardFromDeck(state, 'tactic');
-      if (card) addCardToHand(state, actor, card);
-      if (actor.location === 'radio') {
-        performLocationScanOrDisarm(state, actor, 'radio', 'scan', nowMs, roleDef.skillName);
-      }
-      return;
-    }
-    case 'suong-an-danh': {
-      grantShield(actor, 1);
-      state.blackoutLocation = actor.location;
-      state.blackoutRoundsLeft = 1;
-      const hist = state.tamperHistoryByLocation[actor.location];
-      if (hist.length > 0) {
-        hist.pop();
-      }
-      appendPrivateNote(
-        state,
-        actor,
-        `[Cắt Cầu Dao] Đã ngắt điện ${getLocationShortLabel(actor.location)} và xóa dấu thao tác gần nhất tại phòng này.`,
-        nowMs,
-      );
-      return;
-    }
-    case 'suong-tin-gia': {
-      grantShield(actor, 1);
-      const victim = pickInspectionTarget(state, actor, targetPlayer, true);
-      if (victim) {
-        if (!actor.dealtDamageRounds.includes(state.round)) {
-          actor.dealtDamageRounds.push(state.round);
-        }
-        applyDamage(state, victim, 2, nowMs, `${actor.displayName} (${roleDef.skillName})`, {
-          attacker: actor,
-        });
-      }
-      return;
-    }
-    case 'suong-gac-cong': {
-      const victim = pickInspectionTarget(state, actor, targetPlayer, true);
-      if (victim) {
-        victim.healBlockedNextTurn = true;
-        if (!actor.dealtDamageRounds.includes(state.round)) {
-          actor.dealtDamageRounds.push(state.round);
-        }
-        applyDamage(state, victim, 2, nowMs, `${actor.displayName} (${roleDef.skillName})`, {
-          pierceShield: 1,
-          attacker: actor,
-        });
-      }
-      return;
-    }
-    case 'lang-anh-san': {
-      grantShield(actor, 1);
-      if (!actor.verifiedSceneLocations.includes(actor.location)) {
-        actor.verifiedSceneLocations.push(actor.location);
-      }
-      const hist = state.tamperHistoryByLocation[actor.location];
-      const latest = hist[hist.length - 1];
-      appendEvidence(
-        state,
-        actor,
-        {
-          kind: 'scene',
-          subjectLabel: `Trích xuất ${getLocationShortLabel(actor.location)}`,
-          locationId: actor.location,
-          summary: latest
-            ? `Thu được dấu vết hiện trường từ ${latest.displayName} (V${latest.round}).`
-            : `Đã xác thực hiện trường ${getLocationShortLabel(actor.location)}.`,
-          sourceLabel: roleDef.skillName,
-        },
-        nowMs,
-      );
-      return;
-    }
-    case 'lang-quan-sat': {
-      grantShield(actor, 2);
-      const t = pickInspectionTarget(state, actor, targetPlayer, true);
-      if (t) {
-        if (!actor.metPlayerIds.includes(t.playerId)) actor.metPlayerIds.push(t.playerId);
-        createEquipmentTraitEvidence(state, actor, t, false, roleDef.skillName, nowMs);
-      }
-      return;
-    }
-    case 'lang-cuu-ho': {
-      actor.bodyguardActive = true;
-      const ward = actor.wardPlayerId
-        ? state.players.find((p) => p.playerId === actor.wardPlayerId && p.alive) ?? null
-        : null;
-      const healTarget = ward ?? (targetPlayer && targetPlayer.alive ? targetPlayer : actor);
-      applyHeal(healTarget, 3);
-      grantShield(healTarget, 2);
-      if (ward && healTarget.playerId === ward.playerId) {
-        actor.wardProtectionsCount += 1;
-      }
-      return;
-    }
+  const nextPlayer = getActivePlayer(state);
+  if (nextPlayer && nextPlayer.skillCooldown > 0) {
+    nextPlayer.skillCooldown = Math.max(0, nextPlayer.skillCooldown - 1);
   }
 }
 
@@ -260,468 +156,225 @@ export function applyPlayerGameAction(
   playerId: string,
   action: BoardGameActionPayload,
   nowMs: number,
-): ActionApplyResult {
-  if (state.finished) {
+): ApplyActionResult {
+  if (state.finished || state.turnPhase === 'ENDED') {
     return { ok: false, reason: 'Ván đấu đã kết thúc.' };
   }
+
   const actor = state.players.find((p) => p.playerId === playerId);
-  if (!actor || !actor.alive || actor.detained) {
-    return { ok: false, reason: 'Bạn không còn quyền hành động trong ván này.' };
+  if (!actor) {
+    return { ok: false, reason: 'Người chơi không thuộc ván đấu này.' };
   }
-  const active = getActivePlayer(state);
-  if (!active || active.playerId !== playerId) {
+  if (!actor.alive) {
+    return { ok: false, reason: 'Bạn đã kiệt sức nên không thể thực hiện hành động.' };
+  }
+
+  const current = getActivePlayer(state);
+  if (!current || current.playerId !== playerId) {
     return { ok: false, reason: 'Chưa tới lượt của bạn.' };
   }
 
-  // Cho phép tự lật vai công khai bất kỳ lúc nào trong lượt mình (nhận +1 Khiên tinh thần)
-  if (action.type === 'REVEAL_ROLE') {
-    if (actor.revealed) {
-      return { ok: false, reason: 'Bạn đã công khai danh tính trước đó.' };
-    }
-    actor.revealed = true;
-    grantShield(actor, 1);
-    if (actor.roleId === 'lang-cuu-ho') {
-      actor.bodyguardActive = true;
-    }
-    const roleDef = ROLES_BY_ID[actor.roleId];
-    appendPublicLog(
-      state,
-      'reveal',
-      `${actor.displayName} tự công khai danh tính: ${roleDef.name} (${FACTION_LABELS[actor.faction]})!`,
-      nowMs,
-      actor.playerId,
-    );
-    evaluateVictoryState(state, nowMs, false);
-    return { ok: true };
-  }
-
-  // Ghi nhận giả thuyết (thao tác sổ tay miễn phí 1 lần/lượt trước khi hết lượt)
-  if (action.type === 'RECORD_HYPOTHESIS') {
-    if (state.hypothesisUpdatedThisTurn) {
-      return { ok: false, reason: 'Bạn đã cập nhật giả thuyết trong lượt này rồi.' };
-    }
-    const target = state.players.find(
-      (p) => p.playerId === action.targetPlayerId && p.playerId !== actor.playerId && p.alive,
-    );
-    if (!target) {
-      return { ok: false, reason: 'Mục tiêu giả thuyết không hợp lệ.' };
-    }
-    if (target.revealed) {
-      return { ok: false, reason: 'Chỉ được ghi giả thuyết cho sinh viên CHƯA lật vai.' };
-    }
-    if (!actor.metPlayerIds.includes(target.playerId)) {
-      return { ok: false, reason: 'Hãy gặp mặt hoặc điều tra sinh viên này trước khi chốt giả thuyết.' };
-    }
-    const existingIdx = actor.hypotheses.findIndex((h) => h.targetPlayerId === target.playerId);
-    const nextEntry = {
-      targetPlayerId: target.playerId,
-      targetName: target.displayName,
-      predictedFaction: action.predictedFaction,
-      recordedRound: state.round,
-    };
-    if (existingIdx >= 0) {
-      actor.hypotheses[existingIdx] = nextEntry;
-    } else {
-      if (actor.hypotheses.length >= 3) {
-        actor.hypotheses.shift();
+  // --- PHA 1: MOVE_OR_STAY ---
+  if (state.turnPhase === 'MOVE_OR_STAY') {
+    if (action.type === 'MOVE') {
+      if (!isValidLocationId(action.location)) {
+        return { ok: false, reason: 'Khu vực di chuyển không hợp lệ.' };
       }
-      actor.hypotheses.push(nextEntry);
-    }
-    state.hypothesisUpdatedThisTurn = true;
-    appendPrivateNote(
-      state,
-      actor,
-      `[Giả Thuyết] Ghi nhận ${target.displayName} → ${FACTION_LABELS[action.predictedFaction]}.`,
-      nowMs,
-    );
-    return { ok: true };
-  }
-
-  // Pha 1: MOVE (Bắt buộc di chuyển sang ô KỀ CẬN)
-  if (state.turnPhase === 'MOVE') {
-    if (action.type !== 'MOVE') {
-      return { ok: false, reason: 'Đang ở pha Di chuyển: hãy chọn 1 khu vực kề cận.' };
-    }
-    if (!isValidLocationId(action.location) || action.location === actor.location) {
-      return { ok: false, reason: 'Hãy chọn một khu vực khác với vị trí đang đứng.' };
-    }
-    if (!isAdjacentLocation(actor.location, action.location)) {
-      return { ok: false, reason: 'Chỉ được di chuyển tới khu vực có đường nối kề cận (trừ khi dùng Giấy Thông Hành).' };
-    }
-
-    actor.location = action.location;
-    clampShieldForLocation(actor);
-    if (!actor.visitedLocations.includes(action.location)) {
-      actor.visitedLocations.push(action.location);
-    }
-    actor.recentMoves.push({ round: state.round, location: action.location });
-    if (actor.recentMoves.length > 6) {
-      actor.recentMoves = actor.recentMoves.slice(-6);
-    }
-    state.lastVisitorByLocation[action.location] = actor.playerId;
-    recordCoPresenceForPlayer(state, actor);
-
-    appendPublicLog(
-      state,
-      'move',
-      `${actor.displayName} di chuyển tới ${getLocationName(action.location)}.`,
-      nowMs,
-      actor.playerId,
-    );
-
-    state.turnPhase = 'DRAW_OR_EXPLORE';
-    evaluateVictoryState(state, nowMs, false);
-    return { ok: true };
-  }
-
-  // Pha 2: DRAW_OR_EXPLORE (Khảo sát khu vực hoặc Rút thẻ)
-  if (state.turnPhase === 'DRAW_OR_EXPLORE') {
-    if (action.type === 'INTERACT_LOC') {
-      if (state.blackoutLocation === actor.location) {
-        return { ok: false, reason: 'Khu vực này đang mất điện cục bộ trong vòng này — không thể thao tác thiết bị.' };
-      }
-      const mode = action.mode === 'sabotage' ? 'sabotage' : 'scan';
-      const scanRes = performLocationScanOrDisarm(
-        state,
-        actor,
-        actor.location,
-        mode,
-        nowMs,
-        `Khảo sát ${getLocationShortLabel(actor.location)}`,
-      );
-      if (!scanRes.ok) return scanRes;
-      state.turnPhase = 'TACTICAL_ACTION';
-      evaluateVictoryState(state, nowMs, false);
-      return { ok: true };
-    }
-
-    if (action.type !== 'DRAW_CARD') {
-      return { ok: false, reason: 'Đang ở pha Khảo sát: hãy Khảo sát khu vực hoặc Rút 1 lá bài.' };
-    }
-
-    const deck =
-      action.deck === 'clue' || action.deck === 'event' || action.deck === 'tactic'
-        ? action.deck
-        : 'event';
-    const card = drawCardFromDeck(state, deck);
-    if (!card) {
-      state.turnPhase = 'TACTICAL_ACTION';
-      return { ok: true };
-    }
-
-    if (deck === 'tactic') {
-      addCardToHand(state, actor, card);
-      appendPublicLog(
-        state,
-        'draw',
-        `${actor.displayName} rút 1 lá Chiến thuật giữ kín trên tay.`,
-        nowMs,
-        actor.playerId,
-      );
-    } else {
-      appendPublicLog(
-        state,
-        'draw',
-        `${actor.displayName} rút thẻ ${deck === 'clue' ? 'Điều tra' : 'Sự kiện'}: "${card.title}".`,
-        nowMs,
-        actor.playerId,
-      );
-      resolveCardImmediateEffect(state, actor, card, null, null, undefined, nowMs);
-      state.discards[deck].push(card.id);
-    }
-
-    state.turnPhase = 'TACTICAL_ACTION';
-    if (!evaluateVictoryState(state, nowMs, false) && (!actor.alive || actor.detained)) {
-      advanceTurnPointer(state, nowMs);
-    }
-    return { ok: true };
-  }
-
-  // Pha 3: TACTICAL_ACTION
-  if (state.turnPhase === 'TACTICAL_ACTION') {
-    if (action.type === 'END_TURN') {
-      appendPublicLog(state, 'system', `${actor.displayName} kết thúc lượt.`, nowMs, actor.playerId);
-      advanceTurnPointer(state, nowMs);
-      return { ok: true };
-    }
-
-    if (state.actionUsedThisTurn) {
-      return { ok: false, reason: 'Bạn đã thực hiện hành động chính lượt này; hãy bấm Kết thúc lượt.' };
-    }
-
-    if (action.type === 'INVESTIGATE') {
-      const target = state.players.find((p) => p.playerId === action.targetPlayerId && p.alive);
-      if (!target || target.playerId === actor.playerId) {
-        return { ok: false, reason: 'Hãy chọn sinh viên còn sống hợp lệ để điều tra.' };
-      }
-      const inRange =
-        target.location === actor.location ||
-        (actor.location === 'court' && isAdjacentLocation('court', target.location));
-      if (!inRange) {
+      const legalDests = listLegalMovesForPlayer(actor);
+      if (!legalDests.includes(action.location)) {
         return {
           ok: false,
-          reason: 'Chỉ điều tra được người đứng cùng phòng (hoặc ô kề cận khi ở Sân Bóng Rổ).',
+          reason: `Chỉ được bước tới khu vực kề cận (${legalDests.map(getLocationName).join(', ')}).`,
         };
       }
-      if (!actor.metPlayerIds.includes(target.playerId)) {
-        actor.metPlayerIds.push(target.playerId);
+      actor.location = action.location;
+      if (!actor.visitedLocations.includes(action.location)) {
+        actor.visitedLocations.push(action.location);
       }
-
-      const focus = action.focus === 'activity' ? 'activity' : 'equipment';
-      if (focus === 'activity') {
-        createActivityEvidence(state, actor, target, 'Điều Tra Hành Tung', nowMs);
-      } else {
-        createEquipmentTraitEvidence(state, actor, target, false, 'Kiểm Tra Trang Bị', nowMs);
-      }
-
+      actor.recentTrail = [...actor.recentTrail.slice(-5), action.location];
+      actor.movesMade += 1;
+      actor.stayedLastTurn = false;
+      state.turnPhase = 'LOCATION_ACTION';
       appendPublicLog(
         state,
-        'investigate',
-        `${actor.displayName} tiến hành điều tra (${focus === 'activity' ? 'hành tung' : 'trang bị'}) đối với ${target.displayName}.`,
+        'move',
+        `🚶 ${actor.displayName} di chuyển tới ${getLocationName(action.location)}.`,
         nowMs,
         actor.playerId,
       );
-      state.actionUsedThisTurn = true;
+      return { ok: true };
+    }
+
+    if (action.type === 'STAY') {
+      actor.stayedLastTurn = true;
+      actor.stayedCount += 1;
+      state.turnPhase = 'LOCATION_ACTION';
+      appendPublicLog(
+        state,
+        'stay',
+        `⏸️ ${actor.displayName} chọn đứng yên tại ${getLocationName(actor.location)}.`,
+        nowMs,
+        actor.playerId,
+      );
+      return { ok: true };
+    }
+
+    return { ok: false, reason: 'Đang ở Pha 1 (Di chuyển hoặc Đứng yên).' };
+  }
+
+  // --- PHA 2: LOCATION_ACTION ---
+  if (state.turnPhase === 'LOCATION_ACTION') {
+    if (action.type === 'EXPLORE_LOC') {
+      executeExploreLocation(state, actor, nowMs);
+      state.turnPhase = 'MAIN_ACTION';
       evaluateVictoryState(state, nowMs, false);
       return { ok: true };
     }
 
-    if (action.type === 'USE_CARD') {
-      const cardIdx = actor.hand.findIndex((c) => c.id === action.cardId);
-      if (cardIdx === -1) {
-        return { ok: false, reason: 'Bạn không giữ lá bài này trên tay.' };
+    if (action.type === 'DRAW_CARD') {
+      const allowed = KTX_LOCATION_MAP[actor.location]?.allowedDecks ?? [];
+      if (!allowed.includes(action.deck)) {
+        return {
+          ok: false,
+          reason: `${getLocationName(actor.location)} chỉ cho rút bộ: ${allowed.map((d) => DECK_LABELS[d]).join(', ')}.`,
+        };
       }
-      const [card] = actor.hand.splice(cardIdx, 1);
-      const explicitTarget = action.targetPlayerId
-        ? state.players.find((p) => p.playerId === action.targetPlayerId && p.alive) ?? null
-        : null;
-      const explicitSecond = action.targetSecondPlayerId
-        ? state.players.find((p) => p.playerId === action.targetSecondPlayerId && p.alive) ?? null
-        : null;
-
-      if (
-        explicitTarget &&
-        (card.targetMode === 'same-location' || card.targetMode === 'adjacent-or-same') &&
-        explicitTarget.location !== actor.location &&
-        !(card.targetMode === 'adjacent-or-same' && isAdjacentLocation(actor.location, explicitTarget.location))
-      ) {
-        actor.hand.splice(cardIdx, 0, card);
-        return { ok: false, reason: 'Mục tiêu đang đứng ngoài tầm tác động của thẻ bài này.' };
+      const drawn = drawCardFromDeck(state, actor, action.deck, nowMs);
+      if (!drawn) {
+        return { ok: false, reason: 'Chồng bài này tạm thời đã hết.' };
       }
+      appendPrivateNote(state, actor, `Bạn vừa rút thẻ "${drawn.title}".`, nowMs);
+      appendPublicLog(
+        state,
+        'draw',
+        `🃏 ${actor.displayName} rút 1 thẻ ${DECK_LABELS[action.deck]} tại ${getLocationName(actor.location)}.`,
+        nowMs,
+        actor.playerId,
+      );
+      state.turnPhase = 'MAIN_ACTION';
+      return { ok: true };
+    }
 
-      resolveCardImmediateEffect(
+    return { ok: false, reason: 'Đang ở Pha 2 (Khảo sát khu vực hoặc Rút bài).' };
+  }
+
+  // --- PHA 3: MAIN_ACTION ---
+  if (state.turnPhase === 'MAIN_ACTION') {
+    if (action.type === 'EQUIP_CARD') {
+      const card = actor.hand.find((c) => c.id === action.cardId);
+      if (!card) return { ok: false, reason: 'Không tìm thấy thẻ trên tay.' };
+      return resolveEquipCard(state, actor, card, nowMs);
+    }
+
+    if (action.type === 'REVEAL_ROLE') {
+      return resolveVoluntaryReveal(state, actor, nowMs);
+    }
+
+    if (action.type === 'INVESTIGATE_CARD') {
+      const card = actor.hand.find((c) => c.id === action.cardId && c.deck === 'investigation');
+      if (!card) return { ok: false, reason: 'Không tìm thấy thẻ Điều tra này trên tay.' };
+      const target = state.players.find(
+        (p) => p.playerId === action.targetPlayerId && p.alive && p.playerId !== actor.playerId,
+      );
+      if (!target) return { ok: false, reason: 'Mục tiêu điều tra không hợp lệ.' };
+      const res = resolveInvestigationCard(state, actor, target, card, nowMs);
+      if (!res.ok) return res;
+      if (!state.finished) advanceTurn(state, nowMs);
+      return { ok: true };
+    }
+
+    if (action.type === 'PLAY_EVENT') {
+      const card = actor.hand.find((c) => c.id === action.cardId && c.deck === 'event');
+      if (!card) return { ok: false, reason: 'Không tìm thấy thẻ Sự kiện này trên tay.' };
+      const res = resolveEventCard(
         state,
         actor,
         card,
-        explicitTarget,
-        explicitSecond,
+        action.targetPlayerId,
         action.targetLocation,
         nowMs,
       );
-      state.discards[card.deck].push(card.id);
-      state.actionUsedThisTurn = true;
-      if (!evaluateVictoryState(state, nowMs, false) && (!actor.alive || actor.detained)) {
-        advanceTurnPointer(state, nowMs);
-      }
+      if (!res.ok) return res;
+      if (!state.finished) advanceTurn(state, nowMs);
       return { ok: true };
     }
 
-    if (action.type === 'USE_SKILL') {
-      const target = action.targetPlayerId
-        ? state.players.find((p) => p.playerId === action.targetPlayerId && p.alive) ?? null
-        : null;
-
-      // Vy (suong-tin-gia) dùng lén khi chưa lật: cấy nhiễu giả mà KHÔNG lộ vai!
-      if (actor.roleId === 'suong-tin-gia' && !actor.revealed) {
-        if (actor.covertSkillUsed) {
-          return { ok: false, reason: 'Bạn đã dùng khả năng lén trong ván này rồi.' };
-        }
-        const roomVictim =
-          target && target.playerId !== actor.playerId && target.location === actor.location
-            ? target
-            : state.players.find(
-                (p) => p.alive && p.playerId !== actor.playerId && p.location === actor.location,
-              ) ?? null;
-        if (!roomVictim) {
-          return { ok: false, reason: 'Cần có 1 sinh viên khác đứng cùng phòng để gieo nhiễu giả bí mật.' };
-        }
-        actor.covertSkillUsed = true;
-        if (!roomVictim.plantedDecoyRounds.includes(state.round)) {
-          roomVictim.plantedDecoyRounds.push(state.round);
-        }
-        appendPrivateNote(
-          state,
-          actor,
-          `[Gieo Nhiễu Giả - Ẩn Danh] Đã gài dấu thao tác kỹ thuật giả lên ${roomVictim.displayName} mà không lộ danh tính.`,
-          nowMs,
-        );
-        appendPublicLog(
-          state,
-          'scene',
-          `${actor.displayName} quan sát kỹ xung quanh tại ${getLocationShortLabel(actor.location)}.`,
-          nowMs,
-          actor.playerId,
-        );
-        state.actionUsedThisTurn = true;
-        evaluateVictoryState(state, nowMs, false);
-        return { ok: true };
-      }
-
-      if (actor.skillUsed) {
-        return { ok: false, reason: 'Kỹ năng nhân vật đã được sử dụng.' };
-      }
-      executeRevealedRoleSkill(state, actor, target, nowMs);
-      state.actionUsedThisTurn = true;
-      if (!evaluateVictoryState(state, nowMs, false) && (!actor.alive || actor.detained)) {
-        advanceTurnPointer(state, nowMs);
-      }
+    if (action.type === 'USE_EQUIPMENT') {
+      const card = actor.hand.find((c) => c.id === action.cardId && c.deck === 'equipment');
+      if (!card) return { ok: false, reason: 'Không tìm thấy thẻ Trang bị tiêu hao trên tay.' };
+      const res = resolveUseConsumableEquipment(
+        state,
+        actor,
+        card,
+        action.targetPlayerId,
+        nowMs,
+      );
+      if (!res.ok) return res;
+      if (!state.finished) advanceTurn(state, nowMs);
       return { ok: true };
     }
 
     if (action.type === 'ATTACK') {
       const target = state.players.find(
-        (p) => p.playerId === action.targetPlayerId && p.alive && !p.detained,
+        (p) => p.playerId === action.targetPlayerId && p.alive && p.playerId !== actor.playerId,
       );
-      if (!target || target.playerId === actor.playerId) {
-        return { ok: false, reason: 'Hãy chọn mục tiêu còn khả năng hành động hợp lệ.' };
+      if (!target) return { ok: false, reason: 'Mục tiêu tấn công không hợp lệ.' };
+      if (!canPlayerAttackTarget(state, actor, target)) {
+        return {
+          ok: false,
+          reason: 'Mục tiêu không ở trong tầm đánh (cần cùng phòng hoặc mở tầm đánh kề phòng).',
+        };
       }
-      if (target.location !== actor.location) {
-        return { ok: false, reason: 'Chỉ được Công kích người đứng cùng khu vực với bạn.' };
+      resolveAttackStrike(state, actor, target, 2, nowMs, 'tấn công', { isNormalAttack: true });
+      if (!state.finished) advanceTurn(state, nowMs);
+      return { ok: true };
+    }
+
+    if (action.type === 'DEFEND') {
+      addTempShield(actor, 1);
+      const roomPeers = state.players.filter(
+        (p) => p.alive && p.playerId !== actor.playerId && p.location === actor.location,
+      );
+      if (roomPeers.length > 0) {
+        const obsLines = roomPeers.map((peer) => {
+          const jamHand = peer.revealed && peer.roleId === 'suong-tin-gia';
+          const handText = jamHand ? '? lá (bị nhiễu)' : `${peer.hand.length} lá`;
+          return `${peer.displayName}: ${handText}, ${peer.equipped.length} trang bị`;
+        });
+        appendPrivateNote(
+          state,
+          actor,
+          `Quan sát cùng phòng khi phòng thủ: ${obsLines.join(' · ')}.`,
+          nowMs,
+        );
       }
-      if (!actor.dealtDamageRounds.includes(state.round)) {
-        actor.dealtDamageRounds.push(state.round);
-      }
-      const pierce = actor.roleId === 'suong-gac-cong' && actor.revealed ? 1 : 0;
-      const dmgRes = applyDamage(state, target, 2, nowMs, `${actor.displayName} (Công kích)`, {
-        pierceShield: pierce,
-        attacker: actor,
-      });
       appendPublicLog(
         state,
-        'attack',
-        `${actor.displayName} công kích ${target.displayName} (gây ${dmgRes.hpLost} vết thương, Khiên đỡ ${dmgRes.shieldAbsorbed}).`,
+        'defend',
+        `🛡️ ${actor.displayName} thủ thế phòng ngự (+1 Giáp tạm) và cảnh giác quan sát xung quanh.`,
         nowMs,
         actor.playerId,
       );
-      state.actionUsedThisTurn = true;
-      evaluateVictoryState(state, nowMs, false);
+      if (!state.finished) advanceTurn(state, nowMs);
       return { ok: true };
     }
 
-    if (action.type === 'CONFRONT') {
-      if (state.round < 3) {
-        return { ok: false, reason: 'Chỉ được mở Đối Chất chính thức từ Vòng 3 trở đi.' };
-      }
-      if (actor.confrontUsed) {
-        return { ok: false, reason: 'Mỗi sinh viên chỉ được quyền Đối Chất tối đa 1 lần mỗi ván.' };
-      }
-      const anywhereAllowed = state.breakerSealed && state.radioSealed;
-      if (!anywhereAllowed && actor.location !== 'lobby' && actor.location !== 'breaker') {
-        return {
-          ok: false,
-          reason: 'Cần đứng ở Sảnh KTX hoặc Phòng Cầu Dao (hoặc niêm phong đủ Cầu Dao & Phát Thanh) để Đối Chất.',
-        };
-      }
-      const target = state.players.find(
-        (p) => p.playerId === action.targetPlayerId && p.playerId !== actor.playerId && p.alive,
+    if (action.type === 'USE_SKILL') {
+      const res = resolveRevealedSkill(state, actor, action.targetPlayerId, nowMs);
+      if (!res.ok) return res;
+      if (!state.finished) advanceTurn(state, nowMs);
+      return { ok: true };
+    }
+
+    if (action.type === 'END_TURN') {
+      appendPublicLog(
+        state,
+        'system',
+        `⏭️ ${actor.displayName} kết thúc lượt.`,
+        nowMs,
+        actor.playerId,
       );
-      if (!target || target.revealed || target.detained) {
-        return { ok: false, reason: 'Chỉ được Đối Chất sinh viên còn sống và CHƯA lật vai.' };
-      }
-      if (!anywhereAllowed && target.location !== actor.location) {
-        return { ok: false, reason: 'Mục tiêu Đối Chất phải đứng cùng phòng với bạn.' };
-      }
-
-      actor.confrontUsed = true;
-      state.actionUsedThisTurn = true;
-
-      if (target.faction === 'mist-order') {
-        target.revealed = true;
-        target.detained = true;
-        const rName = ROLES_BY_ID[target.roleId].name;
-        appendPublicLog(
-          state,
-          'confront',
-          `⚖️ ĐỐI CHẤT CHÍNH XÁC! ${actor.displayName} vạch trần ${target.displayName} là [${rName} · Hội Màn Sương] và TẠM GIỮ thành công!`,
-          nowMs,
-          actor.playerId,
-        );
-        state.highlights.push({
-          round: state.round,
-          title: `Tạm giữ ${target.displayName}`,
-          detail: `${actor.displayName} đối chất chính xác Hội Màn Sương.`,
-          atMs: nowMs,
-        });
-      } else {
-        state.falseAccusationCount += 1;
-        applyDirectWounds(state, actor, 2, nowMs, 'Phản chấn Đối Chất sai');
-        if (state.sabotagePlanted && !state.sabotageArmed) {
-          state.sabotageArmed = true;
-          appendPublicLog(
-            state,
-            'incident',
-            `⚠️ Nhân lúc hoảng loạn sau cáo buộc sai, Mạch Quá Tải gài ngầm trong KTX đã chuyển sang trạng thái CHỜ KÍCH NỔ!`,
-            nowMs,
-          );
-        }
-        appendPublicLog(
-          state,
-          'confront',
-          `❌ ĐỐI CHẤT SAI NGƯỜI! ${target.displayName} không thuộc Hội Màn Sương — ${actor.displayName} chịu phản chấn 2 vết thương trực tiếp!`,
-          nowMs,
-          actor.playerId,
-        );
-      }
-
-      if (!evaluateVictoryState(state, nowMs, false) && !actor.alive) {
-        advanceTurnPointer(state, nowMs);
-      }
-      return { ok: true };
-    }
-
-    if (action.type === 'DETONATE_PLOT') {
-      if (actor.faction !== 'mist-order') {
-        return { ok: false, reason: 'Chỉ Hội Màn Sương mới có thể kích nổ Mạch Quá Tải.' };
-      }
-      if (!state.sabotageArmed || !state.sabotagePlanted || state.sabotagePlantedRound === null) {
-        return { ok: false, reason: 'Chưa có Mạch Quá Tải nào được gài và kích hoạt chờ nổ.' };
-      }
-      if (state.round <= state.sabotagePlantedRound) {
-        return { ok: false, reason: 'Phải sang vòng kế tiếp sau khi gài mạch mới được phép kích nổ.' };
-      }
-      const canRemote = actor.revealed && actor.location === 'radio';
-      if (actor.location !== state.secretSabotageLocation && !canRemote) {
-        return {
-          ok: false,
-          reason: `Hãy đứng tại ${getLocationShortLabel(state.secretSabotageLocation)} (hoặc lật vai tại Phát Thanh) để kích nổ!`,
-        };
-      }
-      state.plotDetonated = true;
-      state.actionUsedThisTurn = true;
-      evaluateVictoryState(state, nowMs, false);
-      return { ok: true };
-    }
-
-    if (action.type === 'PUBLISH_DOSSIER') {
-      if (actor.roleId !== 'lang-anh-san') {
-        return { ok: false, reason: 'Chỉ vai Hải (Người Săn Gói Tin) mới thực hiện được hành động này.' };
-      }
-      if (state.round < 4) {
-        return { ok: false, reason: 'Chỉ được Công Bố Hồ Sơ trên sóng từ Vòng 4 trở đi.' };
-      }
-      if (actor.location !== 'radio') {
-        return { ok: false, reason: 'Bạn phải có mặt tại Phòng Phát Thanh để phát sóng hồ sơ.' };
-      }
-      if (actor.verifiedSceneLocations.length < 2 || actor.evidenceList.length < 3) {
-        return {
-          ok: false,
-          reason: `Cần xác thực >= 2 hiện trường kỹ thuật (${actor.verifiedSceneLocations.length}/2) và >= 3 chứng cứ (${actor.evidenceList.length}/3).`,
-        };
-      }
-      actor.revealed = true;
-      state.dossierPublishedBy = actor.playerId;
-      state.actionUsedThisTurn = true;
-      evaluateVictoryState(state, nowMs, false);
+      advanceTurn(state, nowMs);
       return { ok: true };
     }
   }
@@ -730,31 +383,31 @@ export function applyPlayerGameAction(
 }
 
 /**
- * Timeout 100% trung lập phe — KHÔNG bao giờ đọc `faction`, `roleId`, `hand` hay `secretSabotageLocation`.
- * Hai trạng thái công khai giống nhau sẽ luôn cho kết quả công khai giống nhau khi hết giờ.
+ * Xử lý hết giờ lượt trung lập 100%: tuyệt đối KHÔNG đọc `faction`, `roleId`,
+ * `hand`, `hp` hay bất kỳ dữ liệu bí mật nào để tránh rò rỉ khi AFK/disconnect.
  */
-export function applyTimeoutAutoTurn(state: AuthoritativeGameState, nowMs: number): void {
-  if (state.finished) return;
-  const active = getActivePlayer(state);
-  if (!active || !active.alive || active.detained) {
-    advanceTurnPointer(state, nowMs);
-    return;
+export function applyTimeoutAutoTurn(
+  state: AuthoritativeGameState,
+  nowMs: number,
+): boolean {
+  if (state.finished || state.turnPhase === 'ENDED') return false;
+  const actor = getActivePlayer(state);
+  if (!actor || !actor.alive) {
+    advanceTurn(state, nowMs);
+    return true;
   }
 
-  if (state.turnPhase === 'MOVE') {
-    grantShield(active, 1);
-  }
+  addTempShield(actor, 1);
+  actor.stayedLastTurn = true;
+  actor.stayedCount += 1;
 
   appendPublicLog(
     state,
     'timeout',
-    `⏳ ${active.displayName} hết giờ thao tác — giữ vị trí phòng thủ và tự động chuyển lượt.`,
+    `⏱️ ${actor.displayName} hết thời gian lượt — hệ thống tự động thủ thế (+1 Giáp tạm) và chuyển lượt.`,
     nowMs,
-    active.playerId,
+    actor.playerId,
   );
-  advanceTurnPointer(state, nowMs);
-}
-
-export function listLegalMovesForLocation(loc: BoardGameLocationId): BoardGameLocationId[] {
-  return listAdjacentDestinations(loc);
+  advanceTurn(state, nowMs);
+  return true;
 }

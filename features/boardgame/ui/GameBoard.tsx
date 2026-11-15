@@ -1,9 +1,9 @@
 'use client';
 
 // ---------------------------------------------------------------------------
-// features/boardgame/ui/GameBoard.tsx — Bàn chơi 2D chính của "Bóng Đêm KTX"
-// (6 khu vực KTX, thanh Tín hiệu/Nhiễu sóng, đồng hồ đếm ngược, vai bí mật,
-// điều khiển theo lượt, nhật ký, kết quả & responsive Mobile 390x844).
+// features/boardgame/ui/GameBoard.tsx — Bàn chơi 2D chính của "Bóng Đêm KTX v3"
+// (6 khu vực KTX, trạng thái Giới nghiêm & 3 chồng bài, Spotlight điều tra / lật vai,
+// đồng hồ đếm ngược 1 lượt, đồng bộ ẩn thẻ/bài tay, nhật ký & responsive 390x844).
 // ---------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from 'react';
@@ -12,12 +12,19 @@ import {
   type BoardGameActionPayload,
   type BoardGameChatEmoteServerMessage,
   type BoardGameEmoteId,
+  type BoardGameLocationId,
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
 } from '../network/contracts';
-import { KTX_LOCATION_MAP, isAdjacentLocation } from '../domain/rules';
+import { FACTION_LABELS } from '../domain/roles';
+import {
+  KTX_LOCATION_MAP,
+  isAdjacentLocation,
+  listLegalMovesForLocation,
+} from '../domain/rules';
 import {
   BOARD_GRID_ORDER,
+  FACTION_THEME,
   LOCATION_VISUAL_META,
   LocationSceneSvg,
   PlayerPawnToken,
@@ -89,6 +96,7 @@ export default function GameBoard({
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'board' | 'role' | 'log'>('board');
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [roleHiddenOnScreen, setRoleHiddenOnScreen] = useState(true);
   const [chatInput, setChatInput] = useState('');
   const [internalMuted, setInternalMuted] = useState<boolean>(() => isBoardGameSoundMuted());
   const [toastEmote, setToastEmote] = useState<BoardGameChatEmoteServerMessage | null>(null);
@@ -103,8 +111,8 @@ export default function GameBoard({
 
   const didInitAudioRefs = useRef(false);
   const prevActiveIdRef = useRef<string | null>(publicGame.activePlayerId);
-  const prevDisarmedRef = useRef<number>(publicGame.disarmedCount);
-  const prevArmedRef = useRef<boolean>(publicGame.sabotageArmed);
+  const prevInvestigationIdRef = useRef<string | null>(publicGame.lastInvestigation?.id ?? null);
+  const prevRevealIdRef = useRef<string | null>(publicGame.lastRevealEvent?.id ?? null);
   const prevHandCountRef = useRef<number>(privateView?.hand.length ?? 0);
   const prevRevealedCountRef = useRef<number>(
     publicGame.players.filter((p) => Boolean(p.revealedFaction || p.revealedRoleId)).length,
@@ -117,11 +125,14 @@ export default function GameBoard({
     const revealedCount = publicGame.players.filter((p) =>
       Boolean(p.revealedFaction || p.revealedRoleId),
     ).length;
+    const latestInvId = publicGame.lastInvestigation?.id ?? null;
+    const latestRevealId = publicGame.lastRevealEvent?.id ?? null;
+
     if (!didInitAudioRefs.current) {
       didInitAudioRefs.current = true;
       prevActiveIdRef.current = publicGame.activePlayerId;
-      prevDisarmedRef.current = publicGame.disarmedCount;
-      prevArmedRef.current = publicGame.sabotageArmed;
+      prevInvestigationIdRef.current = latestInvId;
+      prevRevealIdRef.current = latestRevealId;
       prevHandCountRef.current = handCount;
       prevRevealedCountRef.current = revealedCount;
       prevPhaseRef.current = publicGame.turnPhase;
@@ -139,29 +150,29 @@ export default function GameBoard({
       playTurnAlert();
     }
 
-    if (
-      publicGame.disarmedCount > prevDisarmedRef.current ||
-      (publicGame.sabotageArmed && !prevArmedRef.current)
-    ) {
+    if (latestInvId && latestInvId !== prevInvestigationIdRef.current) {
       playTrackAdvance();
     }
     if (handCount > prevHandCountRef.current) {
       playCardDraw();
     }
-    if (revealedCount > prevRevealedCountRef.current) {
+    if (
+      (latestRevealId && latestRevealId !== prevRevealIdRef.current) ||
+      revealedCount > prevRevealedCountRef.current
+    ) {
       playRoleReveal();
     }
 
     prevActiveIdRef.current = publicGame.activePlayerId;
-    prevDisarmedRef.current = publicGame.disarmedCount;
-    prevArmedRef.current = publicGame.sabotageArmed;
+    prevInvestigationIdRef.current = latestInvId;
+    prevRevealIdRef.current = latestRevealId;
     prevHandCountRef.current = handCount;
     prevRevealedCountRef.current = revealedCount;
     prevPhaseRef.current = publicGame.turnPhase;
   }, [
     publicGame.activePlayerId,
-    publicGame.disarmedCount,
-    publicGame.sabotageArmed,
+    publicGame.lastInvestigation?.id,
+    publicGame.lastRevealEvent?.id,
     publicGame.players,
     publicGame.turnPhase,
     privateView?.hand.length,
@@ -204,10 +215,26 @@ export default function GameBoard({
     !isSpectator &&
       !pendingAction &&
       selfPlayer?.alive &&
-      !selfPlayer?.detained &&
       publicGame.activePlayerId === selfPlayerId &&
-      publicGame.turnPhase === 'MOVE',
+      publicGame.turnPhase === 'MOVE_OR_STAY',
   );
+
+  const legalBoardMoves = (() => {
+    if (!canClickMoveOnBoard || !selfPlayer) return new Set<BoardGameLocationId>();
+    const oneStep = listLegalMovesForLocation(selfPlayer.location);
+    const hasTwoStep =
+      Boolean(privateView?.equipped.some((c) => c.effectId === 'eq-sneakers')) ||
+      (selfPlayer.revealedRoleId === 'suong-an-danh' && selfPlayer.location === 'corridor');
+    const dest = new Set<BoardGameLocationId>(oneStep);
+    if (hasTwoStep) {
+      for (const mid of oneStep) {
+        for (const two of listLegalMovesForLocation(mid)) {
+          if (two !== selfPlayer.location) dest.add(two);
+        }
+      }
+    }
+    return dest;
+  })();
 
   const handleDispatchAction = async (action: BoardGameActionPayload) => {
     if (pendingAction) return;
@@ -224,17 +251,18 @@ export default function GameBoard({
   };
 
   const latestEmotes = recentEmotes.slice(-4).reverse();
+  const aliveCount = publicGame.players.filter((p) => p.alive).length;
 
   return (
     <div
       data-testid="boardgame-2d-board"
       className="fixed inset-0 z-[45] flex flex-col overflow-x-hidden bg-slate-950/94 text-slate-100 backdrop-blur-md"
     >
-      {/* Thanh đỉnh: Tên trận, Chỉ số Tín hiệu vs Màn sương, Vòng, Đồng hồ, Nút */}
+      {/* Thanh đỉnh: Tên trận, Vòng, Đồng hồ 1 lượt, Âm thanh, Luật & Thoát */}
       <header className="shrink-0 border-b border-slate-800 bg-slate-950/90 px-3 py-2.5 sm:px-4">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="text-sm font-extrabold text-amber-300">🎲 BÓNG ĐÊM KTX</span>
+            <span className="text-sm font-extrabold text-amber-300">🎲 BÓNG ĐÊM KTX v3</span>
             {inviteCode && (
               <span className="rounded-md bg-slate-800 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-200">
                 #{inviteCode}
@@ -286,65 +314,94 @@ export default function GameBoard({
           </div>
         </div>
 
-        {/* Thanh Trạng thái Lưới điện KTX & Tiến độ Rạng Sáng (phiên bản v2 ẩn vai) */}
+        {/* Thanh Trạng thái v3: Giới Nghiêm, Sống sót, 3 Chồng bài & Spotlight Điều tra / Lật vai */}
         <div
-          data-testid="bg-incident-status-bar"
-          className="mx-auto mt-2 grid max-w-7xl grid-cols-1 gap-2 sm:grid-cols-2"
+          data-testid="bg-v3-status-bar"
+          className="mx-auto mt-2 flex max-w-7xl flex-col gap-1.5"
         >
-          <div
-            className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-[11px] ${
-              publicGame.sabotageArmed
-                ? 'border-rose-400/70 bg-rose-950/45 text-rose-100'
-                : 'border-amber-500/35 bg-amber-950/25 text-amber-100'
-            }`}
-          >
-            <div className="flex items-center gap-1.5 font-semibold">
-              <span>{publicGame.sabotageArmed ? '⚠️' : '🌅'}</span>
-              <span>
-                {publicGame.sabotageArmed
-                  ? 'Báo động: 1 Mạch Quá Tải đang CHỜ KÍCH NỔ!'
-                  : `Đêm KTX — Vòng ${publicGame.round}/${publicGame.maxRounds} tới Rạng Sáng`}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div
+              className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-[11px] ${
+                publicGame.curfewPressureActive
+                  ? 'border-rose-400/70 bg-rose-950/45 text-rose-100'
+                  : 'border-amber-500/35 bg-amber-950/25 text-amber-100'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-semibold">
+                <span>{publicGame.curfewPressureActive ? '🌙' : '🕵️'}</span>
+                <span>
+                  {publicGame.curfewPressureActive
+                    ? 'Áp lực Giới nghiêm: đứng lẻ cuối vòng sẽ mất Giáp & 1 HP!'
+                    : `Phiên trực đêm KTX — ${aliveCount}/${publicGame.players.length} người đang đứng vững`}
+                </span>
+              </div>
+              <span className="rounded bg-slate-950/75 px-2 py-0.5 font-mono text-[10px] text-amber-200">
+                Lượt #{publicGame.turnNumber}
               </span>
             </div>
-            <span className="rounded bg-slate-950/75 px-2 py-0.5 font-mono text-[10px] text-amber-200">
-              {publicGame.round >= 3 ? '⚖️ Đã mở Đối chất' : '🔒 Đối chất mở ở V3'}
-            </span>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-500/35 bg-slate-950/60 px-3 py-1.5 text-[11px] text-slate-200">
+              <div className="flex flex-wrap items-center gap-2 font-semibold">
+                <span className="text-amber-300">
+                  🔎 Điều tra: {publicGame.deckCounts.investigation}
+                </span>
+                <span className="text-cyan-300">
+                  🎒 Trang bị: {publicGame.deckCounts.equipment}
+                </span>
+                <span className="text-rose-300">
+                  ⚡ Sự kiện: {publicGame.deckCounts.event}
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400">
+                Chỉ lộ vết thương &amp; đồ đeo công khai
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-500/35 bg-slate-950/60 px-3 py-1.5 text-[11px] text-slate-200">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span
-                data-testid="bg-breaker-seal-badge"
-                className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${
-                  publicGame.breakerSealed
-                    ? 'bg-emerald-950/80 text-emerald-200 ring-emerald-400/50'
-                    : 'bg-slate-900 text-slate-400 ring-slate-700'
-                }`}
-              >
-                ⚡ Cầu Dao: {publicGame.breakerSealed ? 'Niêm phong' : 'Chưa khóa'}
-              </span>
-              <span
-                data-testid="bg-radio-seal-badge"
-                className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${
-                  publicGame.radioSealed
-                    ? 'bg-emerald-950/80 text-emerald-200 ring-emerald-400/50'
-                    : 'bg-slate-900 text-slate-400 ring-slate-700'
-                }`}
-              >
-                📡 Phát Thanh: {publicGame.radioSealed ? 'Niêm phong' : 'Chưa khóa'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 font-mono text-[10px]">
-              <span data-testid="bg-disarmed-count" className="font-bold text-teal-300">
-                🛡️ Gỡ: {publicGame.disarmedCount}
-              </span>
-              {publicGame.falseAccusationCount > 0 && (
-                <span className="font-bold text-rose-300">
-                  ❌ Sai: {publicGame.falseAccusationCount}
-                </span>
+          {(publicGame.lastInvestigation || publicGame.lastRevealEvent) && (
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {publicGame.lastInvestigation && (
+                <div
+                  data-testid="bg-last-investigation-banner"
+                  className="flex items-center justify-between gap-2 rounded-xl border border-amber-500/45 bg-amber-950/35 px-3 py-1 text-[11px] text-amber-100 transition motion-reduce:transition-none"
+                >
+                  <span className="truncate">
+                    🔎 {publicGame.lastInvestigation.publicMessage}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                      publicGame.lastInvestigation.outcome === 'condition-met'
+                        ? 'bg-amber-500/25 text-amber-200'
+                        : 'bg-slate-800 text-slate-300'
+                    }`}
+                  >
+                    {publicGame.lastInvestigation.outcome === 'condition-met'
+                      ? 'Có phản ứng'
+                      : 'Không phản ứng'}
+                  </span>
+                </div>
+              )}
+
+              {publicGame.lastRevealEvent && (
+                <div
+                  data-testid="bg-last-reveal-banner"
+                  className="flex items-center justify-between gap-2 rounded-xl border border-orange-500/55 bg-orange-950/40 px-3 py-1 text-[11px] text-orange-100 transition motion-reduce:transition-none"
+                >
+                  <span className="truncate">
+                    🎭 <strong>{publicGame.lastRevealEvent.displayName}</strong> lộ diện:{' '}
+                    <strong>{publicGame.lastRevealEvent.roleName}</strong>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold ${
+                      FACTION_THEME[publicGame.lastRevealEvent.faction].badgeClasses
+                    }`}
+                  >
+                    {FACTION_LABELS[publicGame.lastRevealEvent.faction]}
+                  </span>
+                </div>
               )}
             </div>
-          </div>
+          )}
         </div>
       </header>
 
@@ -370,7 +427,7 @@ export default function GameBoard({
 
       {/* Nội dung chính Responsive: Desktop 3 cột / Mobile tab */}
       <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 pb-24 lg:grid-cols-12 lg:pb-4">
-        {/* Cột Trái: Vai trò bí mật & Sổ ghi chép */}
+        {/* Cột Trái: Vai trò bí mật & Manh mối */}
         <section
           className={`lg:col-span-3 ${mobileTab === 'role' ? 'block' : 'hidden lg:block'}`}
         >
@@ -378,8 +435,8 @@ export default function GameBoard({
             privateView={privateView}
             publicGame={publicGame}
             isSpectator={isSpectator}
-            pendingAction={pendingAction}
-            onAction={handleDispatchAction}
+            hiddenOnScreen={roleHiddenOnScreen}
+            onToggleHidden={() => setRoleHiddenOnScreen((v) => !v)}
           />
         </section>
 
@@ -393,7 +450,7 @@ export default function GameBoard({
                 🗺️ Bàn Cờ Khuôn Viên KTX Bách Khoa
               </span>
               <span className="text-[10px] text-slate-400">
-                Đường nối hiển thị ô kề (tầm xa Sân Bóng Rổ &amp; lưới Hành Lang B7)
+                Đường nối hiển thị ô kề cận &amp; trục giao lộ Hành Lang B7
               </span>
             </div>
 
@@ -405,17 +462,15 @@ export default function GameBoard({
                 className="pointer-events-none absolute inset-0 hidden h-full w-full sm:block"
                 aria-hidden="true"
               >
-                {/* Vành ngoài & Trục dọc */}
                 <line x1="100" y1="100" x2="300" y2="100" stroke="#F59E0B" strokeOpacity="0.28" strokeWidth="4" strokeDasharray="7 6" />
                 <line x1="300" y1="100" x2="500" y2="100" stroke="#38BDF8" strokeOpacity="0.28" strokeWidth="4" strokeDasharray="7 6" />
                 <line x1="100" y1="100" x2="100" y2="300" stroke="#C084FC" strokeOpacity="0.28" strokeWidth="4" strokeDasharray="7 6" />
-                {/* Giao lộ Hành Lang B7 nối thẳng tới 5 ô */}
+                <line x1="500" y1="100" x2="500" y2="300" stroke="#38BDF8" strokeOpacity="0.28" strokeWidth="4" strokeDasharray="7 6" />
                 <line x1="300" y1="300" x2="100" y2="100" stroke="#34D399" strokeOpacity="0.3" strokeWidth="3.5" />
                 <line x1="300" y1="300" x2="300" y2="100" stroke="#34D399" strokeOpacity="0.3" strokeWidth="3.5" />
                 <line x1="300" y1="300" x2="500" y2="100" stroke="#34D399" strokeOpacity="0.3" strokeWidth="3.5" />
                 <line x1="300" y1="300" x2="100" y2="300" stroke="#34D399" strokeOpacity="0.32" strokeWidth="3.5" />
                 <line x1="300" y1="300" x2="500" y2="300" stroke="#34D399" strokeOpacity="0.32" strokeWidth="3.5" />
-                {/* Mạch điện ngầm nối Cầu Dao <-> Phát Thanh */}
                 <path
                   d="M100 315 Q300 398 500 315"
                   fill="none"
@@ -432,17 +487,7 @@ export default function GameBoard({
                   const vis = LOCATION_VISUAL_META[locId];
                   const occupants = publicGame.players.filter((p) => p.location === loc.id);
                   const isSelfHere = occupants.some((p) => p.playerId === selfPlayerId);
-                  const isBlackout = publicGame.blackoutLocation === loc.id;
-                  const canMoveHere = Boolean(
-                    canClickMoveOnBoard &&
-                      selfPlayer &&
-                      selfPlayer.location !== loc.id &&
-                      isAdjacentLocation(selfPlayer.location, loc.id),
-                  );
-                  const isSealed =
-                    (loc.id === 'breaker' && publicGame.breakerSealed) ||
-                    (loc.id === 'radio' && publicGame.radioSealed);
-                  const isTampered = publicGame.tamperedLocations.includes(loc.id);
+                  const canMoveHere = legalBoardMoves.has(loc.id);
                   const isNearCourt = Boolean(
                     selfPlayer &&
                       selfPlayer.location === 'court' &&
@@ -473,37 +518,30 @@ export default function GameBoard({
                           : undefined
                       }
                       className={`group flex min-w-0 flex-col justify-between rounded-2xl border p-2 transition motion-reduce:transition-none ${
-                        isBlackout
-                          ? 'border-violet-500/70 bg-violet-950/65 shadow-[0_0_16px_rgba(124,58,237,0.22)]'
-                          : isSelfHere
-                            ? 'border-amber-400/80 bg-slate-900/95 shadow-[0_0_16px_rgba(251,191,36,0.2)]'
-                            : canMoveHere
-                              ? 'cursor-pointer border-slate-700/90 bg-slate-900/90 hover:border-amber-400 hover:bg-slate-800/95'
-                              : isNearCourt
-                                ? 'border-sky-500/45 bg-slate-900/90'
-                                : 'border-slate-800/95 bg-slate-900/88'
+                        isSelfHere
+                          ? 'border-amber-400/80 bg-slate-900/95 shadow-[0_0_16px_rgba(251,191,36,0.2)]'
+                          : canMoveHere
+                            ? 'cursor-pointer border-slate-700/90 bg-slate-900/90 hover:border-amber-400 hover:bg-slate-800/95'
+                            : isNearCourt
+                              ? 'border-sky-500/45 bg-slate-900/90'
+                              : 'border-slate-800/95 bg-slate-900/88'
                       }`}
                     >
                       <div className="space-y-1.5">
                         <div className="relative overflow-hidden rounded-lg">
-                          <LocationSceneSvg locationId={loc.id} isBlackout={isBlackout} />
+                          <LocationSceneSvg locationId={loc.id} />
                           <div className="absolute inset-x-1 top-1 flex flex-wrap items-center justify-between gap-1">
                             {isSelfHere && (
                               <span className="rounded-md bg-amber-400 px-1.5 py-0.5 text-[9px] font-extrabold text-slate-950 shadow">
                                 📍 Bạn
                               </span>
                             )}
-                            {isBlackout && (
-                              <span className="ml-auto rounded-md bg-violet-700 px-1.5 py-0.5 text-[9px] font-bold text-white shadow">
-                                ⚡ Mất điện
-                              </span>
-                            )}
-                            {!isBlackout && isNearCourt && (
+                            {isNearCourt && !isSelfHere && (
                               <span className="ml-auto rounded-md bg-sky-900/90 px-1.5 py-0.5 text-[9px] font-semibold text-sky-200 ring-1 ring-sky-400/50">
-                                🎯 Tầm rổ
+                                🎯 Kề rổ
                               </span>
                             )}
-                            {canMoveHere && !isBlackout && !isNearCourt && (
+                            {canMoveHere && (
                               <span className="ml-auto rounded-md bg-slate-950/85 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300 opacity-85 group-hover:bg-amber-500 group-hover:text-slate-950">
                                 🚶 Tới ô
                               </span>
@@ -526,16 +564,6 @@ export default function GameBoard({
                           >
                             {vis.badgeText}
                           </div>
-                          {isSealed && (
-                            <span className="rounded bg-emerald-950/90 px-1 py-0.5 text-[9px] font-bold text-emerald-300 ring-1 ring-emerald-500/40">
-                              🔒 Niêm phong
-                            </span>
-                          )}
-                          {isTampered && !isSealed && (
-                            <span className="rounded bg-amber-950/90 px-1 py-0.5 text-[9px] font-semibold text-amber-300 ring-1 ring-amber-500/40">
-                              🔧 Đã chạm tủ
-                            </span>
-                          )}
                         </div>
                       </div>
 
@@ -567,6 +595,8 @@ export default function GameBoard({
             selfPlayerId={selfPlayerId}
             isSpectator={isSpectator}
             pendingAction={pendingAction}
+            hiddenOnScreen={roleHiddenOnScreen}
+            onToggleHidden={() => setRoleHiddenOnScreen((v) => !v)}
             onAction={handleDispatchAction}
           />
         </section>
@@ -649,7 +679,7 @@ export default function GameBoard({
             mobileTab === 'board' ? 'bg-amber-500/15 text-amber-300' : 'text-slate-400'
           }`}
         >
-          🗺️ Bàn & Lượt
+          🗺️ Bàn &amp; Lượt
         </button>
         <button
           type="button"

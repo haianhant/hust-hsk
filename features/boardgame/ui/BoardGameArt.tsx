@@ -35,7 +35,7 @@ export const FACTION_THEME: Record<
     cardBorder: 'border-amber-400/50',
     accentHex: '#F59E0B',
     glowHex: '#FDE68A',
-    shortGoal: 'Gỡ mạch quá tải, tạm giữ Màn Sương hoặc khóa an toàn tới Rạng Sáng',
+    shortGoal: 'Xác minh danh tính và hạ hết Hội Màn Sương (hoặc giữ lợi thế chốt trực tới Rạng Sáng)',
   },
   'mist-order': {
     label: 'Hội Màn Sương',
@@ -44,7 +44,7 @@ export const FACTION_THEME: Record<
     cardBorder: 'border-violet-400/50',
     accentHex: '#A855F7',
     glowHex: '#E9D5FF',
-    shortGoal: 'Gài & Kích nổ Mạch Quá Tải hoặc lọt tuần tra lúc Rạng Sáng',
+    shortGoal: 'Che giấu tung tích, loại hết Đội Gác Đèn hoặc áp đảo kiểm soát cuối đêm',
   },
   wanderer: {
     label: 'Kẻ Lang Thang',
@@ -53,7 +53,7 @@ export const FACTION_THEME: Record<
     cardBorder: 'border-emerald-400/50',
     accentHex: '#10B981',
     glowHex: '#A7F3D0',
-    shortGoal: 'Hoàn thành nhiệm vụ điều tra, giả thuyết hoặc bảo hộ bí mật',
+    shortGoal: 'Hoàn thành mục tiêu độc lập hoặc đồng thắng (trang bị, nhân chứng, bảo hộ)',
   },
 };
 
@@ -72,10 +72,10 @@ export interface RoleVisualMeta {
 export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   'gac-ky-thuat': {
     heroName: 'Minh',
-    archetype: 'Kỹ Thuật Tầng Thượng',
+    archetype: 'Kỹ Thuật Viên · 13 HP',
     emblem: '🔧',
-    skillChips: ['Lật vai 1×', 'Quét/gỡ xuyên mất điện', '+2 ❤️ cùng phòng'],
-    winShort: 'Gỡ âm mưu Màn Sương hoặc tạm giữ hết Màn Sương',
+    skillChips: ['Lật: +1 🛡️ & +1 Trang bị', 'CD 2v: Hồi 2 & +1/+2 🛡️', 'Miễn ST Sự kiện khi có đồ'],
+    winShort: 'Hạ toàn bộ Hội Màn Sương hoặc giữ lợi thế chốt trực tới Rạng Sáng',
     bgFrom: '#451A03',
     bgTo: '#92400E',
     cloakHex: '#D97706',
@@ -83,10 +83,10 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   },
   'gac-truc-ban': {
     heroName: 'Lan',
-    archetype: 'Trực Ban Nội Trú',
+    archetype: 'Trực Ban Nội Trú · 12 HP',
     emblem: '📋',
-    skillChips: ['Lật vai 1×', '+2 🛡️ Khiên', 'Đọc lịch sử thao tác'],
-    winShort: 'Gỡ âm mưu Màn Sương hoặc tạm giữ hết Màn Sương',
+    skillChips: ['Lật: Hồi 1 & +1 Điều tra', 'CD 2v: Bảo hộ không tụt < 1 HP', 'Soi thêm số bài tay'],
+    winShort: 'Hạ toàn bộ Hội Màn Sương hoặc giữ lợi thế chốt trực tới Rạng Sáng',
     bgFrom: '#422006',
     bgTo: '#78350F',
     cloakHex: '#B45309',
@@ -94,10 +94,10 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   },
   'gac-radio': {
     heroName: 'Khánh',
-    archetype: 'Hội Viên Radio KTX',
+    archetype: 'Phát Thanh Viên KTX · 11 HP',
     emblem: '🎙️',
-    skillChips: ['Lật vai 1×', '+1 🟦 Chiến thuật · +1 🛡️', 'Niêm phong nhanh Phát Thanh'],
-    winShort: 'Gỡ âm mưu Màn Sương hoặc tạm giữ hết Màn Sương',
+    skillChips: ['Lật: Soi toàn khu & +1 🛡️', 'CD 2v: Gắn Hở sườn +1 ST', 'Điều tra mọi vị trí'],
+    winShort: 'Hạ toàn bộ Hội Màn Sương hoặc giữ lợi thế chốt trực tới Rạng Sáng',
     bgFrom: '#431407',
     bgTo: '#9A3412',
     cloakHex: '#EA580C',
@@ -105,10 +105,10 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   },
   'suong-an-danh': {
     heroName: 'Tú',
-    archetype: 'Cư Dân Vô Hình',
+    archetype: 'Cư Dân Vô Hình · 12 HP',
     emblem: '🔌',
-    skillChips: ['Lật vai 1×', '⚡ Ngắt điện 1 vòng', 'Xóa dấu phòng · +1 🛡️'],
-    winShort: 'Gài & Kích nổ Mạch Quá Tải hoặc qua mặt tuần tra tới Rạng Sáng',
+    skillChips: ['Lật: +1 🛡️ & Đánh kề', 'CD 2v: Đổi chỗ + 2 ST phục kích', 'Xuyên Thủ · Lướt B7'],
+    winShort: 'Hạ hết Đội Gác Đèn hoặc duy trì ẩn danh áp đảo tới Rạng Sáng',
     bgFrom: '#2E1065',
     bgTo: '#581C87',
     cloakHex: '#6D28D9',
@@ -116,10 +116,10 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   },
   'suong-tin-gia': {
     heroName: 'Vy',
-    archetype: 'Người Gửi Tin Đồn',
+    archetype: 'Người Gửi Tin Đồn · 11 HP',
     emblem: '🎭',
-    skillChips: ['Dùng lén 1×: Cấy nhiễu giả', 'Lật: 2 ST · +1 🛡️', 'Đánh lạc hướng'],
-    winShort: 'Gài & Kích nổ Mạch Quá Tải hoặc qua mặt tuần tra tới Rạng Sáng',
+    skillChips: ['Lật: +1 Sự kiện & +1 🛡️', 'CD 2v: Xóa 1 🛡️ · 1 ST · Đẩy', 'Che số bài trước DEFEND'],
+    winShort: 'Hạ hết Đội Gác Đèn hoặc duy trì ẩn danh áp đảo tới Rạng Sáng',
     bgFrom: '#3B0764',
     bgTo: '#701A75',
     cloakHex: '#A21CAF',
@@ -127,10 +127,10 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   },
   'suong-gac-cong': {
     heroName: 'Dũng',
-    archetype: 'Bóng Đêm Hành Lang',
+    archetype: 'Bóng Đêm Hành Lang · 13 HP',
     emblem: '🔒',
-    skillChips: ['Lật: Đòn đánh xuyên 1 🛡️', '💥 2 ST & khóa hồi', 'Canh Trạm Mục Tiêu'],
-    winShort: 'Gài & Kích nổ Mạch Quá Tải hoặc loại toàn bộ Gác Đèn',
+    skillChips: ['Lật: Tầm đánh kề phòng', 'CD 2v: Áp sát 3 ST người thương/lật', 'Đánh người ≥3 thương +1 ST'],
+    winShort: 'Hạ hết Đội Gác Đèn hoặc duy trì kiểm soát tới Rạng Sáng',
     bgFrom: '#1E1B4B',
     bgTo: '#4C1D95',
     cloakHex: '#4338CA',
@@ -138,10 +138,10 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   },
   'lang-anh-san': {
     heroName: 'Hải',
-    archetype: 'Săn Gói Tin Bí Mật',
+    archetype: 'Người Săn Gói Tin · 12 HP',
     emblem: '💎',
-    skillChips: ['Lật vai 1×', '+1 hiện trường · +1 🛡️', 'V4+ Phát Thanh: Công bố'],
-    winShort: '≥ 2 hiện trường kỹ thuật & ≥ 3 chứng cứ, Công bố ở Phát Thanh V4+',
+    skillChips: ['Lật: +1 🛡️ & +1 Trang bị', 'V5+ đủ 2 Đồ & 3 Soi: Thắng ngay!', 'Sống + ≥2 Đồ & ≥2 Soi: Đồng thắng'],
+    winShort: 'Đạt ≥ 2 Trang bị & ≥ 3 Điều tra kích hoạt từ Vòng 5+ để THẮNG ĐƠN ĐỘC (hoặc ≥ 2/2 đồng thắng)',
     bgFrom: '#022C22',
     bgTo: '#065F46',
     cloakHex: '#047857',
@@ -149,10 +149,10 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   },
   'lang-quan-sat': {
     heroName: 'Trang',
-    archetype: 'Ghi Chép Đêm Khuya',
+    archetype: 'Người Ghi Chép · 11 HP',
     emblem: '📓',
-    skillChips: ['Lật vai 1×', '+2 🛡️ Khiên', 'Soi trang bị tầm gần'],
-    winShort: 'Ghi ≥ 2 giả thuyết ĐÚNG PHE (0 sai) trên người chưa lật & sống sót',
+    skillChips: ['Lật: Hồi 1 & +1 🛡️', 'CD 2v: Cùng nhận +1 🛡️ & +1 Điều tra', 'Còn ≤2 sống & đã lật: Thắng ngay!'],
+    winShort: 'Sống sót tới khi ≤ 2 người & đã lật (≥ 2 ngã) để THẮNG ĐƠN ĐỘC, hoặc trụ khi ≥ 2 người gục',
     bgFrom: '#042F2E',
     bgTo: '#115E59',
     cloakHex: '#0F766E',
@@ -160,10 +160,10 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   },
   'lang-cuu-ho': {
     heroName: 'Bình',
-    archetype: 'Người Bảo Hộ Ngầm',
+    archetype: 'Người Bảo Hộ · 13 HP',
     emblem: '🩺',
-    skillChips: ['Lật vai 1×', '+3 ❤️ & +2 🛡️ Bảo hộ', 'Đỡ đòn thay cùng phòng'],
-    winShort: 'Giữ Mục tiêu Bảo hộ sống + hỗ trợ/hứng đòn thay ≥ 1 lần',
+    skillChips: ['Lật: Hồi 1 & +1 🛡️', 'CD 2v: Hồi 1 & +2 🛡️ đồng hành', 'Báo thù kẻ hạ mục tiêu'],
+    winShort: 'Giữ Mục tiêu Bảo hộ sống sót (hoặc kết liễu kẻ hạ họ / lọt top 2 cuối ván)',
     bgFrom: '#052E16',
     bgTo: '#166534',
     cloakHex: '#15803D',
@@ -181,37 +181,37 @@ export interface LocationVisualMeta {
 export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMeta> = {
   lobby: {
     icon: '🏮',
-    badgeText: 'Sơ cứu & Đối chất V3+',
+    badgeText: 'Sơ cứu (+1 ❤️/+1 🛡️) · Sự kiện',
     frameAccent: '#F59E0B',
     pillClasses: 'bg-amber-950/80 text-amber-200 ring-amber-400/40',
   },
   canteen: {
     icon: '🍜',
-    badgeText: 'Quét mạch · +1 🛡️',
+    badgeText: 'Tiếp tế Trang bị · Sự kiện',
     frameAccent: '#FB923C',
     pillClasses: 'bg-orange-950/80 text-orange-200 ring-orange-400/40',
   },
   court: {
     icon: '🏀',
-    badgeText: 'Tầm kề · Khiên≤2',
+    badgeText: 'Tầm đánh kề +1 ST · Trang bị',
     frameAccent: '#38BDF8',
     pillClasses: 'bg-sky-950/80 text-sky-200 ring-sky-400/40',
   },
   breaker: {
     icon: '⚡',
-    badgeText: 'Niêm phong & Đối chất',
+    badgeText: 'Chốt Bảo Vệ (+1 🛡️) · Điều tra/Đồ',
     frameAccent: '#C084FC',
     pillClasses: 'bg-purple-950/80 text-purple-200 ring-purple-400/40',
   },
   corridor: {
     icon: '🧭',
-    badgeText: 'Nối 5 khu · Nghe dấu',
+    badgeText: 'Nối 5 khu (+1 🛡️) · Điều tra/Sự kiện',
     frameAccent: '#34D399',
     pillClasses: 'bg-emerald-950/80 text-emerald-200 ring-emerald-400/40',
   },
   radio: {
     icon: '📡',
-    badgeText: 'Niêm phong · Phát sóng',
+    badgeText: 'Sóng toàn KTX · Điều tra/Sự kiện',
     frameAccent: '#FBBF24',
     pillClasses: 'bg-yellow-950/80 text-yellow-200 ring-yellow-400/40',
   },
@@ -581,7 +581,7 @@ export function LocationSceneSvg({
 
 export function DeckCardBackSvg({ deck }: { deck: BoardGameDeckId }) {
   const palette =
-    deck === 'clue'
+    deck === 'investigation'
       ? { bg: '#451A03', border: '#F59E0B', fg: '#FDE68A' }
       : deck === 'event'
         ? { bg: '#4C0519', border: '#F43F5E', fg: '#FECDD3' }
@@ -591,7 +591,7 @@ export function DeckCardBackSvg({ deck }: { deck: BoardGameDeckId }) {
     <svg viewBox="0 0 36 48" className="h-10 w-8 shrink-0 rounded-md shadow" aria-hidden="true">
       <rect x="1" y="1" width="34" height="46" rx="5" fill={palette.bg} stroke={palette.border} strokeWidth="2" />
       <rect x="4.5" y="4.5" width="27" height="39" rx="3" fill="none" stroke={palette.fg} strokeOpacity="0.35" strokeDasharray="2 2" />
-      {deck === 'clue' && (
+      {deck === 'investigation' && (
         <>
           <circle cx="16.5" cy="21" r="6" fill="none" stroke={palette.fg} strokeWidth="2.2" />
           <line x1="21" y1="25.5" x2="26" y2="31" stroke={palette.fg} strokeWidth="2.5" strokeLinecap="round" />
@@ -600,7 +600,7 @@ export function DeckCardBackSvg({ deck }: { deck: BoardGameDeckId }) {
       {deck === 'event' && (
         <path d="M19 12L12 24H18L15 36L25 22H19L22 12Z" fill={palette.fg} />
       )}
-      {deck === 'tactic' && (
+      {deck === 'equipment' && (
         <>
           <path d="M18 13L26 16.5V23.5C26 28.5 22.5 32 18 34C13.5 32 10 28.5 10 23.5V16.5L18 13Z" fill="none" stroke={palette.fg} strokeWidth="2" />
           <circle cx="18" cy="23" r="2.8" fill={palette.fg} />
@@ -631,13 +631,11 @@ export function PlayerPawnToken({
       className={`inline-flex items-center gap-1.5 rounded-xl border px-1.5 py-1 text-[11px] transition motion-reduce:transition-none ${
         !player.alive
           ? 'border-slate-800 bg-slate-950/65 text-slate-500 opacity-65 line-through'
-          : player.detained
-            ? 'border-amber-700/60 bg-slate-950/80 text-amber-200/80 opacity-85'
-            : isActiveTurn
-              ? 'border-amber-400 bg-amber-950/70 text-amber-50 shadow-[0_0_12px_rgba(251,191,36,0.35)]'
-              : isSelf
-                ? 'border-emerald-400/60 bg-emerald-950/45 text-emerald-50'
-                : 'border-slate-700/90 bg-slate-950/85 text-slate-100'
+          : isActiveTurn
+            ? 'border-amber-400 bg-amber-950/70 text-amber-50 shadow-[0_0_12px_rgba(251,191,36,0.35)]'
+            : isSelf
+              ? 'border-emerald-400/60 bg-emerald-950/45 text-emerald-50'
+              : 'border-slate-700/90 bg-slate-950/85 text-slate-100'
       }`}
     >
       {/* Quân cờ Avatar thu nhỏ */}
@@ -662,13 +660,13 @@ export function PlayerPawnToken({
 
       <div className="min-w-0 leading-tight">
         <div className="flex items-center gap-1 truncate font-semibold">
-          {isActiveTurn && !player.detained && <span className="text-amber-300">▶</span>}
+          {isActiveTurn && player.alive && <span className="text-amber-300">▶</span>}
           <span className="max-w-[76px] truncate sm:max-w-[92px]">{player.displayName}</span>
           {player.revealedFaction && (
             <FactionCrestSvg faction={player.revealedFaction} className="h-3.5 w-3.5 shrink-0" />
           )}
         </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[10px]">
+        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px]">
           <span
             className={`font-semibold ${
               player.woundsTaken > 0 ? 'text-rose-300' : 'text-slate-300'
@@ -677,14 +675,27 @@ export function PlayerPawnToken({
           >
             🩹{player.woundsTaken}
           </span>
-          {player.visibleShield > 0 && (
-            <span className="font-semibold text-sky-300" title="Khiên đang có">
-              🛡️{player.visibleShield}
+          {player.tempShield > 0 && (
+            <span className="font-semibold text-sky-300" title="Giáp tạm đang có">
+              🛡️{player.tempShield}
             </span>
           )}
-          {player.detained && (
-            <span className="font-semibold text-amber-300" title="Bị tạm giữ sau Đối chất">
-              🔒Tạm giữ
+          {player.equipped.length > 0 && (
+            <span
+              className="font-semibold text-cyan-300"
+              title={`Trang bị đang mang: ${player.equipped.map((e) => e.title).join(', ')}`}
+            >
+              🎒{player.equipped.length}
+            </span>
+          )}
+          {player.exposedMark > 0 && (
+            <span className="font-semibold text-orange-300" title="Đang bị Hở sườn (+1 ST đòn kế)">
+              🎯
+            </span>
+          )}
+          {player.wardedUntilRound > 0 && (
+            <span className="font-semibold text-emerald-300" title="Đang được Lan bảo hộ">
+              🛡️L
             </span>
           )}
           {!player.connected && <span className="text-rose-400">📡✕</span>}

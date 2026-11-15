@@ -156,9 +156,13 @@ export function renderMatchPostcardDataUrl(
   ctx.fillText('HUSTVerse — CLB Board Game KTX'.normalize('NFC'), 74, 65);
 
   const safeRound = Math.min(publicGame.round, publicGame.maxRounds);
-  const sealTag = `${publicGame.breakerSealed ? 'CầuDao✓' : 'CầuDao○'} · ${publicGame.radioSealed ? 'PhátThanh✓' : 'PhátThanh○'}`;
+  const totalInvestigations = publicGame.players.reduce(
+    (sum, p) => sum + p.investigationsCount,
+    0,
+  );
+  const aliveCount = publicGame.players.filter((p) => p.alive).length;
   const statsText =
-    `Vòng ${safeRound}/${publicGame.maxRounds}  ·  Gỡ mạch ${publicGame.disarmedCount}  ·  ${sealTag}`.normalize(
+    `Vòng ${safeRound}/${publicGame.maxRounds}  ·  Điều tra ${totalInvestigations}  ·  Sống sót ${aliveCount}/${publicGame.players.length}`.normalize(
       'NFC',
     );
   ctx.textAlign = 'right';
@@ -214,7 +218,6 @@ export function renderMatchPostcardDataUrl(
             faction: (p.revealedFaction ?? 'lantern-guard') as BoardGameFactionId,
             won: publicGame.winnerPlayerIds.includes(p.playerId),
             alive: p.alive,
-            detained: p.detained,
             hp: Math.max(0, fallbackMax - p.woundsTaken),
             maxHp: fallbackMax,
             woundsTaken: p.woundsTaken,
@@ -267,11 +270,9 @@ export function renderMatchPostcardDataUrl(
 
     const outcomeLabel = (p.won
       ? '🏆 Thắng'
-      : p.detained
-        ? '🔒 Tạm giữ'
-        : p.alive
-          ? 'Sống sót'
-          : 'Đã gục'
+      : p.alive
+        ? 'Sống sót'
+        : 'Đã gục'
     ).normalize('NFC');
     ctx.fillStyle = p.won ? '#FCD34D' : p.alive ? '#94A3B8' : '#FB7185';
     ctx.font = `700 13px ${CANVAS_VN_FONT}`;
