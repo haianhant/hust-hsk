@@ -219,6 +219,32 @@ async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl) {
 
       if (msg.type === 'BG_STATE_SYNC' && msg.publicGame) {
         const pg = msg.publicGame;
+        if (pg.rulesetVersion !== 2) {
+          audit.auditErrors.push(
+            `${user.label}: expected rulesetVersion 2, got ${String(pg.rulesetVersion)}`,
+          );
+        }
+        const rawPg = JSON.stringify(pg);
+        for (const forbidden of [
+          '"signalProgress"',
+          '"mistProgress"',
+          '"maxTrackValue"',
+          '"secretSabotageLocation"',
+          '"sabotagePlanted"',
+          '"sabotageCanDetonate"',
+        ]) {
+          if (rawPg.includes(forbidden)) {
+            audit.auditErrors.push(
+              `${user.label}: v1/secret field ${forbidden} leaked in publicGame!`,
+            );
+          }
+        }
+        const isPlaying = msg.status === 'PLAYING' || pg.turnPhase !== 'ENDED';
+        if (isPlaying && (rawPg.includes('"hp":') || rawPg.includes('"maxHp":'))) {
+          audit.auditErrors.push(
+            `${user.label}: hidden hp/maxHp leaked in publicGame while PLAYING!`,
+          );
+        }
         if (pg.turnPhase !== 'ENDED' && pg.finalReveal) {
           audit.auditErrors.push(`${user.label}: finalReveal leaked before ENDED!`);
         }
@@ -283,17 +309,21 @@ async function playFirstValidStepOnPage(page) {
     return false;
   };
 
-  // Pha 1: MOVE -> ưu tiên Phòng Phát Thanh ('radio') để sớm kích hoạt ADJUST_TRACK
+  // Pha 1: MOVE -> ưu tiên vị trí có tương tác chiến thuật, fallback bất kỳ ô kề hợp lệ
   if (await tryClick('[data-testid="bg-move-radio"]')) return true;
+  if (await tryClick('[data-testid="bg-move-breaker"]')) return true;
+  if (await tryClick('[data-testid="bg-move-corridor"]')) return true;
   if (await tryClick('[data-testid^="bg-move-"]')) return true;
 
-  // Pha 2: DRAW_OR_EXPLORE -> ưu tiên +1 Tín hiệu tại Phòng Phát Thanh, fallback Rút thẻ
-  if (await tryClick('[data-testid="bg-adjust-signal"]')) return true;
+  // Pha 2: DRAW_OR_EXPLORE -> ưu tiên gài phá hoại / tương tác địa điểm, fallback Rút thẻ
+  if (await tryClick('[data-testid="bg-plant-sabotage"]')) return true;
+  if (await tryClick('[data-testid="bg-interact-location"]')) return true;
   if (await tryClick('[data-testid="bg-draw-clue"]')) return true;
   if (await tryClick('[data-testid="bg-draw-event"]')) return true;
   if (await tryClick('[data-testid="bg-draw-tactic"]')) return true;
 
-  // Pha 3: TACTICAL_ACTION -> Kết thúc lượt
+  // Pha 3: TACTICAL_ACTION -> Kích nổ nếu đủ điều kiện hoặc Kết thúc lượt
+  if (await tryClick('[data-testid="bg-detonate-btn"]')) return true;
   if (await tryClick('[data-testid="bg-end-turn-btn"]')) return true;
 
   return false;
@@ -437,13 +467,18 @@ async function main() {
         await p.page.waitForSelector('[data-testid="bg-role-card"]', { timeout: 25000 });
       }
     }
-    // Trên Mobile 390x844 (P4), kiểm tra chuyển tab "Vai bí mật" rồi quay lại tab "Bàn & Lượt"
+    // Trên Mobile 390x844 (P4), kiểm tra chuyển tab "Vai bí mật", lật thẻ vai rồi quay lại tab "Bàn & Lượt"
     await p4.page.bringToFront();
     await p4.page.locator('button:has-text("Vai bí mật")').click();
+    await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
+    await p4.page.locator('[data-testid="bg-toggle-role-card"]').click();
     await p4.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
     await p4.page.locator('button:has-text("Bàn & Lượt")').click();
     await p4.page.waitForSelector('[data-testid="bg-loc-lobby"]', { timeout: 20000 });
 
+    await p2.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
+    await p2.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    await p2.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
     const p2RoleBeforeReload = (
       await p2.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()
     ).trim();
@@ -457,6 +492,32 @@ async function main() {
     await p2.page.waitForSelector('[data-testid="bg-emote-toast"]', { timeout: 15000 });
 
     await p1.page.bringToFront();
+    await p1.page.waitForSelector('[data-testid="bg-incident-status-bar"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
+    const leakedHpText = await p1.page.evaluate(() => {
+      const board = document.querySelector('[data-testid="boardgame-2d-board"]');
+      if (!board) return 'MISSING_BOARD';
+      const clone = board.cloneNode(true);
+      clone
+        .querySelectorAll('[data-testid="bg-role-card-secret"]')
+        .forEach((el) => el.remove());
+      const text = clone.textContent || '';
+      const match = text.match(/\b\d+\s*\/\s*\d+\s*HP\b/i);
+      return match ? match[0] : null;
+    });
+    assert.equal(
+      leakedHpText,
+      null,
+      `Public board/action-panel không được lộ HP (phát hiện: ${leakedHpText})`,
+    );
+    const selfMoveCountAtLobby = await p1.page.locator('[data-testid="bg-move-lobby"]').count();
+    assert.equal(
+      selfMoveCountAtLobby,
+      0,
+      'ActionPanel không được hiển thị nút di chuyển tới chính vị trí đang đứng (lobby)',
+    );
+    await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
     await p1.page.waitForTimeout(300);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-02-gameboard-desktop.png') });
 
@@ -485,6 +546,8 @@ async function main() {
     await p2.page.locator('#enter-campus').waitFor({ state: 'visible', timeout: 45000 });
     await p2.page.locator('#enter-campus').click();
     await p2.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 45000 });
+    await p2.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 30000 });
+    await p2.page.locator('[data-testid="bg-toggle-role-card"]').click();
     await p2.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 30000 });
     const p2RoleAfterReload = (
       await p2.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()
@@ -498,7 +561,7 @@ async function main() {
     // 6. Chơi hết ván tới FINISHED bằng điều khiển UI thật trên cả 4 trình duyệt
     console.log('[BG4 E2E] Step 6: Playing turns to FINISHED...');
     let finished = false;
-    for (let step = 0; step < 140; step++) {
+    for (let step = 0; step < 320; step++) {
       if (
         await p1.page
           .locator('[data-testid="bg-match-result-modal"]')
@@ -515,7 +578,15 @@ async function main() {
           break;
         }
       }
-      await p1.page.waitForTimeout(acted ? 140 : 120);
+      await p1.page.waitForTimeout(acted ? 160 : 120);
+    }
+    if (!finished) {
+      const diagText = await p1.page
+        .evaluate(
+          () => document.querySelector('[data-testid="boardgame-2d-board"]')?.innerText.slice(0, 500) || '',
+        )
+        .catch(() => '');
+      console.error('[BG4 E2E] Step 6 timeout board snapshot:', diagText);
     }
     assert.equal(finished, true, 'Trận đấu 4 người phải kết thúc FINISHED trong giới hạn bước');
 

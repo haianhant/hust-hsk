@@ -15,6 +15,24 @@ const { WebSocket } = require('./ws-shim/mini-ws');
 const {
   startStandaloneBoardGameTestServer,
 } = require('./ws-shim/boardgame-do-harness.cjs');
+const { listLegalMovesForLocation } = require('../features/boardgame/domain/index.ts');
+
+function assertPublicGameNoV1OrSecretLeaks(pub, status) {
+  assert.equal(pub.rulesetVersion, 2);
+  const raw = JSON.stringify(pub);
+  const alwaysForbidden = [
+    '"secretSabotageLocation":',
+    '"signalProgress":',
+    '"mistProgress":',
+    '"maxTrackValue":',
+  ];
+  if (status === 'PLAYING') {
+    alwaysForbidden.push('"maxHp":', '"hp":');
+  }
+  for (const forbidden of alwaysForbidden) {
+    assert.equal(raw.includes(forbidden), false, `publicGame (${status}) leaked ${forbidden}`);
+  }
+}
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -167,10 +185,11 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
     ).engineState;
     const roleById = new Map(initialEngine.players.map((ep) => [ep.playerId, ep.roleId]));
 
-    // Chơi ván thật qua WS cho tới khi FINISHED (ưu tiên di chuyển tới radio & tăng Signal để ván kết thúc gọn)
+    // Chơi ván v2 hợp lệ qua WS cho tới khi FINISHED
     let actionSeq = 0;
     let safety = 0;
-    while (players[0].c.getLatestSync().status === 'PLAYING' && safety < 120) {
+    let plantedRound = null;
+    while (players[0].c.getLatestSync().status === 'PLAYING' && safety < 180) {
       safety += 1;
       const latest = players[0].c.getLatestSync();
       const pub = latest.publicGame;
@@ -183,18 +202,39 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
 
       let act;
       if (pub.turnPhase === 'MOVE') {
-        act = {
-          type: 'MOVE',
-          location: actorPub.location === 'radio' ? 'breaker' : 'radio',
-        };
+        const adj = listLegalMovesForLocation(actorPub.location);
+        const preferred =
+          actorSync.privateView?.secretSabotageLocation &&
+          adj.includes(actorSync.privateView.secretSabotageLocation)
+            ? actorSync.privateView.secretSabotageLocation
+            : adj.find((id) => id === 'corridor' || id === 'radio' || id === 'breaker') ?? adj[0];
+        act = { type: 'MOVE', location: preferred };
       } else if (pub.turnPhase === 'DRAW_OR_EXPLORE') {
-        if (actorPub.location === 'radio' && pub.blackoutLocation !== 'radio') {
-          act = { type: 'ADJUST_TRACK', mode: 'signal' };
+        if (
+          actorSync.privateView?.secretSabotageLocation === actorPub.location &&
+          !pub.sabotageArmed &&
+          plantedRound === null &&
+          pub.blackoutLocation !== actorPub.location
+        ) {
+          plantedRound = pub.round;
+          act = { type: 'INTERACT_LOC', mode: 'sabotage' };
+        } else if (pub.blackoutLocation !== actorPub.location) {
+          act = { type: 'INTERACT_LOC', mode: 'scan' };
         } else {
           act = { type: 'DRAW_CARD', deck: 'clue' };
         }
       } else if (pub.turnPhase === 'TACTICAL_ACTION') {
-        act = { type: 'END_TURN' };
+        if (
+          actorSync.privateView?.faction === 'mist-order' &&
+          pub.sabotageArmed &&
+          plantedRound !== null &&
+          pub.round > plantedRound &&
+          actorPub.location === actorSync.privateView.secretSabotageLocation
+        ) {
+          act = { type: 'DETONATE_PLOT' };
+        } else {
+          act = { type: 'END_TURN' };
+        }
       }
 
       actionSeq += 1;
@@ -237,6 +277,9 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
       }
       if (msg.type === 'BG_STATE_SYNC') {
         assert.equal(msg.privateView, null, 'Khán giả không bao giờ nhận privateView');
+        if (msg.publicGame) {
+          assertPublicGameNoV1OrSecretLeaks(msg.publicGame, msg.status);
+        }
         if (msg.status === 'PLAYING' && msg.publicGame) {
           for (const pp of msg.publicGame.players) {
             if (!pp.revealedRoleId) {
@@ -257,6 +300,9 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
           assert.equal(msg.__raw.includes(mssv), false, `Player ${i} frame leaked MSSV ${mssv}`);
         }
         if (msg.type === 'BG_STATE_SYNC') {
+          if (msg.publicGame) {
+            assertPublicGameNoV1OrSecretLeaks(msg.publicGame, msg.status);
+          }
           if (msg.privateView) {
             assert.equal(msg.privateView.playerId, players[i].playerId);
           }
@@ -316,6 +362,10 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
       (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
     );
     const revAtStart = startSync.revision;
+    const startActor = startSync.publicGame.players.find(
+      (p) => p.playerId === startSync.publicGame.activePlayerId,
+    );
+    const adjMoveDest = listLegalMovesForLocation(startActor.location)[0];
 
     // Gửi trùng lặp 1 requestId hai lần liên tiếp (không delay -> kiểm chứng chạy trước rate limit!)
     const lenBefore = clients[0].inbox.length;
@@ -323,7 +373,7 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
       type: 'BG_GAME_ACTION',
       requestId: 'idem-move-1',
       expectedRevision: revAtStart,
-      action: { type: 'MOVE', location: 'canteen' },
+      action: { type: 'MOVE', location: adjMoveDest },
     };
     clients[0].send(payload);
     clients[0].send(payload);
@@ -454,5 +504,93 @@ test('BG3 DO Authoritative Match & P0 Security Suite', async (t) => {
     clients.forEach((c, idx) => {
       if (idx !== 3) c.close();
     });
+  });
+
+  await t.test('(4) Legacy v1 SQLite row graceful adaptation & clean v2 rematch', async () => {
+    const createRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableId: 'table-2', hostName: 'LegacyCheck' }),
+    });
+    const { matchId, inviteCode } = await createRes.json();
+
+    const clients = [];
+    const auths = [];
+    for (let i = 0; i < 4; i++) {
+      const c = await openBgClient(srv.wsBaseUrl, { matchId });
+      c.send({ type: 'BG_JOIN', matchId, inviteCode, displayName: `LV${i + 1}` });
+      const auth = await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
+      clients.push(c);
+      auths.push(auth);
+    }
+    for (let i = 1; i < 4; i++) {
+      const lenBefore = clients[0].inbox.length;
+      clients[i].send({ type: 'BG_SET_READY', ready: true, requestId: `lv-rdy-${i}` });
+      await clients[0].nextMsg((m) => m.type === 'BG_STATE_SYNC', 4000, lenBefore);
+    }
+    clients[0].send({ type: 'BG_START_MATCH', requestId: 'lv-start' });
+    const startSync = await clients[0].nextMsg(
+      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
+    );
+
+    // Overwrite DO SQLite row with legacy v1 shape (no rulesetVersion, deprecated keys)
+    const container = srv.containers.get(matchId);
+    const legacyBlob = JSON.stringify({
+      engineState: {
+        matchId,
+        round: 3,
+        maxRounds: 7,
+        signalProgress: 4,
+        mistProgress: 2,
+        players: auths.map((a, idx) => ({
+          playerId: a.playerId,
+          displayName: `LV${idx + 1}`,
+          seatIndex: idx,
+          roleId: 'hieu-minh',
+          location: 'lobby',
+          alive: true,
+          connected: true,
+          hp: 10,
+          maxHp: 10,
+        })),
+      },
+    });
+    container.ctx.storage.sql.exec(
+      'UPDATE matches SET game_state_json = ? WHERE match_id = ?',
+      legacyBlob,
+      matchId,
+    );
+
+    // Hibernating & reconnecting or sending action cleanly transitions legacy match to FINISHED without crash
+    const beforeActLen = clients[0].inbox.length;
+    clients[0].send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'lv-act-1',
+      expectedRevision: startSync.revision,
+      action: { type: 'END_TURN' },
+    });
+    const legacyFinished = await clients[0].nextMsg(
+      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'FINISHED',
+      4000,
+      beforeActLen,
+    );
+    assert.equal(legacyFinished.publicGame.rulesetVersion, 2);
+    assert.match(legacyFinished.publicGame.winnerLabel, /Luật v2/);
+
+    // Players can immediately ready up & start a clean v2 rematch
+    const beforeReady = clients[0].inbox.length;
+    for (let i = 1; i < 4; i++) {
+      clients[i].send({ type: 'BG_SET_READY', ready: true, requestId: `lv-re-${i}` });
+    }
+    await clients[0].nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.status === 'READY_CHECK', 4000, beforeReady);
+    clients[0].send({ type: 'BG_START_MATCH', requestId: 'lv-rematch' });
+    const rematchPlaying = await clients[0].nextMsg(
+      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
+      4000,
+      beforeReady,
+    );
+    assert.equal(rematchPlaying.publicGame.rulesetVersion, 2);
+
+    clients.forEach((c) => c.close());
   });
 });

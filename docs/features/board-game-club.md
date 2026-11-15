@@ -1,7 +1,7 @@
 # HUSTVerse Board Game Club & “Bóng Đêm KTX — Secrets After Dark”
 
 > **Module IDs:** `feature.board-game-club`, `feature.bong-dem-ktx`, `worker.board-game-room`  
-> **Trạng thái triển khai:** Hoàn thiện trọn bộ BG1 (`feat/bg1-board-game-lounge`) → BG2 (`feat/bg2-match-lobby-do`) → BG3 (`feat/bg3-playable-mvp`) → BG4 (`feat/bg4-polish-social`)  
+> **Trạng thái triển khai:** Hoàn thiện BG1–BG4 và **Nâng cấp Luật v2 (`BOARD_GAME_RULESET_VERSION = 2` — Hidden Role & Deduction Rework)** (`feat/boardgame-v2-deduction`), xem đặc tả chi tiết tại [`docs/features/boardgame-v2-rules.md`](./boardgame-v2-rules.md).  
 > **Bản quyền:** 100% IP, bối cảnh, nhân vật, luật chơi, bộ thẻ và giao diện nguyên bản lấy cảm hứng từ thể loại *social deduction / hidden-role tactical board game*; không sao chép tên thương mại, luật chi tiết hay lời văn của bất kỳ sản phẩm nào khác.
 
 ---
@@ -68,79 +68,22 @@ worker/src/
 
 ---
 
-## 3. Thiết kế Trò chơi “Bóng Đêm KTX — Secrets After Dark” (`BG3`)
+## 3. Thiết kế Trò chơi “Bóng Đêm KTX — Secrets After Dark” (Luật v2 — Hidden Role & Deduction)
 
-### 3.1. Bối cảnh & Mục tiêu
+> Tài liệu quy tắc & mô hình suy luận chi tiết được tách thành đặc tả riêng tại **[`docs/features/boardgame-v2-rules.md`](./boardgame-v2-rules.md)** (`BOARD_GAME_RULESET_VERSION = 2`).
 
-> Đêm mất điện bất ngờ tại khu KTX Bách Khoa khiến hệ thống phát thanh nội bộ lặp lại các dải nhiễu kỳ lạ. Nhóm sinh viên tụ họp điều tra nhận ra có kẻ đang phá sóng từ bên trong, trong khi vài nhân vật khác lại theo đuổi toan tính riêng trước khi ánh đèn sáng trở lại.
+### 3.1. Tóm tắt cơ chế v2 (Loại bỏ hoàn toàn đua điểm Tín hiệu/Màn sương)
 
-- **Số người chơi:** `4 – 8` người mỗi bàn (`Tối đa 8 ghế/bàn`).
-- **Số vòng hữu hạn:** Tối đa `7 vòng` (cho `4–5` người) hoặc `8 vòng` (cho `6–8` người) — bảo đảm **luôn kết thúc hữu hạn, không kẹt vô hạn**.
-- **2 Chỉ số trung tâm trên Bảng KTX:**
-  - `signalProgress` (`0 → 6`, **Chỉ số Tín hiệu**): Tiến trình khôi phục phát thanh của Đội Gác Đèn.
-  - `mistProgress` (`0 → 6`, **Chỉ số Màn sương**): Mức độ nhiễu loạn & mất kiểm soát của Hội Màn Sương.
-- **Mục tiêu & Nhịp độ 15–25 phút:** Mỗi người chơi giữ `1 Nhân vật bí mật` (100% nguyên bản), `HP` (`9–14`), năng lượng điều tra / lá bài trên tay (`tối đa 4 lá`), và đứng tại một trong `6 Khu vực KTX`.
-
-### 3.2. Ba phe nguyên bản & 9 Nhân vật độc lập
-
-#### Cấu hình chia vai theo số người chơi
-
-| Số người | Đội Gác Đèn | Hội Màn Sương | Kẻ Lang Thang |
-|---:|---:|---:|---:|
-| **4** | 2 | 2 | 0 |
-| **5** | 2 | 2 | 1 |
-| **6** | 3 | 2 | 1 |
-| **7** | 3 | 3 | 1 |
-| **8** | 3 | 3 | 2 |
-
-#### Danh sách 9 Nhân vật nguyên bản
-
-| ID | Tên nhân vật | Phe | HP tối đa | Mục tiêu thắng đặc biệt | Kỹ năng chủ động / bị động (1 lần/ván hoặc có hồi) |
-|---|---|---|---:|---|---|
-| `gac-ky-thuat` | **Minh — Kỹ Thuật Viên Tầng Thượng** | Đội Gác Đèn | 12 | Đội Gác Đèn thắng (`signalProgress >= 6` hoặc hạ toàn bộ Hội Màn Sương) | **Nối Mạch Dự Phòng** (1 lần/ván): `+1 signalProgress` tại *Phòng Phát Thanh* hoặc *Phòng Bảo Vệ*, hồi `+2 HP` cho 1 người cùng phòng |
-| `gac-truc-ban` | **Lan — Trực Ban Nội Trú** | Đội Gác Đèn | 13 | Đội Gác Đèn thắng | **Kiểm Tra Sổ Trực** (1 lần/ván): Bắt buộc 1 người cùng khu vực cho biết phe có phải *Hội Màn Sương* hay không (riêng cho Lan) hoặc tăng khiên `+2` |
-| `gac-radio` | **Khánh — Hội Viên Radio KTX** | Đội Gác Đèn | 11 | Đội Gác Đèn thắng | **Sóng Ngắn Bách Khoa** (1 lần/ván): Soi gói manh mối tại khu vực hiện tại và rút thêm `1 lá Tín hiệu` |
-| `suong-an-danh` | **Tú — Cư Dân Vô Hình** | Hội Màn Sương | 12 | Hội Màn Sương thắng (`mistProgress >= 6` hoặc hạ toàn bộ Đội Gác Đèn) | **Cắt Cầu Dao** (1 lần/ván): `+1 mistProgress`, khiến khu vực đang đứng tạm tối (người khác rời đi hoặc chịu `1 sát thương`) |
-| `suong-tin-gia` | **Vy — Người Gửi Tin Đồn** | Hội Màn Sương | 11 | Hội Màn Sương thắng | **Bẻ Hướng Tần Số** (1 lần/ván): Đảo 1 điểm `signalProgress` thành `mistProgress` nếu đã lộ vai hoặc gây `2 sát thương` tầm xa 1 ô |
-| `suong-gac-cong` | **Dũng — Bóng Đêm Hành Lang** | Hội Màn Sương | 13 | Hội Màn Sương thắng | **Khóa Cửa Chắn** (1 lần/ván): Gây `2 sát thương` cho 1 mục tiêu cùng khu vực và chặn hồi phục lượt tới |
-| `lang-anh-san` | **Hải — Người Săn Gói Tin Bí Mật** | Kẻ Lang Thang | 10 | **Thu thập đủ 3 Mảnh Tin Đen** (`fragments >= 3`) khi vẫn còn sống, hoặc sống sót khi cạn vòng với `>= 2 Mảnh Tin` | **Lần Theo Dây Cáp** (1 lần/ván): Lật 1 lá Manh mối và nhận ngay `+1 Mảnh Tin Đen` |
-| `lang-quan-sat` | **Trang — Người Ghi Chép Đêm Khuya** | Kẻ Lang Thang | 10 | **Đoán đúng phe của ≥ 3 người khác** thông qua hành động Lật/Chỉ điểm hoặc **là người đứng cạnh vị trí dẫn đầu khi trận kết thúc với HP >= 5** | **Ghi Chép Lạnh Lùng** (1 lần/ván): Soi bí mật phe của 1 người chơi bất kỳ và nhận `+2 Khiên` |
-| `lang-cuu-ho` | **Bình — Người Bảo Hộ Ngầm** | Kẻ Lang Thang | 11 | **Giữ cho mục tiêu bí mật (`wardId`) sống sót tới khi kết thúc ván** và bản thân còn `HP >= 4` (nếu ward bị hạ, chuyển sang đạt `>= 3 lần Che Chắn`) | **Che Chắn Khẩn Cấp** (1 lần/ván): Chuyển toàn bộ sát thương hướng vào `ward` trong vòng sang Khiên hoặc hồi `+3 HP` cho `ward` |
-
-> **Chốt kết thúc hữu hạn:** Khi hết số vòng tối đa (`7` hoặc `8`) mà chưa phe nào chạm ngưỡng thắng tức thì:
-> 1. Kiểm tra điều kiện thắng Kẻ Lang Thang còn sống đạt mốc.
-> 2. Nếu không, phe có hiệu số `(signalProgress - mistProgress)` cao hơn thắng; nếu hòa điểm, xét tổng HP còn lại của thành viên còn sống mỗi phe; nếu vẫn hòa, Đội Gác Đèn thắng nhờ lưới điện dự phòng khôi phục vào rạng sáng.
-
-### 3.3. Bản đồ 6 Khu vực KTX
-
-1. **Sảnh Ký Túc Xá (`lobby`):** Khu vực trung tâm, có đèn pin khẩn cấp (`+1 HP` khi dừng chân lần đầu trong vòng nếu HP < 5).
-2. **Căng Tin B5–B9 (`canteen`):** Rút thêm `1 lá Sự Kiện` hoặc nhận đồ tiếp tế (`+1 Khiên`).
-3. **Phòng Phát Thanh (`radio`):** Trạm khuếch đại chính; cho phép dùng hành động điều chỉnh `+1 Tín hiệu` hoặc `+1 Nhiễu sóng` theo phe/lựa chọn.
-4. **Sân Bóng Rổ KTX (`court`):** Tầm quan sát rộng; có thể **Tác động (Attack / Thăm dò)** mục tiêu ở khu vực lân cận hoặc thu thập `1 Mảnh Tin`.
-5. **Hành Lang B7 (`corridor`):** Nút giao lối tắt; di chuyển tới bất kỳ phòng nào vào lượt sau hoặc gài bẫy Manh mối.
-6. **Phòng Bảo Vệ & Cầu Dao (`breaker`):** Trung tâm điện; mở khóa kiểm tra nguồn điện (`+1 Tín hiệu` / `+1 Màn sương` tùy lá bài) hoặc soi trạm ghi nhận ai vừa ghé qua.
-
-### 3.4. Hệ thống 32 Lá bài Data-Driven (`GameCard`)
-
-Mỗi `GameCard` khai báo thuần dữ liệu `{ id, deck: 'clue' | 'event' | 'tactic', title, summary, effectId, targetMode, value }`:
-- **`clue` (10 lá):** Gửi manh mối kiểm chứng phe/khả năng hoặc thu thập `Mảnh Tin` (ví dụ: *Phiếu Ghi Trực Điện*, *Tệp Âm Thanh Nhiễu*, *Sổ Điểm Danh Tầng 3*).
-- **`event` (12 lá):** Tác động toàn bàn hoặc tại khu vực như tăng/giảm Tín hiệu, Màn sương, đổi vị trí, hồi phục hay mất điện cục bộ.
-- **`tactic` (10 lá):** Thẻ chiến thuật cầm tay (`tối đa 4 lá`): tạo Khiên, tăng sát thương, phản đòn, soi vai bí mật, hoặc chặn khả năng đối phương.
-
-### 3.5. Cấu trúc 1 Lượt Chơi (Server-Authoritative)
-
-1. **Di chuyển (`MOVE`):** Chọn 1 trong 5 khu vực khác vị trí hiện tại (hoặc giữ vị trí theo hiệu ứng).
-2. **Hành động Khu vực (`EXPLORE` / `DRAW_CARD` / `ADJUST_TRACK`):** Rút `1 lá` từ bộ `clue`, `event` hoặc `tactic` phù hợp khu vực (bộ `tactic` nhân bản thành 20 lá để đủ chia 2 lá khởi đầu cho tối đa 8 người); riêng khi đang ở **Phòng Phát Thanh (`radio`)** có thể chọn `ADJUST_TRACK` (`+1 Tín hiệu` hoặc `+1 Nhiễu sóng`).
-3. **Tác động Chiến thuật (`TACTICAL_ACTION`):** Chọn **1 trong các lựa chọn** hợp lệ trước khi kết thúc lượt (nếu sự kiện vừa rút khiến bản thân gục trước pha này, lượt tự động chuyển tiếp an toàn):
-   - Sử dụng 1 lá `Tactic` trên tay.
-   - Kích hoạt **Kỹ năng Nhân vật** (có thể kèm **Lật Vai / Reveal Identity** để tăng uy lực hoặc đạt điều kiện).
-   - **Thăm dò (`PROBE`)** hoặc **Công kích (`ATTACK`)** 1 người chơi ở cùng khu vực (hoặc lân cận từ Sân Bóng Rổ `court`).
-   - **Kết thúc lượt (`END_TURN`)**.
-4. **Hết giờ tự động (`DO alarm()`):** Sau `45 giây` không thao tác (hoặc `15 giây` nếu người tới lượt bị mất kết nối), `BoardGameRoom` Durable Object tự động thực hiện bước di chuyển/kết thúc lượt hợp lệ để ván đấu không bao giờ treo.
-5. **Chia sẻ & Hậu kỳ (`BG4`):**
-   - **Link mời trực tiếp (`?bgInvite=CODE`):** Nút `🔗 Link mời` trong `BoardGameLobby` tạo URL kèm `?bgInvite=CODE`; khi người chơi mở link và vào campus (`#enter-campus`), `app/page.tsx` tự động đưa avatar vào Phòng CLB Board Game, mở sảnh và kết nối thẳng vào bàn chờ theo mã mời.
-   - **Âm thanh WebAudio thủ tục (`features/boardgame/ui/sound.ts`):** Âm thanh rút thẻ, lật vai, tiến độ tín hiệu/nhiễu sóng, báo tới lượt, biểu cảm và chiến thắng (lưu trạng thái tắt/bật ở `localStorage`, an toàn khi thiếu `AudioContext`).
-   - **Bưu thiếp Tổng kết (`MatchPostcard.tsx`):** Canvas 2D `1200×675` tiếng Việt NFC qua `wrapVietnameseCanvasContext`, xuất PNG tải về; tuyệt đối không hiển thị MSSV.
+- **Số người chơi & Số vòng hữu hạn:** `4 – 8` người/bàn; tối đa `6 vòng` (`4–5` người) hoặc `7 vòng` (`6–8` người) kết thúc bằng **Phiên Họp Rạng Sáng (Dawn Inquest)**.
+- **Bảo mật P0 tuyệt đối:** `hp` và `maxHp` luôn ẩn hoàn toàn trong `getPublicGameView()`; người chơi khác chỉ thấy `woundsTaken`, `visibleShield`, `detained` và `handCount`. Thẻ vai 2D mặc định **ÚP (`hiddenOnScreen = true`)**.
+- **Ma trận 3×3 Trực giao (`accessTag × traceTag`):** Mỗi đặc điểm đơn lẻ luôn khớp đúng `{1 Đội Gác Đèn, 1 Hội Màn Sương, 1 Kẻ Lang Thang}`, buộc người chơi ghép ít nhất 2 manh mối (`INVESTIGATE`, quét phòng, thẻ Điều tra `clue-01..08`) trước khi kết luận.
+- **Bản đồ 6 khu vực có giới hạn di chuyển kề cận (`isAdjacentLocation`):** Sảnh KTX (`lobby`), Căng tin B5–B9 (`canteen`), Phòng Phát Thanh (`radio`), Sân Bóng Rổ (`court`), Hành Lang B7 (`corridor` nối cả 5 ô), và Phòng Bảo Vệ & Cầu Dao (`breaker`).
+- **Luồng 1 lượt & Điều kiện thắng bất đối xứng:**
+  1. `MOVE`: Di chuyển tới 1 ô kề cận.
+  2. `DRAW_OR_EXPLORE`: Quét thiết bị / Gỡ mạch (`INTERACT_LOC scan`, giúp niêm phong `breaker`/`radio`), hoặc Hội Màn Sương bí mật gài Mạch Quá Tải (`INTERACT_LOC sabotage` tại `secretSabotageLocation`, nhật ký công khai y hệt quét phòng), hoặc rút 1 trong 3 bộ bài (`clue` / `event` / `tactic`, 24 lá).
+  3. `TACTICAL_ACTION`: `INVESTIGATE` (`equipment`/`activity`), `CONFRONT` từ Vòng 3+ (tạm giữ đúng Màn Sương hoặc phản chấn 2 vết thương trực tiếp), `ATTACK`, `USE_SKILL` (hoặc Vy `Gieo Nhiễu Giả` ẩn danh), `DETONATE_PLOT` (Màn Sương từ vòng sau khi gài), `PUBLISH_DOSSIER` (Hải V4+ ở Phát Thanh), `RECORD_HYPOTHESIS`, `REVEAL_ROLE` (kèm hộp xác nhận), `END_TURN`.
+- **Hết giờ trung lập (`DO alarm()`):** `applyTimeoutAutoTurn()` không đọc `faction`/`roleId`, tự cộng `+1 Khiên` nếu đang ở pha `MOVE` và chuyển lượt.
+- **Chia sẻ & Hậu kỳ:** Link mời `?bgInvite=CODE`, âm thanh WebAudio (`sound.ts`), Bưu thiếp PNG 1200×675 (`MatchPostcard.tsx`, không MSSV).
 
 ---
 

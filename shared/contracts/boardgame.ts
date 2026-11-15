@@ -26,6 +26,7 @@ export type BoardGameMatchStatus =
   | 'FINISHED'
   | 'CLOSED';
 
+export const BOARD_GAME_RULESET_VERSION = 2 as const;
 export const BOARD_GAME_MIN_PLAYERS = 4;
 export const BOARD_GAME_MAX_PLAYERS = 8;
 export const BOARD_GAME_TABLE_SEAT_COUNT = 8;
@@ -64,6 +65,37 @@ export type BoardGameLocationId =
 
 export type BoardGameDeckId = 'clue' | 'event' | 'tactic';
 
+export type BoardGameAccessTag = 'tech-key' | 'broadcast-gear' | 'patrol-badge';
+
+export type BoardGameTraceTag = 'insulated-gloves' | 'signal-meter' | 'magnetic-card';
+
+export type BoardGameEvidenceKind =
+  | 'equipment'
+  | 'activity'
+  | 'scene'
+  | 'comparison'
+  | 'grid';
+
+export interface BoardGameEvidenceEntry {
+  id: string;
+  round: number;
+  atMs: number;
+  kind: BoardGameEvidenceKind;
+  subjectLabel: string;
+  targetPlayerId?: string | null;
+  locationId?: BoardGameLocationId | null;
+  summary: string;
+  sourceLabel: string;
+  compatibleHint?: string;
+}
+
+export interface BoardGameHypothesisEntry {
+  targetPlayerId: string;
+  targetName: string;
+  predictedFaction: BoardGameFactionId;
+  recordedRound: number;
+}
+
 export type BoardGameTurnPhase =
   | 'MOVE'
   | 'DRAW_OR_EXPLORE'
@@ -93,7 +125,14 @@ export interface BoardGameCardPublicMeta {
   title: string;
   summary: string;
   effectId: string;
-  targetMode: 'self' | 'single-player' | 'same-location' | 'adjacent-or-same' | 'global' | 'location';
+  targetMode:
+    | 'self'
+    | 'single-player'
+    | 'same-location'
+    | 'adjacent-or-same'
+    | 'pair-players'
+    | 'global'
+    | 'location';
   value: number;
 }
 
@@ -127,17 +166,18 @@ export interface BoardGamePublicPlayerView {
   displayName: string;
   seatIndex: number;
   location: BoardGameLocationId;
-  hp: number;
-  maxHp: number;
-  shield: number;
-  fragments: number;
+  /** Sức khỏe bí mật được tách khỏi kênh công khai: chỉ lộ số vết thương và khiên hiện có. */
+  woundsTaken: number;
+  visibleShield: number;
   handCount: number;
   alive: boolean;
+  detained: boolean;
   connected: boolean;
-  skillUsed: boolean;
+  // BẢO MẬT P0: Chỉ hiện vai, phe, maxHp & trạng thái kỹ năng khi người chơi tự lật, bị bắt giữ, bị loại hoặc trận FINISHED!
   revealedRoleId: BoardGameRoleId | null;
   revealedFaction: BoardGameFactionId | null;
-  wardSurvivedBonus?: boolean;
+  revealedMaxHp: number | null;
+  revealedSkillUsed: boolean;
   appearance: RemoteAppearance;
 }
 
@@ -149,12 +189,14 @@ export interface BoardGamePublicLogEntry {
     | 'system'
     | 'move'
     | 'draw'
+    | 'scene'
+    | 'investigate'
     | 'tactic'
     | 'skill'
     | 'attack'
-    | 'probe'
+    | 'confront'
     | 'reveal'
-    | 'track'
+    | 'incident'
     | 'elimination'
     | 'timeout'
     | 'victory';
@@ -177,16 +219,23 @@ export interface BoardGameRevealRecord {
   faction: BoardGameFactionId;
   won: boolean;
   alive: boolean;
+  detained: boolean;
   hp: number;
+  maxHp: number;
+  woundsTaken: number;
 }
 
 export interface BoardGamePublicGameView {
+  rulesetVersion: 2;
   matchId: string;
   round: number;
   maxRounds: number;
-  signalProgress: number;
-  mistProgress: number;
-  maxTrackValue: number;
+  sabotageArmed: boolean;
+  disarmedCount: number;
+  breakerSealed: boolean;
+  radioSealed: boolean;
+  falseAccusationCount: number;
+  tamperedLocations: readonly BoardGameLocationId[];
   turnPhase: BoardGameTurnPhase;
   activePlayerId: string | null;
   turnOrder: readonly string[];
@@ -217,37 +266,66 @@ export interface BoardGamePrivateGameView {
   faction: BoardGameFactionId;
   hp: number;
   maxHp: number;
+  woundsTaken: number;
   shield: number;
-  fragments: number;
   skillUsed: boolean;
+  covertSkillUsed: boolean;
+  confrontUsed: boolean;
   revealed: boolean;
+  detained: boolean;
+  accessTag: BoardGameAccessTag;
+  traceTag: BoardGameTraceTag;
   secretGoalText: string;
+  /** Chỉ điền cho thành viên Hội Màn Sương (null với Gác Đèn, Lang Thang và Khán giả). */
+  secretSabotageLocation: BoardGameLocationId | null;
+  /** Chỉ bật true cho Hội Màn Sương khi Mạch Quá Tải đã được gài ngầm (luôn false với phe khác). */
+  sabotagePlanted: boolean;
+  /** Chỉ bật true cho Hội Màn Sương khi Mạch Quá Tải đã đủ điều kiện kích nổ ở vòng hiện tại. */
+  sabotageCanDetonate: boolean;
+  verifiedSceneLocations: readonly BoardGameLocationId[];
   wardPlayerId: string | null;
   wardDisplayName: string | null;
-  shieldedForWardCount: number;
-  correctPredictions: number;
-  predictedPlayerIds: readonly string[];
+  wardProtectionsCount: number;
+  sacrificedForWard: boolean;
+  hypotheses: readonly BoardGameHypothesisEntry[];
+  metPlayerIds: readonly string[];
   hand: readonly BoardGameCardPublicMeta[];
+  evidenceList: readonly BoardGameEvidenceEntry[];
   privateNotes: readonly BoardGamePrivateNote[];
 }
 
 export type BoardGameActionPayload =
   | { type: 'MOVE'; location: BoardGameLocationId }
   | { type: 'DRAW_CARD'; deck: BoardGameDeckId }
-  | { type: 'USE_CARD'; cardId: string; targetPlayerId?: string; targetLocation?: BoardGameLocationId }
+  | { type: 'INTERACT_LOC'; mode?: 'scan' | 'sabotage' }
+  | {
+      type: 'USE_CARD';
+      cardId: string;
+      targetPlayerId?: string;
+      targetSecondPlayerId?: string;
+      targetLocation?: BoardGameLocationId;
+    }
   | { type: 'ATTACK'; targetPlayerId: string }
   | {
-      type: 'PROBE';
+      type: 'INVESTIGATE';
       targetPlayerId: string;
-      claimedFaction?: BoardGameFactionId;
+      focus?: 'equipment' | 'activity';
+    }
+  | { type: 'CONFRONT'; targetPlayerId: string }
+  | { type: 'DETONATE_PLOT' }
+  | { type: 'PUBLISH_DOSSIER' }
+  | {
+      type: 'RECORD_HYPOTHESIS';
+      targetPlayerId: string;
+      predictedFaction: BoardGameFactionId;
     }
   | {
       type: 'USE_SKILL';
       targetPlayerId?: string;
+      targetSecondPlayerId?: string;
       targetLocation?: BoardGameLocationId;
     }
   | { type: 'REVEAL_ROLE' }
-  | { type: 'ADJUST_TRACK'; mode: 'signal' | 'mist' }
   | { type: 'END_TURN' };
 
 export interface BoardGameStateSyncMessage {

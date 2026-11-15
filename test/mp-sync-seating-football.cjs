@@ -369,6 +369,7 @@ async function main() {
 
     // P2 đứng dậy để cả hai thoát CLB Board Game sạch sẽ
     await p2.page.locator('[data-testid="bg-stand-up-btn"]').click();
+    await p2.page.locator('[data-testid="bg-stand-up-btn"]').waitFor({ state: 'detached', timeout: 10000 });
     await p1.page.locator('[data-testid="bg-exit-lounge-btn"]').click();
     await p2.page.locator('[data-testid="bg-exit-lounge-btn"]').click();
     await Promise.all([

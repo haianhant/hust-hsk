@@ -1,121 +1,80 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/victory.ts — Kiểm tra & kết thúc thắng thua
-// tức thì hoặc khi chạm trần số vòng hữu hạn (7 hoặc 8 vòng).
+// features/boardgame/domain/victory.ts — Điều kiện thắng bất đối xứng v2
+// (Âm Mưu Phá Hoại Ngầm, Niêm Phong Lưới Điện, Đối Chất & Phiên Họp Rạng Sáng).
+// Tuyệt đối không dùng điểm Tín hiệu/Màn sương hay tổng HP để phân thắng bại.
 // ---------------------------------------------------------------------------
 
+import type { BoardGameRevealRecord } from '../../../shared/contracts/boardgame';
 import { FACTION_LABELS, ROLES_BY_ID } from './roles';
+import { getLocationName } from './rules';
 import type { AuthoritativeGameState, AuthoritativePlayerState } from './types';
 
-function qualifiesWandererAtEnd(
+function scoreHypotheses(
+  player: AuthoritativePlayerState,
+  allPlayers: readonly AuthoritativePlayerState[],
+): { correct: number; wrong: number } {
+  let correct = 0;
+  let wrong = 0;
+  for (const h of player.hypotheses) {
+    const target = allPlayers.find((p) => p.playerId === h.targetPlayerId);
+    if (!target) continue;
+    if (target.faction === h.predictedFaction) {
+      correct += 1;
+    } else {
+      wrong += 1;
+    }
+  }
+  return { correct, wrong };
+}
+
+export function qualifiesWandererCoWin(
   p: AuthoritativePlayerState,
-  players: readonly AuthoritativePlayerState[],
-  isRoundLimitReached: boolean,
+  allPlayers: readonly AuthoritativePlayerState[],
 ): boolean {
   if (p.faction !== 'wanderer') return false;
   if (p.roleId === 'lang-anh-san') {
-    return p.alive && p.fragments >= 2;
+    return p.alive && !p.detained && p.verifiedSceneLocations.length >= 2 && p.evidenceList.length >= 3;
   }
   if (p.roleId === 'lang-quan-sat') {
-    return p.alive && (p.correctPredictions >= 2 || (isRoundLimitReached && p.hp >= 6));
+    if (!p.alive) return false;
+    const { correct, wrong } = scoreHypotheses(p, allPlayers);
+    return correct >= 2 && wrong === 0;
   }
   if (p.roleId === 'lang-cuu-ho') {
-    const ward = p.wardPlayerId ? players.find((x) => x.playerId === p.wardPlayerId) : null;
-    if (ward && ward.alive && p.alive && p.hp >= 4 && (p.shieldedForWardCount >= 1 || isRoundLimitReached)) {
-      return true;
-    }
-    return p.shieldedForWardCount >= 2;
+    const ward = p.wardPlayerId ? allPlayers.find((x) => x.playerId === p.wardPlayerId) : null;
+    if (!ward || !ward.alive) return false;
+    return (p.alive && p.wardProtectionsCount >= 1) || p.sacrificedForWard;
   }
   return false;
 }
 
-/** Kiểm tra điều kiện thắng tức thì giữa ván đấu. Trả true nếu trận đã ngã ngũ. */
-export function evaluateVictoryState(
+function finalizeMatchOutcome(
   state: AuthoritativeGameState,
   nowMs: number,
-  isRoundLimitReached = false,
-): boolean {
-  if (state.finished) return true;
-
-  // 1. Kẻ Lang Thang đạt mốc thắng tức thì (Hải đủ >= 3 Mảnh Tin Đen)
-  const soloHunter = state.players.find(
-    (p) => p.roleId === 'lang-anh-san' && p.alive && p.fragments >= 3,
-  );
-  if (soloHunter && !isRoundLimitReached) {
-    state.finished = true;
-    state.turnPhase = 'ENDED';
-    state.winnerFaction = 'wanderer-solo';
-    state.winnerPlayerIds = [soloHunter.playerId];
-    state.winnerLabel = `${soloHunter.displayName} (Kẻ Lang Thang)`;
-    state.winReason = `${soloHunter.displayName} đã thu thập đủ ${soloHunter.fragments} Mảnh Tin Đen và giải mã toàn bộ đêm mất điện!`;
-    state.highlights.push({
-      round: state.round,
-      title: 'Giải mã đơn độc',
-      detail: state.winReason,
-      atMs: nowMs,
-    });
-    return true;
-  }
-
-  const aliveGuard = state.players.filter((p) => p.faction === 'lantern-guard' && p.alive);
-  const aliveMist = state.players.filter((p) => p.faction === 'mist-order' && p.alive);
-
-  let primaryFaction: 'lantern-guard' | 'mist-order' | null = null;
-  let reason = '';
-
-  if (state.signalProgress >= state.maxTrackValue) {
-    primaryFaction = 'lantern-guard';
-    reason = `Đội Gác Đèn đã đưa Chỉ số Tín hiệu lên ${state.signalProgress}/${state.maxTrackValue}, khôi phục hoàn toàn phát thanh KTX!`;
-  } else if (state.mistProgress >= state.maxTrackValue) {
-    primaryFaction = 'mist-order';
-    reason = `Hội Màn Sương đã đẩy Chỉ số Nhiễu sóng lên ${state.mistProgress}/${state.maxTrackValue}, nhấn chìm khu KTX trong màn sương!`;
-  } else if (aliveMist.length === 0 && aliveGuard.length > 0) {
-    primaryFaction = 'lantern-guard';
-    reason = 'Toàn bộ thành viên Hội Màn Sương đã bị loại khỏi cuộc điều tra!';
-  } else if (aliveGuard.length === 0 && aliveMist.length > 0) {
-    primaryFaction = 'mist-order';
-    reason = 'Toàn bộ Đội Gác Đèn đã kiệt sức; Hội Màn Sương kiểm soát hệ thống KTX!';
-  } else if (isRoundLimitReached) {
-    if (state.signalProgress > state.mistProgress) {
-      primaryFaction = 'lantern-guard';
-      reason = `Hết ${state.maxRounds} vòng: Đội Gác Đèn dẫn điểm Tín hiệu (${state.signalProgress} so với ${state.mistProgress}).`;
-    } else if (state.mistProgress > state.signalProgress) {
-      primaryFaction = 'mist-order';
-      reason = `Hết ${state.maxRounds} vòng: Hội Màn Sương chiếm ưu thế Nhiễu sóng (${state.mistProgress} so với ${state.signalProgress}).`;
-    } else {
-      const guardHp = aliveGuard.reduce((sum, p) => sum + p.hp, 0);
-      const mistHp = aliveMist.reduce((sum, p) => sum + p.hp, 0);
-      if (mistHp > guardHp) {
-        primaryFaction = 'mist-order';
-        reason = `Hết ${state.maxRounds} vòng hòa chỉ số (${state.mistProgress}-${state.signalProgress}); Hội Màn Sương giữ tổng HP cao hơn (${mistHp} vs ${guardHp}).`;
-      } else {
-        primaryFaction = 'lantern-guard';
-        reason = `Hết ${state.maxRounds} vòng đến rạng sáng: Đội Gác Đèn bật thành công nguồn điện dự phòng (${guardHp} vs ${mistHp} HP).`;
-      }
+  winnerFaction: 'lantern-guard' | 'mist-order' | 'wanderer-solo',
+  winnerLabel: string,
+  reason: string,
+  primaryWinnerIds: string[],
+  highlightTitle: string,
+): true {
+  const winnerSet = new Set<string>(primaryWinnerIds);
+  for (const p of state.players) {
+    if (qualifiesWandererCoWin(p, state.players)) {
+      winnerSet.add(p.playerId);
     }
-  }
-
-  if (!primaryFaction) return false;
-
-  const coWinners: string[] = [];
-  state.players.forEach((p) => {
-    if (p.faction === primaryFaction) {
-      coWinners.push(p.playerId);
-    } else if (qualifiesWandererAtEnd(p, state.players, isRoundLimitReached)) {
-      coWinners.push(p.playerId);
-    }
-    // Lật toàn bộ vai công khai trong trạng thái kết thúc
+    // Lật mở toàn bộ vai công khai khi trận kết thúc
     p.revealed = true;
-  });
+  }
 
   state.finished = true;
   state.turnPhase = 'ENDED';
-  state.winnerFaction = primaryFaction;
-  state.winnerPlayerIds = coWinners;
-  state.winnerLabel = FACTION_LABELS[primaryFaction];
+  state.winnerFaction = winnerFaction;
+  state.winnerPlayerIds = Array.from(winnerSet);
+  state.winnerLabel = winnerLabel;
   state.winReason = reason;
   state.highlights.push({
     round: state.round,
-    title: `${state.winnerLabel} chiến thắng`,
+    title: highlightTitle,
     detail: reason,
     atMs: nowMs,
   });
@@ -131,7 +90,181 @@ export function evaluateVictoryState(
   return true;
 }
 
-export function buildFinalRevealSummary(state: AuthoritativeGameState) {
+/** Đánh giá toàn bộ điều kiện thắng v2 theo thứ tự ưu tiên tất định. */
+export function evaluateVictoryState(
+  state: AuthoritativeGameState,
+  nowMs: number,
+  isDawnReached = false,
+): boolean {
+  if (state.finished) return true;
+
+  // 1. Hải — Công Bố Hồ Sơ Độc Lập từ Vòng 4+ tại Phòng Phát Thanh
+  if (state.dossierPublishedBy) {
+    const hai = state.players.find((p) => p.playerId === state.dossierPublishedBy);
+    if (hai) {
+      const reason = `${hai.displayName} (Kẻ Lang Thang) đã công bố toàn bộ Hồ Sơ Mất Điện trực tiếp trên sóng Phát Thanh Bách Khoa!`;
+      return finalizeMatchOutcome(
+        state,
+        nowMs,
+        'wanderer-solo',
+        `${hai.displayName} (Công Bố Hồ Sơ)`,
+        reason,
+        [hai.playerId],
+        'Hồ sơ chấn động KTX',
+      );
+    }
+  }
+
+  // 2. Hội Màn Sương kích nổ thành công Mạch Quá Tải đã gài
+  if (state.plotDetonated) {
+    const mistIds = state.players.filter((p) => p.faction === 'mist-order').map((p) => p.playerId);
+    const reason = `Hội Màn Sương kích nổ thành công Mạch Quá Tải tại ${getLocationName(state.secretSabotageLocation)}, cắt hoàn toàn hệ thống KTX!`;
+    return finalizeMatchOutcome(
+      state,
+      nowMs,
+      'mist-order',
+      FACTION_LABELS['mist-order'],
+      reason,
+      mistIds,
+      `${FACTION_LABELS['mist-order']} chiến thắng`,
+    );
+  }
+
+  const activeMist = state.players.filter(
+    (p) => p.faction === 'mist-order' && p.alive && !p.detained,
+  );
+  const aliveGuard = state.players.filter((p) => p.faction === 'lantern-guard' && p.alive);
+  const guardIds = state.players.filter((p) => p.faction === 'lantern-guard').map((p) => p.playerId);
+  const mistIds = state.players.filter((p) => p.faction === 'mist-order').map((p) => p.playerId);
+
+  // 3. Toàn bộ Hội Màn Sương đã bị loại hoặc bị Tạm giữ qua Đối chất
+  if (activeMist.length === 0) {
+    const reason =
+      'Toàn bộ thành viên Hội Màn Sương đã bị tạm giữ hoặc rời cuộc chơi — Đội Gác Đèn bảo vệ an toàn KTX!';
+    return finalizeMatchOutcome(
+      state,
+      nowMs,
+      'lantern-guard',
+      FACTION_LABELS['lantern-guard'],
+      reason,
+      guardIds,
+      `${FACTION_LABELS['lantern-guard']} chiến thắng`,
+    );
+  }
+
+  // 4. Toàn bộ Đội Gác Đèn đã kiệt sức trong khi Hội Màn Sương vẫn còn người tự do
+  if (aliveGuard.length === 0) {
+    const reason = 'Toàn bộ Đội Gác Đèn đã kiệt sức; Hội Màn Sương hoàn toàn làm chủ khu KTX!';
+    return finalizeMatchOutcome(
+      state,
+      nowMs,
+      'mist-order',
+      FACTION_LABELS['mist-order'],
+      reason,
+      mistIds,
+      `${FACTION_LABELS['mist-order']} chiến thắng`,
+    );
+  }
+
+  // 4b. Từ Vòng 3+, gỡ được >= 2 lần mạch và niêm phong cả Cầu Dao lẫn Phát Thanh thắng ngay lập tức
+  if (state.round >= 3 && state.disarmedCount >= 2 && state.breakerSealed && state.radioSealed) {
+    const reason =
+      'Đội Gác Đèn đã gỡ thành công 2 Mạch Quá Tải và niêm phong chặt cả Cầu Dao lẫn Phát Thanh!';
+    return finalizeMatchOutcome(
+      state,
+      nowMs,
+      'lantern-guard',
+      FACTION_LABELS['lantern-guard'],
+      reason,
+      guardIds,
+      'Niêm phong & Vô hiệu hóa hoàn toàn',
+    );
+  }
+
+  // 5. Rạng Sáng (chạm trần số vòng hữu hạn)
+  if (isDawnReached) {
+    // 5a. Mạch Quá Tải chưa bị gỡ phát nổ lúc Rạng Sáng
+    if (state.sabotagePlanted) {
+      const reason = `Rạng Sáng Vòng ${state.maxRounds}: Mạch Quá Tải tại ${getLocationName(state.secretSabotageLocation)} không được gỡ kịp thời đã kích nổ lúc chuyển ca!`;
+      return finalizeMatchOutcome(
+        state,
+        nowMs,
+        'mist-order',
+        FACTION_LABELS['mist-order'],
+        reason,
+        mistIds,
+        'Mạch nổ lúc Rạng Sáng',
+      );
+    }
+
+    // 5b. Đội Gác Đèn đã niêm phong cả Cầu Dao & Phát Thanh và ít nhất 1 lần gỡ mạch hoặc lật/khống chế Màn Sương
+    const anyMistExposedOrDown = state.players.some(
+      (p) => p.faction === 'mist-order' && (p.revealed || p.detained || !p.alive),
+    );
+    if (state.breakerSealed && state.radioSealed && (state.disarmedCount >= 1 || anyMistExposedOrDown)) {
+      const reason = `Rạng Sáng Vòng ${state.maxRounds}: Đội Gác Đèn đã niêm phong cả Cầu Dao lẫn Phát Thanh và khóa chặt âm mưu Màn Sương!`;
+      return finalizeMatchOutcome(
+        state,
+        nowMs,
+        'lantern-guard',
+        FACTION_LABELS['lantern-guard'],
+        reason,
+        guardIds,
+        'Niêm phong thành công',
+      );
+    }
+
+    // 5c. Nếu hai phe chính giằng co chưa hoàn tất mục tiêu, Trang có thể đoạt chiến thắng Rạng Sáng bằng 2+ giả thuyết chuẩn xác tuyệt đối
+    const trang = state.players.find((p) => p.roleId === 'lang-quan-sat' && p.alive);
+    if (trang) {
+      const { correct, wrong } = scoreHypotheses(trang, state.players);
+      if (correct >= 2 && wrong === 0) {
+        const reason = `Rạng Sáng Vòng ${state.maxRounds}: Giữa thế giằng co, ${trang.displayName} (Người Ghi Chép) đưa ra bản luận tội chính xác ${correct}/${correct} nhân thân bí mật!`;
+        return finalizeMatchOutcome(
+          state,
+          nowMs,
+          'wanderer-solo',
+          `${trang.displayName} (Suy Luận Tuyệt Đối)`,
+          reason,
+          [trang.playerId],
+          'Bản ghi Rạng Sáng',
+        );
+      }
+    }
+
+    // 5d. Phiên Họp Rạng Sáng: Xét xem có thành viên Màn Sương ẩn danh & tự do nào từng xâm nhập Trạm Mục Tiêu hay không
+    const undetectedInfiltrator = activeMist.find(
+      (p) => !p.revealed && p.visitedLocations.includes(state.secretSabotageLocation),
+    );
+    if (undetectedInfiltrator) {
+      const reason = `Phiên Họp Rạng Sáng: Màn Sương còn người ẩn danh chưa bị lật từng xâm nhập ${getLocationName(state.secretSabotageLocation)} qua mặt đội tuần tra!`;
+      return finalizeMatchOutcome(
+        state,
+        nowMs,
+        'mist-order',
+        FACTION_LABELS['mist-order'],
+        reason,
+        mistIds,
+        'Màn Sương qua mặt tuần tra',
+      );
+    }
+
+    const reason = `Phiên Họp Rạng Sáng: Không kẻ phá hoại ẩn danh nào lọt được vào ${getLocationName(state.secretSabotageLocation)} — Đội Gác Đèn giữ vững khu KTX!`;
+    return finalizeMatchOutcome(
+      state,
+      nowMs,
+      'lantern-guard',
+      FACTION_LABELS['lantern-guard'],
+      reason,
+      guardIds,
+      'Tuần tra giữ vững KTX',
+    );
+  }
+
+  return false;
+}
+
+export function buildFinalRevealSummary(state: AuthoritativeGameState): BoardGameRevealRecord[] {
   const winners = new Set(state.winnerPlayerIds);
   return state.players.map((p) => ({
     playerId: p.playerId,
@@ -141,6 +274,9 @@ export function buildFinalRevealSummary(state: AuthoritativeGameState) {
     faction: p.faction,
     won: winners.has(p.playerId),
     alive: p.alive,
+    detained: p.detained,
     hp: p.hp,
+    maxHp: p.maxHp,
+    woundsTaken: Math.max(0, p.maxHp - p.hp),
   }));
 }

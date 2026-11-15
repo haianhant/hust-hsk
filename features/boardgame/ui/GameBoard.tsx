@@ -103,8 +103,8 @@ export default function GameBoard({
 
   const didInitAudioRefs = useRef(false);
   const prevActiveIdRef = useRef<string | null>(publicGame.activePlayerId);
-  const prevSignalRef = useRef<number>(publicGame.signalProgress);
-  const prevMistRef = useRef<number>(publicGame.mistProgress);
+  const prevDisarmedRef = useRef<number>(publicGame.disarmedCount);
+  const prevArmedRef = useRef<boolean>(publicGame.sabotageArmed);
   const prevHandCountRef = useRef<number>(privateView?.hand.length ?? 0);
   const prevRevealedCountRef = useRef<number>(
     publicGame.players.filter((p) => Boolean(p.revealedFaction || p.revealedRoleId)).length,
@@ -120,8 +120,8 @@ export default function GameBoard({
     if (!didInitAudioRefs.current) {
       didInitAudioRefs.current = true;
       prevActiveIdRef.current = publicGame.activePlayerId;
-      prevSignalRef.current = publicGame.signalProgress;
-      prevMistRef.current = publicGame.mistProgress;
+      prevDisarmedRef.current = publicGame.disarmedCount;
+      prevArmedRef.current = publicGame.sabotageArmed;
       prevHandCountRef.current = handCount;
       prevRevealedCountRef.current = revealedCount;
       prevPhaseRef.current = publicGame.turnPhase;
@@ -140,8 +140,8 @@ export default function GameBoard({
     }
 
     if (
-      publicGame.signalProgress > prevSignalRef.current ||
-      publicGame.mistProgress > prevMistRef.current
+      publicGame.disarmedCount > prevDisarmedRef.current ||
+      (publicGame.sabotageArmed && !prevArmedRef.current)
     ) {
       playTrackAdvance();
     }
@@ -153,15 +153,15 @@ export default function GameBoard({
     }
 
     prevActiveIdRef.current = publicGame.activePlayerId;
-    prevSignalRef.current = publicGame.signalProgress;
-    prevMistRef.current = publicGame.mistProgress;
+    prevDisarmedRef.current = publicGame.disarmedCount;
+    prevArmedRef.current = publicGame.sabotageArmed;
     prevHandCountRef.current = handCount;
     prevRevealedCountRef.current = revealedCount;
     prevPhaseRef.current = publicGame.turnPhase;
   }, [
     publicGame.activePlayerId,
-    publicGame.signalProgress,
-    publicGame.mistProgress,
+    publicGame.disarmedCount,
+    publicGame.sabotageArmed,
     publicGame.players,
     publicGame.turnPhase,
     privateView?.hand.length,
@@ -204,11 +204,10 @@ export default function GameBoard({
     !isSpectator &&
       !pendingAction &&
       selfPlayer?.alive &&
+      !selfPlayer?.detained &&
       publicGame.activePlayerId === selfPlayerId &&
       publicGame.turnPhase === 'MOVE',
   );
-
-  const trackSteps = Array.from({ length: publicGame.maxTrackValue }, (_, idx) => idx + 1);
 
   const handleDispatchAction = async (action: BoardGameActionPayload) => {
     if (pendingAction) return;
@@ -287,69 +286,63 @@ export default function GameBoard({
           </div>
         </div>
 
-        {/* Hai thanh tiến độ Tín hiệu (Đội Gác Đèn) vs Nhiễu sóng (Hội Màn Sương) dạng nút cờ */}
-        <div className="mx-auto mt-2 grid max-w-7xl grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-500/35 bg-amber-950/25 px-3 py-1.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-200">
-              <span>🏮</span>
-              <span>Tín hiệu Gác Đèn</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-1" aria-hidden="true">
-                {trackSteps.map((step) => {
-                  const lit = step <= publicGame.signalProgress;
-                  return (
-                    <span
-                      key={`sig-${step}`}
-                      className={`flex h-4 w-4 items-center justify-center rounded-full border text-[9px] font-bold transition ${
-                        lit
-                          ? 'border-amber-200 bg-amber-400 text-slate-950 shadow-[0_0_8px_rgba(251,191,36,0.75)]'
-                          : 'border-slate-700 bg-slate-900 text-slate-500'
-                      }`}
-                    >
-                      {step}
-                    </span>
-                  );
-                })}
-              </div>
-              <span
-                data-testid="bg-signal-score"
-                className="min-w-[26px] text-right font-mono text-[11px] font-bold text-amber-300"
-              >
-                {publicGame.signalProgress}/{publicGame.maxTrackValue}
+        {/* Thanh Trạng thái Lưới điện KTX & Tiến độ Rạng Sáng (phiên bản v2 ẩn vai) */}
+        <div
+          data-testid="bg-incident-status-bar"
+          className="mx-auto mt-2 grid max-w-7xl grid-cols-1 gap-2 sm:grid-cols-2"
+        >
+          <div
+            className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-[11px] ${
+              publicGame.sabotageArmed
+                ? 'border-rose-400/70 bg-rose-950/45 text-rose-100'
+                : 'border-amber-500/35 bg-amber-950/25 text-amber-100'
+            }`}
+          >
+            <div className="flex items-center gap-1.5 font-semibold">
+              <span>{publicGame.sabotageArmed ? '⚠️' : '🌅'}</span>
+              <span>
+                {publicGame.sabotageArmed
+                  ? 'Báo động: 1 Mạch Quá Tải đang CHỜ KÍCH NỔ!'
+                  : `Đêm KTX — Vòng ${publicGame.round}/${publicGame.maxRounds} tới Rạng Sáng`}
               </span>
             </div>
+            <span className="rounded bg-slate-950/75 px-2 py-0.5 font-mono text-[10px] text-amber-200">
+              {publicGame.round >= 3 ? '⚖️ Đã mở Đối chất' : '🔒 Đối chất mở ở V3'}
+            </span>
           </div>
 
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-violet-500/35 bg-violet-950/25 px-3 py-1.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-200">
-              <span>🌫️</span>
-              <span>Nhiễu sóng Màn Sương</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-1" aria-hidden="true">
-                {trackSteps.map((step) => {
-                  const lit = step <= publicGame.mistProgress;
-                  return (
-                    <span
-                      key={`mist-${step}`}
-                      className={`flex h-4 w-4 items-center justify-center rounded-full border text-[9px] font-bold transition ${
-                        lit
-                          ? 'border-fuchsia-200 bg-violet-500 text-white shadow-[0_0_8px_rgba(167,139,250,0.75)]'
-                          : 'border-slate-700 bg-slate-900 text-slate-500'
-                      }`}
-                    >
-                      {step}
-                    </span>
-                  );
-                })}
-              </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-500/35 bg-slate-950/60 px-3 py-1.5 text-[11px] text-slate-200">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span
-                data-testid="bg-mist-score"
-                className="min-w-[26px] text-right font-mono text-[11px] font-bold text-violet-300"
+                data-testid="bg-breaker-seal-badge"
+                className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${
+                  publicGame.breakerSealed
+                    ? 'bg-emerald-950/80 text-emerald-200 ring-emerald-400/50'
+                    : 'bg-slate-900 text-slate-400 ring-slate-700'
+                }`}
               >
-                {publicGame.mistProgress}/{publicGame.maxTrackValue}
+                ⚡ Cầu Dao: {publicGame.breakerSealed ? 'Niêm phong' : 'Chưa khóa'}
               </span>
+              <span
+                data-testid="bg-radio-seal-badge"
+                className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${
+                  publicGame.radioSealed
+                    ? 'bg-emerald-950/80 text-emerald-200 ring-emerald-400/50'
+                    : 'bg-slate-900 text-slate-400 ring-slate-700'
+                }`}
+              >
+                📡 Phát Thanh: {publicGame.radioSealed ? 'Niêm phong' : 'Chưa khóa'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 font-mono text-[10px]">
+              <span data-testid="bg-disarmed-count" className="font-bold text-teal-300">
+                🛡️ Gỡ: {publicGame.disarmedCount}
+              </span>
+              {publicGame.falseAccusationCount > 0 && (
+                <span className="font-bold text-rose-300">
+                  ❌ Sai: {publicGame.falseAccusationCount}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -376,12 +369,18 @@ export default function GameBoard({
       )}
 
       {/* Nội dung chính Responsive: Desktop 3 cột / Mobile tab */}
-      <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 pb-16 lg:grid-cols-12 lg:pb-4">
+      <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 pb-24 lg:grid-cols-12 lg:pb-4">
         {/* Cột Trái: Vai trò bí mật & Sổ ghi chép */}
         <section
           className={`lg:col-span-3 ${mobileTab === 'role' ? 'block' : 'hidden lg:block'}`}
         >
-          <RoleCard privateView={privateView} isSpectator={isSpectator} />
+          <RoleCard
+            privateView={privateView}
+            publicGame={publicGame}
+            isSpectator={isSpectator}
+            pendingAction={pendingAction}
+            onAction={handleDispatchAction}
+          />
         </section>
 
         {/* Cột Giữa: Bàn Cờ Minh Họa 6 Khu Vực KTX & Bảng Điều Khiển Lượt */}
@@ -434,7 +433,16 @@ export default function GameBoard({
                   const occupants = publicGame.players.filter((p) => p.location === loc.id);
                   const isSelfHere = occupants.some((p) => p.playerId === selfPlayerId);
                   const isBlackout = publicGame.blackoutLocation === loc.id;
-                  const canMoveHere = canClickMoveOnBoard && selfPlayer?.location !== loc.id;
+                  const canMoveHere = Boolean(
+                    canClickMoveOnBoard &&
+                      selfPlayer &&
+                      selfPlayer.location !== loc.id &&
+                      isAdjacentLocation(selfPlayer.location, loc.id),
+                  );
+                  const isSealed =
+                    (loc.id === 'breaker' && publicGame.breakerSealed) ||
+                    (loc.id === 'radio' && publicGame.radioSealed);
+                  const isTampered = publicGame.tamperedLocations.includes(loc.id);
                   const isNearCourt = Boolean(
                     selfPlayer &&
                       selfPlayer.location === 'court' &&
@@ -512,10 +520,22 @@ export default function GameBoard({
                           </div>
                         </div>
 
-                        <div
-                          className={`inline-flex max-w-full items-center truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${vis.pillClasses}`}
-                        >
-                          {vis.badgeText}
+                        <div className="flex flex-wrap items-center gap-1">
+                          <div
+                            className={`inline-flex max-w-full items-center truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${vis.pillClasses}`}
+                          >
+                            {vis.badgeText}
+                          </div>
+                          {isSealed && (
+                            <span className="rounded bg-emerald-950/90 px-1 py-0.5 text-[9px] font-bold text-emerald-300 ring-1 ring-emerald-500/40">
+                              🔒 Niêm phong
+                            </span>
+                          )}
+                          {isTampered && !isSealed && (
+                            <span className="rounded bg-amber-950/90 px-1 py-0.5 text-[9px] font-semibold text-amber-300 ring-1 ring-amber-500/40">
+                              🔧 Đã chạm tủ
+                            </span>
+                          )}
                         </div>
                       </div>
 

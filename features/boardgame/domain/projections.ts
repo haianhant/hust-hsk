@@ -2,12 +2,15 @@
 // features/boardgame/domain/projections.ts — Tách biệt tuyệt đối P0 giữa
 // dữ liệu công khai (`getPublicGameView`) và bí mật (`getPrivateGameView`).
 // Khán giả / socket chưa xác thực luôn nhận `privateView: null`.
+// Tuyệt đối không gửi `hp`, `maxHp`, `fragments`, `skillUsed` ẩn hay
+// `secretSabotageLocation` ra kênh công khai.
 // ---------------------------------------------------------------------------
 
-import type {
-  BoardGamePrivateGameView,
-  BoardGamePublicGameView,
-  BoardGamePublicPlayerView,
+import {
+  BOARD_GAME_RULESET_VERSION,
+  type BoardGamePrivateGameView,
+  type BoardGamePublicGameView,
+  type BoardGamePublicPlayerView,
 } from '../../../shared/contracts/boardgame';
 import { ROLES_BY_ID } from './roles';
 import type { AuthoritativeGameState } from './types';
@@ -24,27 +27,31 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     displayName: p.displayName,
     seatIndex: p.seatIndex,
     location: p.location,
-    hp: p.hp,
-    maxHp: p.maxHp,
-    shield: p.shield,
-    fragments: p.fragments,
+    woundsTaken: Math.max(0, p.maxHp - p.hp),
+    visibleShield: p.shield,
     handCount: p.hand.length,
     alive: p.alive,
+    detained: p.detained,
     connected: p.connected,
-    skillUsed: p.skillUsed,
-    // BẢO MẬT P0: Chỉ hiện vai & phe khi người chơi tự lật hoặc ván đã FINISHED!
+    // BẢO MẬT P0: Chỉ hiện vai, phe, maxHp & skillUsed khi người chơi đã lật vai công khai hoặc hết trận!
     revealedRoleId: p.revealed ? p.roleId : null,
     revealedFaction: p.revealed ? p.faction : null,
+    revealedMaxHp: p.revealed ? p.maxHp : null,
+    revealedSkillUsed: p.revealed ? p.skillUsed : false,
     appearance: p.appearance,
   }));
 
   return {
+    rulesetVersion: BOARD_GAME_RULESET_VERSION,
     matchId: state.matchId,
     round: state.round,
     maxRounds: state.maxRounds,
-    signalProgress: state.signalProgress,
-    mistProgress: state.mistProgress,
-    maxTrackValue: state.maxTrackValue,
+    sabotageArmed: state.sabotageArmed,
+    disarmedCount: state.disarmedCount,
+    breakerSealed: state.breakerSealed,
+    radioSealed: state.radioSealed,
+    falseAccusationCount: state.falseAccusationCount,
+    tamperedLocations: state.tamperedLocations.slice(),
     turnPhase: state.turnPhase,
     activePlayerId,
     turnOrder: state.turnOrder.slice(),
@@ -85,16 +92,35 @@ export function getPrivateGameView(
     faction: player.faction,
     hp: player.hp,
     maxHp: player.maxHp,
+    woundsTaken: Math.max(0, player.maxHp - player.hp),
     shield: player.shield,
-    fragments: player.fragments,
     skillUsed: player.skillUsed,
+    covertSkillUsed: player.covertSkillUsed,
+    confrontUsed: player.confrontUsed,
     revealed: player.revealed,
+    detained: player.detained,
+    accessTag: player.accessTag,
+    traceTag: player.traceTag,
     secretGoalText: roleDef.goalSummary,
+    // Chỉ thành viên Hội Màn Sương mới biết Trạm Mục Tiêu phá hoại ngầm!
+    secretSabotageLocation: player.faction === 'mist-order' ? state.secretSabotageLocation : null,
+    sabotagePlanted: player.faction === 'mist-order' ? state.sabotagePlanted : false,
+    sabotageCanDetonate:
+      player.faction === 'mist-order'
+        ? Boolean(
+            state.sabotageArmed &&
+              state.sabotagePlanted &&
+              state.sabotagePlantedRound !== null &&
+              state.round > state.sabotagePlantedRound,
+          )
+        : false,
+    verifiedSceneLocations: player.verifiedSceneLocations.slice(),
     wardPlayerId: wardPlayer?.playerId ?? null,
     wardDisplayName: wardPlayer?.displayName ?? null,
-    shieldedForWardCount: player.shieldedForWardCount,
-    correctPredictions: player.correctPredictions,
-    predictedPlayerIds: player.predictedPlayerIds.slice(),
+    wardProtectionsCount: player.wardProtectionsCount,
+    sacrificedForWard: player.sacrificedForWard,
+    hypotheses: player.hypotheses.slice(),
+    metPlayerIds: player.metPlayerIds.slice(),
     hand: player.hand.map((c) => ({
       id: c.id,
       deck: c.deck,
@@ -104,6 +130,7 @@ export function getPrivateGameView(
       targetMode: c.targetMode,
       value: c.value,
     })),
-    privateNotes: player.privateNotes.slice(-16),
+    evidenceList: player.evidenceList.slice(-20),
+    privateNotes: player.privateNotes.slice(-18),
   };
 }

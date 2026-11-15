@@ -1,13 +1,21 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/state-machine.ts — Khởi tạo trận đấu
-// AuthoritativeGameState từ danh sách ghế thật 4–8 người chơi.
+// features/boardgame/domain/state-machine.ts — Khởi tạo trận đấu Bóng Đêm KTX v2
+// (rulesetVersion = 2) từ danh sách ghế thật 4–8 người chơi.
 // ---------------------------------------------------------------------------
 
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
 import { CARDS_BY_ID, listCardIdsByDeck } from './cards';
-import { FACTION_LABELS, ROLES_BY_ID, getRoleDistribution, listRolesForFaction } from './roles';
 import {
-  BOARD_GAME_MAX_TRACK,
+  ACCESS_TAG_LABELS,
+  FACTION_LABELS,
+  ROLES_BY_ID,
+  TRACE_TAG_LABELS,
+  getRoleDistribution,
+  listRolesForFaction,
+} from './roles';
+import {
+  BOARD_GAME_INFRASTRUCTURE_LOCATIONS,
+  getLocationName,
   getMaxRoundsForPlayerCount,
   nextDeterministicRandom,
   shuffleWithRng,
@@ -38,18 +46,37 @@ export function createInitialGameState(input: CreateInitialGameInput): Authorita
     .sort((a, b) => a.seatIndex - b.seatIndex);
 
   const state: AuthoritativeGameState = {
+    rulesetVersion: 2,
     matchId: input.matchId,
     seed,
     rngState: seed,
     round: 1,
     maxRounds: getMaxRoundsForPlayerCount(sortedPlayers.length),
-    signalProgress: 0,
-    mistProgress: 0,
-    maxTrackValue: BOARD_GAME_MAX_TRACK,
+    secretSabotageLocation: 'radio',
+    sabotagePlanted: false,
+    sabotagePlantedRound: null,
+    sabotagePlantedByPlayerId: null,
+    sabotageArmed: false,
+    plotDetonated: false,
+    disarmedCount: 0,
+    breakerSealed: false,
+    radioSealed: false,
+    falseAccusationCount: 0,
+    dossierPublishedBy: null,
+    tamperedLocations: [],
+    tamperHistoryByLocation: {
+      lobby: [],
+      canteen: [],
+      radio: [],
+      court: [],
+      corridor: [],
+      breaker: [],
+    },
     turnOrder: sortedPlayers.map((p) => p.playerId),
     activeTurnIdx: 0,
     turnPhase: 'MOVE',
     actionUsedThisTurn: false,
+    hypothesisUpdatedThisTurn: false,
     blackoutLocation: null,
     blackoutRoundsLeft: 0,
     lastVisitorByLocation: {
@@ -81,8 +108,13 @@ export function createInitialGameState(input: CreateInitialGameInput): Authorita
     seqCounter: 0,
   };
 
-  state.decks.clue = shuffleWithRng(listCardIdsByDeck('clue'), state);
-  state.decks.event = shuffleWithRng(listCardIdsByDeck('event'), state);
+  // Chọn Trạm Mục Tiêu phá hoại bí mật cho ván này
+  const targetIdx = Math.floor(nextDeterministicRandom(state) * BOARD_GAME_INFRASTRUCTURE_LOCATIONS.length);
+  state.secretSabotageLocation = BOARD_GAME_INFRASTRUCTURE_LOCATIONS[targetIdx] ?? 'radio';
+
+  // Trộn bộ bài 24 lá (tạo đủ nhịp điều tra và chiến thuật)
+  state.decks.clue = shuffleWithRng([...listCardIdsByDeck('clue'), ...listCardIdsByDeck('clue')], state);
+  state.decks.event = shuffleWithRng([...listCardIdsByDeck('event'), ...listCardIdsByDeck('event')], state);
   const tacticPool = [...listCardIdsByDeck('tactic'), ...listCardIdsByDeck('tactic')];
   state.decks.tactic = shuffleWithRng(tacticPool, state);
 
@@ -121,31 +153,58 @@ export function createInitialGameState(input: CreateInitialGameInput): Authorita
       hp: role.maxHp,
       maxHp: role.maxHp,
       shield: 0,
-      fragments: 0,
+      accessTag: role.accessTag,
+      traceTag: role.traceTag,
       location: 'lobby',
+      visitedLocations: ['lobby'],
+      recentMoves: [],
+      technicalActionRounds: [],
+      plantedDecoyRounds: [],
+      dealtDamageRounds: [],
+      metPlayerIds: [],
+      verifiedSceneLocations: [],
       alive: true,
+      detained: false,
       connected: p.connected !== false,
       revealed: false,
       skillUsed: false,
+      covertSkillUsed: false,
+      confrontUsed: false,
       healBlockedNextTurn: false,
+      bodyguardActive: false,
       wardPlayerId: null,
-      shieldedForWardCount: 0,
-      predictedPlayerIds: [],
-      correctPredictions: 0,
+      wardProtectionsCount: 0,
+      sacrificedForWard: false,
+      hypotheses: [],
       hand: startingCards,
+      evidenceList: [],
       privateNotes: [
         {
           id: `init-note-${idx + 1}`,
           round: 1,
           atMs: input.nowMs,
-          text: `Vai trò bí mật: ${role.name} (${FACTION_LABELS[role.faction]}). Mục tiêu: ${role.goalSummary}`,
+          text: `Vai bí mật: ${role.name} (${FACTION_LABELS[role.faction]}) · Trang bị [${ACCESS_TAG_LABELS[role.accessTag]} / ${TRACE_TAG_LABELS[role.traceTag]}].`,
         },
       ],
     };
   });
 
-  // Gán ward bí mật cho Bình (Kẻ Lang Thang - Người Bảo Hộ Ngầm)
-  authPlayers.forEach((p) => {
+  // Giao kèo bí mật cho Hội Màn Sương: biết đồng đội cùng phe và Trạm Mục Tiêu phá hoại
+  const mistTeam = authPlayers.filter((p) => p.faction === 'mist-order');
+  for (const m of mistTeam) {
+    const partners = mistTeam
+      .filter((other) => other.playerId !== m.playerId)
+      .map((other) => other.displayName);
+    m.privateNotes.push({
+      id: `mist-brief-${m.playerId}`,
+      round: 1,
+      atMs: input.nowMs,
+      text: `Mật lệnh Hội Màn Sương: Đồng đội [${partners.join(', ') || 'Chỉ mình bạn'}]. Trạm Mục Tiêu phá hoại là ${getLocationName(state.secretSabotageLocation)}!`,
+    });
+  }
+
+  // Gán mục tiêu bảo hộ bí mật cho Bình (Người Bảo Hộ Ngầm)
+  for (const p of authPlayers) {
     if (p.roleId === 'lang-cuu-ho') {
       const candidates = authPlayers.filter((other) => other.playerId !== p.playerId);
       const picked =
@@ -156,11 +215,11 @@ export function createInitialGameState(input: CreateInitialGameInput): Authorita
           id: `ward-note-${p.playerId}`,
           round: 1,
           atMs: input.nowMs,
-          text: `Mục tiêu bảo hộ bí mật của bạn là ${picked.displayName}. Hãy giữ họ sống sót tới cuối ván!`,
+          text: `Mục tiêu Bảo hộ bí mật của bạn là ${picked.displayName}. Hãy che chắn và giữ họ sống sót tới cuối ván!`,
         });
       }
     }
-  });
+  }
 
   state.players = authPlayers;
   state.seqCounter += 1;
@@ -169,7 +228,7 @@ export function createInitialGameState(input: CreateInitialGameInput): Authorita
     round: 1,
     atMs: input.nowMs,
     kind: 'system',
-    text: `Đêm mất điện KTX bắt đầu (${authPlayers.length} sinh viên · tối đa ${state.maxRounds} vòng).`,
+    text: `Đêm mất điện KTX v2 bắt đầu (${authPlayers.length} sinh viên · Rạng Sáng sau ${state.maxRounds} vòng).`,
   });
 
   return state;

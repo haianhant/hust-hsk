@@ -521,42 +521,43 @@ export default function BoardGameLobby({
             </div>
             <div className="flex-1 space-y-3 overflow-y-auto p-4 text-xs leading-relaxed text-slate-200 sm:text-sm">
               <p className="rounded-xl bg-slate-800/70 p-3 text-amber-100">
-                <strong>Bối cảnh:</strong> Một đêm mất điện tại khu KTX Bách Khoa, hệ thống loa nội bộ phát ra tín hiệu lạ.
-                Mỗi sinh viên nhận một <strong>Vai trò bí mật</strong> thuộc một trong ba nhóm sau:
+                <strong>Bối cảnh v2 (Suy luận vai ẩn):</strong> Đêm mất điện tại khu KTX Bách Khoa,
+                một <strong>Trạm Mục Tiêu</strong> trong hạ tầng đang bị nhắm phá hoại. Máu tối đa &amp;
+                phe của từng sinh viên được <strong>giấu kín tuyệt đối</strong> cho tới khi lật vai hoặc hết trận!
               </p>
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div className="rounded-xl border border-sky-500/35 bg-sky-950/30 p-2.5">
                   <div className="font-bold text-sky-300">🔦 Đội Gác Đèn</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Đưa Chỉ số Tín hiệu lên 6 hoặc hạ toàn bộ Hội Màn Sương.
+                    Quét &amp; gỡ Mạch Quá Tải, niêm phong Cầu Dao &amp; Phát Thanh, hoặc Đối chất đúng từ Vòng 3 để Tạm giữ hết Màn Sương.
                   </p>
                 </div>
                 <div className="rounded-xl border border-rose-500/35 bg-rose-950/30 p-2.5">
                   <div className="font-bold text-rose-300">🌫️ Hội Màn Sương</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Đưa Chỉ số Nhiễu sóng lên 6 hoặc hạ toàn bộ Đội Gác Đèn.
+                    Bí mật gài Mạch Quá Tải tại Trạm Mục Tiêu rồi kích nổ từ vòng sau, hoặc lén lọt tuần tra qua Rạng Sáng.
                   </p>
                 </div>
                 <div className="rounded-xl border border-amber-500/35 bg-amber-950/30 p-2.5">
                   <div className="font-bold text-amber-300">🧭 Kẻ Lang Thang</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Mục tiêu cá nhân độc lập (gom Mảnh Tin, đoán phe, bảo hộ đồng đội).
+                    Hải công bố hồ sơ ở Phát Thanh (V4+), Trang chốt đúng giả thuyết phe, Bình bảo vệ mục tiêu bí mật.
                   </p>
                 </div>
               </div>
 
               <div>
-                <h4 className="font-bold text-amber-200">Cấu trúc 1 lượt chơi (7–8 vòng tối đa):</h4>
+                <h4 className="font-bold text-amber-200">Cấu trúc 1 lượt chơi (6–7 vòng tới Rạng Sáng):</h4>
                 <ol className="mt-1 list-inside list-decimal space-y-1 text-slate-300">
                   <li>
-                    <strong>Di chuyển:</strong> Chọn sang một khu vực khác trong 6 khu vực KTX (Sảnh, Căng tin, Phát thanh, Sân bóng rổ, Hành lang B7, Phòng Cầu dao).
+                    <strong>Di chuyển kề cận:</strong> Bước sang 1 khu vực có đường nối trực tiếp trên bản đồ KTX.
                   </li>
                   <li>
-                    <strong>Điều tra / Rút thẻ:</strong> Rút thẻ <em>Manh mối</em>, <em>Sự kiện</em> hoặc <em>Chiến thuật</em>.
+                    <strong>Khảo sát / Rút thẻ:</strong> Quét thiết bị phòng (hoặc Màn Sương lén gài mạch), hay rút thẻ Điều tra / Sự kiện / Chiến thuật.
                   </li>
                   <li>
-                    <strong>Hành động chiến thuật:</strong> Dùng thẻ trên tay, kích hoạt Kỹ năng nhân vật, Thăm dò/Công kích người cùng khu vực hoặc Kết thúc lượt.
+                    <strong>Suy luận &amp; Chiến thuật:</strong> Điều tra Dụng cụ / Hành tung (luôn khớp 3 phe nên phải ghép manh mối), ghi Sổ Giả Thuyết, Dùng thẻ, Công kích, Đối chất (V3+ — sai chịu 2 vết thương trực tiếp!) hoặc Kích nổ / Công bố hồ sơ.
                   </li>
                 </ol>
               </div>

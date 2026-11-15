@@ -1510,9 +1510,7 @@ export default function HomePage() {
     setBoardGameLobbyOpen(false);
     setBoardGameRulesOpen(false);
     setBoardGameExitConfirmOpen(false);
-    if (boardGameClient.getSnapshot().matchId) {
-      boardGameClient.leaveMatch();
-    }
+    boardGameClient.leaveMatch();
     setFade(true);
     window.setTimeout(() => {
       getHook()?.exitBoardGameClub?.();
@@ -1523,12 +1521,15 @@ export default function HomePage() {
   }, []);
 
   const handleRequestExitBoardGameClub = useCallback(() => {
-    if (boardGameSeatId || bgSnap.matchId) {
+    const hookState = getHook()?.getBoardGameSeatState?.();
+    const liveSeated = hookState ? Boolean(hookState.seatId) : Boolean(boardGameSeatId);
+    const liveSnap = boardGameClient.getSnapshot();
+    if (liveSeated || liveSnap.matchId) {
       setBoardGameExitConfirmOpen(true);
       return;
     }
     exitBoardGameClubFade();
-  }, [boardGameSeatId, bgSnap.matchId, exitBoardGameClubFade]);
+  }, [boardGameSeatId, exitBoardGameClubFade]);
 
   const bgAppearance = useMemo(
     () => ({
@@ -1617,9 +1618,7 @@ export default function HomePage() {
       showToast('Không thể đứng dậy rời ghế khi ván đang diễn ra.');
       return;
     }
-    if (snap.matchId) {
-      boardGameClient.leaveMatch();
-    }
+    boardGameClient.leaveMatch();
     const r = getHook()?.standUpBoardGameSeat?.();
     if (r?.ok) {
       setBoardGameSeatId(null);

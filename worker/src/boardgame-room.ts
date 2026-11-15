@@ -22,6 +22,7 @@ import {
   BOARD_GAME_MAX_SPECTATORS,
   BOARD_GAME_MIN_PLAYERS,
   BOARD_GAME_RECONNECT_HOLD_MS,
+  BOARD_GAME_RULESET_VERSION,
   canTransitionBoardGameStatus,
   sanitizeBoardGameAppearance,
   sanitizeBoardGameChatText,
@@ -44,13 +45,16 @@ import {
   type BoardGameTableId,
 } from '../../shared/contracts/boardgame';
 import {
+  ROLES_BY_ID,
   applyPlayerGameAction,
   applyTimeoutAutoTurn,
   createInitialGameState,
   getActivePlayer,
   getPrivateGameView,
   getPublicGameView,
+  isValidLocationId,
   type AuthoritativeGameState,
+  type AuthoritativePlayerState,
 } from '../../features/boardgame/domain';
 
 export const BG_DIRECTORY_ROOM_NAME = '__lounge_directory__';
@@ -902,8 +906,10 @@ export class BoardGameRoom {
     ) {
       const rows = this.listPlayerRows();
       const engineState = this.loadEngineState(match, rows);
-      if (engineState && !engineState.finished) {
-        applyTimeoutAutoTurn(engineState, nowMs);
+      if (engineState && (!engineState.finished || match.status === 'PLAYING')) {
+        if (!engineState.finished) {
+          applyTimeoutAutoTurn(engineState, nowMs);
+        }
         const nextStatus: BoardGameMatchStatus = engineState.finished ? 'FINISHED' : 'PLAYING';
         const nextDeadline = engineState.finished
           ? null
@@ -918,7 +924,7 @@ export class BoardGameRoom {
           nextStatus,
           nextDeadline,
           nowMs,
-          JSON.stringify({ engineState }),
+          JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
           match.match_id,
         );
         await this.scheduleNextAlarm(nowMs);
@@ -1390,7 +1396,7 @@ export class BoardGameRoom {
       deadlineMs,
       timeoutMs,
       nowMs,
-      JSON.stringify({ engineState }),
+      JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
       match.match_id,
     );
 
@@ -1519,6 +1525,30 @@ export class BoardGameRoom {
       return;
     }
 
+    if (engineState.finished && match.status === 'PLAYING') {
+      const nextRev = match.revision + 1;
+      this.sql.exec('UPDATE match_players SET ready = 0');
+      this.sql.exec(
+        `UPDATE matches
+         SET status = 'FINISHED', revision = ?, turn_deadline_ms = NULL, updated_at_ms = ?, game_state_json = ?
+         WHERE match_id = ?`,
+        nextRev,
+        nowMs,
+        JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
+        match.match_id,
+      );
+      this.broadcastStateSync();
+      await this.syncDirectoryFromMatch();
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId: reqId,
+        ok: false,
+        revision: nextRev,
+        reason: engineState.winReason ?? 'Phiên ván cũ đã được khép để nâng cấp Luật v2.',
+      });
+      return;
+    }
+
     const res = applyPlayerGameAction(
       engineState,
       player.player_id,
@@ -1560,7 +1590,7 @@ export class BoardGameRoom {
       newRevision,
       nextDeadline,
       nowMs,
-      JSON.stringify({ engineState }),
+      JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
       match.match_id,
     );
 
@@ -1769,6 +1799,129 @@ export class BoardGameRoom {
     await storage.setAlarm(earliest);
   }
 
+  private adaptLegacyEngineState(
+    match: MatchDbRow,
+    rawEngine: Record<string, unknown>,
+    playerRows?: readonly MatchPlayerDbRow[],
+  ): AuthoritativeGameState {
+    const fallbackRole = ROLES_BY_ID['gac-ky-thuat'];
+    const rawPlayers = Array.isArray(rawEngine.players) ? rawEngine.players : [];
+    const mappedPlayers: AuthoritativePlayerState[] = rawPlayers.map((entry, idx) => {
+      const p = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>;
+      const rawRoleId = typeof p.roleId === 'string' && p.roleId in ROLES_BY_ID ? p.roleId : fallbackRole.id;
+      const roleDef = ROLES_BY_ID[rawRoleId as keyof typeof ROLES_BY_ID] ?? fallbackRole;
+      const maxHp = typeof p.maxHp === 'number' && p.maxHp > 0 ? p.maxHp : roleDef.maxHp;
+      const hp = typeof p.hp === 'number' ? Math.max(0, Math.min(maxHp, p.hp)) : maxHp;
+      const loc =
+        typeof p.location === 'string' && isValidLocationId(p.location) ? p.location : 'lobby';
+      const playerId = typeof p.playerId === 'string' ? p.playerId : `legacy-${idx}`;
+      return {
+        playerId,
+        displayName: typeof p.displayName === 'string' ? p.displayName : `Sinh viên ${idx + 1}`,
+        seatIndex: typeof p.seatIndex === 'number' ? p.seatIndex : idx,
+        appearance: sanitizeBoardGameAppearance(p.appearance),
+        roleId: roleDef.id,
+        faction: roleDef.faction,
+        hp,
+        maxHp,
+        shield: typeof p.shield === 'number' ? p.shield : 0,
+        accessTag: roleDef.accessTag,
+        traceTag: roleDef.traceTag,
+        location: loc,
+        visitedLocations: [loc],
+        recentMoves: [],
+        technicalActionRounds: [],
+        plantedDecoyRounds: [],
+        dealtDamageRounds: [],
+        metPlayerIds: [],
+        verifiedSceneLocations: [],
+        alive: typeof p.alive === 'boolean' ? p.alive : hp > 0,
+        detained: false,
+        connected: Boolean(p.connected),
+        revealed: true,
+        skillUsed: Boolean(p.skillUsed),
+        covertSkillUsed: false,
+        confrontUsed: false,
+        healBlockedNextTurn: false,
+        bodyguardActive: false,
+        wardPlayerId: null,
+        wardProtectionsCount: 0,
+        sacrificedForWard: false,
+        hypotheses: [],
+        hand: [],
+        evidenceList: [],
+        privateNotes: [],
+      };
+    });
+
+    if (playerRows) {
+      const connById = new Map<string, boolean>();
+      for (const row of playerRows) {
+        connById.set(row.player_id, row.connected === 1);
+      }
+      for (const ep of mappedPlayers) {
+        const isConn = connById.get(ep.playerId);
+        if (typeof isConn === 'boolean') ep.connected = isConn;
+      }
+    }
+
+    return {
+      rulesetVersion: 2,
+      matchId: typeof rawEngine.matchId === 'string' ? rawEngine.matchId : match.match_id,
+      seed: typeof rawEngine.seed === 'number' ? rawEngine.seed : 1,
+      rngState: typeof rawEngine.rngState === 'number' ? rawEngine.rngState : 1,
+      round: typeof rawEngine.round === 'number' ? rawEngine.round : 1,
+      maxRounds: typeof rawEngine.maxRounds === 'number' ? rawEngine.maxRounds : 6,
+      secretSabotageLocation: 'breaker',
+      sabotagePlanted: false,
+      sabotagePlantedRound: null,
+      sabotagePlantedByPlayerId: null,
+      sabotageArmed: false,
+      plotDetonated: false,
+      disarmedCount: 0,
+      breakerSealed: false,
+      radioSealed: false,
+      falseAccusationCount: 0,
+      dossierPublishedBy: null,
+      tamperedLocations: [],
+      tamperHistoryByLocation: {
+        lobby: [],
+        radio: [],
+        breaker: [],
+        canteen: [],
+        corridor: [],
+        court: [],
+      },
+      turnOrder: mappedPlayers.map((p) => p.playerId),
+      activeTurnIdx: 0,
+      turnPhase: 'ENDED',
+      actionUsedThisTurn: true,
+      hypothesisUpdatedThisTurn: true,
+      blackoutLocation: null,
+      blackoutRoundsLeft: 0,
+      lastVisitorByLocation: {
+        lobby: null,
+        radio: null,
+        breaker: null,
+        canteen: null,
+        corridor: null,
+        court: null,
+      },
+      players: mappedPlayers,
+      decks: { clue: [], event: [], tactic: [] },
+      discards: { clue: [], event: [], tactic: [] },
+      publicLog: Array.isArray(rawEngine.publicLog) ? rawEngine.publicLog.slice(-20) : [],
+      highlights: [],
+      winnerLabel: 'Phiên v1 đã khép — Sẵn sàng Luật v2',
+      winnerFaction: null,
+      winnerPlayerIds: [],
+      winReason:
+        'Bóng Đêm KTX vừa nâng cấp lên Luật v2 (Suy luận vai ẩn). Phiên cũ đã được khép an toàn; hãy bấm Ván mới để chơi theo luật mới.',
+      finished: true,
+      seqCounter: typeof rawEngine.seqCounter === 'number' ? rawEngine.seqCounter : 0,
+    };
+  }
+
   private loadEngineState(
     match: MatchDbRow,
     playerRows?: readonly MatchPlayerDbRow[],
@@ -1776,6 +1929,14 @@ export class BoardGameRoom {
     const parsedState = parseJsonObject(match.game_state_json);
     const rawEngine = parsedState?.engineState;
     if (!rawEngine || typeof rawEngine !== 'object') return null;
+    const rawRecord = rawEngine as Record<string, unknown>;
+    const outerVersion = parsedState?.rulesetVersion;
+    if (
+      outerVersion !== BOARD_GAME_RULESET_VERSION ||
+      rawRecord.rulesetVersion !== BOARD_GAME_RULESET_VERSION
+    ) {
+      return this.adaptLegacyEngineState(match, rawRecord, playerRows);
+    }
     const engineState = rawEngine as AuthoritativeGameState;
     if (playerRows && Array.isArray(engineState.players)) {
       const connById = new Map<string, boolean>();
