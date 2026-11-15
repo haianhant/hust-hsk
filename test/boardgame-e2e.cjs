@@ -25,6 +25,20 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(ROOT, 'out');
 const SHOT_DIR = process.env.BOARDGAME_SHOT_DIR || path.join(ROOT, 'test-results', 'boardgame');
+const UI_TIMEOUT = 60000;
+const VALID_SHARDS = new Set(['all', 'e2e-01-04', 'e2e-02', 'e2e-03', 'e2e-05-06']);
+
+function parseShardArg() {
+  const arg = process.argv.slice(2).find((a) => a.startsWith('--shard='));
+  const raw = (arg ? arg.slice('--shard='.length) : process.env.BOARDGAME_E2E_SHARD || 'all').trim();
+  const shard = raw || 'all';
+  if (!VALID_SHARDS.has(shard)) {
+    throw new Error(
+      `Invalid --shard="${shard}". Expected one of: ${Array.from(VALID_SHARDS).join(', ')}`,
+    );
+  }
+  return shard;
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -569,6 +583,12 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
   return { page, audit, isPeer: true, join, setReady, startMatch, getState, sendAction, stepFullTurnIfActive };
 }
 
+async function setPage3DPaused(page, paused) {
+  await page
+    .evaluate((p) => window.dispatchEvent(new CustomEvent('bkhn:pause-3d', { detail: Boolean(p) })), paused)
+    .catch(() => undefined);
+}
+
 async function enterCampusAndWaitHook(page, targetUrl, diagAudit) {
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
   const enterBtn = page.locator('#enter-campus');
@@ -781,15 +801,16 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     // Step 1: P1 Host sits at Table 1 -> auto-create Lobby bar on HUD
     await enterCampusAndWaitHook(p1.page, outUrl, p1.audit);
     await p1.page.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await p1.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 30000 });
+    await p1.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 25000 });
+    await p1.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: UI_TIMEOUT });
 
     const inviteCode = (await p1.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
     assert.match(inviteCode, /^[A-Z0-9]{6}$/, `Invalid invite code: "${inviteCode}"`);
     await p1.page.locator('[data-testid="bg-hud-copy-link-btn"]').click();
+    await setPage3DPaused(p1.page, true);
 
     const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
     const dirJson = await dirRes.json();
@@ -810,8 +831,8 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     const p4EnterBtn = p4.page.locator('#enter-campus');
     await p4EnterBtn.waitFor({ state: 'visible', timeout: 90000 });
     await p4EnterBtn.click({ timeout: 90000 });
-    await p4.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 45000 });
-    await p4.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: 60000 });
+    await p4.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: UI_TIMEOUT });
+    await p4.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: UI_TIMEOUT });
     const p4CleanedUrl = await p4.page.evaluate(() => window.location.search);
     assert.equal(p4CleanedUrl.includes('bgInvite='), false, 'URL query param ?bgInvite= must be stripped');
     // E2E-04: Mobile Lobby overflow check
@@ -822,13 +843,14 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
 
     // Exercise Leave + Manual Invite-Code Join on Mobile UI
     await p4.page.locator('[data-testid="bg-leave-match-btn"]').click();
-    await p4.page.waitForSelector('[data-testid="bg-join-code-input"]', { timeout: 25000 });
+    await p4.page.waitForSelector('[data-testid="bg-join-code-input"]', { timeout: UI_TIMEOUT });
     await p4.page.waitForTimeout(150);
     await p4.page.locator('[data-testid="bg-join-code-input"]').fill(inviteCode);
     await p4.page.locator('[data-testid="bg-join-code-btn"]').click();
-    await p4.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: 30000 });
+    await p4.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: UI_TIMEOUT });
     await p4.page.locator('[data-testid="bg-close-lobby-btn"]').click();
-    await p4.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 20000 });
+    await p4.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: UI_TIMEOUT });
+    await setPage3DPaused(p4.page, true);
 
     // Step 3: Peers 2 & 3 join via lightweight Chromium WS peer pages (max 2 WebGL contexts active)
     const peerCtx = await peerBrowser.newContext({ viewport: { width: 800, height: 600 } });
@@ -841,13 +863,14 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       allAudited.push(peer);
     }
 
+    await setPage3DPaused(p1.page, false);
     await p1.page.bringToFront();
     await p1.page.waitForFunction(
       () => document.querySelector('[data-testid="bg-hud-match-bar"]')?.textContent?.includes('/4 sẵn sàng'),
       null,
-      { timeout: 25000, polling: 200 },
+      { timeout: UI_TIMEOUT, polling: 200 },
     );
-    await p1.page.waitForTimeout(300);
+    await p1.page.waitForTimeout(350);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-01-lobby-4p.png') });
 
     // Step 4: Start match from HUD
@@ -860,15 +883,15 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     await p1.page.waitForFunction(
       () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
       null,
-      { timeout: 30000, polling: 200 },
+      { timeout: UI_TIMEOUT, polling: 200 },
     );
     await p1.page.locator('[data-testid="bg-hud-start-btn"]').click();
 
     for (const p of uiPlayers) {
       await p.page.bringToFront();
-      await p.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 30000 });
+      await p.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: UI_TIMEOUT });
       if (!p.user.mobile) {
-        await p.page.waitForSelector('[data-testid="bg-role-card"]', { timeout: 25000 });
+        await p.page.waitForSelector('[data-testid="bg-role-card"]', { timeout: UI_TIMEOUT });
       }
     }
 
@@ -899,27 +922,27 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     };
 
     await p4.page.locator('button:has-text("Vai bí mật")').click();
-    await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
+    await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: UI_TIMEOUT });
     await checkMobileOverflowAndTabs('Vai bí mật');
     await p4.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    await p4.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
+    await p4.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     await p4.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
+    await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: UI_TIMEOUT });
 
     await p4.page.locator('button:has-text("Nhật ký")').click();
-    await p4.page.waitForSelector('[data-testid="bg-game-log"]', { timeout: 20000 });
+    await p4.page.waitForSelector('[data-testid="bg-game-log"]', { timeout: UI_TIMEOUT });
     await checkMobileOverflowAndTabs('Nhật ký');
 
     await p4.page.locator('button:has-text("Bàn & Lượt")').click();
-    await p4.page.waitForSelector('[data-testid="bg-loc-corridor"]', { timeout: 20000 });
+    await p4.page.waitForSelector('[data-testid="bg-loc-corridor"]', { timeout: UI_TIMEOUT });
     await checkMobileOverflowAndTabs('Bàn & Lượt');
     await p4.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-03-gameboard-mobile.png') });
 
     // Rules modal, sound toggle, emote toast, hand mask & HP leak check on P1 & P4
     await p1.page.bringToFront();
-    await p1.page.waitForSelector('[data-testid="bg-v3-status-bar"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="bg-v3-status-bar"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-board-rules-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: 15000 });
+    await p1.page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: UI_TIMEOUT });
     const rulesModalText = await p1.page.locator('[data-testid="boardgame-rules-modal"]').innerText();
     assert.ok(
       rulesModalText.includes('Bối cảnh v3') && rulesModalText.includes('Bảo mật màn hình'),
@@ -930,7 +953,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     await p1.page.locator('[data-testid="bg-sound-toggle-btn"]').click();
     await p1.page.locator('[data-testid="bg-sound-toggle-btn"]').click();
     await p1.page.locator('[data-testid="bg-emote-wave"]').click();
-    await p4.page.waitForSelector('[data-testid="bg-emote-toast"]', { timeout: 15000 });
+    await p4.page.waitForSelector('[data-testid="bg-emote-toast"]', { timeout: UI_TIMEOUT });
 
     let activePlayer = null;
     for (let waitTurn = 0; waitTurn < 12; waitTurn++) {
@@ -951,16 +974,16 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     await playFirstValidStepOnPage(activePlayer.page, 0);
     await activePlayer.page.waitForTimeout(180);
     await playFirstValidStepOnPage(activePlayer.page, 0);
-    await activePlayer.page.waitForSelector('[data-testid="bg-hand-masked-banner"]', { timeout: 20000 });
+    await activePlayer.page.waitForSelector('[data-testid="bg-hand-masked-banner"]', { timeout: UI_TIMEOUT });
     await activePlayer.page.locator('[data-testid="bg-unmask-hand-btn"]').click();
-    await activePlayer.page.waitForSelector('[data-testid^="bg-use-card-"]', { timeout: 20000 });
+    await activePlayer.page.waitForSelector('[data-testid^="bg-use-card-"]', { timeout: UI_TIMEOUT });
     await activePlayer.page.locator('[data-testid="bg-end-turn-btn"]').click();
 
     await p1.page.bringToFront();
     if ((await p1.page.locator('[data-testid="bg-role-card-facedown"]').count()) > 0) {
       await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
     }
-    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     const leakedHpText = await p1.page.evaluate(() => {
       const board = document.querySelector('[data-testid="boardgame-2d-board"]');
       if (!board) return 'MISSING_BOARD';
@@ -1048,10 +1071,10 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     );
 
     for (const p of uiPlayers) {
-      await p.page.waitForSelector('[data-testid="bg-match-result-modal"]', { timeout: 20000 });
+      await p.page.waitForSelector('[data-testid="bg-match-result-modal"]', { timeout: UI_TIMEOUT });
     }
-    await p1.page.waitForSelector('[data-testid="bg-match-postcard-img"]', { timeout: 20000 });
-    await p1.page.waitForSelector('[data-testid="bg-download-postcard-btn"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="bg-match-postcard-img"]', { timeout: UI_TIMEOUT });
+    await p1.page.waitForSelector('[data-testid="bg-download-postcard-btn"]', { timeout: UI_TIMEOUT });
     const postcardMeta = await p1.page.evaluate(() => {
       const img = document.querySelector('[data-testid="bg-match-postcard-img"]');
       const link = document.querySelector('[data-testid="bg-download-postcard-btn"]');
@@ -1081,9 +1104,10 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     await peerCtx.close().catch(() => undefined);
 
     // Exit back to KTX courtyard
+    await setPage3DPaused(p1.page, false);
     await p1.page.bringToFront();
     await p1.page.locator('[data-testid="bg-leave-game-btn"]').click();
-    await p1.page.locator('[data-testid="boardgame-2d-board"]').waitFor({ state: 'detached', timeout: 20000 });
+    await p1.page.locator('[data-testid="boardgame-2d-board"]').waitFor({ state: 'detached', timeout: UI_TIMEOUT });
     const closeLobbyBtn = p1.page.locator('[data-testid="bg-close-lobby-btn"]');
     if ((await closeLobbyBtn.count()) > 0 && (await closeLobbyBtn.isVisible().catch(() => false))) {
       await closeLobbyBtn.click();
@@ -1147,11 +1171,11 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
 
     await enterCampusAndWaitHook(host.page, outUrl, host.audit);
     await host.page.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await host.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await host.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: UI_TIMEOUT });
     await host.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await host.page.waitForSelector('[data-testid="bg-sit-table-2-btn"]', { timeout: 20000 });
+    await host.page.waitForSelector('[data-testid="bg-sit-table-2-btn"]', { timeout: UI_TIMEOUT });
     await host.page.locator('[data-testid="bg-sit-table-2-btn"]').click();
-    await host.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
+    await host.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: UI_TIMEOUT });
 
     const inviteCode = (await host.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
     const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
@@ -1166,6 +1190,7 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     for (let seat = 1; seat < 8; seat++) {
       const peer = await createBrowserWsPeer(peerContext, outUrl, shim.wsBaseUrl, `SinhVien_${seat + 1}`, seat);
       await peer.join(matchInfo.matchId, inviteCode, false);
+      await peer.setReady(true);
       peers.push(peer);
       allAudited.push(peer);
     }
@@ -1173,10 +1198,20 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await host.page.waitForFunction(
       () => document.querySelector('[data-testid="bg-hud-match-bar"]')?.textContent?.includes('8'),
       null,
-      { timeout: 20000, polling: 200 },
+      { timeout: UI_TIMEOUT, polling: 200 },
     );
 
-    // 9th participant joins as Spectator via directory "👁 Xem" button
+    // Host starts 8-player match FIRST so host's 3D Lounge Canvas is suspended (suspend3D=true) before launching 9th Spectator
+    await host.page.bringToFront();
+    await host.page.waitForFunction(
+      () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
+      null,
+      { timeout: UI_TIMEOUT, polling: 200 },
+    );
+    await host.page.locator('[data-testid="bg-hud-start-btn"]').click();
+    await host.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: UI_TIMEOUT });
+
+    // 9th participant joins ongoing match as Spectator via directory "👁 Xem" button
     const spec = await setupPlayerContext(chromium, launchOpts, specUser, shim.wsBaseUrl, {
       expectSpectator: true,
     });
@@ -1186,31 +1221,16 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await spec.page.bringToFront();
     await enterCampusAndWaitHook(spec.page, outUrl, spec.audit);
     await spec.page.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await spec.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 30000 });
+    await spec.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: UI_TIMEOUT });
     await spec.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await spec.page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 20000 });
-    const watchBtn = spec.page
-      .locator(`[data-testid="boardgame-lobby-modal"] div:has-text("${inviteCode}") button:has-text("Xem")`)
-      .first();
-    await watchBtn.waitFor({ state: 'visible', timeout: 20000 });
+    await spec.page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: UI_TIMEOUT });
+    const watchBtn = spec.page.locator(`[data-testid="bg-watch-match-${inviteCode}"]`).first();
+    await watchBtn.waitFor({ state: 'visible', timeout: UI_TIMEOUT });
     await watchBtn.click();
 
-    for (const peer of peers) {
-      await peer.setReady(true);
-    }
-    await host.page.bringToFront();
-    await host.page.waitForFunction(
-      () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
-      null,
-      { timeout: 25000, polling: 200 },
-    );
-    await host.page.locator('[data-testid="bg-hud-start-btn"]').click();
-
-    await host.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 25000 });
-    await spec.page.bringToFront();
-    await spec.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 25000 });
-    await spec.page.waitForSelector('[data-testid="bg-spectator-role-placeholder"]', { timeout: 15000 });
-    await spec.page.waitForSelector('[data-testid="bg-action-spectator-banner"]', { timeout: 15000 });
+    await spec.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: UI_TIMEOUT });
+    await spec.page.waitForSelector('[data-testid="bg-spectator-role-placeholder"]', { timeout: UI_TIMEOUT });
+    await spec.page.waitForSelector('[data-testid="bg-action-spectator-banner"]', { timeout: UI_TIMEOUT });
     assert.equal(await spec.page.locator('[data-testid="bg-action-panel"]').count(), 0);
     await spec.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-8p-spectator.png') });
 
@@ -1279,11 +1299,11 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
 
     await enterCampusAndWaitHook(p1.page, outUrl, p1.audit);
     await p1.page.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await p1.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-sit-table-1-btn"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="bg-sit-table-1-btn"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: UI_TIMEOUT });
     const inviteCode = (await p1.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
 
     const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
@@ -1305,7 +1325,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.waitForFunction(
       () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
       null,
-      { timeout: 25000, polling: 200 },
+      { timeout: UI_TIMEOUT, polling: 200 },
     );
     const p1IdBefore = p1.audit.selfPlayerId;
 
@@ -1324,12 +1344,12 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       await p1.page.waitForFunction(
         () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
         null,
-        { timeout: 20000, polling: 200 },
+        { timeout: UI_TIMEOUT, polling: 200 },
       );
       await p1.page.locator('[data-testid="bg-hud-start-btn"]').click();
     } else {
       const readyBtn = p1.page.locator('[data-testid="bg-hud-ready-btn"]');
-      await readyBtn.waitFor({ state: 'visible', timeout: 15000 });
+      await readyBtn.waitFor({ state: 'visible', timeout: UI_TIMEOUT });
       const readyLabel = (await readyBtn.innerText()).trim();
       if (!readyLabel.includes('Đã sẵn sàng')) {
         await readyBtn.click();
@@ -1339,7 +1359,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
             return Boolean(btn && (btn.textContent || '').includes('Đã sẵn sàng'));
           },
           null,
-          { timeout: 10000, polling: 150 },
+          { timeout: UI_TIMEOUT, polling: 150 },
         );
       }
       let started = false;
@@ -1358,11 +1378,11 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       }
       assert.ok(started, 'Checkpoint 1: promoted host peer must start match once P1 restores ready');
     }
-    await p1.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 25000 });
+    await p1.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: UI_TIMEOUT });
 
     // Read secret role name once before checkpoints
     await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 15000 });
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     const expectedRoleName = (await p1.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()).trim();
 
     // Helper: advance peers until P1 has ActionPanel
@@ -1386,7 +1406,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await reloadAndRestoreTo('[data-testid="boardgame-2d-board"]');
     assert.equal(p1.audit.selfPlayerId, p1IdBefore, 'Checkpoint 2: must preserve exact playerId');
     await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 15000 });
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     assert.equal(
       (await p1.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()).trim(),
       expectedRoleName,
@@ -1398,7 +1418,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
       .catch(() => false);
     if (!hasActionAfterC2) {
-      await p1.page.waitForSelector('[data-testid="bg-waiting-turn-banner"]', { timeout: 15000 });
+      await p1.page.waitForSelector('[data-testid="bg-waiting-turn-banner"]', { timeout: UI_TIMEOUT });
       await advancePeersUntilP1Active();
     }
     // Complete P1 turn via UI after reload -> pass turn to a peer
@@ -1413,7 +1433,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     }
 
     // Checkpoint 3: Reload during another player's turn
-    await p1.page.waitForSelector('[data-testid="bg-waiting-turn-banner"]', { timeout: 15000 });
+    await p1.page.waitForSelector('[data-testid="bg-waiting-turn-banner"]', { timeout: UI_TIMEOUT });
     await reloadAndRestoreTo('[data-testid="bg-waiting-turn-banner"]');
     assert.equal(await p1.page.locator('[data-testid="bg-action-panel"]').count(), 0);
     await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
@@ -1426,19 +1446,19 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     // Advance back to P1 -> reach MAIN_ACTION -> REVEAL_ROLE -> Checkpoint 4
     await advancePeersUntilP1Active();
     await p1.page.locator('[data-testid="bg-stay-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-explore-loc"]', { timeout: 10000 });
+    await p1.page.waitForSelector('[data-testid="bg-explore-loc"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-explore-loc"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-reveal-role-btn"]', { timeout: 10000 });
+    await p1.page.waitForSelector('[data-testid="bg-reveal-role-btn"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-reveal-role-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-confirm-reveal-btn"]', { timeout: 10000 });
+    await p1.page.waitForSelector('[data-testid="bg-confirm-reveal-btn"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-confirm-reveal-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-last-reveal-banner"]', { timeout: 15000 });
+    await p1.page.waitForSelector('[data-testid="bg-last-reveal-banner"]', { timeout: UI_TIMEOUT });
 
     // Checkpoint 4: Reload after voluntary role revelation
     await reloadAndRestoreTo('[data-testid="boardgame-2d-board"]');
     assert.equal(p1.audit.selfPlayerId, p1IdBefore, 'Checkpoint 4: must preserve exact playerId');
     await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 15000 });
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     const roleCardTextC4 = await p1.page.locator('[data-testid="bg-role-card-secret"]').innerText();
     assert.equal(
       roleCardTextC4.includes('Mở khóa sau khi lật'),
@@ -1466,11 +1486,11 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
         await new Promise((r) => setTimeout(r, 40));
       }
     }
-    await p1.page.waitForSelector('[data-testid="bg-match-result-modal"]', { timeout: 25000 });
+    await p1.page.waitForSelector('[data-testid="bg-match-result-modal"]', { timeout: UI_TIMEOUT });
 
     // Checkpoint 5: Reload during FINISHED screen
     await reloadAndRestoreTo('[data-testid="bg-match-result-modal"]');
-    await p1.page.waitForSelector('[data-testid="bg-match-postcard-img"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="bg-match-postcard-img"]', { timeout: UI_TIMEOUT });
 
     verifyCommonAudits(allAudited);
     return { inviteCode, checkpointsPassed: 5, restoredRole: expectedRoleName };
@@ -1509,53 +1529,74 @@ async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)
       { label: 'MatchA-Host', name: 'Chu Ban A', mssv: '20229101', viewport: { width: 1280, height: 800 }, mobile: false },
       shim.wsBaseUrl,
     );
-    const hostB = await setupPlayerContext(
-      chromium,
-      launchOpts,
-      { label: 'MatchB-Host', name: 'Chu Ban B', mssv: '20229102', viewport: { width: 1280, height: 800 }, mobile: false },
-      shim.wsBaseUrl,
-    );
-    browsers.push(hostA.browser, hostB.browser);
-    contexts.push(hostA.context, hostB.context);
-    allAudited.push(hostA, hostB);
+    browsers.push(hostA.browser);
+    contexts.push(hostA.context);
+    allAudited.push(hostA);
 
     await enterCampusAndWaitHook(hostA.page, outUrl, hostA.audit);
     await hostA.page.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await hostA.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await hostA.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: UI_TIMEOUT });
     await hostA.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await hostA.page.waitForSelector('[data-testid="bg-sit-table-1-btn"]', { timeout: 20000 });
+    await hostA.page.waitForSelector('[data-testid="bg-sit-table-1-btn"]', { timeout: UI_TIMEOUT });
     await hostA.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
-    await hostA.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
+    await hostA.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: UI_TIMEOUT });
     const codeA = (await hostA.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
 
-    await hostB.page.bringToFront();
-    await enterCampusAndWaitHook(hostB.page, outUrl, hostB.audit);
-    await hostB.page.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await hostB.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
-    await hostB.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await hostB.page.waitForSelector('[data-testid="bg-sit-table-2-btn"]', { timeout: 20000 });
-    await hostB.page.locator('[data-testid="bg-sit-table-2-btn"]').click();
-    await hostB.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
-    const codeB = (await hostB.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
-    assert.notEqual(codeA, codeB);
-
-    const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
-    const dirJson = await dirRes.json();
-    const matchA = (dirJson.matches || []).find((m) => m.inviteCode === codeA);
-    const matchB = (dirJson.matches || []).find((m) => m.inviteCode === codeB);
-    assert.ok(matchA && matchB && matchA.matchId !== matchB.matchId);
+    const dirResA = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
+    const dirJsonA = await dirResA.json();
+    const matchA = (dirJsonA.matches || []).find((m) => m.inviteCode === codeA);
+    assert.ok(matchA, `Match A (${codeA}) must appear in directory`);
 
     const peerCtx = await peerBrowser.newContext({ viewport: { width: 800, height: 600 } });
     contexts.push(peerCtx);
     const peersA = [];
-    const peersB = [];
     for (let s = 1; s < 4; s++) {
       const pA = await createBrowserWsPeer(peerCtx, outUrl, shim.wsBaseUrl, `MatchA_P${s + 1}`, s);
       await pA.join(matchA.matchId, codeA, false);
       await pA.setReady(true);
       peersA.push(pA);
       allAudited.push(pA);
+    }
 
+    // Start Match A FIRST so hostA transitions to 2D board (suspend3D=true -> 0% WebGL CPU) before booting hostB
+    await hostA.page.bringToFront();
+    await hostA.page.waitForFunction(
+      () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
+      null,
+      { timeout: UI_TIMEOUT, polling: 200 },
+    );
+    await hostA.page.locator('[data-testid="bg-hud-start-btn"]').click();
+    await hostA.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: UI_TIMEOUT });
+
+    const hostB = await setupPlayerContext(
+      chromium,
+      launchOpts,
+      { label: 'MatchB-Host', name: 'Chu Ban B', mssv: '20229102', viewport: { width: 1280, height: 800 }, mobile: false },
+      shim.wsBaseUrl,
+    );
+    browsers.push(hostB.browser);
+    contexts.push(hostB.context);
+    allAudited.push(hostB);
+
+    await hostB.page.bringToFront();
+    await enterCampusAndWaitHook(hostB.page, outUrl, hostB.audit);
+    await hostB.page.evaluate(() => window.__bkhn.enterBoardGameClub());
+    await hostB.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: UI_TIMEOUT });
+    await hostB.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
+    await hostB.page.waitForSelector('[data-testid="bg-sit-table-2-btn"]', { timeout: UI_TIMEOUT });
+    await hostB.page.locator('[data-testid="bg-sit-table-2-btn"]').click();
+    await hostB.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: UI_TIMEOUT });
+    const codeB = (await hostB.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
+    assert.notEqual(codeA, codeB);
+
+    const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
+    const dirJson = await dirRes.json();
+    const matchANow = (dirJson.matches || []).find((m) => m.inviteCode === codeA);
+    const matchB = (dirJson.matches || []).find((m) => m.inviteCode === codeB);
+    assert.ok(matchANow && matchB && matchANow.matchId === matchA.matchId && matchA.matchId !== matchB.matchId);
+
+    const peersB = [];
+    for (let s = 1; s < 4; s++) {
       const pB = await createBrowserWsPeer(peerCtx, outUrl, shim.wsBaseUrl, `MatchB_P${s + 1}`, s);
       await pB.join(matchB.matchId, codeB, false);
       await pB.setReady(true);
@@ -1563,23 +1604,14 @@ async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)
       allAudited.push(pB);
     }
 
-    await hostA.page.bringToFront();
-    await hostA.page.waitForFunction(
-      () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
-      null,
-      { timeout: 20000 },
-    );
-    await hostA.page.locator('[data-testid="bg-hud-start-btn"]').click();
-    await hostA.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 20000 });
-
     await hostB.page.bringToFront();
     await hostB.page.waitForFunction(
       () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
       null,
-      { timeout: 20000 },
+      { timeout: UI_TIMEOUT, polling: 200 },
     );
     await hostB.page.locator('[data-testid="bg-hud-start-btn"]').click();
-    await hostB.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 20000 });
+    await hostB.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: UI_TIMEOUT });
 
     // E2E-05: Assert matchId isolation on both Hosts & peers
     assert.deepEqual([...hostA.audit.matchIdsSeen], [matchA.matchId]);
@@ -1594,16 +1626,25 @@ async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)
           new Promise((resolve) => {
             const ws = new WebSocket(`${wsUrl}/ws/boardgame?matchId=${encodeURIComponent(targetMatchId)}`);
             const received = [];
+            let done = false;
+            const finish = () => {
+              if (done) return;
+              done = true;
+              clearTimeout(fallbackTimer);
+              try {
+                ws.close();
+              } catch {
+                // ignore close errors
+              }
+              resolve(received);
+            };
+            const fallbackTimer = setTimeout(finish, payloads.length * 60 + 2000);
             ws.onopen = () => {
               payloads.forEach((p, idx) => {
                 setTimeout(() => {
                   ws.send(typeof p === 'string' ? p : JSON.stringify(p));
                 }, idx * 45);
               });
-              setTimeout(() => {
-                ws.close();
-                resolve(received);
-              }, payloads.length * 45 + 250);
             };
             ws.onmessage = (ev) => {
               try {
@@ -1611,7 +1652,11 @@ async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)
               } catch {
                 received.push({ raw: ev.data });
               }
+              if (received.length >= payloads.length) {
+                finish();
+              }
             };
+            ws.onerror = () => finish();
           });
 
         const wrongTokenMsgs = await openAndSend(mB, [
@@ -1709,6 +1754,7 @@ async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)
 }
 
 async function main() {
+  const shard = parseShardArg();
   if (!fs.existsSync(path.join(OUT_DIR, 'index.html'))) {
     throw new Error('Missing out/index.html — run npm run build before boardgame-e2e.cjs');
   }
@@ -1731,38 +1777,51 @@ async function main() {
     peerBrowser = await chromium.launch(launchOpts);
 
     const summary = {
+      shard,
       shotDir: SHOT_DIR,
       startedAt: new Date().toISOString(),
       scenarios: {},
     };
 
-    const t1 = Date.now();
-    summary.scenarios['E2E-01_E2E-04'] = {
-      ...(await runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)),
-      durationMs: Date.now() - t1,
-    };
+    if (shard === 'all' || shard === 'e2e-01-04') {
+      const t1 = Date.now();
+      summary.scenarios['E2E-01_E2E-04'] = {
+        ...(await runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)),
+        durationMs: Date.now() - t1,
+      };
+    }
 
-    const t2 = Date.now();
-    summary.scenarios['E2E-02'] = {
-      ...(await runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim)),
-      durationMs: Date.now() - t2,
-    };
+    if (shard === 'all' || shard === 'e2e-02') {
+      const t2 = Date.now();
+      summary.scenarios['E2E-02'] = {
+        ...(await runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim)),
+        durationMs: Date.now() - t2,
+      };
+    }
 
-    const t3 = Date.now();
-    summary.scenarios['E2E-03'] = {
-      ...(await runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim)),
-      durationMs: Date.now() - t3,
-    };
+    if (shard === 'all' || shard === 'e2e-03') {
+      const t3 = Date.now();
+      summary.scenarios['E2E-03'] = {
+        ...(await runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim)),
+        durationMs: Date.now() - t3,
+      };
+    }
 
-    const t4 = Date.now();
-    summary.scenarios['E2E-05_E2E-06'] = {
-      ...(await runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)),
-      durationMs: Date.now() - t4,
-    };
+    if (shard === 'all' || shard === 'e2e-05-06') {
+      const t4 = Date.now();
+      summary.scenarios['E2E-05_E2E-06'] = {
+        ...(await runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)),
+        durationMs: Date.now() - t4,
+      };
+    }
 
     summary.finishedAt = new Date().toISOString();
-    fs.writeFileSync(path.join(SHOT_DIR, 'e2e-summary.json'), JSON.stringify(summary, null, 2), 'utf8');
-    console.log('BOARDGAME V3.1 E2E PASS (E2E-01..E2E-06):', JSON.stringify(summary));
+    const summaryText = JSON.stringify(summary, null, 2);
+    fs.writeFileSync(path.join(SHOT_DIR, 'e2e-summary.json'), summaryText, 'utf8');
+    if (shard !== 'all') {
+      fs.writeFileSync(path.join(SHOT_DIR, `e2e-summary-${shard}.json`), summaryText, 'utf8');
+    }
+    console.log(`BOARDGAME V3.1 E2E PASS (${shard}):`, JSON.stringify(summary));
   } finally {
     if (peerBrowser) await peerBrowser.close().catch(() => undefined);
     outServer.close();

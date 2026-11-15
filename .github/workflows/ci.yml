@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  verify:
-    name: Typecheck, Unit/Protocol Tests & Static Build
+  build-and-unit:
+    name: Gates 1–6 — Typecheck, Unit/Protocol/Sim & Static Build
     runs-on: ubuntu-latest
 
     steps:
@@ -48,25 +48,120 @@ jobs:
       - name: Gate 6 — Next.js Static Export Build
         run: npm run build
 
-      - name: Install Playwright Chromium for Browser Gates
+      - name: Upload Next Static Export Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-static-out
+          path: out/
+          include-hidden-files: true
+          retention-days: 1
+
+  gate7-pr10b:
+    name: Gate 7 — PR10B Browser Verification Gate
+    needs: build-and-unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download Next Static Export Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: next-static-out
+          path: out
+
+      - name: Verify Static Export Present
+        run: test -f out/index.html
+
+      - name: Install Playwright Chromium
         run: npx playwright-core install --with-deps chromium
 
       - name: Gate 7 — PR10B Browser Verification Gate (No Silent Skip)
         run: PLAYWRIGHT_CORE_PATH=$(pwd)/node_modules/playwright-core npm run test:pr10b
 
-      - name: Gate 8 — Board Game Club & Bóng Đêm KTX Browser E2E (E2E-01..E2E-06)
-        run: npm run test:boardgame:e2e
+  gate8-boardgame-e2e:
+    name: Gate 8 — Board Game E2E (${{ matrix.shard }})
+    needs: build-and-unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [e2e-01-04, e2e-02, e2e-03, e2e-05-06, bg1-smoke]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download Next Static Export Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: next-static-out
+          path: out
+
+      - name: Verify Static Export Present
+        run: test -f out/index.html
+
+      - name: Install Playwright Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Gate 8 — Run Shard ${{ matrix.shard }}
+        run: |
+          if [ "${{ matrix.shard }}" = "bg1-smoke" ]; then
+            node test/boardgame-bg1-smoke.cjs
+          else
+            node test/boardgame-e2e.cjs --shard=${{ matrix.shard }}
+          fi
 
       - name: Upload Board Game E2E Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: boardgame-e2e-artifacts
+          name: boardgame-e2e-${{ matrix.shard }}
           path: test-results/boardgame/
           if-no-files-found: ignore
+          retention-days: 7
+
+  deploy-worker:
+    name: Deploy Cloudflare Worker (hust-hsk-rooms)
+    needs: [build-and-unit, gate7-pr10b, gate8-boardgame-e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Deploy Cloudflare Worker (hust-hsk-rooms)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -78,6 +173,8 @@ jobs:
           fi
           node scripts/deploy-ci.mjs
           curl -fsS https://hust-hsk-rooms.hunganhz179.workers.dev/health
+          echo ""
+          curl -fsS https://hust-hsk-rooms.hunganhz179.workers.dev/api/boardgame/health
           echo ""
           curl -fsS https://hust-hsk-rooms.hunganhz179.workers.dev/api/boardgame/matches
           echo ""

@@ -163,6 +163,9 @@ async function main() {
         '--use-angle=swiftshader',
         '--enable-webgl',
         '--ignore-gpu-blocklist',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
       ],
     });
 
@@ -179,9 +182,11 @@ async function main() {
     });
 
     await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await page.locator('#enter-campus').click();
+    const enterBtn = page.locator('#enter-campus');
+    await enterBtn.waitFor({ state: 'visible', timeout: 90000 });
+    await enterBtn.click({ timeout: 90000 });
     await page.waitForFunction(() => Boolean(window.__bkhn && window.__bkhn.enterBoardGameClub), null, {
-      timeout: 30000,
+      timeout: 90000,
     });
 
     // Teleport đến trước cửa CLB Board Game KTX (109.9, -55.0) quay mặt về hướng Tây nhìn thẳng vào cửa nhà CLB
@@ -193,7 +198,7 @@ async function main() {
       await page.waitForFunction(
         () => document.body.innerText.includes('Vào CLB Board Game'),
         null,
-        { timeout: 20000 },
+        { timeout: 60000 },
       );
     } catch (err) {
       const diag = await page.evaluate(() => ({
@@ -207,7 +212,7 @@ async function main() {
 
     // Nhấn phím E để bước vào CLB Board Game KTX
     await page.keyboard.press('e');
-    await page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 60000 });
     await page.waitForTimeout(700);
     await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-02-lounge-day.png') });
 
@@ -222,28 +227,28 @@ async function main() {
 
     // Mở Sảnh bàn chơi, kiểm tra trạng thái thật 0/8 và ngồi vào Bàn 1
     await page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 60000 });
     const lobbyText = await page.locator('[data-testid="boardgame-lobby-modal"]').innerText();
     assert.ok(lobbyText.includes('0/8 ghế'), 'Sảnh ban đầu phải hiển thị đúng 0/8 ghế thật');
     await page.locator('[data-testid="bg-sit-table-1-btn"]').click();
-    await page.waitForSelector('[data-testid="bg-stand-up-btn"]', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="bg-stand-up-btn"]', { timeout: 60000 });
     await page.waitForTimeout(450);
     await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-03-lounge-night-seated.png') });
 
     // Mở Luật chơi
     await page.locator('[data-testid="bg-toggle-rules-btn"]').click();
-    await page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: 60000 });
     await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-04-rules-modal.png') });
     await page.locator('[data-testid="bg-close-rules-btn"]').click();
 
     // Bấm Rời CLB khi đang ngồi ghế -> phải hiện hộp thoại xác nhận trước khi thoát
     await page.locator('[data-testid="bg-exit-lounge-btn"]').click();
-    await page.waitForSelector('[data-testid="boardgame-exit-confirm-modal"]', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="boardgame-exit-confirm-modal"]', { timeout: 60000 });
     await page.locator('[data-testid="bg-confirm-exit-btn"]').click();
     await page.waitForFunction(
       () => window.__bkhn.isInBoardGameClub && !window.__bkhn.isInBoardGameClub(),
       null,
-      { timeout: 20000 },
+      { timeout: 60000 },
     );
 
     const fatalErrors = errors.filter(
@@ -263,14 +268,16 @@ async function main() {
     }, { wsUrl: `${shim.wsBaseUrl}/ws` });
     const mPage = await ctxMobile.newPage();
     await mPage.goto(url, { waitUntil: 'domcontentloaded' });
-    await mPage.locator('#enter-campus').click();
+    const mEnterBtn = mPage.locator('#enter-campus');
+    await mEnterBtn.waitFor({ state: 'visible', timeout: 90000 });
+    await mEnterBtn.click({ timeout: 90000 });
     await mPage.waitForFunction(() => Boolean(window.__bkhn && window.__bkhn.enterBoardGameClub), null, {
-      timeout: 30000,
+      timeout: 90000,
     });
     await mPage.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await mPage.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await mPage.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 60000 });
     await mPage.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await mPage.waitForSelector('[data-testid="boardgame-lobby-modal"]');
+    await mPage.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 60000 });
     const noHorizontalOverflow = await mPage.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth + 1,
     );

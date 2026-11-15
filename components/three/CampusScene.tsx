@@ -702,8 +702,15 @@ export default function CampusScene({
   const isIndoor = inClassroom || inBoardGameClub || (inLibraryLobby && !isOpenAirRooftop);
   const activeAtm = isIndoor ? (INDOOR_ATMOSPHERE[timeOfDay] ?? ATMOSPHERE.day) : atm;
 
+  const [testPause3D, setTestPause3D] = useState(false);
+
   useEffect(() => {
+    const onPause3D = (e: Event) => {
+      setTestPause3D(Boolean((e as CustomEvent<boolean>).detail));
+    };
+    window.addEventListener('bkhn:pause-3d', onPause3D);
     return () => {
+      window.removeEventListener('bkhn:pause-3d', onPause3D);
       delete (window as unknown as { __bkhn?: unknown }).__bkhn;
     };
   }, []);
@@ -711,7 +718,7 @@ export default function CampusScene({
   return (
     <Canvas
       shadows
-      frameloop={suspend3D ? 'never' : 'always'}
+      frameloop={suspend3D || testPause3D ? 'never' : 'always'}
       dpr={[1, 1.75]}
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.06 }}
       camera={{ fov: 55, near: 0.1, far: 600, position: [-70, 10, 26] }}

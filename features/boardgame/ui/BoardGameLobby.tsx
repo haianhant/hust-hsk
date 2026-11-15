@@ -473,6 +473,7 @@ export default function BoardGameLobby({
                                   )}
                                   <button
                                     type="button"
+                                    data-testid={`bg-watch-match-${m.inviteCode}`}
                                     onClick={() => onJoinDirectoryMatch(m.matchId, m.inviteCode, true)}
                                     className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-medium text-sky-300 hover:bg-slate-700"
                                   >
