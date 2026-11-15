@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import {
+  BOARD_GAME_ABANDONED_MATCH_TTL_MS,
   BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS,
   BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
   BOARD_GAME_FINISHED_TTL_MS,
@@ -21,6 +22,7 @@ import {
   BOARD_GAME_MAX_PLAYERS,
   BOARD_GAME_MAX_SPECTATORS,
   BOARD_GAME_MIN_PLAYERS,
+  BOARD_GAME_PROTOCOL_VERSION,
   BOARD_GAME_RECONNECT_HOLD_MS,
   BOARD_GAME_RULESET_VERSION,
   canTransitionBoardGameStatus,
@@ -35,6 +37,8 @@ import {
   sanitizeInviteCode,
   seatIndexToSeatId,
   isValidBoardGameEmote,
+  validateBoardGameActionPayload,
+  validateBoardGameClientMessage,
   type BoardGameActionPayload,
   type BoardGameLobbyPlayerView,
   type BoardGameMatchStatus,
@@ -56,6 +60,7 @@ import {
   type AuthoritativeGameState,
   type AuthoritativePlayerState,
 } from '../../features/boardgame/domain';
+import { logBoardGameEvent } from './boardgame-observability';
 
 export const BG_DIRECTORY_ROOM_NAME = '__lounge_directory__';
 export const BG_WS_FENCE_CLOSE_CODE = 4001;
@@ -64,9 +69,30 @@ const MIN_ACTION_INTERVAL_MS = 25;
 const EMOTE_COOLDOWN_MS = 1500;
 const WINDOW_MS = 2000;
 const MAX_MSGS_PER_WINDOW = 25;
+const MAX_JOINS_PER_WINDOW = 5;
+const PROD_MIN_TURN_TIMEOUT_MS = 15_000;
+const PROD_MAX_TURN_TIMEOUT_MS = 90_000;
+const TEST_MIN_TURN_TIMEOUT_MS = 1_500;
+const TEST_MAX_TURN_TIMEOUT_MS = 120_000;
+const utf8Encoder = new TextEncoder();
 
 export interface BoardGameEnv {
   BOARD_GAME_ROOM?: DurableObjectNamespace;
+  ENVIRONMENT?: string;
+  ALLOW_SHORT_TURN_TIMEOUT?: string;
+}
+
+export function clampBoardGameTurnTimeoutMs(
+  rawTimeout: unknown,
+  env?: Pick<BoardGameEnv, 'ALLOW_SHORT_TURN_TIMEOUT'>,
+): number {
+  const allowShort = env?.ALLOW_SHORT_TURN_TIMEOUT === '1';
+  const minMs = allowShort ? TEST_MIN_TURN_TIMEOUT_MS : PROD_MIN_TURN_TIMEOUT_MS;
+  const maxMs = allowShort ? TEST_MAX_TURN_TIMEOUT_MS : PROD_MAX_TURN_TIMEOUT_MS;
+  if (typeof rawTimeout !== 'number' || !Number.isFinite(rawTimeout)) {
+    return BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
+  }
+  return Math.max(minMs, Math.min(maxMs, Math.floor(rawTimeout)));
 }
 
 interface MatchDbRow {
@@ -119,6 +145,8 @@ interface BgSocketAttachment {
 interface SocketRateState {
   windowStartMs: number;
   msgCount: number;
+  joinWindowStartMs: number;
+  joinCount: number;
   lastActionMs: number;
   lastChatEmoteMs: number;
 }
@@ -533,7 +561,7 @@ export class BoardGameRoom {
       const inviteCode = sanitizeInviteCode(body.inviteCode);
       const tableId = sanitizeBoardGameTableId(body.tableId);
       const rawTimeout = typeof body.turnTimeoutMs === 'number' ? body.turnTimeoutMs : BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
-      const turnTimeoutMs = Math.max(3000, Math.min(120_000, Math.floor(rawTimeout)));
+      const turnTimeoutMs = clampBoardGameTurnTimeoutMs(rawTimeout, this.env);
       if (!matchId || !inviteCode) {
         return Response.json({ ok: false, error: 'invalid-init-fields' }, { status: 400 });
       }
@@ -558,6 +586,13 @@ export class BoardGameRoom {
         nowMs,
         nowMs,
       );
+      await this.scheduleNextAlarm(nowMs);
+      logBoardGameEvent(this.env, 'MATCH_CREATED', {
+        matchId,
+        tableId,
+        status: 'CREATED',
+        revision: 1,
+      });
       return Response.json({ ok: true, matchId, inviteCode, tableId }, { status: 201 });
     }
 
@@ -686,18 +721,57 @@ export class BoardGameRoom {
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     this.ensureSchema();
     const nowMs = Date.now();
-    const rawStr = typeof message === 'string' ? message : new TextDecoder().decode(message);
-    if (rawStr.length > MAX_WS_PAYLOAD_BYTES) {
-      this.sendError(ws, 'RATE_LIMITED', 'Gói tin vượt quá kích thước cho phép.');
+    const attBefore = this.getAttachment(ws);
+    const byteLength =
+      typeof message === 'string' ? utf8Encoder.encode(message).byteLength : message.byteLength;
+    if (byteLength > MAX_WS_PAYLOAD_BYTES) {
+      logBoardGameEvent(this.env, 'WEBSOCKET_ERROR', {
+        matchId: attBefore?.matchId,
+        playerId: attBefore?.playerId,
+        reason: 'payload-too-large',
+      });
+      this.sendError(ws, 'INVALID_ACTION', 'Gói tin vượt quá kích thước cho phép (8 KB).');
       return;
     }
-    const msg = parseJsonObject(rawStr);
-    if (!msg || typeof msg.type !== 'string') return;
+    const rawStr = typeof message === 'string' ? message : new TextDecoder().decode(message);
+    let parsedRaw: unknown;
+    try {
+      parsedRaw = JSON.parse(rawStr);
+    } catch {
+      logBoardGameEvent(this.env, 'WEBSOCKET_ERROR', {
+        matchId: attBefore?.matchId,
+        playerId: attBefore?.playerId,
+        reason: 'malformed-json',
+      });
+      this.sendError(ws, 'INVALID_ACTION', 'Thông điệp WebSocket không phải JSON hợp lệ.');
+      return;
+    }
+
+    const validation = validateBoardGameClientMessage(parsedRaw);
+    if (!validation.ok) {
+      logBoardGameEvent(this.env, 'ACTION_REJECTED', {
+        matchId: attBefore?.matchId,
+        playerId: attBefore?.playerId,
+        code: validation.code,
+        reason: validation.error,
+      });
+      this.sendError(
+        ws,
+        validation.code,
+        validation.error,
+        validation.requestId ? { requestId: validation.requestId } : undefined,
+      );
+      return;
+    }
+    const validatedMsg = validation.message;
+    const msg = validatedMsg as unknown as Record<string, unknown>;
 
     // Rate limit per socket
     const rl = this.rateMap.get(ws) ?? {
       windowStartMs: nowMs,
       msgCount: 0,
+      joinWindowStartMs: nowMs,
+      joinCount: 0,
       lastActionMs: 0,
       lastChatEmoteMs: 0,
     };
@@ -705,18 +779,29 @@ export class BoardGameRoom {
       rl.windowStartMs = nowMs;
       rl.msgCount = 0;
     }
+    if (nowMs - rl.joinWindowStartMs > WINDOW_MS) {
+      rl.joinWindowStartMs = nowMs;
+      rl.joinCount = 0;
+    }
     rl.msgCount += 1;
     this.rateMap.set(ws, rl);
     if (rl.msgCount > MAX_MSGS_PER_WINDOW) {
+      logBoardGameEvent(this.env, 'RATE_LIMITED', {
+        matchId: attBefore?.matchId,
+        playerId: attBefore?.playerId,
+        reason: 'ws-msg-burst',
+      });
       this.sendError(ws, 'RATE_LIMITED', 'Bạn gửi yêu cầu quá nhanh, vui lòng chậm lại.');
       return;
     }
 
-    if (msg.type === 'BG_PING') {
+    if (validatedMsg.type === 'BG_PING') {
       this.send(ws, {
         type: 'BG_PONG',
         serverTimeMs: nowMs,
-        ...(typeof msg.clientTimeMs === 'number' ? { clientTimeMs: msg.clientTimeMs } : {}),
+        ...(typeof validatedMsg.clientTimeMs === 'number'
+          ? { clientTimeMs: validatedMsg.clientTimeMs }
+          : {}),
       });
       return;
     }
@@ -724,7 +809,7 @@ export class BoardGameRoom {
     // Directory socket subscription
     const att = this.getAttachment(ws);
     if (att?.isDirectory) {
-      if (msg.type === 'BG_DIRECTORY_REFRESH') {
+      if (validatedMsg.type === 'BG_DIRECTORY_REFRESH') {
         this.send(ws, {
           type: 'BG_DIRECTORY_SYNC',
           matches: this.queryDirectoryMatches(nowMs),
@@ -733,7 +818,21 @@ export class BoardGameRoom {
       return;
     }
 
-    if (msg.type === 'BG_JOIN') {
+    if (validatedMsg.type === 'BG_JOIN') {
+      rl.joinCount += 1;
+      if (rl.joinCount > MAX_JOINS_PER_WINDOW) {
+        logBoardGameEvent(this.env, 'RATE_LIMITED', {
+          matchId: validatedMsg.matchId,
+          reason: 'join-burst',
+        });
+        this.sendError(
+          ws,
+          'RATE_LIMITED',
+          'Gửi yêu cầu tham gia/kết nối lại quá nhanh, vui lòng chờ giây lát.',
+          validation.requestId ? { requestId: validation.requestId } : undefined,
+        );
+        return;
+      }
       // Serialize joins through async promise chain so SHA-256 + seat check stay race-free
       const prev = this.joinChain;
       let release!: () => void;
@@ -764,7 +863,19 @@ export class BoardGameRoom {
 
     const reqId = sanitizeBoardGameRequestId(msg.requestId) ?? undefined;
 
-    if (msg.type === 'BG_LEAVE') {
+    if (validatedMsg.type === 'BG_REQUEST_SYNC') {
+      const syncMsg = this.buildStateSyncPayload(att.playerId, att.isSpectator);
+      if (syncMsg) {
+        this.send(ws, syncMsg);
+      } else {
+        this.sendError(ws, 'MATCH_NOT_FOUND', 'Phòng chơi không còn tồn tại.', {
+          requestId: reqId,
+        });
+      }
+      return;
+    }
+
+    if (validatedMsg.type === 'BG_LEAVE') {
       await this.handleLeave(ws, player);
       return;
     }
@@ -779,7 +890,7 @@ export class BoardGameRoom {
       return;
     }
 
-    if (msg.type === 'BG_CHAT_EMOTE') {
+    if (validatedMsg.type === 'BG_CHAT_EMOTE') {
       if (nowMs - rl.lastChatEmoteMs < EMOTE_COOLDOWN_MS) {
         this.sendError(ws, 'RATE_LIMITED', 'Biểu cảm/nhắn tin đang hồi, chờ giây lát.', {
           requestId: reqId,
@@ -801,12 +912,12 @@ export class BoardGameRoom {
       return;
     }
 
-    if (msg.type === 'BG_GAME_ACTION') {
+    if (validatedMsg.type === 'BG_GAME_ACTION') {
       await this.handleGameAction(ws, player, msg, reqId, rl, nowMs);
       return;
     }
 
-    switch (msg.type) {
+    switch (validatedMsg.type) {
       case 'BG_SELECT_SEAT': {
         await this.handleSelectSeat(ws, player, sanitizeBoardGameSeatIndex(msg.seatIndex), reqId);
         return;
@@ -816,13 +927,13 @@ export class BoardGameRoom {
         return;
       }
       case 'BG_SET_READY': {
-        await this.handleSetReady(ws, player, Boolean(msg.ready), reqId);
+        await this.handleSetReady(ws, player, validatedMsg.ready, reqId);
         return;
       }
       case 'BG_START_MATCH': {
         const timeoutOverride =
-          typeof msg.turnTimeoutMs === 'number'
-            ? Math.max(1500, Math.min(120_000, Math.floor(msg.turnTimeoutMs)))
+          typeof validatedMsg.turnTimeoutMs === 'number'
+            ? clampBoardGameTurnTimeoutMs(validatedMsg.turnTimeoutMs, this.env)
             : undefined;
         await this.handleStartMatch(ws, player, reqId, timeoutOverride);
         return;
@@ -851,6 +962,14 @@ export class BoardGameRoom {
       nowMs,
       player.player_id,
     );
+    logBoardGameEvent(this.env, 'PLAYER_DISCONNECTED', {
+      matchId: match.match_id,
+      tableId: match.table_id,
+      playerId: player.player_id,
+      seatIndex: player.seat_index,
+      isSpectator: player.is_spectator === 1,
+      status: match.status,
+    });
 
     if (player.is_spectator === 1) {
       // Remove disconnected spectators cleanly so they don't occupy spectator cap
@@ -889,6 +1008,12 @@ export class BoardGameRoom {
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
+    const att = this.getAttachment(ws);
+    logBoardGameEvent(this.env, 'WEBSOCKET_ERROR', {
+      matchId: att?.matchId,
+      playerId: att?.playerId,
+      reason: 'socket-error-event',
+    });
     await this.webSocketClose(ws);
   }
 
@@ -897,6 +1022,61 @@ export class BoardGameRoom {
     const match = this.getMatchRow();
     if (!match || match.status === 'CLOSED') return;
     const nowMs = Date.now();
+
+    // Expire orphaned CREATED lobbies that never received a player join
+    if (
+      match.status === 'CREATED' &&
+      nowMs - match.created_at_ms >= BOARD_GAME_RECONNECT_HOLD_MS
+    ) {
+      this.sql.exec(
+        'UPDATE matches SET status = ?, updated_at_ms = ? WHERE match_id = ?',
+        'CLOSED',
+        nowMs,
+        match.match_id,
+      );
+      logBoardGameEvent(this.env, 'MATCH_CLEANED_UP', {
+        matchId: match.match_id,
+        tableId: match.table_id,
+        status: 'CLOSED',
+        reason: 'created-orphan-timeout',
+      });
+      await this.syncDirectoryFromMatch();
+      return;
+    }
+
+    // Expire abandoned PLAYING matches when every seated player has disconnected past TTL
+    if (match.status === 'PLAYING') {
+      const disconnAgg = this.sql
+        .exec<{ connected_count: number | null; max_seen: number | null }>(
+          `SELECT
+             SUM(CASE WHEN connected = 1 AND is_spectator = 0 THEN 1 ELSE 0 END) AS connected_count,
+             MAX(CASE WHEN is_spectator = 0 THEN last_seen_ms ELSE NULL END) AS max_seen
+           FROM match_players`,
+        )
+        .one();
+      const connectedPlayers = Number(disconnAgg?.connected_count ?? 0);
+      const maxLastSeen = disconnAgg?.max_seen;
+      if (
+        connectedPlayers === 0 &&
+        typeof maxLastSeen === 'number' &&
+        nowMs - maxLastSeen >= BOARD_GAME_ABANDONED_MATCH_TTL_MS
+      ) {
+        this.sql.exec(
+          'UPDATE matches SET status = ?, turn_deadline_ms = NULL, updated_at_ms = ? WHERE match_id = ?',
+          'CLOSED',
+          nowMs,
+          match.match_id,
+        );
+        logBoardGameEvent(this.env, 'MATCH_CLEANED_UP', {
+          matchId: match.match_id,
+          tableId: match.table_id,
+          status: 'CLOSED',
+          reason: 'all-players-abandoned',
+        });
+        await this.syncDirectoryFromMatch();
+        return;
+      }
+    }
 
     // Auto-advance expired turns during PLAYING so a disconnected/AFK player never stalls the table
     if (
@@ -907,6 +1087,7 @@ export class BoardGameRoom {
       const rows = this.listPlayerRows();
       const engineState = this.loadEngineState(match, rows);
       if (engineState && (!engineState.finished || match.status === 'PLAYING')) {
+        const timedOutPlayerId = getActivePlayer(engineState)?.playerId;
         if (!engineState.finished) {
           applyTimeoutAutoTurn(engineState, nowMs);
         }
@@ -927,6 +1108,24 @@ export class BoardGameRoom {
           JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
           match.match_id,
         );
+        logBoardGameEvent(this.env, 'TURN_TIMEOUT', {
+          matchId: match.match_id,
+          tableId: match.table_id,
+          playerId: timedOutPlayerId,
+          status: nextStatus,
+          round: engineState.round,
+          turnNumber: engineState.turnNumber,
+        });
+        if (engineState.finished) {
+          logBoardGameEvent(this.env, 'MATCH_FINISHED', {
+            matchId: match.match_id,
+            tableId: match.table_id,
+            status: 'FINISHED',
+            round: engineState.round,
+            turnNumber: engineState.turnNumber,
+            winnerFaction: engineState.winnerFaction,
+          });
+        }
         await this.scheduleNextAlarm(nowMs);
         this.broadcastStateSync();
         await this.syncDirectoryFromMatch();
@@ -956,6 +1155,13 @@ export class BoardGameRoom {
             nowMs,
             match.match_id,
           );
+          logBoardGameEvent(this.env, 'MATCH_CLEANED_UP', {
+            matchId: match.match_id,
+            tableId: match.table_id,
+            status: 'CLOSED',
+            cleanedCount: stalePlayers.length,
+            reason: 'lobby-stale-empty',
+          });
           await this.syncDirectoryFromMatch();
           return;
         }
@@ -976,6 +1182,12 @@ export class BoardGameRoom {
         nowMs,
         match.match_id,
       );
+      logBoardGameEvent(this.env, 'MATCH_CLEANED_UP', {
+        matchId: match.match_id,
+        tableId: match.table_id,
+        status: 'CLOSED',
+        reason: 'finished-ttl-expired',
+      });
       await this.syncDirectoryFromMatch();
       return;
     }
@@ -989,21 +1201,37 @@ export class BoardGameRoom {
 
   private async handleJoin(ws: WebSocket, msg: Record<string, unknown>): Promise<void> {
     const match = this.getMatchRow();
+    const reqId = sanitizeBoardGameRequestId(msg.requestId) ?? undefined;
     if (!match || match.status === 'CLOSED') {
-      this.sendError(ws, 'MATCH_NOT_FOUND', 'Phòng chơi không tồn tại hoặc đã đóng.');
+      this.sendError(ws, 'MATCH_NOT_FOUND', 'Phòng chơi không tồn tại hoặc đã đóng.', {
+        requestId: reqId,
+      });
       return;
     }
 
     const nowMs = Date.now();
     const rawInvite = msg.inviteCode !== undefined ? sanitizeInviteCode(msg.inviteCode) : null;
     if (msg.inviteCode !== undefined && rawInvite !== match.invite_code) {
-      this.sendError(ws, 'INVALID_INVITE', 'Mã mời không khớp với phòng này.');
+      this.sendError(ws, 'INVALID_INVITE', 'Mã mời không khớp với phòng này.', {
+        requestId: reqId,
+      });
       return;
     }
 
     const displayName = sanitizeBoardGameName(msg.displayName);
     const appearanceJson = JSON.stringify(sanitizeBoardGameAppearance(msg.appearance));
+    const hasSuppliedTokenRaw =
+      typeof msg.reconnectToken === 'string' && msg.reconnectToken.trim().length > 0;
     const suppliedToken = sanitizeBoardGameToken(msg.reconnectToken);
+    if (hasSuppliedTokenRaw && !suppliedToken) {
+      this.sendError(
+        ws,
+        'UNAUTHORIZED',
+        'Token kết nối lại không đúng định dạng.',
+        { requestId: reqId },
+      );
+      return;
+    }
     const wantsSpectator = Boolean(msg.asSpectator);
     const preferredSeat = sanitizeBoardGameSeatIndex(msg.preferredSeatIndex);
 
@@ -1012,7 +1240,9 @@ export class BoardGameRoom {
       const tokenHash = await sha256Hex(suppliedToken);
       const latestMatch = this.getMatchRow();
       if (!latestMatch || latestMatch.status === 'CLOSED') {
-        this.sendError(ws, 'MATCH_NOT_FOUND', 'Phòng chơi không tồn tại hoặc đã đóng.');
+        this.sendError(ws, 'MATCH_NOT_FOUND', 'Phòng chơi không tồn tại hoặc đã đóng.', {
+          requestId: reqId,
+        });
         return;
       }
       const existing = this.findPlayerByTokenHash(tokenHash);
@@ -1028,6 +1258,9 @@ export class BoardGameRoom {
           nowMs,
           existing.player_id,
         );
+        if (latestMatch.status === 'WAITING' || latestMatch.status === 'READY_CHECK') {
+          this.recomputeLobbyStatus();
+        }
         const connId = randomBase64Url(9);
         this.setAttachment(ws, {
           matchId: latestMatch.match_id,
@@ -1037,6 +1270,7 @@ export class BoardGameRoom {
         });
         this.send(ws, {
           type: 'BG_AUTH_ISSUED',
+          protocolVersion: BOARD_GAME_PROTOCOL_VERSION,
           matchId: latestMatch.match_id,
           inviteCode: latestMatch.invite_code,
           playerId: existing.player_id,
@@ -1045,20 +1279,32 @@ export class BoardGameRoom {
           seatIndex: existing.seat_index,
         });
         this.bumpMatchRevisionOnly(nowMs);
+        await this.scheduleNextAlarm(nowMs);
+        logBoardGameEvent(this.env, 'PLAYER_RECONNECTED', {
+          matchId: latestMatch.match_id,
+          tableId: latestMatch.table_id,
+          playerId: existing.player_id,
+          seatIndex: existing.seat_index,
+          isSpectator: existing.is_spectator === 1,
+          status: latestMatch.status,
+        });
         this.broadcastStateSync();
         await this.syncDirectoryFromMatch();
         return;
       }
-      // If reconnectToken didn't match DB, continue only if match isn't started/full or reject if mismatch?
-      // Security: if client was attempting to reconnect in PLAYING state with an invalid token, reject cleanly.
-      if (latestMatch.status === 'PLAYING' && !wantsSpectator) {
-        this.sendError(
-          ws,
-          'UNAUTHORIZED',
-          'Token kết nối lại không hợp lệ hoặc phiên đã hết hạn.',
-        );
-        return;
-      }
+      // Security: Reject any unknown/expired/wrong-match reconnectToken across ALL match states.
+      logBoardGameEvent(this.env, 'ACTION_REJECTED', {
+        matchId: latestMatch.match_id,
+        code: 'UNAUTHORIZED',
+        reason: 'invalid-reconnect-token',
+      });
+      this.sendError(
+        ws,
+        'UNAUTHORIZED',
+        'Token kết nối lại không hợp lệ, thuộc phòng khác hoặc phiên đã hết hạn.',
+        { requestId: reqId },
+      );
+      return;
     }
 
     // Fresh join path — generate new CSPRNG 256-bit reconnectToken
@@ -1163,9 +1409,20 @@ export class BoardGameRoom {
       isSpectator,
     });
 
+    await this.scheduleNextAlarm(nowMs);
+    logBoardGameEvent(this.env, 'PLAYER_JOINED', {
+      matchId: latestMatch.match_id,
+      tableId: latestMatch.table_id,
+      playerId,
+      seatIndex: assignedSeat,
+      isSpectator,
+      status: this.getMatchRow()?.status ?? nextStatus,
+    });
+
     // Send secret 256-bit reconnectToken UNICAST ONCE exclusively to joining client
     this.send(ws, {
       type: 'BG_AUTH_ISSUED',
+      protocolVersion: BOARD_GAME_PROTOCOL_VERSION,
       matchId: latestMatch.match_id,
       inviteCode: latestMatch.invite_code,
       playerId,
@@ -1401,6 +1658,15 @@ export class BoardGameRoom {
     );
 
     await this.scheduleNextAlarm(nowMs);
+    logBoardGameEvent(this.env, 'MATCH_STARTED', {
+      matchId: match.match_id,
+      tableId: match.table_id,
+      status: 'PLAYING',
+      playerCount: seated.length,
+      revision: match.revision + 1,
+      round: engineState.round,
+      turnNumber: engineState.turnNumber,
+    });
     if (requestId) {
       this.send(ws, {
         type: 'BG_ACTION_ACK',
@@ -1451,6 +1717,19 @@ export class BoardGameRoom {
 
     // 2. Per-socket mutation cadence throttle
     if (nowMs - rl.lastActionMs < MIN_ACTION_INTERVAL_MS) {
+      logBoardGameEvent(this.env, 'RATE_LIMITED', {
+        matchId: match?.match_id,
+        tableId: match?.table_id,
+        playerId: player.player_id,
+        reason: 'action-burst',
+      });
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId: reqId,
+        ok: false,
+        revision: curRev,
+        reason: 'Thao tác quá nhanh.',
+      });
       this.sendError(ws, 'RATE_LIMITED', 'Thao tác quá nhanh.', {
         requestId: reqId,
         revision: curRev,
@@ -1492,21 +1771,29 @@ export class BoardGameRoom {
       return;
     }
 
-    const rawAction = msg.action;
-    if (!rawAction || typeof rawAction !== 'object' || typeof (rawAction as Record<string, unknown>).type !== 'string') {
+    const actionCheck = validateBoardGameActionPayload(msg.action);
+    if (!actionCheck.ok) {
+      logBoardGameEvent(this.env, 'ACTION_REJECTED', {
+        matchId: match.match_id,
+        tableId: match.table_id,
+        playerId: player.player_id,
+        code: 'INVALID_ACTION',
+        reason: actionCheck.error,
+      });
       this.send(ws, {
         type: 'BG_ACTION_ACK',
         requestId: reqId,
         ok: false,
         revision: match.revision,
-        reason: 'Gói lệnh hành động không hợp lệ.',
+        reason: actionCheck.error,
       });
-      this.sendError(ws, 'INVALID_ACTION', 'Gói lệnh hành động không hợp lệ.', {
+      this.sendError(ws, 'INVALID_ACTION', actionCheck.error, {
         requestId: reqId,
         revision: match.revision,
       });
       return;
     }
+    const actionPayload = actionCheck.action;
 
     const playerRows = this.listPlayerRows();
     const engineState = this.loadEngineState(match, playerRows);
@@ -1553,12 +1840,20 @@ export class BoardGameRoom {
     const res = applyPlayerGameAction(
       engineState,
       player.player_id,
-      rawAction as BoardGameActionPayload,
+      actionPayload,
       nowMs,
     );
     if (!res.ok) {
       const reason = res.reason || 'Hành động không hợp lệ ở pha hiện tại.';
       const errCode = reason.includes('Chưa tới lượt') ? 'NOT_YOUR_TURN' : 'INVALID_ACTION';
+      logBoardGameEvent(this.env, 'ACTION_REJECTED', {
+        matchId: match.match_id,
+        tableId: match.table_id,
+        playerId: player.player_id,
+        actionType: actionPayload.type,
+        code: errCode,
+        reason,
+      });
       this.send(ws, {
         type: 'BG_ACTION_ACK',
         requestId: reqId,
@@ -1609,6 +1904,26 @@ export class BoardGameRoom {
     );
 
     await this.scheduleNextAlarm(nowMs);
+    logBoardGameEvent(this.env, 'ACTION_APPLIED', {
+      matchId: match.match_id,
+      tableId: match.table_id,
+      playerId: player.player_id,
+      actionType: actionPayload.type,
+      revision: newRevision,
+      round: engineState.round,
+      turnNumber: engineState.turnNumber,
+      status: nextStatus,
+    });
+    if (engineState.finished) {
+      logBoardGameEvent(this.env, 'MATCH_FINISHED', {
+        matchId: match.match_id,
+        tableId: match.table_id,
+        status: 'FINISHED',
+        round: engineState.round,
+        turnNumber: engineState.turnNumber,
+        winnerFaction: engineState.winnerFaction,
+      });
+    }
     this.send(ws, {
       type: 'BG_ACTION_ACK',
       requestId: reqId,
@@ -1779,8 +2094,29 @@ export class BoardGameRoom {
     }
 
     const candidates: number[] = [];
+    if (match.status === 'CREATED') {
+      candidates.push(Math.max(nowMs + 250, match.created_at_ms + BOARD_GAME_RECONNECT_HOLD_MS));
+    }
     if (match.status === 'PLAYING' && typeof match.turn_deadline_ms === 'number') {
       candidates.push(Math.max(nowMs + 250, match.turn_deadline_ms));
+    }
+    if (match.status === 'PLAYING') {
+      const disconnAgg = this.sql
+        .exec<{ connected_count: number | null; max_seen: number | null }>(
+          `SELECT
+             SUM(CASE WHEN connected = 1 AND is_spectator = 0 THEN 1 ELSE 0 END) AS connected_count,
+             MAX(CASE WHEN is_spectator = 0 THEN last_seen_ms ELSE NULL END) AS max_seen
+           FROM match_players`,
+        )
+        .one();
+      if (
+        Number(disconnAgg?.connected_count ?? 0) === 0 &&
+        typeof disconnAgg?.max_seen === 'number'
+      ) {
+        candidates.push(
+          Math.max(nowMs + 1000, disconnAgg.max_seen + BOARD_GAME_ABANDONED_MATCH_TTL_MS),
+        );
+      }
     }
     if (match.status === 'WAITING' || match.status === 'READY_CHECK' || match.status === 'FINISHED') {
       const disconn = this.sql
@@ -1813,7 +2149,10 @@ export class BoardGameRoom {
     const rawPlayers = Array.isArray(rawEngine.players) ? rawEngine.players : [];
     const mappedPlayers: AuthoritativePlayerState[] = rawPlayers.map((entry, idx) => {
       const p = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>;
-      const rawRoleId = typeof p.roleId === 'string' && p.roleId in ROLES_BY_ID ? p.roleId : fallbackRole.id;
+      const rawRoleId =
+        typeof p.roleId === 'string' && Object.hasOwn(ROLES_BY_ID, p.roleId)
+          ? p.roleId
+          : fallbackRole.id;
       const roleDef = ROLES_BY_ID[rawRoleId as keyof typeof ROLES_BY_ID] ?? fallbackRole;
       const maxHp = typeof p.maxHp === 'number' && p.maxHp > 0 ? p.maxHp : roleDef.maxHp;
       const hp = typeof p.hp === 'number' ? Math.max(0, Math.min(maxHp, p.hp)) : maxHp;
@@ -2023,6 +2362,14 @@ export class BoardGameRoom {
         JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
         match.match_id,
       );
+      logBoardGameEvent(this.env, 'MATCH_FINISHED', {
+        matchId: match.match_id,
+        tableId: match.table_id,
+        status: 'FINISHED',
+        round: engineState.round,
+        turnNumber: engineState.turnNumber,
+        winnerFaction: engineState.winnerFaction,
+      });
     }
     const effectiveMatch = this.getMatchRow() ?? match;
     const publicGame: BoardGamePublicGameView | null = engineState
@@ -2035,6 +2382,7 @@ export class BoardGameRoom {
 
     return {
       type: 'BG_STATE_SYNC',
+      protocolVersion: BOARD_GAME_PROTOCOL_VERSION,
       matchId: effectiveMatch.match_id,
       inviteCode: effectiveMatch.invite_code,
       tableId: effectiveMatch.table_id,

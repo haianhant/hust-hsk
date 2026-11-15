@@ -262,7 +262,7 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   },
 ];
 
-export const ROLES_BY_ID: Record<BoardGameRoleId, CharacterDesign> = {
+export const ROLES_BY_ID: Record<BoardGameRoleId, CharacterDesign> = Object.freeze({
   'gac-ky-thuat': ROLES_CATALOG[0],
   'gac-truc-ban': ROLES_CATALOG[1],
   'gac-radio': ROLES_CATALOG[2],
@@ -272,7 +272,13 @@ export const ROLES_BY_ID: Record<BoardGameRoleId, CharacterDesign> = {
   'lang-anh-san': ROLES_CATALOG[6],
   'lang-quan-sat': ROLES_CATALOG[7],
   'lang-cuu-ho': ROLES_CATALOG[8],
-};
+});
+
+export function getRoleById(roleId: string): CharacterDesign | undefined {
+  return Object.hasOwn(ROLES_BY_ID, roleId)
+    ? ROLES_BY_ID[roleId as BoardGameRoleId]
+    : undefined;
+}
 
 export interface FactionCountSplit {
   lanternGuard: number;

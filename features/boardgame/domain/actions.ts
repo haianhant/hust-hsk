@@ -23,8 +23,8 @@ import {
   resolveVoluntaryReveal,
 } from './effects';
 import {
-  KTX_LOCATION_MAP,
   canPlayerAttackTarget,
+  getLocationDefinition,
   getLocationName,
   isValidLocationId,
   listLegalMovesForPlayer,
@@ -232,7 +232,7 @@ export function applyPlayerGameAction(
     }
 
     if (action.type === 'DRAW_CARD') {
-      const allowed = KTX_LOCATION_MAP[actor.location]?.allowedDecks ?? [];
+      const allowed = getLocationDefinition(actor.location)?.allowedDecks ?? [];
       if (!allowed.includes(action.deck)) {
         return {
           ok: false,

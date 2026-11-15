@@ -471,6 +471,14 @@ function chooseBotAction(pub, priv, profile, mem, rng, turnFlags) {
     if (allowedDecks.includes('equipment') && priv.equipped.length < 2) {
       return { type: 'DRAW_CARD', deck: 'equipment' };
     }
+    if (
+      allowedDecks.includes('event') &&
+      priv.hand.length < 4 &&
+      (invCards.length >= 1 || priv.equipped.length >= 1) &&
+      rng() < 0.3
+    ) {
+      return { type: 'DRAW_CARD', deck: 'event' };
+    }
 
     return rng() < 0.45
       ? { type: 'EXPLORE_LOC' }
@@ -563,6 +571,33 @@ function chooseBotAction(pub, priv, profile, mem, rng, turnFlags) {
         }
         if (c.deck === 'equipment' && c.isConsumable) {
           legalTurnEnders.push({ type: 'USE_EQUIPMENT', cardId: c.id, targetPlayerId: selfPub.playerId });
+        }
+        if (c.deck === 'event') {
+          const ek = getCardEffectKind(c);
+          if (ek === 'ev-locker-audit') {
+            const auditTargets = aliveOthers.filter((p) => p.equipped.length > 0);
+            if (auditTargets.length > 0) {
+              legalTurnEnders.push({
+                type: 'PLAY_EVENT',
+                cardId: c.id,
+                targetPlayerId: pickRandom(auditTargets, rng).playerId,
+              });
+            }
+          } else if (ek === 'ev-power-flicker') {
+            legalTurnEnders.push({
+              type: 'PLAY_EVENT',
+              cardId: c.id,
+              targetLocation: selfPub.location !== 'corridor' ? selfPub.location : 'lobby',
+            });
+          } else if (ek === 'ev-loudspeaker') {
+            legalTurnEnders.push({
+              type: 'PLAY_EVENT',
+              cardId: c.id,
+              targetLocation: selfPub.location,
+            });
+          } else {
+            legalTurnEnders.push({ type: 'PLAY_EVENT', cardId: c.id });
+          }
         }
       }
       const atkTargets = getAttackTargets(pub, priv, selfPub, turnFlags.exploredCourt, turnFlags.revealedThisTurn);
@@ -673,7 +708,63 @@ function chooseBotAction(pub, priv, profile, mem, rng, turnFlags) {
       }
     }
 
-    // F. Attack when a confirmed/high-priority enemy target is in range
+    const pickSituationalEventAction = () => {
+      const calmTea = priv.hand.find((c) => getCardEffectKind(c) === 'ev-calm-tea');
+      if (calmTea && priv.woundsTaken >= 3) {
+        const sameRoomFriend = aliveOthers.find(
+          (p) => p.location === selfPub.location && scoreEnemyPriority(mem, pub, priv, p) < 0.2,
+        );
+        return { type: 'PLAY_EVENT', cardId: calmTea.id, targetPlayerId: sameRoomFriend?.playerId };
+      }
+
+      for (const ev of priv.hand.filter((c) => c.deck === 'event')) {
+        const ek = getCardEffectKind(ev);
+        if (ek === 'ev-locker-audit') {
+          const equippedEnemy = aliveOthers
+            .filter((p) => p.equipped.length > 0 && scoreEnemyPriority(mem, pub, priv, p) > 0.25)
+            .sort((a, b) => scoreEnemyPriority(mem, pub, priv, b) - scoreEnemyPriority(mem, pub, priv, a))[0];
+          if (equippedEnemy) return { type: 'PLAY_EVENT', cardId: ev.id, targetPlayerId: equippedEnemy.playerId };
+        } else if (ek === 'ev-power-flicker') {
+          return {
+            type: 'PLAY_EVENT',
+            cardId: ev.id,
+            targetLocation: selfPub.location !== 'corridor' ? selfPub.location : 'lobby',
+          };
+        } else if (ek === 'ev-loudspeaker') {
+          const crowdedLoc = KTX_LOCATIONS.map((l) => ({
+            id: l.id,
+            count: aliveOthers.filter((p) => p.location === l.id).length,
+          })).sort((a, b) => b.count - a.count)[0];
+          return { type: 'PLAY_EVENT', cardId: ev.id, targetLocation: crowdedLoc.id };
+        } else if (
+          ek === 'ev-midnight-noodles' &&
+          (selfPub.location === 'lobby' || selfPub.location === 'canteen' || priv.woundsTaken > 0)
+        ) {
+          return { type: 'PLAY_EVENT', cardId: ev.id };
+        } else if (ek === 'ev-rain-shower' || ek === 'ev-rumor-wave' || ek === 'ev-curfew-bell') {
+          return { type: 'PLAY_EVENT', cardId: ev.id };
+        }
+      }
+      return null;
+    };
+
+    // F. Decisive attacks (>= 0.85) first; otherwise consider situational events before marginal pokes
+    if (bestAtk && bestAtk.score >= 0.85) {
+      const wBest = estimateTargetWeights(mem, pub, priv, bestAtk.p);
+      const isSureAlly =
+        (priv.faction === 'lantern-guard' && (bestAtk.p.revealedFaction === 'lantern-guard' || wBest.guardProb >= 0.72)) ||
+        (priv.faction === 'mist-order' && bestAtk.p.revealedFaction === 'mist-order');
+
+      if (!isSureAlly) {
+        return { type: 'ATTACK', targetPlayerId: bestAtk.p.playerId };
+      }
+    }
+
+    const highLevEvent = pickSituationalEventAction();
+    if (highLevEvent) {
+      return highLevEvent;
+    }
+
     if (bestAtk) {
       const wBest = estimateTargetWeights(mem, pub, priv, bestAtk.p);
       const isSureAlly =
@@ -692,41 +783,16 @@ function chooseBotAction(pub, priv, profile, mem, rng, turnFlags) {
       }
     }
 
-    // G. Calm Tea / Magnetic Pass / Events
-    const calmTea = priv.hand.find((c) => getCardEffectKind(c) === 'ev-calm-tea');
-    if (calmTea && priv.woundsTaken >= 3) {
-      const sameRoomFriend = aliveOthers.find(
-        (p) => p.location === selfPub.location && scoreEnemyPriority(mem, pub, priv, p) < 0.2,
-      );
-      return { type: 'PLAY_EVENT', cardId: calmTea.id, targetPlayerId: sameRoomFriend?.playerId };
-    }
-
+    // G. Magnetic Pass & Remaining Events
     const magPass = priv.hand.find((c) => getCardEffectKind(c) === 'eq-magnetic-pass')
       || priv.equipped.find((c) => getCardEffectKind(c) === 'eq-magnetic-pass');
     if (magPass && (selfPub.tempShield === 0 || priv.hand.length < 4)) {
       return { type: 'USE_EQUIPMENT', cardId: magPass.id, targetPlayerId: selfPub.playerId };
     }
 
-    for (const ev of priv.hand.filter((c) => c.deck === 'event')) {
-      const ek = getCardEffectKind(ev);
-      if (ek === 'ev-locker-audit') {
-        const equippedEnemy = aliveOthers
-          .filter((p) => p.equipped.length > 0 && scoreEnemyPriority(mem, pub, priv, p) > 0.25)
-          .sort((a, b) => scoreEnemyPriority(mem, pub, priv, b) - scoreEnemyPriority(mem, pub, priv, a))[0];
-        if (equippedEnemy) return { type: 'PLAY_EVENT', cardId: ev.id, targetPlayerId: equippedEnemy.playerId };
-      } else if (ek === 'ev-power-flicker') {
-        return { type: 'PLAY_EVENT', cardId: ev.id, targetLocation: selfPub.location !== 'corridor' ? selfPub.location : 'lobby' };
-      } else if (ek === 'ev-loudspeaker') {
-        const crowdedLoc = KTX_LOCATIONS.map((l) => ({
-          id: l.id,
-          count: aliveOthers.filter((p) => p.location === l.id).length,
-        })).sort((a, b) => b.count - a.count)[0];
-        return { type: 'PLAY_EVENT', cardId: ev.id, targetLocation: crowdedLoc.id };
-      } else if (ek === 'ev-midnight-noodles' && (selfPub.location === 'lobby' || selfPub.location === 'canteen' || priv.woundsTaken > 0)) {
-        return { type: 'PLAY_EVENT', cardId: ev.id };
-      } else if (ek === 'ev-rain-shower' || ek === 'ev-rumor-wave' || ek === 'ev-curfew-bell') {
-        return { type: 'PLAY_EVENT', cardId: ev.id };
-      }
+    const fallbackEvent = pickSituationalEventAction();
+    if (fallbackEvent) {
+      return fallbackEvent;
     }
 
     // Secondary attack fallback when in room with a plausible target
@@ -806,6 +872,40 @@ function runBalanceSimulation(gamesPerCount = 900) {
       skill: 0,
       defend: 0,
     },
+    revealTiming: {
+      roundHistogram: {},
+      revealRoundSum: 0,
+      totalReveals: 0,
+      byFaction: {
+        'lantern-guard': { revealed: { appearances: 0, wins: 0 }, unrevealed: { appearances: 0, wins: 0 } },
+        'mist-order': { revealed: { appearances: 0, wins: 0 }, unrevealed: { appearances: 0, wins: 0 } },
+        wanderer: { revealed: { appearances: 0, wins: 0 }, unrevealed: { appearances: 0, wins: 0 } },
+      },
+    },
+    dawnSubReasons: {
+      eliminationAdvantage: 0,
+      guardWatchAdvantage: 0,
+      mistStealthControl: 0,
+      exactTieGuardDefault: 0,
+      wandererCoWinAttached: 0,
+    },
+    eventFunnel: {
+      openingHandEvents: 0,
+      drawnEventsPhase2: 0,
+      vyRevealBonusEvents: 0,
+      playedEventsTotal: 0,
+      playedEventsByCard: {
+        'ev-01': 0,
+        'ev-02': 0,
+        'ev-03': 0,
+        'ev-04': 0,
+        'ev-05': 0,
+        'ev-06': 0,
+        'ev-07': 0,
+        'ev-08': 0,
+      },
+      unplayedInHandAtEnd: 0,
+    },
     botAccessViolations: 0,
   };
 
@@ -835,6 +935,8 @@ function runBalanceSimulation(gamesPerCount = 900) {
       wandererWinInvolvement: 0,
       avgRounds: 0,
       roundsSum: 0,
+      turnsSum: 0,
+      avgTotalTurns: 0,
       round1Deaths: 0,
       earlyEnds: 0,
     };
@@ -854,6 +956,9 @@ function runBalanceSimulation(gamesPerCount = 900) {
         nowMs: 1_700_000_000_000,
         players: playersInput,
       });
+      for (const p of state.players) {
+        overall.eventFunnel.openingHandEvents += p.hand.filter((c) => c.deck === 'event').length;
+      }
 
       const seatProfiles = playersInput.map((_, i) => PROFILES[(g * 3 + i) % PROFILES.length]);
       const initPrivById = {};
@@ -877,6 +982,7 @@ function runBalanceSimulation(gamesPerCount = 900) {
       };
       let firstElimRound = null;
       const voluntaryRevealsSet = new Set();
+      const revealRoundByPlayerId = {};
 
       while (!state.finished && safetySteps < 700) {
         safetySteps += 1;
@@ -906,6 +1012,7 @@ function runBalanceSimulation(gamesPerCount = 900) {
         const prevTurnPhase = state.turnPhase;
         const prevLoc = active.location;
         const aliveBefore = new Set(state.players.filter((p) => p.alive).map((p) => p.playerId));
+        const activeEventsBefore = active.hand.filter((c) => c.deck === 'event').length;
 
         let action = chooseBotAction(pub, priv, profile, memByPlayer[active.playerId], rng, turnFlags);
         let res = applyPlayerGameAction(
@@ -948,15 +1055,34 @@ function runBalanceSimulation(gamesPerCount = 900) {
             if (prevLoc === 'radio') turnFlags.exploredRadio = true;
             if (prevLoc === 'court') turnFlags.exploredCourt = true;
           }
+          if (prevTurnPhase === 'LOCATION_ACTION' && action.type === 'DRAW_CARD' && action.deck === 'event') {
+            overall.eventFunnel.drawnEventsPhase2 += 1;
+          }
           if (action.type === 'REVEAL_ROLE') {
             turnFlags.revealedThisTurn = true;
             voluntaryRevealsSet.add(active.playerId);
+            const r = Math.min(state.round, state.maxRounds);
+            if (revealRoundByPlayerId[active.playerId] === undefined) {
+              revealRoundByPlayerId[active.playerId] = r;
+              overall.revealTiming.revealRoundSum += r;
+              overall.revealTiming.totalReveals += 1;
+              overall.revealTiming.roundHistogram[r] = (overall.revealTiming.roundHistogram[r] || 0) + 1;
+            }
+            if (active.roleId === 'suong-tin-gia') {
+              const evGain = Math.max(0, active.hand.filter((c) => c.deck === 'event').length - activeEventsBefore);
+              overall.eventFunnel.vyRevealBonusEvents += evGain > 0 ? evGain : 1;
+            }
           }
           if (action.type === 'INVESTIGATE_CARD') overall.actions.investigate += 1;
           else if (action.type === 'ATTACK') overall.actions.attack += 1;
           else if (action.type === 'EQUIP_CARD') overall.actions.equip += 1;
-          else if (action.type === 'PLAY_EVENT') overall.actions.event += 1;
-          else if (action.type === 'USE_SKILL') overall.actions.skill += 1;
+          else if (action.type === 'PLAY_EVENT') {
+            overall.actions.event += 1;
+            overall.eventFunnel.playedEventsTotal += 1;
+            if (Object.hasOwn(overall.eventFunnel.playedEventsByCard, action.cardId)) {
+              overall.eventFunnel.playedEventsByCard[action.cardId] += 1;
+            }
+          } else if (action.type === 'USE_SKILL') overall.actions.skill += 1;
           else if (action.type === 'DEFEND') overall.actions.defend += 1;
         }
 
@@ -993,6 +1119,22 @@ function runBalanceSimulation(gamesPerCount = 900) {
       else if (reason.includes('nhân chứng cuối cùng')) overall.winReasons.wandererSoloTrang += 1;
       else if (reason.includes('Hết ') || reason.includes('rạng sáng') || reason.includes('Giới Nghiêm')) {
         overall.winReasons.dawnTiebreak += 1;
+        if (reason.includes('loại được nhiều đối thủ hơn') || reason.includes('hạ gục được nhiều mục tiêu hơn')) {
+          overall.dawnSubReasons.eliminationAdvantage += 1;
+        } else if (reason.includes('giữ kín tung tích và áp đảo điểm kiểm soát')) {
+          overall.dawnSubReasons.mistStealthControl += 1;
+        } else if (reason.includes('giữ vững chốt trực và tổng số điều tra')) {
+          const vsMatch = reason.match(/\((\d+)\s+vs\s+(\d+)\)/);
+          if (vsMatch && vsMatch[1] === vsMatch[2]) {
+            overall.dawnSubReasons.exactTieGuardDefault += 1;
+          } else {
+            overall.dawnSubReasons.guardWatchAdvantage += 1;
+          }
+        }
+        const winnerSetDawn = new Set(state.winnerPlayerIds);
+        if (state.players.some((p) => p.faction === 'wanderer' && winnerSetDawn.has(p.playerId))) {
+          overall.dawnSubReasons.wandererCoWinAttached += 1;
+        }
       } else if (reason.includes('đều kiệt sức') || reason.includes('cùng lúc')) {
         overall.winReasons.mutualWipeout += 1;
       } else {
@@ -1002,6 +1144,7 @@ function runBalanceSimulation(gamesPerCount = 900) {
       const effectiveRound = Math.min(state.round, state.maxRounds);
       overall.roundsSum += effectiveRound;
       overall.byCount[n].roundsSum += effectiveRound;
+      overall.byCount[n].turnsSum += state.turnNumber;
       overall.minRound = Math.min(overall.minRound, effectiveRound);
       overall.maxRound = Math.max(overall.maxRound, effectiveRound);
       overall.roundHistogram[effectiveRound] = (overall.roundHistogram[effectiveRound] || 0) + 1;
@@ -1027,6 +1170,7 @@ function runBalanceSimulation(gamesPerCount = 900) {
         overall.totalPlayerSeats += 1;
         if (!p.alive) overall.totalEliminations += 1;
         if (voluntaryRevealsSet.has(p.playerId)) overall.totalVoluntaryReveals += 1;
+        overall.eventFunnel.unplayedInHandAtEnd += p.hand.filter((c) => c.deck === 'event').length;
 
         const rStats = overall.byRole[p.roleId];
         rStats.appearances += 1;
@@ -1035,6 +1179,13 @@ function runBalanceSimulation(gamesPerCount = 900) {
         if (won && state.winnerFaction === 'wanderer-solo') rStats.soloWins += 1;
         if (p.alive) rStats.survivedCount += 1;
         if (voluntaryRevealsSet.has(p.playerId)) rStats.voluntaryReveals += 1;
+
+        const fBucket = overall.revealTiming.byFaction[p.faction];
+        if (fBucket) {
+          const revKey = voluntaryRevealsSet.has(p.playerId) ? 'revealed' : 'unrevealed';
+          fBucket[revKey].appearances += 1;
+          if (won) fBucket[revKey].wins += 1;
+        }
 
         const profStats = overall.byProfile[seatProfiles[p.seatIndex]];
         profStats.games += 1;
@@ -1058,6 +1209,7 @@ function runBalanceSimulation(gamesPerCount = 900) {
     }
 
     overall.byCount[n].avgRounds = +(overall.byCount[n].roundsSum / overall.byCount[n].games).toFixed(2);
+    overall.byCount[n].avgTotalTurns = +(overall.byCount[n].turnsSum / overall.byCount[n].games).toFixed(2);
   }
 
   return overall;
@@ -1157,6 +1309,58 @@ console.log(
         skill: +(stats.actions.skill / completed).toFixed(2),
         defend: +(stats.actions.defend / completed).toFixed(2),
       },
+      revealTiming: {
+        totalVoluntaryReveals: stats.revealTiming.totalReveals,
+        avgRevealRound:
+          stats.revealTiming.totalReveals > 0
+            ? +(stats.revealTiming.revealRoundSum / stats.revealTiming.totalReveals).toFixed(2)
+            : 0,
+        roundHistogram: stats.revealTiming.roundHistogram,
+        byFactionWinDelta: Object.fromEntries(
+          Object.entries(stats.revealTiming.byFaction).map(([fKey, bucket]) => {
+            const revRate =
+              bucket.revealed.appearances > 0
+                ? (bucket.revealed.wins / bucket.revealed.appearances) * 100
+                : 0;
+            const unrevRate =
+              bucket.unrevealed.appearances > 0
+                ? (bucket.unrevealed.wins / bucket.unrevealed.appearances) * 100
+                : 0;
+            return [
+              fKey,
+              {
+                revealed: {
+                  appearances: bucket.revealed.appearances,
+                  wins: bucket.revealed.wins,
+                  winRatePct: +revRate.toFixed(2),
+                },
+                unrevealed: {
+                  appearances: bucket.unrevealed.appearances,
+                  wins: bucket.unrevealed.wins,
+                  winRatePct: +unrevRate.toFixed(2),
+                },
+                winRateDeltaPct: +(revRate - unrevRate).toFixed(2),
+              },
+            ];
+          }),
+        ),
+      },
+      dawnSubReasons: stats.dawnSubReasons,
+      eventFunnel: stats.eventFunnel,
+      modeledHumanDurationMinutes: Object.fromEntries(
+        [4, 6, 8].map((pc) => {
+          const avgTurns = stats.byCount[pc].avgTotalTurns;
+          return [
+            `${pc}p`,
+            {
+              avgTotalTurns: avgTurns,
+              fast18sMin: +((avgTurns * 18) / 60 + 1.5).toFixed(1),
+              typical25sMin: +((avgTurns * 25) / 60 + 1.5).toFixed(1),
+              deliberate32sMin: +((avgTurns * 32) / 60 + 1.5).toFixed(1),
+            },
+          ];
+        }),
+      ),
       roundHistogram: stats.roundHistogram,
     },
     null,

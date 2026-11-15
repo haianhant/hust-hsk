@@ -530,7 +530,7 @@ export default function ActionPanel({
                   </div>
 
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {privateView.hand.map((card) => {
+                    {privateView.hand.map((card, cardIdx) => {
                       const isInv = card.deck === 'investigation';
                       const isEquip = card.deck === 'equipment';
                       const isPassiveEquip = isEquip && !card.isConsumable;
@@ -617,7 +617,7 @@ export default function ActionPanel({
 
                       return (
                         <button
-                          key={card.id}
+                          key={`${card.id}-${cardIdx}`}
                           type="button"
                           data-testid={`bg-use-card-${card.id}`}
                           disabled={disabled}

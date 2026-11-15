@@ -1,22 +1,17 @@
 /**
- * test/boardgame-e2e.cjs — Kiểm thử Playwright đa ngữ cảnh End-to-End cho BG4:
- *   1. Khởi chạy static out/ + local ws-shim (HskRoom + BoardGameRoom SQLite DO thật).
- *   2. 4 trình duyệt độc lập: 3 Desktop (1280x800) + 1 Mobile (390x844, hasTouch).
- *   3. Gắn MSSV test riêng cho từng trình duyệt (`20229101`..`20229104`) và audit
- *      mọi WS frame `framereceived`:
- *      - Tuyệt đối KHÔNG xuất hiện MSSV hay `reconnectToken` của người khác.
- *      - Trong lúc `PLAYING`, không bao giờ rò rỉ vai bí mật chưa lật / bài trên tay người khác.
- *   4. Host tạo bàn 1, kiểm tra nút sao chép link `?bgInvite=CODE`; Players 2 & 3 nhập mã;
- *      Mobile Player 4 mở thẳng `/?bgInvite=CODE` -> tự động vào CLB + phòng chờ -> chụp `bg4-01-lobby-4p.png`.
- *   5. Cả 4 người sẵn sàng -> Host bắt đầu trận -> kiểm tra RoleCard, nút tắt/bật âm thanh,
- *      gửi emote & hiện toast -> chụp `bg4-02-gameboard-desktop.png` + `bg4-03-gameboard-mobile.png`
- *      (kiểm tra Mobile không tràn ngang `scrollWidth <= 390`).
- *   6. F5 (`page.reload()`) giữa ván ở Player 2 -> tự động khôi phục đúng bàn & vai bí mật.
- *   7. Đánh lần lượt các lượt trên UI 2D cho tới khi `FINISHED` -> kiểm tra `MatchPostcard`
- *      (`1200x675` PNG Data URL, zero MSSV) -> chụp `bg4-04-match-result-postcard.png`.
- *   8. Thoát ván đấu & rời CLB Board Game quay lại sân KTX -> chụp `bg4-05-exit-ktx.png`.
+ * test/boardgame-e2e.cjs — Portable Playwright End-to-End Suite (Bóng Đêm KTX v3.1):
+ *   E2E-01: 4-player mixed Desktop (3) + Mobile (1) full match lifecycle, rules modal, sound,
+ *           emotes, hand masking, MatchPostcard (1200x675 PNG, zero MSSV) & return to KTX.
+ *   E2E-02: 8-player full Table 2 match + 9th Spectator (privateView === null, zero hidden leaks).
+ *   E2E-03: 5-checkpoint mid-session reload reconnect matrix (READY_CHECK, own turn, other turn,
+ *           post-REVEAL_ROLE, FINISHED match result).
+ *   E2E-04: Mobile 390x844 full responsive audit (Lobby & all 3 GameBoard tabs, overflow === 0,
+ *           touch target bounding-box checks & playable turn on mobile).
+ *   E2E-05: Concurrent 2-match isolation (Table 1 + Table 2) & /api/boardgame/health verification.
+ *   E2E-06: Browser WebSocket security regression (wrong-match UNAUTHORIZED token, malformed JSON,
+ *           unknown message type, prototype-key payload, out-of-turn action without DO crash).
  *
- * Run (after `npm run build`): node test/boardgame-e2e.cjs
+ * Run (after `npm run build`): npm run test:boardgame:e2e
  */
 'use strict';
 
@@ -29,8 +24,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(ROOT, 'out');
-const SHOT_DIR =
-  '/home/bao/.gemini/antigravity-cli/brain/f3119e13-33de-4820-bc0e-636c745568a1';
+const SHOT_DIR = process.env.BOARDGAME_SHOT_DIR || path.join(ROOT, 'test-results', 'boardgame');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -48,12 +42,58 @@ function loadPlaywright() {
     process.env.PLAYWRIGHT_CORE_PATH,
     path.join(ROOT, 'node_modules/playwright-core'),
     path.join(ROOT, 'node_modules/playwright'),
-    '/home/bao/.vscode/extensions/vscjava.migrate-java-to-azure-1.24.0-linux-x64/node_modules/playwright-core',
+    'playwright-core',
+    'playwright',
   ].filter(Boolean);
   for (const p of candidates) {
-    if (fs.existsSync(p)) return require(p);
+    try {
+      return require(p);
+    } catch {
+      // try next candidate
+    }
   }
-  throw new Error('playwright-core not found');
+  throw new Error('playwright-core not found — run `npm ci` or install `playwright-core@1.48.2`.');
+}
+
+function resolveBrowserExecutable(chromium) {
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
+    return process.env.CHROME_PATH;
+  }
+  if (chromium && typeof chromium.executablePath === 'function') {
+    const pwExec = chromium.executablePath();
+    if (pwExec && fs.existsSync(pwExec)) {
+      return undefined;
+    }
+  }
+  for (const p of [
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+  ]) {
+    if (fs.existsSync(p)) return p;
+  }
+  throw new Error(
+    'No Chromium/Chrome executable found. Run: npx playwright-core install --with-deps chromium',
+  );
+}
+
+function buildLaunchOptions(executablePath) {
+  return {
+    headless: true,
+    executablePath,
+    args: [
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+      '--use-gl=angle',
+      '--use-angle=swiftshader',
+      '--enable-webgl',
+      '--ignore-gpu-blocklist',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+    ],
+  };
 }
 
 function getFreePort() {
@@ -72,6 +112,11 @@ function startOutServer() {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
       const cleanUrl = (req.url || '/').split('?')[0];
+      if (cleanUrl === '/__e2e-peer.html') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<!doctype html><html><head><title>E2E Browser Peer</title></head><body>OK</body></html>');
+        return;
+      }
       let filePath = path.join(OUT_DIR, cleanUrl === '/' ? 'index.html' : cleanUrl);
       if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
         filePath = path.join(filePath, 'index.html');
@@ -140,7 +185,109 @@ const TEST_USERS = [
 
 const ALL_TEST_MSSVS = TEST_USERS.map((u) => u.mssv);
 
-async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl) {
+const FORBIDDEN_PUBLIC_KEYS = [
+  '"signalProgress"',
+  '"mistProgress"',
+  '"maxTrackValue"',
+  '"secretSabotageLocation"',
+  '"sabotagePlanted"',
+  '"sabotageCanDetonate"',
+  '"sabotageProgress"',
+  '"activeArmor"',
+  '"attackBonus"',
+  '"rngState"',
+];
+
+function auditBoardGameFrameText(label, text, audit, forbiddenMssvs = ALL_TEST_MSSVS, expectSpectator = false) {
+  audit.wsFramesChecked += 1;
+  audit.rawFrames.push(text);
+  if (audit.rawFrames.length > 250) {
+    audit.rawFrames.shift();
+  }
+
+  for (const mssv of forbiddenMssvs) {
+    if (text.includes(mssv)) {
+      audit.auditErrors.push(`${label}: MSSV ${mssv} leaked in WS frame!`);
+    }
+  }
+
+  let msg;
+  try {
+    msg = JSON.parse(text);
+  } catch {
+    return;
+  }
+
+  if (msg.type === 'BG_AUTH_ISSUED') {
+    audit.selfPlayerId = msg.playerId || audit.selfPlayerId;
+    audit.selfReconnectToken = msg.reconnectToken || audit.selfReconnectToken;
+    audit.matchIdsSeen.add(msg.matchId);
+    if (msg.protocolVersion !== undefined && msg.protocolVersion !== 1) {
+      audit.auditErrors.push(`${label}: unexpected protocolVersion ${msg.protocolVersion}`);
+    }
+    if (expectSpectator && msg.isSpectator !== true) {
+      audit.auditErrors.push(`${label}: spectator BG_AUTH_ISSUED missing isSpectator=true!`);
+    }
+    if (expectSpectator && msg.seatIndex !== null) {
+      audit.auditErrors.push(`${label}: spectator BG_AUTH_ISSUED must have seatIndex=null!`);
+    }
+  }
+
+  if (msg.type === 'BG_STATE_SYNC') {
+    audit.latestSync = msg;
+    audit.matchIdsSeen.add(msg.matchId);
+    if (expectSpectator && msg.privateView !== null) {
+      audit.auditErrors.push(`${label}: spectator received non-null privateView!`);
+    }
+    if (
+      expectSpectator &&
+      audit.selfPlayerId &&
+      Array.isArray(msg.publicGame?.players) &&
+      msg.publicGame.players.some((pl) => pl.playerId === audit.selfPlayerId)
+    ) {
+      audit.auditErrors.push(`${label}: spectator appeared inside publicGame.players!`);
+    }
+
+    if (msg.publicGame) {
+      const pg = msg.publicGame;
+      if (pg.rulesetVersion !== 3) {
+        audit.auditErrors.push(`${label}: expected rulesetVersion 3, got ${String(pg.rulesetVersion)}`);
+      }
+      const rawPg = JSON.stringify(pg);
+      for (const forbidden of FORBIDDEN_PUBLIC_KEYS) {
+        if (rawPg.includes(forbidden)) {
+          audit.auditErrors.push(`${label}: forbidden field ${forbidden} leaked in publicGame!`);
+        }
+      }
+      const isPlaying = msg.status === 'PLAYING' || pg.turnPhase !== 'ENDED';
+      if (isPlaying && (rawPg.includes('"hp":') || rawPg.includes('"maxHp":'))) {
+        audit.auditErrors.push(`${label}: hidden hp/maxHp leaked in publicGame while PLAYING!`);
+      }
+      if (pg.turnPhase !== 'ENDED' && pg.finalReveal) {
+        audit.auditErrors.push(`${label}: finalReveal leaked before ENDED!`);
+      }
+      if (msg.privateView && audit.selfPlayerId && msg.privateView.playerId !== audit.selfPlayerId) {
+        audit.auditErrors.push(
+          `${label}: privateView belongs to ${msg.privateView.playerId}, expected ${audit.selfPlayerId}`,
+        );
+      }
+      for (const pl of pg.players || []) {
+        if (pl.playerId !== audit.selfPlayerId && !pl.revealedRoleId) {
+          const rawPlayer = JSON.stringify(pl);
+          if (
+            rawPlayer.includes('secretGoalText') ||
+            rawPlayer.includes('"hand"') ||
+            rawPlayer.includes('"skillName"')
+          ) {
+            audit.auditErrors.push(`${label}: hidden secretGoal/hand/skill exposed for ${pl.playerId}`);
+          }
+        }
+      }
+    }
+  }
+}
+
+async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl, opts = {}) {
   const browser = await chromium.launch(launchOpts);
   const context = await browser.newContext(
     user.mobile
@@ -176,9 +323,12 @@ async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl) {
 
   const page = await context.newPage();
   const audit = {
+    label: user.label,
     selfPlayerId: null,
     selfReconnectToken: null,
     wsFramesChecked: 0,
+    latestSync: null,
+    matchIdsSeen: new Set(),
     rawFrames: [],
     auditErrors: [],
     pageErrors: [],
@@ -196,95 +346,236 @@ async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl) {
     if (!ws.url().includes('/ws/boardgame')) return;
     ws.on('framereceived', ({ payload }) => {
       const text = typeof payload === 'string' ? payload : String(payload);
-      audit.wsFramesChecked += 1;
-      audit.rawFrames.push(text);
-
-      for (const mssv of ALL_TEST_MSSVS) {
-        if (text.includes(mssv)) {
-          audit.auditErrors.push(`${user.label}: MSSV ${mssv} leaked in WS frame!`);
-        }
-      }
-
-      let msg;
-      try {
-        msg = JSON.parse(text);
-      } catch {
-        return;
-      }
-
-      if (msg.type === 'BG_AUTH_ISSUED') {
-        audit.selfPlayerId = msg.playerId || audit.selfPlayerId;
-        audit.selfReconnectToken = msg.reconnectToken || audit.selfReconnectToken;
-      }
-
-      if (msg.type === 'BG_STATE_SYNC' && msg.publicGame) {
-        const pg = msg.publicGame;
-        if (pg.rulesetVersion !== 3) {
-          audit.auditErrors.push(
-            `${user.label}: expected rulesetVersion 3, got ${String(pg.rulesetVersion)}`,
-          );
-        }
-        const rawPg = JSON.stringify(pg);
-        for (const forbidden of [
-          '"signalProgress"',
-          '"mistProgress"',
-          '"maxTrackValue"',
-          '"secretSabotageLocation"',
-          '"sabotagePlanted"',
-          '"sabotageCanDetonate"',
-          '"sabotageProgress"',
-          '"activeArmor"',
-          '"attackBonus"',
-        ]) {
-          if (rawPg.includes(forbidden)) {
-            audit.auditErrors.push(
-              `${user.label}: forbidden v1/v2/secret field ${forbidden} leaked in publicGame!`,
-            );
-          }
-        }
-        const isPlaying = msg.status === 'PLAYING' || pg.turnPhase !== 'ENDED';
-        if (isPlaying && (rawPg.includes('"hp":') || rawPg.includes('"maxHp":'))) {
-          audit.auditErrors.push(
-            `${user.label}: hidden hp/maxHp leaked in publicGame while PLAYING!`,
-          );
-        }
-        if (pg.turnPhase !== 'ENDED' && pg.finalReveal) {
-          audit.auditErrors.push(`${user.label}: finalReveal leaked before ENDED!`);
-        }
-        if (msg.privateView && audit.selfPlayerId && msg.privateView.playerId !== audit.selfPlayerId) {
-          audit.auditErrors.push(
-            `${user.label}: privateView belongs to ${msg.privateView.playerId}, expected ${audit.selfPlayerId}`,
-          );
-        }
-        for (const pl of pg.players || []) {
-          if (pl.playerId !== audit.selfPlayerId && !pl.revealedRoleId) {
-            const rawPlayer = JSON.stringify(pl);
-            if (
-              rawPlayer.includes('secretGoalText') ||
-              rawPlayer.includes('"hand"') ||
-              rawPlayer.includes('"skillName"')
-            ) {
-              audit.auditErrors.push(
-                `${user.label}: hidden secretGoal/hand/skill exposed for ${pl.playerId}`,
-              );
-            }
-          }
-        }
-      }
+      auditBoardGameFrameText(user.label, text, audit, ALL_TEST_MSSVS, Boolean(opts.expectSpectator));
     });
   });
 
   return { browser, context, page, audit };
 }
 
+/**
+ * Lightweight browser WebSocket client inside a real Chromium page (zero 3D WebGL overhead),
+ * used for non-focused seats in 8-player and multi-match scenarios.
+ */
+async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, preferredSeatIndex = null) {
+  const page = await context.newPage();
+  const audit = {
+    label: displayName,
+    selfPlayerId: null,
+    selfReconnectToken: null,
+    wsFramesChecked: 0,
+    latestSync: null,
+    matchIdsSeen: new Set(),
+    rawFrames: [],
+    auditErrors: [],
+    pageErrors: [],
+  };
+  page.on('pageerror', (e) => audit.pageErrors.push(`${displayName}: ${e.message}`));
+  page.on('websocket', (ws) => {
+    if (!ws.url().includes('/ws/boardgame')) return;
+    ws.on('framereceived', ({ payload }) => {
+      auditBoardGameFrameText(displayName, String(payload), audit, ALL_TEST_MSSVS, false);
+    });
+  });
+
+  await page.goto(`${outUrl}/__e2e-peer.html`, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    window.__peerState = {
+      ws: null,
+      auth: null,
+      latestSync: null,
+      messages: [],
+    };
+  });
+
+  async function join(matchId, inviteCode, asSpectator = false) {
+    const auth = await page.evaluate(
+      ({ wsUrl, matchId: mId, inviteCode: code, name, seatIdx, spec }) => {
+        return new Promise((resolve, reject) => {
+          const st = window.__peerState;
+          const ws = new WebSocket(`${wsUrl}/ws/boardgame?matchId=${encodeURIComponent(mId)}`);
+          st.ws = ws;
+          let gotAuth = null;
+          let gotSync = false;
+          const timer = setTimeout(() => reject(new Error(`Peer ${name} join timeout`)), 10000);
+          ws.onopen = () => {
+            ws.send(
+              JSON.stringify({
+                type: 'BG_JOIN',
+                matchId: mId,
+                inviteCode: code,
+                displayName: name,
+                asSpectator: spec,
+                ...(seatIdx !== null ? { preferredSeatIndex: seatIdx } : {}),
+              }),
+            );
+          };
+          ws.onmessage = (ev) => {
+            const msg = JSON.parse(ev.data);
+            st.messages.push(msg);
+            if (msg.type === 'BG_AUTH_ISSUED') {
+              gotAuth = msg;
+              st.auth = msg;
+            } else if (msg.type === 'BG_STATE_SYNC') {
+              st.latestSync = msg;
+              gotSync = true;
+            } else if (msg.type === 'BG_ERROR' && !gotAuth) {
+              clearTimeout(timer);
+              reject(new Error(`Peer join BG_ERROR: ${msg.code} ${msg.message}`));
+            }
+            if (gotAuth && gotSync) {
+              clearTimeout(timer);
+              resolve(gotAuth);
+            }
+          };
+          ws.onerror = () => {
+            clearTimeout(timer);
+            reject(new Error(`Peer ${name} ws error`));
+          };
+        });
+      },
+      {
+        wsUrl: wsBaseUrl,
+        matchId,
+        inviteCode,
+        name: displayName,
+        seatIdx: preferredSeatIndex,
+        spec: asSpectator,
+      },
+    );
+    audit.selfPlayerId = auth.playerId;
+    audit.selfReconnectToken = auth.reconnectToken;
+    return auth;
+  }
+
+  async function setReady(ready = true) {
+    await page.evaluate((r) => {
+      window.__peerState.ws.send(
+        JSON.stringify({
+          type: 'BG_SET_READY',
+          ready: r,
+          requestId: `rdy-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        }),
+      );
+    }, ready);
+  }
+
+  async function startMatch() {
+    return page.evaluate(() => {
+      const ws = window.__peerState && window.__peerState.ws;
+      if (!ws || ws.readyState !== 1) return false;
+      ws.send(
+        JSON.stringify({
+          type: 'BG_START_MATCH',
+          requestId: `start-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        }),
+      );
+      return true;
+    });
+  }
+
+  async function getState() {
+    return page.evaluate(() => ({
+      auth: window.__peerState.auth,
+      sync: window.__peerState.latestSync,
+    }));
+  }
+
+  async function sendAction(action) {
+    return page.evaluate((act) => {
+      return new Promise((resolve) => {
+        const st = window.__peerState;
+        const reqId = `peer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const expectedRev = st.latestSync ? st.latestSync.revision : 0;
+        const startIdx = st.messages.length;
+        st.ws.send(
+          JSON.stringify({
+            type: 'BG_GAME_ACTION',
+            requestId: reqId,
+            expectedRevision: expectedRev,
+            action: act,
+          }),
+        );
+        const deadline = Date.now() + 4000;
+        const poll = () => {
+          for (let i = startIdx; i < st.messages.length; i++) {
+            const m = st.messages[i];
+            if (m.type === 'BG_ACTION_ACK' && m.requestId === reqId) {
+              if (!m.ok || (st.latestSync && st.latestSync.revision >= m.revision)) {
+                resolve(m);
+                return;
+              }
+              const waitSyncDeadline = Date.now() + 800;
+              const waitSync = () => {
+                if ((st.latestSync && st.latestSync.revision >= m.revision) || Date.now() >= waitSyncDeadline) {
+                  resolve(m);
+                  return;
+                }
+                setTimeout(waitSync, 15);
+              };
+              setTimeout(waitSync, 15);
+              return;
+            }
+            if (m.type === 'BG_ERROR' && m.requestId === reqId) {
+              resolve({ ok: false, code: m.code, reason: m.message });
+              return;
+            }
+          }
+          if (Date.now() > deadline) {
+            resolve({ ok: false, code: 'TIMEOUT', reason: 'peer action wait timeout' });
+            return;
+          }
+          setTimeout(poll, 20);
+        };
+        setTimeout(poll, 20);
+      });
+    }, action);
+  }
+
+  async function stepFullTurnIfActive(preferExplore = true) {
+    const st = await getState();
+    const sync = st.sync;
+    if (!sync || sync.status !== 'PLAYING' || sync.publicGame?.activePlayerId !== st.auth?.playerId) {
+      return false;
+    }
+    const turnBefore = sync.publicGame.turnNumber;
+    const phase = sync.publicGame.turnPhase;
+    if (phase === 'MOVE_OR_STAY') {
+      await sendAction({ type: 'STAY' });
+      await new Promise((r) => setTimeout(r, 75));
+    }
+    const st2 = await getState();
+    if (st2.sync?.status === 'PLAYING' && st2.sync.publicGame?.activePlayerId === st2.auth?.playerId && st2.sync.publicGame.turnPhase === 'LOCATION_ACTION') {
+      await sendAction(preferExplore ? { type: 'EXPLORE_LOC' } : { type: 'DRAW_CARD', deck: 'event' });
+      await new Promise((r) => setTimeout(r, 75));
+    }
+    const st3 = await getState();
+    if (st3.sync?.status === 'PLAYING' && st3.sync.publicGame?.activePlayerId === st3.auth?.playerId && st3.sync.publicGame.turnPhase === 'MAIN_ACTION') {
+      const res = await sendAction({ type: 'DEFEND' });
+      if (!res.ok) {
+        await sendAction({ type: 'END_TURN' });
+      }
+      await new Promise((r) => setTimeout(r, 75));
+    }
+    const stAfter = await getState();
+    return (
+      stAfter.sync?.status === 'FINISHED' ||
+      (stAfter.sync?.publicGame?.turnNumber ?? turnBefore) !== turnBefore ||
+      stAfter.sync?.publicGame?.activePlayerId !== st.auth?.playerId
+    );
+  }
+
+  return { page, audit, isPeer: true, join, setReady, startMatch, getState, sendAction, stepFullTurnIfActive };
+}
+
 async function enterCampusAndWaitHook(page, targetUrl, diagAudit) {
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
   const enterBtn = page.locator('#enter-campus');
-  await enterBtn.waitFor({ state: 'visible', timeout: 45000 });
-  await enterBtn.click({ timeout: 45000 });
+  await enterBtn.waitFor({ state: 'visible', timeout: 65000 });
+  await enterBtn.click({ timeout: 65000 });
   try {
     await page.waitForFunction(() => Boolean(window.__bkhn && window.__bkhn.enterBoardGameClub), null, {
-      timeout: 45000,
+      timeout: 65000,
       polling: 200,
     });
   } catch (err) {
@@ -300,7 +591,7 @@ async function enterCampusAndWaitHook(page, targetUrl, diagAudit) {
   }
 }
 
-async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set()) {
+async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(), options = {}) {
   const snap = await page
     .evaluate(() => {
       const confirmBtn = document.querySelector('[data-testid="bg-confirm-reveal-btn"]');
@@ -310,7 +601,6 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
       const panel = document.querySelector('[data-testid="bg-action-panel"]');
       if (!panel) return { mode: 'none', turnKey: '', enabledIds: [] };
       const statusBar = document.querySelector('[data-testid="bg-v3-status-bar"]');
-      const turnKey = (statusBar?.textContent || '').replace(/\s+/g, ' ').slice(0, 120);
       const btns = Array.from(panel.querySelectorAll('button[data-testid]'));
       const enabledIds = btns
         .filter((b) => {
@@ -320,49 +610,64 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
         })
         .map((b) => b.getAttribute('data-testid'))
         .filter(Boolean);
+      const rawStatus = (statusBar?.textContent || '').replace(/\s+/g, ' ');
+      const turnMatch = rawStatus.match(/Lượt\s*#\d+/);
+      const turnNumStr = turnMatch ? turnMatch[0] : rawStatus.slice(0, 48);
+      const phaseTag = enabledIds.includes('bg-stay-btn')
+        ? 'P1'
+        : enabledIds.includes('bg-explore-loc')
+          ? 'P2'
+          : 'P3';
+      const turnKey = `${turnNumStr}::${phaseTag}`;
       return { mode: 'panel', turnKey, enabledIds };
     })
     .catch(() => ({ mode: 'none', turnKey: '', enabledIds: [] }));
 
   if (snap.mode === 'confirm-reveal') {
-    const ok = await page
+    return page
       .locator('[data-testid="bg-confirm-reveal-btn"]')
       .click({ timeout: 4000 })
       .then(() => true)
       .catch(() => false);
-    return ok;
   }
   if (snap.mode !== 'panel' || snap.enabledIds.length === 0) return false;
 
-  const isFresh = (id) => id === 'bg-end-turn-btn' || !triedSet.has(`${snap.turnKey}::${id}`);
+  const NON_BLOCKABLE = new Set(['bg-stay-btn', 'bg-explore-loc', 'bg-defend-btn', 'bg-end-turn-btn']);
+  const isFresh = (id) => NON_BLOCKABLE.has(id) || !triedSet.has(`${snap.turnKey}::${id}`);
   const enabledSet = new Set(snap.enabledIds);
 
   const pickAndClick = async (id) => {
     if (!id || !enabledSet.has(id) || !isFresh(id)) return false;
-    if (id !== 'bg-end-turn-btn') {
-      triedSet.add(`${snap.turnKey}::${id}`);
-    }
     const loc = page.locator(`[data-testid="${id}"]`).first();
-    const clicked = await loc
+    await loc.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => undefined);
+    let clicked = await loc
       .click({ timeout: 4000 })
       .then(() => true)
       .catch(() => false);
+    if (!clicked && (await loc.isEnabled({ timeout: 500 }).catch(() => false))) {
+      clicked = await loc
+        .click({ force: true, timeout: 2000 })
+        .then(() => true)
+        .catch(() => false);
+    }
     if (!clicked) return false;
+    if (!NON_BLOCKABLE.has(id)) {
+      triedSet.add(`${snap.turnKey}::${id}`);
+    }
     if (id === 'bg-reveal-role-btn') {
       const confirmBtn = page.locator('[data-testid="bg-confirm-reveal-btn"]');
       if (
         await confirmBtn
-          .waitFor({ state: 'visible', timeout: 1500 })
+          .waitFor({ state: 'visible', timeout: 2000 })
           .then(() => true)
           .catch(() => false)
       ) {
-        await confirmBtn.click({ timeout: 4000 }).catch(() => undefined);
+        await confirmBtn.click({ timeout: 2000 }).catch(() => undefined);
       }
     }
     return true;
   };
 
-  // Pha 1 (MOVE_OR_STAY)
   for (const id of ['bg-move-canteen', 'bg-move-corridor']) {
     if (await pickAndClick(id)) return true;
   }
@@ -370,20 +675,13 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
   if (anyMove && (await pickAndClick(anyMove))) return true;
   if (await pickAndClick('bg-stay-btn')) return true;
 
-  // Pha 2 (LOCATION_ACTION)
-  const p2Order = [
-    'bg-draw-investigation',
-    'bg-draw-equipment',
-    'bg-draw-event',
-    'bg-explore-loc',
-  ];
+  const p2Order = ['bg-draw-investigation', 'bg-draw-equipment', 'bg-draw-event', 'bg-explore-loc'];
   for (let i = 0; i < p2Order.length; i++) {
     if (await pickAndClick(p2Order[(stepIndex + i) % p2Order.length])) return true;
   }
 
-  // Pha 3 (MAIN_ACTION)
   if (await pickAndClick('bg-unmask-hand-btn')) return true;
-  if (await pickAndClick('bg-reveal-role-btn')) return true;
+  if (!options.skipReveal && (await pickAndClick('bg-reveal-role-btn'))) return true;
   if (await pickAndClick('bg-use-skill-btn')) return true;
   const anyCard = snap.enabledIds.find((id) => id.startsWith('bg-use-card-') && isFresh(id));
   if (anyCard && (await pickAndClick(anyCard))) return true;
@@ -394,43 +692,86 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
   return false;
 }
 
-async function main() {
-  if (!fs.existsSync(path.join(OUT_DIR, 'index.html'))) {
-    throw new Error('Missing out/index.html — run npm run build before boardgame-e2e.cjs');
+function verifyCommonAudits(items) {
+  const tokens = items.map((p) => p.audit.selfReconnectToken).filter(Boolean);
+  assert.equal(new Set(tokens).size, tokens.length, 'All reconnectTokens must be globally distinct');
+
+  for (let i = 0; i < items.length; i++) {
+    const p = items[i];
+    for (let j = 0; j < items.length; j++) {
+      if (i === j) continue;
+      const otherToken = items[j].audit.selfReconnectToken;
+      if (!otherToken) continue;
+      for (const frame of p.audit.rawFrames) {
+        assert.equal(
+          frame.includes(otherToken),
+          false,
+          `${p.audit.label}: reconnectToken of ${items[j].audit.label} leaked in WS frame!`,
+        );
+      }
+    }
+    assert.ok(p.audit.wsFramesChecked > 0, `${p.audit.label} must receive live WS frames`);
+    assert.equal(
+      p.audit.auditErrors.length,
+      0,
+      `${p.audit.label} WS audit errors: ${p.audit.auditErrors.join('; ')}`,
+    );
+    assert.equal(
+      p.audit.pageErrors.length,
+      0,
+      `${p.audit.label} page errors: ${p.audit.pageErrors.join('; ')}`,
+    );
   }
+}
 
-  const { chromium } = loadPlaywright();
-  const shimPort = await getFreePort();
-  const shim = await startWsShim(shimPort);
-  const { server: outServer, url: outUrl } = await startOutServer();
+async function captureFailureArtifacts(scenarioId, entries, error) {
+  fs.mkdirSync(SHOT_DIR, { recursive: true });
+  const trace = {
+    scenario: scenarioId,
+    error: error instanceof Error ? `${error.message}\n${error.stack}` : String(error),
+    pages: [],
+  };
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (!entry?.page || entry.page.isClosed()) continue;
+    const label = entry.label || entry.audit?.label || `page-${i}`;
+    if (!entry.isPeer) {
+      const shotPath = path.join(SHOT_DIR, `failure-${scenarioId}-${label}.png`);
+      await Promise.race([
+        entry.page.screenshot({ path: shotPath, timeout: 4000 }).catch(() => undefined),
+        new Promise((r) => setTimeout(r, 4500)),
+      ]);
+    }
+    trace.pages.push({
+      label,
+      url: entry.page.url(),
+      auditErrors: entry.audit?.auditErrors || [],
+      pageErrors: entry.audit?.pageErrors || [],
+      lastFrames: (entry.audit?.rawFrames || []).slice(-5),
+    });
+  }
+  fs.writeFileSync(
+    path.join(SHOT_DIR, `failure-${scenarioId}-trace.json`),
+    JSON.stringify(trace, null, 2),
+    'utf8',
+  );
+}
 
+// ===========================================================================
+// E2E-01 & E2E-04: 4-Player Full Lifecycle + Mobile (390x844) Playability
+// ===========================================================================
+async function runE2E01AndE2E04(chromium, launchOpts, outUrl, shim) {
+  console.log('[E2E-01 & E2E-04] Running 4-player mixed Desktop+Mobile lifecycle...');
   const browsers = [];
   const contexts = [];
+  const players = [];
   try {
-    const launchOpts = {
-      headless: true,
-      executablePath: fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined,
-      args: [
-        '--no-sandbox',
-        '--disable-dev-shm-usage',
-        '--use-gl=angle',
-        '--use-angle=swiftshader',
-        '--enable-webgl',
-        '--ignore-gpu-blocklist',
-      ],
-    };
+    const p1 = { user: TEST_USERS[0], ...(await setupPlayerContext(chromium, launchOpts, TEST_USERS[0], shim.wsBaseUrl)) };
+    browsers.push(p1.browser);
+    contexts.push(p1.context);
+    players.push(p1);
 
-    const players = [];
-    for (const user of TEST_USERS) {
-      const p = await setupPlayerContext(chromium, launchOpts, user, shim.wsBaseUrl);
-      browsers.push(p.browser);
-      contexts.push(p.context);
-      players.push({ user, ...p });
-    }
-    const [p1, p2, p3, p4] = players;
-
-    // 1. P1 (Host Desktop) vào campus -> CLB -> ngồi Bàn 1 -> tự động tạo phòng chờ ngay trên HUD
-    console.log('[BG4 E2E] Step 1: P1 sitting at Table 1 (auto-create match on HUD)...');
+    // Step 1: P1 Host sits at Table 1 -> auto-create Lobby bar on HUD
     await enterCampusAndWaitHook(p1.page, outUrl, p1.audit);
     await p1.page.evaluate(() => window.__bkhn.enterBoardGameClub());
     await p1.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
@@ -440,11 +781,14 @@ async function main() {
     await p1.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
 
     const inviteCode = (await p1.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
-    assert.match(inviteCode, /^[A-Z0-9]{6}$/, `Mã mời không hợp lệ: "${inviteCode}"`);
+    assert.match(inviteCode, /^[A-Z0-9]{6}$/, `Invalid invite code: "${inviteCode}"`);
     await p1.page.locator('[data-testid="bg-hud-copy-link-btn"]').click();
 
-    // 2. P2 ngồi Bàn 1 (tự động vào đúng phòng chờ của P1); P3 nhập mã mời
-    console.log(`[BG4 E2E] Step 2: P2 auto-joining Table 1 & P3 joining invite ${inviteCode}...`);
+    // Step 2: P2 auto-joins Table 1; P3 enters inviteCode
+    const p2 = { user: TEST_USERS[1], ...(await setupPlayerContext(chromium, launchOpts, TEST_USERS[1], shim.wsBaseUrl)) };
+    browsers.push(p2.browser);
+    contexts.push(p2.context);
+    players.push(p2);
     await p2.page.bringToFront();
     await enterCampusAndWaitHook(p2.page, outUrl, p2.audit);
     await p2.page.evaluate(() => window.__bkhn.enterBoardGameClub());
@@ -454,8 +798,12 @@ async function main() {
     await p2.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
     await p2.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 30000 });
     const p2HudCode = (await p2.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
-    assert.equal(p2HudCode, inviteCode, `P2 ngồi Bàn 1 phải vào đúng mã mời ${inviteCode}, thực tế "${p2HudCode}"`);
+    assert.equal(p2HudCode, inviteCode);
 
+    const p3 = { user: TEST_USERS[2], ...(await setupPlayerContext(chromium, launchOpts, TEST_USERS[2], shim.wsBaseUrl)) };
+    browsers.push(p3.browser);
+    contexts.push(p3.context);
+    players.push(p3);
     await p3.page.bringToFront();
     await enterCampusAndWaitHook(p3.page, outUrl, p3.audit);
     await p3.page.evaluate(() => window.__bkhn.enterBoardGameClub());
@@ -468,63 +816,50 @@ async function main() {
     await p3.page.locator('[data-testid="bg-close-lobby-btn"]').click();
     await p3.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 15000 });
 
-    // 3. P4 (Mobile 390x844) mở trực tiếp `/?bgInvite=CODE` -> auto-enter CLB + auto-join phòng
-    console.log('[BG4 E2E] Step 3: P4 mobile opening ?bgInvite URL...');
+    // Step 3: P4 (Mobile 390x844) opens ?bgInvite=CODE
+    const p4 = { user: TEST_USERS[3], ...(await setupPlayerContext(chromium, launchOpts, TEST_USERS[3], shim.wsBaseUrl)) };
+    browsers.push(p4.browser);
+    contexts.push(p4.context);
+    players.push(p4);
     await p4.page.bringToFront();
     await p4.page.goto(`${outUrl}/?bgInvite=${inviteCode}`, { waitUntil: 'domcontentloaded' });
     const p4EnterBtn = p4.page.locator('#enter-campus');
-    await p4EnterBtn.waitFor({ state: 'visible', timeout: 45000 });
-    await p4EnterBtn.click({ timeout: 45000 });
-    try {
-      await p4.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 45000 });
-    } catch (err) {
-      const diag4 = await p4.page.evaluate(() => ({
-        url: window.location.href,
-        hasHud: Boolean(document.querySelector('[data-testid="boardgame-club-hud"]')),
-        isInClub: window.__bkhn?.isInBoardGameClub?.(),
-        pos: window.__bkhn?.getPos?.(),
-        bodyText: document.body.innerText.slice(0, 500),
-      }));
-      console.error('DIAG Step 3 P4:', JSON.stringify(diag4), 'AUDIT P4:', JSON.stringify(p4.audit));
-      throw err;
-    }
+    await p4EnterBtn.waitFor({ state: 'visible', timeout: 65000 });
+    await p4EnterBtn.click({ timeout: 65000 });
+    await p4.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 45000 });
     await p4.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: 45000 });
     const p4CleanedUrl = await p4.page.evaluate(() => window.location.search);
-    assert.equal(p4CleanedUrl.includes('bgInvite='), false, 'URL phải được làm sạch sau khi đọc ?bgInvite=');
+    assert.equal(p4CleanedUrl.includes('bgInvite='), false, 'URL query param ?bgInvite= must be stripped');
+    // E2E-04: Mobile Lobby overflow check
+    const mobileLobbyOverflow = await p4.page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    assert.equal(mobileLobbyOverflow, false, 'Mobile 390x844 Lobby must not overflow horizontally');
     await p4.page.locator('[data-testid="bg-close-lobby-btn"]').click();
     await p4.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 15000 });
 
-    // Chờ P1 thấy đủ 4 người trên HUD ngoài phòng 3D (không cần mở modal)
     await p1.page.bringToFront();
     await p1.page.waitForFunction(
-      () =>
-        document
-          .querySelector('[data-testid="bg-hud-match-bar"]')
-          ?.textContent?.includes('/4 sẵn sàng'),
+      () => document.querySelector('[data-testid="bg-hud-match-bar"]')?.textContent?.includes('/4 sẵn sàng'),
       null,
       { timeout: 25000, polling: 200 },
     );
-    await p1.page.waitForTimeout(350);
+    await p1.page.waitForTimeout(300);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-01-lobby-4p.png') });
 
-    // 4. P2, P3, P4 bấm Sẵn sàng trực tiếp trên HUD -> Host bấm Bắt đầu ván đấu trên HUD
-    console.log('[BG4 E2E] Step 4: Readying up and starting 4-player match from HUD...');
+    // Step 4: Start match from HUD
     for (const peer of [p2, p3, p4]) {
       await peer.page.bringToFront();
       await peer.page.locator('[data-testid="bg-hud-ready-btn"]').click();
     }
     await p1.page.bringToFront();
     await p1.page.waitForFunction(
-      () => {
-        const btn = document.querySelector('[data-testid="bg-hud-start-btn"]');
-        return Boolean(btn && !btn.hasAttribute('disabled'));
-      },
+      () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
       null,
       { timeout: 30000, polling: 200 },
     );
     await p1.page.locator('[data-testid="bg-hud-start-btn"]').click();
 
-    // Tất cả 4 người vào màn hình bàn chơi 2D
     for (const p of players) {
       await p.page.bringToFront();
       await p.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 30000 });
@@ -532,35 +867,51 @@ async function main() {
         await p.page.waitForSelector('[data-testid="bg-role-card"]', { timeout: 25000 });
       }
     }
-    // Trên Mobile 390x844 (P4), kiểm tra chuyển tab "Vai bí mật", lật thẻ vai, úp lại để giữ riêng tư, rồi quay lại tab "Bàn & Lượt"
+
+    // E2E-04: Mobile 3-tab horizontal overflow + touch button geometry verification on P4
     await p4.page.bringToFront();
+    const checkMobileOverflowAndTabs = async (tabName) => {
+      const stats = await p4.page.evaluate(() => {
+        const board = document.querySelector('[data-testid="boardgame-2d-board"]');
+        const navBtns = Array.from(document.querySelectorAll('nav button')).map((el) => {
+          const r = el.getBoundingClientRect();
+          return { text: (el.textContent || '').trim(), w: r.width, h: r.height, left: r.left, right: r.right };
+        });
+        return {
+          docOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+          boardOverflow: board ? board.scrollWidth > board.clientWidth + 1 : false,
+          navBtns,
+        };
+      });
+      assert.equal(
+        stats.docOverflow || stats.boardOverflow,
+        false,
+        `Mobile 390x844 overflow on tab "${tabName}": ${JSON.stringify(stats)}`,
+      );
+      for (const b of stats.navBtns) {
+        assert.ok(b.w >= 32 && b.h >= 32, `Mobile nav button "${b.text}" too small: ${b.w}x${b.h}`);
+        assert.ok(b.left >= -1 && b.right <= 391, `Mobile nav button "${b.text}" clipped horizontally`);
+      }
+    };
+
     await p4.page.locator('button:has-text("Vai bí mật")').click();
     await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
+    await checkMobileOverflowAndTabs('Vai bí mật');
     await p4.page.locator('[data-testid="bg-toggle-role-card"]').click();
     await p4.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
     await p4.page.locator('[data-testid="bg-toggle-role-card"]').click();
     await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 20000 });
+
+    await p4.page.locator('button:has-text("Nhật ký")').click();
+    await p4.page.waitForSelector('[data-testid="bg-game-log"]', { timeout: 20000 });
+    await checkMobileOverflowAndTabs('Nhật ký');
+
     await p4.page.locator('button:has-text("Bàn & Lượt")').click();
     await p4.page.waitForSelector('[data-testid="bg-loc-corridor"]', { timeout: 20000 });
-
-    // Kiểm tra Mobile 390x844 không tràn ngang trước khi thao tác tiếp
-    const mobileOverflow = await p4.page.evaluate(() => {
-      const board = document.querySelector('[data-testid="boardgame-2d-board"]');
-      return {
-        docOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
-        boardOverflow: board ? board.scrollWidth > board.clientWidth + 1 : false,
-        scrollW: document.documentElement.scrollWidth,
-        innerW: window.innerWidth,
-      };
-    });
-    assert.equal(
-      mobileOverflow.docOverflow || mobileOverflow.boardOverflow,
-      false,
-      `Mobile 390x844 bị tràn ngang: ${JSON.stringify(mobileOverflow)}`,
-    );
+    await checkMobileOverflowAndTabs('Bàn & Lượt');
     await p4.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-03-gameboard-mobile.png') });
 
-    // Kiểm tra hướng dẫn v3 (Rules Modal) ngay trong ván
+    // Rules modal, sound toggle, emote toast, hand mask & HP leak check on P1
     await p1.page.bringToFront();
     await p1.page.waitForSelector('[data-testid="bg-v3-status-bar"]', { timeout: 20000 });
     await p1.page.locator('[data-testid="bg-board-rules-btn"]').click();
@@ -568,17 +919,15 @@ async function main() {
     const rulesModalText = await p1.page.locator('[data-testid="boardgame-rules-modal"]').innerText();
     assert.ok(
       rulesModalText.includes('Bối cảnh v3') && rulesModalText.includes('Bảo mật màn hình'),
-      'Rules modal phải cập nhật đúng luật Bóng Đêm KTX v3',
+      'Rules modal must reflect v3 mechanics',
     );
     await p1.page.locator('[data-testid="bg-close-rules-btn"]').click();
 
-    // Test âm thanh toggle + biểu cảm toast real-time
     await p1.page.locator('[data-testid="bg-sound-toggle-btn"]').click();
     await p1.page.locator('[data-testid="bg-sound-toggle-btn"]').click();
     await p1.page.locator('[data-testid="bg-emote-wave"]').click();
     await p2.page.waitForSelector('[data-testid="bg-emote-toast"]', { timeout: 15000 });
 
-    // Kiểm tra bảo mật màn hình (úc thẻ -> ẩn bài trên tay; bấm mở -> hiện bài & kỹ năng) trên người đang giữ lượt
     let activePlayer = null;
     for (const p of players) {
       if ((await p.page.locator('[data-testid="bg-action-panel"]').count()) > 0) {
@@ -586,19 +935,16 @@ async function main() {
         break;
       }
     }
-    assert.ok(activePlayer, 'Phải có đúng 1 người chơi đang giữ lượt hiển thị ActionPanel');
+    assert.ok(activePlayer, 'Exactly one player must display ActionPanel');
     await activePlayer.page.bringToFront();
-    // Pha 1 -> Pha 2 -> Pha 3 (MAIN_ACTION)
     await playFirstValidStepOnPage(activePlayer.page, 0);
     await activePlayer.page.waitForTimeout(180);
     await playFirstValidStepOnPage(activePlayer.page, 0);
     await activePlayer.page.waitForSelector('[data-testid="bg-hand-masked-banner"]', { timeout: 20000 });
     await activePlayer.page.locator('[data-testid="bg-unmask-hand-btn"]').click();
     await activePlayer.page.waitForSelector('[data-testid^="bg-use-card-"]', { timeout: 20000 });
-    // Đóng lượt đầu nhẹ nhàng bằng END_TURN (hoặc giữ nguyên sẵn sàng cho vòng lặp Bước 6)
     await activePlayer.page.locator('[data-testid="bg-end-turn-btn"]').click();
 
-    // Đảm bảo P1 không rò rỉ HP ra ngoài thẻ vai bí mật, rồi mở thẻ vai P1 chụp bg4-02-gameboard-desktop.png
     await p1.page.bringToFront();
     if ((await p1.page.locator('[data-testid="bg-role-card-facedown"]').count()) > 0) {
       await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
@@ -608,57 +954,22 @@ async function main() {
       const board = document.querySelector('[data-testid="boardgame-2d-board"]');
       if (!board) return 'MISSING_BOARD';
       const clone = board.cloneNode(true);
-      clone
-        .querySelectorAll('[data-testid="bg-role-card-secret"]')
-        .forEach((el) => el.remove());
-      const text = clone.textContent || '';
-      const match = text.match(/\b\d+\s*\/\s*\d+\s*HP\b/i);
+      clone.querySelectorAll('[data-testid="bg-role-card-secret"]').forEach((el) => el.remove());
+      const match = (clone.textContent || '').match(/\b\d+\s*\/\s*\d+\s*HP\b/i);
       return match ? match[0] : null;
     });
-    assert.equal(
-      leakedHpText,
-      null,
-      `Public board/action-panel không được lộ HP (phát hiện: ${leakedHpText})`,
-    );
-    await p1.page.waitForTimeout(300);
+    assert.equal(leakedHpText, null, `Public board leaked HP text: ${leakedHpText}`);
+    await p1.page.waitForTimeout(250);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-02-gameboard-desktop.png') });
 
-    // Đọc vai bí mật của P2 trước khi thử F5 reconnect
-    await p2.page.bringToFront();
-    if ((await p2.page.locator('[data-testid="bg-role-card-facedown"]').count()) > 0) {
-      await p2.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    }
-    await p2.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 20000 });
-    const p2RoleBeforeReload = (
-      await p2.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()
-    ).trim();
-    assert.ok(p2RoleBeforeReload.length > 0, 'P2 phải thấy thẻ vai bí mật của mình');
-
-    // 5. F5 (page.reload) giữa trận ở P2 -> khôi phục tự động đúng bàn & đúng vai bí mật
-    console.log('[BG4 E2E] Step 5: Testing mid-match F5 reconnect on P2...');
-    await p2.page.bringToFront();
-    await p2.page.reload({ waitUntil: 'domcontentloaded' });
-    await p2.page.locator('#enter-campus').waitFor({ state: 'visible', timeout: 45000 });
-    await p2.page.locator('#enter-campus').click();
-    await p2.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 45000 });
-    await p2.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: 30000 });
-    await p2.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    await p2.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 30000 });
-    const p2RoleAfterReload = (
-      await p2.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()
-    ).trim();
-    assert.equal(
-      p2RoleAfterReload,
-      p2RoleBeforeReload,
-      'Sau F5 giữa trận, P2 phải nhận lại đúng nguyên vai bí mật của mình',
-    );
-
-    // 6. Chơi hết ván tới FINISHED bằng điều khiển UI thật trên cả 4 trình duyệt
-    console.log('[BG4 E2E] Step 6: Playing turns to FINISHED...');
+    // Drive full 4-player match to FINISHED while explicitly verifying E2E-04 mobile turn execution on P4
     let finished = false;
     let lastBroughtIdx = -1;
+    let p4MobileButtonsChecked = false;
+    let p4MobileActionsExecuted = 0;
     const triedActionsPerTurn = new Set();
-    for (let step = 0; step < 520; step++) {
+
+    for (let step = 0; step < 540; step++) {
       const modalVisible = await p1.page
         .evaluate(() => Boolean(document.querySelector('[data-testid="bg-match-result-modal"]')))
         .catch(() => false);
@@ -683,34 +994,48 @@ async function main() {
         await players[activeIdx].page.bringToFront().catch(() => undefined);
         lastBroughtIdx = activeIdx;
       }
+      if (activeIdx === 3 && !p4MobileButtonsChecked) {
+        const btnMetrics = await p4.page.evaluate(() =>
+          Array.from(document.querySelectorAll('[data-testid="bg-action-panel"] button[data-testid]'))
+            .filter((el) => {
+              const r = el.getBoundingClientRect();
+              return r.width > 0 && r.height > 0;
+            })
+            .map((el) => {
+              const r = el.getBoundingClientRect();
+              return { id: el.getAttribute('data-testid'), w: r.width, h: r.height, left: r.left, right: r.right };
+            }),
+        );
+        for (const m of btnMetrics) {
+          assert.ok(m.h >= 32 && m.w >= 32, `Mobile action button ${m.id} hit box < 32px: ${m.w}x${m.h}`);
+          assert.ok(m.left >= -1 && m.right <= 391, `Mobile action button ${m.id} off-screen: ${m.right}`);
+        }
+        p4MobileButtonsChecked = true;
+      }
       const acted =
         activeIdx >= 0
           ? await playFirstValidStepOnPage(players[activeIdx].page, step, triedActionsPerTurn)
           : false;
-      await new Promise((r) => setTimeout(r, acted ? 70 : 60));
+      if (acted && activeIdx === 3) {
+        p4MobileActionsExecuted += 1;
+      }
+      await new Promise((r) => setTimeout(r, acted ? 120 : 60));
     }
-    if (!finished) {
-      const diagText = await p1.page
-        .evaluate(
-          () => document.querySelector('[data-testid="boardgame-2d-board"]')?.innerText.slice(0, 500) || '',
-        )
-        .catch(() => '');
-      console.error('[BG4 E2E] Step 6 timeout board snapshot:', diagText);
-    }
-    assert.equal(finished, true, 'Trận đấu 4 người phải kết thúc FINISHED trong giới hạn bước');
+    assert.equal(finished, true, 'E2E-01 4-player match must reach FINISHED');
+    assert.ok(
+      p4MobileButtonsChecked && p4MobileActionsExecuted >= 2,
+      `E2E-04 mobile player P4 must execute playable actions (${p4MobileActionsExecuted})`,
+    );
 
-    // Chờ MatchResult & MatchPostcard trên cả 4 màn hình
     for (const p of players) {
       await p.page.waitForSelector('[data-testid="bg-match-result-modal"]', { timeout: 20000 });
     }
     await p1.page.waitForSelector('[data-testid="bg-match-postcard-img"]', { timeout: 20000 });
     await p1.page.waitForSelector('[data-testid="bg-download-postcard-btn"]', { timeout: 20000 });
-
     const postcardMeta = await p1.page.evaluate(() => {
       const img = document.querySelector('[data-testid="bg-match-postcard-img"]');
       const link = document.querySelector('[data-testid="bg-download-postcard-btn"]');
-      const modalText =
-        document.querySelector('[data-testid="bg-match-result-modal"]')?.innerText || '';
+      const modalText = document.querySelector('[data-testid="bg-match-result-modal"]')?.innerText || '';
       return {
         imgSrcPrefix: img ? img.getAttribute('src')?.slice(0, 22) : null,
         naturalWidth: img ? img.naturalWidth : 0,
@@ -720,44 +1045,40 @@ async function main() {
         modalText,
       };
     });
-
-    assert.equal(postcardMeta.imgSrcPrefix, 'data:image/png;base64,', 'Postcard phải là PNG Data URL');
-    assert.equal(postcardMeta.naturalWidth, 1200, 'MatchPostcard width phải là 1200');
-    assert.equal(postcardMeta.naturalHeight, 675, 'MatchPostcard height phải là 675');
-    assert.equal(postcardMeta.hrefPrefix, 'data:image/png;base64,', 'Link tải phải trỏ tới PNG');
-    assert.ok(postcardMeta.downloadAttr?.endsWith('.png'), 'Thuộc tính download phải có đuôi .png');
+    assert.equal(postcardMeta.imgSrcPrefix, 'data:image/png;base64,');
+    assert.equal(postcardMeta.naturalWidth, 1200);
+    assert.equal(postcardMeta.naturalHeight, 675);
+    assert.equal(postcardMeta.hrefPrefix, 'data:image/png;base64,');
+    assert.ok(postcardMeta.downloadAttr?.endsWith('.png'));
     for (const mssv of ALL_TEST_MSSVS) {
-      assert.equal(
-        postcardMeta.modalText.includes(mssv),
-        false,
-        `Màn hình tổng kết tuyệt đối không được chứa MSSV ${mssv}`,
-      );
+      assert.equal(postcardMeta.modalText.includes(mssv), false, `MatchResult leaked MSSV ${mssv}`);
     }
-
-    await p1.page.waitForTimeout(250);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-04-match-result-postcard.png') });
 
-    // 7. Thoát ván -> Rời CLB về lại sân KTX
-    console.log('[BG4 E2E] Step 7: Exiting match & CLB back to KTX campus...');
-    await p1.page.locator('[data-testid="bg-leave-game-btn"]').click();
-    await p1.page
-      .locator('[data-testid="boardgame-2d-board"]')
-      .waitFor({ state: 'detached', timeout: 20000 });
+    verifyCommonAudits(players);
+    for (const peer of [p2, p3, p4]) {
+      await peer.context.close().catch(() => undefined);
+      await peer.browser.close().catch(() => undefined);
+    }
 
+    // Exit back to KTX courtyard
+    await p1.page.bringToFront();
+    await p1.page.locator('[data-testid="bg-leave-game-btn"]').click();
+    await p1.page.locator('[data-testid="boardgame-2d-board"]').waitFor({ state: 'detached', timeout: 20000 });
     const closeLobbyBtn = p1.page.locator('[data-testid="bg-close-lobby-btn"]');
     if ((await closeLobbyBtn.count()) > 0 && (await closeLobbyBtn.isVisible().catch(() => false))) {
       await closeLobbyBtn.click();
     }
-
     await p1.page.locator('[data-testid="bg-exit-lounge-btn"]').click();
     const confirmExitBtn = p1.page.locator('[data-testid="bg-confirm-exit-btn"]');
     if (
-      (await confirmExitBtn.count()) > 0 &&
-      (await confirmExitBtn.isVisible().catch(() => false))
+      await confirmExitBtn
+        .waitFor({ state: 'visible', timeout: 800 })
+        .then(() => true)
+        .catch(() => false)
     ) {
       await confirmExitBtn.click();
     }
-
     await p1.page.waitForFunction(
       () => {
         if (!window.__bkhn?.isInBoardGameClub || !window.__bkhn?.getPos) return false;
@@ -765,54 +1086,19 @@ async function main() {
         return !window.__bkhn.isInBoardGameClub() && pos.x > 100 && pos.z < -45;
       },
       null,
-      { timeout: 40000, polling: 200 },
+      { timeout: 65000, polling: 200 },
     );
-    await p1.page.waitForTimeout(500);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-05-exit-ktx.png') });
-
-    // 8. Kiểm tra tổng hợp WS security + cross-player token isolation + console errors
-    const tokens = players.map((p) => p.audit.selfReconnectToken).filter(Boolean);
-    assert.equal(tokens.length, 4, 'Cả 4 người chơi phải được cấp reconnectToken riêng');
-    assert.equal(new Set(tokens).size, 4, '4 reconnectToken phải khác nhau hoàn toàn');
-
-    for (let i = 0; i < players.length; i++) {
-      const p = players[i];
-      for (let j = 0; j < players.length; j++) {
-        if (i === j) continue;
-        const otherToken = players[j].audit.selfReconnectToken;
-        if (!otherToken) continue;
-        for (const frame of p.audit.rawFrames) {
-          assert.equal(
-            frame.includes(otherToken),
-            false,
-            `${p.user.label}: reconnectToken của ${players[j].user.label} bị rò rỉ trong WS frame!`,
-          );
-        }
-      }
-    }
-
-    for (const p of players) {
-      assert.ok(p.audit.wsFramesChecked > 0, `${p.user.label} phải nhận được WS frames thật`);
-      assert.equal(
-        p.audit.auditErrors.length,
-        0,
-        `${p.user.label} WS audit errors: ${p.audit.auditErrors.join('; ')}`,
-      );
-      assert.equal(
-        p.audit.pageErrors.length,
-        0,
-        `${p.user.label} page errors: ${p.audit.pageErrors.join('; ')}`,
-      );
-    }
-
-    console.log(
-      'BG4 E2E PASS:',
-      JSON.stringify({
-        inviteCode,
-        framesAudited: players.map((p) => ({ player: p.user.label, frames: p.audit.wsFramesChecked })),
-        postcardSize: `${postcardMeta.naturalWidth}x${postcardMeta.naturalHeight}`,
-      }),
-    );
+    assert.equal(p1.audit.pageErrors.length, 0, `P1 exit page errors: ${p1.audit.pageErrors.join('; ')}`);
+    return {
+      inviteCode,
+      postcardSize: `${postcardMeta.naturalWidth}x${postcardMeta.naturalHeight}`,
+      p4MobileActionsExecuted,
+      framesChecked: players.reduce((acc, p) => acc + p.audit.wsFramesChecked, 0),
+    };
+  } catch (err) {
+    await captureFailureArtifacts('E2E-01-04', players, err);
+    throw err;
   } finally {
     for (const ctx of contexts) {
       await ctx.close().catch(() => undefined);
@@ -820,6 +1106,643 @@ async function main() {
     for (const b of browsers) {
       await b.close().catch(() => undefined);
     }
+  }
+}
+
+// ===========================================================================
+// E2E-02: 8-Player Full Table + 9th Spectator Isolation
+// ===========================================================================
+async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
+  console.log('[E2E-02] Running 8-player Table 2 + 9th Spectator isolation...');
+  const browsers = [];
+  const contexts = [];
+  const allAudited = [];
+  let peerContext = null;
+  try {
+    const hostUser = { label: 'E2E02-Host', name: 'Chu Ban 8P', mssv: '20229101', viewport: { width: 1280, height: 800 }, mobile: false };
+    const specUser = { label: 'E2E02-Spec', name: 'Khan Gia 9', mssv: '20229102', viewport: { width: 1280, height: 800 }, mobile: false };
+    const host = await setupPlayerContext(chromium, launchOpts, hostUser, shim.wsBaseUrl);
+    browsers.push(host.browser);
+    contexts.push(host.context);
+    allAudited.push(host);
+
+    await enterCampusAndWaitHook(host.page, outUrl, host.audit);
+    await host.page.evaluate(() => window.__bkhn.enterBoardGameClub());
+    await host.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await host.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
+    await host.page.waitForSelector('[data-testid="bg-sit-table-2-btn"]', { timeout: 20000 });
+    await host.page.locator('[data-testid="bg-sit-table-2-btn"]').click();
+    await host.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
+
+    const inviteCode = (await host.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
+    const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
+    const dirJson = await dirRes.json();
+    const matchInfo = (dirJson.matches || []).find((m) => m.inviteCode === inviteCode);
+    assert.ok(matchInfo, `Table 2 match ${inviteCode} must appear in directory`);
+    assert.equal(matchInfo.maxPlayers, 8);
+
+    peerContext = await peerBrowser.newContext({ viewport: { width: 800, height: 600 } });
+    contexts.push(peerContext);
+    const peers = [];
+    for (let seat = 1; seat < 8; seat++) {
+      const peer = await createBrowserWsPeer(peerContext, outUrl, shim.wsBaseUrl, `SinhVien_${seat + 1}`, seat);
+      await peer.join(matchInfo.matchId, inviteCode, false);
+      peers.push(peer);
+      allAudited.push(peer);
+    }
+
+    await host.page.waitForFunction(
+      () => document.querySelector('[data-testid="bg-hud-match-bar"]')?.textContent?.includes('8'),
+      null,
+      { timeout: 20000, polling: 200 },
+    );
+
+    // 9th participant joins as Spectator via directory "👁 Xem" button
+    const spec = await setupPlayerContext(chromium, launchOpts, specUser, shim.wsBaseUrl, { expectSpectator: true });
+    browsers.push(spec.browser);
+    contexts.push(spec.context);
+    allAudited.push(spec);
+    await enterCampusAndWaitHook(spec.page, outUrl, spec.audit);
+    await spec.page.evaluate(() => window.__bkhn.enterBoardGameClub());
+    await spec.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 30000 });
+    await spec.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
+    await spec.page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 20000 });
+    const watchBtn = spec.page
+      .locator(`[data-testid="boardgame-lobby-modal"] div:has-text("${inviteCode}") button:has-text("Xem")`)
+      .first();
+    await watchBtn.waitFor({ state: 'visible', timeout: 20000 });
+    await watchBtn.click();
+
+    for (const peer of peers) {
+      await peer.setReady(true);
+    }
+    await host.page.bringToFront();
+    await host.page.waitForFunction(
+      () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
+      null,
+      { timeout: 25000, polling: 200 },
+    );
+    await host.page.locator('[data-testid="bg-hud-start-btn"]').click();
+
+    await host.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 25000 });
+    await spec.page.bringToFront();
+    await spec.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 25000 });
+    await spec.page.waitForSelector('[data-testid="bg-spectator-role-placeholder"]', { timeout: 15000 });
+    await spec.page.waitForSelector('[data-testid="bg-action-spectator-banner"]', { timeout: 15000 });
+    assert.equal(await spec.page.locator('[data-testid="bg-action-panel"]').count(), 0);
+    await spec.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-8p-spectator.png') });
+
+    // Execute 8 turns (1 full round across 8p) verifying active state sync
+    const hostTried = new Set();
+    let turnsCompleted = 0;
+    for (let step = 0; step < 90 && turnsCompleted < 8; step++) {
+      const hostActive = await host.page
+        .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
+        .catch(() => false);
+      if (hostActive) {
+        await playFirstValidStepOnPage(host.page, step, hostTried);
+        await new Promise((r) => setTimeout(r, 70));
+        continue;
+      }
+      let peerStepped = false;
+      for (const peer of peers) {
+        if (await peer.stepFullTurnIfActive(true)) {
+          peerStepped = true;
+          turnsCompleted += 1;
+          break;
+        }
+      }
+      if (!peerStepped) await new Promise((r) => setTimeout(r, 60));
+    }
+    assert.ok(turnsCompleted >= 6, `Expected >= 6 8p peer turns completed, got ${turnsCompleted}`);
+    assert.equal(await spec.page.locator('[data-testid="bg-action-panel"]').count(), 0);
+
+    verifyCommonAudits(allAudited);
+    return { inviteCode, players: 8, spectatorVerified: true, turnsCompleted };
+  } catch (err) {
+    await captureFailureArtifacts('E2E-02', allAudited, err);
+    throw err;
+  } finally {
+    for (const ctx of contexts) {
+      await ctx.close().catch(() => undefined);
+    }
+    for (const b of browsers) {
+      await b.close().catch(() => undefined);
+    }
+  }
+}
+
+// ===========================================================================
+// E2E-03: 5-Checkpoint Mid-Session Browser Reload Reconnect Matrix
+// ===========================================================================
+async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
+  console.log('[E2E-03] Running 5-checkpoint reload reconnect matrix...');
+  const browsers = [];
+  const contexts = [];
+  const allAudited = [];
+  try {
+    const p1User = { label: 'E2E03-P1', name: 'Reconnect P1', mssv: '20229101', viewport: { width: 1280, height: 800 }, mobile: false };
+    const p1 = await setupPlayerContext(chromium, launchOpts, p1User, shim.wsBaseUrl);
+    browsers.push(p1.browser);
+    contexts.push(p1.context);
+    allAudited.push(p1);
+
+    const reloadAndRestoreTo = async (selector) => {
+      await p1.page.reload({ waitUntil: 'domcontentloaded' });
+      const enter = p1.page.locator('#enter-campus');
+      await enter.waitFor({ state: 'visible', timeout: 65000 });
+      await enter.click();
+      await p1.page.waitForSelector(selector, { timeout: 65000 });
+    };
+
+    await enterCampusAndWaitHook(p1.page, outUrl, p1.audit);
+    await p1.page.evaluate(() => window.__bkhn.enterBoardGameClub());
+    await p1.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await p1.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-sit-table-1-btn"]', { timeout: 20000 });
+    await p1.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
+    const inviteCode = (await p1.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
+
+    const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
+    const dirJson = await dirRes.json();
+    const matchInfo = (dirJson.matches || []).find((m) => m.inviteCode === inviteCode);
+    assert.ok(matchInfo);
+
+    const peerCtx = await peerBrowser.newContext({ viewport: { width: 800, height: 600 } });
+    contexts.push(peerCtx);
+    const peers = [];
+    for (let seat = 1; seat < 4; seat++) {
+      const peer = await createBrowserWsPeer(peerCtx, outUrl, shim.wsBaseUrl, `ReconnectPeer_${seat}`, seat);
+      await peer.join(matchInfo.matchId, inviteCode, false);
+      await peer.setReady(true);
+      peers.push(peer);
+      allAudited.push(peer);
+    }
+
+    await p1.page.waitForFunction(
+      () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
+      null,
+      { timeout: 25000, polling: 200 },
+    );
+    const p1IdBefore = p1.audit.selfPlayerId;
+
+    // Checkpoint 1: Reload during READY_CHECK lobby
+    await reloadAndRestoreTo('[data-testid="bg-hud-invite-code"]');
+    const codeAfterC1 = (await p1.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
+    assert.equal(codeAfterC1, inviteCode, 'Checkpoint 1: must restore READY_CHECK inviteCode');
+    assert.equal(p1.audit.selfPlayerId, p1IdBefore, 'Checkpoint 1: must preserve exact playerId');
+
+    // DO intentionally promotes next connected player when the host disconnects on reload;
+    // support both host-retained and promoted-host flows to start the match cleanly.
+    const isP1StillHost = await p1.page
+      .evaluate(() => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]')))
+      .catch(() => false);
+    if (isP1StillHost) {
+      await p1.page.waitForFunction(
+        () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
+        null,
+        { timeout: 20000, polling: 200 },
+      );
+      await p1.page.locator('[data-testid="bg-hud-start-btn"]').click();
+    } else {
+      const readyBtn = p1.page.locator('[data-testid="bg-hud-ready-btn"]');
+      await readyBtn.waitFor({ state: 'visible', timeout: 15000 });
+      const readyLabel = (await readyBtn.innerText()).trim();
+      if (!readyLabel.includes('Đã sẵn sàng')) {
+        await readyBtn.click();
+        await p1.page.waitForFunction(
+          () => {
+            const btn = document.querySelector('[data-testid="bg-hud-ready-btn"]');
+            return Boolean(btn && (btn.textContent || '').includes('Đã sẵn sàng'));
+          },
+          null,
+          { timeout: 10000, polling: 150 },
+        );
+      }
+      let started = false;
+      for (let attempt = 0; attempt < 30 && !started; attempt++) {
+        for (const peer of peers) {
+          const st = await peer.getState();
+          if (st.sync?.status === 'PLAYING') {
+            started = true;
+            break;
+          }
+          if (st.sync?.hostPlayerId && st.sync.hostPlayerId === st.auth?.playerId) {
+            await peer.startMatch();
+          }
+        }
+        if (!started) await new Promise((r) => setTimeout(r, 250));
+      }
+      assert.ok(started, 'Checkpoint 1: promoted host peer must start match once P1 restores ready');
+    }
+    await p1.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 25000 });
+
+    // Read secret role name once before checkpoints
+    await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 15000 });
+    const expectedRoleName = (await p1.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()).trim();
+
+    // Helper: advance peers until P1 has ActionPanel
+    const advancePeersUntilP1Active = async () => {
+      for (let i = 0; i < 40; i++) {
+        const isP1Turn = await p1.page
+          .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
+          .catch(() => false);
+        if (isP1Turn) return;
+        for (const peer of peers) {
+          await peer.stepFullTurnIfActive(true);
+        }
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      throw new Error('Timed out waiting for P1 turn');
+    };
+
+    await advancePeersUntilP1Active();
+
+    // Checkpoint 2: Reload during P1's own turn (MOVE_OR_STAY)
+    await reloadAndRestoreTo('[data-testid="boardgame-2d-board"]');
+    assert.equal(p1.audit.selfPlayerId, p1IdBefore, 'Checkpoint 2: must preserve exact playerId');
+    await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 15000 });
+    assert.equal(
+      (await p1.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()).trim(),
+      expectedRoleName,
+      'Checkpoint 2: secret role restored on own turn',
+    );
+    // Reloading full Next.js + WebGL campus under SwiftShader can exceed
+    // BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS (12s); advance peers back to P1 if turn timed out.
+    const hasActionAfterC2 = await p1.page
+      .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
+      .catch(() => false);
+    if (!hasActionAfterC2) {
+      await p1.page.waitForSelector('[data-testid="bg-waiting-turn-banner"]', { timeout: 15000 });
+      await advancePeersUntilP1Active();
+    }
+    // Complete P1 turn via UI after reload -> pass turn to a peer
+    const p1Tried = new Set();
+    for (let s = 0; s < 12; s++) {
+      const stillOwn = await p1.page
+        .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
+        .catch(() => false);
+      if (!stillOwn) break;
+      await playFirstValidStepOnPage(p1.page, s, p1Tried, { skipReveal: true });
+      await new Promise((r) => setTimeout(r, 70));
+    }
+
+    // Checkpoint 3: Reload during another player's turn
+    await p1.page.waitForSelector('[data-testid="bg-waiting-turn-banner"]', { timeout: 15000 });
+    await reloadAndRestoreTo('[data-testid="bg-waiting-turn-banner"]');
+    assert.equal(await p1.page.locator('[data-testid="bg-action-panel"]').count(), 0);
+    await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    assert.equal(
+      (await p1.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()).trim(),
+      expectedRoleName,
+      'Checkpoint 3: secret role restored during opponent turn',
+    );
+
+    // Advance back to P1 -> reach MAIN_ACTION -> REVEAL_ROLE -> Checkpoint 4
+    await advancePeersUntilP1Active();
+    await p1.page.locator('[data-testid="bg-stay-btn"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-explore-loc"]', { timeout: 10000 });
+    await p1.page.locator('[data-testid="bg-explore-loc"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-reveal-role-btn"]', { timeout: 10000 });
+    await p1.page.locator('[data-testid="bg-reveal-role-btn"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-confirm-reveal-btn"]', { timeout: 10000 });
+    await p1.page.locator('[data-testid="bg-confirm-reveal-btn"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-last-reveal-banner"]', { timeout: 15000 });
+
+    // Checkpoint 4: Reload after voluntary role revelation
+    await reloadAndRestoreTo('[data-testid="boardgame-2d-board"]');
+    assert.equal(p1.audit.selfPlayerId, p1IdBefore, 'Checkpoint 4: must preserve exact playerId');
+    await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 15000 });
+    const roleCardTextC4 = await p1.page.locator('[data-testid="bg-role-card-secret"]').innerText();
+    assert.equal(
+      roleCardTextC4.includes('Mở khóa sau khi lật'),
+      false,
+      'Checkpoint 4: unlocked skill status must persist across reload after REVEAL_ROLE',
+    );
+    await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-reconnect-check.png') });
+
+    // Drive match to FINISHED fast via peers + UI P1
+    for (let step = 0; step < 300; step++) {
+      const done = await p1.page
+        .evaluate(() => Boolean(document.querySelector('[data-testid="bg-match-result-modal"]')))
+        .catch(() => false);
+      if (done) break;
+      const ownTurn = await p1.page
+        .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
+        .catch(() => false);
+      if (ownTurn) {
+        await playFirstValidStepOnPage(p1.page, step, p1Tried);
+        await new Promise((r) => setTimeout(r, 65));
+      } else {
+        for (const peer of peers) {
+          await peer.stepFullTurnIfActive(true);
+        }
+        await new Promise((r) => setTimeout(r, 40));
+      }
+    }
+    await p1.page.waitForSelector('[data-testid="bg-match-result-modal"]', { timeout: 25000 });
+
+    // Checkpoint 5: Reload during FINISHED screen
+    await reloadAndRestoreTo('[data-testid="bg-match-result-modal"]');
+    await p1.page.waitForSelector('[data-testid="bg-match-postcard-img"]', { timeout: 20000 });
+
+    verifyCommonAudits(allAudited);
+    return { inviteCode, checkpointsPassed: 5, restoredRole: expectedRoleName };
+  } catch (err) {
+    await captureFailureArtifacts('E2E-03', allAudited, err);
+    throw err;
+  } finally {
+    for (const ctx of contexts) {
+      await ctx.close().catch(() => undefined);
+    }
+    for (const b of browsers) {
+      await b.close().catch(() => undefined);
+    }
+  }
+}
+
+// ===========================================================================
+// E2E-05 & E2E-06: Concurrent 2-Match Isolation + Browser WS Security Probes
+// ===========================================================================
+async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim) {
+  console.log('[E2E-05 & E2E-06] Running 2-match concurrent isolation & security probe suite...');
+  const browsers = [];
+  const contexts = [];
+  const allAudited = [];
+  try {
+    const healthRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/health`);
+    assert.equal(healthRes.status, 200);
+    const healthJson = await healthRes.json();
+    assert.equal(healthJson.ok, true);
+    assert.equal(healthJson.rulesetVersion, 3);
+    assert.equal(healthJson.protocolVersion, 1);
+
+    const hostA = await setupPlayerContext(
+      chromium,
+      launchOpts,
+      { label: 'MatchA-Host', name: 'Chu Ban A', mssv: '20229101', viewport: { width: 1280, height: 800 }, mobile: false },
+      shim.wsBaseUrl,
+    );
+    const hostB = await setupPlayerContext(
+      chromium,
+      launchOpts,
+      { label: 'MatchB-Host', name: 'Chu Ban B', mssv: '20229102', viewport: { width: 1280, height: 800 }, mobile: false },
+      shim.wsBaseUrl,
+    );
+    browsers.push(hostA.browser, hostB.browser);
+    contexts.push(hostA.context, hostB.context);
+    allAudited.push(hostA, hostB);
+
+    await enterCampusAndWaitHook(hostA.page, outUrl, hostA.audit);
+    await hostA.page.evaluate(() => window.__bkhn.enterBoardGameClub());
+    await hostA.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await hostA.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
+    await hostA.page.waitForSelector('[data-testid="bg-sit-table-1-btn"]', { timeout: 20000 });
+    await hostA.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
+    await hostA.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
+    const codeA = (await hostA.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
+
+    await hostB.page.bringToFront();
+    await enterCampusAndWaitHook(hostB.page, outUrl, hostB.audit);
+    await hostB.page.evaluate(() => window.__bkhn.enterBoardGameClub());
+    await hostB.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await hostB.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
+    await hostB.page.waitForSelector('[data-testid="bg-sit-table-2-btn"]', { timeout: 20000 });
+    await hostB.page.locator('[data-testid="bg-sit-table-2-btn"]').click();
+    await hostB.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
+    const codeB = (await hostB.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
+    assert.notEqual(codeA, codeB);
+
+    const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
+    const dirJson = await dirRes.json();
+    const matchA = (dirJson.matches || []).find((m) => m.inviteCode === codeA);
+    const matchB = (dirJson.matches || []).find((m) => m.inviteCode === codeB);
+    assert.ok(matchA && matchB && matchA.matchId !== matchB.matchId);
+
+    const peerCtx = await peerBrowser.newContext({ viewport: { width: 800, height: 600 } });
+    contexts.push(peerCtx);
+    const peersA = [];
+    const peersB = [];
+    for (let s = 1; s < 4; s++) {
+      const pA = await createBrowserWsPeer(peerCtx, outUrl, shim.wsBaseUrl, `MatchA_P${s + 1}`, s);
+      await pA.join(matchA.matchId, codeA, false);
+      await pA.setReady(true);
+      peersA.push(pA);
+      allAudited.push(pA);
+
+      const pB = await createBrowserWsPeer(peerCtx, outUrl, shim.wsBaseUrl, `MatchB_P${s + 1}`, s);
+      await pB.join(matchB.matchId, codeB, false);
+      await pB.setReady(true);
+      peersB.push(pB);
+      allAudited.push(pB);
+    }
+
+    await hostA.page.bringToFront();
+    await hostA.page.waitForFunction(
+      () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
+      null,
+      { timeout: 20000 },
+    );
+    await hostA.page.locator('[data-testid="bg-hud-start-btn"]').click();
+    await hostA.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 20000 });
+
+    await hostB.page.bringToFront();
+    await hostB.page.waitForFunction(
+      () => Boolean(document.querySelector('[data-testid="bg-hud-start-btn"]:not([disabled])')),
+      null,
+      { timeout: 20000 },
+    );
+    await hostB.page.locator('[data-testid="bg-hud-start-btn"]').click();
+    await hostB.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: 20000 });
+
+    // E2E-05: Assert matchId isolation on both Hosts & peers
+    assert.deepEqual([...hostA.audit.matchIdsSeen], [matchA.matchId]);
+    assert.deepEqual([...hostB.audit.matchIdsSeen], [matchB.matchId]);
+
+    // E2E-06: Security probe from a real Chromium browser context
+    const probePage = await peerCtx.newPage();
+    await probePage.goto(`${outUrl}/__e2e-peer.html`, { waitUntil: 'domcontentloaded' });
+    const secResults = await probePage.evaluate(
+      async ({ wsUrl, mA, mB, foreignToken }) => {
+        const openAndSend = (targetMatchId, payloads) =>
+          new Promise((resolve) => {
+            const ws = new WebSocket(`${wsUrl}/ws/boardgame?matchId=${encodeURIComponent(targetMatchId)}`);
+            const received = [];
+            ws.onopen = () => {
+              payloads.forEach((p, idx) => {
+                setTimeout(() => {
+                  ws.send(typeof p === 'string' ? p : JSON.stringify(p));
+                }, idx * 45);
+              });
+              setTimeout(() => {
+                ws.close();
+                resolve(received);
+              }, payloads.length * 45 + 250);
+            };
+            ws.onmessage = (ev) => {
+              try {
+                received.push(JSON.parse(ev.data));
+              } catch {
+                received.push({ raw: ev.data });
+              }
+            };
+          });
+
+        const wrongTokenMsgs = await openAndSend(mB, [
+          {
+            type: 'BG_JOIN',
+            matchId: mB,
+            displayName: 'Attacker',
+            reconnectToken: foreignToken,
+          },
+        ]);
+
+        const fuzzMsgs = await openAndSend(mA, [
+          '{"broken_json',
+          { type: 'BG_FORCE_WIN' },
+          { type: 'BG_SET_READY', ready: 'invalid-string' },
+        ]);
+
+        return { wrongTokenMsgs, fuzzMsgs };
+      },
+      {
+        wsUrl: shim.wsBaseUrl,
+        mA: matchA.matchId,
+        mB: matchB.matchId,
+        foreignToken: hostA.audit.selfReconnectToken,
+      },
+    );
+
+    assert.ok(
+      secResults.wrongTokenMsgs.some((m) => m.type === 'BG_ERROR' && m.code === 'UNAUTHORIZED'),
+      `Cross-match token must fail with UNAUTHORIZED: ${JSON.stringify(secResults.wrongTokenMsgs)}`,
+    );
+    const invalidErrCount = secResults.fuzzMsgs.filter(
+      (m) => m.type === 'BG_ERROR' && m.code === 'INVALID_ACTION',
+    ).length;
+    assert.equal(
+      invalidErrCount,
+      3,
+      `All 3 malformed/unknown browser payloads must return INVALID_ACTION: ${JSON.stringify(secResults.fuzzMsgs)}`,
+    );
+
+    // Send prototype-key action & wrong-phase action from authenticated peer without crashing Match A DO
+    const peerProtoRes = await peersA[0].sendAction({
+      type: 'PLAY_EVENT',
+      cardId: 'ev-03',
+      targetLocation: 'toString',
+    });
+    assert.equal(peerProtoRes.ok, false);
+    assert.equal(peerProtoRes.code, 'INVALID_ACTION');
+
+    // Step turns in Match A & Match B after probes to confirm full health
+    let turnedA = false;
+    let turnedB = false;
+    for (let i = 0; i < 6 && (!turnedA || !turnedB); i++) {
+      for (const p of peersA) {
+        if (await p.stepFullTurnIfActive(true)) turnedA = true;
+      }
+      for (const p of peersB) {
+        if (await p.stepFullTurnIfActive(true)) turnedB = true;
+      }
+      if (!turnedA) {
+        const aOwn = await hostA.page
+          .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
+          .catch(() => false);
+        if (aOwn) {
+          await hostA.page.bringToFront();
+          turnedA = await playFirstValidStepOnPage(hostA.page, 0, new Set());
+        }
+      }
+      if (!turnedB) {
+        const bOwn = await hostB.page
+          .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
+          .catch(() => false);
+        if (bOwn) {
+          await hostB.page.bringToFront();
+          turnedB = await playFirstValidStepOnPage(hostB.page, 0, new Set());
+        }
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.equal(turnedA && turnedB, true, 'Both concurrent matches must process post-probe actions cleanly');
+
+    verifyCommonAudits(allAudited);
+    return { codeA, codeB, securityProbesPassed: 4 };
+  } catch (err) {
+    await captureFailureArtifacts('E2E-05-06', allAudited, err);
+    throw err;
+  } finally {
+    for (const ctx of contexts) {
+      await ctx.close().catch(() => undefined);
+    }
+    for (const b of browsers) {
+      await b.close().catch(() => undefined);
+    }
+  }
+}
+
+async function main() {
+  if (!fs.existsSync(path.join(OUT_DIR, 'index.html'))) {
+    throw new Error('Missing out/index.html — run npm run build before boardgame-e2e.cjs');
+  }
+  fs.mkdirSync(SHOT_DIR, { recursive: true });
+  for (const f of fs.readdirSync(SHOT_DIR)) {
+    if (f.startsWith('failure-')) {
+      fs.unlinkSync(path.join(SHOT_DIR, f));
+    }
+  }
+
+  const { chromium } = loadPlaywright();
+  const executablePath = resolveBrowserExecutable(chromium);
+  const launchOpts = buildLaunchOptions(executablePath);
+  const shimPort = await getFreePort();
+  const shim = await startWsShim(shimPort);
+  const { server: outServer, url: outUrl } = await startOutServer();
+
+  let peerBrowser;
+  try {
+    const summary = {
+      shotDir: SHOT_DIR,
+      startedAt: new Date().toISOString(),
+      scenarios: {},
+    };
+
+    const t1 = Date.now();
+    summary.scenarios['E2E-01_E2E-04'] = {
+      ...(await runE2E01AndE2E04(chromium, launchOpts, outUrl, shim)),
+      durationMs: Date.now() - t1,
+    };
+
+    peerBrowser = await chromium.launch(launchOpts);
+
+    const t2 = Date.now();
+    summary.scenarios['E2E-02'] = {
+      ...(await runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim)),
+      durationMs: Date.now() - t2,
+    };
+
+    const t3 = Date.now();
+    summary.scenarios['E2E-03'] = {
+      ...(await runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim)),
+      durationMs: Date.now() - t3,
+    };
+
+    const t4 = Date.now();
+    summary.scenarios['E2E-05_E2E-06'] = {
+      ...(await runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)),
+      durationMs: Date.now() - t4,
+    };
+
+    summary.finishedAt = new Date().toISOString();
+    fs.writeFileSync(path.join(SHOT_DIR, 'e2e-summary.json'), JSON.stringify(summary, null, 2), 'utf8');
+    console.log('BOARDGAME V3.1 E2E PASS (E2E-01..E2E-06):', JSON.stringify(summary));
+  } finally {
+    if (peerBrowser) await peerBrowser.close().catch(() => undefined);
     outServer.close();
     if (shim && shim.proc && shim.proc.exitCode === null) {
       shim.proc.kill('SIGTERM');

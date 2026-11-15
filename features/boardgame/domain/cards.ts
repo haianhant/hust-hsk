@@ -312,9 +312,13 @@ export const CARDS_CATALOG: readonly GameCard[] = [
   },
 ];
 
-export const CARDS_BY_ID: Record<string, GameCard> = Object.fromEntries(
-  CARDS_CATALOG.map((card) => [card.id, card]),
+export const CARDS_BY_ID: Record<string, GameCard> = Object.freeze(
+  Object.fromEntries(CARDS_CATALOG.map((card) => [card.id, card])),
 );
+
+export function getCardById(cardId: string): GameCard | undefined {
+  return Object.hasOwn(CARDS_BY_ID, cardId) ? CARDS_BY_ID[cardId] : undefined;
+}
 
 export function listCardIdsByDeck(deck: BoardGameDeckId): string[] {
   return CARDS_CATALOG.filter((c) => c.deck === deck).map((c) => c.id);

@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
-import { CARDS_BY_ID, listCardIdsByDeck } from './cards';
+import { getCardById, listCardIdsByDeck } from './cards';
 import {
   FACTION_LABELS,
   ROLES_BY_ID,
@@ -109,13 +109,15 @@ export function createInitialGameState(input: CreateInitialGameInput): Authorita
 
     // Mỗi sinh viên khởi đầu đồng nhất với 1 Thẻ Điều tra + 1 Thẻ Trang bị hoặc Sự kiện (luân phiên theo ghế)
     const invId = state.decks.investigation.shift();
-    if (invId && CARDS_BY_ID[invId]) {
-      startingCards.push(CARDS_BY_ID[invId]);
+    const invCard = invId ? getCardById(invId) : undefined;
+    if (invCard) {
+      startingCards.push(invCard);
     }
     const secondDeck = idx % 2 === 0 ? state.decks.equipment : state.decks.event;
     const secondId = secondDeck.shift();
-    if (secondId && CARDS_BY_ID[secondId]) {
-      startingCards.push(CARDS_BY_ID[secondId]);
+    const secondCard = secondId ? getCardById(secondId) : undefined;
+    if (secondCard) {
+      startingCards.push(secondCard);
     }
 
     return {

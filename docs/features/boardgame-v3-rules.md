@@ -65,7 +65,7 @@ Mỗi người chơi nhận **1 ngân sách thời gian duy nhất cho toàn b�
      - **`PLAY_EVENT`:** Kích hoạt 1 thẻ *Sự kiện* trên tay.
      - **`USE_EQUIPMENT`:** Kích hoạt 1 thẻ *Trang bị tiêu hao* (*Bình Trà Gừng* / *Thẻ Từ Nội Trú*) từ tay hoặc từ ô đã trang bị rồi bỏ thẻ đó.
      - **`ATTACK`:** Tấn công 1 sinh viên khác cùng phòng (hoặc kề phòng nếu có tầm nhìn Sân Bóng Rổ / *Gậy Móc Khóa Tuần Đêm* / kỹ năng Dũng).
-     - **`DEFEND`:** Nhận `+1 Giáp tạm` (tối đa `2`) tới đầu lượt kế tiếp và quan sát kín số bài trên tay + số trang bị của những người đang đứng cùng phòng.
+     - **`DEFEND`:** Nhận `+1 Giáp tạm` (tối đa `2`) cho tới hết lượt kế tiếp của chính bạn (`1` vòng) và quan sát kín số bài trên tay + số trang bị của những người đang đứng cùng phòng (nếu mục tiêu là **Vy `suong-tin-gia` đã lật vai**, số bài trên tay bị che dưới dạng `? lá (bị nhiễu)`).
      - **`USE_SKILL`:** Dùng kỹ năng chủ động riêng (chỉ khả dụng khi **đã lật vai** và hết hồi chiêu `2` vòng).
      - **`END_TURN`:** Nhường lượt cho người kế tiếp.
 
@@ -78,10 +78,10 @@ Mọi phe đều có đúng 1 nhân vật ở mỗi mức máu `11 / 12 / 13 HP`
 | Nhân vật | Phe | HP tối đa | Lợi ích ngay khi Tự Lật Vai | Kỹ năng Chủ động (Hồi 2 vòng) & Nội tại sau Lật |
 |---|---|---:|---|---|
 | **Minh** (`gac-ky-thuat`) | Đội Gác Đèn | **13** | `+1 Giáp tạm` & rút `1 Trang bị` | **Gia Cố Chốt Trực:** Chọn bản thân hoặc đồng đội cùng/kề phòng: hồi `2` vết thương và tặng `+1 Giáp tạm` (`+2` nếu họ chưa bị thương). *Nội tại khi lật:* Miễn nhiễm sát thương từ Sự kiện nếu đang mang ít nhất 1 trang bị. |
-| **Lan** (`gac-truc-ban`) | Đội Gác Đèn | **12** | Hồi `1` vết thương & rút `1 Điều tra` | **Lệnh Bảo Hộ Trực Đêm:** Đặt khiên bảo hộ lên người khác cùng/kề phòng tới đầu lượt sau của Lan: giảm `1 ST` nhận vào và **không thể tụt xuống dưới 1 HP**. *Nội tại khi lật:* Mọi thẻ Điều tra của Lan tự động đọc thêm chính xác số bài trên tay mục tiêu. |
+| **Lan** (`gac-truc-ban`) | Đội Gác Đèn | **12** | Hồi `1` vết thương & rút `1 Điều tra` | **Lệnh Bảo Hộ Trực Đêm:** Đặt khiên bảo hộ lên người khác cùng/kề phòng tới đầu lượt sau của Lan: giảm `1 ST` nhận vào và **không thể tụt xuống dưới 1 HP**. *Nội tại khi lật:* Mọi thẻ Điều tra của Lan tự động đọc thêm số bài trên tay mục tiêu (hoặc `? lá (bị nhiễu)` nếu mục tiêu là Vy đã lật vai). |
 | **Khánh** (`gac-radio`) | Đội Gác Đèn | **11** | Kích hoạt *Sóng toàn khu* lượt này & `+1 Giáp tạm` | **Phát Sóng Kiểm Chứng:** Chọn bất kỳ ai trên bản đồ: kiểm tra công khai xem họ từng `Tấn công > 0` hoặc đang đeo trang bị không; nếu có (hoặc là Màn Sương đã lật), gắn dấu hở sườn `exposedMark = 1`. *Nội tại:* Dùng Thẻ Điều tra toàn bản đồ. |
 | **Tú** (`suong-an-danh`) | Hội Màn Sương | **12** | `+1 Giáp tạm` & mở tầm đánh kề phòng lượt này | **Đánh Tráo Bóng Tối:** Chọn mục tiêu cùng/kề phòng: đổi chỗ với họ (nếu ở ô kề) và gây `2 ST` phục kích (vẫn tính giáp/áo bảo hộ). *Nội tại:* Đòn đánh thường của Tú bỏ qua giảm thương *Bình Tĩnh Tự Vệ*. |
-| **Vy** (`suong-tin-don`) | Hội Màn Sương | **11** | Rút `1 Sự kiện` & `+1 Giáp tạm` | **Tung Hỏa Mù Hành Lang:** Chọn mục tiêu cùng/kề phòng: xóa `1 Giáp tạm`, gây `1 ST` và đẩy họ sang 1 khu vực kề cận. *Nội tại:* Đối phương dùng `DEFEND` cùng phòng với Vy không đọc được số bài trên tay Vy. |
+| **Vy** (`suong-tin-gia`) | Hội Màn Sương | **11** | Rút `1 Sự kiện` & `+1 Giáp tạm` | **Tung Hỏa Mù Hành Lang:** Chọn mục tiêu cùng/kề phòng: xóa `1 Giáp tạm`, gây `1 ST` và đẩy họ sang `1` khu vực kề cận. *Nội tại khi lật:* `handCount` công khai của Vy chuyển thành `null` (`?`); mọi kiểm tra số/nhóm bài trên tay Vy qua `DEFEND`, `inv-08`, `inv-09` hoặc nội tại của Lan đều chỉ trả về `? lá (bị nhiễu)`. |
 | **Dũng** (`suong-gac-cong`) | Hội Màn Sương | **13** | Mở tầm đánh kề phòng lượt này | **Áp Sát Bất Ngờ:** Nhảy vào phòng của mục tiêu cùng/kề phòng (phải đã có `>= 1 vết thương` hoặc đã lật vai) và tung đòn `3 ST` cơ bản. *Nội tại:* Đánh mục tiêu có `>= 3 vết thương` gây thêm `+1 ST`. |
 | **Hải** (`lang-anh-san`) | Kẻ Lang Thang | **12** | `+1 Giáp tạm` & rút `1 Trang bị` | **Chốt Gói Tin Đêm:** Từ Vòng 5 trở đi, nếu đang mang `>= 2 Trang bị` và đã điều tra `>= 3` lần -> **Hải thắng đơn độc ngay lập tức!** Nếu chưa đủ điều kiện: rút `1 Điều tra` & `+1 Giáp tạm`. |
 | **Trang** (`lang-quan-sat`) | Kẻ Lang Thang | **11** | Hồi `1` vết thương & `+1 Giáp tạm` | **Biên Bản Đối Chất:** Chọn 1 người cùng/kề phòng: cả 2 nhận `+1 Giáp tạm` và Trang rút `1 Điều tra`. Thắng đơn độc ngay nếu đã lật khi toàn bàn chỉ còn `<= 2` người sống (đã có `>= 2` người bị loại). |
@@ -100,8 +100,8 @@ Thay vì soi thẳng phe thật, mỗi thẻ **Điều tra có điều kiện** 
 5. **`inv-05` · Soi Thẻ Nội Trú:** Đúng nếu `Gác Đèn HOẶC Dũng HOẶC Trang` (*Minh, Lan, Khánh, Dũng, Trang* vs *Tú, Vy, Hải, Bình*). Nếu đúng: người điều tra biết máu tối đa của mục tiêu thuộc nhóm chẵn (`12`) hay lẻ (`11/13`).
 6. **`inv-06` · Đối Chiếu Lời Khai:** Đúng nếu `Mục tiêu CÙNG PHE hoặc CÙNG MÁU TỐI ĐA với bạn`. Báo kết quả đối chiếu + ghi chú kín mức thương tích (`>= 2` hay còn khỏe).
 7. **`inv-07` · Dấu Chân Hành Lang:** Đúng nếu `Mục tiêu từng ghé Phát Thanh/Bảo Vệ HOẶC từng đứng yên (STAY)`. Nếu đúng: báo kín cho người điều tra tối đa 2 phòng mục tiêu vừa ghé.
-8. **`inv-08` · Vết Xước Tay Áo:** Đúng nếu `Mục tiêu đã từng tấn công HOẶC đang đeo trang bị`. Nếu đúng: người điều tra biết chính xác `attacksMade > 0` và số thẻ trên tay; nếu mục tiêu đã từng đánh người mà còn `<= 1` vết thương, nhận `1` vết thương cảnh cáo (không gây gục).
-9. **`inv-09` · Kiểm Tra Ngăn Balo:** Đúng nếu `Mục tiêu có >= 2 thẻ trên tay HOẶC đang đeo trang bị`. Nếu đúng: liệt kê kín nhóm bài trên tay mục tiêu (ví dụ `1 Điều tra, 1 Sự kiện`).
+8. **`inv-08` · Vết Xước Tay Áo:** Đúng nếu `Mục tiêu đã từng tấn công HOẶC đang đeo trang bị`. Nếu đúng: người điều tra biết chính xác `attacksMade > 0` và số thẻ trên tay (che `? lá (bị nhiễu)` nếu mục tiêu là **Vy đã lật vai**); nếu mục tiêu đã từng đánh người mà còn `<= 1` vết thương, nhận `1` vết thương cảnh cáo (không gây gục).
+9. **`inv-09` · Kiểm Tra Ngăn Balo:** Đúng nếu `Mục tiêu có >= 2 thẻ trên tay HOẶC đang đeo trang bị`. Nếu đúng: liệt kê kín nhóm bài trên tay mục tiêu (ví dụ `1 Điều tra, 1 Sự kiện`; che `? lá (bị nhiễu)` nếu mục tiêu là **Vy đã lật vai**).
 
 ---
 
@@ -137,9 +137,14 @@ Thay vì soi thẳng phe thật, mỗi thẻ **Điều tra có điều kiện** 
 - **Bình Tĩnh Tự Vệ (Anti-Blind-Attack):** Nếu bạn `ATTACK` một sinh viên **chưa lật vai**, **chưa từng tấn công ai (`attacksMade === 0`)** và **bạn chưa từng điều tra người đó** (trừ Tú đã lật vai):
   1. Sát thương bị **giảm `1`** (tối thiểu `1` trước khi trừ giáp).
   2. Nếu nạn nhân còn sống sau đòn đánh, họ nhận ngay **`+1 Giáp tạm`** (tối đa `2`) để có cơ hội phản ứng!
-- **Phòng thủ theo thứ tự:** Trừ *Áo Khoác Gió Bách Khoa* (`-1`, tối thiểu 1) -> Trừ *Lệnh Bảo Hộ* của Lan (`-1`, đồng thời chặn không cho rơi dưới `1 HP`) -> Trừ điểm **`tempShield`** (có thể chặn xuống còn `0` vết thương).
-- **Bị loại (`woundsTaken >= maxHp`):** Nhân vật ngã gục (`alive = false`), **lật mở vai trò & phe công khai**, bỏ toàn bộ trang bị đang mang. Người bị loại không thể đi lượt tiếp.
-- **Kỷ Luật Nội Trú (Anti Friendly-Fire):** Nếu một thành viên **Đội Gác Đèn** tung đòn **hạ gục đồng đội Đội Gác Đèn**, kẻ đánh nhầm lập tức chịu **`2` vết thương sốc tâm lý** (không gây tự sát, dừng tối đa tại `maxHp - 1`) và **rơi 1 trang bị đang mang**.
+- **Vòng đời Giáp tạm (`tempShield`) & Thứ tự Phòng thủ:**
+  - *Thứ tự giảm sát thương:* Trừ *Áo Khoác Gió Bách Khoa* (`-1`, tối thiểu 1) -> Trừ *Lệnh Bảo Hộ* của Lan (`-1`, đồng thời chặn không cho rơi dưới `1 HP`) -> Trừ điểm **`tempShield`** (có thể chặn xuống còn `0` vết thương).
+  - *Thời hạn giáp đúng 1 vòng:* Giáp nhận trong **chính lượt của bạn** (`DEFEND`, `Sảnh`, `Hành Lang B7`, `Bảo Vệ`, `ev-01`/`ev-07` tự buff, kỹ năng lật/chủ động của bản thân) giữ cờ `gainedShieldThisTurn = true` để không bị trừ ngay cuối lượt hiện tại mà bảo vệ xuyên tới cuối lượt kế tiếp của bạn. Ngược lại, giáp nhận **ngoài lượt** (*Bình Tĩnh Tự Vệ*, `ev-01` cho người chơi khác tại ô đích, hoặc Minh/Trang/Bình buff cho đồng đội) giữ `gainedShieldThisTurn = false` nên chỉ bảo vệ tới hết lượt sắp tới của người nhận rồi mới giảm `1`, không bao giờ kéo dài `2` vòng.
+- **Bị loại (`woundsTaken >= maxHp`):** Nhân vật ngã gục (`alive = false`), reset giáp tạm, **lật mở vai trò & phe công khai**, bỏ toàn bộ trang bị đang mang. Người bị loại không thể đi lượt tiếp.
+- **Kỷ Luật Nội Trú (Anti Friendly-Fire & Chống Lộ Phe Thầm Lặng):**
+  - Nếu một thành viên `Đội Gác Đèn` tung đòn `ATTACK` thường hạ gục đồng đội `Đội Gác Đèn`:
+  - Khi kẻ đánh **ĐÃ LẬT VAI (`revealed = true`):** lập tức chịu công khai **`2` vết thương sốc tâm lý** (không gây tự sát, dừng tối đa tại `maxHp - 1`), **rơi `1` trang bị đang mang** (nếu có), và phát Highlight + Nhật ký công khai.
+  - Khi kẻ đánh **CHƯA LẬT VAI (`revealed = false`):** để bảo toàn tuyệt đối bí mật vai trò (không tạo dấu hiệu công khai giúp suy luận ngược phe ẩn), máy chủ **không** trừ HP, không rơi đồ và không ghi nhật ký công khai; thay vào đó áp dụng tự kỷ luật nội bộ kín (`skillCooldown = max(skillCooldown, 2)` kèm ghi chú riêng tư cho người đánh).
 
 ---
 

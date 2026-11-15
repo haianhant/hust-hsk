@@ -16,6 +16,8 @@
 import { useSyncExternalStore } from 'react';
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
 import {
+  BOARD_GAME_PROTOCOL_VERSION,
+  BOARD_GAME_RULESET_VERSION,
   clearStoredBoardGameAuth,
   loadStoredBoardGameAuth,
   parseBoardGameServerMessage,
@@ -527,6 +529,16 @@ export class BoardGameClient {
   private handleServerMessage(msg: NonNullable<ReturnType<typeof parseBoardGameServerMessage>>): void {
     switch (msg.type) {
       case 'BG_AUTH_ISSUED': {
+        if (
+          typeof msg.protocolVersion === 'number' &&
+          msg.protocolVersion > BOARD_GAME_PROTOCOL_VERSION
+        ) {
+          this.intentionalClose = true;
+          this.emit({
+            lastError: `Phiên bản giao thức máy chủ (v${msg.protocolVersion}) mới hơn trình khách. Vui lòng tải lại trang.`,
+          });
+          return;
+        }
         saveStoredBoardGameAuth({
           matchId: msg.matchId,
           inviteCode: msg.inviteCode,
@@ -546,6 +558,19 @@ export class BoardGameClient {
         return;
       }
       case 'BG_STATE_SYNC': {
+        if (
+          (typeof msg.protocolVersion === 'number' &&
+            msg.protocolVersion > BOARD_GAME_PROTOCOL_VERSION) ||
+          (msg.publicGame &&
+            typeof msg.publicGame.rulesetVersion === 'number' &&
+            msg.publicGame.rulesetVersion > BOARD_GAME_RULESET_VERSION)
+        ) {
+          this.intentionalClose = true;
+          this.emit({
+            lastError: 'Phiên bản luật chơi trên máy chủ mới hơn trình khách. Vui lòng tải lại trang.',
+          });
+          return;
+        }
         this.emit({
           connectionState: 'connected',
           matchId: msg.matchId,
@@ -581,10 +606,12 @@ export class BoardGameClient {
             entry.resolve(false, msg.message);
           }
         }
-        if (msg.code === 'MATCH_NOT_FOUND' && this.joinCtx) {
+        if ((msg.code === 'MATCH_NOT_FOUND' || msg.code === 'UNAUTHORIZED') && this.joinCtx) {
           clearStoredBoardGameAuth(this.joinCtx.matchId);
           this.clearActiveMatchRef();
-          this.intentionalClose = true;
+          if (msg.code === 'MATCH_NOT_FOUND') {
+            this.intentionalClose = true;
+          }
         }
         this.emit({ lastError: msg.message });
         return;
@@ -686,6 +713,10 @@ export class BoardGameClient {
       ...EMPTY_SNAPSHOT,
       directoryMatches: this.snap.directoryMatches,
     });
+  }
+
+  requestSync(): void {
+    this.rawSend({ type: 'BG_REQUEST_SYNC', requestId: this.nextRequestId() });
   }
 
   clearError(): void {

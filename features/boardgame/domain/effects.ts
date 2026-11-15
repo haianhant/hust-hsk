@@ -13,8 +13,8 @@ import type {
   BoardGameLocationId,
   BoardGamePublicLogEntry,
 } from '../../../shared/contracts/boardgame';
-import { CARDS_BY_ID } from './cards';
-import { FACTION_LABELS, ROLES_BY_ID } from './roles';
+import { getCardById } from './cards';
+import { FACTION_LABELS, getRoleById, ROLES_BY_ID } from './roles';
 import {
   BOARD_GAME_MAX_EQUIPPED,
   BOARD_GAME_MAX_HAND,
@@ -23,6 +23,7 @@ import {
   canPlayerUseSkillRange,
   getLocationName,
   hasEquippedEffect,
+  isValidLocationId,
   listLegalMovesForLocation,
   shuffleWithRng,
 } from './rules';
@@ -109,10 +110,14 @@ export function appendHighlight(
   });
 }
 
-export function addTempShield(player: AuthoritativePlayerState, amount: number): number {
+export function addTempShield(
+  player: AuthoritativePlayerState,
+  amount: number,
+  isActiveTurnPlayer = true,
+): number {
   const before = player.tempShield;
   player.tempShield = Math.min(BOARD_GAME_MAX_SHIELD, player.tempShield + Math.max(0, amount));
-  if (amount > 0) {
+  if (amount > 0 && isActiveTurnPlayer) {
     player.gainedShieldThisTurn = true;
   }
   return player.tempShield - before;
@@ -137,7 +142,7 @@ export function drawCardFromDeck(
   }
   const cardId = state.decks[deck].shift();
   if (!cardId) return null;
-  const card = CARDS_BY_ID[cardId];
+  const card = getCardById(cardId);
   if (!card) return null;
 
   if (player.hand.length >= BOARD_GAME_MAX_HAND) {
@@ -209,6 +214,7 @@ export function eliminatePlayer(
   victim.alive = false;
   victim.hp = 0;
   victim.tempShield = 0;
+  victim.gainedShieldThisTurn = false;
   victim.wardedUntilRound = 0;
   victim.exposedMark = 0;
   victim.eliminatedByPlayerId = killer?.playerId ?? null;
@@ -244,7 +250,7 @@ export function eliminatePlayer(
 
   const wasHidden = !victim.revealed;
   victim.revealed = true;
-  const roleDef = ROLES_BY_ID[victim.roleId];
+  const roleDef = getRoleById(victim.roleId) ?? ROLES_BY_ID['gac-ky-thuat'];
   if (wasHidden) {
     state.seqCounter += 1;
     state.lastRevealEvent = {
@@ -363,38 +369,50 @@ export function resolveAttackStrike(
   if (target.hp <= 0) {
     eliminatePlayer(state, target, actor, nowMs);
 
-    // Kỷ luật Đội Gác Đèn: Gác Đèn hạ nhầm Gác Đèn bị sốc 2 vết thương & rơi 1 trang bị
+    // Kỷ luật Đội Gác Đèn:
+    // - Khi ĐÃ LẬT VAI: công khai sốc 2 vết thương & rơi 1 trang bị.
+    // - Khi CHƯA LẬT VAI: áp dụng tự kỷ luật kín để tuyệt đối không làm rò rỉ phe/vai qua log hay HP/trang bị công khai.
     if (
       options.isNormalAttack &&
       actor.faction === 'lantern-guard' &&
       target.faction === 'lantern-guard' &&
       actor.alive
     ) {
-      const shock = actor.hp > 1 ? Math.min(2, actor.hp - 1) : 0;
-      actor.hp -= shock;
-      const droppedEq = actor.equipped.shift();
-      if (droppedEq) {
-        state.discards[droppedEq.deck].push(droppedEq.id);
+      if (actor.revealed) {
+        const shock = actor.hp > 1 ? Math.min(2, actor.hp - 1) : 0;
+        actor.hp -= shock;
+        const droppedEq = actor.equipped.shift();
+        if (droppedEq) {
+          state.discards[droppedEq.deck].push(droppedEq.id);
+        }
+        appendHighlight(
+          state,
+          'Kỷ Luật Nội Trú',
+          `${actor.displayName} hạ nhầm đồng đội Gác Đèn (${target.displayName}), chịu ${shock} sốc tâm lý!`,
+          nowMs,
+        );
+        appendPublicLog(
+          state,
+          'attack',
+          `🚨 Kỷ luật Đội Gác Đèn: ${actor.displayName} đánh gục đồng đội và chịu ${shock} vết thương phản chấn${
+            droppedEq ? ` cùng rơi "${droppedEq.title}"` : ''
+          }!`,
+          nowMs,
+          actor.playerId,
+        );
+      } else {
+        actor.skillCooldown = Math.max(actor.skillCooldown, 2);
+        appendPrivateNote(
+          state,
+          actor,
+          `Kỷ Luật Nội Trú (nội bộ): bạn vừa hạ nhầm đồng đội Gác Đèn (${target.displayName}) — kỹ năng đặc biệt sẽ chịu hồi chiêu 2 vòng khi lật vai.`,
+          nowMs,
+        );
       }
-      appendHighlight(
-        state,
-        'Kỷ Luật Nội Trú',
-        `${actor.displayName} hạ nhầm đồng đội Gác Đèn (${target.displayName}), chịu ${shock} sốc tâm lý!`,
-        nowMs,
-      );
-      appendPublicLog(
-        state,
-        'attack',
-        `🚨 Kỷ luật Đội Gác Đèn: ${actor.displayName} đánh gục đồng đội và chịu ${shock} vết thương phản chấn${
-          droppedEq ? ` cùng rơi "${droppedEq.title}"` : ''
-        }!`,
-        nowMs,
-        actor.playerId,
-      );
     }
   } else {
     if (unprovokedComposureTriggered) {
-      addTempShield(target, 1);
+      addTempShield(target, 1, false);
       appendPrivateNote(
         state,
         target,
@@ -652,12 +670,14 @@ export function resolveInvestigationCard(
     }
     case 'inv-scuffle-trace': {
       met = target.attacksMade > 0 || target.equipped.length >= 1;
+      const jamTargetHand = target.revealed && target.roleId === 'suong-tin-gia';
+      const handText = jamTargetHand ? '? lá (bị nhiễu)' : `${target.hand.length} lá`;
       if (met) {
         if (target.attacksMade > 0 && target.maxHp - target.hp <= 1) {
           applyNonLethalPressureDamage(state, target, 1, 'investigation', nowMs);
         }
         publicMessage = `Phát hiện dấu vết xô xát/trang bị trên ${target.displayName}.`;
-        privateDetail = `${target.displayName} đã đánh ${target.attacksMade} lần · Mang ${target.equipped.length} trang bị · Giữ ${target.hand.length} lá trên tay.`;
+        privateDetail = `${target.displayName} đã đánh ${target.attacksMade} lần · Mang ${target.equipped.length} trang bị · Giữ ${handText} trên tay.`;
       } else {
         publicMessage = `${target.displayName} chưa có dấu xô xát và chưa mang trang bị.`;
         privateDetail = `${target.displayName} đang 0 lần tấn công và 0 trang bị công khai.`;
@@ -667,13 +687,18 @@ export function resolveInvestigationCard(
     case 'inv-locker-check':
     default: {
       met = target.hand.length >= 2 || target.equipped.length >= 1;
+      const jamTargetHand = target.revealed && target.roleId === 'suong-tin-gia';
       const cats = target.hand.slice(0, 3).map((c) => DECK_LABELS[c.deck]);
       if (met) {
         publicMessage = `Kiểm tra ngăn balo ${target.displayName} hoàn tất — manh mối gửi kín cho ${actor.displayName}.`;
-        privateDetail = `Trong tay ${target.displayName} có ${target.hand.length} lá [${cats.join(', ') || 'trống'}] · Trang bị: ${target.equipped.length}.`;
+        privateDetail = jamTargetHand
+          ? `Trong tay ${target.displayName} bị nhiễu thông tin (? lá) · Trang bị: ${target.equipped.length}.`
+          : `Trong tay ${target.displayName} có ${target.hand.length} lá [${cats.join(', ') || 'trống'}] · Trang bị: ${target.equipped.length}.`;
       } else {
         publicMessage = `${target.displayName} hiện mang quá ít vật dụng trong balo.`;
-        privateDetail = `${target.displayName} đang giữ ${target.hand.length} lá và ${target.equipped.length} trang bị.`;
+        privateDetail = jamTargetHand
+          ? `${target.displayName} bị nhiễu thông tin (? lá) và ${target.equipped.length} trang bị.`
+          : `${target.displayName} đang giữ ${target.hand.length} lá và ${target.equipped.length} trang bị.`;
       }
       break;
     }
@@ -681,7 +706,9 @@ export function resolveInvestigationCard(
 
   // Nội tại sau khi lật vai của Lan: tự động đọc thêm số bài chính xác trên tay mục tiêu
   if (actor.revealed && actor.roleId === 'gac-truc-ban') {
-    privateDetail += ` [Sổ trực Lan: mục tiêu hiện có ${target.hand.length} lá trên tay & ${target.equipped.length} trang bị].`;
+    const jamTargetHand = target.revealed && target.roleId === 'suong-tin-gia';
+    const handText = jamTargetHand ? '? lá (bị nhiễu)' : `${target.hand.length} lá`;
+    privateDetail += ` [Sổ trực Lan: mục tiêu hiện có ${handText} trên tay & ${target.equipped.length} trang bị].`;
   }
 
   const outcome: 'condition-met' | 'no-reaction' = met ? 'condition-met' : 'no-reaction';
@@ -810,6 +837,9 @@ export function resolveEventCard(
   if (card.deck !== 'event') {
     return { ok: false, reason: 'Thẻ được chọn không thuộc bộ Sự kiện.' };
   }
+  if (targetLocation !== undefined && !isValidLocationId(targetLocation)) {
+    return { ok: false, reason: 'Khu vực sự kiện không hợp lệ.' };
+  }
 
   const destLoc = targetLocation ?? actor.location;
 
@@ -822,7 +852,7 @@ export function resolveEventCard(
       for (const p of state.players) {
         if (!p.alive) continue;
         if (p.location === 'corridor' && p.tempShield > 0) p.tempShield -= 1;
-        if (p.location === destLoc) addTempShield(p, 1);
+        if (p.location === destLoc) addTempShield(p, 1, p.playerId === actor.playerId);
       }
       appendPublicLog(
         state,
@@ -993,7 +1023,7 @@ export function resolveVoluntaryReveal(
   if (actor.revealed) {
     return { ok: false, reason: 'Nhân vật của bạn đã lật vai công khai từ trước.' };
   }
-  const roleDef = ROLES_BY_ID[actor.roleId];
+  const roleDef = getRoleById(actor.roleId) ?? ROLES_BY_ID['gac-ky-thuat'];
   actor.revealed = true;
   actor.actedThisRound = true;
 
@@ -1105,7 +1135,7 @@ export function resolveRevealedSkill(
     };
   }
 
-  const roleDef = ROLES_BY_ID[actor.roleId];
+  const roleDef = getRoleById(actor.roleId) ?? ROLES_BY_ID['gac-ky-thuat'];
   const findTarget = (allowSelf: boolean, sameOrAdjOnly: boolean): AuthoritativePlayerState | null => {
     const t = targetPlayerId
       ? state.players.find((p) => p.playerId === targetPlayerId && p.alive) ?? null
@@ -1124,7 +1154,7 @@ export function resolveRevealedSkill(
       if (!t) return { ok: false, reason: 'Chọn bản thân hoặc 1 người sống cùng/kề phòng.' };
       const unhurt = t.hp >= t.maxHp;
       healPlayerWounds(t, 2);
-      addTempShield(t, unhurt ? 2 : 1);
+      addTempShield(t, unhurt ? 2 : 1, t.playerId === actor.playerId);
       appendPublicLog(
         state,
         'skill',
@@ -1250,7 +1280,7 @@ export function resolveRevealedSkill(
       const t = findTarget(false, true);
       if (!t) return { ok: false, reason: 'Chọn 1 sinh viên khác cùng/kề phòng cho Biên Bản Đối Chất.' };
       addTempShield(actor, 1);
-      addTempShield(t, 1);
+      addTempShield(t, 1, false);
       drawCardFromDeck(state, actor, 'investigation', nowMs);
       appendPublicLog(
         state,
@@ -1266,7 +1296,7 @@ export function resolveRevealedSkill(
       const t = findTarget(false, true);
       if (!t) return { ok: false, reason: 'Chọn 1 sinh viên khác cùng/kề phòng để dùng Lá Chắn Thân Mình.' };
       healPlayerWounds(t, 1);
-      addTempShield(t, 2);
+      addTempShield(t, 2, false);
       addTempShield(actor, 1);
       if (actor.protegePlayerId && t.playerId === actor.protegePlayerId) {
         actor.protectedProtegeCount += 1;

@@ -530,7 +530,7 @@ export default function BoardGameLobby({
                 <div className="rounded-xl border border-sky-500/35 bg-sky-950/30 p-2.5">
                   <div className="font-bold text-sky-300">🔦 Đội Gác Đèn</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Suy luận ra phe ẩn và loại hết <strong>Hội Màn Sương</strong>, hoặc giữ đa số lực lượng khi qua 8 vòng tới Rạng Sáng.
+                    Suy luận ra phe ẩn và loại hết <strong>Hội Màn Sương</strong>, hoặc giữ đa số lực lượng sau 9–10 vòng tới Rạng Sáng.
                   </p>
                 </div>
                 <div className="rounded-xl border border-rose-500/35 bg-rose-950/30 p-2.5">
@@ -557,7 +557,7 @@ export default function BoardGameLobby({
                     <strong>Pha 2 · Khám phá khu vực hoặc Rút thẻ (LOCATION_ACTION):</strong> Kích hoạt hiệu ứng đặc thù phòng KTX, hoặc rút từ 1 trong 3 chồng bài: <strong>Điều tra</strong>, <strong>Trang bị</strong>, <strong>Sự kiện</strong>.
                   </li>
                   <li>
-                    <strong>Pha 3 · Hành động chính &amp; Lật vai (MAIN_ACTION):</strong> Điều tra có điều kiện (chỉ định mục tiêu — kết quả ghép từ ít nhất 2 phe để suy luận), dùng thẻ/trang bị, Phòng thủ (+1 Giáp tạm &amp; quan sát cùng phòng), Công kích (cùng phòng — chú ý Kỷ luật Gác Đèn khi bắn nhầm phe), hoặc tự nguyện <strong>Lật vai</strong> mở khóa kỹ năng đặc biệt trước khi Kết thúc lượt.
+                    <strong>Pha 3 · Hành động chính &amp; Lật vai (MAIN_ACTION):</strong> Điều tra có điều kiện (chỉ định mục tiêu — kết quả ghép từ ít nhất 2 phe để suy luận), dùng thẻ/trang bị, Phòng thủ (+1 Giáp tạm &amp; quan sát cùng phòng), Công kích (cùng phòng — người đã lật vai Gác Đèn hạ nhầm đồng đội chịu Kỷ luật Nội Trú công khai), hoặc tự nguyện <strong>Lật vai</strong> mở khóa kỹ năng đặc biệt trước khi Kết thúc lượt.
                   </li>
                 </ol>
               </div>

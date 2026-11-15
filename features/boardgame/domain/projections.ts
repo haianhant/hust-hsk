@@ -13,7 +13,7 @@ import {
   type BoardGamePublicGameView,
   type BoardGamePublicPlayerView,
 } from '../../../shared/contracts/boardgame';
-import { ROLES_BY_ID } from './roles';
+import { getRoleById, ROLES_BY_ID } from './roles';
 import type { AuthoritativeGameState, GameCard } from './types';
 import { buildFinalRevealSummary } from './victory';
 
@@ -44,7 +44,7 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     location: p.location,
     woundsTaken: Math.max(0, p.maxHp - p.hp),
     tempShield: p.tempShield,
-    handCount: p.hand.length,
+    handCount: p.revealed && p.roleId === 'suong-tin-gia' ? null : p.hand.length,
     equipped: p.equipped.map(serializeCardMeta),
     attacksMade: p.attacksMade,
     investigationsCount: p.investigationsCount,
@@ -97,7 +97,7 @@ export function getPrivateGameView(
   const player = state.players.find((p) => p.playerId === authenticatedPlayerId);
   if (!player) return null;
 
-  const roleDef = ROLES_BY_ID[player.roleId];
+  const roleDef = getRoleById(player.roleId) ?? ROLES_BY_ID['gac-ky-thuat'];
   const protege = player.protegePlayerId
     ? state.players.find((p) => p.playerId === player.protegePlayerId) ?? null
     : null;

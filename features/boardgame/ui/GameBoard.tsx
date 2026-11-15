@@ -426,7 +426,7 @@ export default function GameBoard({
       )}
 
       {/* Nội dung chính Responsive: Desktop 3 cột / Mobile tab */}
-      <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 pb-24 lg:grid-cols-12 lg:pb-4">
+      <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 pb-4 lg:grid-cols-12">
         {/* Cột Trái: Vai trò bí mật & Manh mối */}
         <section
           className={`lg:col-span-3 ${mobileTab === 'role' ? 'block' : 'hidden lg:block'}`}
@@ -671,7 +671,7 @@ export default function GameBoard({
       </div>
 
       {/* Thanh tab Mobile (dưới cùng trên < lg) */}
-      <nav className="fixed inset-x-0 bottom-0 z-[46] grid grid-cols-3 border-t border-slate-800 bg-slate-950/95 lg:hidden">
+      <nav className="shrink-0 z-[46] grid grid-cols-3 border-t border-slate-800 bg-slate-950/95 lg:hidden">
         <button
           type="button"
           onClick={() => setMobileTab('board')}

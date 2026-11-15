@@ -21,7 +21,7 @@ const assert = require('node:assert/strict');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(ROOT, 'out');
-const SHOT_DIR = '/home/bao/.gemini/antigravity-cli/brain/f3119e13-33de-4820-bc0e-636c745568a1';
+const SHOT_DIR = process.env.BOARDGAME_SHOT_DIR || path.join(ROOT, 'test-results', 'boardgame');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -104,21 +104,50 @@ async function startWsShim(port) {
 
 function loadPlaywright() {
   const candidates = [
+    process.env.PLAYWRIGHT_CORE_PATH,
     path.join(ROOT, 'node_modules/playwright-core'),
     path.join(ROOT, 'node_modules/playwright'),
-    '/home/bao/.vscode/extensions/vscjava.migrate-java-to-azure-1.24.0-linux-x64/node_modules/playwright-core',
-  ];
+    'playwright-core',
+    'playwright',
+  ].filter(Boolean);
   for (const p of candidates) {
-    if (fs.existsSync(p)) return require(p);
+    try {
+      return require(p);
+    } catch {
+      // try next candidate
+    }
   }
-  throw new Error('playwright-core not found');
+  throw new Error('playwright-core not found — run `npm ci` or install `playwright-core@1.48.2`.');
+}
+
+function resolveBrowserExecutable(chromium) {
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
+    return process.env.CHROME_PATH;
+  }
+  if (chromium && typeof chromium.executablePath === 'function') {
+    const pwExec = chromium.executablePath();
+    if (pwExec && fs.existsSync(pwExec)) {
+      return undefined; // Let Playwright launch its managed matched Chromium binary
+    }
+  }
+  for (const p of [
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+  ]) {
+    if (fs.existsSync(p)) return p;
+  }
+  throw new Error('No Chromium/Chrome executable found. Run: npx playwright-core install --with-deps chromium');
 }
 
 async function main() {
   if (!fs.existsSync(path.join(OUT_DIR, 'index.html'))) {
     throw new Error('Missing out/index.html — run npm run build before boardgame-bg1-smoke.cjs');
   }
+  fs.mkdirSync(SHOT_DIR, { recursive: true });
   const { chromium } = loadPlaywright();
+  const executablePath = resolveBrowserExecutable(chromium);
   const shimPort = await getFreePort();
   const shim = await startWsShim(shimPort);
   const { server, url } = await startOutServer();
@@ -126,7 +155,7 @@ async function main() {
   try {
     browser = await chromium.launch({
       headless: true,
-      executablePath: fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined,
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-dev-shm-usage',

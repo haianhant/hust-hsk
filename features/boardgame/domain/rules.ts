@@ -71,21 +71,27 @@ export const KTX_LOCATIONS: readonly LocationDefinition[] = [
   },
 ];
 
-export const KTX_LOCATION_MAP: Record<BoardGameLocationId, LocationDefinition> = {
+export const KTX_LOCATION_MAP: Record<BoardGameLocationId, LocationDefinition> = Object.freeze({
   lobby: KTX_LOCATIONS[0],
   canteen: KTX_LOCATIONS[1],
   court: KTX_LOCATIONS[2],
   radio: KTX_LOCATIONS[3],
   corridor: KTX_LOCATIONS[4],
   breaker: KTX_LOCATIONS[5],
-};
+});
+
+export function getLocationDefinition(loc: string): LocationDefinition | undefined {
+  return Object.hasOwn(KTX_LOCATION_MAP, loc)
+    ? KTX_LOCATION_MAP[loc as BoardGameLocationId]
+    : undefined;
+}
 
 export function getLocationName(loc: BoardGameLocationId): string {
-  return KTX_LOCATION_MAP[loc]?.name ?? loc;
+  return getLocationDefinition(loc)?.name ?? loc;
 }
 
 export function getLocationShortLabel(loc: BoardGameLocationId): string {
-  return KTX_LOCATION_MAP[loc]?.shortLabel ?? loc;
+  return getLocationDefinition(loc)?.shortLabel ?? loc;
 }
 
 export function getMaxRoundsForPlayerCount(playerCount: number): number {
@@ -104,12 +110,13 @@ export function isValidLocationId(raw: unknown): raw is BoardGameLocationId {
 }
 
 export function isAdjacentLocation(a: BoardGameLocationId, b: BoardGameLocationId): boolean {
+  if (!isValidLocationId(a) || !isValidLocationId(b)) return false;
   if (a === b) return true;
-  return KTX_LOCATION_MAP[a]?.adjacent.includes(b) ?? false;
+  return getLocationDefinition(a)?.adjacent.includes(b) ?? false;
 }
 
 export function listLegalMovesForLocation(loc: BoardGameLocationId): BoardGameLocationId[] {
-  return KTX_LOCATION_MAP[loc]?.adjacent.slice() ?? [];
+  return getLocationDefinition(loc)?.adjacent.slice() ?? [];
 }
 
 export function hasEquippedEffect(

@@ -17,6 +17,15 @@ const { WebSocket } = require('./ws-shim/mini-ws');
 const {
   startStandaloneBoardGameTestServer,
 } = require('./ws-shim/boardgame-do-harness.cjs');
+const {
+  BOARD_GAME_ABANDONED_MATCH_TTL_MS,
+  BOARD_GAME_RECONNECT_HOLD_MS,
+} = require('../shared/contracts/boardgame.ts');
+const {
+  setBoardGameLogSink,
+  resetBoardGameObservabilityForTest,
+} = require('../worker/src/boardgame-observability.ts');
+const { clampBoardGameTurnTimeoutMs } = require('../worker/src/boardgame-room.ts');
 const { listLegalMovesForLocation } = require('../features/boardgame/domain/index.ts');
 
 function assertPublicGameV3NoLeaks(pub, status) {
@@ -741,5 +750,280 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     mB.clients.forEach(({ c }, idx) => {
       if (idx !== 0) c.close();
     });
+  });
+
+  await t.test('(6) Strict payload validation, cross-match UNAUTHORIZED & BG_REQUEST_SYNC recovery', async () => {
+    const mA = await setupStartedMatch(srv, 'table-1', ['SEC1', 'SEC2', 'SEC3', 'SEC4']);
+    const createBRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableId: 'table-2', hostName: 'SEC_B_Host' }),
+    });
+    const mBCreated = await createBRes.json();
+    assert.equal(mBCreated.ok, true);
+
+    // 0. Production turnTimeoutMs clamp guard
+    assert.equal(clampBoardGameTurnTimeoutMs(1500, {}), 15_000);
+    assert.equal(clampBoardGameTurnTimeoutMs(300_000, {}), 90_000);
+    assert.equal(clampBoardGameTurnTimeoutMs(1500, { ALLOW_SHORT_TURN_TIMEOUT: '1' }), 1500);
+
+    // 1. Raw WebSocket security checks: malformed JSON, >8KB payload, prototype pollution -> BG_ERROR (no silent drop/crash)
+    const rawWs = new WebSocket(`${srv.wsBaseUrl}/ws/boardgame?matchId=${mA.matchId}`);
+    const errQueue = [];
+    rawWs.on('message', (d) => errQueue.push(JSON.parse(d.toString())));
+    await new Promise((r) => rawWs.once('open', r));
+    rawWs.send('{not-json');
+    rawWs.send('x'.repeat(9000));
+    rawWs.send('{"type":"BG_JOIN","__proto__":{"polluted":true},"matchId":"' + mA.matchId + '","displayName":"Hacker"}');
+    await delay(120);
+    assert.ok(errQueue.filter((e) => e.type === 'BG_ERROR' && e.code === 'INVALID_ACTION').length >= 3);
+    rawWs.close();
+
+    // 2. Token của phòng A gửi tới phòng B (CREATED/WAITING) cũng bị UNAUTHORIZED ngay lập tức
+    const cCross = await openBgClient(srv.wsBaseUrl, { matchId: mBCreated.matchId });
+    cCross.send({
+      type: 'BG_JOIN',
+      matchId: mBCreated.matchId,
+      inviteCode: mBCreated.inviteCode,
+      displayName: 'CrossRoomUser',
+      reconnectToken: mA.clients[0].auth.reconnectToken,
+    });
+    const unauthErr = await cCross.nextMsg((msg) => msg.type === 'BG_ERROR');
+    assert.equal(unauthErr.code, 'UNAUTHORIZED');
+    cCross.close();
+
+    // Token sai trên một phòng đang PLAYING cũng phải từ chối UNAUTHORIZED ngay
+    const cCrossPlaying = await openBgClient(srv.wsBaseUrl, { matchId: mA.matchId });
+    cCrossPlaying.send({
+      type: 'BG_JOIN',
+      matchId: mA.matchId,
+      inviteCode: mA.inviteCode,
+      displayName: 'CrossRoomPlaying',
+      reconnectToken: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    });
+    const unauthPlaying = await cCrossPlaying.nextMsg((msg) => msg.type === 'BG_ERROR');
+    assert.equal(unauthPlaying.code, 'UNAUTHORIZED');
+    cCrossPlaying.close();
+
+    // 3. Commit -> Retry identical requestId idempotency -> Invalid action -> BG_REQUEST_SYNC -> Valid retry
+    const curSync = mA.clients[0].c.getLatestSync();
+    const active = mA.clients.find((cl) => cl.playerId === curSync.publicGame.activePlayerId);
+    const revBefore = curSync.revision;
+    const reqDup = 'dup-idemp-req-1';
+    active.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: reqDup,
+      expectedRevision: revBefore,
+      action: { type: 'STAY' },
+    });
+    const ack1 = await active.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === reqDup);
+    assert.equal(ack1.ok, true);
+    assert.equal(ack1.revision, revBefore + 1);
+    const syncAfterStay = await active.c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.revision === revBefore + 1);
+    assert.equal(syncAfterStay.publicGame.turnPhase, 'LOCATION_ACTION');
+
+    // Retry exact same requestId (even with old expectedRevision) returns cached ack + sync without bumping revision
+    const idxBeforeDup = active.c.inbox.length;
+    active.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: reqDup,
+      expectedRevision: revBefore,
+      action: { type: 'STAY' },
+    });
+    const ackDup = await active.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === reqDup, 4000, idxBeforeDup);
+    assert.equal(ackDup.ok, true);
+    assert.equal(ackDup.revision, revBefore + 1);
+    const dupSync = await active.c.nextMsg((m) => m.type === 'BG_STATE_SYNC', 4000, idxBeforeDup);
+    assert.equal(dupSync.revision, revBefore + 1);
+
+    // Rejected invalid action -> BG_REQUEST_SYNC -> valid retry succeeds cleanly
+    const idxBeforeErr = active.c.inbox.length;
+    active.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'bad-action-after-stay',
+      expectedRevision: revBefore + 1,
+      action: { type: 'DEFEND' }, // sai pha (đang LOCATION_ACTION)
+    });
+    const badAck = await active.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'bad-action-after-stay', 4000, idxBeforeErr);
+    assert.equal(badAck.ok, false);
+    const idxBeforeReqSync = active.c.inbox.length;
+    active.c.send({ type: 'BG_REQUEST_SYNC', requestId: 'req-sync-1' });
+    const resynced = await active.c.nextMsg((m) => m.type === 'BG_STATE_SYNC', 4000, idxBeforeReqSync);
+    assert.equal(resynced.revision, revBefore + 1);
+    assert.equal(resynced.publicGame.turnPhase, 'LOCATION_ACTION');
+
+    await delay(40);
+    active.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'valid-retry-explore',
+      expectedRevision: resynced.revision,
+      action: { type: 'EXPLORE_LOC' },
+    });
+    const okExplore = await active.c.nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === 'valid-retry-explore');
+    assert.equal(okExplore.ok, true);
+
+    mA.clients.forEach(({ c }) => c.close());
+  });
+
+  await t.test('(7) Reconnect in READY_CHECK, orphan CREATED & all-disconnected PLAYING cleanup via alarm() + /api/boardgame/health', async () => {
+    // 1. Reconnect trong READY_CHECK phải recomputeLobbyStatus về lại READY_CHECK tự động
+    const createLobbyRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableId: 'table-1', hostName: 'ReadyHost' }),
+    });
+    const lobbyMeta = await createLobbyRes.json();
+    const lClients = [];
+    for (let i = 0; i < 4; i++) {
+      const c = await openBgClient(srv.wsBaseUrl, { matchId: lobbyMeta.matchId });
+      c.send({ type: 'BG_JOIN', matchId: lobbyMeta.matchId, inviteCode: lobbyMeta.inviteCode, displayName: `Rdy_${i}`, preferredSeatIndex: i });
+      const auth = await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
+      await c.nextMsg((m) => m.type === 'BG_STATE_SYNC');
+      lClients.push({ c, auth });
+    }
+    for (let i = 1; i < 4; i++) {
+      lClients[i].c.send({ type: 'BG_SET_READY', ready: true, requestId: `rcheck-${i}` });
+    }
+    await lClients[0].c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.status === 'READY_CHECK');
+    // P2 disconnect -> status drops to WAITING -> P2 reconnect -> recomputes READY_CHECK!
+    lClients[1].c.close();
+    await lClients[0].c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.status === 'WAITING');
+    const p2Re = await openBgClient(srv.wsBaseUrl, { matchId: lobbyMeta.matchId });
+    p2Re.send({
+      type: 'BG_JOIN',
+      matchId: lobbyMeta.matchId,
+      displayName: 'Rdy_1',
+      reconnectToken: lClients[1].auth.reconnectToken,
+    });
+    const restoredReady = await lClients[0].c.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.status === 'READY_CHECK');
+    assert.equal(restoredReady.status, 'READY_CHECK');
+    p2Re.close();
+    lClients.forEach(({ c }, i) => { if (i !== 1) c.close(); });
+
+    // 2. Orphan CREATED cleanup past BOARD_GAME_RECONNECT_HOLD_MS
+    const orphanRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableId: 'table-2', hostName: 'OrphanHost' }),
+    });
+    const orphan = await orphanRes.json();
+    const orphanContainer = srv.containers.get(orphan.matchId);
+    orphanContainer.ctx.storage.sql.exec(
+      'UPDATE matches SET created_at_ms = ? WHERE match_id = ?',
+      Date.now() - BOARD_GAME_RECONNECT_HOLD_MS - 5000,
+      orphan.matchId,
+    );
+    await fetch(`${srv.httpBaseUrl}/__bg_trigger_alarm?matchId=${orphan.matchId}`, { method: 'POST' });
+    const orphanRow = orphanContainer.ctx.storage.sql
+      .exec('SELECT status FROM matches WHERE match_id = ?', orphan.matchId)
+      .one();
+    assert.equal(orphanRow.status, 'CLOSED');
+
+    // 3. Abandoned all-disconnected PLAYING cleanup past BOARD_GAME_ABANDONED_MATCH_TTL_MS
+    const mAbd = await setupStartedMatch(srv, 'table-1', ['AB1', 'AB2', 'AB3', 'AB4']);
+    mAbd.clients.forEach(({ c }) => c.close());
+    await delay(50);
+    const abdContainer = srv.containers.get(mAbd.matchId);
+    abdContainer.ctx.storage.sql.exec(
+      'UPDATE match_players SET connected = 0, last_seen_ms = ?',
+      Date.now() - BOARD_GAME_ABANDONED_MATCH_TTL_MS - 5000,
+    );
+    await fetch(`${srv.httpBaseUrl}/__bg_trigger_alarm?matchId=${mAbd.matchId}`, { method: 'POST' });
+    const abdRow = abdContainer.ctx.storage.sql
+      .exec('SELECT status, turn_deadline_ms FROM matches WHERE match_id = ?', mAbd.matchId)
+      .one();
+    assert.equal(abdRow.status, 'CLOSED');
+    assert.equal(abdRow.turn_deadline_ms, null);
+
+    // 4. Health endpoint returns clean metrics without secret exposure
+    const healthRes = await fetch(`${srv.httpBaseUrl}/api/boardgame/health`);
+    assert.equal(healthRes.status, 200);
+    const healthJson = await healthRes.json();
+    assert.equal(healthJson.ok, true);
+    assert.equal(healthJson.component, 'boardgame');
+    assert.ok(healthJson.metrics && typeof healthJson.metrics.counts.MATCH_CREATED === 'number');
+  });
+
+  await t.test('(8) Structured observability logs emit full lifecycle without secret leakage', async () => {
+    const capturedLogs = [];
+    resetBoardGameObservabilityForTest();
+    setBoardGameLogSink((entry) => capturedLogs.push(entry));
+    t.after(() => setBoardGameLogSink(null));
+
+    const m = await setupStartedMatch(srv, 'table-2', ['SV 20226010', 'LogB', 'LogC', 'LogD'], { turnTimeoutMs: 1500 });
+    const tokens = m.clients.map((cl) => cl.auth.reconnectToken);
+
+    const sync0 = m.clients[0].c.getLatestSync();
+    const actor = m.clients.find((cl) => cl.playerId === sync0.publicGame.activePlayerId);
+    // Emit ACTION_APPLIED and ACTION_REJECTED
+    actor.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'log-act-1',
+      expectedRevision: sync0.revision,
+      action: { type: 'STAY' },
+    });
+    await actor.c.nextMsg((msg) => msg.type === 'BG_ACTION_ACK' && msg.requestId === 'log-act-1');
+    await actor.c.nextMsg((msg) => msg.type === 'BG_STATE_SYNC' && msg.revision === sync0.revision + 1);
+    await delay(40);
+    actor.c.send({
+      type: 'BG_GAME_ACTION',
+      requestId: 'log-act-bad',
+      expectedRevision: sync0.revision + 1,
+      action: { type: 'END_TURN' },
+    });
+    await actor.c.nextMsg((msg) => msg.type === 'BG_ACTION_ACK' && msg.requestId === 'log-act-bad');
+
+    // Emit PLAYER_DISCONNECTED & PLAYER_RECONNECTED
+    m.clients[1].c.close();
+    await delay(40);
+    const c1Re = await openBgClient(srv.wsBaseUrl, { matchId: m.matchId });
+    c1Re.send({
+      type: 'BG_JOIN',
+      matchId: m.matchId,
+      displayName: 'SV 20226010',
+      reconnectToken: m.clients[1].auth.reconnectToken,
+    });
+    await c1Re.nextMsg((msg) => msg.type === 'BG_AUTH_ISSUED');
+    await c1Re.nextMsg((msg) => msg.type === 'BG_STATE_SYNC');
+
+    // Emit TURN_TIMEOUT via alarm
+    await delay(1600);
+    await fetch(`${srv.httpBaseUrl}/__bg_trigger_alarm?matchId=${m.matchId}`, { method: 'POST' });
+
+    c1Re.close();
+    m.clients.forEach(({ c }, i) => { if (i !== 1) c.close(); });
+    await delay(40);
+
+    const eventSet = new Set(capturedLogs.map((e) => e.event));
+    for (const reqEvent of [
+      'MATCH_CREATED',
+      'PLAYER_JOINED',
+      'MATCH_STARTED',
+      'ACTION_APPLIED',
+      'ACTION_REJECTED',
+      'PLAYER_DISCONNECTED',
+      'PLAYER_RECONNECTED',
+      'TURN_TIMEOUT',
+    ]) {
+      assert.ok(eventSet.has(reqEvent), `Structured log missing event ${reqEvent}`);
+    }
+
+    const logBlob = JSON.stringify(capturedLogs);
+    assert.equal(logBlob.includes('20226010'), false, 'Logs must scrub 8-digit MSSV');
+    for (const tok of tokens) {
+      assert.equal(logBlob.includes(tok), false, 'Logs must never contain plaintext reconnectToken');
+    }
+    for (const forbiddenField of [
+      '"roleId"',
+      '"privateClues"',
+      '"privateNotes"',
+      '"protegePlayerId"',
+      '"reconnectToken"',
+      '"rngState"',
+      '"hand"',
+      '"maxHp"',
+    ]) {
+      assert.equal(logBlob.includes(forbiddenField), false, `Logs must never contain ${forbiddenField}`);
+    }
   });
 });

@@ -7,6 +7,8 @@
 import { resolveWsUrl } from '../../../lib/multiplayer';
 import {
   BOARD_GAME_MAX_PLAYERS,
+  BOARD_GAME_PROTOCOL_VERSION,
+  BOARD_GAME_RULESET_VERSION,
   sanitizeBoardGameMatchId,
   sanitizeBoardGameName,
   sanitizeBoardGameTableId,
@@ -127,6 +129,9 @@ export function parseBoardGameServerMessage(rawJson: string): BoardGameServerMes
       ) {
         return {
           type: 'BG_AUTH_ISSUED',
+          ...(typeof msg.protocolVersion === 'number'
+            ? { protocolVersion: msg.protocolVersion }
+            : {}),
           matchId: msg.matchId,
           inviteCode: msg.inviteCode,
           playerId: msg.playerId,

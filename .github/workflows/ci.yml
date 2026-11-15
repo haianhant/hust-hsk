@@ -2,7 +2,7 @@ name: CI Verification Gates
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
   pull_request:
     branches: [main]
 
@@ -48,10 +48,22 @@ jobs:
       - name: Gate 6 — Next.js Static Export Build
         run: npm run build
 
+      - name: Install Playwright Chromium for Browser Gates
+        run: npx playwright-core install --with-deps chromium
+
       - name: Gate 7 — PR10B Browser Verification Gate (No Silent Skip)
-        run: |
-          npm install --no-save playwright-core@1.48.2
-          PLAYWRIGHT_CORE_PATH=$(pwd)/node_modules/playwright-core npm run test:pr10b
+        run: PLAYWRIGHT_CORE_PATH=$(pwd)/node_modules/playwright-core npm run test:pr10b
+
+      - name: Gate 8 — Board Game Club & Bóng Đêm KTX Browser E2E (E2E-01..E2E-06)
+        run: npm run test:boardgame:e2e
+
+      - name: Upload Board Game E2E Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boardgame-e2e-artifacts
+          path: test-results/boardgame/
+          if-no-files-found: ignore
 
       - name: Deploy Cloudflare Worker (hust-hsk-rooms)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

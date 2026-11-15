@@ -11,6 +11,8 @@
 
 import {
   BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS,
+  BOARD_GAME_PROTOCOL_VERSION,
+  BOARD_GAME_RULESET_VERSION,
   INVITE_CODE_ALPHABET,
   INVITE_CODE_LENGTH,
   sanitizeBoardGameMatchId,
@@ -18,7 +20,15 @@ import {
   sanitizeBoardGameTableId,
   sanitizeInviteCode,
 } from '../../shared/contracts/boardgame';
-import { BG_DIRECTORY_ROOM_NAME, type BoardGameEnv } from './boardgame-room';
+import {
+  BG_DIRECTORY_ROOM_NAME,
+  clampBoardGameTurnTimeoutMs,
+  type BoardGameEnv,
+} from './boardgame-room';
+import {
+  getBoardGameMetricsSnapshot,
+  logBoardGameEvent,
+} from './boardgame-observability';
 
 const ipCreateBuckets = new Map<string, { windowStartMs: number; count: number }>();
 
@@ -90,6 +100,10 @@ export async function handleBoardGameRequest(
   const origin = request.headers.get('Origin');
   const allowedOrigin = resolveAllowedBoardGameOrigin(origin);
   if (!allowedOrigin) {
+    logBoardGameEvent(env, 'ORIGIN_REJECTED', {
+      pathname: url.pathname,
+      reason: 'disallowed-origin',
+    });
     return Response.json(
       { ok: false, error: 'Origin không nằm trong danh sách cho phép.' },
       { status: 403 },
@@ -99,6 +113,21 @@ export async function handleBoardGameRequest(
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers });
+  }
+
+  // GET /api/boardgame/health — Trạng thái vận hành nhẹ, an toàn (zero secret data)
+  if (url.pathname === '/api/boardgame/health' && request.method === 'GET') {
+    return Response.json(
+      {
+        ok: true,
+        component: 'boardgame',
+        env: env.ENVIRONMENT ?? 'production',
+        protocolVersion: BOARD_GAME_PROTOCOL_VERSION,
+        rulesetVersion: BOARD_GAME_RULESET_VERSION,
+        metrics: getBoardGameMetricsSnapshot(),
+      },
+      { status: 200, headers },
+    );
   }
 
   const ns = env.BOARD_GAME_ROOM;
@@ -125,6 +154,7 @@ export async function handleBoardGameRequest(
   // POST /api/boardgame/matches — Tạo phòng đấu mới + sinh mã mời 6 ký tự duy nhất
   if (url.pathname === '/api/boardgame/matches' && request.method === 'POST') {
     if (!checkIpRateLimit(`create:${clientIp}`, 20)) {
+      logBoardGameEvent(env, 'RATE_LIMITED', { pathname: url.pathname, reason: 'create-match' });
       return Response.json(
         { ok: false, error: 'Tạo phòng quá nhanh, vui lòng thử lại sau ít phút.' },
         { status: 429, headers },
@@ -147,7 +177,7 @@ export async function handleBoardGameRequest(
       typeof body.turnTimeoutMs === 'number'
         ? body.turnTimeoutMs
         : BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
-    const turnTimeoutMs = Math.max(3000, Math.min(120_000, Math.floor(rawTimeout)));
+    const turnTimeoutMs = clampBoardGameTurnTimeoutMs(rawTimeout, env);
 
     const dirStub = ns.get(ns.idFromName(BG_DIRECTORY_ROOM_NAME));
     let createdMatchId = '';
@@ -217,6 +247,7 @@ export async function handleBoardGameRequest(
   // POST /api/boardgame/join-table — Tự động vào phòng chờ đang mở của Bàn 1/2 hoặc tạo phòng mới
   if (url.pathname === '/api/boardgame/join-table' && request.method === 'POST') {
     if (!checkIpRateLimit(`join-table:${clientIp}`, 30)) {
+      logBoardGameEvent(env, 'RATE_LIMITED', { pathname: url.pathname, reason: 'join-table' });
       return Response.json(
         { ok: false, error: 'Thao tác chọn bàn quá nhanh, vui lòng chờ giây lát.' },
         { status: 429, headers },
@@ -239,7 +270,7 @@ export async function handleBoardGameRequest(
       typeof body.turnTimeoutMs === 'number'
         ? body.turnTimeoutMs
         : BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
-    const turnTimeoutMs = Math.max(3000, Math.min(120_000, Math.floor(rawTimeout)));
+    const turnTimeoutMs = clampBoardGameTurnTimeoutMs(rawTimeout, env);
     const dirStub = ns.get(ns.idFromName(BG_DIRECTORY_ROOM_NAME));
 
     for (let attempt = 0; attempt < 6; attempt++) {
@@ -398,6 +429,7 @@ export async function handleBoardGameRequest(
   // POST /api/boardgame/join-by-code — Tra cứu phòng qua mã mời 6 ký tự
   if (url.pathname === '/api/boardgame/join-by-code' && request.method === 'POST') {
     if (!checkIpRateLimit(`lookup:${clientIp}`, 40)) {
+      logBoardGameEvent(env, 'RATE_LIMITED', { pathname: url.pathname, reason: 'join-by-code' });
       return Response.json(
         { ok: false, error: 'Tra cứu mã mời quá nhiều lần, vui lòng chờ giây lát.' },
         { status: 429, headers },

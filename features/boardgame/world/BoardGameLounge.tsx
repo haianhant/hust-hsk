@@ -64,10 +64,10 @@ function makeInfoBoardTexture(): THREE.CanvasTexture {
 
     ctx.textAlign = 'left';
     const bullets = [
-      '• Đội Gác Đèn: Khôi phục Tín hiệu đạt 6 điểm hoặc hạ Hội Màn Sương.',
-      '• Hội Màn Sương: Đẩy Nhiễu sóng đạt 6 điểm hoặc triệt tiêu Đội Gác Đèn.',
-      '• Kẻ Lang Thang: Hoàn thành mục tiêu cá nhân bí mật trước khi hết vòng.',
-      '• Đi lại tự do quanh phòng, chọn ghế ngồi hoặc bấm [E] tại bảng để xem luật.',
+      '• Đội Gác Đèn: Điều tra & lật mặt phe ẩn, loại hết Hội Màn Sương hoặc thắng đa số.',
+      '• Hội Màn Sương: Giấu thân phận, triệt tiêu Đội Gác Đèn hoặc giữ thế đa số tới Rạng Sáng.',
+      '• Kẻ Lang Thang: Hoàn thành mục tiêu cá nhân bí mật (Hải / Trang / Bình) qua 9–10 vòng.',
+      '• Chọn ghế tại 2 bàn 8 người để mở sảnh chờ tự động hoặc bấm [E] xem bảng luật v3.',
     ];
     ctx.fillStyle = '#E2E8F0';
     ctx.font = `600 26px ${CANVAS_VN_FONT}`;
