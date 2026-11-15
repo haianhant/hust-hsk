@@ -1,8 +1,8 @@
 'use client';
 
 // ---------------------------------------------------------------------------
-// features/boardgame/ui/ActionPanel.tsx — Bảng điều khiển lượt hợp lệ
-// theo 3 pha: MOVE -> DRAW_OR_EXPLORE -> TACTICAL_ACTION -> END_TURN.
+// features/boardgame/ui/ActionPanel.tsx — Bảng điều khiển lượt trực quan
+// theo 3 bước: ① MOVE -> ② DRAW_OR_EXPLORE -> ③ TACTICAL_ACTION -> END_TURN.
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from 'react';
@@ -15,6 +15,10 @@ import type {
 } from '../network/contracts';
 import { KTX_LOCATIONS, KTX_LOCATION_MAP, isAdjacentLocation } from '../domain/rules';
 import { FACTION_LABELS } from '../domain/roles';
+import {
+  DeckCardBackSvg,
+  LOCATION_VISUAL_META,
+} from './BoardGameArt';
 
 export interface ActionPanelProps {
   publicGame: BoardGamePublicGameView;
@@ -25,12 +29,11 @@ export interface ActionPanelProps {
   onAction: (action: BoardGameActionPayload) => void;
 }
 
-const PHASE_TITLES: Record<string, string> = {
-  MOVE: 'Bước 1/3 · Di chuyển sang khu vực KTX mới',
-  DRAW_OR_EXPLORE: 'Bước 2/3 · Điều tra rút thẻ (hoặc chỉnh Trạm)',
-  TACTICAL_ACTION: 'Bước 3/3 · Dùng thẻ / Kỹ năng / Công kích hoặc Kết thúc lượt',
-  ENDED: 'Ván đấu đã ngã ngũ',
-};
+const PHASE_STEPS = [
+  { id: 'MOVE', label: '① Di chuyển' },
+  { id: 'DRAW_OR_EXPLORE', label: '② Khám phá' },
+  { id: 'TACTICAL_ACTION', label: '③ Chiến thuật' },
+] as const;
 
 export default function ActionPanel({
   publicGame,
@@ -84,14 +87,18 @@ export default function ActionPanel({
     return null;
   }
 
+  const currentStepIdx = PHASE_STEPS.findIndex((s) => s.id === publicGame.turnPhase);
+
   if (isSpectator || !selfPublic) {
     return (
       <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-3 text-xs text-slate-300">
-        <div className="font-semibold text-sky-300">
-          ⏳ Đang theo dõi lượt của {activePlayer?.displayName ?? 'người chơi'}
-        </div>
-        <div className="mt-1 text-slate-400">
-          {PHASE_TITLES[publicGame.turnPhase] ?? publicGame.turnPhase}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-semibold text-sky-300">
+            ⏳ Đang theo dõi lượt của {activePlayer?.displayName ?? 'người chơi'}
+          </span>
+          <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">
+            {PHASE_STEPS[currentStepIdx]?.label ?? publicGame.turnPhase}
+          </span>
         </div>
       </div>
     );
@@ -114,10 +121,10 @@ export default function ActionPanel({
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="font-semibold text-amber-200">
-            ⏳ Đang chờ lượt của {activePlayer?.displayName ?? 'đồng đội'}
+            ⏳ Chờ lượt: {activePlayer?.displayName ?? 'đồng đội'}
           </span>
-          <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">
-            {PHASE_TITLES[publicGame.turnPhase] ?? publicGame.turnPhase}
+          <span className="rounded-lg bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">
+            {PHASE_STEPS[currentStepIdx]?.label ?? publicGame.turnPhase}
           </span>
         </div>
       </div>
@@ -136,15 +143,34 @@ export default function ActionPanel({
   return (
     <div
       data-testid="bg-action-panel"
-      className="space-y-3 rounded-2xl border border-amber-400/50 bg-slate-900/95 p-3.5 text-xs text-slate-100 shadow-xl"
+      className="space-y-2.5 rounded-2xl border border-amber-400/55 bg-slate-900/95 p-3 text-xs text-slate-100 shadow-xl"
     >
+      {/* Thanh bước lượt 1 -> 2 -> 3 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1.5 font-bold text-amber-300">
-          <span>🎯 LƯỢT CỦA BẠN</span>
-          <span className="font-normal text-slate-300">
-            ({PHASE_TITLES[publicGame.turnPhase] ?? publicGame.turnPhase})
-          </span>
-        </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-extrabold text-amber-300">🎯 LƯỢT BẠN</span>
+          <div className="flex flex-wrap items-center gap-1">
+            {PHASE_STEPS.map((st, idx) => {
+              const active = idx === currentStepIdx;
+              const done = idx < currentStepIdx;
+              return (
+                <span
+                  key={st.id}
+                  className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                    active
+                      ? 'bg-amber-400 text-slate-950'
+                      : done
+                        ? 'bg-emerald-950/80 text-emerald-300'
+                        : 'bg-slate-800/80 text-slate-400'
+                  }`}
+                >
+                  {st.label}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
         {privateView && !privateView.revealed && (
           <button
             type="button"
@@ -158,44 +184,51 @@ export default function ActionPanel({
         )}
       </div>
 
-      {/* Pha 1: MOVE */}
+      {/* Pha 1: MOVE (chọn ô trực quan gọn gàng hoặc bấm thẳng lên bản đồ) */}
       {publicGame.turnPhase === 'MOVE' && (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {moveOptions.map((loc) => {
-            const blackout = publicGame.blackoutLocation === loc.id;
-            return (
-              <button
-                key={loc.id}
-                type="button"
-                data-testid={`bg-move-${loc.id}`}
-                disabled={pendingAction}
-                onClick={() => onAction({ type: 'MOVE', location: loc.id })}
-                className="flex flex-col items-start rounded-xl border border-slate-700 bg-slate-950/80 p-2.5 text-left transition hover:border-amber-400 hover:bg-amber-950/35 disabled:opacity-45 motion-reduce:transition-none"
-              >
-                <div className="flex w-full items-center justify-between gap-1 font-semibold text-amber-200">
-                  <span>🚶 {loc.name}</span>
-                  {blackout && (
-                    <span className="rounded bg-violet-950 px-1.5 py-0.5 text-[10px] text-violet-200">
-                      Mất điện
+        <div className="space-y-1.5">
+          <div className="text-[11px] text-slate-300">
+            Chọn ô muốn di chuyển tới (hoặc bấm trực tiếp ô trên bàn cờ):
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+            {moveOptions.map((loc) => {
+              const blackout = publicGame.blackoutLocation === loc.id;
+              const vis = LOCATION_VISUAL_META[loc.id];
+              const occCount = publicGame.players.filter((p) => p.location === loc.id).length;
+              return (
+                <button
+                  key={loc.id}
+                  type="button"
+                  data-testid={`bg-move-${loc.id}`}
+                  disabled={pendingAction}
+                  title={loc.description}
+                  onClick={() => onAction({ type: 'MOVE', location: loc.id })}
+                  className="flex flex-col items-start rounded-xl border border-slate-700 bg-slate-950/85 p-2 text-left transition hover:border-amber-400 hover:bg-amber-950/40 disabled:opacity-45 motion-reduce:transition-none"
+                >
+                  <div className="flex w-full items-center justify-between gap-1 font-bold text-amber-100">
+                    <span className="truncate">
+                      {vis.icon} {loc.shortLabel}
                     </span>
-                  )}
-                </div>
-                <span className="mt-1 text-[11px] leading-snug text-slate-400">
-                  {loc.description}
-                </span>
-              </button>
-            );
-          })}
+                    <span className="text-[10px] text-slate-400">
+                      {blackout ? '⚡' : occCount > 0 ? `👥${occCount}` : ''}
+                    </span>
+                  </div>
+                  <span className="mt-1 truncate text-[10px] font-medium text-amber-300/90">
+                    {vis.badgeText}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Pha 2: DRAW_OR_EXPLORE */}
       {publicGame.turnPhase === 'DRAW_OR_EXPLORE' && (
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {isCurrentBlackout && (
-            <div className="rounded-lg border border-violet-500/40 bg-violet-950/45 px-2.5 py-1.5 text-[11px] text-violet-200">
-              ⚡ Khu vực {KTX_LOCATION_MAP[currentLoc].name} đang mất điện cục bộ trong vòng này —
-              tính năng đặc biệt tạm vô hiệu.
+            <div className="rounded-lg border border-violet-500/45 bg-violet-950/45 px-2.5 py-1 text-[11px] text-violet-200">
+              ⚡ {KTX_LOCATION_MAP[currentLoc].shortLabel} đang mất điện 1 vòng — hiệu ứng ô tạm tắt.
             </div>
           )}
 
@@ -205,13 +238,14 @@ export default function ActionPanel({
               data-testid="bg-draw-clue"
               disabled={pendingAction}
               onClick={() => onAction({ type: 'DRAW_CARD', deck: 'clue' })}
-              className="rounded-xl border border-amber-500/50 bg-amber-950/45 p-2.5 text-left hover:bg-amber-900/55 disabled:opacity-45"
+              className="flex items-center gap-2.5 rounded-xl border border-amber-500/50 bg-amber-950/40 p-2 text-left transition hover:border-amber-400 hover:bg-amber-900/55 disabled:opacity-45"
             >
-              <div className="font-bold text-amber-200">
-                🟨 Rút Manh mối ({publicGame.deckCounts.clue})
-              </div>
-              <div className="mt-0.5 text-[11px] text-amber-100/80">
-                Nhặt Mảnh tin hoặc soi phe bí mật.
+              <DeckCardBackSvg deck="clue" />
+              <div className="min-w-0">
+                <div className="font-bold text-amber-200">
+                  Manh mối ({publicGame.deckCounts.clue})
+                </div>
+                <div className="text-[10px] text-amber-100/80">Soi phe · +Mảnh tin</div>
               </div>
             </button>
 
@@ -220,13 +254,14 @@ export default function ActionPanel({
               data-testid="bg-draw-event"
               disabled={pendingAction}
               onClick={() => onAction({ type: 'DRAW_CARD', deck: 'event' })}
-              className="rounded-xl border border-rose-500/50 bg-rose-950/45 p-2.5 text-left hover:bg-rose-900/55 disabled:opacity-45"
+              className="flex items-center gap-2.5 rounded-xl border border-rose-500/50 bg-rose-950/40 p-2 text-left transition hover:border-rose-400 hover:bg-rose-900/55 disabled:opacity-45"
             >
-              <div className="font-bold text-rose-200">
-                🟥 Rút Sự kiện ({publicGame.deckCounts.event})
-              </div>
-              <div className="mt-0.5 text-[11px] text-rose-100/80">
-                Biến cố trực tiếp lên khu vực & Tín hiệu.
+              <DeckCardBackSvg deck="event" />
+              <div className="min-w-0">
+                <div className="font-bold text-rose-200">
+                  Sự kiện ({publicGame.deckCounts.event})
+                </div>
+                <div className="text-[10px] text-rose-100/80">Biến cố khu &amp; sóng</div>
               </div>
             </button>
 
@@ -235,28 +270,29 @@ export default function ActionPanel({
               data-testid="bg-draw-tactic"
               disabled={pendingAction}
               onClick={() => onAction({ type: 'DRAW_CARD', deck: 'tactic' })}
-              className="rounded-xl border border-sky-500/50 bg-sky-950/45 p-2.5 text-left hover:bg-sky-900/55 disabled:opacity-45"
+              className="flex items-center gap-2.5 rounded-xl border border-sky-500/50 bg-sky-950/40 p-2 text-left transition hover:border-sky-400 hover:bg-sky-900/55 disabled:opacity-45"
             >
-              <div className="font-bold text-sky-200">
-                🟦 Rút Chiến thuật ({publicGame.deckCounts.tactic})
-              </div>
-              <div className="mt-0.5 text-[11px] text-sky-100/80">
-                Giữ kín trên tay để tung ra đúng thời điểm.
+              <DeckCardBackSvg deck="tactic" />
+              <div className="min-w-0">
+                <div className="font-bold text-sky-200">
+                  Chiến thuật ({publicGame.deckCounts.tactic})
+                </div>
+                <div className="text-[10px] text-sky-100/80">Giữ tay tung đòn</div>
               </div>
             </button>
           </div>
 
           {currentLoc === 'radio' && !isCurrentBlackout && (
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-2.5">
-              <span className="text-[11px] font-semibold text-emerald-200">
-                📡 Đặc quyền Phòng Phát Thanh:
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/35 px-2.5 py-2">
+              <span className="text-[11px] font-bold text-emerald-200">
+                📡 Trạm Phát Thanh:
               </span>
               <button
                 type="button"
                 data-testid="bg-adjust-signal"
                 disabled={pendingAction}
                 onClick={() => onAction({ type: 'ADJUST_TRACK', mode: 'signal' })}
-                className="rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-45"
+                className="rounded-lg bg-amber-400 px-2.5 py-1 text-[11px] font-bold text-slate-950 hover:bg-amber-300 disabled:opacity-45"
               >
                 +1 Tín hiệu 🏮
               </button>
@@ -276,28 +312,47 @@ export default function ActionPanel({
 
       {/* Pha 3: TACTICAL_ACTION */}
       {publicGame.turnPhase === 'TACTICAL_ACTION' && (
-        <div className="space-y-3">
-          {/* Chọn mục tiêu */}
-          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-950/75 p-2.5">
+        <div className="space-y-2.5">
+          {/* Chọn mục tiêu nhanh dạng chip + select đồng bộ cho screen-reader/E2E */}
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-950/80 p-2">
             <label htmlFor="bg-target-select" className="text-[11px] font-semibold text-slate-300">
               🎯 Mục tiêu:
             </label>
+            <div className="flex flex-wrap items-center gap-1">
+              {aliveTargets.map((t) => {
+                const inRange = inRangeTargets.some((r) => r.playerId === t.playerId);
+                const selected = t.playerId === effectiveTargetId;
+                return (
+                  <button
+                    key={t.playerId}
+                    type="button"
+                    onClick={() => setSelectedTargetId(t.playerId)}
+                    className={`rounded-lg border px-2 py-0.5 text-[11px] font-semibold transition ${
+                      selected
+                        ? 'border-amber-400 bg-amber-400 text-slate-950'
+                        : inRange
+                          ? 'border-sky-500/45 bg-slate-900 text-sky-200 hover:border-sky-400'
+                          : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
+                    }`}
+                  >
+                    {t.displayName} · ❤️{t.hp}
+                    {inRange ? ' 🎯' : ''}
+                  </button>
+                );
+              })}
+            </div>
             <select
               id="bg-target-select"
               data-testid="bg-target-select"
               value={effectiveTargetId ?? ''}
               onChange={(e) => setSelectedTargetId(e.target.value)}
-              className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-amber-100 outline-none focus:border-amber-400"
+              className="sr-only"
             >
-              {aliveTargets.map((t) => {
-                const inRange = inRangeTargets.some((r) => r.playerId === t.playerId);
-                return (
-                  <option key={t.playerId} value={t.playerId}>
-                    {t.displayName} ({KTX_LOCATION_MAP[t.location].shortLabel} · {t.hp} HP
-                    {inRange ? ' · Trong tầm' : ''})
-                  </option>
-                );
-              })}
+              {aliveTargets.map((t) => (
+                <option key={t.playerId} value={t.playerId}>
+                  {t.displayName} ({KTX_LOCATION_MAP[t.location].shortLabel} · {t.hp} HP)
+                </option>
+              ))}
             </select>
           </div>
 
@@ -305,9 +360,9 @@ export default function ActionPanel({
           {privateView && privateView.hand.length > 0 && (
             <div className="space-y-1.5">
               <div className="text-[11px] font-bold uppercase tracking-wider text-sky-300">
-                🃏 Lá bài Chiến thuật trên tay ({privateView.hand.length}/4)
+                🃏 Bài trên tay ({privateView.hand.length}/4)
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {privateView.hand.map((card, idx) => (
                   <button
                     key={`${card.id}-${idx}`}
@@ -321,11 +376,14 @@ export default function ActionPanel({
                         targetPlayerId: effectiveTargetId,
                       })
                     }
-                    className="rounded-xl border border-sky-500/40 bg-slate-950/85 p-2 text-left hover:border-sky-400 hover:bg-sky-950/40 disabled:opacity-45"
+                    className="flex items-start gap-2 rounded-xl border border-sky-500/45 bg-slate-950/90 p-2 text-left transition hover:border-sky-400 hover:bg-sky-950/45 disabled:opacity-45"
                   >
-                    <div className="font-semibold text-sky-200">✨ {card.title}</div>
-                    <div className="mt-0.5 text-[11px] leading-snug text-slate-400">
-                      {card.summary}
+                    <DeckCardBackSvg deck={card.deck} />
+                    <div className="min-w-0">
+                      <div className="font-bold text-sky-200">✨ {card.title}</div>
+                      <div className="mt-0.5 text-[10px] leading-snug text-slate-300">
+                        {card.summary}
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -334,7 +392,7 @@ export default function ActionPanel({
           )}
 
           {/* Hành động chiến thuật + Kết thúc lượt */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2.5">
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-800 pt-2">
             <button
               type="button"
               data-testid="bg-use-skill-btn"
@@ -345,9 +403,9 @@ export default function ActionPanel({
                   targetPlayerId: effectiveTargetId,
                 })
               }
-              className="rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-40"
+              className="rounded-xl bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-amber-500 disabled:opacity-40"
             >
-              ⚡ Kỹ năng (Lật vai)
+              ⚡ Kỹ năng
             </button>
 
             <button
@@ -357,7 +415,7 @@ export default function ActionPanel({
               title={
                 hasRangeTarget
                   ? 'Công kích -2 HP mục tiêu trong tầm'
-                  : 'Cần có sinh viên khác đứng cùng khu vực (hoặc kề cạnh tại Sân Bóng Rổ)'
+                  : 'Cần có sinh viên cùng khu vực (hoặc kề cạnh tại Sân Bóng Rổ)'
               }
               onClick={() =>
                 rangeTargetId &&
@@ -366,7 +424,7 @@ export default function ActionPanel({
                   targetPlayerId: rangeTargetId,
                 })
               }
-              className="rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-500 disabled:opacity-40"
+              className="rounded-xl bg-rose-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-rose-500 disabled:opacity-40"
             >
               ⚔️ Công kích
             </button>
@@ -405,7 +463,7 @@ export default function ActionPanel({
               data-testid="bg-end-turn-btn"
               disabled={pendingAction}
               onClick={() => onAction({ type: 'END_TURN' })}
-              className="ml-auto rounded-xl bg-emerald-500 px-4 py-1.5 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-45"
+              className="ml-auto rounded-xl bg-emerald-500 px-3.5 py-1.5 text-[11px] font-extrabold text-slate-950 hover:bg-emerald-400 disabled:opacity-45"
             >
               ✓ Kết thúc lượt
             </button>

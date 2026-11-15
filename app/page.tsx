@@ -1530,56 +1530,6 @@ export default function HomePage() {
     exitBoardGameClubFade();
   }, [boardGameSeatId, bgSnap.matchId, exitBoardGameClubFade]);
 
-  const handleSelectBoardGameSeat = useCallback(
-    (seatId: string) => {
-      const snap = boardGameClient.getSnapshot();
-      const mpNow = multiplayer.getSnapshot();
-      const takenByBg = snap.players.find(
-        (p) => p.seatId === seatId && p.playerId !== snap.playerId && !p.isSpectator,
-      );
-      const takenByMp = mpNow.players.find(
-        (p) => p.id !== mpNow.selfId && p.scene === 'boardgame' && p.seatedSeatId === seatId,
-      );
-      if (takenByBg || takenByMp) {
-        const who = takenByBg?.displayName ?? takenByMp?.name ?? 'người chơi khác';
-        showToast(`🪑 Ghế này đang có ${who} ngồi — hãy chọn ghế trống khác!`);
-        return;
-      }
-      if (snap.matchId) {
-        if (snap.status === 'PLAYING' || snap.status === 'STARTING') {
-          showToast('Ván đấu đang diễn ra, không thể đổi ghế lúc này.');
-          return;
-        }
-        const parsed = seatIdToTableAndIndex(seatId);
-        if (parsed && (!snap.tableId || parsed.tableId === snap.tableId)) {
-          boardGameClient.selectSeat(parsed.seatIndex);
-        }
-      }
-      const r = getHook()?.sitAtBoardGameSeat?.(seatId);
-      if (r?.ok) {
-        setBoardGameSeatId(r.seatId ?? seatId);
-        showToast(`🪑 Đã ngồi vào ${r.label ?? 'ghế bàn chơi'} (bấm E để đứng dậy)`);
-      }
-    },
-    [showToast],
-  );
-
-  const handleStandUpBoardGameSeat = useCallback(() => {
-    const snap = boardGameClient.getSnapshot();
-    if (snap.matchId) {
-      if (snap.status === 'PLAYING' || snap.status === 'STARTING') {
-        showToast('Không thể đứng dậy rời ghế khi ván đang diễn ra.');
-        return;
-      }
-      boardGameClient.standUp();
-    }
-    const r = getHook()?.standUpBoardGameSeat?.();
-    if (r?.ok) {
-      setBoardGameSeatId(null);
-      showToast('Đã đứng dậy khỏi bàn Board Game.');
-    }
-  }, [showToast]);
-
   const bgAppearance = useMemo(
     () => ({
       gender: characterProfile.gender,
@@ -1598,6 +1548,84 @@ export default function HomePage() {
       characterProfile.backpack,
     ],
   );
+
+  const handleSelectBoardGameSeat = useCallback(
+    (seatId: string) => {
+      const snap = boardGameClient.getSnapshot();
+      const mpNow = multiplayer.getSnapshot();
+      const takenByBg = snap.players.find(
+        (p) => p.seatId === seatId && p.playerId !== snap.playerId && !p.isSpectator,
+      );
+      const takenByMp = mpNow.players.find(
+        (p) => p.id !== mpNow.selfId && p.scene === 'boardgame' && p.seatedSeatId === seatId,
+      );
+      if (takenByBg || takenByMp) {
+        const who = takenByBg?.displayName ?? takenByMp?.name ?? 'người chơi khác';
+        showToast(`🪑 Ghế này đang có ${who} ngồi — hãy chọn ghế trống khác!`);
+        return;
+      }
+      if (snap.matchId && (snap.status === 'PLAYING' || snap.status === 'STARTING')) {
+        showToast('Ván đấu đang diễn ra, không thể đổi ghế lúc này.');
+        return;
+      }
+      const r = getHook()?.sitAtBoardGameSeat?.(seatId);
+      if (!r?.ok) return;
+      const effectiveSeatId = r.seatId ?? seatId;
+      setBoardGameSeatId(effectiveSeatId);
+      showToast(`🪑 Đã ngồi vào ${r.label ?? 'ghế bàn chơi'} (bấm E để đứng dậy)`);
+
+      const parsed = seatIdToTableAndIndex(effectiveSeatId);
+      if (!parsed) return;
+
+      const sameTableWaitingMatch = Boolean(
+        snap.matchId &&
+          snap.tableId === parsed.tableId &&
+          !snap.isSpectator &&
+          (snap.status === 'CREATED' || snap.status === 'WAITING' || snap.status === 'READY_CHECK'),
+      );
+      if (sameTableWaitingMatch) {
+        boardGameClient.selectSeat(parsed.seatIndex);
+        return;
+      }
+
+      if (snap.matchId) {
+        boardGameClient.leaveMatch();
+      }
+      void boardGameClient
+        .joinOrCreateTableMatch({
+          tableId: parsed.tableId,
+          displayName: characterProfile.name,
+          appearance: bgAppearance,
+          preferredSeatIndex: parsed.seatIndex,
+        })
+        .then((res) => {
+          if (res.ok) {
+            showToast(
+              res.created
+                ? `🎲 Đã mở phòng chờ ${parsed.tableId === 'table-1' ? 'Bàn 1' : 'Bàn 2'} · Mã mời: ${res.inviteCode}`
+                : `🎲 Đã tự động vào phòng ${res.inviteCode}!`,
+            );
+          }
+        });
+    },
+    [bgAppearance, characterProfile.name, showToast],
+  );
+
+  const handleStandUpBoardGameSeat = useCallback(() => {
+    const snap = boardGameClient.getSnapshot();
+    if (snap.matchId && (snap.status === 'PLAYING' || snap.status === 'STARTING')) {
+      showToast('Không thể đứng dậy rời ghế khi ván đang diễn ra.');
+      return;
+    }
+    if (snap.matchId) {
+      boardGameClient.leaveMatch();
+    }
+    const r = getHook()?.standUpBoardGameSeat?.();
+    if (r?.ok) {
+      setBoardGameSeatId(null);
+      showToast('Đã đứng dậy khỏi bàn Board Game.');
+    }
+  }, [showToast]);
 
   // Đăng ký kênh danh sách trận trong sảnh CLB Board Game
   useEffect(() => {
@@ -2541,12 +2569,19 @@ export default function HomePage() {
     [bgSnap.playerId, bgSnap.players],
   );
   const isBgHost = Boolean(bgSnap.playerId && bgSnap.hostPlayerId === bgSnap.playerId);
+  const bgSeatedPlayers = useMemo(
+    () => bgSnap.players.filter((p) => !p.isSpectator && p.seatId && p.connected),
+    [bgSnap.players],
+  );
+  const bgReadyCount = useMemo(
+    () => bgSeatedPlayers.filter((p) => p.isHost || p.ready).length,
+    [bgSeatedPlayers],
+  );
   const canStartBgMatch = useMemo(() => {
     if (!isBgHost || bgSnap.status === 'PLAYING' || bgSnap.status === 'STARTING') return false;
-    const connectedSeated = bgSnap.players.filter((p) => !p.isSpectator && p.seatId && p.connected);
-    if (connectedSeated.length < BOARD_GAME_MIN_PLAYERS) return false;
-    return connectedSeated.every((p) => p.isHost || p.ready);
-  }, [isBgHost, bgSnap.status, bgSnap.players]);
+    if (bgSeatedPlayers.length < BOARD_GAME_MIN_PLAYERS) return false;
+    return bgSeatedPlayers.every((p) => p.isHost || p.ready);
+  }, [isBgHost, bgSnap.status, bgSeatedPlayers]);
 
   const bgStatusLabel =
     bgSnap.status === 'CREATED'
@@ -2884,9 +2919,17 @@ export default function HomePage() {
             inviteCode={bgSnap.inviteCode}
             matchStatusLabel={bgStatusLabel}
             isSpectator={bgSnap.isSpectator}
+            isHost={isBgHost}
+            localReady={Boolean(selfBgPlayer?.ready)}
+            canStartMatch={canStartBgMatch}
+            seatedPlayerCount={bgSeatedPlayers.length}
+            readyPlayerCount={bgReadyCount}
+            gameActive={bgGameActive}
             onToggleLobby={() => setBoardGameLobbyOpen((v) => !v)}
             onToggleRules={() => setBoardGameRulesOpen((v) => !v)}
             onStandUpSeat={handleStandUpBoardGameSeat}
+            onToggleReady={() => boardGameClient.setReady(!selfBgPlayer?.ready)}
+            onStartMatch={() => boardGameClient.startMatch()}
             onRequestExit={handleRequestExitBoardGameClub}
           />
           <BoardGameLobby

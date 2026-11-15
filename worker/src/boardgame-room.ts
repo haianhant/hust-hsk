@@ -386,6 +386,84 @@ export class BoardGameRoom {
       return Response.json({ ok: true, matchId, inviteCode, tableId }, { status: 201 });
     }
 
+    if (url.pathname === '/__dir/join-or-register-table' && request.method === 'POST') {
+      this.roomName = BG_DIRECTORY_ROOM_NAME;
+      const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!body) return Response.json({ ok: false, error: 'invalid-json' }, { status: 400 });
+      const tableId = sanitizeBoardGameTableId(body.tableId);
+      const hostName = sanitizeBoardGameName(body.hostName);
+      const matchId = sanitizeBoardGameMatchId(body.matchId);
+      const inviteCode = sanitizeInviteCode(body.inviteCode);
+      if (!matchId || !inviteCode) {
+        return Response.json({ ok: false, error: 'invalid-fields' }, { status: 400 });
+      }
+      this.sql.exec(
+        'DELETE FROM directory_matches WHERE status = ? OR updated_at_ms < ?',
+        'CLOSED',
+        nowMs - 2 * 3600_000,
+      );
+      const openRows = this.sql
+        .exec<DirectoryRow>(
+          `SELECT * FROM directory_matches
+           WHERE table_id = ?
+             AND status IN ('CREATED', 'WAITING', 'READY_CHECK')
+             AND player_count < max_players
+           ORDER BY (CASE WHEN player_count > 0 THEN 0 ELSE 1 END) ASC, updated_at_ms DESC
+           LIMIT 1`,
+          tableId,
+        )
+        .toArray();
+      if (openRows[0]) {
+        return Response.json({
+          ok: true,
+          created: false,
+          match: this.formatDirectoryRow(openRows[0]),
+        });
+      }
+      const conflict = this.sql
+        .exec<{ match_id: string }>(
+          'SELECT match_id FROM directory_matches WHERE invite_code = ? LIMIT 1',
+          inviteCode,
+        )
+        .toArray();
+      if (conflict.length > 0) {
+        return Response.json({ ok: false, error: 'invite-code-collision' }, { status: 409 });
+      }
+      this.sql.exec(
+        `INSERT INTO directory_matches (
+          match_id, invite_code, table_id, host_name, status, player_count, max_players, spectator_count, updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        matchId,
+        inviteCode,
+        tableId,
+        hostName,
+        'CREATED',
+        0,
+        BOARD_GAME_MAX_PLAYERS,
+        0,
+        nowMs,
+      );
+      this.broadcastDirectorySnapshot();
+      return Response.json(
+        {
+          ok: true,
+          created: true,
+          match: {
+            matchId,
+            inviteCode,
+            tableId,
+            hostName,
+            status: 'CREATED' as BoardGameMatchStatus,
+            playerCount: 0,
+            maxPlayers: BOARD_GAME_MAX_PLAYERS,
+            spectatorCount: 0,
+            updatedAtMs: nowMs,
+          },
+        },
+        { status: 201 },
+      );
+    }
+
     if (url.pathname === '/__dir/update' && request.method === 'POST') {
       this.roomName = BG_DIRECTORY_ROOM_NAME;
       const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;

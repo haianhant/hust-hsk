@@ -15,8 +15,13 @@ import {
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
 } from '../network/contracts';
-import { KTX_LOCATIONS } from '../domain/rules';
-import { FACTION_LABELS } from '../domain/roles';
+import { KTX_LOCATION_MAP, isAdjacentLocation } from '../domain/rules';
+import {
+  BOARD_GRID_ORDER,
+  LOCATION_VISUAL_META,
+  LocationSceneSvg,
+  PlayerPawnToken,
+} from './BoardGameArt';
 import RoleCard from './RoleCard';
 import ActionPanel from './ActionPanel';
 import GameLog from './GameLog';
@@ -192,9 +197,18 @@ export default function GameBoard({
 
   const activePlayer =
     publicGame.players.find((p) => p.playerId === publicGame.activePlayerId) ?? null;
+  const selfPlayer = selfPlayerId
+    ? publicGame.players.find((p) => p.playerId === selfPlayerId) ?? null
+    : null;
+  const canClickMoveOnBoard = Boolean(
+    !isSpectator &&
+      !pendingAction &&
+      selfPlayer?.alive &&
+      publicGame.activePlayerId === selfPlayerId &&
+      publicGame.turnPhase === 'MOVE',
+  );
 
-  const signalPct = Math.round((publicGame.signalProgress / publicGame.maxTrackValue) * 100);
-  const mistPct = Math.round((publicGame.mistProgress / publicGame.maxTrackValue) * 100);
+  const trackSteps = Array.from({ length: publicGame.maxTrackValue }, (_, idx) => idx + 1);
 
   const handleDispatchAction = async (action: BoardGameActionPayload) => {
     if (pendingAction) return;
@@ -273,35 +287,69 @@ export default function GameBoard({
           </div>
         </div>
 
-        {/* Hai thanh tiến độ Tín hiệu (Đội Gác Đèn) vs Nhiễu sóng (Hội Màn Sương) */}
+        {/* Hai thanh tiến độ Tín hiệu (Đội Gác Đèn) vs Nhiễu sóng (Hội Màn Sương) dạng nút cờ */}
         <div className="mx-auto mt-2 grid max-w-7xl grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-1.5">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-amber-200">
-              <span>📡 Tín hiệu Gác Đèn</span>
-              <span data-testid="bg-signal-score">
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-500/35 bg-amber-950/25 px-3 py-1.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-200">
+              <span>🏮</span>
+              <span>Tín hiệu Gác Đèn</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1" aria-hidden="true">
+                {trackSteps.map((step) => {
+                  const lit = step <= publicGame.signalProgress;
+                  return (
+                    <span
+                      key={`sig-${step}`}
+                      className={`flex h-4 w-4 items-center justify-center rounded-full border text-[9px] font-bold transition ${
+                        lit
+                          ? 'border-amber-200 bg-amber-400 text-slate-950 shadow-[0_0_8px_rgba(251,191,36,0.75)]'
+                          : 'border-slate-700 bg-slate-900 text-slate-500'
+                      }`}
+                    >
+                      {step}
+                    </span>
+                  );
+                })}
+              </div>
+              <span
+                data-testid="bg-signal-score"
+                className="min-w-[26px] text-right font-mono text-[11px] font-bold text-amber-300"
+              >
                 {publicGame.signalProgress}/{publicGame.maxTrackValue}
               </span>
             </div>
-            <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-300 transition-[width] duration-300 motion-reduce:transition-none"
-                style={{ width: `${signalPct}%` }}
-              />
-            </div>
           </div>
 
-          <div className="rounded-xl border border-violet-500/30 bg-violet-950/20 px-3 py-1.5">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-violet-200">
-              <span>🌫️ Nhiễu sóng Màn Sương</span>
-              <span data-testid="bg-mist-score">
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-violet-500/35 bg-violet-950/25 px-3 py-1.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-200">
+              <span>🌫️</span>
+              <span>Nhiễu sóng Màn Sương</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1" aria-hidden="true">
+                {trackSteps.map((step) => {
+                  const lit = step <= publicGame.mistProgress;
+                  return (
+                    <span
+                      key={`mist-${step}`}
+                      className={`flex h-4 w-4 items-center justify-center rounded-full border text-[9px] font-bold transition ${
+                        lit
+                          ? 'border-fuchsia-200 bg-violet-500 text-white shadow-[0_0_8px_rgba(167,139,250,0.75)]'
+                          : 'border-slate-700 bg-slate-900 text-slate-500'
+                      }`}
+                    >
+                      {step}
+                    </span>
+                  );
+                })}
+              </div>
+              <span
+                data-testid="bg-mist-score"
+                className="min-w-[26px] text-right font-mono text-[11px] font-bold text-violet-300"
+              >
                 {publicGame.mistProgress}/{publicGame.maxTrackValue}
               </span>
-            </div>
-            <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-400 transition-[width] duration-300 motion-reduce:transition-none"
-                style={{ width: `${mistPct}%` }}
-              />
             </div>
           </div>
         </div>
@@ -336,91 +384,161 @@ export default function GameBoard({
           <RoleCard privateView={privateView} isSpectator={isSpectator} />
         </section>
 
-        {/* Cột Giữa: Bản đồ 6 Khu Vực KTX & Bảng Lượt */}
+        {/* Cột Giữa: Bàn Cờ Minh Họa 6 Khu Vực KTX & Bảng Điều Khiển Lượt */}
         <section
           className={`space-y-3 lg:col-span-6 ${mobileTab === 'board' ? 'block' : 'hidden lg:block'}`}
         >
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            {KTX_LOCATIONS.map((loc) => {
-              const occupants = publicGame.players.filter((p) => p.location === loc.id);
-              const isSelfHere = occupants.some((p) => p.playerId === selfPlayerId);
-              const isBlackout = publicGame.blackoutLocation === loc.id;
-              return (
-                <div
-                  key={loc.id}
-                  data-testid={`bg-loc-${loc.id}`}
-                  className={`flex flex-col justify-between rounded-2xl border p-3 transition motion-reduce:transition-none ${
-                    isBlackout
-                      ? 'border-violet-500/55 bg-violet-950/30'
-                      : isSelfHere
-                        ? 'border-amber-400/60 bg-slate-900/95'
-                        : 'border-slate-800 bg-slate-900/80'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-amber-200">{loc.name}</span>
-                      <div className="flex items-center gap-1">
-                        {isBlackout && (
-                          <span className="rounded bg-violet-900 px-1.5 py-0.5 text-[10px] font-semibold text-violet-100">
-                            ⚡ Mất điện
-                          </span>
-                        )}
-                        {isSelfHere && (
-                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
-                            Bạn ở đây
-                          </span>
+          <div className="relative overflow-hidden rounded-3xl border border-amber-500/30 bg-[radial-gradient(ellipse_at_top,_rgba(30,41,59,0.92),_rgba(2,6,23,0.98))] p-2.5 shadow-2xl sm:p-3.5">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-1.5 px-1 text-[11px]">
+              <span className="font-bold uppercase tracking-wider text-amber-300/90">
+                🗺️ Bàn Cờ Khuôn Viên KTX Bách Khoa
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Đường nối hiển thị ô kề (tầm xa Sân Bóng Rổ &amp; lưới Hành Lang B7)
+              </span>
+            </div>
+
+            <div className="relative">
+              {/* Sơ đồ đường nối giữa 6 ô bàn cờ (hiện trên màn >= sm cho bố cục 3x2 phẳng) */}
+              <svg
+                viewBox="0 0 600 400"
+                preserveAspectRatio="none"
+                className="pointer-events-none absolute inset-0 hidden h-full w-full sm:block"
+                aria-hidden="true"
+              >
+                {/* Vành ngoài & Trục dọc */}
+                <line x1="100" y1="100" x2="300" y2="100" stroke="#F59E0B" strokeOpacity="0.28" strokeWidth="4" strokeDasharray="7 6" />
+                <line x1="300" y1="100" x2="500" y2="100" stroke="#38BDF8" strokeOpacity="0.28" strokeWidth="4" strokeDasharray="7 6" />
+                <line x1="100" y1="100" x2="100" y2="300" stroke="#C084FC" strokeOpacity="0.28" strokeWidth="4" strokeDasharray="7 6" />
+                {/* Giao lộ Hành Lang B7 nối thẳng tới 5 ô */}
+                <line x1="300" y1="300" x2="100" y2="100" stroke="#34D399" strokeOpacity="0.3" strokeWidth="3.5" />
+                <line x1="300" y1="300" x2="300" y2="100" stroke="#34D399" strokeOpacity="0.3" strokeWidth="3.5" />
+                <line x1="300" y1="300" x2="500" y2="100" stroke="#34D399" strokeOpacity="0.3" strokeWidth="3.5" />
+                <line x1="300" y1="300" x2="100" y2="300" stroke="#34D399" strokeOpacity="0.32" strokeWidth="3.5" />
+                <line x1="300" y1="300" x2="500" y2="300" stroke="#34D399" strokeOpacity="0.32" strokeWidth="3.5" />
+                {/* Mạch điện ngầm nối Cầu Dao <-> Phát Thanh */}
+                <path
+                  d="M100 315 Q300 398 500 315"
+                  fill="none"
+                  stroke="#A855F7"
+                  strokeOpacity="0.35"
+                  strokeWidth="3.5"
+                  strokeDasharray="6 5"
+                />
+              </svg>
+
+              <div className="relative z-10 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5">
+                {BOARD_GRID_ORDER.map((locId) => {
+                  const loc = KTX_LOCATION_MAP[locId];
+                  const vis = LOCATION_VISUAL_META[locId];
+                  const occupants = publicGame.players.filter((p) => p.location === loc.id);
+                  const isSelfHere = occupants.some((p) => p.playerId === selfPlayerId);
+                  const isBlackout = publicGame.blackoutLocation === loc.id;
+                  const canMoveHere = canClickMoveOnBoard && selfPlayer?.location !== loc.id;
+                  const isNearCourt = Boolean(
+                    selfPlayer &&
+                      selfPlayer.location === 'court' &&
+                      isAdjacentLocation('court', loc.id) &&
+                      loc.id !== 'court',
+                  );
+
+                  return (
+                    <div
+                      key={loc.id}
+                      data-testid={`bg-loc-${loc.id}`}
+                      title={loc.description}
+                      role={canMoveHere ? 'button' : undefined}
+                      tabIndex={canMoveHere ? 0 : undefined}
+                      onClick={
+                        canMoveHere
+                          ? () => void handleDispatchAction({ type: 'MOVE', location: loc.id })
+                          : undefined
+                      }
+                      onKeyDown={
+                        canMoveHere
+                          ? (e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                void handleDispatchAction({ type: 'MOVE', location: loc.id });
+                              }
+                            }
+                          : undefined
+                      }
+                      className={`group flex min-w-0 flex-col justify-between rounded-2xl border p-2 transition motion-reduce:transition-none ${
+                        isBlackout
+                          ? 'border-violet-500/70 bg-violet-950/65 shadow-[0_0_16px_rgba(124,58,237,0.22)]'
+                          : isSelfHere
+                            ? 'border-amber-400/80 bg-slate-900/95 shadow-[0_0_16px_rgba(251,191,36,0.2)]'
+                            : canMoveHere
+                              ? 'cursor-pointer border-slate-700/90 bg-slate-900/90 hover:border-amber-400 hover:bg-slate-800/95'
+                              : isNearCourt
+                                ? 'border-sky-500/45 bg-slate-900/90'
+                                : 'border-slate-800/95 bg-slate-900/88'
+                      }`}
+                    >
+                      <div className="space-y-1.5">
+                        <div className="relative overflow-hidden rounded-lg">
+                          <LocationSceneSvg locationId={loc.id} isBlackout={isBlackout} />
+                          <div className="absolute inset-x-1 top-1 flex flex-wrap items-center justify-between gap-1">
+                            {isSelfHere && (
+                              <span className="rounded-md bg-amber-400 px-1.5 py-0.5 text-[9px] font-extrabold text-slate-950 shadow">
+                                📍 Bạn
+                              </span>
+                            )}
+                            {isBlackout && (
+                              <span className="ml-auto rounded-md bg-violet-700 px-1.5 py-0.5 text-[9px] font-bold text-white shadow">
+                                ⚡ Mất điện
+                              </span>
+                            )}
+                            {!isBlackout && isNearCourt && (
+                              <span className="ml-auto rounded-md bg-sky-900/90 px-1.5 py-0.5 text-[9px] font-semibold text-sky-200 ring-1 ring-sky-400/50">
+                                🎯 Tầm rổ
+                              </span>
+                            )}
+                            {canMoveHere && !isBlackout && !isNearCourt && (
+                              <span className="ml-auto rounded-md bg-slate-950/85 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300 opacity-85 group-hover:bg-amber-500 group-hover:text-slate-950">
+                                🚶 Tới ô
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-1">
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-extrabold text-amber-100">
+                              {vis.icon} {loc.shortLabel}
+                            </div>
+                            <div className="truncate text-[10px] text-slate-400">{loc.name}</div>
+                          </div>
+                        </div>
+
+                        <div
+                          className={`inline-flex max-w-full items-center truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${vis.pillClasses}`}
+                        >
+                          {vis.badgeText}
+                        </div>
+                      </div>
+
+                      {/* Quân cờ Token các sinh viên tại ô này */}
+                      <div className="mt-2 flex flex-wrap gap-1 border-t border-slate-800/70 pt-1.5">
+                        {occupants.length === 0 ? (
+                          <span className="text-[10px] italic text-slate-600">Ô trống</span>
+                        ) : (
+                          occupants.map((p) => (
+                            <PlayerPawnToken
+                              key={p.playerId}
+                              player={p}
+                              isSelf={p.playerId === selfPlayerId}
+                              isActiveTurn={p.playerId === publicGame.activePlayerId}
+                            />
+                          ))
                         )}
                       </div>
                     </div>
-                    <p className="mt-1 text-[11px] leading-snug text-slate-400">{loc.description}</p>
-                  </div>
-
-                  {/* Sinh viên đang có mặt tại khu vực */}
-                  <div className="mt-2.5 flex flex-wrap gap-1.5">
-                    {occupants.length === 0 ? (
-                      <span className="text-[11px] italic text-slate-600">Chưa có ai</span>
-                    ) : (
-                      occupants.map((p) => {
-                        const isActive = p.playerId === publicGame.activePlayerId;
-                        const isMe = p.playerId === selfPlayerId;
-                        return (
-                          <div
-                            key={p.playerId}
-                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] ${
-                              !p.alive
-                                ? 'border-slate-800 bg-slate-950/60 text-slate-500 line-through'
-                                : isActive
-                                  ? 'border-amber-400 bg-amber-950/55 text-amber-100'
-                                  : isMe
-                                    ? 'border-emerald-500/45 bg-emerald-950/35 text-emerald-100'
-                                    : 'border-slate-700 bg-slate-950/75 text-slate-200'
-                            }`}
-                          >
-                            <span className="font-semibold">
-                              {isActive ? '▶ ' : ''}
-                              {p.displayName}
-                            </span>
-                            <span className="text-[10px] text-rose-300">❤️{p.hp}</span>
-                            {p.shield > 0 && (
-                              <span className="text-[10px] text-sky-300">🛡️{p.shield}</span>
-                            )}
-                            {p.revealedFaction && (
-                              <span className="rounded bg-slate-800 px-1 text-[10px] text-amber-300">
-                                {FACTION_LABELS[p.revealedFaction]}
-                              </span>
-                            )}
-                            {!p.connected && (
-                              <span className="text-[10px] text-rose-400">(Mất mạng)</span>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <ActionPanel

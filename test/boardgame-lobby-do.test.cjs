@@ -345,3 +345,84 @@ test('BG2 DO SQLite & Lobby Protocol Full Suite', async (t) => {
     c2.close();
   });
 });
+
+test('BG2 /api/boardgame/join-table atomic auto-lobby per table', async () => {
+  const srv = await startStandaloneBoardGameTestServer(0);
+  try {
+    const reqs = ['An', 'Bình', 'Chi', 'Dung'].map((hostName) =>
+      fetch(`${srv.httpBaseUrl}/api/boardgame/join-table`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId: 'table-1', hostName }),
+      }).then((r) => r.json()),
+    );
+    const resList = await Promise.all(reqs);
+    for (const r of resList) {
+      assert.equal(r.ok, true);
+      assert.equal(r.tableId, 'table-1');
+    }
+    const uniqueMatchIds = new Set(resList.map((r) => r.matchId));
+    const uniqueInvites = new Set(resList.map((r) => r.inviteCode));
+    assert.equal(uniqueMatchIds.size, 1, '4 người cùng bấm Bàn 1 phải vào cùng 1 matchId duy nhất');
+    assert.equal(uniqueInvites.size, 1, '4 người cùng bấm Bàn 1 phải nhận cùng 1 inviteCode');
+    assert.equal(
+      resList.filter((r) => r.created).length,
+      1,
+      'Chỉ đúng 1 request đầu tiên trả về created: true',
+    );
+
+    const t2Res = await (
+      await fetch(`${srv.httpBaseUrl}/api/boardgame/join-table`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId: 'table-2', hostName: 'Bàn Hai' }),
+      })
+    ).json();
+    assert.equal(t2Res.ok, true);
+    assert.equal(t2Res.tableId, 'table-2');
+    assert.notEqual(t2Res.matchId, resList[0].matchId, 'Bàn 2 phải có phòng riêng biệt với Bàn 1');
+
+    // Kết nối 4 người vào phòng Bàn 1 theo ghế 0..3 -> Sẵn sàng -> Host bắt đầu trận (PLAYING)
+    const t1MatchId = resList[0].matchId;
+    const t1Clients = [];
+    for (let i = 0; i < 4; i++) {
+      const c = await openBgClient(srv.wsBaseUrl, { matchId: t1MatchId });
+      c.send({
+        type: 'BG_JOIN',
+        matchId: t1MatchId,
+        displayName: `Table1_P${i}`,
+        preferredSeatIndex: i,
+      });
+      await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
+      t1Clients.push(c);
+    }
+    for (let i = 1; i < 4; i++) {
+      t1Clients[i].send({ type: 'BG_SET_READY', ready: true });
+    }
+    await t1Clients[0].nextMsg(
+      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'READY_CHECK',
+      4000,
+    );
+    t1Clients[0].send({ type: 'BG_START_MATCH' });
+    await t1Clients[0].nextMsg(
+      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
+      4000,
+    );
+
+    // Sau khi Bàn 1 đã PLAYING, join-table mới trên Bàn 1 phải tự tạo phòng chờ mới
+    const afterStartRes = await (
+      await fetch(`${srv.httpBaseUrl}/api/boardgame/join-table`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId: 'table-1', hostName: 'Nhóm Sau' }),
+      })
+    ).json();
+    assert.equal(afterStartRes.ok, true);
+    assert.equal(afterStartRes.created, true);
+    assert.notEqual(afterStartRes.matchId, t1MatchId);
+
+    for (const c of t1Clients) c.close();
+  } finally {
+    await srv.close();
+  }
+});

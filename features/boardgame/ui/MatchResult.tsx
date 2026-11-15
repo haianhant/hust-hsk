@@ -7,7 +7,11 @@
 
 import type { ReactNode } from 'react';
 import type { BoardGamePublicGameView } from '../network/contracts';
-import { FACTION_LABELS } from '../domain/roles';
+import {
+  FACTION_THEME,
+  FactionCrestSvg,
+  RolePortraitSvg,
+} from './BoardGameArt';
 
 export interface MatchResultProps {
   publicGame: BoardGamePublicGameView;
@@ -82,23 +86,32 @@ export default function MatchResult({
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {reveals.map((r) => {
                 const isSelf = r.playerId === selfPlayerId;
+                const ft = FACTION_THEME[r.faction];
                 return (
                   <div
                     key={r.playerId}
-                    className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                    className={`flex items-center justify-between gap-2.5 rounded-xl border px-2.5 py-2 ${
                       r.won
                         ? 'border-emerald-500/45 bg-emerald-950/25'
                         : 'border-slate-800 bg-slate-950/75'
                     }`}
                   >
-                    <div className="min-w-0">
-                      <div className="truncate font-bold text-slate-100">
-                        {r.displayName}
-                        {isSelf ? ' (Bạn)' : ''}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-slate-300">
-                        {r.roleName} ·{' '}
-                        <span className="text-amber-300">{FACTION_LABELS[r.faction]}</span>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <RolePortraitSvg roleId={r.roleId} size="sm" />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-slate-100">
+                          {r.displayName}
+                          {isSelf ? ' (Bạn)' : ''}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-300">
+                          <span className="truncate">{r.roleName}</span>
+                          <span
+                            className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-semibold border ${ft.badgeClasses}`}
+                          >
+                            <FactionCrestSvg faction={r.faction} className="h-3 w-3" />
+                            {ft.shortLabel}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <div className="shrink-0 text-right">

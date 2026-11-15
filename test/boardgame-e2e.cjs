@@ -334,37 +334,44 @@ async function main() {
     }
     const [p1, p2, p3, p4] = players;
 
-    // 1. P1 (Host Desktop) vào campus -> CLB -> ngồi Bàn 1 -> Tạo bàn chơi & lấy mã mời
-    console.log('[BG4 E2E] Step 1: P1 creating room...');
+    // 1. P1 (Host Desktop) vào campus -> CLB -> ngồi Bàn 1 -> tự động tạo phòng chờ ngay trên HUD
+    console.log('[BG4 E2E] Step 1: P1 sitting at Table 1 (auto-create match on HUD)...');
     await enterCampusAndWaitHook(p1.page, outUrl, p1.audit);
     await p1.page.evaluate(() => window.__bkhn.enterBoardGameClub());
     await p1.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
     await p1.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
     await p1.page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 20000 });
     await p1.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
-    // Sau khi ngồi ghế, mở lại Sảnh bàn chơi để tạo trận ở đúng bàn đang ngồi
-    await p1.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-create-match-btn"]', { timeout: 20000 });
-    await p1.page.locator('[data-testid="bg-create-match-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-invite-code"]', { timeout: 20000 });
+    await p1.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: 20000 });
 
-    const inviteCode = (await p1.page.locator('[data-testid="bg-invite-code"]').innerText()).trim();
+    const inviteCode = (await p1.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
     assert.match(inviteCode, /^[A-Z0-9]{6}$/, `Mã mời không hợp lệ: "${inviteCode}"`);
-    await p1.page.locator('[data-testid="bg-copy-invite-link-btn"]').click();
+    await p1.page.locator('[data-testid="bg-hud-copy-link-btn"]').click();
 
-    // 2. P2 & P3 vào CLB và nhập mã mời
-    console.log(`[BG4 E2E] Step 2: P2 & P3 joining invite ${inviteCode}...`);
-    for (const peer of [p2, p3]) {
-      await peer.page.bringToFront();
-      await enterCampusAndWaitHook(peer.page, outUrl, peer.audit);
-      await peer.page.evaluate(() => window.__bkhn.enterBoardGameClub());
-      await peer.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 45000 });
-      await peer.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-      await peer.page.waitForSelector('[data-testid="bg-join-code-input"]', { timeout: 30000 });
-      await peer.page.locator('[data-testid="bg-join-code-input"]').fill(inviteCode);
-      await peer.page.locator('[data-testid="bg-join-code-btn"]').click();
-      await peer.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: 30000 });
-    }
+    // 2. P2 ngồi Bàn 1 (tự động vào đúng phòng chờ của P1); P3 nhập mã mời
+    console.log(`[BG4 E2E] Step 2: P2 auto-joining Table 1 & P3 joining invite ${inviteCode}...`);
+    await p2.page.bringToFront();
+    await enterCampusAndWaitHook(p2.page, outUrl, p2.audit);
+    await p2.page.evaluate(() => window.__bkhn.enterBoardGameClub());
+    await p2.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 45000 });
+    await p2.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
+    await p2.page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 20000 });
+    await p2.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
+    await p2.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 30000 });
+    const p2HudCode = (await p2.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
+    assert.equal(p2HudCode, inviteCode, `P2 ngồi Bàn 1 phải vào đúng mã mời ${inviteCode}, thực tế "${p2HudCode}"`);
+
+    await p3.page.bringToFront();
+    await enterCampusAndWaitHook(p3.page, outUrl, p3.audit);
+    await p3.page.evaluate(() => window.__bkhn.enterBoardGameClub());
+    await p3.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 45000 });
+    await p3.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
+    await p3.page.waitForSelector('[data-testid="bg-join-code-input"]', { timeout: 30000 });
+    await p3.page.locator('[data-testid="bg-join-code-input"]').fill(inviteCode);
+    await p3.page.locator('[data-testid="bg-join-code-btn"]').click();
+    await p3.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: 30000 });
+    await p3.page.locator('[data-testid="bg-close-lobby-btn"]').click();
+    await p3.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 15000 });
 
     // 3. P4 (Mobile 390x844) mở trực tiếp `/?bgInvite=CODE` -> auto-enter CLB + auto-join phòng
     console.log('[BG4 E2E] Step 3: P4 mobile opening ?bgInvite URL...');
@@ -389,36 +396,38 @@ async function main() {
     await p4.page.waitForSelector('[data-testid="bg-ready-toggle-btn"]', { timeout: 45000 });
     const p4CleanedUrl = await p4.page.evaluate(() => window.location.search);
     assert.equal(p4CleanedUrl.includes('bgInvite='), false, 'URL phải được làm sạch sau khi đọc ?bgInvite=');
+    await p4.page.locator('[data-testid="bg-close-lobby-btn"]').click();
+    await p4.page.waitForSelector('[data-testid="bg-hud-ready-btn"]', { timeout: 15000 });
 
-    // Chờ P1 thấy đủ 4/8 ghế trong phòng chờ
+    // Chờ P1 thấy đủ 4 người trên HUD ngoài phòng 3D (không cần mở modal)
     await p1.page.bringToFront();
     await p1.page.waitForFunction(
       () =>
         document
-          .querySelector('[data-testid="boardgame-lobby-modal"]')
-          ?.textContent?.includes('4/8 ghế'),
+          .querySelector('[data-testid="bg-hud-match-bar"]')
+          ?.textContent?.includes('/4 sẵn sàng'),
       null,
       { timeout: 25000 },
     );
     await p1.page.waitForTimeout(350);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-01-lobby-4p.png') });
 
-    // 4. P2, P3, P4 bấm Sẵn sàng -> Host bấm Bắt đầu ván đấu
-    console.log('[BG4 E2E] Step 4: Readying up and starting 4-player match...');
+    // 4. P2, P3, P4 bấm Sẵn sàng trực tiếp trên HUD -> Host bấm Bắt đầu ván đấu trên HUD
+    console.log('[BG4 E2E] Step 4: Readying up and starting 4-player match from HUD...');
     for (const peer of [p2, p3, p4]) {
       await peer.page.bringToFront();
-      await peer.page.locator('[data-testid="bg-ready-toggle-btn"]').click();
+      await peer.page.locator('[data-testid="bg-hud-ready-btn"]').click();
     }
     await p1.page.bringToFront();
     await p1.page.waitForFunction(
       () => {
-        const btn = document.querySelector('[data-testid="bg-start-match-btn"]');
+        const btn = document.querySelector('[data-testid="bg-hud-start-btn"]');
         return Boolean(btn && !btn.hasAttribute('disabled'));
       },
       null,
       { timeout: 30000 },
     );
-    await p1.page.locator('[data-testid="bg-start-match-btn"]').click();
+    await p1.page.locator('[data-testid="bg-hud-start-btn"]').click();
 
     // Tất cả 4 người vào màn hình bàn chơi 2D
     for (const p of players) {

@@ -18,9 +18,9 @@ features/boardgame/
     contracts.ts, client.ts
   world/        # Lazy-loaded 3D exterior & interior scene (R3F / Three.js)
     BoardGameEntrance.tsx, BoardGameLounge.tsx, BoardGameTable.tsx, BoardGameSeats.tsx, BoardGameCamera.tsx
-  ui/           # Giao diện 2D Lobby, Bàn chơi, Nhật ký, Tổng kết & Bưu thiếp kỷ niệm
-    BoardGameLobby.tsx, BoardGameHUD.tsx, GameBoard.tsx, RoleCard.tsx, ActionPanel.tsx,
-    GameLog.tsx, MatchResult.tsx, MatchPostcard.tsx, sound.ts
+  ui/           # Giao diện 2D Lobby, Bàn chơi minh họa SVG, Nhật ký, Tổng kết & Bưu thiếp kỷ niệm
+    BoardGameLobby.tsx, BoardGameHUD.tsx, BoardGameArt.tsx, GameBoard.tsx, RoleCard.tsx,
+    ActionPanel.tsx, GameLog.tsx, MatchResult.tsx, MatchPostcard.tsx, sound.ts
   index.ts
 shared/contracts/boardgame.ts   # Wire protocol & DTO dùng chung Frontend ↔ Cloudflare Worker
 worker/src/
@@ -153,9 +153,13 @@ Mỗi `GameCard` khai báo thuần dữ liệu `{ id, deck: 'clue' | 'event' | '
   - `[[migrations]] tag = "v2"`, `new_sqlite_classes = ["BoardGameRoom"]`
 - `worker/src/boardgame-router.ts`:
   - `POST /api/boardgame/matches`: Tạo trận mới tại bàn 1 hoặc bàn 2, sinh `matchId`, mã mời `inviteCode` (`6` ký tự `[A-HJ-NP-Z2-9]`, loại bỏ `0/O/1/I/L`), đăng ký vào DO `__lounge_directory__`, trả về `{ matchId, inviteCode, tableId }`.
+  - `POST /api/boardgame/join-table`: Atomic lookup-or-create theo `tableId` (`table-1` / `table-2`) qua `__lounge_directory__` (`POST /__dir/join-or-register-table`) để khi người chơi ngồi vào ghế 3D là tự động vào phòng chờ đang mở của bàn đó hoặc tạo phòng mới nếu chưa có, kèm dọn race-condition khi nhiều người ngồi gần như đồng thời.
   - `GET /api/boardgame/matches`: Lấy danh sách trận đang mở (`CREATED`, `WAITING`, `READY_CHECK`, `PLAYING`) từ `__lounge_directory__` (tối đa 16 bản ghi công khai, **không chứa vai bí mật hay reconnectToken**).
   - `POST /api/boardgame/join-by-code`: Tra cứu `matchId` từ `inviteCode` qua `__lounge_directory__` (trả `404` nếu không tồn tại/đã đóng).
   - `GET /ws/boardgame?matchId=...&playerId=...&seatIndex=...`: Nâng cấp WebSocket trực tiếp vào `BoardGameRoom` DO tương ứng (`idFromName(matchId)` hoặc `idFromName('__lounge_directory__')` nếu `mode=directory`).
+- **Luồng ngồi ghế -> Sẵn sàng / Bắt đầu trực tiếp trên HUD & Đồ họa bàn cờ (`BoardGameArt.tsx`):**
+  - Ngồi xuống ghế 3D ở `Bàn 1` hoặc `Bàn 2` tự động gọi `joinOrCreateTableMatch` và hiển thị ngay thanh `[data-testid="bg-hud-match-bar"]` ngoài HUD với mã mời, nút chép link, bộ đếm sẵn sàng, nút `Sẵn sàng` (người chơi) và `▶ Bắt đầu ván đấu` (Host) mà không cần mở modal Sảnh. Đứng dậy khi đang ở phòng chờ sẽ rời phòng chờ sạch sẽ (`leaveMatch()`).
+  - Màn hình bàn cờ 2D dùng đồ họa SVG tùy biến (`FactionCrestSvg`, `RolePortraitSvg` cho 9 lớp nhân vật, `LocationSceneSvg` cho 6 địa điểm KTX nối đường đi, `DeckCardBackSvg`, `PlayerPawnToken` theo trang phục HUST và thước 6 nấc Tín hiệu/Màn sương) thay thế các khối chữ đơn thuần.
 
 ### 4.2. Lược đồ SQLite trong `BoardGameRoom`
 

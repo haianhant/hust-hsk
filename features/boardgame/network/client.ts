@@ -111,6 +111,7 @@ export class BoardGameClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reqCounter = 0;
+  private opSeq = 0;
   private pendingAck = new Map<
     string,
     { resolve: (ok: boolean, reason?: string) => void; timer: ReturnType<typeof setTimeout> }
@@ -218,6 +219,7 @@ export class BoardGameClient {
     preferredSeatIndex?: number | null;
     turnTimeoutMs?: number;
   }): Promise<{ ok: true; matchId: string; inviteCode: string } | { ok: false; error: string }> {
+    const seq = ++this.opSeq;
     const eps = resolveBoardGameEndpoints();
     if (!eps.ok) {
       return { ok: false, error: eps.reason };
@@ -235,6 +237,9 @@ export class BoardGameClient {
             : {}),
         }),
       });
+      if (seq !== this.opSeq) {
+        return { ok: false, error: 'Thao tác đã được thay thế.' };
+      }
       const data = (await res.json()) as {
         ok?: boolean;
         matchId?: string;
@@ -263,6 +268,70 @@ export class BoardGameClient {
     }
   }
 
+  /** Tự động vào phòng chờ đang mở của bàn 1/2 hoặc tạo mới khi vừa ngồi ghế 3D. */
+  async joinOrCreateTableMatch(params: {
+    tableId: BoardGameTableId;
+    displayName: string;
+    appearance?: RemoteAppearance;
+    preferredSeatIndex?: number | null;
+    turnTimeoutMs?: number;
+  }): Promise<
+    { ok: true; matchId: string; inviteCode: string; created: boolean } | { ok: false; error: string }
+  > {
+    const seq = ++this.opSeq;
+    const eps = resolveBoardGameEndpoints();
+    if (!eps.ok) {
+      return { ok: false, error: eps.reason };
+    }
+    const cleanName = sanitizeBoardGameName(params.displayName);
+    try {
+      const res = await fetch(`${eps.httpBaseUrl}/api/boardgame/join-table`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableId: params.tableId,
+          hostName: cleanName,
+          ...(typeof params.turnTimeoutMs === 'number'
+            ? { turnTimeoutMs: params.turnTimeoutMs }
+            : {}),
+        }),
+      });
+      if (seq !== this.opSeq) {
+        return { ok: false, error: 'Thao tác chọn bàn đã bị hủy.' };
+      }
+      const data = (await res.json()) as {
+        ok?: boolean;
+        created?: boolean;
+        matchId?: string;
+        inviteCode?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.ok || !data.matchId || !data.inviteCode) {
+        const errMsg = data.error || 'Không thể kết nối phòng của bàn chơi.';
+        this.emit({ lastError: errMsg });
+        return { ok: false, error: errMsg };
+      }
+      this.connectToMatch({
+        matchId: data.matchId,
+        inviteCode: data.inviteCode,
+        displayName: cleanName,
+        appearance: params.appearance ?? {},
+        asSpectator: false,
+        preferredSeatIndex: params.preferredSeatIndex ?? null,
+      });
+      return {
+        ok: true,
+        matchId: data.matchId,
+        inviteCode: data.inviteCode,
+        created: Boolean(data.created),
+      };
+    } catch {
+      const errMsg = 'Không kết nối được tới máy chủ Board Game.';
+      this.emit({ lastError: errMsg });
+      return { ok: false, error: errMsg };
+    }
+  }
+
   async joinByInviteCode(params: {
     inviteCode: string;
     displayName: string;
@@ -270,6 +339,7 @@ export class BoardGameClient {
     asSpectator?: boolean;
     preferredSeatIndex?: number | null;
   }): Promise<{ ok: true; matchId: string; inviteCode: string } | { ok: false; error: string }> {
+    const seq = ++this.opSeq;
     const cleanCode = sanitizeInviteCode(params.inviteCode);
     if (!cleanCode) {
       const errMsg = 'Mã mời phải gồm 6 ký tự chữ/số hợp lệ (ví dụ: KTX89A).';
@@ -286,6 +356,9 @@ export class BoardGameClient {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inviteCode: cleanCode }),
       });
+      if (seq !== this.opSeq) {
+        return { ok: false, error: 'Thao tác đã được thay thế.' };
+      }
       const data = (await res.json()) as {
         ok?: boolean;
         match?: { matchId?: string; inviteCode?: string };
@@ -324,6 +397,7 @@ export class BoardGameClient {
     asSpectator?: boolean;
     preferredSeatIndex?: number | null;
   }): void {
+    this.opSeq += 1;
     this.clearReconnectTimer();
     this.intentionalClose = false;
     this.reconnectAttempts = 0;
@@ -594,6 +668,7 @@ export class BoardGameClient {
   }
 
   leaveMatch(): void {
+    this.opSeq += 1;
     const currentId = this.snap.matchId ?? this.joinCtx?.matchId ?? null;
     this.intentionalClose = true;
     this.clearReconnectTimer();
