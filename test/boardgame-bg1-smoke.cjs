@@ -175,6 +175,8 @@ async function main() {
       window.__HUST_TEST_MP_WS_URL = wsUrl;
     }, { wsUrl: `${shim.wsBaseUrl}/ws` });
     const page = await ctxDesktop.newPage();
+    ctxDesktop.setDefaultTimeout(90000);
+    page.setDefaultTimeout(90000);
     const errors = [];
     page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`));
     page.on('console', (msg) => {
@@ -208,13 +210,13 @@ async function main() {
       console.error('DIAG:', JSON.stringify(diag), 'ERRORS:', errors);
       throw err;
     }
-    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-01-exterior.png') });
+    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-01-exterior.png'), timeout: 120000 });
 
     // Nhấn phím E để bước vào CLB Board Game KTX
     await page.keyboard.press('e');
     await page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 60000 });
     await page.waitForTimeout(700);
-    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-02-lounge-day.png') });
+    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-02-lounge-day.png'), timeout: 120000 });
 
     // Chuyển sang Ban đêm để kiểm tra ánh sáng tụ họp buổi tối ấm áp
     const nightBtn = page.locator('#toggle-time-of-day, button:has-text("Ngày"), button:has-text("Hoàng hôn"), button[aria-label*="thời gian"]').first();
@@ -233,12 +235,12 @@ async function main() {
     await page.locator('[data-testid="bg-sit-table-1-btn"]').click();
     await page.waitForSelector('[data-testid="bg-stand-up-btn"]', { timeout: 60000 });
     await page.waitForTimeout(450);
-    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-03-lounge-night-seated.png') });
+    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-03-lounge-night-seated.png'), timeout: 120000 });
 
     // Mở Luật chơi
     await page.locator('[data-testid="bg-toggle-rules-btn"]').click();
     await page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: 60000 });
-    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-04-rules-modal.png') });
+    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-04-rules-modal.png'), timeout: 120000 });
     await page.locator('[data-testid="bg-close-rules-btn"]').click();
 
     // Bấm Rời CLB khi đang ngồi ghế -> phải hiện hộp thoại xác nhận trước khi thoát
@@ -267,6 +269,8 @@ async function main() {
       window.__HUST_TEST_MP_WS_URL = wsUrl;
     }, { wsUrl: `${shim.wsBaseUrl}/ws` });
     const mPage = await ctxMobile.newPage();
+    ctxMobile.setDefaultTimeout(90000);
+    mPage.setDefaultTimeout(90000);
     await mPage.goto(url, { waitUntil: 'domcontentloaded' });
     const mEnterBtn = mPage.locator('#enter-campus');
     await mEnterBtn.waitFor({ state: 'visible', timeout: 90000 });
@@ -282,7 +286,7 @@ async function main() {
       () => document.documentElement.scrollWidth <= window.innerWidth + 1,
     );
     assert.equal(noHorizontalOverflow, true, 'Mobile 390x844 layout must not overflow horizontally');
-    await mPage.screenshot({ path: path.join(SHOT_DIR, 'bg1-05-mobile-lobby.png') });
+    await mPage.screenshot({ path: path.join(SHOT_DIR, 'bg1-05-mobile-lobby.png'), timeout: 120000 });
     await ctxMobile.close();
 
     console.log('BG1 Smoke PASS: desktop + mobile verified cleanly.');

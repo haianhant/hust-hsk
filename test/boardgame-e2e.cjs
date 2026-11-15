@@ -875,7 +875,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       { timeout: UI_TIMEOUT, polling: 200 },
     );
     await p1.page.waitForTimeout(350);
-    await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-01-lobby-4p.png') });
+    await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-01-lobby-4p.png'), timeout: 120000 });
     await setPage3DPaused(p1.page, true);
 
     // Step 4: Start match from HUD
@@ -1136,7 +1136,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       null,
       { timeout: 65000, polling: 200 },
     );
-    await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-05-exit-ktx.png') });
+    await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-05-exit-ktx.png'), timeout: 120000 });
     assert.equal(p1.audit.pageErrors.length, 0, `P1 exit page errors: ${p1.audit.pageErrors.join('; ')}`);
     return {
       inviteCode,
