@@ -22,7 +22,7 @@
 | `npm run test:mp` | Giao thức WebSocket Campus / Library / Football | `PASS` (`33/33`, `0 fail`) | `mp-protocol exit=0` |
 | `npm run test:boardgame` | Unit Engine v3/v3.1 + Lounge + SQLite DO + Sim | `PASS` (`30/30` + `4,500` ván sim) | `10971.70 ms` (unit/DO) + sim exit 0 |
 | `node test/boardgame-sim.cjs` | Mô phỏng cân bằng 4P–8P (`900 × 5` ván) | `PASS` (`4,500/4,500`) | `0` treo, `0` hòa, `0` leak bot |
-| `npm run test:boardgame:e2e` | Browser E2E 4P/8P/Reconnect/Security (`E2E-01..06`) | `PASS` (exit 0) | `612.23s` tổng tuần tự; CI song song 5 shard, xem chi tiết §2 |
+| `npm run test:boardgame:e2e` | Browser E2E 4P/8P/Reconnect/Security (`E2E-01..06`) | `PASS` (exit 0) | Toàn bộ tuần tự `612.23s`; kiểm chứng lại từng shard sau tối ưu pause-3D + `60s` timeout (`e2e-05-06`: `81.08s`, `e2e-02`: `95.97s`); xem §2 |
 | `node test/boardgame-bg1-smoke.cjs` | Smoke Lounge 3D Desktop + Mobile | `PASS` (exit 0) | `bg1-01..05` |
 | `node test/boardgame-perf-bench.cjs` | Microbenchmark Worker DO (`4P` & `8P`) | `PASS` (exit 0) | Xem chi tiết §3 |
 | `npm run test:pr10b` | Thư viện Navigation + Camera + Transition Race | `PASS` (exit 0) | Chạy sau sửa `CampusScene.tsx`: `11/11` preset + mobile, camera smoke PASS, 33 transition (`geometries=1897, textures=184, calls=1584`) |
@@ -33,17 +33,17 @@
 
 ## 2. Kết quả Browser E2E (`E2E-01 .. E2E-06`) & Tối ưu Song song Hóa Gate 8
 
-Từ [`test-results/boardgame/e2e-summary.json`](../../test-results/boardgame/e2e-summary.json) qua `npm run test:boardgame:e2e` (trình duyệt headless Chromium + WebGL SwiftShader đối thoại với SQLite Durable Object harness):
+Từ [`test-results/boardgame/e2e-summary.json`](../../test-results/boardgame/e2e-summary.json) (đợt chạy tuần tự toàn bộ) và [`e2e-summary-e2e-02.json`](../../test-results/boardgame/e2e-summary-e2e-02.json) / [`e2e-summary-e2e-05-06.json`](../../test-results/boardgame/e2e-summary-e2e-05-06.json) qua `npm run test:boardgame:e2e` (Chromium + WebGL SwiftShader đối thoại với SQLite Durable Object harness):
 
 | Kịch bản (`--shard`) | Mã mời / Phòng | Kết quả & Dữ liệu Quan sát | Thời lượng | Ảnh / Artifact |
 |---|---|---|---|---|
-| **`E2E-01 & E2E-04`** (`e2e-01-04`) | `EZB7R2` | PASS — Hoàn thành `32` thao tác Mobile `390×844` P4, tạo Postcard `1200×675` PNG, quét `884` WebSocket frames `0` secret leak, thoát sạch về sân KTX | `152,312 ms` | `bg4-01-lobby-4p.png` .. `bg4-05-exit-ktx.png` |
-| **`E2E-02`** (`e2e-02`) | `63U8ZL` | PASS — `8` người chơi hoàn tất `8` lượt; Spectator thứ 9 xác nhận `privateView === null` và không xuất hiện trong danh sách ngồi công khai | `142,510 ms` | `bg-v31-8p-spectator.png` |
-| **`E2E-03`** (`e2e-03`) | `NNU68F` | PASS — `5/5` checkpoints (`READY_CHECK` kèm chuyển quyền Chủ bàn, lượt bản thân, lượt đối thủ, sau `REVEAL_ROLE` giữ mở khóa kỹ năng, và màn `FINISHED`); khôi phục đúng `Tú — Cư Dân Vô Hình` | `188,850 ms` | `bg-v31-reconnect-check.png` |
-| **`E2E-05 & E2E-06`** (`e2e-05-06`) | `JWJH47`, `HZYJVT` | PASS — 2 bàn `table-1` và `table-2` cô lập trạng thái hoàn toàn; `4/4` security probes trình duyệt (`cross-match token`, malformed JSON, unknown type, `__proto__` prototype key) bị từ chối chuẩn | `128,560 ms` *(đơn lẻ: `86,386 ms`, `AG2G8L` / `6LZQ6L`)* | `e2e-summary.json` |
+| **`E2E-01 & E2E-04`** (`e2e-01-04`) | `EZB7R2` | PASS — Hoàn thành `32` thao tác Mobile `390×844` P4, tạo Postcard `1200×675` PNG, quét `884` WebSocket frames `0` secret leak, thoát sạch về sân KTX | `152,312 ms` *(tuần tự)* | `bg4-01-lobby-4p.png` .. `bg4-05-exit-ktx.png` |
+| **`E2E-02`** (`e2e-02`) | `QEBXFR` *(toàn bộ: `63U8ZL`)* | PASS — `8` người chơi hoàn tất `8` lượt; Spectator thứ 9 xác nhận `privateView === null` và không xuất hiện trong danh sách ngồi công khai | `95,974 ms` *(shard sau tối ưu)* | `bg-v31-8p-spectator.png` |
+| **`E2E-03`** (`e2e-03`) | `NNU68F` | PASS — `5/5` checkpoints (`READY_CHECK` kèm chuyển quyền Chủ bàn, lượt bản thân, lượt đối thủ, sau `REVEAL_ROLE` giữ mở khóa kỹ năng, và màn `FINISHED`); khôi phục đúng `Tú — Cư Dân Vô Hình` | `188,850 ms` *(tuần tự)* | `bg-v31-reconnect-check.png` |
+| **`E2E-05 & E2E-06`** (`e2e-05-06`) | `ZQQ2RL`, `RJG4PC` *(toàn bộ: `JWJH47`, `HZYJVT`)* | PASS — 2 bàn `table-1` và `table-2` cô lập trạng thái hoàn toàn; `4/4` security probes trình duyệt (`cross-match token`, malformed JSON, unknown type, `__proto__` prototype key) bị từ chối chuẩn | `81,083 ms` *(shard sau tối ưu)* | `e2e-summary-e2e-05-06.json` |
 
 ### Tối ưu Ổn định & Song song Hóa Gate 8 trên CI
-- **Loại bỏ tranh chấp WebGL SwiftShader (`bkhn:pause-3d` & thứ tự vào ván):** Trong `components/three/CampusScene.tsx`, thêm listener sự kiện `bkhn:pause-3d` để tạm dừng vòng lặp dựng hình `frameloop="never"` khi trình duyệt nền đang chờ trình duyệt thứ hai khởi động Campus 3D; trong `E2E-02` và `E2E-05 & E2E-06`, trận đầu tiên chuyển sang trạng thái `PLAYING` (`suspend3D = true`, 0% CPU WebGL) trước khi mở phiên trình duyệt thứ hai, đồng thời nâng `UI_TIMEOUT = 60000` ms cho các thao tác dựng UI trên runner CI 2 vCPU.
+- **Loại bỏ tranh chấp WebGL SwiftShader (`bkhn:pause-3d`, tạm dừng 3D sau khi ngồi bàn & thứ tự vào ván):** Trong `components/three/CampusScene.tsx`, thêm listener sự kiện `bkhn:pause-3d` để tạm dừng vòng lặp dựng hình `frameloop="never"` khi trình duyệt nền đang chờ trình duyệt thứ hai khởi động Campus 3D hoặc ngay sau khi Host/Spectator đã ngồi vào bàn trước bước bấm bắt đầu / xem trận đấu; trong `E2E-02` và `E2E-05 & E2E-06`, trận đầu tiên chuyển sang trạng thái `PLAYING` (`suspend3D = true`, 0% CPU WebGL) trước khi mở phiên trình duyệt thứ hai; đồng thời thiết lập `context.setDefaultTimeout(60000)` / `page.setDefaultTimeout(60000)` và `UI_TIMEOUT = 60000` ms trong `test/boardgame-e2e.cjs` để không nghẽn bước kiểm tra ổn định `rAF` của Playwright trên runner CI 2 vCPU.
 - **5 Matrix Shards Song song (`.github/workflows/ci.yml`):** Thay thế job đơn chạy tuần tự >14m43s bằng DAG 4 job (`build-and-unit` upload artifact `out/` → `gate7-pr10b` + 5 VM song song `gate8-boardgame-e2e` cho `e2e-01-04`, `e2e-02`, `e2e-03`, `e2e-05-06`, `bg1-smoke` → `deploy-worker` trên `main`).
 
 ---

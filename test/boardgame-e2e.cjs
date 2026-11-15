@@ -337,6 +337,8 @@ async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl, opt
   );
 
   const page = await context.newPage();
+  context.setDefaultTimeout(UI_TIMEOUT);
+  page.setDefaultTimeout(UI_TIMEOUT);
   const audit = {
     label: user.label,
     selfPlayerId: null,
@@ -374,6 +376,8 @@ async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl, opt
  */
 async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, preferredSeatIndex = null) {
   const page = await context.newPage();
+  context.setDefaultTimeout(UI_TIMEOUT);
+  page.setDefaultTimeout(UI_TIMEOUT);
   const audit = {
     label: displayName,
     selfPlayerId: null,
@@ -872,6 +876,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     );
     await p1.page.waitForTimeout(350);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-01-lobby-4p.png') });
+    await setPage3DPaused(p1.page, true);
 
     // Step 4: Start match from HUD
     for (const peer of peers) {
@@ -1178,6 +1183,7 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await host.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: UI_TIMEOUT });
 
     const inviteCode = (await host.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
+    await setPage3DPaused(host.page, true);
     const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
     const dirJson = await dirRes.json();
     const matchInfo = (dirJson.matches || []).find((m) => m.inviteCode === inviteCode);
@@ -1222,6 +1228,7 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await enterCampusAndWaitHook(spec.page, outUrl, spec.audit);
     await spec.page.evaluate(() => window.__bkhn.enterBoardGameClub());
     await spec.page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: UI_TIMEOUT });
+    await setPage3DPaused(spec.page, true);
     await spec.page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
     await spec.page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: UI_TIMEOUT });
     const watchBtn = spec.page.locator(`[data-testid="bg-watch-match-${inviteCode}"]`).first();
@@ -1541,6 +1548,7 @@ async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)
     await hostA.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
     await hostA.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: UI_TIMEOUT });
     const codeA = (await hostA.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
+    await setPage3DPaused(hostA.page, true);
 
     const dirResA = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
     const dirJsonA = await dirResA.json();
@@ -1587,6 +1595,7 @@ async function runE2E05AndE2E06(chromium, launchOpts, peerBrowser, outUrl, shim)
     await hostB.page.locator('[data-testid="bg-sit-table-2-btn"]').click();
     await hostB.page.waitForSelector('[data-testid="bg-hud-invite-code"]', { timeout: UI_TIMEOUT });
     const codeB = (await hostB.page.locator('[data-testid="bg-hud-invite-code"]').innerText()).trim();
+    await setPage3DPaused(hostB.page, true);
     assert.notEqual(codeA, codeB);
 
     const dirRes = await fetch(`${shim.httpBaseUrl}/api/boardgame/matches`);
