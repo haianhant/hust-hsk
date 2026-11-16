@@ -14,8 +14,8 @@ import type {
   ZoneClusterDefinition,
 } from './types';
 
-export const BOARD_GAME_MAX_HAND = 3;
-export const BOARD_GAME_MAX_EQUIPPED = 3;
+export const BOARD_GAME_MAX_HAND = 5;
+export const BOARD_GAME_MAX_EQUIPPED = 99;
 export const BOARD_GAME_SAFETY_MAX_ROUNDS = 30;
 
 export const ZONE_CLUSTERS: readonly ZoneClusterDefinition[] = [

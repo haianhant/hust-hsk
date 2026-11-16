@@ -1147,6 +1147,19 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       assert.ok(healBtnText.includes('(Bạn)'), `Heal button must target self after reset, got: ${healBtnText}`);
     }
 
+    if ((await activePlayer.page.locator('[data-testid="bg-reveal-role-btn"]').count()) > 0) {
+      await activePlayer.page.locator('[data-testid="bg-reveal-role-btn"]').click();
+      await activePlayer.page.waitForSelector('[data-testid="bg-confirm-reveal-btn"]', { timeout: UI_TIMEOUT });
+      await activePlayer.page.waitForSelector('[data-testid="bg-cancel-reveal-btn"]', { timeout: UI_TIMEOUT });
+      await activePlayer.page.locator('[data-testid="bg-cancel-reveal-btn"]').click();
+      await activePlayer.page.waitForSelector('[data-testid="bg-reveal-role-btn"]', { timeout: UI_TIMEOUT });
+      assert.equal(
+        await activePlayer.page.locator('[data-testid="bg-confirm-reveal-btn"]').count(),
+        0,
+        'Cancelling reveal must dismiss bg-confirm-reveal-btn immediately',
+      );
+    }
+
     await activePlayer.page.locator('[data-testid="bg-end-turn-btn"]').click();
 
     await p1.page.bringToFront();
@@ -1171,6 +1184,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     let lastBroughtIdx = -1;
     let p4MobileButtonsChecked = false;
     let p4MobileActionsExecuted = 0;
+    let p4CompletedFirstUnmask = activePlayer === p4;
     const triedActionsPerTurn = new Set();
 
     for (let step = 0; step < 540; step++) {
@@ -1243,11 +1257,37 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
             `Heal card button must display (Bạn) when targeting self, got: ${healSelectOnTurn.btnText}`,
           );
         }
+        let p4MaskedBefore = 0;
+        if (activeUi === p4) {
+          p4MaskedBefore = await p4.page
+            .locator('[data-testid="bg-hand-masked-banner"]')
+            .count()
+            .catch(() => 0);
+          if (p4CompletedFirstUnmask) {
+            assert.equal(
+              p4MaskedBefore,
+              0,
+              'Hand must stay unmasked across turns once opened by player',
+            );
+          }
+        }
         const acted = await playFirstValidStepOnPage(activeUi.page, step, triedActionsPerTurn);
         if (acted && activeUi === p4) {
           p4MobileActionsExecuted += 1;
         }
         await new Promise((r) => setTimeout(r, acted ? 110 : 60));
+        if (activeUi === p4 && !p4CompletedFirstUnmask && p4MaskedBefore > 0 && acted) {
+          const stillInPanelUnmasked = await p4.page
+            .evaluate(
+              () =>
+                Boolean(document.querySelector('[data-testid="bg-action-panel"]')) &&
+                !document.querySelector('[data-testid="bg-hand-masked-banner"]'),
+            )
+            .catch(() => false);
+          if (stillInPanelUnmasked) {
+            p4CompletedFirstUnmask = true;
+          }
+        }
       } else {
         let peerStepped = false;
         for (const peer of peers) {

@@ -136,21 +136,17 @@ export function applyHeal(
 }
 
 function equipToPlayerSlot(
-  state: AuthoritativeGameState,
   owner: AuthoritativePlayerState,
   cardId: string,
 ): void {
-  if (owner.equipped.length >= BOARD_GAME_MAX_EQUIPPED) {
-    const dropped = owner.equipped.shift();
-    if (dropped) {
-      discardCardId(state, dropped);
-    }
+  // Chuẩn Shadow Hunters: trang bị đặt ngửa không bị giới hạn trần 3 món.
+  if (owner.equipped.length < BOARD_GAME_MAX_EQUIPPED) {
+    owner.equipped.push(cardId);
   }
-  owner.equipped.push(cardId);
 }
 
 export function stealOneEquippedGear(
-  state: AuthoritativeGameState,
+  _state: AuthoritativeGameState,
   thief: AuthoritativePlayerState,
   victim: AuthoritativePlayerState,
 ): GameCardDefinition | null {
@@ -167,7 +163,7 @@ export function stealOneEquippedGear(
   }
   const [stolenId] = victim.equipped.splice(bestIdx, 1);
   if (!stolenId) return null;
-  equipToPlayerSlot(state, thief, stolenId);
+  equipToPlayerSlot(thief, stolenId);
   return getCardById(stolenId);
 }
 
@@ -470,10 +466,12 @@ export function resolveDrawLocationCard(
     return { ok: true };
   }
 
+  let trimmedOverflow = false;
   if (actor.hand.length >= BOARD_GAME_MAX_HAND) {
     const discardedId = actor.hand.shift();
     if (discardedId) {
       discardCardId(state, discardedId);
+      trimmedOverflow = true;
     }
   }
   actor.hand.push(card.id);
@@ -489,7 +487,7 @@ export function resolveDrawLocationCard(
   appendPublicLog(
     state,
     'draw',
-    `🃏 ${actor.displayName} rút 1 thẻ ${deckLabel} tại ${loc.name}.`,
+    `🃏 ${actor.displayName} rút 1 thẻ ${deckLabel} tại ${loc.name}${trimmedOverflow ? ` (đầy tay ${BOARD_GAME_MAX_HAND} lá, tự bỏ 1 lá cũ)` : ''}.`,
     nowMs,
     actor.playerId,
   );
@@ -513,6 +511,9 @@ export function resolveLocationPower(
       return { ok: false, error: 'Mục tiêu Hành Lang (9) không hợp lệ hoặc đã bị loại.' };
     }
     const chosenMode = mode === 'damage' ? 'damage' : mode === 'heal' ? 'heal' : target.playerId === actor.playerId ? 'heal' : 'damage';
+    if (chosenMode === 'damage' && target.playerId === actor.playerId) {
+      return { ok: false, error: 'Không thể tự gây sát thương lên chính mình tại Hành Lang (9).' };
+    }
     if (chosenMode === 'heal') {
       const healed = applyHeal(state, target, 1);
       appendPublicLog(
@@ -601,7 +602,7 @@ export function resolveEquipCard(
     return { ok: false, error: 'Chỉ thẻ Trang bị lâu dài mới lắp được vào ô đồ.' };
   }
   actor.hand.splice(idx, 1);
-  equipToPlayerSlot(state, actor, card.id);
+  equipToPlayerSlot(actor, card.id);
   appendPublicLog(
     state,
     'equipment',
@@ -620,8 +621,8 @@ export function resolveUseCard(
   targetLocation: BoardGameLocationId | undefined,
   nowMs: number,
 ): EngineActionResult {
-  if (state.turnPhase !== 'MAIN_ACTION') {
-    return { ok: false, error: 'Chỉ dùng thẻ Hành động khi đã vào pha Hành động chính.' };
+  if (state.turnPhase !== 'LOCATION_ACTION' && state.turnPhase !== 'MAIN_ACTION') {
+    return { ok: false, error: 'Hãy tung xúc xắc di chuyển trước khi dùng thẻ Hành động.' };
   }
   const idx = actor.hand.indexOf(cardId);
   if (idx === -1) {
@@ -763,8 +764,8 @@ export function resolveInvestigateCard(
   targetPlayerId: string,
   nowMs: number,
 ): EngineActionResult {
-  if (state.turnPhase !== 'MAIN_ACTION') {
-    return { ok: false, error: 'Chỉ đưa thẻ Thăm Dò Kín khi đã vào pha Hành động chính.' };
+  if (state.turnPhase !== 'LOCATION_ACTION' && state.turnPhase !== 'MAIN_ACTION') {
+    return { ok: false, error: 'Hãy tung xúc xắc di chuyển trước khi đưa thẻ Thăm Dò Kín.' };
   }
   const idx = actor.hand.indexOf(cardId);
   if (idx === -1) {
@@ -1006,6 +1007,16 @@ export function resolveAttack(
       if (target.equipped.includes('ev-04')) cRaw += 1;
     }
     const cDealt = applyDamage(state, actor, cRaw, 'attack', target, nowMs);
+    if (state.lastDiceRoll) {
+      state.lastDiceRoll.counterRoll = {
+        playerId: target.playerId,
+        displayName: target.displayName,
+        d6: cd6,
+        d4: cd4,
+        total: cRaw,
+        damageDealt: cDealt,
+      };
+    }
     const cRollDesc = cStick ? `1d4=${cd4}` : `|${cd6}-${cd4}|=${cBase}`;
     appendPublicLog(
       state,

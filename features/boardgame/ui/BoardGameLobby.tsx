@@ -571,7 +571,7 @@ export default function BoardGameLobby({
                       <strong>Pha 2 · Hành động khu vực (LOCATION_ACTION):</strong> Rút thẻ tương ứng (ô 2–3 Khám Phá Kín, ô 4–5 Đột Kích, ô 6 Cung Ứng, ô 8 chọn bất kỳ), Hồi 1 / Gây 2 sát thương tại ô 9, Cướp 1 Trang bị tại ô 10, hoặc Bỏ qua khu vực.
                     </li>
                     <li>
-                      <strong>Pha 3 · Hành động chính &amp; Lật vai (MAIN_ACTION):</strong> Đưa Thẻ Khám Phá Kín 1-đối-1, trang bị vũ khí/giáp, lật vai kích hoạt kỹ năng riêng, đánh thường <strong>|1d6 - 1d4|</strong> cùng Cụm (hụt khi ra 0), hoặc bấm Kết thúc lượt.
+                      <strong>Pha 3 · Hành động chính &amp; Lật vai (MAIN_ACTION):</strong> Đưa Thẻ Khám Phá Kín 1-đối-1, trang bị vũ khí/giáp (<strong>đặt ngửa không giới hạn số món</strong> chuẩn Shadow Hunters), lật vai kích hoạt kỹ năng riêng, đánh thường <strong>|1d6 - 1d4|</strong> cùng Cụm (hụt khi ra 0), hoặc bấm Kết thúc lượt.
                     </li>
                   </ol>
                 </div>

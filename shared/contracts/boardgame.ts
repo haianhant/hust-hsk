@@ -142,6 +142,14 @@ export interface BoardGameDiceRollEvent {
   resolvedLocation: BoardGameLocationId | null;
   targetPlayerId?: string;
   damageDealt?: number;
+  counterRoll?: {
+    playerId: string;
+    displayName: string;
+    d6: number;
+    d4: number;
+    total: number;
+    damageDealt: number;
+  };
 }
 
 export interface BoardGameInvestigationOutcome {

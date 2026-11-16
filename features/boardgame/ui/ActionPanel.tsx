@@ -7,7 +7,11 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { getRoleDesign } from '@/features/boardgame/domain/roles';
-import { getLocationDefinition, LOCATIONS_CATALOG } from '@/features/boardgame/domain/rules';
+import {
+  BOARD_GAME_MAX_HAND,
+  getLocationDefinition,
+  LOCATIONS_CATALOG,
+} from '@/features/boardgame/domain/rules';
 import type {
   BoardGameActionPayload,
   BoardGameLocationId,
@@ -49,16 +53,6 @@ export function ActionPanel({
   const [blastLocation, setBlastLocation] = useState<BoardGameLocationId>('lobby');
   const [healTargetId, setHealTargetId] = useState<string | null>(null);
 
-  useEffect(() => {
-    setHealTargetId(null);
-  }, [publicGame.turnNumber]);
-
-  useEffect(() => {
-    if (selfPlayerId && selectedTargetId === selfPlayerId) {
-      setHealTargetId(selfPlayerId);
-    }
-  }, [selectedTargetId, selfPlayerId]);
-
   const selfPlayer = useMemo(
     () => publicGame.players.find((p) => p.playerId === selfPlayerId) ?? null,
     [publicGame.players, selfPlayerId],
@@ -71,6 +65,29 @@ export function ActionPanel({
     () => alivePlayers.filter((p) => p.playerId !== selfPlayerId),
     [alivePlayers, selfPlayerId],
   );
+
+  useEffect(() => {
+    setHealTargetId(null);
+  }, [publicGame.turnNumber]);
+
+  useEffect(() => {
+    setConfirmingReveal(false);
+    const selfLoc = selfPlayer?.location;
+    const preferred =
+      (selectedTargetId && selectedTargetId !== selfPlayerId
+        ? aliveOthers.find((p) => p.playerId === selectedTargetId)
+        : null) ??
+      aliveOthers.find((p) => p.location !== selfLoc) ??
+      aliveOthers[0];
+    setBlastLocation(preferred?.location ?? 'lobby');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicGame.turnNumber, publicGame.turnPhase]);
+
+  useEffect(() => {
+    if (selfPlayerId && selectedTargetId === selfPlayerId) {
+      setHealTargetId(selfPlayerId);
+    }
+  }, [selectedTargetId, selfPlayerId]);
 
   // Tầm đánh chuẩn kiểu Shadow Hunters: cùng Cụm Khu Vực, trừ khi mang Dây Cáp Đàn Hồi (ev-04).
   const attackableTargets = useMemo(() => {
@@ -194,6 +211,307 @@ export function ActionPanel({
       !attackableTargets.some((t) => t.playerId === validOtherTarget.playerId),
   );
 
+  const protegePlayer = privateView.protegePlayerId
+    ? publicGame.players.find((p) => p.playerId === privateView.protegePlayerId) ?? null
+    : null;
+  const binhAvenging =
+    privateView.roleId === 'lang-cuu-ho' && Boolean(protegePlayer && !protegePlayer.alive);
+
+  const attackWeaponBonus = selfPlayer.equipped.reduce((sum, eq) => {
+    if (eq.id === 'eq-04') {
+      return sum + (privateView.revealed && privateView.faction === 'lantern-guard' ? 2 : 1);
+    }
+    if (eq.id === 'ev-02') return sum + 1;
+    if (eq.id === 'ev-03') return sum + 2;
+    if (eq.id === 'ev-04') return sum + 1;
+    return sum;
+  }, 0);
+  const attackDiceFormula = `${equippedPreciseStick ? '1d4' : '|1d6-1d4|'}${
+    attackWeaponBonus > 0 ? `+${attackWeaponBonus}` : ''
+  }`;
+  const attackTargetWarning = validAttackTarget
+    ? validAttackTarget.guardianShieldActive
+      ? ' · 🛡️ Khiên 0 ST!'
+      : validAttackTarget.revealedRoleId === 'suong-gac-cong'
+        ? ' · 🥊 Phản kích!'
+        : ''
+    : '';
+
+  const isDrawZone =
+    currentLoc.deckHint !== 'power-9' && currentLoc.deckHint !== 'power-10';
+  const handIsFull = privateView.hand.length >= BOARD_GAME_MAX_HAND;
+
+  const renderTargetSelector = (title: string) => (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
+          {title}
+        </p>
+        {selectedIsSelf ? (
+          <span className="text-[11px] font-semibold text-emerald-300">
+            💚 Đang chọn Bản thân — các thẻ hồi sức ưu tiên tự hồi cho bạn
+          </span>
+        ) : (
+          selectedIsOutOfRange &&
+          validOtherTarget && (
+            <span className="text-[11px] font-semibold text-sky-300">
+              {validOtherTarget.displayName} ngoài tầm đánh cùng Cụm — chỉ dùng được thẻ/kỹ năng tầm xa
+            </span>
+          )
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          data-testid="bg-target-pill-self"
+          aria-pressed={selectedIsSelf}
+          onClick={() => {
+            onSelectTarget(selfPlayer.playerId);
+            setHealTargetId(selfPlayer.playerId);
+          }}
+          className={`px-2.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+            selectedIsSelf
+              ? 'bg-emerald-600/85 border-emerald-300 text-white'
+              : 'bg-slate-800 border-emerald-500/40 text-emerald-200 hover:bg-slate-700'
+          }`}
+        >
+          <span>💚 Bản thân ({selfPlayer.woundsTaken} vết)</span>
+        </button>
+        {aliveOthers.map((p) => {
+          const inRange = attackableTargets.some((t) => t.playerId === p.playerId);
+          const selected = !selectedIsSelf && validOtherTarget?.playerId === p.playerId;
+          return (
+            <button
+              key={p.playerId}
+              type="button"
+              data-testid={`bg-target-pill-other-${p.seatIndex}`}
+              aria-pressed={selected}
+              onClick={() => onSelectTarget(p.playerId)}
+              className={`px-2.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                selected
+                  ? inRange
+                    ? 'bg-rose-600/85 border-rose-300 text-white'
+                    : 'bg-sky-700/80 border-sky-300 text-white'
+                  : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+              }`}
+            >
+              <span>{p.displayName}</span>
+              {inRange ? (
+                <span className="text-[11px] px-1.5 py-0.5 rounded bg-black/30 text-amber-200">
+                  🎯 Tầm đánh
+                </span>
+              ) : selected ? (
+                <span className="text-[11px] px-1.5 py-0.5 rounded bg-black/30 text-sky-100">
+                  🃏 Dùng thẻ
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const renderHandCardsSection = () => {
+    const blastOccupants = alivePlayers.filter((p) => p.location === blastLocation);
+    const blastHasSelf = blastOccupants.some((p) => p.playerId === selfPlayer.playerId);
+    const blastOthersCount = blastOccupants.filter(
+      (p) => p.playerId !== selfPlayer.playerId,
+    ).length;
+
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
+            🃏 Bài trên tay ({privateView.hand.length}/{BOARD_GAME_MAX_HAND}):
+          </p>
+          {privateView.hand.length > 0 && (
+            <button
+              type="button"
+              onClick={onToggleHandMask}
+              className="px-2.5 py-1 min-h-[32px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 cursor-pointer"
+            >
+              {handMaskLocked ? '👁️ Hiện bài trên tay' : '🙈 Che bài'}
+            </button>
+          )}
+        </div>
+
+        {privateView.hand.length === 0 ? (
+          <p className="text-xs sm:text-sm text-slate-400">Chưa có thẻ nào trên tay.</p>
+        ) : handMaskLocked ? (
+          <div
+            data-testid="bg-hand-masked-banner"
+            className="rounded-xl border border-dashed border-amber-400/45 bg-slate-950/85 px-3 py-2 flex flex-wrap items-center justify-between gap-2.5"
+          >
+            <p className="text-xs sm:text-sm font-semibold text-amber-100">
+              🙈 Bài trên tay đang được che để chống nhìn màn hình ({privateView.hand.length} lá).
+            </p>
+            <button
+              type="button"
+              data-testid="bg-unmask-hand-btn"
+              onClick={onToggleHandMask}
+              className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black cursor-pointer"
+            >
+              👁️ Mở xem bài của tôi
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {privateView.hand.map((card, idx) => {
+              const isInv = card.deck === 'investigation';
+              const isGear = !isInv && !card.isConsumable;
+              const isLocBlast = card.effectId === 'ev-07';
+              const isSingleHeal =
+                card.deck === 'equipment' &&
+                Boolean(card.isConsumable) &&
+                card.targetMode === 'single-player';
+
+              return (
+                <div
+                  key={`${card.id}-${idx}`}
+                  className={`rounded-xl border p-2.5 flex flex-col justify-between gap-2 ${
+                    isInv
+                      ? 'border-emerald-500/45 bg-emerald-950/35'
+                      : card.deck === 'equipment'
+                        ? 'border-sky-500/45 bg-sky-950/35'
+                        : 'border-rose-500/45 bg-rose-950/35'
+                  }`}
+                >
+                  <div>
+                    <p className="text-xs sm:text-sm font-black text-white">{card.title}</p>
+                    <p className="text-xs text-slate-200 mt-0.5 leading-snug" title={card.summary}>
+                      {card.summary}
+                    </p>
+                  </div>
+
+                  {isSingleHeal && (
+                    <select
+                      data-testid={`bg-heal-select-${card.id}`}
+                      value={validHealCardTarget.playerId}
+                      onChange={(e) => setHealTargetId(e.target.value)}
+                      className="w-full rounded-lg bg-slate-950 border border-emerald-500/50 px-2 py-1 text-xs font-bold text-emerald-100"
+                      aria-label="Chọn người nhận hồi sức"
+                    >
+                      <option value={selfPlayer.playerId}>
+                        💚 Bản thân: {selfPlayer.displayName} ({selfPlayer.woundsTaken} vết)
+                      </option>
+                      {aliveOthers.map((p) => (
+                        <option key={p.playerId} value={p.playerId}>
+                          🤝 {p.displayName} ({p.woundsTaken} vết)
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {isLocBlast && (
+                    <select
+                      data-testid="bg-blast-loc-select"
+                      value={blastLocation}
+                      onChange={(e) => setBlastLocation(e.target.value as BoardGameLocationId)}
+                      className="w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1 text-xs font-bold text-slate-100"
+                      aria-label="Chọn khu vực ném thẻ Mất Điện"
+                    >
+                      {LOCATIONS_CATALOG.map((l) => {
+                        const occ = alivePlayers.filter((p) => p.location === l.id);
+                        const hasSelfHere = occ.some((p) => p.playerId === selfPlayer.playerId);
+                        const othersHere = occ.filter((p) => p.playerId !== selfPlayer.playerId);
+                        const occLabel =
+                          occ.length === 0
+                            ? '(Trống)'
+                            : hasSelfHere
+                              ? `(⚠️ CÓ BẠN${othersHere.length ? ` + ${othersHere.map((p) => p.displayName).join(', ')}` : ''})`
+                              : `(🎯 ${othersHere.map((p) => p.displayName).join(', ')})`;
+                        return (
+                          <option key={l.id} value={l.id}>
+                            Ô {l.diceLabel} · {l.name} {occLabel}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
+
+                  <button
+                    type="button"
+                    data-testid={`bg-use-card-${card.id}`}
+                    disabled={
+                      (isInv && !validOtherTarget) ||
+                      (!isInv &&
+                        !isGear &&
+                        !isLocBlast &&
+                        !isSingleHeal &&
+                        card.targetMode === 'single-player' &&
+                        !validOtherTarget)
+                    }
+                    onClick={() => {
+                      if (isInv && validOtherTarget) {
+                        onAction({
+                          type: 'INVESTIGATE_CARD',
+                          cardId: card.id,
+                          targetPlayerId: validOtherTarget.playerId,
+                        });
+                      } else if (isGear) {
+                        onAction({ type: 'EQUIP_CARD', cardId: card.id });
+                      } else if (isLocBlast) {
+                        onAction({
+                          type: 'USE_CARD',
+                          cardId: card.id,
+                          targetLocation: blastLocation,
+                        });
+                      } else if (isSingleHeal) {
+                        onAction({
+                          type: 'USE_CARD',
+                          cardId: card.id,
+                          targetPlayerId: validHealCardTarget.playerId,
+                        });
+                      } else if (card.targetMode === 'single-player' && validOtherTarget) {
+                        onAction({
+                          type: 'USE_CARD',
+                          cardId: card.id,
+                          targetPlayerId: validOtherTarget.playerId,
+                        });
+                      } else {
+                        onAction({ type: 'USE_CARD', cardId: card.id });
+                      }
+                    }}
+                    className={`w-full px-3 py-1.5 min-h-[36px] rounded-xl border text-xs font-black transition cursor-pointer ${
+                      isLocBlast && blastHasSelf
+                        ? 'bg-rose-800/80 hover:bg-rose-700 border-rose-400/60 text-amber-100'
+                        : 'bg-slate-800 hover:bg-slate-700 border-white/15 text-white'
+                    }`}
+                  >
+                    {isInv
+                      ? `🔍 Đưa kín → ${validOtherTarget?.displayName ?? '?'}`
+                      : isGear
+                        ? '🎒 Trang bị ngay'
+                        : isLocBlast
+                          ? blastHasSelf
+                            ? `⚠️ Nổ Ô ${LOCATION_VISUAL_META[blastLocation].diceLabel} (Trúng cả Bạn!)`
+                            : blastOthersCount === 0
+                              ? `💥 Nổ Ô ${LOCATION_VISUAL_META[blastLocation].diceLabel} (Trống)`
+                              : `💥 Nổ Ô ${LOCATION_VISUAL_META[blastLocation].diceLabel} (${blastOthersCount} người)`
+                          : isSingleHeal
+                            ? `💚 Hồi → ${
+                                validHealCardTarget.playerId === selfPlayer.playerId
+                                  ? `${selfPlayer.displayName} (Bạn)`
+                                  : validHealCardTarget.displayName
+                              }`
+                            : card.id === 'eq-07'
+                              ? '💚 Hồi cả Cụm'
+                              : card.id === 'eq-08'
+                                ? '💚 Tự hồi sức'
+                                : card.targetMode === 'single-player'
+                                  ? `⚡ Kích hoạt → ${validOtherTarget?.displayName ?? '?'}`
+                                  : '⚡ Kích hoạt ngay'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <section
       data-testid="bg-action-panel"
@@ -216,17 +534,27 @@ export function ActionPanel({
         <div className="flex items-center gap-2 flex-wrap">
           {!privateView.revealed &&
             (confirmingReveal ? (
-              <button
-                type="button"
-                data-testid="bg-confirm-reveal-btn"
-                onClick={() => {
-                  setConfirmingReveal(false);
-                  onAction({ type: 'REVEAL_ROLE' });
-                }}
-                className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black transition cursor-pointer"
-              >
-                ✅ Xác nhận Lật Vai Công Khai
-              </button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  data-testid="bg-confirm-reveal-btn"
+                  onClick={() => {
+                    setConfirmingReveal(false);
+                    onAction({ type: 'REVEAL_ROLE' });
+                  }}
+                  className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black transition cursor-pointer"
+                >
+                  ✅ Xác nhận Lật Vai Công Khai
+                </button>
+                <button
+                  type="button"
+                  data-testid="bg-cancel-reveal-btn"
+                  onClick={() => setConfirmingReveal(false)}
+                  className="px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs sm:text-sm font-bold transition cursor-pointer"
+                >
+                  ✕ Hủy
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
@@ -250,10 +578,23 @@ export function ActionPanel({
                   onAction({ type: 'USE_SKILL', targetPlayerId: skillTarget.playerId });
                 }
               }}
-              className="px-3 py-1.5 min-h-[36px] rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-45 text-white text-xs sm:text-sm font-bold transition cursor-pointer"
+              className={`px-3 py-1.5 min-h-[36px] rounded-xl disabled:opacity-45 text-white text-xs sm:text-sm font-bold transition cursor-pointer ${
+                privateView.roleId === 'lang-cuu-ho'
+                  ? binhAvenging
+                    ? 'bg-rose-600 hover:bg-rose-500'
+                    : 'bg-emerald-600 hover:bg-emerald-500'
+                  : 'bg-violet-600 hover:bg-violet-500'
+              }`}
             >
-              ✨ {roleDesign.skillName}
-              {skillTarget && roleDesign.targetMode !== 'self' ? ` (${skillTarget.displayName})` : ''}
+              {privateView.roleId === 'lang-cuu-ho'
+                ? binhAvenging
+                  ? `⚔️ Báo Thù: 2 ST → ${skillTarget?.displayName ?? '?'}`
+                  : `🛟 Hộ Vệ: Hồi 2 → ${skillTarget?.displayName ?? '?'} (Bạn chịu 1 vết)`
+                : `✨ ${roleDesign.skillName}${
+                    skillTarget && roleDesign.targetMode !== 'self'
+                      ? ` (${skillTarget.displayName})`
+                      : ''
+                  }`}
             </button>
           )}
         </div>
@@ -421,16 +762,19 @@ export function ActionPanel({
                 <button
                   type="button"
                   data-testid="bg-loc-damage-btn"
-                  onClick={() =>
-                    onAction({
-                      type: 'USE_LOC_POWER',
-                      targetPlayerId: validAnyTarget.playerId,
-                      mode: 'damage',
-                    })
-                  }
-                  className="px-3.5 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+                  disabled={!validOtherTarget}
+                  onClick={() => {
+                    if (validOtherTarget) {
+                      onAction({
+                        type: 'USE_LOC_POWER',
+                        targetPlayerId: validOtherTarget.playerId,
+                        mode: 'damage',
+                      });
+                    }
+                  }}
+                  className="px-3.5 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs sm:text-sm font-black transition cursor-pointer"
                 >
-                  💥 Gây 2 dmg lên {validAnyTarget.displayName}
+                  💥 Gây 2 dmg lên {validOtherTarget?.displayName ?? '?'}
                 </button>
               </>
             )}
@@ -459,6 +803,23 @@ export function ActionPanel({
               ⏭️ Bỏ qua khu vực → Pha Hành Động
             </button>
           </div>
+
+          {isDrawZone && handIsFull && (
+            <p
+              data-testid="bg-hand-full-warning"
+              className="rounded-xl border border-amber-400/50 bg-amber-950/40 px-3 py-1.5 text-xs font-bold text-amber-200"
+            >
+              ⚠️ Tay đang đầy {BOARD_GAME_MAX_HAND}/{BOARD_GAME_MAX_HAND} lá — rút thêm sẽ tự bỏ lá cũ nhất
+              {!handMaskLocked && privateView.hand[0] ? ` ("${privateView.hand[0].title}")` : ''}. Bạn có thể dùng bớt bài bên dưới trước khi rút!
+            </p>
+          )}
+
+          {currentLoc.deckHint !== 'power-9' &&
+            ((privateView.hand.length > 0 && !handMaskLocked) ||
+              (canUseSkillNow && roleDesign.targetMode !== 'self')) &&
+            renderTargetSelector('Chọn mục tiêu cho Kỹ năng / Thẻ:')}
+
+          {privateView.hand.length > 0 && renderHandCardsSection()}
         </div>
       )}
 
@@ -466,245 +827,10 @@ export function ActionPanel({
       {publicGame.turnPhase === 'MAIN_ACTION' && (
         <div className="space-y-2.5">
           {/* Chọn mục tiêu nhanh cho Thẻ & Đòn Đánh */}
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
-                Chọn mục tiêu hành động / tấn công:
-              </p>
-              {selectedIsSelf ? (
-                <span className="text-[11px] font-semibold text-emerald-300">
-                  💚 Đang chọn Bản thân — các thẻ hồi sức ưu tiên tự hồi cho bạn
-                </span>
-              ) : (
-                selectedIsOutOfRange &&
-                validOtherTarget && (
-                  <span className="text-[11px] font-semibold text-sky-300">
-                    {validOtherTarget.displayName} ngoài tầm đánh cùng Cụm — chỉ dùng được thẻ/kỹ năng tầm xa
-                  </span>
-                )
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                data-testid="bg-target-pill-self"
-                aria-pressed={selectedIsSelf}
-                onClick={() => {
-                  onSelectTarget(selfPlayer.playerId);
-                  setHealTargetId(selfPlayer.playerId);
-                }}
-                className={`px-2.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                  selectedIsSelf
-                    ? 'bg-emerald-600/85 border-emerald-300 text-white'
-                    : 'bg-slate-800 border-emerald-500/40 text-emerald-200 hover:bg-slate-700'
-                }`}
-              >
-                <span>💚 Bản thân ({selfPlayer.woundsTaken} vết)</span>
-              </button>
-              {aliveOthers.map((p) => {
-                const inRange = attackableTargets.some((t) => t.playerId === p.playerId);
-                const selected = !selectedIsSelf && validOtherTarget?.playerId === p.playerId;
-                return (
-                  <button
-                    key={p.playerId}
-                    type="button"
-                    data-testid={`bg-target-pill-other-${p.seatIndex}`}
-                    aria-pressed={selected}
-                    onClick={() => onSelectTarget(p.playerId)}
-                    className={`px-2.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                      selected
-                        ? inRange
-                          ? 'bg-rose-600/85 border-rose-300 text-white'
-                          : 'bg-sky-700/80 border-sky-300 text-white'
-                        : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
-                    }`}
-                  >
-                    <span>{p.displayName}</span>
-                    {inRange ? (
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-black/30 text-amber-200">
-                        🎯 Tầm đánh
-                      </span>
-                    ) : selected ? (
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-black/30 text-sky-100">
-                        🃏 Dùng thẻ
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {renderTargetSelector('Chọn mục tiêu hành động / tấn công:')}
 
           {/* Bài trên tay (kèm lớp che chống nhìn trộm màn hình) */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
-                🃏 Bài trên tay ({privateView.hand.length}/3):
-              </p>
-              {privateView.hand.length > 0 && (
-                <button
-                  type="button"
-                  onClick={onToggleHandMask}
-                  className="px-2.5 py-1 min-h-[32px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 cursor-pointer"
-                >
-                  {handMaskLocked ? '👁️ Hiện bài trên tay' : '🙈 Che bài'}
-                </button>
-              )}
-            </div>
-
-            {privateView.hand.length === 0 ? (
-              <p className="text-xs sm:text-sm text-slate-400">Chưa có thẻ nào trên tay.</p>
-            ) : handMaskLocked ? (
-              <div
-                data-testid="bg-hand-masked-banner"
-                className="rounded-xl border border-dashed border-amber-400/45 bg-slate-950/85 px-3 py-2 flex flex-wrap items-center justify-between gap-2.5"
-              >
-                <p className="text-xs sm:text-sm font-semibold text-amber-100">
-                  🙈 Bài trên tay đang được che để chống nhìn màn hình ({privateView.hand.length} lá).
-                </p>
-                <button
-                  type="button"
-                  data-testid="bg-unmask-hand-btn"
-                  onClick={onToggleHandMask}
-                  className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black cursor-pointer"
-                >
-                  👁️ Mở xem bài của tôi
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {privateView.hand.map((card, idx) => {
-                  const isInv = card.deck === 'investigation';
-                  const isGear = !isInv && !card.isConsumable;
-                  const isLocBlast = card.effectId === 'ev-07';
-                  const isSingleHeal =
-                    card.deck === 'equipment' &&
-                    Boolean(card.isConsumable) &&
-                    card.targetMode === 'single-player';
-
-                  return (
-                    <div
-                      key={`${card.id}-${idx}`}
-                      className={`rounded-xl border p-2.5 flex flex-col justify-between gap-2 ${
-                        isInv
-                          ? 'border-emerald-500/45 bg-emerald-950/35'
-                          : card.deck === 'equipment'
-                            ? 'border-sky-500/45 bg-sky-950/35'
-                            : 'border-rose-500/45 bg-rose-950/35'
-                      }`}
-                    >
-                      <div>
-                        <p className="text-xs sm:text-sm font-black text-white">{card.title}</p>
-                        <p className="text-xs text-slate-200 mt-0.5 leading-snug" title={card.summary}>
-                          {card.summary}
-                        </p>
-                      </div>
-
-                      {isSingleHeal && (
-                        <select
-                          data-testid={`bg-heal-select-${card.id}`}
-                          value={validHealCardTarget.playerId}
-                          onChange={(e) => setHealTargetId(e.target.value)}
-                          className="w-full rounded-lg bg-slate-950 border border-emerald-500/50 px-2 py-1 text-xs font-bold text-emerald-100"
-                          aria-label="Chọn người nhận hồi sức"
-                        >
-                          <option value={selfPlayer.playerId}>
-                            💚 Bản thân: {selfPlayer.displayName} ({selfPlayer.woundsTaken} vết)
-                          </option>
-                          {aliveOthers.map((p) => (
-                            <option key={p.playerId} value={p.playerId}>
-                              🤝 {p.displayName} ({p.woundsTaken} vết)
-                            </option>
-                          ))}
-                        </select>
-                      )}
-
-                      {isLocBlast && (
-                        <select
-                          value={blastLocation}
-                          onChange={(e) => setBlastLocation(e.target.value as BoardGameLocationId)}
-                          className="w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1 text-xs font-bold text-slate-100"
-                          aria-label="Chọn khu vực ném thẻ Mất Điện"
-                        >
-                          {LOCATIONS_CATALOG.map((l) => (
-                            <option key={l.id} value={l.id}>
-                              Ô {l.diceLabel} · {l.name}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-
-                      <button
-                        type="button"
-                        data-testid={`bg-use-card-${card.id}`}
-                        disabled={
-                          (isInv && !validOtherTarget) ||
-                          (!isInv &&
-                            !isGear &&
-                            !isLocBlast &&
-                            !isSingleHeal &&
-                            card.targetMode === 'single-player' &&
-                            !validOtherTarget)
-                        }
-                        onClick={() => {
-                          if (isInv && validOtherTarget) {
-                            onAction({
-                              type: 'INVESTIGATE_CARD',
-                              cardId: card.id,
-                              targetPlayerId: validOtherTarget.playerId,
-                            });
-                          } else if (isGear) {
-                            onAction({ type: 'EQUIP_CARD', cardId: card.id });
-                          } else if (isLocBlast) {
-                            onAction({
-                              type: 'USE_CARD',
-                              cardId: card.id,
-                              targetLocation: blastLocation,
-                            });
-                          } else if (isSingleHeal) {
-                            onAction({
-                              type: 'USE_CARD',
-                              cardId: card.id,
-                              targetPlayerId: validHealCardTarget.playerId,
-                            });
-                          } else if (card.targetMode === 'single-player' && validOtherTarget) {
-                            onAction({
-                              type: 'USE_CARD',
-                              cardId: card.id,
-                              targetPlayerId: validOtherTarget.playerId,
-                            });
-                          } else {
-                            onAction({ type: 'USE_CARD', cardId: card.id });
-                          }
-                        }}
-                        className="w-full px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/15 text-xs font-black text-white transition cursor-pointer"
-                      >
-                        {isInv
-                          ? `🔍 Đưa kín → ${validOtherTarget?.displayName ?? '?'}`
-                          : isGear
-                            ? '🎒 Trang bị ngay'
-                            : isLocBlast
-                              ? `💥 Nổ tại Ô ${LOCATION_VISUAL_META[blastLocation].diceLabel}`
-                              : isSingleHeal
-                                ? `💚 Hồi → ${
-                                    validHealCardTarget.playerId === selfPlayer.playerId
-                                      ? `${selfPlayer.displayName} (Bạn)`
-                                      : validHealCardTarget.displayName
-                                  }`
-                                : card.id === 'eq-07'
-                                  ? '💚 Hồi cả Cụm'
-                                  : card.id === 'eq-08'
-                                    ? '💚 Tự hồi sức'
-                                    : card.targetMode === 'single-player'
-                                      ? `⚡ Kích hoạt → ${validOtherTarget?.displayName ?? '?'}`
-                                      : '⚡ Kích hoạt ngay'}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {renderHandCardsSection()}
 
           {/* Hàng nút chính cuối pha: Tấn công hoặc Kết thúc lượt */}
           <div className="flex flex-wrap items-center gap-2.5 pt-1.5 border-t border-slate-800/80">
@@ -720,7 +846,7 @@ export function ActionPanel({
               className="px-4 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs sm:text-sm font-black shadow transition cursor-pointer"
             >
               {validAttackTarget
-                ? `⚔️ Tấn công ${validAttackTarget.displayName} (${equippedPreciseStick ? '1d4' : '|1d6-1d4|'})`
+                ? `⚔️ Tấn công ${validAttackTarget.displayName} (${attackDiceFormula}${attackTargetWarning})`
                 : '⚔️ Chưa có mục tiêu cùng Cụm'}
             </button>
 

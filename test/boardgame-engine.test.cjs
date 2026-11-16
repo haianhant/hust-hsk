@@ -23,6 +23,8 @@ const {
   validateBoardGameClientMessage,
 } = require('../shared/contracts/boardgame.ts');
 const {
+  BOARD_GAME_MAX_EQUIPPED,
+  BOARD_GAME_MAX_HAND,
   LOCATIONS_CATALOG,
   ROLES_CATALOG,
   applyPlayerGameAction,
@@ -626,4 +628,151 @@ test('V4.7 — Tự hồi máu (eq-05, eq-06, eq-07, eq-08, ô 9) & không bị 
   assert.equal(backToSelf.validAnyTarget.playerId, selfPub.playerId);
   assert.notEqual(backToSelf.validAttackTarget?.playerId, selfPub.playerId);
   assert.notEqual(backToSelf.validOtherTarget?.playerId, selfPub.playerId);
+});
+
+test('V4.8 — Gỡ trần 3 Trang bị, tay 5 lá + dùng thẻ ở Pha 2, chặn tự bắn Ô 9 & counterRoll', () => {
+  assert.equal(BOARD_GAME_MAX_HAND, 5);
+  assert.ok(BOARD_GAME_MAX_EQUIPPED >= 99);
+
+  const state = createInitialGameState({
+    matchId: 'v4-pack-a',
+    seed: 909,
+    nowMs: 1_750_100_000_000,
+    players: makePlayers(4),
+  });
+  const list = Object.values(state.players);
+  const actor = getActivePlayer(state);
+  const dung = list.find((p) => p.playerId !== actor.playerId);
+  assert.ok(actor && dung);
+
+  // Cố định phe 2 vs 2 rõ ràng để không kết thúc sớm giữa chừng
+  const others = list.filter((p) => p.playerId !== actor.playerId && p.playerId !== dung.playerId);
+  actor.roleId = 'gac-truc-ban';
+  actor.faction = 'lantern-guard';
+  actor.maxHp = 13;
+  actor.hp = 13;
+  actor.woundsTaken = 0;
+
+  dung.roleId = 'suong-gac-cong';
+  dung.faction = 'mist-order';
+  dung.maxHp = 14;
+  dung.hp = 14;
+  dung.woundsTaken = 0;
+  dung.revealed = true;
+  dung.equipped = ['ev-01'];
+
+  others[0].roleId = 'gac-radio';
+  others[0].faction = 'lantern-guard';
+  others[1].roleId = 'suong-an-danh';
+  others[1].faction = 'mist-order';
+
+  // 1. Dùng bài Hành động & Thăm Dò Kín ngay trong Pha 2 (LOCATION_ACTION) mà vẫn còn lượt rút ở khu vực
+  state.turnPhase = 'LOCATION_ACTION';
+  actor.location = 'radio';
+  actor.woundsTaken = 3;
+  actor.hp = actor.maxHp - 3;
+  actor.hand = ['eq-05', 'inv-01', 'eq-01', 'eq-02', 'eq-03'];
+
+  const p2Heal = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'USE_CARD', cardId: 'eq-05', targetPlayerId: actor.playerId },
+    1_750_100_001_000,
+  );
+  assert.equal(p2Heal.ok, true);
+  assert.equal(state.turnPhase, 'LOCATION_ACTION', 'Dùng thẻ ở Pha 2 không được làm mất Pha 2');
+  assert.equal(actor.hand.length, 4);
+
+  const p2Inv = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'INVESTIGATE_CARD', cardId: 'inv-01', targetPlayerId: dung.playerId },
+    1_750_100_002_000,
+  );
+  assert.equal(p2Inv.ok, true);
+  assert.equal(state.turnPhase, 'LOCATION_ACTION');
+  assert.equal(actor.hand.length, 3);
+
+  // 2. Trang bị đủ 4 món từ tay + cướp thêm món thứ 5 tại Sân Bóng (10): không món nào bị vứt bỏ!
+  for (const eqId of ['eq-01', 'eq-02', 'eq-03']) {
+    const eqRes = applyPlayerGameAction(
+      state,
+      actor.playerId,
+      { type: 'EQUIP_CARD', cardId: eqId },
+      1_750_100_003_000,
+    );
+    assert.equal(eqRes.ok, true);
+  }
+  actor.hand.push('eq-04');
+  assert.equal(
+    applyPlayerGameAction(state, actor.playerId, { type: 'EQUIP_CARD', cardId: 'eq-04' }, 1_750_100_004_000).ok,
+    true,
+  );
+  assert.deepEqual(actor.equipped, ['eq-01', 'eq-02', 'eq-03', 'eq-04']);
+
+  actor.location = 'court';
+  const stealFifth = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'USE_LOC_POWER', targetPlayerId: dung.playerId, mode: 'steal' },
+    1_750_100_005_000,
+  );
+  assert.equal(stealFifth.ok, true);
+  assert.equal(actor.equipped.length, 5, 'Trang bị đặt ngửa chuẩn Shadow Hunters không giới hạn 3 món');
+  assert.ok(actor.equipped.includes('eq-01') && actor.equipped.includes('ev-01'));
+
+  // 3. Chặn tự gây 2 sát thương lên chính mình tại Ô 9 (corridor), vẫn cho phép tự hồi 1
+  state.turnPhase = 'LOCATION_ACTION';
+  actor.location = 'corridor';
+  const selfDmgBlock = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'USE_LOC_POWER', targetPlayerId: actor.playerId, mode: 'damage' },
+    1_750_100_006_000,
+  );
+  assert.equal(selfDmgBlock.ok, false);
+  actor.woundsTaken = 2;
+  actor.hp = actor.maxHp - 2;
+  const selfHealOk = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'USE_LOC_POWER', targetPlayerId: actor.playerId, mode: 'heal' },
+    1_750_100_007_000,
+  );
+  assert.equal(selfHealOk.ok, true);
+  assert.equal(actor.woundsTaken, 1);
+
+  // 4. Đầy 5 lá trên tay rút thêm mới bỏ lá cũ & ghi log ẩn tên bài
+  state.turnPhase = 'LOCATION_ACTION';
+  actor.location = 'lobby';
+  actor.hand = ['inv-02', 'inv-03', 'eq-06', 'eq-07', 'ev-06'];
+  const overflowDraw = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'DRAW_CARD', deck: 'equipment' },
+    1_750_100_008_000,
+  );
+  assert.equal(overflowDraw.ok, true);
+  assert.equal(actor.hand.length, 5);
+  assert.equal(actor.hand[0], 'inv-03');
+  const lastLog = state.publicLog[state.publicLog.length - 1];
+  assert.ok(lastLog.text.includes('đầy tay 5 lá'), `Expected full-hand note in log, got: ${lastLog.text}`);
+  assert.equal(lastLog.text.includes('inv-02'), false);
+
+  // 5. Đòn phản kích của Dũng "Gác Cổng" ghi nhận counterRoll trên lastDiceRoll
+  state.activePlayerId = actor.playerId;
+  state.turnPhase = 'MAIN_ACTION';
+  actor.location = 'radio';
+  dung.location = 'radio';
+  dung.equipped = ['ev-01']; // Dụng cụ chắc chắn gây 1d4 phản công
+  const atkRes = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'ATTACK', targetPlayerId: dung.playerId },
+    1_750_100_009_000,
+  );
+  assert.equal(atkRes.ok, true);
+  assert.ok(state.lastDiceRoll?.counterRoll, 'Phản kích của Dũng phải điền lastDiceRoll.counterRoll');
+  assert.equal(state.lastDiceRoll.counterRoll.playerId, dung.playerId);
+  assert.ok(state.lastDiceRoll.counterRoll.damageDealt >= 1);
 });

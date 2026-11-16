@@ -25,6 +25,7 @@ export interface RoleCardProps {
   privateView: BoardGamePrivateGameView | null;
   isSpectator: boolean;
   cardVisible: boolean;
+  unreadClueCount?: number;
   onToggleCardVisible: () => void;
 }
 
@@ -33,6 +34,7 @@ export function RoleCard({
   privateView,
   isSpectator,
   cardVisible,
+  unreadClueCount = 0,
   onToggleCardVisible,
 }: RoleCardProps) {
   if (isSpectator || !privateView) {
@@ -117,6 +119,14 @@ export function RoleCard({
               )}
             </div>
           )}
+          {unreadClueCount > 0 && (
+            <p
+              data-testid="bg-facedown-unread-clues"
+              className="mx-auto inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/50 bg-emerald-950/60 px-2.5 py-1 text-xs font-bold text-emerald-200"
+            >
+              🕵️ +{unreadClueCount} mật báo mới — bấm &ldquo;Soi vai của tôi&rdquo; để đọc
+            </p>
+          )}
         </div>
       ) : (
         <div data-testid="bg-role-card-secret" className="space-y-3">
@@ -174,7 +184,7 @@ export function RoleCard({
             <p className="text-sm text-slate-100 leading-snug">{privateView.secretGoalText}</p>
             {privateView.roleId === 'lang-anh-san' && (
               <p className="text-xs font-bold text-amber-300 mt-1.5">
-                Tiến độ Trang bị: {privateView.equipped.length} / 3 món
+                Tiến độ thắng (Hải): {privateView.equipped.length} / 3+ món
               </p>
             )}
             {privateView.roleId === 'lang-cuu-ho' && privateView.protegeDisplayName && (
@@ -209,7 +219,7 @@ export function RoleCard({
           {/* Trang bị đang đeo */}
           <div className="rounded-xl bg-slate-950/85 border border-slate-800 p-3">
             <p className="text-xs font-extrabold uppercase tracking-wider text-sky-300 mb-1.5">
-              🎒 Trang bị đang đeo ({privateView.equipped.length}/3)
+              🎒 Trang bị đang đeo ({privateView.equipped.length})
             </p>
             {privateView.equipped.length === 0 ? (
               <p className="text-xs text-slate-400">Chưa trang bị món nào.</p>

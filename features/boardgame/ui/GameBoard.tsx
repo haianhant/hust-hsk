@@ -116,6 +116,8 @@ export function GameBoard({
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [localMuted, setLocalMuted] = useState(() => isBoardGameSoundMuted());
   const [dicePulse, setDicePulse] = useState(false);
+  const [seenClueCount, setSeenClueCount] = useState(0);
+  const [seenLogCount, setSeenLogCount] = useState(() => publicGame.publicLog.length);
 
   const prevTurnRef = useRef<number>(publicGame.turnNumber);
   const prevActiveRef = useRef<string | null>(publicGame.activePlayerId);
@@ -128,6 +130,31 @@ export function GameBoard({
   const effectiveMuted = propMuted ?? localMuted;
 
   useEffect(() => {
+    setHandUnmasked(false);
+    setRoleCardVisible(false);
+    setSeenClueCount(0);
+    setSeenLogCount(publicGame.publicLog.length);
+    setSelectedTargetId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicGame.matchId]);
+
+  const totalClues = privateView?.privateClues.length ?? 0;
+  useEffect(() => {
+    if (roleCardVisible && (sideDrawerOpen || mobileTab === 'role')) {
+      setSeenClueCount((prev) => Math.max(prev, totalClues));
+    }
+  }, [roleCardVisible, sideDrawerOpen, mobileTab, totalClues]);
+
+  useEffect(() => {
+    if (mobileTab === 'log') {
+      setSeenLogCount((prev) => Math.max(prev, publicGame.publicLog.length));
+    }
+  }, [mobileTab, publicGame.publicLog.length]);
+
+  const unreadClueCount = isSpectator ? 0 : Math.max(0, totalClues - seenClueCount);
+  const unreadLogCount = Math.max(0, publicGame.publicLog.length - seenLogCount);
+
+  useEffect(() => {
     if (typeof turnDeadlineMs !== 'number') return;
     setNowMs(Date.now());
     const id = window.setInterval(() => setNowMs(Date.now()), 500);
@@ -137,7 +164,6 @@ export function GameBoard({
   useEffect(() => {
     if (prevTurnRef.current !== publicGame.turnNumber) {
       prevTurnRef.current = publicGame.turnNumber;
-      setHandUnmasked(false);
       setSelectedTargetId(null);
       setLocalError(null);
       if (
@@ -391,24 +417,40 @@ export function GameBoard({
         <button
           type="button"
           onClick={() => setMobileTab('role')}
-          className={`min-h-[40px] rounded-xl px-2 text-xs font-black transition cursor-pointer ${
+          className={`min-h-[40px] rounded-xl px-2 text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
             mobileTab === 'role'
               ? 'bg-amber-400 text-slate-950'
               : 'bg-slate-800 text-slate-200 border border-slate-700'
           }`}
         >
-          🎭 Vai bí mật
+          <span>🎭 Vai bí mật</span>
+          {unreadClueCount > 0 && (
+            <span
+              data-testid="bg-mobile-tab-role-badge"
+              className="inline-flex items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black leading-none text-white"
+            >
+              {unreadClueCount}
+            </span>
+          )}
         </button>
         <button
           type="button"
           onClick={() => setMobileTab('log')}
-          className={`min-h-[40px] rounded-xl px-2 text-xs font-black transition cursor-pointer ${
+          className={`min-h-[40px] rounded-xl px-2 text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
             mobileTab === 'log'
               ? 'bg-emerald-400 text-slate-950'
               : 'bg-slate-800 text-slate-200 border border-slate-700'
           }`}
         >
-          📜 Nhật ký
+          <span>📜 Nhật ký</span>
+          {unreadLogCount > 0 && mobileTab !== 'log' && (
+            <span
+              data-testid="bg-mobile-tab-log-badge"
+              className="inline-flex items-center justify-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-black leading-none text-slate-950"
+            >
+              {unreadLogCount > 9 ? '9+' : unreadLogCount}
+            </span>
+          )}
         </button>
       </nav>
 
@@ -416,12 +458,33 @@ export function GameBoard({
       {(displayedError ||
         publicGame.lastInvestigation ||
         publicGame.lastRevealEvent ||
+        unreadClueCount > 0 ||
         latestEmote) && (
         <div className="shrink-0 bg-slate-950/90 border-b border-slate-800/80 px-3 sm:px-5 py-1.5">
           <div className="mx-auto max-w-[1680px] flex flex-wrap items-center gap-2">
             {displayedError && (
               <div className="rounded-xl bg-rose-950/80 border border-rose-500/60 px-3 py-1.5 text-xs sm:text-sm font-bold text-rose-100">
                 ⚠️ {displayedError}
+              </div>
+            )}
+            {unreadClueCount > 0 && (
+              <div
+                data-testid="bg-unread-clue-banner"
+                className="rounded-xl bg-amber-950/70 border border-amber-400/60 px-3 py-1.5 text-xs sm:text-sm font-bold text-amber-100 flex items-center gap-2"
+              >
+                <span>🕵️ Bạn có {unreadClueCount} mật báo thăm dò mới!</span>
+                <button
+                  type="button"
+                  data-testid="bg-open-unread-clues-btn"
+                  onClick={() => {
+                    setSideDrawerOpen(true);
+                    setMobileTab('role');
+                    setRoleCardVisible(true);
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
+                >
+                  Mở đọc
+                </button>
               </div>
             )}
             {publicGame.lastInvestigation && (
@@ -751,6 +814,19 @@ export function GameBoard({
                                 ? `Điểm đến: ${LOCATION_VISUAL_META[publicGame.lastDiceRoll.resolvedLocation].name}`
                                 : 'Sẵn sàng tung xúc xắc tiếp theo.'}
                         </p>
+                        {publicGame.lastDiceRoll.kind === 'attack' &&
+                          publicGame.lastDiceRoll.counterRoll && (
+                            <p
+                              data-testid="bg-dice-counter-roll"
+                              className="text-[11px] sm:text-xs text-amber-300 font-bold truncate"
+                            >
+                              🥊 {publicGame.lastDiceRoll.counterRoll.displayName} phản kích (
+                              {publicGame.lastDiceRoll.counterRoll.d6 > 0
+                                ? `|${publicGame.lastDiceRoll.counterRoll.d6} - ${publicGame.lastDiceRoll.counterRoll.d4}|`
+                                : `1d4=${publicGame.lastDiceRoll.counterRoll.d4}`}
+                              ) → trả đòn {publicGame.lastDiceRoll.counterRoll.damageDealt} sát thương!
+                            </p>
+                          )}
                       </div>
                       {canRollOnBoard && (
                         <span className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-400 text-slate-950 text-xs font-black whitespace-nowrap">
@@ -961,7 +1037,14 @@ export function GameBoard({
                 onSelectTarget={setSelectedTargetId}
                 onAction={dispatchAction}
                 handMaskLocked={!roleCardVisible && !handUnmasked}
-                onToggleHandMask={() => setHandUnmasked((v) => !v)}
+                onToggleHandMask={() => {
+                  if (roleCardVisible || handUnmasked) {
+                    setHandUnmasked(false);
+                    setRoleCardVisible(false);
+                  } else {
+                    setHandUnmasked(true);
+                  }
+                }}
               />
             </div>
           </div>
@@ -980,6 +1063,7 @@ export function GameBoard({
                   privateView={privateView}
                   isSpectator={isSpectator}
                   cardVisible={roleCardVisible}
+                  unreadClueCount={unreadClueCount}
                   onToggleCardVisible={() => setRoleCardVisible((v) => !v)}
                 />
               </div>
