@@ -49,6 +49,7 @@ import {
   type BoardGameTableId,
 } from '../../shared/contracts/boardgame';
 import {
+  DEFAULT_CLUSTER_PAIRS,
   ROLES_BY_ID,
   applyPlayerGameAction,
   applyTimeoutAutoTurn,
@@ -2210,12 +2211,14 @@ export class BoardGameRoom {
         skillUsedOnce: false,
         guardianShieldActive: false,
         attacksMade: typeof p.attacksMade === 'number' ? p.attacksMade : 0,
+        attacksThisTurn: typeof p.attacksThisTurn === 'number' ? p.attacksThisTurn : 0,
         investigationsCount: typeof p.investigationsCount === 'number' ? p.investigationsCount : 0,
         consecutiveSameZoneRolls: 0,
         eliminatedRound: null,
         eliminatedByPlayerId: null,
         protegePlayerId: null,
         avengedProtegeKiller: false,
+        charlesKillWon: false,
         investigatedTargetIds: [],
         privateClues: [],
       };
@@ -2279,6 +2282,12 @@ export class BoardGameRoom {
       turnPhase: 'ENDED',
       activePlayerId: null,
       turnOrder,
+      clusterPairs: DEFAULT_CLUSTER_PAIRS.map((pair) => ({
+        clusterId: pair.clusterId,
+        locationIds: [pair.locationIds[0], pair.locationIds[1]],
+      })),
+      firstDeadPlayerId: null,
+      extraTurnPending: false,
       players: playersRecord,
       decks: { investigation: [], equipment: [], event: [] },
       discards: { investigation: [], equipment: [], event: [] },
@@ -2327,19 +2336,33 @@ export class BoardGameRoom {
       return this.adaptLegacyEngineState(match, rawRecord, playerRows);
     }
     const engineState = rawEngine as AuthoritativeGameState;
-    if (playerRows && engineState.players && typeof engineState.players === 'object') {
+    if (!Array.isArray(engineState.clusterPairs) || engineState.clusterPairs.length !== 3) {
+      engineState.clusterPairs = DEFAULT_CLUSTER_PAIRS.map((pair) => ({
+        clusterId: pair.clusterId,
+        locationIds: [pair.locationIds[0], pair.locationIds[1]],
+      }));
+    }
+    if (engineState.firstDeadPlayerId === undefined) engineState.firstDeadPlayerId = null;
+    if (typeof engineState.extraTurnPending !== 'boolean') engineState.extraTurnPending = false;
+    if (engineState.players && typeof engineState.players === 'object') {
       const connById = new Map<string, boolean>();
-      for (const row of playerRows) {
-        connById.set(row.player_id, row.connected === 1);
+      if (playerRows) {
+        for (const row of playerRows) {
+          connById.set(row.player_id, row.connected === 1);
+        }
       }
       const list = Array.isArray(engineState.players)
         ? engineState.players
         : Object.values(engineState.players);
       for (const ep of list) {
-        const isConn = connById.get(ep.playerId);
-        if (typeof isConn === 'boolean') {
-          ep.connected = isConn;
+        if (playerRows) {
+          const isConn = connById.get(ep.playerId);
+          if (typeof isConn === 'boolean') {
+            ep.connected = isConn;
+          }
         }
+        if (typeof ep.attacksThisTurn !== 'number') ep.attacksThisTurn = 0;
+        if (typeof ep.charlesKillWon !== 'boolean') ep.charlesKillWon = false;
       }
     }
     return engineState;

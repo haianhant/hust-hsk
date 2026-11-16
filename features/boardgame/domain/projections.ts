@@ -11,6 +11,7 @@ import type {
 } from '../../../shared/contracts/boardgame';
 import { getCardById, toCardPublicMeta } from './cards';
 import { getRoleDesign } from './roles';
+import { DEFAULT_CLUSTER_PAIRS } from './rules';
 import type { AuthoritativeGameState, AuthoritativePlayerState } from './types';
 
 function mapCardIdsToMeta(cardIds: readonly string[]): BoardGameCardPublicMeta[] {
@@ -36,6 +37,7 @@ export function getPublicPlayerView(
     handCount: player.hand.length,
     equipped: mapCardIdsToMeta(player.equipped),
     attacksMade: player.attacksMade,
+    attacksThisTurn: player.attacksThisTurn ?? 0,
     investigationsCount: player.investigationsCount,
     guardianShieldActive: player.guardianShieldActive,
     alive: player.alive,
@@ -54,6 +56,7 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     .map((pid) => state.players[pid])
     .filter((p): p is AuthoritativePlayerState => Boolean(p))
     .map((player) => getPublicPlayerView(player, state.finished));
+  const deadCount = Object.values(state.players).filter((p) => !p.alive).length;
 
   return {
     rulesetVersion: 4,
@@ -64,6 +67,9 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     turnPhase: state.turnPhase,
     activePlayerId: state.activePlayerId,
     turnOrder: [...state.turnOrder],
+    clusterPairs: state.clusterPairs ?? DEFAULT_CLUSTER_PAIRS,
+    ...(state.allowedMoveDestinations ? { allowedMoveDestinations: [...state.allowedMoveDestinations] } : {}),
+    deadCount,
     players: orderedPlayers,
     deckCounts: {
       investigation: state.decks.investigation.length,

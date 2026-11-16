@@ -1,11 +1,13 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/state-machine.ts — Khởi tạo ván đấu Bóng Đêm KTX v4
-// từ phòng chờ (4–8 người chơi) với bộ chia phe cân bằng & bài khởi đầu.
+// features/boardgame/domain/state-machine.ts — Khởi tạo ván đấu Shadow Hunters
+// chuẩn gốc (4–8 người chơi): 0 bài khởi đầu, xáo 3 Cụm ngẫu nhiên, đủ 48 thẻ & 10 vai.
 // ---------------------------------------------------------------------------
 
-import type {
-  BoardGameDeckId,
-  BoardGameRoleId,
+import {
+  BOARD_GAME_VALID_LOCATIONS,
+  type BoardGameClusterPair,
+  type BoardGameDeckId,
+  type BoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
 import { listCardIdsByDeck } from './cards';
@@ -77,6 +79,16 @@ export function createInitialGameState(
     event: evDeck.shuffled,
   };
 
+  // Xáo ngẫu nhiên 6 khu vực vào 3 Cụm cặp đôi (Shadow Hunters base setup)
+  const shuffledZones = shuffleWithRng(BOARD_GAME_VALID_LOCATIONS, rngState);
+  rngState = shuffledZones.nextState;
+  const z = shuffledZones.shuffled;
+  const clusterPairs: BoardGameClusterPair[] = [
+    { clusterId: 'north', locationIds: [z[0], z[1]] },
+    { clusterId: 'central', locationIds: [z[2], z[3]] },
+    { clusterId: 'south', locationIds: [z[4], z[5]] },
+  ];
+
   const shuffledStarts = shuffleWithRng(
     LOCATIONS_CATALOG.map((l) => l.id),
     rngState,
@@ -91,10 +103,6 @@ export function createInitialGameState(
     const roleId = shuffledRoles.shuffled[i] ?? 'gac-truc-ban';
     const role = getRoleDesign(roleId);
 
-    // Phát 1 lá Khám Phá Kín mở đầu để có tương tác ngay từ vòng 1.
-    const startingCard = decks.investigation.shift();
-    const initialHand = startingCard ? [startingCard] : [];
-
     players[pIn.playerId] = {
       playerId: pIn.playerId,
       displayName: pIn.displayName,
@@ -105,7 +113,8 @@ export function createInitialGameState(
       maxHp: role.maxHp,
       woundsTaken: 0,
       location: shuffledStarts.shuffled[i % shuffledStarts.shuffled.length],
-      hand: initialHand,
+      // Chuẩn Shadow Hunters: 0 bài trên tay lúc khởi đầu
+      hand: [],
       equipped: [],
       revealed: false,
       alive: true,
@@ -114,32 +123,19 @@ export function createInitialGameState(
       skillUsedOnce: false,
       guardianShieldActive: false,
       attacksMade: 0,
+      attacksThisTurn: 0,
       investigationsCount: 0,
       consecutiveSameZoneRolls: 0,
       eliminatedRound: null,
       eliminatedByPlayerId: null,
       protegePlayerId: null,
       avengedProtegeKiller: false,
+      charlesKillWon: false,
       investigatedTargetIds: [],
       privateClues: [],
       appearance: pIn.appearance,
     };
     turnOrder.push(pIn.playerId);
-  }
-
-  // Chỉ định Người được bảo hộ ngầm cho Bình "Bảo Vệ" (ưu tiên không phải Wanderer khác).
-  for (const pid of turnOrder) {
-    const player = players[pid];
-    if (player.roleId !== 'lang-cuu-ho') continue;
-    const nonWanderers = turnOrder.filter(
-      (otherId) => otherId !== pid && players[otherId].faction !== 'wanderer',
-    );
-    const pool = nonWanderers.length > 0 ? nonWanderers : turnOrder.filter((o) => o !== pid);
-    if (pool.length > 0) {
-      const picked = shuffleWithRng(pool, rngState);
-      rngState = picked.nextState;
-      player.protegePlayerId = picked.shuffled[0] ?? null;
-    }
   }
 
   const state: AuthoritativeGameState = {
@@ -153,6 +149,9 @@ export function createInitialGameState(
     turnPhase: 'ROLL_MOVE',
     activePlayerId: turnOrder[0] ?? null,
     turnOrder,
+    clusterPairs,
+    firstDeadPlayerId: null,
+    extraTurnPending: false,
     players,
     decks,
     discards: {
@@ -176,7 +175,7 @@ export function createInitialGameState(
   appendPublicLog(
     state,
     'system',
-    `🌙 Ván Săn Bóng Đêm KTX bắt đầu (${turnOrder.length} người chơi)! Hãy tung xúc xắc 1d6 + 1d4 ở mỗi lượt để di chuyển.`,
+    `🌙 Ván Săn Bóng Đêm KTX bắt đầu (${turnOrder.length} SV · ${split.lanternGuard} Săn / ${split.mistOrder} Bóng / ${split.wanderer} Độc hành)! 3 Cụm đã xáo ngẫu nhiên — tung 1d6+1d4 để di chuyển.`,
     input.nowMs,
   );
   return state;

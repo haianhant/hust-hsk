@@ -1,25 +1,25 @@
 'use client';
 
 // ---------------------------------------------------------------------------
-// features/boardgame/ui/ActionPanel.tsx — Bảng Hành Động Theo Pha Xúc Xắc v4
-// Đứng ngay dưới bàn cờ, chữ to rõ ràng, mỗi nút đúng pha hiện tại, zero wall of text.
+// features/boardgame/ui/ActionPanel.tsx — Bảng Hành Động Chuẩn Shadow Hunters
+// Đứng cố định đáy bàn cờ, không bẫy thao tác, hỗ trợ đủ 10 Nhân vật & 48 Thẻ bài.
 // ---------------------------------------------------------------------------
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { getRoleDesign } from '@/features/boardgame/domain/roles';
 import {
+  areInSameCluster,
   BOARD_GAME_MAX_HAND,
+  DEFAULT_CLUSTER_PAIRS,
   getLocationDefinition,
+  getPairedLocationInCluster,
   LOCATIONS_CATALOG,
 } from '@/features/boardgame/domain/rules';
 import type {
   BoardGameActionPayload,
-  BoardGameLocationId,
   BoardGamePrivateGameView,
   BoardGamePublicGameView,
-  BoardGamePublicPlayerView,
 } from '@/shared/contracts/boardgame';
-import { LOCATION_VISUAL_META } from './BoardGameArt';
 import { resolveActionTargets } from './target-selection';
 
 export interface ActionPanelProps {
@@ -34,10 +34,6 @@ export interface ActionPanelProps {
   onToggleHandMask: () => void;
 }
 
-function getClusterForPlayer(p: BoardGamePublicPlayerView) {
-  return LOCATION_VISUAL_META[p.location].clusterId;
-}
-
 export function ActionPanel({
   publicGame,
   privateView,
@@ -50,8 +46,9 @@ export function ActionPanel({
   onToggleHandMask,
 }: ActionPanelProps) {
   const [confirmingReveal, setConfirmingReveal] = useState(false);
-  const [blastLocation, setBlastLocation] = useState<BoardGameLocationId>('lobby');
   const [healTargetId, setHealTargetId] = useState<string | null>(null);
+  const [stealEquipId, setStealEquipId] = useState<string>('');
+  const [bananaEquipId, setBananaEquipId] = useState<string>('');
 
   const selfPlayer = useMemo(
     () => publicGame.players.find((p) => p.playerId === selfPlayerId) ?? null,
@@ -68,19 +65,12 @@ export function ActionPanel({
 
   useEffect(() => {
     setHealTargetId(null);
+    setStealEquipId('');
+    setBananaEquipId('');
   }, [publicGame.turnNumber]);
 
   useEffect(() => {
     setConfirmingReveal(false);
-    const selfLoc = selfPlayer?.location;
-    const preferred =
-      (selectedTargetId && selectedTargetId !== selfPlayerId
-        ? aliveOthers.find((p) => p.playerId === selectedTargetId)
-        : null) ??
-      aliveOthers.find((p) => p.location !== selfLoc) ??
-      aliveOthers[0];
-    setBlastLocation(preferred?.location ?? 'lobby');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicGame.turnNumber, publicGame.turnPhase]);
 
   useEffect(() => {
@@ -89,17 +79,17 @@ export function ActionPanel({
     }
   }, [selectedTargetId, selfPlayerId]);
 
-  // Tầm đánh chuẩn kiểu Shadow Hunters: cùng Cụm Khu Vực, trừ khi mang Dây Cáp Đàn Hồi (ev-04).
+  const clusterPairs = publicGame.clusterPairs ?? DEFAULT_CLUSTER_PAIRS;
+
+  // Tầm đánh chuẩn Shadow Hunters: cùng Cụm, trừ Súng Bắn Đinh (ev-05 Handgun) bắn mọi Cụm khác.
   const attackableTargets = useMemo(() => {
     if (!selfPlayer) return [];
-    const selfCluster = getClusterForPlayer(selfPlayer);
-    const hasLongCable = selfPlayer.equipped.some((eq) => eq.id === 'ev-04');
-    if (hasLongCable) {
-      const remote = aliveOthers.filter((p) => getClusterForPlayer(p) !== selfCluster);
-      return remote.length > 0 ? remote : aliveOthers;
-    }
-    return aliveOthers.filter((p) => getClusterForPlayer(p) === selfCluster);
-  }, [aliveOthers, selfPlayer]);
+    const hasHandgun = selfPlayer.equipped.some((eq) => eq.id === 'ev-05');
+    return aliveOthers.filter((p) => {
+      const same = areInSameCluster(selfPlayer.location, p.location, clusterPairs);
+      return hasHandgun ? !same : same;
+    });
+  }, [aliveOthers, selfPlayer, clusterPairs]);
 
   if (isSpectator || !selfPlayer || !privateView) {
     return (
@@ -157,6 +147,9 @@ export function ActionPanel({
   }
 
   const currentLoc = getLocationDefinition(selfPlayer.location);
+  const pairedLoc = getLocationDefinition(
+    getPairedLocationInCluster(selfPlayer.location, clusterPairs),
+  );
   const roleDesign = getRoleDesign(privateView.roleId);
   const {
     validAttackTarget,
@@ -173,37 +166,49 @@ export function ActionPanel({
     healTargetId,
   });
   const equippedTargets = aliveOthers.filter((p) => p.equipped.length > 0);
+  const hasAnyHandCard = privateView.hand.length > 0;
+  const hasMasamune = selfPlayer.equipped.some((eq) => eq.id === 'ev-01');
+  const hasMachineGun = selfPlayer.equipped.some((eq) => eq.id === 'ev-06');
+  const hasHandgun = selfPlayer.equipped.some((eq) => eq.id === 'ev-05');
+  const attacksThisTurn = selfPlayer.attacksThisTurn ?? 0;
 
-  const sameClusterOthers = aliveOthers.filter(
-    (p) => getClusterForPlayer(p) === getClusterForPlayer(selfPlayer),
-  );
-  const canUseSkillNow =
-    privateView.revealed &&
-    roleDesign.targetMode !== 'passive' &&
-    privateView.skillCooldown === 0 &&
-    !(roleDesign.oncePerMatch && privateView.skillUsedOnce) &&
-    (publicGame.turnPhase === 'LOCATION_ACTION' || publicGame.turnPhase === 'MAIN_ACTION');
+  // Điều kiện kích hoạt kỹ năng theo từng nhân vật chuẩn Shadow Hunters
+  const canUseSkillNow = (() => {
+    if (!privateView.revealed || roleDesign.targetMode === 'passive') return false;
+    if (roleDesign.oncePerMatch && privateView.skillUsedOnce) return false;
+    if (privateView.skillCooldown > 0) return false;
+    switch (privateView.roleId) {
+      case 'gac-truc-ban': // Emi Teleport: Pha 1 ROLL_MOVE
+        return publicGame.turnPhase === 'ROLL_MOVE';
+      case 'lang-cuu-ho': // Charles Bloody Feast: sau đòn đánh 1 trong MAIN_ACTION & còn > 2 HP
+        return (
+          publicGame.turnPhase === 'MAIN_ACTION' &&
+          attacksThisTurn === 1 &&
+          privateView.hp > 2 &&
+          !hasAnyHandCard &&
+          attackableTargets.length > 0
+        );
+      default: // George, Franklin, Allie: ROLL_MOVE / LOCATION_ACTION / MAIN_ACTION
+        return (
+          publicGame.turnPhase === 'ROLL_MOVE' ||
+          publicGame.turnPhase === 'LOCATION_ACTION' ||
+          publicGame.turnPhase === 'MAIN_ACTION'
+        );
+    }
+  })();
 
-  const sameClusterEquippedOthers = sameClusterOthers.filter((p) => p.equipped.length > 0);
-  const skillCandidates =
-    privateView.roleId === 'lang-anh-san' ? sameClusterEquippedOthers : sameClusterOthers;
   const skillTarget =
     roleDesign.targetMode === 'self'
       ? selfPlayer
-      : roleDesign.targetMode === 'any-player'
-        ? validAnyTarget
-        : roleDesign.targetMode === 'any-other'
-          ? validOtherTarget
-          : skillCandidates.find((p) => p.playerId === selectedTargetId) ??
-            skillCandidates[0] ??
-            null;
+      : privateView.roleId === 'lang-cuu-ho'
+        ? validAttackTarget
+        : validOtherTarget;
 
   const rerollPrompt =
     publicGame.turnPhase === 'ROLL_MOVE' &&
     publicGame.lastDiceRoll?.rerollRequired &&
     publicGame.lastDiceRoll.playerId === selfPlayer.playerId;
 
-  const equippedPreciseStick = selfPlayer.equipped.some((eq) => eq.id === 'ev-01');
   const selectedIsSelf = selectedTargetId === selfPlayer.playerId;
   const selectedIsOutOfRange = Boolean(
     !selectedIsSelf &&
@@ -211,23 +216,16 @@ export function ActionPanel({
       !attackableTargets.some((t) => t.playerId === validOtherTarget.playerId),
   );
 
-  const protegePlayer = privateView.protegePlayerId
-    ? publicGame.players.find((p) => p.playerId === privateView.protegePlayerId) ?? null
-    : null;
-  const binhAvenging =
-    privateView.roleId === 'lang-cuu-ho' && Boolean(protegePlayer && !protegePlayer.alive);
-
   const attackWeaponBonus = selfPlayer.equipped.reduce((sum, eq) => {
     if (eq.id === 'eq-04') {
-      return sum + (privateView.revealed && privateView.faction === 'lantern-guard' ? 2 : 1);
+      return sum + (privateView.revealed && privateView.faction === 'lantern-guard' ? 2 : 0);
     }
-    if (eq.id === 'ev-02') return sum + 1;
-    if (eq.id === 'ev-03') return sum + 2;
-    if (eq.id === 'ev-04') return sum + 1;
+    if (eq.id === 'ev-02' || eq.id === 'ev-03' || eq.id === 'ev-04') return sum + 1;
+    if (eq.id === 'eq-01') return sum - 1;
     return sum;
   }, 0);
-  const attackDiceFormula = `${equippedPreciseStick ? '1d4' : '|1d6-1d4|'}${
-    attackWeaponBonus > 0 ? `+${attackWeaponBonus}` : ''
+  const attackDiceFormula = `${hasMasamune ? '1d4' : '|1d6-1d4|'}${
+    attackWeaponBonus > 0 ? `+${attackWeaponBonus}` : attackWeaponBonus < 0 ? `${attackWeaponBonus}` : ''
   }`;
   const attackTargetWarning = validAttackTarget
     ? validAttackTarget.guardianShieldActive
@@ -237,9 +235,27 @@ export function ActionPanel({
         : ''
     : '';
 
-  const isDrawZone =
-    currentLoc.deckHint !== 'power-9' && currentLoc.deckHint !== 'power-10';
-  const handIsFull = privateView.hand.length >= BOARD_GAME_MAX_HAND;
+  const mustResolveCardFirst = hasAnyHandCard;
+  const mustAttackMasamune =
+    hasMasamune && attacksThisTurn === 0 && attackableTargets.length > 0;
+  const canEndTurn = !mustResolveCardFirst && !mustAttackMasamune;
+
+  const allowedMoveList = publicGame.allowedMoveDestinations
+    ? LOCATIONS_CATALOG.filter(
+        (l) => l.id !== selfPlayer.location && publicGame.allowedMoveDestinations!.includes(l.id),
+      )
+    : LOCATIONS_CATALOG.filter((l) => l.id !== selfPlayer.location);
+  const isCompassChoice = Boolean(
+    publicGame.allowedMoveDestinations && publicGame.allowedMoveDestinations.length < 5,
+  );
+
+  const chosenStealEquipId =
+    validStealTarget && validStealTarget.equipped.some((e) => e.id === stealEquipId)
+      ? stealEquipId
+      : validStealTarget?.equipped[0]?.id ?? '';
+  const chosenBananaEquipId = selfPlayer.equipped.some((e) => e.id === bananaEquipId)
+    ? bananaEquipId
+    : selfPlayer.equipped[0]?.id ?? '';
 
   const renderTargetSelector = (title: string) => (
     <div className="space-y-1">
@@ -249,13 +265,13 @@ export function ActionPanel({
         </p>
         {selectedIsSelf ? (
           <span className="text-[11px] font-semibold text-emerald-300">
-            💚 Đang chọn Bản thân — các thẻ hồi sức ưu tiên tự hồi cho bạn
+            💚 Đang chọn Bản thân — các thẻ chỉ định mọi người sẽ nhắm vào bạn
           </span>
         ) : (
           selectedIsOutOfRange &&
           validOtherTarget && (
             <span className="text-[11px] font-semibold text-sky-300">
-              {validOtherTarget.displayName} ngoài tầm đánh cùng Cụm — chỉ dùng được thẻ/kỹ năng tầm xa
+              {validOtherTarget.displayName} ngoài tầm đánh ({hasHandgun ? 'đứng cùng Cụm' : 'đứng khác Cụm'})
             </span>
           )
         )}
@@ -312,136 +328,142 @@ export function ActionPanel({
     </div>
   );
 
-  const renderHandCardsSection = () => {
-    const blastOccupants = alivePlayers.filter((p) => p.location === blastLocation);
-    const blastHasSelf = blastOccupants.some((p) => p.playerId === selfPlayer.playerId);
-    const blastOthersCount = blastOccupants.filter(
-      (p) => p.playerId !== selfPlayer.playerId,
-    ).length;
-
-    return (
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
-            🃏 Bài trên tay ({privateView.hand.length}/{BOARD_GAME_MAX_HAND}):
-          </p>
-          {privateView.hand.length > 0 && (
-            <button
-              type="button"
-              onClick={onToggleHandMask}
-              className="px-2.5 py-1 min-h-[32px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 cursor-pointer"
-            >
-              {handMaskLocked ? '👁️ Hiện bài trên tay' : '🙈 Che bài'}
-            </button>
-          )}
-        </div>
-
-        {privateView.hand.length === 0 ? (
-          <p className="text-xs sm:text-sm text-slate-400">Chưa có thẻ nào trên tay.</p>
-        ) : handMaskLocked ? (
-          <div
-            data-testid="bg-hand-masked-banner"
-            className="rounded-xl border border-dashed border-amber-400/45 bg-slate-950/85 px-3 py-2 flex flex-wrap items-center justify-between gap-2.5"
+  const renderHandCardsSection = () => (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">
+          🃏 Thẻ vừa rút cần giải quyết ({privateView.hand.length}/{BOARD_GAME_MAX_HAND}):
+        </p>
+        {hasAnyHandCard && (
+          <button
+            type="button"
+            onClick={onToggleHandMask}
+            className="px-2.5 py-1 min-h-[32px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 cursor-pointer"
           >
-            <p className="text-xs sm:text-sm font-semibold text-amber-100">
-              🙈 Bài trên tay đang được che để chống nhìn màn hình ({privateView.hand.length} lá).
-            </p>
-            <button
-              type="button"
-              data-testid="bg-unmask-hand-btn"
-              onClick={onToggleHandMask}
-              className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black cursor-pointer"
-            >
-              👁️ Mở xem bài của tôi
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            {privateView.hand.map((card, idx) => {
-              const isInv = card.deck === 'investigation';
-              const isGear = !isInv && !card.isConsumable;
-              const isLocBlast = card.effectId === 'ev-07';
-              const isSingleHeal =
-                card.deck === 'equipment' &&
-                Boolean(card.isConsumable) &&
-                card.targetMode === 'single-player';
+            {handMaskLocked ? '👁️ Hiện thẻ vừa rút' : '🙈 Che thẻ'}
+          </button>
+        )}
+      </div>
 
-              return (
-                <div
-                  key={`${card.id}-${idx}`}
-                  className={`rounded-xl border p-2.5 flex flex-col justify-between gap-2 ${
-                    isInv
-                      ? 'border-emerald-500/45 bg-emerald-950/35'
-                      : card.deck === 'equipment'
-                        ? 'border-sky-500/45 bg-sky-950/35'
-                        : 'border-rose-500/45 bg-rose-950/35'
-                  }`}
-                >
-                  <div>
-                    <p className="text-xs sm:text-sm font-black text-white">{card.title}</p>
-                    <p className="text-xs text-slate-200 mt-0.5 leading-snug" title={card.summary}>
-                      {card.summary}
-                    </p>
-                  </div>
+      {!hasAnyHandCard ? (
+        <p className="text-xs text-slate-400">
+          Không còn thẻ chờ giải quyết — Trang bị rút được tự động đeo ngay lên bàn.
+        </p>
+      ) : handMaskLocked ? (
+        <div
+          data-testid="bg-hand-masked-banner"
+          className="rounded-xl border border-dashed border-amber-400/45 bg-slate-950/85 px-3 py-2 flex flex-wrap items-center justify-between gap-2.5"
+        >
+          <p className="text-xs sm:text-sm font-semibold text-amber-100">
+            🙈 Thẻ vừa rút đang được che để chống nhìn màn hình ({privateView.hand.length} lá).
+          </p>
+          <button
+            type="button"
+            data-testid="bg-unmask-hand-btn"
+            onClick={onToggleHandMask}
+            className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black cursor-pointer"
+          >
+            👁️ Mở xem bài của tôi
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          {privateView.hand.map((card, idx) => {
+            const isInv = card.deck === 'investigation';
+            const isGear = !isInv && !card.isConsumable;
+            const isFirstAid = card.id === 'eq-09';
+            const isBlessing = card.id === 'eq-08';
+            const isMoodyGoblin = card.id === 'ev-11';
+            const isBananaPeel = card.id === 'ev-12';
+            const isOptionalRevealCard =
+              card.id === 'eq-13' || card.id === 'eq-14' || card.id === 'ev-13';
+            const isOtherSinglePlayer =
+              !isInv &&
+              !isGear &&
+              !isFirstAid &&
+              !isMoodyGoblin &&
+              !isBananaPeel &&
+              card.targetMode === 'single-player';
 
-                  {isSingleHeal && (
-                    <select
-                      data-testid={`bg-heal-select-${card.id}`}
-                      value={validHealCardTarget.playerId}
-                      onChange={(e) => setHealTargetId(e.target.value)}
-                      className="w-full rounded-lg bg-slate-950 border border-emerald-500/50 px-2 py-1 text-xs font-bold text-emerald-100"
-                      aria-label="Chọn người nhận hồi sức"
-                    >
-                      <option value={selfPlayer.playerId}>
-                        💚 Bản thân: {selfPlayer.displayName} ({selfPlayer.woundsTaken} vết)
+            const disabled =
+              (isInv && !validOtherTarget) ||
+              (isOtherSinglePlayer && !validOtherTarget) ||
+              (isBlessing && !validOtherTarget);
+
+            return (
+              <div
+                key={`${card.id}-${idx}`}
+                className={`rounded-xl border p-2.5 flex flex-col justify-between gap-2 ${
+                  isInv
+                    ? 'border-emerald-500/45 bg-emerald-950/35'
+                    : card.deck === 'equipment'
+                      ? 'border-sky-500/45 bg-sky-950/35'
+                      : 'border-rose-500/45 bg-rose-950/35'
+                }`}
+              >
+                <div>
+                  <p className="text-xs sm:text-sm font-black text-white">{card.title}</p>
+                  <p className="text-xs text-slate-200 mt-0.5 leading-snug" title={card.summary}>
+                    {card.summary}
+                  </p>
+                </div>
+
+                {isFirstAid && (
+                  <select
+                    data-testid={`bg-heal-select-${card.id}`}
+                    value={validHealCardTarget.playerId}
+                    onChange={(e) => setHealTargetId(e.target.value)}
+                    className="w-full rounded-lg bg-slate-950 border border-emerald-500/50 px-2 py-1 text-xs font-bold text-emerald-100"
+                    aria-label="Chọn người đặt mốc 7 thương tích"
+                  >
+                    <option value={selfPlayer.playerId}>
+                      💚 Bản thân: {selfPlayer.displayName} ({selfPlayer.woundsTaken} vết)
+                    </option>
+                    {aliveOthers.map((p) => (
+                      <option key={p.playerId} value={p.playerId}>
+                        🩺 {p.displayName} ({p.woundsTaken} vết)
                       </option>
-                      {aliveOthers.map((p) => (
-                        <option key={p.playerId} value={p.playerId}>
-                          🤝 {p.displayName} ({p.woundsTaken} vết)
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                    ))}
+                  </select>
+                )}
 
-                  {isLocBlast && (
-                    <select
-                      data-testid="bg-blast-loc-select"
-                      value={blastLocation}
-                      onChange={(e) => setBlastLocation(e.target.value as BoardGameLocationId)}
-                      className="w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1 text-xs font-bold text-slate-100"
-                      aria-label="Chọn khu vực ném thẻ Mất Điện"
-                    >
-                      {LOCATIONS_CATALOG.map((l) => {
-                        const occ = alivePlayers.filter((p) => p.location === l.id);
-                        const hasSelfHere = occ.some((p) => p.playerId === selfPlayer.playerId);
-                        const othersHere = occ.filter((p) => p.playerId !== selfPlayer.playerId);
-                        const occLabel =
-                          occ.length === 0
-                            ? '(Trống)'
-                            : hasSelfHere
-                              ? `(⚠️ CÓ BẠN${othersHere.length ? ` + ${othersHere.map((p) => p.displayName).join(', ')}` : ''})`
-                              : `(🎯 ${othersHere.map((p) => p.displayName).join(', ')})`;
-                        return (
-                          <option key={l.id} value={l.id}>
-                            Ô {l.diceLabel} · {l.name} {occLabel}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  )}
+                {isMoodyGoblin && validStealTarget && validStealTarget.equipped.length > 0 && (
+                  <select
+                    data-testid="bg-steal-equip-select"
+                    value={chosenStealEquipId}
+                    onChange={(e) => setStealEquipId(e.target.value)}
+                    className="w-full rounded-lg bg-slate-950 border border-sky-500/50 px-2 py-1 text-xs font-bold text-sky-100"
+                    aria-label="Chọn món Trang bị muốn cướp"
+                  >
+                    {validStealTarget.equipped.map((eq, i) => (
+                      <option key={`${eq.id}-${i}`} value={eq.id}>
+                        🧤 Lấy "{eq.title}" từ {validStealTarget.displayName}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
+                {isBananaPeel && selfPlayer.equipped.length > 0 && (
+                  <select
+                    data-testid="bg-banana-equip-select"
+                    value={chosenBananaEquipId}
+                    onChange={(e) => setBananaEquipId(e.target.value)}
+                    className="w-full rounded-lg bg-slate-950 border border-amber-500/50 px-2 py-1 text-xs font-bold text-amber-100"
+                    aria-label="Chọn Trang bị để giao"
+                  >
+                    {selfPlayer.equipped.map((eq, i) => (
+                      <option key={`${eq.id}-${i}`} value={eq.id}>
+                        🍌 Giao "{eq.title}" → {validOtherTarget?.displayName ?? '?'}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <div className="flex flex-col gap-1.5">
                   <button
                     type="button"
                     data-testid={`bg-use-card-${card.id}`}
-                    disabled={
-                      (isInv && !validOtherTarget) ||
-                      (!isInv &&
-                        !isGear &&
-                        !isLocBlast &&
-                        !isSingleHeal &&
-                        card.targetMode === 'single-player' &&
-                        !validOtherTarget)
-                    }
+                    disabled={disabled}
                     onClick={() => {
                       if (isInv && validOtherTarget) {
                         onAction({
@@ -451,19 +473,31 @@ export function ActionPanel({
                         });
                       } else if (isGear) {
                         onAction({ type: 'EQUIP_CARD', cardId: card.id });
-                      } else if (isLocBlast) {
-                        onAction({
-                          type: 'USE_CARD',
-                          cardId: card.id,
-                          targetLocation: blastLocation,
-                        });
-                      } else if (isSingleHeal) {
+                      } else if (isFirstAid) {
                         onAction({
                           type: 'USE_CARD',
                           cardId: card.id,
                           targetPlayerId: validHealCardTarget.playerId,
                         });
-                      } else if (card.targetMode === 'single-player' && validOtherTarget) {
+                      } else if (isMoodyGoblin) {
+                        onAction({
+                          type: 'USE_CARD',
+                          cardId: card.id,
+                          ...(validStealTarget
+                            ? {
+                                targetPlayerId: validStealTarget.playerId,
+                                ...(chosenStealEquipId ? { equipCardId: chosenStealEquipId } : {}),
+                              }
+                            : {}),
+                        });
+                      } else if (isBananaPeel) {
+                        onAction({
+                          type: 'USE_CARD',
+                          cardId: card.id,
+                          ...(validOtherTarget ? { targetPlayerId: validOtherTarget.playerId } : {}),
+                          ...(chosenBananaEquipId ? { equipCardId: chosenBananaEquipId } : {}),
+                        });
+                      } else if (isOtherSinglePlayer && validOtherTarget) {
                         onAction({
                           type: 'USE_CARD',
                           cardId: card.id,
@@ -473,44 +507,51 @@ export function ActionPanel({
                         onAction({ type: 'USE_CARD', cardId: card.id });
                       }
                     }}
-                    className={`w-full px-3 py-1.5 min-h-[36px] rounded-xl border text-xs font-black transition cursor-pointer ${
-                      isLocBlast && blastHasSelf
-                        ? 'bg-rose-800/80 hover:bg-rose-700 border-rose-400/60 text-amber-100'
-                        : 'bg-slate-800 hover:bg-slate-700 border-white/15 text-white'
-                    }`}
+                    className="w-full px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-45 border border-white/15 text-xs font-black text-white transition cursor-pointer"
                   >
                     {isInv
                       ? `🔍 Đưa kín → ${validOtherTarget?.displayName ?? '?'}`
                       : isGear
                         ? '🎒 Trang bị ngay'
-                        : isLocBlast
-                          ? blastHasSelf
-                            ? `⚠️ Nổ Ô ${LOCATION_VISUAL_META[blastLocation].diceLabel} (Trúng cả Bạn!)`
-                            : blastOthersCount === 0
-                              ? `💥 Nổ Ô ${LOCATION_VISUAL_META[blastLocation].diceLabel} (Trống)`
-                              : `💥 Nổ Ô ${LOCATION_VISUAL_META[blastLocation].diceLabel} (${blastOthersCount} người)`
-                          : isSingleHeal
-                            ? `💚 Hồi → ${
-                                validHealCardTarget.playerId === selfPlayer.playerId
-                                  ? `${selfPlayer.displayName} (Bạn)`
-                                  : validHealCardTarget.displayName
-                              }`
-                            : card.id === 'eq-07'
-                              ? '💚 Hồi cả Cụm'
-                              : card.id === 'eq-08'
-                                ? '💚 Tự hồi sức'
-                                : card.targetMode === 'single-player'
-                                  ? `⚡ Kích hoạt → ${validOtherTarget?.displayName ?? '?'}`
-                                  : '⚡ Kích hoạt ngay'}
+                        : isFirstAid
+                          ? `🩺 Mốc 7 → ${
+                              validHealCardTarget.playerId === selfPlayer.playerId
+                                ? `${selfPlayer.displayName} (Bạn)`
+                                : validHealCardTarget.displayName
+                            }`
+                          : isMoodyGoblin
+                            ? validStealTarget
+                              ? `👺 Cướp đồ từ ${validStealTarget.displayName}`
+                              : '👺 Bỏ qua (Chưa ai có đồ)'
+                            : isBananaPeel
+                              ? selfPlayer.equipped.length === 0
+                                ? '🍌 Không có đồ → Tự nhận 1 ST'
+                                : `🍌 Giao đồ → ${validOtherTarget?.displayName ?? '?'}`
+                              : isOtherSinglePlayer
+                                ? `⚡ Kích hoạt → ${validOtherTarget?.displayName ?? '?'}`
+                                : '⚡ Kích hoạt ngay'}
                   </button>
+
+                  {isOptionalRevealCard && (
+                    <button
+                      type="button"
+                      data-testid={`bg-skip-card-${card.id}`}
+                      onClick={() =>
+                        onAction({ type: 'USE_CARD', cardId: card.id, skipEffect: true })
+                      }
+                      className="w-full px-3 py-1 min-h-[32px] rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-bold text-slate-300 transition cursor-pointer"
+                    >
+                      🙈 Không kích hoạt (Giữ kín vai / Hủy thẻ)
+                    </button>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  };
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <section
@@ -533,7 +574,11 @@ export function ActionPanel({
 
         <div className="flex items-center gap-2 flex-wrap">
           {!privateView.revealed &&
-            (confirmingReveal ? (
+            (privateView.roleId === 'lang-tien-phong' ? (
+              <span className="px-2.5 py-1 rounded-xl bg-teal-950/60 border border-teal-500/40 text-teal-200 text-[11px] font-bold">
+                🗣️ Tự lộ khi có người ngã
+              </span>
+            ) : confirmingReveal ? (
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   type="button"
@@ -580,21 +625,19 @@ export function ActionPanel({
               }}
               className={`px-3 py-1.5 min-h-[36px] rounded-xl disabled:opacity-45 text-white text-xs sm:text-sm font-bold transition cursor-pointer ${
                 privateView.roleId === 'lang-cuu-ho'
-                  ? binhAvenging
-                    ? 'bg-rose-600 hover:bg-rose-500'
-                    : 'bg-emerald-600 hover:bg-emerald-500'
+                  ? 'bg-rose-600 hover:bg-rose-500'
                   : 'bg-violet-600 hover:bg-violet-500'
               }`}
             >
-              {privateView.roleId === 'lang-cuu-ho'
-                ? binhAvenging
-                  ? `⚔️ Báo Thù: 2 ST → ${skillTarget?.displayName ?? '?'}`
-                  : `🛟 Hộ Vệ: Hồi 2 → ${skillTarget?.displayName ?? '?'} (Bạn chịu 1 vết)`
-                : `✨ ${roleDesign.skillName}${
-                    skillTarget && roleDesign.targetMode !== 'self'
-                      ? ` (${skillTarget.displayName})`
-                      : ''
-                  }`}
+              {privateView.roleId === 'gac-truc-ban'
+                ? `✨ Bước Nhảy Tắt → Ô ${pairedLoc.diceLabel} (${pairedLoc.shortName})`
+                : privateView.roleId === 'lang-cuu-ho'
+                  ? `🩸 Đòn Đánh Đẫm Máu (-2 HP → Chém bồi ${skillTarget?.displayName ?? '?'})`
+                  : `✨ ${roleDesign.skillName}${
+                      skillTarget && roleDesign.targetMode !== 'self'
+                        ? ` (${skillTarget.displayName})`
+                        : ''
+                    }`}
             </button>
           )}
         </div>
@@ -602,33 +645,42 @@ export function ActionPanel({
 
       {/* PHA 1: TUNG XÚC XẮC DI CHUYỂN */}
       {publicGame.turnPhase === 'ROLL_MOVE' && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <p className="text-xs sm:text-sm text-slate-200 font-semibold">
-            {rerollPrompt
-              ? `🎲 Vừa tung trùng ô ${currentLoc.name} (${currentLoc.diceLabel}) — bấm ĐỔ LẠI xúc xắc ngay!`
-              : 'Bước 1: Tung đồng thời 1d6 + 1d4 (hoặc bấm thẳng vào Khay Xúc Xắc trên bàn) để di chuyển.'}
-          </p>
-          <button
-            type="button"
-            data-testid="bg-roll-dice-btn"
-            onClick={() => onAction({ type: 'ROLL_DICE' })}
-            className="w-full sm:w-auto shrink-0 px-5 py-2.5 min-h-[42px] rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-sm sm:text-base font-black shadow-lg transition cursor-pointer"
-          >
-            {rerollPrompt
-              ? '🎲 ĐỔ LẠI XÚC XẮC (1d6 + 1d4)'
-              : '🎲 TUNG XÚC XẮC (1d6 + 1d4)'}
-          </button>
+        <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <p className="text-xs sm:text-sm text-slate-200 font-semibold">
+              {rerollPrompt
+                ? `🎲 Vừa tung trùng ô ${currentLoc.name} (${currentLoc.diceLabel}) — bấm ĐỔ LẠI xúc xắc ngay!`
+                : 'Bước 1: Tung đồng thời 1d6 + 1d4 (hoặc bấm thẳng vào Khay Xúc Xắc trên bàn) để di chuyển.'}
+            </p>
+            <button
+              type="button"
+              data-testid="bg-roll-dice-btn"
+              onClick={() => onAction({ type: 'ROLL_DICE' })}
+              className="w-full sm:w-auto shrink-0 px-5 py-2.5 min-h-[42px] rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-sm sm:text-base font-black shadow-lg transition cursor-pointer"
+            >
+              {rerollPrompt
+                ? '🎲 ĐỔ LẠI XÚC XẮC (1d6 + 1d4)'
+                : selfPlayer.equipped.some((e) => e.id === 'eq-05')
+                  ? '🧭 TUNG XÚC XẮC x2 (LA BÀN)'
+                  : '🎲 TUNG XÚC XẮC (1d6 + 1d4)'}
+            </button>
+          </div>
+          {canUseSkillNow &&
+            roleDesign.targetMode !== 'self' &&
+            renderTargetSelector('Chọn mục tiêu cho Kỹ năng đầu lượt:')}
         </div>
       )}
 
-      {/* PHA 1B: CHỌN KHU VỰC TỰ DO KHI TỔNG XÚC XẮC = 7 */}
+      {/* PHA 1B: CHỌN KHU VỰC (TỔNG 7 HOẶC LA BÀN ĐỊNH HƯỚNG) */}
       {publicGame.turnPhase === 'CHOOSE_MOVE' && (
         <div className="space-y-2">
           <p className="text-xs sm:text-sm font-bold text-amber-200">
-            ✨ Tổng xúc xắc bằng 7! Chọn khu vực bên dưới hoặc bấm thẳng lên bàn cờ để di chuyển tới:
+            {isCompassChoice
+              ? `🧭 La Bàn Định Hướng! Chọn 1 trong ${allowedMoveList.length} khu vực bên dưới hoặc bấm thẳng lên bàn cờ:`
+              : '✨ Tổng xúc xắc bằng 7! Chọn khu vực bên dưới hoặc bấm thẳng lên bàn cờ để di chuyển tới:'}
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-            {LOCATIONS_CATALOG.filter((l) => l.id !== selfPlayer.location).map((loc) => (
+            {allowedMoveList.map((loc) => (
               <button
                 key={loc.id}
                 type="button"
@@ -691,24 +743,41 @@ export function ActionPanel({
           )}
 
           {currentLoc.deckHint === 'power-10' && equippedTargets.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {equippedTargets.map((p) => {
-                const selected = validStealTarget?.playerId === p.playerId;
-                return (
-                  <button
-                    key={p.playerId}
-                    type="button"
-                    onClick={() => onSelectTarget(p.playerId)}
-                    className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
-                      selected
-                        ? 'bg-sky-600 border-sky-300 text-white'
-                        : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
-                    }`}
-                  >
-                    {p.displayName} ({p.equipped.length} đồ)
-                  </button>
-                );
-              })}
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap gap-1.5">
+                {equippedTargets.map((p) => {
+                  const selected = validStealTarget?.playerId === p.playerId;
+                  return (
+                    <button
+                      key={p.playerId}
+                      type="button"
+                      onClick={() => onSelectTarget(p.playerId)}
+                      className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                        selected
+                          ? 'bg-sky-600 border-sky-300 text-white'
+                          : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                      }`}
+                    >
+                      {p.displayName} ({p.equipped.length} đồ)
+                    </button>
+                  );
+                })}
+              </div>
+              {validStealTarget && validStealTarget.equipped.length > 1 && (
+                <select
+                  data-testid="bg-loc-steal-select"
+                  value={chosenStealEquipId}
+                  onChange={(e) => setStealEquipId(e.target.value)}
+                  className="rounded-lg bg-slate-950 border border-sky-500/50 px-2.5 py-1 text-xs font-bold text-sky-100"
+                  aria-label="Chọn Trang bị muốn cướp tại Sân Bóng"
+                >
+                  {validStealTarget.equipped.map((eq, i) => (
+                    <option key={`${eq.id}-${i}`} value={eq.id}>
+                      🧤 Cướp "{eq.title}"
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 
@@ -787,6 +856,7 @@ export function ActionPanel({
                     type: 'USE_LOC_POWER',
                     targetPlayerId: validStealTarget.playerId,
                     mode: 'steal',
+                    ...(chosenStealEquipId ? { equipCardId: chosenStealEquipId } : {}),
                   })
                 }
                 className="px-3.5 py-2 min-h-[40px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
@@ -804,32 +874,20 @@ export function ActionPanel({
             </button>
           </div>
 
-          {isDrawZone && handIsFull && (
-            <p
-              data-testid="bg-hand-full-warning"
-              className="rounded-xl border border-amber-400/50 bg-amber-950/40 px-3 py-1.5 text-xs font-bold text-amber-200"
-            >
-              ⚠️ Tay đang đầy {BOARD_GAME_MAX_HAND}/{BOARD_GAME_MAX_HAND} lá — rút thêm sẽ tự bỏ lá cũ nhất
-              {!handMaskLocked && privateView.hand[0] ? ` ("${privateView.hand[0].title}")` : ''}. Bạn có thể dùng bớt bài bên dưới trước khi rút!
-            </p>
-          )}
-
           {currentLoc.deckHint !== 'power-9' &&
-            ((privateView.hand.length > 0 && !handMaskLocked) ||
+            ((hasAnyHandCard && !handMaskLocked) ||
               (canUseSkillNow && roleDesign.targetMode !== 'self')) &&
             renderTargetSelector('Chọn mục tiêu cho Kỹ năng / Thẻ:')}
 
-          {privateView.hand.length > 0 && renderHandCardsSection()}
+          {hasAnyHandCard && renderHandCardsSection()}
         </div>
       )}
 
-      {/* PHA 3: DÙNG BÀI / TẤN CÔNG / KẾT THÚC LƯỢT */}
+      {/* PHA 3: GIẢI QUYẾT THẺ VỪA RÚT / TẤN CÔNG / KẾT THÚC LƯỢT */}
       {publicGame.turnPhase === 'MAIN_ACTION' && (
         <div className="space-y-2.5">
-          {/* Chọn mục tiêu nhanh cho Thẻ & Đòn Đánh */}
           {renderTargetSelector('Chọn mục tiêu hành động / tấn công:')}
 
-          {/* Bài trên tay (kèm lớp che chống nhìn trộm màn hình) */}
           {renderHandCardsSection()}
 
           {/* Hàng nút chính cuối pha: Tấn công hoặc Kết thúc lượt */}
@@ -837,7 +895,7 @@ export function ActionPanel({
             <button
               type="button"
               data-testid="bg-attack-btn"
-              disabled={!validAttackTarget}
+              disabled={!validAttackTarget || mustResolveCardFirst || attacksThisTurn >= 1}
               onClick={() => {
                 if (validAttackTarget) {
                   onAction({ type: 'ATTACK', targetPlayerId: validAttackTarget.playerId });
@@ -845,18 +903,27 @@ export function ActionPanel({
               }}
               className="px-4 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs sm:text-sm font-black shadow transition cursor-pointer"
             >
-              {validAttackTarget
-                ? `⚔️ Tấn công ${validAttackTarget.displayName} (${attackDiceFormula}${attackTargetWarning})`
-                : '⚔️ Chưa có mục tiêu cùng Cụm'}
+              {attacksThisTurn >= 1
+                ? '⚔️ Đã tấn công trong lượt'
+                : validAttackTarget
+                  ? `${hasMachineGun ? `🔫 Xả đạn ${attackableTargets.length} người` : `⚔️ Tấn công ${validAttackTarget.displayName}`} (${attackDiceFormula}${attackTargetWarning})`
+                  : hasHandgun
+                    ? '🔫 Chưa có mục tiêu ở Cụm khác'
+                    : '⚔️ Chưa có mục tiêu cùng Cụm'}
             </button>
 
             <button
               type="button"
               data-testid="bg-end-turn-btn"
+              disabled={!canEndTurn}
               onClick={() => onAction({ type: 'END_TURN' })}
-              className="px-4 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-black shadow transition cursor-pointer"
+              className="px-4 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-45 text-white text-xs sm:text-sm font-black shadow transition cursor-pointer"
             >
-              ✔️ Kết thúc lượt
+              {mustResolveCardFirst
+                ? '🃏 Hãy dùng hết thẻ vừa rút'
+                : mustAttackMasamune
+                  ? '⚔️ Bắt buộc đánh (Masamune)'
+                  : '✔️ Kết thúc lượt'}
             </button>
           </div>
         </div>

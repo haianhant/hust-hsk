@@ -6,6 +6,7 @@
 
 import type {
   BoardGameCardPublicMeta,
+  BoardGameClusterPair,
   BoardGameDeckId,
   BoardGameDiceRollEvent,
   BoardGameFactionId,
@@ -23,33 +24,50 @@ import type {
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
 
 export type GameCardEffectKind =
-  | 'inv_is_hunter'
-  | 'inv_is_shadow'
-  | 'inv_is_wanderer'
-  | 'inv_hunter_or_wanderer'
-  | 'inv_shadow_or_wanderer'
-  | 'inv_hp_ge_12'
-  | 'inv_hp_le_11'
-  | 'inv_unrevealed'
-  | 'eq_armor'
-  | 'eq_heavy_shield'
-  | 'eq_event_ward'
-  | 'eq_captain_badge'
-  | 'ev_heal_2'
-  | 'ev_heal_3'
-  | 'ev_cluster_heal_2'
-  | 'ev_full_heal_hunter'
-  | 'eq_precise_stick'
-  | 'eq_wrench'
-  | 'eq_iron_bar'
-  | 'eq_long_cable'
-  | 'eq_steal_hook'
-  | 'ev_snipe_2'
-  | 'ev_location_blast_2'
-  | 'ev_drain_2';
+  | 'inv_anger'
+  | 'inv_blackmail'
+  | 'inv_greed'
+  | 'inv_slap'
+  | 'inv_spell'
+  | 'inv_exorcism'
+  | 'inv_aid'
+  | 'inv_nurturance'
+  | 'inv_huddle'
+  | 'inv_bully'
+  | 'inv_tough_lesson'
+  | 'inv_prediction'
+  | 'eq_holy_robe'
+  | 'eq_fortune_brooch'
+  | 'eq_talisman'
+  | 'eq_spear'
+  | 'eq_compass'
+  | 'eq_silver_rosary'
+  | 'eq_holy_water'
+  | 'eq_blessing'
+  | 'eq_first_aid'
+  | 'eq_guardian_angel'
+  | 'eq_flare'
+  | 'eq_mirror'
+  | 'eq_advent'
+  | 'eq_chocolate'
+  | 'eq_concealed_knowledge'
+  | 'ev_masamune'
+  | 'ev_butcher_knife'
+  | 'ev_chainsaw'
+  | 'ev_rusted_axe'
+  | 'ev_handgun'
+  | 'ev_machine_gun'
+  | 'ev_vampire_bat'
+  | 'ev_spider'
+  | 'ev_dynamite'
+  | 'ev_spiritual_doll'
+  | 'ev_moody_goblin'
+  | 'ev_banana_peel'
+  | 'ev_diabolic_ritual';
 
 export interface GameCardDefinition extends BoardGameCardPublicMeta {
   effectKind: GameCardEffectKind;
+  copies: number;
 }
 
 export interface ZoneClusterDefinition {
@@ -105,12 +123,14 @@ export interface AuthoritativePlayerState {
   skillUsedOnce: boolean;
   guardianShieldActive: boolean;
   attacksMade: number;
+  attacksThisTurn: number;
   investigationsCount: number;
   consecutiveSameZoneRolls: number;
   eliminatedRound: number | null;
   eliminatedByPlayerId: string | null;
   protegePlayerId: string | null;
   avengedProtegeKiller: boolean;
+  charlesKillWon: boolean;
   investigatedTargetIds: string[];
   privateClues: BoardGamePrivateClueEntry[];
   appearance: RemoteAppearance;
@@ -127,6 +147,10 @@ export interface AuthoritativeGameState {
   turnPhase: BoardGameTurnPhase;
   activePlayerId: string | null;
   turnOrder: string[];
+  clusterPairs: BoardGameClusterPair[];
+  allowedMoveDestinations?: BoardGameLocationId[];
+  firstDeadPlayerId: string | null;
+  extraTurnPending: boolean;
   players: Record<string, AuthoritativePlayerState>;
   decks: Record<BoardGameDeckId, string[]>;
   discards: Record<BoardGameDeckId, string[]>;

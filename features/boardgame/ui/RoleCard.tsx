@@ -184,13 +184,19 @@ export function RoleCard({
             <p className="text-sm text-slate-100 leading-snug">{privateView.secretGoalText}</p>
             {privateView.roleId === 'lang-anh-san' && (
               <p className="text-xs font-bold text-amber-300 mt-1.5">
-                Tiến độ thắng (Hải): {privateView.equipped.length} / 3+ món
+                Tiến độ thắng (Hải): {privateView.equipped.length} / 5 món
               </p>
             )}
-            {privateView.roleId === 'lang-cuu-ho' && privateView.protegeDisplayName && (
+            {privateView.roleId === 'lang-cuu-ho' && (
+              <p className="text-xs font-bold text-orange-300 mt-1.5">
+                💀 Tổng người đã gục trên bàn: {publicGame.deadCount} / 3+ (giết từ xác thứ 3 để thắng!)
+              </p>
+            )}
+            {privateView.roleId === 'lang-tien-phong' && (
               <p className="text-xs font-bold text-teal-300 mt-1.5">
-                🛡️ Người được bảo hộ ngầm: {privateView.protegeDisplayName}
-                {privateView.avengedProtegeKiller ? ' (Đã báo thù!)' : ''}
+                {publicGame.deadCount === 0
+                  ? '⚡ Chưa ai gục — nếu bạn gục ĐẦU TIÊN, bạn thắng ngay lập tức!'
+                  : `🗣️ Đã có ${publicGame.deadCount} người gục — đồng hành cùng Đội Săn Đêm tới cuối trận!`}
               </p>
             )}
           </div>
@@ -203,7 +209,9 @@ export function RoleCard({
               </p>
               <span className="text-xs font-bold text-slate-300">
                 {!privateView.revealed
-                  ? 'Cần lật vai'
+                  ? privateView.roleId === 'lang-tien-phong'
+                    ? 'Tự lộ khi có người ngã'
+                    : 'Cần lật vai'
                   : roleDesign.targetMode === 'passive'
                     ? 'Nội tại'
                     : roleDesign.oncePerMatch && privateView.skillUsedOnce

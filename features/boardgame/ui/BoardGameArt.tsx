@@ -8,6 +8,7 @@
 
 import React from 'react';
 import type {
+  BoardGameClusterPair,
   BoardGameDeckId,
   BoardGameFactionId,
   BoardGameLocationId,
@@ -67,66 +68,73 @@ export interface RoleVisualMeta {
 export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   'gac-ky-thuat': {
     codeName: 'Minh "Kỹ Thuật"',
-    title: 'Đội trưởng Xung Kích',
+    title: 'George · 14 HP',
     accentHex: '#34d399',
     motif: 'Cờ lê & Ánh đèn pha',
     shortAbility: '1 lần/trận: Tung 1d4 gây sát thương toàn bàn',
   },
   'gac-truc-ban': {
     codeName: 'Lan "Trực Ban"',
-    title: 'Chốt Trực Kiên Cố',
+    title: 'Emi · 10 HP',
     accentHex: '#10b981',
-    motif: 'Sổ trực & Lá chắn chốt',
-    shortAbility: '1 lần/trận: Bật lá chắn miễn nhiễm sát thương 1 vòng',
+    motif: 'Thẻ từ & Cổng dịch chuyển',
+    shortAbility: 'Pha 1: Bước thẳng sang ô cặp đôi cùng Cụm',
   },
   'gac-radio': {
     codeName: 'Vy "Radio"',
-    title: 'Trinh Sát Cao Áp',
+    title: 'Franklin · 12 HP',
     accentHex: '#38bdf8',
-    motif: 'Tai nghe & Xung cao áp',
+    motif: 'Tai nghe & Sét cao áp',
     shortAbility: '1 lần/trận: Tung 1d6 gây sát thương toàn bàn',
   },
   'suong-an-danh': {
     codeName: 'Tú "Ẩn Danh"',
-    title: 'Bóng Đêm Hút Sinh Lực',
+    title: 'Vampire · 13 HP',
     accentHex: '#fb7185',
     motif: 'Bóng áo choàng đêm',
     shortAbility: 'Nội tại: Đánh trúng (> 0) hồi lại 2 máu',
   },
   'suong-tin-gia': {
     codeName: 'Khánh "Tin Giả"',
-    title: 'Kẻ Ngụy Trang Đa Tầng',
+    title: 'Unknown · 11 HP',
     accentHex: '#f43f5e',
-    motif: 'Mặt nạ & Tín hiệu nhiễu',
-    shortAbility: 'Úp vai né Thẻ Khám Phá · Lật: 2 dmg cùng Cụm (2 vòng)',
+    motif: 'Mặt nạ Ngụy Trang',
+    shortAbility: 'Nội tại khi úp vai: Nói dối trước Thẻ Khám Phá Kín',
   },
   'suong-gac-cong': {
     codeName: 'Dũng "Gác Cổng"',
-    title: 'Thủ Lĩnh Phản Kích',
+    title: 'Werewolf · 14 HP',
     accentHex: '#a78bfa',
     motif: 'Ổ khóa sắt & Khiên phản đòn',
     shortAbility: 'Nội tại: Bị đánh thường & sống → đánh trả |1d6-1d4|',
   },
   'lang-anh-san': {
     codeName: 'Hải "Sưu Tầm"',
-    title: 'Thợ Săn Trang Bị',
+    title: 'Bob · 10 HP',
     accentHex: '#fbbf24',
     motif: 'Túi đồ nghề KTX',
-    shortAbility: 'Vòng 3+ thắng đủ 3 đồ · Đánh >=2 dmg hoặc cướp đồ cùng Cụm',
+    shortAbility: 'Thắng đủ 5 đồ · Cướp đồ thay ST (4–6p) / lột sạch khi giết (7–8p)',
   },
   'lang-quan-sat': {
     codeName: 'Trang "Kiên Cường"',
-    title: 'Người Sống Sót Bền Bỉ',
+    title: 'Allie · 8 HP',
     accentHex: '#f59e0b',
     motif: 'Ngọn lửa hồi sinh',
-    shortAbility: '1 lần/trận: Hồi sạch toàn bộ thương tích về 0',
+    shortAbility: '1 lần/trận: Hồi sạch thương tích về 0 · Thắng nếu sống cuối trận',
   },
   'lang-cuu-ho': {
-    codeName: 'Bình "Bảo Vệ"',
-    title: 'Vệ Sĩ Thầm Lặng',
+    codeName: 'Bách "Cuồng Chiến"',
+    title: 'Charles · 11 HP',
+    accentHex: '#fb923c',
+    motif: 'Dấu ấn Đẫm Máu',
+    shortAbility: 'Tự mất 2 máu để chém bồi đòn thứ 2 · Thắng khi giết xác >= 3',
+  },
+  'lang-tien-phong': {
+    codeName: 'Đạt "Cảm Tử"',
+    title: 'Daniel · 13 HP',
     accentHex: '#2dd4bf',
-    motif: 'Dây bảo hộ & Báo thù',
-    shortAbility: '2 vòng: Hồi 2 máu đồng đội cùng Cụm (hoặc 2 dmg nếu đã ngã)',
+    motif: 'Còi báo động Cảm Tử',
+    shortAbility: 'Tự lộ khi có người đầu tiên ngã · Thắng nếu chết ĐẦU TIÊN',
   },
 };
 
@@ -157,16 +165,16 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     badgeText: 'Khám Phá',
   },
   breaker: {
-    name: 'Tủ Cầu Dao Tổng',
-    shortName: 'Cầu Dao',
+    name: 'Cổng Hầm KTX',
+    shortName: 'Cổng Hầm',
     clusterId: 'north',
     clusterTitle: 'Cụm Bắc',
     diceLabel: '4–5',
-    accentHex: '#f43f5e',
-    bgGradient: 'from-rose-950/85 via-slate-900/95 to-slate-950',
-    actionTitle: 'Rút Thẻ Đột Kích',
-    actionDesc: 'Rút 1 Thẻ Đột Kích (Vũ khí / Sự kiện)',
-    badgeText: 'Đột Kích',
+    accentHex: '#f59e0b',
+    bgGradient: 'from-amber-950/85 via-slate-900/95 to-slate-950',
+    actionTitle: 'Tự Chọn 1 Chồng Bài',
+    actionDesc: 'Chọn rút 1 thẻ Khám Phá, Cung Ứng hoặc Đột Kích',
+    badgeText: 'Tự Chọn',
   },
   lobby: {
     name: 'Sảnh Tầng 1',
@@ -177,20 +185,20 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     accentHex: '#06b6d4',
     bgGradient: 'from-cyan-950/90 via-slate-900/95 to-slate-950',
     actionTitle: 'Rút Thẻ Cung Ứng',
-    actionDesc: 'Rút 1 Thẻ Cung Ứng (Giáp / Hồi sức)',
+    actionDesc: 'Rút 1 Thẻ Cung Ứng (Trang bị / Hồi sức)',
     badgeText: 'Cung Ứng',
   },
   canteen: {
-    name: 'Căng Tin Đêm',
-    shortName: 'Căng Tin',
+    name: 'Khu Sân Cũ Đêm',
+    shortName: 'Sân Cũ',
     clusterId: 'central',
     clusterTitle: 'Cụm Trung Tâm',
     diceLabel: '8',
-    accentHex: '#f59e0b',
-    bgGradient: 'from-amber-950/85 via-slate-900/95 to-slate-950',
-    actionTitle: 'Tự Chọn 1 Chồng Bài',
-    actionDesc: 'Chọn rút 1 thẻ Khám Phá, Cung Ứng hoặc Đột Kích',
-    badgeText: 'Tự Chọn',
+    accentHex: '#f43f5e',
+    bgGradient: 'from-rose-950/85 via-slate-900/95 to-slate-950',
+    actionTitle: 'Rút Thẻ Đột Kích',
+    actionDesc: 'Rút 1 Thẻ Đột Kích (Vũ khí / Sự kiện)',
+    badgeText: 'Đột Kích',
   },
   corridor: {
     name: 'Hành Lang Tầng 4',
@@ -200,9 +208,9 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '9',
     accentHex: '#8b5cf6',
     bgGradient: 'from-violet-950/85 via-slate-900/95 to-slate-950',
-    actionTitle: 'Hồi 1 hoặc Gây 2 Dmg',
-    actionDesc: 'Chọn 1 người bất kỳ: Hồi 1 máu HOẶC Gây 2 sát thương',
-    badgeText: 'Sơ Cứu / Bẫy',
+    actionTitle: 'Gây 2 ST hoặc Hồi 1 Máu',
+    actionDesc: 'Chọn 1 người bất kỳ: Gây 2 sát thương HOẶC Hồi 1 thương tích',
+    badgeText: 'Bẫy / Sơ Cứu',
   },
   court: {
     name: 'Sân Bóng Rổ Đêm',
@@ -218,6 +226,27 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
   },
 };
 
+const CLUSTER_STYLE_META: Record<
+  BoardGameZoneClusterId,
+  { title: string; ringClass: string; badgeClass: string }
+> = {
+  north: {
+    title: 'Cụm 1',
+    ringClass: 'border-emerald-400/35 bg-emerald-950/20',
+    badgeClass: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40',
+  },
+  central: {
+    title: 'Cụm 2',
+    ringClass: 'border-cyan-400/35 bg-cyan-950/20',
+    badgeClass: 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40',
+  },
+  south: {
+    title: 'Cụm 3',
+    ringClass: 'border-violet-400/35 bg-violet-950/20',
+    badgeClass: 'bg-violet-500/20 text-violet-200 border-violet-400/40',
+  },
+};
+
 export const BOARD_CLUSTERS_ORDER: readonly {
   clusterId: BoardGameZoneClusterId;
   title: string;
@@ -228,29 +257,37 @@ export const BOARD_CLUSTERS_ORDER: readonly {
 }[] = [
   {
     clusterId: 'north',
-    title: 'Cụm Bắc',
-    subtitle: '2–3 Radio · 4–5 Cầu Dao (Đánh chung cụm)',
-    ringClass: 'border-emerald-400/35 bg-emerald-950/20',
-    badgeClass: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40',
+    ...CLUSTER_STYLE_META.north,
+    subtitle: '2–3 Radio · 4–5 Cổng Hầm',
     locations: ['radio', 'breaker'],
   },
   {
     clusterId: 'central',
-    title: 'Cụm Trung Tâm',
-    subtitle: '6 Sảnh · 8 Căng Tin (Đánh chung cụm)',
-    ringClass: 'border-cyan-400/35 bg-cyan-950/20',
-    badgeClass: 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40',
+    ...CLUSTER_STYLE_META.central,
+    subtitle: '6 Sảnh · 8 Sân Cũ',
     locations: ['lobby', 'canteen'],
   },
   {
     clusterId: 'south',
-    title: 'Cụm Nam',
-    subtitle: '9 Hành Lang · 10 Sân Bóng (Đánh chung cụm)',
-    ringClass: 'border-violet-400/35 bg-violet-950/20',
-    badgeClass: 'bg-violet-500/20 text-violet-200 border-violet-400/40',
+    ...CLUSTER_STYLE_META.south,
+    subtitle: '9 Hành Lang · 10 Sân Bóng',
     locations: ['corridor', 'court'],
   },
 ];
+
+export function buildBoardClustersView(clusterPairs?: readonly BoardGameClusterPair[]) {
+  if (!clusterPairs || clusterPairs.length === 0) return BOARD_CLUSTERS_ORDER;
+  return clusterPairs.map((pair) => {
+    const a = LOCATION_VISUAL_META[pair.locationIds[0]];
+    const b = LOCATION_VISUAL_META[pair.locationIds[1]];
+    return {
+      clusterId: pair.clusterId,
+      ...CLUSTER_STYLE_META[pair.clusterId],
+      subtitle: `${a.diceLabel} ${a.shortName} · ${b.diceLabel} ${b.shortName}`,
+      locations: pair.locationIds,
+    };
+  });
+}
 
 export const BOARD_GRID_ORDER: readonly BoardGameLocationId[] = [
   'radio',
@@ -359,6 +396,12 @@ export function RolePortraitSvg({
       )}
       {roleId === 'lang-anh-san' && (
         <rect x="28" y="29" width="9" height="7" rx="2" fill="#fbbf24" />
+      )}
+      {roleId === 'lang-cuu-ho' && (
+        <path d="M18 35L30 27" stroke="#fb7185" strokeWidth="2.4" strokeLinecap="round" />
+      )}
+      {roleId === 'lang-tien-phong' && (
+        <circle cx="34" cy="14" r="4" fill="#2dd4bf" />
       )}
     </svg>
   );

@@ -552,11 +552,9 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
   }
 
   async function stepFullTurnIfActive(preferExplore = true) {
-    const clusterOf = (locId) => {
-      if (locId === 'radio' || locId === 'breaker') return 'north';
-      if (locId === 'lobby' || locId === 'canteen') return 'central';
-      return 'south';
-    };
+    const clusterOf = (locId, pairs) =>
+      (pairs || []).find((c) => Array.isArray(c.locationIds) && c.locationIds.includes(locId))
+        ?.clusterId || 'south';
 
     const st = await getState();
     const sync = st.sync;
@@ -582,7 +580,17 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
         await new Promise((r) => setTimeout(r, 80));
       } else if (pubNow.turnPhase === 'CHOOSE_MOVE') {
         const selfP = pubNow.players.find((p) => p.playerId === sNow.auth.playerId);
-        const dest = selfP?.location !== 'corridor' ? 'corridor' : 'lobby';
+        const allowed =
+          Array.isArray(pubNow.allowedMoveDestinations) && pubNow.allowedMoveDestinations.length > 0
+            ? pubNow.allowedMoveDestinations
+            : null;
+        const dest = allowed
+          ? allowed.includes('corridor')
+            ? 'corridor'
+            : allowed[0]
+          : selfP?.location !== 'corridor'
+            ? 'corridor'
+            : 'lobby';
         await sendAction({ type: 'CHOOSE_DEST', location: dest });
         await new Promise((r) => setTimeout(r, 80));
       } else {
@@ -622,8 +630,8 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
       }
     }
 
-    // 3. MAIN_ACTION (equip / investigate / reveal / attack -> auto ends turn, else END_TURN)
-    for (let mainStep = 0; mainStep < 4; mainStep++) {
+    // 3. MAIN_ACTION (resolve all hand cards -> reveal -> attack -> END_TURN)
+    for (let mainStep = 0; mainStep < 6; mainStep++) {
       const st3 = await getState();
       const pub3 = st3.sync?.publicGame;
       const priv3 = st3.sync?.privateView;
@@ -636,35 +644,45 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
         break;
       }
       const self3 = pub3.players.find((p) => p.playerId === st3.auth.playerId);
-      const enemies = pub3.players.filter(
-        (p) =>
-          p.alive &&
-          p.playerId !== st3.auth.playerId &&
-          (!p.revealedFaction || priv3?.faction === 'wanderer' || p.revealedFaction !== priv3?.faction),
+      const allAliveOthers = pub3.players.filter((p) => p.alive && p.playerId !== st3.auth.playerId);
+      const enemies = allAliveOthers.filter(
+        (p) => !p.revealedFaction || priv3?.faction === 'wanderer' || p.revealedFaction !== priv3?.faction,
       );
-      const otherAlive = enemies[0] || pub3.players.find((p) => p.alive && p.playerId !== st3.auth.playerId);
-      const gear = priv3?.hand?.find((c) => c.deck !== 'investigation' && !c.isConsumable);
-      const invCard = priv3?.hand?.find((c) => c.deck === 'investigation');
-      const offCard = priv3?.hand?.find((c) => c.id === 'ev-06' || c.id === 'ev-07' || c.id === 'ev-08');
-      const hasBow = self3?.equipped?.some((c) => c.id === 'ev-04');
-      const reachable = enemies.filter((p) =>
-        hasBow ? clusterOf(p.location) !== clusterOf(self3.location) : clusterOf(p.location) === clusterOf(self3.location),
-      );
+      const otherAlive = enemies[0] || allAliveOthers[0];
+      const hasHandgun = self3?.equipped?.some((c) => c.id === 'ev-05');
+      const hasMasamune = self3?.equipped?.some((c) => c.id === 'ev-01');
+      const reachableEnemies = enemies.filter((p) => {
+        const same = clusterOf(p.location, pub3.clusterPairs) === clusterOf(self3.location, pub3.clusterPairs);
+        return hasHandgun ? !same : same;
+      });
+      const reachableAny = allAliveOthers.filter((p) => {
+        const same = clusterOf(p.location, pub3.clusterPairs) === clusterOf(self3.location, pub3.clusterPairs);
+        return hasHandgun ? !same : same;
+      });
 
       let act = { type: 'END_TURN' };
-      if (gear) {
-        act = { type: 'EQUIP_CARD', cardId: gear.id };
-      } else if (priv3 && !priv3.revealed && pub3.round >= 2) {
+      if (priv3?.hand && priv3.hand.length > 0) {
+        const card = priv3.hand[0];
+        if (card.deck === 'investigation' && otherAlive) {
+          act = { type: 'INVESTIGATE_CARD', cardId: card.id, targetPlayerId: otherAlive.playerId };
+        } else if (!card.isConsumable && card.deck !== 'investigation') {
+          act = { type: 'EQUIP_CARD', cardId: card.id };
+        } else if (card.id === 'eq-13' || card.id === 'eq-14' || card.id === 'ev-13') {
+          act = { type: 'USE_CARD', cardId: card.id, skipEffect: true };
+        } else if (
+          ['eq-08', 'eq-09', 'ev-07', 'ev-08', 'ev-10', 'ev-11', 'ev-12'].includes(card.id) &&
+          otherAlive
+        ) {
+          act = { type: 'USE_CARD', cardId: card.id, targetPlayerId: otherAlive.playerId };
+        } else {
+          act = { type: 'USE_CARD', cardId: card.id };
+        }
+      } else if (priv3 && !priv3.revealed && priv3.roleId !== 'lang-tien-phong' && pub3.round >= 2) {
         act = { type: 'REVEAL_ROLE' };
-      } else if (invCard && otherAlive) {
-        act = { type: 'INVESTIGATE_CARD', cardId: invCard.id, targetPlayerId: otherAlive.playerId };
-      } else if (offCard && otherAlive) {
-        act =
-          offCard.id === 'ev-07'
-            ? { type: 'USE_CARD', cardId: 'ev-07', targetLocation: otherAlive.location }
-            : { type: 'USE_CARD', cardId: offCard.id, targetPlayerId: otherAlive.playerId };
-      } else if (reachable.length > 0) {
-        act = { type: 'ATTACK', targetPlayerId: reachable[0].playerId };
+      } else if ((self3?.attacksThisTurn ?? 0) < 1 && reachableEnemies.length > 0) {
+        act = { type: 'ATTACK', targetPlayerId: reachableEnemies[0].playerId };
+      } else if ((self3?.attacksThisTurn ?? 0) < 1 && hasMasamune && reachableAny.length > 0) {
+        act = { type: 'ATTACK', targetPlayerId: reachableAny[0].playerId };
       }
 
       const res = await sendAction(act);
@@ -674,7 +692,7 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
         await new Promise((r) => setTimeout(r, 80));
         break;
       }
-      if (act.type === 'ATTACK' || act.type === 'END_TURN') break;
+      if (act.type === 'END_TURN') break;
     }
 
     const stAfter = await getState();
@@ -797,7 +815,7 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
   };
 
   if (await pickAndClick('bg-roll-dice-btn')) return true;
-  for (const id of ['bg-choose-dest-corridor', 'bg-choose-dest-lobby']) {
+  for (const id of ['bg-choose-dest-radio', 'bg-choose-dest-corridor', 'bg-choose-dest-lobby']) {
     if (await pickAndClick(id)) return true;
   }
   const anyDest = snap.enabledIds.find((id) => id.startsWith('bg-choose-dest-') && isFresh(id));
@@ -816,9 +834,11 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
     if (await pickAndClick(p2Order[(stepIndex + i) % p2Order.length])) return true;
   }
 
-  if (await pickAndClick('bg-unmask-hand-btn')) return true;
+  if (!options.skipUnmask && (await pickAndClick('bg-unmask-hand-btn'))) return true;
   if (!options.skipReveal && (await pickAndClick('bg-reveal-role-btn'))) return true;
   if (await pickAndClick('bg-use-skill-btn')) return true;
+  const anySkipCard = snap.enabledIds.find((id) => id.startsWith('bg-skip-card-') && isFresh(id));
+  if (anySkipCard && (await pickAndClick(anySkipCard))) return true;
   const anyCard = snap.enabledIds.find((id) => id.startsWith('bg-use-card-') && isFresh(id));
   if (anyCard && (await pickAndClick(anyCard))) return true;
   if (await pickAndClick('bg-attack-btn')) return true;
@@ -1093,12 +1113,16 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     await activePlayer.page.bringToFront();
     for (let s = 0; s < 5; s++) {
       if ((await activePlayer.page.locator('[data-testid="bg-end-turn-btn"]').count()) > 0) break;
-      await playFirstValidStepOnPage(activePlayer.page, 0);
+      await playFirstValidStepOnPage(activePlayer.page, 0, undefined, {
+        skipReveal: true,
+        skipUnmask: true,
+      });
       await activePlayer.page.waitForTimeout(160);
     }
-    await activePlayer.page.waitForSelector('[data-testid="bg-hand-masked-banner"]', { timeout: UI_TIMEOUT });
-    await activePlayer.page.locator('[data-testid="bg-unmask-hand-btn"]').click();
-    await activePlayer.page.waitForSelector('[data-testid^="bg-use-card-"]', { timeout: UI_TIMEOUT });
+    if ((await activePlayer.page.locator('[data-testid="bg-hand-masked-banner"]').count()) > 0) {
+      await activePlayer.page.locator('[data-testid="bg-unmask-hand-btn"]').click();
+      await activePlayer.page.waitForSelector('[data-testid^="bg-use-card-"]', { timeout: UI_TIMEOUT });
+    }
 
     // Verify self-targeting never gets stuck on an opponent after clicking another player pill/card
     const otherPill = activePlayer.page.locator('[data-testid^="bg-target-pill-other-"]').first();
@@ -1160,7 +1184,25 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       );
     }
 
-    await activePlayer.page.locator('[data-testid="bg-end-turn-btn"]').click();
+    for (let clr = 0; clr < 4; clr++) {
+      const skipBtn = activePlayer.page.locator('[data-testid^="bg-skip-card-"]').first();
+      const useBtn = activePlayer.page.locator('[data-testid^="bg-use-card-"]').first();
+      if ((await skipBtn.count()) > 0 && (await skipBtn.isEnabled().catch(() => false))) {
+        await skipBtn.click();
+        await activePlayer.page.waitForTimeout(140);
+      } else if ((await useBtn.count()) > 0 && (await useBtn.isEnabled().catch(() => false))) {
+        await useBtn.click();
+        await activePlayer.page.waitForTimeout(140);
+      } else {
+        break;
+      }
+    }
+    const endTurnBtn = activePlayer.page.locator('[data-testid="bg-end-turn-btn"]');
+    if ((await endTurnBtn.count()) > 0 && (await endTurnBtn.isEnabled().catch(() => false))) {
+      await endTurnBtn.click();
+    } else if ((await activePlayer.page.locator('[data-testid="bg-attack-btn"]').count()) > 0) {
+      await activePlayer.page.locator('[data-testid="bg-attack-btn"]').click();
+    }
 
     await p1.page.bringToFront();
     if ((await p1.page.locator('[data-testid="bg-role-card-facedown"]').count()) > 0) {
@@ -1662,7 +1704,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     }
     // Complete P1 turn via UI after reload -> pass turn to a peer
     const p1Tried = new Set();
-    for (let s = 0; s < 12; s++) {
+    for (let s = 0; s < 20; s++) {
       const stillOwn = await p1.page
         .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
         .catch(() => false);

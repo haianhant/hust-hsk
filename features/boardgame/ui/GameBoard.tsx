@@ -20,9 +20,9 @@ import {
   type BoardGamePublicGameView,
 } from '../network/contracts';
 import { FACTION_LABELS } from '../domain/roles';
-import { getLocationDefinition } from '../domain/rules';
+import { areInSameCluster, getLocationDefinition } from '../domain/rules';
 import {
-  BOARD_CLUSTERS_ORDER,
+  buildBoardClustersView,
   DeckCardBackSvg,
   DiceD4Svg,
   DiceD6Svg,
@@ -248,27 +248,18 @@ export function GameBoard({
   const attackableIdsOnBoard = useMemo(() => {
     const ids = new Set<string>();
     if (!isMyTurn || !selfPlayer || publicGame.turnPhase !== 'MAIN_ACTION') return ids;
-    const selfCluster = LOCATION_VISUAL_META[selfPlayer.location].clusterId;
     const aliveOthers = publicGame.players.filter(
       (p) => p.alive && p.playerId !== selfPlayerId,
     );
-    const hasLongCable = selfPlayer.equipped.some((eq) => eq.id === 'ev-04');
-    if (hasLongCable) {
-      const remote = aliveOthers.filter(
-        (p) => LOCATION_VISUAL_META[p.location].clusterId !== selfCluster,
-      );
-      for (const p of remote.length > 0 ? remote : aliveOthers) {
-        ids.add(p.playerId);
-      }
-      return ids;
-    }
+    const hasHandgun = selfPlayer.equipped.some((eq) => eq.id === 'ev-05');
     for (const p of aliveOthers) {
-      if (LOCATION_VISUAL_META[p.location].clusterId === selfCluster) {
+      const same = areInSameCluster(selfPlayer.location, p.location, publicGame.clusterPairs);
+      if (hasHandgun ? !same : same) {
         ids.add(p.playerId);
       }
     }
     return ids;
-  }, [isMyTurn, selfPlayer, selfPlayerId, publicGame.players, publicGame.turnPhase]);
+  }, [isMyTurn, selfPlayer, selfPlayerId, publicGame.players, publicGame.clusterPairs, publicGame.turnPhase]);
 
   const playersByWoundNotch = useMemo(() => {
     const buckets: typeof publicGame.players[number][][] = Array.from(
@@ -610,9 +601,9 @@ export function GameBoard({
                 </div>
               </section>
 
-              {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI (6 Ô ĐÁNH SỐ XÚC XẮC) */}
+              {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI (XÁO NGẪU NHIÊN ĐẦU MỖI VÁN) */}
               <section className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                {BOARD_CLUSTERS_ORDER.map((cluster) => (
+                {buildBoardClustersView(publicGame.clusterPairs).map((cluster) => (
                   <div
                     key={cluster.clusterId}
                     className={`rounded-2xl border p-2.5 space-y-2 ${cluster.ringClass}`}
@@ -638,7 +629,9 @@ export function GameBoard({
                         const canChooseMoveHere =
                           isMyTurn &&
                           publicGame.turnPhase === 'CHOOSE_MOVE' &&
-                          !isSelfHere;
+                          !isSelfHere &&
+                          (!publicGame.allowedMoveDestinations ||
+                            publicGame.allowedMoveDestinations.includes(locId));
                         const rolledDestinationHere =
                           publicGame.lastDiceRoll?.kind === 'move' &&
                           publicGame.lastDiceRoll.resolvedLocation === locId;
@@ -809,7 +802,10 @@ export function GameBoard({
                           {publicGame.lastDiceRoll.rerollRequired
                             ? '🔁 Trùng khu vực hiện tại — được quyền ĐỔ LẠI!'
                             : publicGame.lastDiceRoll.freeChoice
-                              ? '✨ Tổng 7! Tự do chọn khu vực bất kỳ.'
+                              ? publicGame.allowedMoveDestinations &&
+                                publicGame.allowedMoveDestinations.length < 5
+                                ? `🧭 La Bàn! Chọn 1 trong ${publicGame.allowedMoveDestinations.length} khu vực hợp lệ.`
+                                : '✨ Tổng 7! Tự do chọn khu vực bất kỳ.'
                               : publicGame.lastDiceRoll.resolvedLocation
                                 ? `Điểm đến: ${LOCATION_VISUAL_META[publicGame.lastDiceRoll.resolvedLocation].name}`
                                 : 'Sẵn sàng tung xúc xắc tiếp theo.'}

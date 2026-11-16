@@ -278,12 +278,17 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
       if (pub.turnPhase === 'ROLL_MOVE') {
         act = { type: 'ROLL_DICE' };
       } else if (pub.turnPhase === 'CHOOSE_MOVE') {
-        const dest = LOCATIONS_CATALOG.find((l) => l.id !== actorPub.location)?.id || 'lobby';
+        const dest =
+          pub.allowedMoveDestinations?.[0] ||
+          LOCATIONS_CATALOG.find((l) => l.id !== actorPub.location)?.id ||
+          'lobby';
         act = { type: 'CHOOSE_DEST', location: dest };
       } else if (pub.turnPhase === 'LOCATION_ACTION') {
         if (actorPub.location === 'radio') {
           act = { type: 'DRAW_CARD', deck: 'investigation' };
-        } else if (actorPub.location === 'breaker' || actorPub.location === 'canteen') {
+        } else if (actorPub.location === 'breaker') {
+          act = { type: 'DRAW_CARD', deck: !exercisedInvestigate ? 'investigation' : 'event' };
+        } else if (actorPub.location === 'canteen') {
           act = { type: 'DRAW_CARD', deck: 'event' };
         } else if (actorPub.location === 'lobby') {
           act = { type: 'DRAW_CARD', deck: 'equipment' };
@@ -306,46 +311,51 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
           }
         }
       } else if (pub.turnPhase === 'MAIN_ACTION') {
-        const hasOtherClusterBow = actorPub.equipped.some((c) => c.id === 'ev-04');
+        const hasHandgun = actorPub.equipped.some((c) => c.id === 'ev-05');
+        const hasMasamune = actorPub.equipped.some((c) => c.id === 'ev-01');
         const reachableEnemies = otherAliveEnemies.filter((p) => {
-          const sameCluster = areInSameCluster(actorPub.location, p.location);
-          return hasOtherClusterBow ? !sameCluster : sameCluster;
+          const sameCluster = areInSameCluster(actorPub.location, p.location, pub.clusterPairs);
+          return hasHandgun ? !sameCluster : sameCluster;
         });
-        const passiveEquip = priv.hand.find((c) => c.deck !== 'investigation' && !c.isConsumable);
-        const invCard = priv.hand.find((c) => c.deck === 'investigation');
-        const offensiveEvent = priv.hand.find(
-          (c) => c.id === 'ev-06' || c.id === 'ev-07' || c.id === 'ev-08',
-        );
+        const reachableAny = actorSync.publicGame.players.filter((p) => {
+          if (!p.alive || p.playerId === actorEntry.playerId) return false;
+          const sameCluster = areInSameCluster(actorPub.location, p.location, pub.clusterPairs);
+          return hasHandgun ? !sameCluster : sameCluster;
+        });
 
-        if (passiveEquip) {
-          act = { type: 'EQUIP_CARD', cardId: passiveEquip.id };
-        } else if (!priv.revealed && !exercisedReveal && pub.round >= 2) {
+        if (!priv.revealed && !exercisedReveal && pub.round >= 2 && priv.roleId !== 'lang-tien-phong') {
           exercisedReveal = true;
           act = { type: 'REVEAL_ROLE' };
-        } else if (!exercisedInvestigate && invCard && anyAliveOther) {
-          exercisedInvestigate = true;
-          act = {
-            type: 'INVESTIGATE_CARD',
-            cardId: invCard.id,
-            targetPlayerId: anyAliveOther.playerId,
-          };
-        } else if (offensiveEvent && (otherAliveEnemies[0] || anyAliveOther)) {
+        } else if (priv.hand.length > 0) {
+          const card = priv.hand[0];
           const foe = otherAliveEnemies[0] || anyAliveOther;
-          if (offensiveEvent.id === 'ev-07') {
+          if (card.deck === 'investigation' && foe) {
+            exercisedInvestigate = true;
             act = {
-              type: 'USE_CARD',
-              cardId: offensiveEvent.id,
-              targetLocation: foe.location,
-            };
-          } else {
-            act = {
-              type: 'USE_CARD',
-              cardId: offensiveEvent.id,
+              type: 'INVESTIGATE_CARD',
+              cardId: card.id,
               targetPlayerId: foe.playerId,
             };
+          } else if (!card.isConsumable && card.deck !== 'investigation') {
+            act = { type: 'EQUIP_CARD', cardId: card.id };
+          } else if (card.id === 'eq-13' || card.id === 'eq-14' || card.id === 'ev-13') {
+            act = { type: 'USE_CARD', cardId: card.id, skipEffect: true };
+          } else if (
+            ['eq-08', 'eq-09', 'ev-07', 'ev-08', 'ev-10', 'ev-11', 'ev-12'].includes(card.id) &&
+            foe
+          ) {
+            act = {
+              type: 'USE_CARD',
+              cardId: card.id,
+              targetPlayerId: foe.playerId,
+            };
+          } else {
+            act = { type: 'USE_CARD', cardId: card.id };
           }
-        } else if (reachableEnemies.length > 0) {
+        } else if ((actorPub.attacksThisTurn ?? 0) < 1 && reachableEnemies.length > 0) {
           act = { type: 'ATTACK', targetPlayerId: reachableEnemies[0].playerId };
+        } else if ((actorPub.attacksThisTurn ?? 0) < 1 && hasMasamune && reachableAny.length > 0) {
+          act = { type: 'ATTACK', targetPlayerId: reachableAny[0].playerId };
         } else {
           act = { type: 'END_TURN' };
         }
@@ -566,11 +576,13 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
           ? {
               type: 'CHOOSE_DEST',
               location:
+                curSync.publicGame.allowedMoveDestinations?.[0] ||
                 LOCATIONS_CATALOG.find(
                   (l) =>
                     l.id !==
                     curSync.publicGame.players.find((p) => p.playerId === actor.playerId).location,
-                )?.id || 'lobby',
+                )?.id ||
+                'lobby',
             }
           : { type: 'ROLL_DICE' };
       actor.c.send({
@@ -707,11 +719,13 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
           ? {
               type: 'CHOOSE_DEST',
               location:
+                curSync.publicGame.allowedMoveDestinations?.[0] ||
                 LOCATIONS_CATALOG.find(
                   (l) =>
                     l.id !==
                     curSync.publicGame.players.find((p) => p.playerId === m.clients[0].playerId).location,
-                )?.id || 'lobby',
+                )?.id ||
+                'lobby',
             }
           : { type: 'ROLL_DICE' };
       m.clients[0].c.send({
@@ -761,6 +775,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     assert.equal(reAuth.playerId, m.clients[3].playerId);
     const reSync = await p3Reconn.nextMsg((msg) => msg.type === 'BG_STATE_SYNC');
     assert.equal(reSync.status, 'PLAYING');
+    assert.equal(reSync.publicGame.clusterPairs.length, 3);
     assert.equal(reSync.privateView.roleId, p3RoleBefore);
     assert.deepEqual(reSync.privateView.hand.map((c) => c.id), p3HandBefore);
 

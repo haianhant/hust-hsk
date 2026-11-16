@@ -519,7 +519,7 @@ export default function BoardGameLobby({
           >
             <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 py-3">
               <h2 className="text-base font-bold text-sky-300">
-                📖 Luật chơi &amp; Từ điển 9 Nhân vật · Bóng Đêm KTX v4
+                📖 Luật chơi &amp; Từ điển 10 Nhân vật · Bóng Đêm KTX v4 (Chuẩn Shadow Hunters)
               </h2>
               <button
                 type="button"
@@ -532,28 +532,28 @@ export default function BoardGameLobby({
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto p-4 text-xs leading-relaxed text-slate-200 sm:text-sm">
               <p className="rounded-xl bg-slate-800/70 p-3 text-amber-100">
-                <strong>Bối cảnh v4 (Săn Bóng Đêm KTX — Xúc xắc 1d6+1d4 &amp; 3 Cụm):</strong> Đêm mất điện tại KTX Bách Khoa,
-                mỗi sinh viên giữ 1 <strong>Nhân vật bí mật</strong> (máu tối đa <strong>9–14 HP</strong> được giấu kín
-                cho tới khi lật vai) và chiến đấu theo nhịp bàn cờ 6 khu vực đánh số xúc xắc!
+                <strong>Bối cảnh v4 (100% Luật gốc Shadow Hunters — 10 Nhân vật &amp; 48 Thẻ bài):</strong> Mỗi sinh viên
+                giữ 1 <strong>Nhân vật bí mật</strong> (máu tối đa <strong>8–14 HP</strong> được giấu kín cho tới khi lật vai),
+                khởi đầu với <strong>0 bài</strong> và chiến đấu trên 6 khu vực xáo ngẫu nhiên vào 3 Cụm đầu mỗi ván!
               </p>
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div className="rounded-xl border border-emerald-500/35 bg-emerald-950/30 p-2.5">
                   <div className="font-bold text-emerald-300">🔦 Đội Săn Đêm (3 vai)</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Xác minh phe ẩn bằng Thẻ Khám Phá Kín và loại sạch toàn bộ <strong>Hội Bóng Đêm</strong>.
+                    Suy luận bằng Thẻ Khám Phá Kín và tiêu diệt toàn bộ <strong>Hội Bóng Đêm</strong>.
                   </p>
                 </div>
                 <div className="rounded-xl border border-rose-500/35 bg-rose-950/30 p-2.5">
                   <div className="font-bold text-rose-300">🌙 Hội Bóng Đêm (3 vai)</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Giả danh ẩn mình giữa đám đông và hạ gục toàn bộ thành viên <strong>Đội Săn Đêm</strong>.
+                    Thắng khi hạ gục toàn bộ <strong>Đội Săn Đêm</strong> HOẶC khi có từ <strong>3 Kẻ Độc Hành</strong> bị loại.
                   </p>
                 </div>
                 <div className="rounded-xl border border-amber-500/35 bg-amber-950/30 p-2.5">
-                  <div className="font-bold text-amber-300">🧭 Kẻ Độc Hành (3 vai)</div>
+                  <div className="font-bold text-amber-300">🧭 Kẻ Độc Hành (4 vai)</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    Mục tiêu riêng: <strong>Hải</strong> đeo 3 Trang bị từ vòng 3+, <strong>Trang</strong> sống tới cuối trận, <strong>Bình</strong> bảo hộ hoặc báo thù.
+                    <strong>Hải</strong> đủ 5 Trang bị · <strong>Trang</strong> sống hết trận · <strong>Bách</strong> giết khi xác ≥ 3 · <strong>Đạt</strong> chết đầu tiên hoặc thắng cùng Săn Đêm.
                   </p>
                 </div>
               </div>
@@ -565,13 +565,13 @@ export default function BoardGameLobby({
                   </h4>
                   <ol className="mt-1 list-inside list-decimal space-y-1 text-xs text-slate-300">
                     <li>
-                      <strong>Pha 1 · Tung xúc xắc di chuyển (ROLL_MOVE):</strong> Tung đồng thời <strong>1d6 + 1d4</strong> để tới ô tương ứng (2–3 Radio, 4–5 Cầu Dao, 6 Sảnh, 8 Căng Tin, 9 Hành Lang, 10 Sân Bóng). Nếu ra <strong>7</strong>: tự do chọn ô bất kỳ; nếu trùng ô đang đứng: bấm <strong>ĐỔ LẠI</strong>!
+                      <strong>Pha 1 · Tung xúc xắc di chuyển (ROLL_MOVE):</strong> Tung đồng thời <strong>1d6 + 1d4</strong> để tới ô tương ứng (2–3 Radio, 4–5 Cổng Hầm, 6 Sảnh, 8 Sân Cũ, 9 Hành Lang, 10 Sân Bóng). Ra <strong>7</strong>: chọn ô bất kỳ; trùng ô đang đứng: <strong>ĐỔ LẠI</strong>!
                     </li>
                     <li>
-                      <strong>Pha 2 · Hành động khu vực (LOCATION_ACTION):</strong> Rút thẻ tương ứng (ô 2–3 Khám Phá Kín, ô 4–5 Đột Kích, ô 6 Cung Ứng, ô 8 chọn bất kỳ), Hồi 1 / Gây 2 sát thương tại ô 9, Cướp 1 Trang bị tại ô 10, hoặc Bỏ qua khu vực.
+                      <strong>Pha 2 · Hành động khu vực (LOCATION_ACTION):</strong> Ô 2–3 rút Khám Phá (Xanh), <strong>Ô 4–5 chọn bất kỳ bộ nào</strong>, Ô 6 rút Cung Ứng (Trắng), <strong>Ô 8 rút Đột Kích (Đen)</strong>, Ô 9 gây 2 ST / hồi 1 máu, Ô 10 cướp 1 Trang bị. Rút trúng Trang bị được <strong>đặt ngửa đeo ngay</strong> không giới hạn số món!
                     </li>
                     <li>
-                      <strong>Pha 3 · Hành động chính &amp; Lật vai (MAIN_ACTION):</strong> Đưa Thẻ Khám Phá Kín 1-đối-1, trang bị vũ khí/giáp (<strong>đặt ngửa không giới hạn số món</strong> chuẩn Shadow Hunters), lật vai kích hoạt kỹ năng riêng, đánh thường <strong>|1d6 - 1d4|</strong> cùng Cụm (hụt khi ra 0), hoặc bấm Kết thúc lượt.
+                      <strong>Pha 3 · Giải quyết thẻ &amp; Tấn công (MAIN_ACTION):</strong> Dùng hết thẻ vừa rút ngay trong lượt, có thể đánh thường <strong>|1d6 - 1d4|</strong> cùng Cụm (trừ khi cầm Súng Bắn Đinh bắn Cụm khác; Kiếm Masamune bắt buộc phải đánh nếu có mục tiêu) rồi Kết thúc lượt.
                     </li>
                   </ol>
                 </div>
@@ -608,20 +608,20 @@ export default function BoardGameLobby({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h4 className="text-sm font-black text-white">
-                      🎭 Danh sách 9 Nhân vật &amp; Kỹ năng trong bàn đấu
+                      🎭 Danh sách 10 Nhân vật &amp; Kho 48 Thẻ bài chuẩn Shadow Hunters
                     </h4>
                     <p className="text-[11px] text-slate-400">
-                      Đọc trước để nắm mánh suy luận HP (9–14 HP), điều kiện thắng và phản công khi đối thủ lật vai!
+                      Đọc trước để nắm mánh suy luận HP (8–14 HP), điều kiện thắng và phản công khi đối thủ lật vai!
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {(
                       [
-                        { id: 'all', label: 'Tất cả 9 vai' },
+                        { id: 'all', label: 'Tất cả 10 vai' },
                         { id: 'lantern-guard', label: '🔦 Săn Đêm (3)' },
                         { id: 'mist-order', label: '🌙 Bóng Đêm (3)' },
-                        { id: 'wanderer', label: '🧭 Độc Hành (3)' },
-                        { id: 'cards', label: '🃏 24 Thẻ bài' },
+                        { id: 'wanderer', label: '🧭 Độc Hành (4)' },
+                        { id: 'cards', label: '🃏 48 Thẻ bài' },
                       ] as const
                     ).map((tab) => (
                       <button
@@ -647,17 +647,17 @@ export default function BoardGameLobby({
                       [
                         {
                           deck: 'investigation',
-                          title: '🔍 Bộ Khám Phá Kín (8 mẫu × 2)',
+                          title: '🔍 Bộ Khám Phá Kín (16 lá)',
                           ring: 'border-emerald-500/35 bg-emerald-950/20',
                         },
                         {
                           deck: 'equipment',
-                          title: '🧰 Bộ Cung Ứng (8 mẫu × 2)',
+                          title: '🧰 Bộ Cung Ứng (16 lá)',
                           ring: 'border-cyan-500/35 bg-cyan-950/20',
                         },
                         {
                           deck: 'event',
-                          title: '⚡ Bộ Đột Kích (8 mẫu × 2)',
+                          title: '⚡ Bộ Đột Kích (16 lá)',
                           ring: 'border-rose-500/35 bg-rose-950/20',
                         },
                       ] as const
@@ -670,7 +670,12 @@ export default function BoardGameLobby({
                               key={card.id}
                               className="rounded-lg bg-slate-900/90 px-2.5 py-1.5 text-[11px]"
                             >
-                              <div className="font-bold text-amber-200">{card.title}</div>
+                              <div className="flex items-center justify-between gap-1 font-bold text-amber-200">
+                                <span>{card.title}</span>
+                                <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">
+                                  ×{card.copies}
+                                </span>
+                              </div>
                               <div className="text-slate-300">{card.summary}</div>
                             </div>
                           ))}

@@ -71,7 +71,8 @@ export type BoardGameRoleId =
   | 'suong-gac-cong'
   | 'lang-anh-san'
   | 'lang-quan-sat'
-  | 'lang-cuu-ho';
+  | 'lang-cuu-ho'
+  | 'lang-tien-phong';
 
 export type BoardGameLocationId =
   | 'lobby'
@@ -215,6 +216,11 @@ export interface BoardGameMatchSummary {
   updatedAtMs: number;
 }
 
+export interface BoardGameClusterPair {
+  clusterId: BoardGameZoneClusterId;
+  locationIds: readonly [BoardGameLocationId, BoardGameLocationId];
+}
+
 export interface BoardGamePublicPlayerView {
   playerId: string;
   displayName: string;
@@ -225,6 +231,7 @@ export interface BoardGamePublicPlayerView {
   handCount: number;
   equipped: readonly BoardGameCardPublicMeta[];
   attacksMade: number;
+  attacksThisTurn: number;
   investigationsCount: number;
   /** Trạng thái khiên che chắn 1 vòng sau khi Trang lật vai/kích hoạt bảo vệ. */
   guardianShieldActive: boolean;
@@ -291,6 +298,9 @@ export interface BoardGamePublicGameView {
   turnPhase: BoardGameTurnPhase;
   activePlayerId: string | null;
   turnOrder: readonly string[];
+  clusterPairs: readonly BoardGameClusterPair[];
+  allowedMoveDestinations?: readonly BoardGameLocationId[];
+  deadCount: number;
   players: readonly BoardGamePublicPlayerView[];
   deckCounts: Record<BoardGameDeckId, number>;
   lastDiceRoll: BoardGameDiceRollEvent | null;
@@ -335,6 +345,7 @@ export type BoardGameActionPayload =
       type: 'USE_LOC_POWER';
       targetPlayerId?: string;
       mode?: 'heal' | 'damage' | 'steal';
+      equipCardId?: string;
     }
   | { type: 'SKIP_LOC' }
   | { type: 'EQUIP_CARD'; cardId: string }
@@ -343,6 +354,8 @@ export type BoardGameActionPayload =
       cardId: string;
       targetPlayerId?: string;
       targetLocation?: BoardGameLocationId;
+      equipCardId?: string;
+      skipEffect?: boolean;
     }
   | { type: 'INVESTIGATE_CARD'; cardId: string; targetPlayerId: string }
   | { type: 'ATTACK'; targetPlayerId: string }
@@ -752,10 +765,10 @@ const ACTION_ALLOWED_KEYS: Record<BoardGameActionPayload['type'], ReadonlySet<st
   ROLL_DICE: new Set(['type']),
   CHOOSE_DEST: new Set(['type', 'location']),
   DRAW_CARD: new Set(['type', 'deck']),
-  USE_LOC_POWER: new Set(['type', 'targetPlayerId', 'mode']),
+  USE_LOC_POWER: new Set(['type', 'targetPlayerId', 'mode', 'equipCardId']),
   SKIP_LOC: new Set(['type']),
   EQUIP_CARD: new Set(['type', 'cardId']),
-  USE_CARD: new Set(['type', 'cardId', 'targetPlayerId', 'targetLocation']),
+  USE_CARD: new Set(['type', 'cardId', 'targetPlayerId', 'targetLocation', 'equipCardId', 'skipEffect']),
   INVESTIGATE_CARD: new Set(['type', 'cardId', 'targetPlayerId']),
   ATTACK: new Set(['type', 'targetPlayerId']),
   REVEAL_ROLE: new Set(['type']),
@@ -805,12 +818,16 @@ export function validateBoardGameActionPayload(
       ) {
         return { ok: false, error: 'Chế độ quyền năng khu vực không hợp lệ.' };
       }
+      if (raw.equipCardId !== undefined && !isValidBoardGameCardIdSyntax(raw.equipCardId)) {
+        return { ok: false, error: 'Mã trang bị mục tiêu không hợp lệ.' };
+      }
       return {
         ok: true,
         action: {
           type: 'USE_LOC_POWER',
           ...(raw.targetPlayerId !== undefined ? { targetPlayerId: raw.targetPlayerId } : {}),
           ...(raw.mode !== undefined ? { mode: raw.mode as 'heal' | 'damage' | 'steal' } : {}),
+          ...(raw.equipCardId !== undefined ? { equipCardId: raw.equipCardId } : {}),
         },
       };
     }
@@ -832,6 +849,12 @@ export function validateBoardGameActionPayload(
       if (raw.targetLocation !== undefined && !isValidContractLocationId(raw.targetLocation)) {
         return { ok: false, error: 'Khu vực mục tiêu của thẻ bài không hợp lệ.' };
       }
+      if (raw.equipCardId !== undefined && !isValidBoardGameCardIdSyntax(raw.equipCardId)) {
+        return { ok: false, error: 'Mã trang bị trong thẻ bài không hợp lệ.' };
+      }
+      if (raw.skipEffect !== undefined && typeof raw.skipEffect !== 'boolean') {
+        return { ok: false, error: 'Tham số skipEffect phải là boolean.' };
+      }
       return {
         ok: true,
         action: {
@@ -839,6 +862,8 @@ export function validateBoardGameActionPayload(
           cardId: raw.cardId,
           ...(raw.targetPlayerId !== undefined ? { targetPlayerId: raw.targetPlayerId } : {}),
           ...(raw.targetLocation !== undefined ? { targetLocation: raw.targetLocation } : {}),
+          ...(raw.equipCardId !== undefined ? { equipCardId: raw.equipCardId } : {}),
+          ...(raw.skipEffect !== undefined ? { skipEffect: raw.skipEffect } : {}),
         },
       };
     }

@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import type {
+  BoardGameClusterPair,
   BoardGameLocationId,
   BoardGameZoneClusterId,
 } from '../../../shared/contracts/boardgame';
@@ -18,23 +19,29 @@ export const BOARD_GAME_MAX_HAND = 5;
 export const BOARD_GAME_MAX_EQUIPPED = 99;
 export const BOARD_GAME_SAFETY_MAX_ROUNDS = 30;
 
+export const DEFAULT_CLUSTER_PAIRS: readonly BoardGameClusterPair[] = [
+  { clusterId: 'north', locationIds: ['radio', 'breaker'] },
+  { clusterId: 'central', locationIds: ['lobby', 'canteen'] },
+  { clusterId: 'south', locationIds: ['corridor', 'court'] },
+];
+
 export const ZONE_CLUSTERS: readonly ZoneClusterDefinition[] = [
   {
     id: 'north',
     name: 'Cụm Bắc',
-    subtitle: 'Tín hiệu & Nguồn điện',
+    subtitle: 'Cặp Khu Vực #1',
     locationIds: ['radio', 'breaker'],
   },
   {
     id: 'central',
     name: 'Cụm Trung Tâm',
-    subtitle: 'Sảnh KTX & Căng tin',
+    subtitle: 'Cặp Khu Vực #2',
     locationIds: ['lobby', 'canteen'],
   },
   {
     id: 'south',
     name: 'Cụm Nam',
-    subtitle: 'Hành lang & Sân thể thao',
+    subtitle: 'Cặp Khu Vực #3',
     locationIds: ['corridor', 'court'],
   },
 ];
@@ -49,20 +56,20 @@ export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
     diceLabel: '2–3',
     subtitle: 'Rút 1 thẻ Khám Phá (Kín)',
     deckHint: 'investigation',
-    actionSummary: 'Rút 1 Thẻ Khám Phá (đặt kín cho 1 người đọc).',
+    actionSummary: 'Rút 1 Thẻ Khám Phá (đưa kín cho 1 người khác đọc).',
     accentColor: '#10b981',
   },
   {
     id: 'breaker',
-    name: 'Tủ Cầu Dao Tổng',
-    shortName: 'Cầu Dao (4–5)',
+    name: 'Cổng Hầm KTX',
+    shortName: 'Cổng Hầm (4–5)',
     clusterId: 'north',
     diceNumbers: [4, 5],
     diceLabel: '4–5',
-    subtitle: 'Rút 1 thẻ Đột Kích',
-    deckHint: 'event',
-    actionSummary: 'Rút 1 Thẻ Đột Kích (Vũ khí / Sự kiện hắc ám).',
-    accentColor: '#f43f5e',
+    subtitle: 'Rút 1 thẻ Bất Kỳ',
+    deckHint: 'any',
+    actionSummary: 'Tự chọn rút 1 thẻ từ Khám Phá (Xanh), Cung Ứng (Trắng) hoặc Đột Kích (Đen).',
+    accentColor: '#f59e0b',
   },
   {
     id: 'lobby',
@@ -73,20 +80,20 @@ export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
     diceLabel: '6',
     subtitle: 'Rút 1 thẻ Cung Ứng',
     deckHint: 'equipment',
-    actionSummary: 'Rút 1 Thẻ Cung Ứng (Giáp bảo hộ / Hồi sức).',
+    actionSummary: 'Rút 1 Thẻ Cung Ứng (Trang bị phòng thủ / Hồi sức).',
     accentColor: '#06b6d4',
   },
   {
     id: 'canteen',
-    name: 'Căng Tin Đêm',
-    shortName: 'Căng Tin (8)',
+    name: 'Khu Sân Cũ Đêm',
+    shortName: 'Sân Cũ (8)',
     clusterId: 'central',
     diceNumbers: [8],
     diceLabel: '8',
-    subtitle: 'Rút 1 thẻ Bất Kỳ',
-    deckHint: 'any',
-    actionSummary: 'Tự chọn rút 1 thẻ từ Khám Phá, Cung Ứng hoặc Đột Kích.',
-    accentColor: '#f59e0b',
+    subtitle: 'Rút 1 thẻ Đột Kích',
+    deckHint: 'event',
+    actionSummary: 'Rút 1 Thẻ Đột Kích (Vũ khí / Sự kiện hắc ám).',
+    accentColor: '#f43f5e',
   },
   {
     id: 'corridor',
@@ -95,9 +102,9 @@ export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
     clusterId: 'south',
     diceNumbers: [9],
     diceLabel: '9',
-    subtitle: 'Hồi 1 hoặc Gây 2 sát thương',
+    subtitle: 'Gây 2 ST hoặc Hồi 1 thương tích',
     deckHint: 'power-9',
-    actionSummary: 'Chọn 1 người bất kỳ: Hồi 1 thương tích HOẶC Gây 2 sát thương.',
+    actionSummary: 'Chọn 1 người bất kỳ (kể cả bạn để hồi máu): Gây 2 ST HOẶC Hồi 1 thương tích.',
     accentColor: '#8b5cf6',
   },
   {
@@ -109,7 +116,7 @@ export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
     diceLabel: '10',
     subtitle: 'Cướp 1 Trang bị đối thủ',
     deckHint: 'power-10',
-    actionSummary: 'Cướp 1 Trang bị đang đeo từ 1 người chơi bất kỳ.',
+    actionSummary: 'Lấy 1 Trang bị đang đeo từ 1 người chơi bất kỳ.',
     accentColor: '#38bdf8',
   },
 ];
@@ -131,11 +138,35 @@ export function isValidLocationId(raw: unknown): raw is BoardGameLocationId {
   return typeof raw === 'string' && Object.hasOwn(LOCATIONS_BY_ID, raw);
 }
 
+export function getClusterForLocation(
+  loc: BoardGameLocationId,
+  clusterPairs: readonly BoardGameClusterPair[] = DEFAULT_CLUSTER_PAIRS,
+): BoardGameZoneClusterId {
+  for (const pair of clusterPairs) {
+    if (pair.locationIds[0] === loc || pair.locationIds[1] === loc) {
+      return pair.clusterId;
+    }
+  }
+  return LOCATIONS_BY_ID[loc].clusterId;
+}
+
+export function getPairedLocationInCluster(
+  loc: BoardGameLocationId,
+  clusterPairs: readonly BoardGameClusterPair[] = DEFAULT_CLUSTER_PAIRS,
+): BoardGameLocationId {
+  for (const pair of clusterPairs) {
+    if (pair.locationIds[0] === loc) return pair.locationIds[1];
+    if (pair.locationIds[1] === loc) return pair.locationIds[0];
+  }
+  return LOCATIONS_CATALOG.find((l) => l.id !== loc)?.id ?? 'lobby';
+}
+
 export function areInSameCluster(
   locA: BoardGameLocationId,
   locB: BoardGameLocationId,
+  clusterPairs: readonly BoardGameClusterPair[] = DEFAULT_CLUSTER_PAIRS,
 ): boolean {
-  return LOCATIONS_BY_ID[locA].clusterId === LOCATIONS_BY_ID[locB].clusterId;
+  return getClusterForLocation(locA, clusterPairs) === getClusterForLocation(locB, clusterPairs);
 }
 
 export function resolveLocationForDiceTotal(
@@ -153,15 +184,13 @@ export function listReachableAttackTargets(
   const others = Object.values(state.players).filter(
     (p) => p.alive && p.playerId !== attacker.playerId,
   );
-  const hasLongCable = attacker.equipped.includes('ev-04');
-  if (hasLongCable) {
-    const remoteTargets = others.filter(
-      (p) => !areInSameCluster(attacker.location, p.location),
-    );
-    // Nếu mọi đối thủ đều đang đứng chung cụm với mình, vẫn cho phép đánh gần để không kẹt lượt cuối trận.
-    return remoteTargets.length > 0 ? remoteTargets : others;
+  const clusterPairs = state.clusterPairs ?? DEFAULT_CLUSTER_PAIRS;
+  const hasHandgun = attacker.equipped.includes('ev-05');
+  if (hasHandgun) {
+    // Chuẩn Shadow Hunters (Handgun): tầm đánh đổi thành mọi Cụm KHÁC ngoài Cụm hiện tại.
+    return others.filter((p) => !areInSameCluster(attacker.location, p.location, clusterPairs));
   }
-  return others.filter((p) => areInSameCluster(attacker.location, p.location));
+  return others.filter((p) => areInSameCluster(attacker.location, p.location, clusterPairs));
 }
 
 export function canPlayerAttackTarget(

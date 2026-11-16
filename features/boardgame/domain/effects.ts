@@ -1,6 +1,7 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/effects.ts — Thực thi mọi hiệu ứng xúc xắc di chuyển,
-// quyền năng khu vực, thẻ Thăm Dò Kín 1-đối-1, Trang bị, Đột Kích, Chiến đấu & Kỹ năng (v4).
+// features/boardgame/domain/effects.ts — Thực thi mọi hiệu ứng chuẩn 100%
+// Shadow Hunters: Xúc xắc di chuyển (+ La Bàn), 6 Khu vực, 48 Thẻ bài,
+// 10 Nhân vật & Giao tranh.
 // ---------------------------------------------------------------------------
 
 import type {
@@ -13,11 +14,13 @@ import type {
 import { getCardById } from './cards';
 import { FACTION_LABELS, getRoleDesign } from './roles';
 import {
-  areInSameCluster,
   BOARD_GAME_MAX_EQUIPPED,
   BOARD_GAME_MAX_HAND,
   canPlayerAttackTarget,
+  DEFAULT_CLUSTER_PAIRS,
   getLocationDefinition,
+  getPairedLocationInCluster,
+  listReachableAttackTargets,
   LOCATIONS_CATALOG,
   nextRandomInt,
   resolveLocationForDiceTotal,
@@ -90,7 +93,7 @@ export function appendPrivateClue(
   }
 }
 
-function discardCardId(state: AuthoritativeGameState, cardId: string): void {
+export function discardCardId(state: AuthoritativeGameState, cardId: string): void {
   const card = getCardById(cardId);
   if (card) {
     state.discards[card.deck].push(cardId);
@@ -139,32 +142,96 @@ function equipToPlayerSlot(
   owner: AuthoritativePlayerState,
   cardId: string,
 ): void {
-  // Chuẩn Shadow Hunters: trang bị đặt ngửa không bị giới hạn trần 3 món.
   if (owner.equipped.length < BOARD_GAME_MAX_EQUIPPED) {
     owner.equipped.push(cardId);
   }
+}
+
+function pickEquippedIndex(
+  equipped: readonly string[],
+  mode: 'highest' | 'lowest',
+  preferredCardId?: string,
+): number {
+  if (preferredCardId) {
+    const found = equipped.indexOf(preferredCardId);
+    if (found >= 0) return found;
+  }
+  let chosenIdx = 0;
+  let chosenVal = mode === 'highest' ? -1 : Number.POSITIVE_INFINITY;
+  for (let i = 0; i < equipped.length; i++) {
+    const c = getCardById(equipped[i]);
+    const val = c ? c.value : 0;
+    if (mode === 'highest' ? val > chosenVal : val < chosenVal) {
+      chosenVal = val;
+      chosenIdx = i;
+    }
+  }
+  return chosenIdx;
 }
 
 export function stealOneEquippedGear(
   _state: AuthoritativeGameState,
   thief: AuthoritativePlayerState,
   victim: AuthoritativePlayerState,
+  preferredCardId?: string,
 ): GameCardDefinition | null {
   if (victim.equipped.length === 0) return null;
-  let bestIdx = 0;
-  let bestVal = -1;
-  for (let i = 0; i < victim.equipped.length; i++) {
-    const c = getCardById(victim.equipped[i]);
-    const val = c ? c.value : 0;
-    if (val > bestVal) {
-      bestVal = val;
-      bestIdx = i;
-    }
-  }
+  const bestIdx = pickEquippedIndex(victim.equipped, 'highest', preferredCardId);
   const [stolenId] = victim.equipped.splice(bestIdx, 1);
   if (!stolenId) return null;
   equipToPlayerSlot(thief, stolenId);
   return getCardById(stolenId);
+}
+
+function transferLowestEquippedGear(
+  giver: AuthoritativePlayerState,
+  receiver: AuthoritativePlayerState,
+  preferredCardId?: string,
+): GameCardDefinition | null {
+  if (giver.equipped.length === 0) return null;
+  const idx = pickEquippedIndex(giver.equipped, 'lowest', preferredCardId);
+  const [movedId] = giver.equipped.splice(idx, 1);
+  if (!movedId) return null;
+  equipToPlayerSlot(receiver, movedId);
+  return getCardById(movedId);
+}
+
+function stealAllEquippedGear(
+  thief: AuthoritativePlayerState,
+  victim: AuthoritativePlayerState,
+): GameCardDefinition[] {
+  const stolen: GameCardDefinition[] = [];
+  while (victim.equipped.length > 0) {
+    const id = victim.equipped.shift();
+    if (!id) continue;
+    equipToPlayerSlot(thief, id);
+    const def = getCardById(id);
+    if (def) stolen.push(def);
+  }
+  return stolen;
+}
+
+function revealPlayerNow(
+  state: AuthoritativeGameState,
+  player: AuthoritativePlayerState,
+  reason: 'voluntary' | 'eliminated',
+  nowMs: number,
+): boolean {
+  if (player.revealed) return false;
+  player.revealed = true;
+  const role = getRoleDesign(player.roleId);
+  state.lastRevealEvent = {
+    id: `rev-${state.turnNumber}-${player.playerId}-${nowMs}`,
+    round: state.round,
+    atMs: nowMs,
+    playerId: player.playerId,
+    displayName: player.displayName,
+    roleId: player.roleId,
+    roleName: role.name,
+    faction: player.faction,
+    reason,
+  };
+  return true;
 }
 
 export function applyDamage(
@@ -174,14 +241,40 @@ export function applyDamage(
   sourceType: DamageSourceKind,
   attacker: AuthoritativePlayerState | null,
   nowMs: number,
+  options?: { isTalismanWardable?: boolean },
 ): number {
   if (!target.alive || rawAmount <= 0) return 0;
 
-  if (target.guardianShieldActive) {
+  // Lá Chắn Thiên Thần (eq-10): chỉ chặn đòn đánh thường (ATTACK) tới đầu lượt kế.
+  if (sourceType === 'attack' && target.guardianShieldActive) {
     appendPublicLog(
       state,
       'skill',
-      `🛡️ Lá Chắn Chốt Trực che chở ${target.displayName} — miễn nhiễm sát thương!`,
+      `🛡️ Lá Chắn Thiên Thần che chở ${target.displayName} — miễn nhiễm đòn đánh!`,
+      nowMs,
+      target.playerId,
+    );
+    return 0;
+  }
+
+  // Ghim Cài May Mắn (eq-02): miễn sát thương từ Hành Lang Tầng 4 (Ô 9 / Weird Woods).
+  if (sourceType === 'location' && target.equipped.includes('eq-02')) {
+    appendPublicLog(
+      state,
+      'equipment',
+      `🍀 Ghim Cài May Mắn bảo vệ ${target.displayName} khỏi bẫy Ô 9 (0 sát thương)!`,
+      nowMs,
+      target.playerId,
+    );
+    return 0;
+  }
+
+  // Bùa Hộ Mệnh (eq-03): miễn sát thương từ Dơi Hút Điện (ev-07), Nhện Chập Mạch (ev-08), Kíp Nổ (ev-09).
+  if (options?.isTalismanWardable && target.equipped.includes('eq-03')) {
+    appendPublicLog(
+      state,
+      'equipment',
+      `🧿 Bùa Hộ Mệnh bảo vệ ${target.displayName} — miễn nhiễm sát thương từ thẻ Đột Kích!`,
       nowMs,
       target.playerId,
     );
@@ -189,17 +282,9 @@ export function applyDamage(
   }
 
   let finalDmg = rawAmount;
-  if (sourceType === 'attack' && finalDmg > 0) {
-    if (target.equipped.includes('eq-01') && finalDmg > 1) {
-      finalDmg -= 1;
-    }
-    if (target.equipped.includes('eq-02') && finalDmg >= 4) {
-      finalDmg = Math.max(1, finalDmg - 2);
-    }
-  } else if ((sourceType === 'event' || sourceType === 'location') && finalDmg > 0) {
-    if (target.equipped.includes('eq-03')) {
-      finalDmg = Math.max(0, finalDmg - 1);
-    }
+  // Áo Choàng Bảo Hộ (eq-01): giảm 1 sát thương từ đòn đánh thường (giảm về 0 được).
+  if (sourceType === 'attack' && finalDmg > 0 && target.equipped.includes('eq-01')) {
+    finalDmg = Math.max(0, finalDmg - 1);
   }
 
   if (finalDmg <= 0) return 0;
@@ -215,9 +300,14 @@ export function applyDamage(
     target.eliminatedByPlayerId = attacker ? attacker.playerId : null;
     target.revealed = true;
 
+    const deadCountNow = Object.values(state.players).filter((p) => !p.alive).length;
+    if (!state.firstDeadPlayerId) {
+      state.firstDeadPlayerId = target.playerId;
+    }
+
     const role = getRoleDesign(target.roleId);
     state.lastRevealEvent = {
-      id: `rev-${state.turnNumber}-${nowMs}`,
+      id: `rev-${state.turnNumber}-${target.playerId}-${nowMs}`,
       round: state.round,
       atMs: nowMs,
       playerId: target.playerId,
@@ -242,31 +332,74 @@ export function applyDamage(
       nowMs,
     );
 
-    // Bình "Bảo Vệ" tự tay hạ kẻ đã loại Người được bảo hộ -> hoàn thành báo thù.
-    if (attacker && attacker.alive && attacker.roleId === 'lang-cuu-ho' && attacker.protegePlayerId) {
-      const protege = state.players[attacker.protegePlayerId];
-      if (protege && protege.eliminatedByPlayerId === target.playerId) {
-        attacker.avengedProtegeKiller = true;
+    // Đạt "Cảm Tử" (Daniel — Scream): nếu còn sống khi người khác ĐẦU TIÊN chết -> buộc lộ diện ngay!
+    if (deadCountNow === 1) {
+      for (const other of Object.values(state.players)) {
+        if (
+          other.playerId !== target.playerId &&
+          other.alive &&
+          !other.revealed &&
+          other.roleId === 'lang-tien-phong'
+        ) {
+          revealPlayerNow(state, other, 'voluntary', nowMs);
+          appendPublicLog(
+            state,
+            'reveal',
+            `🗣️ Tiếng Hét Lộ Diện: ${other.displayName} (Đạt "Cảm Tử") buộc phải lật vai khi có người đầu tiên gục ngã!`,
+            nowMs,
+            other.playerId,
+          );
+        }
       }
     }
 
-    // Chiến lợi phẩm: khi kết liễu đối thủ bằng đòn đánh/sự kiện, kẻ hạ gục lấy 1 trang bị nếu đối thủ có.
-    let looted: GameCardDefinition | null = null;
+    // Bách "Cuồng Chiến" (Charles): thắng ngay khi đòn đánh thường kết liễu nạn nhân lúc tổng xác >= 3!
     if (
       attacker &&
       attacker.alive &&
-      (sourceType === 'attack' || sourceType === 'event') &&
+      attacker.playerId !== target.playerId &&
+      sourceType === 'attack' &&
+      attacker.roleId === 'lang-cuu-ho' &&
+      deadCountNow >= 3
+    ) {
+      attacker.charlesKillWon = true;
+    }
+
+    // Chiến lợi phẩm khi hạ gục (khi người khác kết liễu mục tiêu)
+    if (
+      attacker &&
+      attacker.alive &&
+      attacker.playerId !== target.playerId &&
       target.equipped.length > 0
     ) {
-      looted = stealOneEquippedGear(state, attacker, target);
-      if (looted) {
-        appendPublicLog(
-          state,
-          'steal',
-          `🏆 ${attacker.displayName} thu giữ "${looted.title}" từ ${target.displayName}!`,
-          nowMs,
-          attacker.playerId,
-        );
+      const lootAll =
+        sourceType === 'attack' &&
+        (attacker.equipped.includes('eq-06') ||
+          (attacker.revealed &&
+            attacker.roleId === 'lang-anh-san' &&
+            state.turnOrder.length >= 7));
+      if (lootAll) {
+        const lootedList = stealAllEquippedGear(attacker, target);
+        if (lootedList.length > 0) {
+          appendPublicLog(
+            state,
+            'steal',
+            `🏆 ${attacker.displayName} thu giữ toàn bộ ${lootedList.length} Trang bị từ ${target.displayName} (${lootedList.map((c) => c.title).join(', ')})!`,
+            nowMs,
+            attacker.playerId,
+          );
+        }
+      } else {
+        const looted = stealOneEquippedGear(state, attacker, target);
+        if (looted) {
+          appendPublicLog(
+            state,
+            'steal',
+            `🏆 ${attacker.displayName} thu giữ "${looted.title}" từ ${target.displayName}!`,
+            nowMs,
+            attacker.playerId,
+          );
+        }
       }
     }
 
@@ -292,16 +425,110 @@ export function resolveDiceRollMove(
     return { ok: false, error: 'Hiện không ở pha tung xúc xắc di chuyển.' };
   }
 
+  // La Bàn Định Hướng (eq-05): tung xúc xắc di chuyển 2 lần và chọn 1 trong 2 kết quả.
+  if (actor.equipped.includes('eq-05')) {
+    const rollOneNonSame = () => {
+      let d6 = rollD6(state);
+      let d4 = rollD4(state);
+      let mapped = resolveLocationForDiceTotal(d6 + d4);
+      let guard = 0;
+      while (mapped === actor.location && guard < 4) {
+        guard += 1;
+        d6 = rollD6(state);
+        d4 = rollD4(state);
+        mapped = resolveLocationForDiceTotal(d6 + d4);
+      }
+      if (mapped === actor.location) {
+        const alt = LOCATIONS_CATALOG.find((l) => l.id !== actor.location)?.id ?? 'lobby';
+        mapped = alt;
+      }
+      return { d6, d4, total: d6 + d4, mapped };
+    };
+
+    const r1 = rollOneNonSame();
+    const r2 = rollOneNonSame();
+    const allOthers = LOCATIONS_CATALOG.filter((l) => l.id !== actor.location).map((l) => l.id);
+    const hasChooseAny = r1.mapped === 'choose-any' || r2.mapped === 'choose-any';
+    const distinctChoices = hasChooseAny
+      ? allOthers
+      : Array.from(
+          new Set(
+            [r1.mapped, r2.mapped].filter(
+              (m): m is BoardGameLocationId => m !== 'choose-any' && m !== actor.location,
+            ),
+          ),
+        );
+    const finalChoices = distinctChoices.length > 0 ? distinctChoices : [allOthers[0]];
+
+    if (finalChoices.length === 1) {
+      const destId = finalChoices[0];
+      const destDef = getLocationDefinition(destId);
+      actor.location = destId;
+      actor.consecutiveSameZoneRolls = 0;
+      state.allowedMoveDestinations = undefined;
+      state.turnPhase = 'LOCATION_ACTION';
+      state.lastDiceRoll = {
+        id: `roll-${state.turnNumber}-${nowMs}`,
+        round: state.round,
+        atMs: nowMs,
+        playerId: actor.playerId,
+        displayName: actor.displayName,
+        kind: 'move',
+        d6: r1.d6,
+        d4: r1.d4,
+        total: r1.total,
+        rerollRequired: false,
+        freeChoice: false,
+        resolvedLocation: destId,
+      };
+      appendPublicLog(
+        state,
+        'move',
+        `🧭 La Bàn (${actor.displayName}): (${r1.d6}+${r1.d4}) & (${r2.d6}+${r2.d4}) → tới Ô ${destDef.diceLabel} (${destDef.name}).`,
+        nowMs,
+        actor.playerId,
+      );
+      return { ok: true };
+    }
+
+    state.turnPhase = 'CHOOSE_MOVE';
+    state.allowedMoveDestinations = finalChoices;
+    actor.consecutiveSameZoneRolls = 0;
+    state.lastDiceRoll = {
+      id: `roll-${state.turnNumber}-${nowMs}`,
+      round: state.round,
+      atMs: nowMs,
+      playerId: actor.playerId,
+      displayName: actor.displayName,
+      kind: 'move',
+      d6: r1.d6,
+      d4: r1.d4,
+      total: r1.total,
+      rerollRequired: false,
+      freeChoice: true,
+      resolvedLocation: finalChoices[0],
+    };
+    appendPublicLog(
+      state,
+      'dice',
+      `🧭 La Bàn Định Hướng: ${actor.displayName} tung (${r1.d6}+${r1.d4}=${r1.total}) & (${r2.d6}+${r2.d4}=${r2.total}) — hãy chọn 1 khu vực!`,
+      nowMs,
+      actor.playerId,
+    );
+    return { ok: true };
+  }
+
   const d6 = rollD6(state);
   const d4 = rollD4(state);
   const total = d6 + d4;
   const mapped = resolveLocationForDiceTotal(total);
 
   if (mapped === 'choose-any') {
-    actor.consecutiveSameZoneRolls = 0;
-    state.turnPhase = 'CHOOSE_MOVE';
+    state.allowedMoveDestinations = LOCATIONS_CATALOG.filter((l) => l.id !== actor.location).map(
+      (l) => l.id,
+    );
     state.lastDiceRoll = {
-      id: `dice-${state.turnNumber}-${nowMs}`,
+      id: `roll-${state.turnNumber}-${nowMs}`,
       round: state.round,
       atMs: nowMs,
       playerId: actor.playerId,
@@ -314,10 +541,12 @@ export function resolveDiceRollMove(
       freeChoice: true,
       resolvedLocation: null,
     };
+    state.turnPhase = 'CHOOSE_MOVE';
+    actor.consecutiveSameZoneRolls = 0;
     appendPublicLog(
       state,
       'dice',
-      `🎲 ${actor.displayName} tung ${d6} + ${d4} = 7! Được tự do chọn bất kỳ khu vực nào kế tiếp.`,
+      `🎲 ${actor.displayName} tung ${d6} + ${d4} = 7! Tự do chọn khu vực bất kỳ trên bàn.`,
       nowMs,
       actor.playerId,
     );
@@ -325,11 +554,16 @@ export function resolveDiceRollMove(
   }
 
   if (mapped === actor.location) {
-    if (actor.consecutiveSameZoneRolls < 2) {
-      actor.consecutiveSameZoneRolls += 1;
-      const loc = getLocationDefinition(mapped);
+    actor.consecutiveSameZoneRolls += 1;
+    if (actor.consecutiveSameZoneRolls >= 2) {
+      const others = LOCATIONS_CATALOG.filter((l) => l.id !== actor.location);
+      const fallback = others[nextRandomInt(state, others.length)];
+      actor.location = fallback.id;
+      actor.consecutiveSameZoneRolls = 0;
+      state.allowedMoveDestinations = undefined;
+      state.turnPhase = 'LOCATION_ACTION';
       state.lastDiceRoll = {
-        id: `dice-${state.turnNumber}-${nowMs}`,
+        id: `roll-${state.turnNumber}-${nowMs}`,
         round: state.round,
         atMs: nowMs,
         playerId: actor.playerId,
@@ -338,28 +572,23 @@ export function resolveDiceRollMove(
         d6,
         d4,
         total,
-        rerollRequired: true,
+        rerollRequired: false,
         freeChoice: false,
-        resolvedLocation: mapped,
+        resolvedLocation: fallback.id,
       };
       appendPublicLog(
         state,
-        'dice',
-        `🎲 ${actor.displayName} tung ${d6} + ${d4} = ${total} (trùng ${loc.name}) — được ĐỔ LẠI xúc xắc!`,
+        'move',
+        `🎲 ${actor.displayName} tung trùng ô hiện tại liên tiếp 2 lần → hệ thống chuyển thẳng sang Ô ${fallback.diceLabel} (${fallback.name}).`,
         nowMs,
         actor.playerId,
       );
       return { ok: true };
     }
 
-    // Chống kẹt vòng lặp vô hạn: quá 2 lần trùng liên tiếp thì chuyển sang khu vực kế tiếp xác định.
-    const candidates = LOCATIONS_CATALOG.filter((l) => l.id !== actor.location);
-    const chosen = candidates[nextRandomInt(state, candidates.length)];
-    actor.consecutiveSameZoneRolls = 0;
-    actor.location = chosen.id;
-    state.turnPhase = 'LOCATION_ACTION';
+    state.allowedMoveDestinations = undefined;
     state.lastDiceRoll = {
-      id: `dice-${state.turnNumber}-${nowMs}`,
+      id: `roll-${state.turnNumber}-${nowMs}`,
       round: state.round,
       atMs: nowMs,
       playerId: actor.playerId,
@@ -368,26 +597,28 @@ export function resolveDiceRollMove(
       d6,
       d4,
       total,
-      rerollRequired: false,
+      rerollRequired: true,
       freeChoice: false,
-      resolvedLocation: chosen.id,
+      resolvedLocation: mapped,
     };
+    const sameLoc = getLocationDefinition(mapped);
     appendPublicLog(
       state,
-      'move',
-      `🎲 ${actor.displayName} tung lần 3 — đổi hướng tới ${chosen.name} (${chosen.diceLabel}).`,
+      'dice',
+      `🎲 ${actor.displayName} tung ${d6} + ${d4} = ${total} (trùng ${sameLoc.name}) → được quyền ĐỔ LẠI!`,
       nowMs,
       actor.playerId,
     );
     return { ok: true };
   }
 
-  actor.consecutiveSameZoneRolls = 0;
   actor.location = mapped;
+  actor.consecutiveSameZoneRolls = 0;
+  state.allowedMoveDestinations = undefined;
   state.turnPhase = 'LOCATION_ACTION';
   const destDef = getLocationDefinition(mapped);
   state.lastDiceRoll = {
-    id: `dice-${state.turnNumber}-${nowMs}`,
+    id: `roll-${state.turnNumber}-${nowMs}`,
     round: state.round,
     atMs: nowMs,
     playerId: actor.playerId,
@@ -403,7 +634,7 @@ export function resolveDiceRollMove(
   appendPublicLog(
     state,
     'move',
-    `🎲 ${actor.displayName} tung ${d6} + ${d4} = ${total} → di chuyển tới ${destDef.name}.`,
+    `🚶 ${actor.displayName} tung ${d6} + ${d4} = ${total} → di chuyển tới Ô ${destDef.diceLabel} (${destDef.name}).`,
     nowMs,
     actor.playerId,
   );
@@ -413,23 +644,37 @@ export function resolveDiceRollMove(
 export function resolveChooseDestination(
   state: AuthoritativeGameState,
   actor: AuthoritativePlayerState,
-  destination: BoardGameLocationId,
+  destLocation: BoardGameLocationId,
   nowMs: number,
 ): EngineActionResult {
   if (state.turnPhase !== 'CHOOSE_MOVE') {
-    return { ok: false, error: 'Chỉ được chọn khu vực tự do sau khi tung ra tổng 7.' };
+    return { ok: false, error: 'Chỉ chọn khu vực khi có quyền lựa chọn điểm đến (Tổng 7 hoặc La Bàn).' };
   }
-  if (destination === actor.location) {
-    return { ok: false, error: 'Phải chọn một khu vực khác với vị trí hiện tại.' };
+  if (destLocation === actor.location) {
+    return { ok: false, error: 'Phải di chuyển tới một khu vực khác với vị trí đang đứng.' };
   }
+  if (
+    state.allowedMoveDestinations &&
+    state.allowedMoveDestinations.length > 0 &&
+    !state.allowedMoveDestinations.includes(destLocation)
+  ) {
+    return { ok: false, error: 'Điểm đến không nằm trong lựa chọn hợp lệ từ kết quả xúc xắc.' };
+  }
+  actor.location = destLocation;
   actor.consecutiveSameZoneRolls = 0;
-  actor.location = destination;
+  state.allowedMoveDestinations = undefined;
   state.turnPhase = 'LOCATION_ACTION';
-  const destDef = getLocationDefinition(destination);
+  const destDef = getLocationDefinition(destLocation);
+  if (state.lastDiceRoll && state.lastDiceRoll.playerId === actor.playerId) {
+    state.lastDiceRoll = {
+      ...state.lastDiceRoll,
+      resolvedLocation: destLocation,
+    };
+  }
   appendPublicLog(
     state,
     'move',
-    `🧭 ${actor.displayName} chọn di chuyển tới ${destDef.name} (${destDef.diceLabel}).`,
+    `✨ ${actor.displayName} chọn di chuyển tới Ô ${destDef.diceLabel} (${destDef.name}).`,
     nowMs,
     actor.playerId,
   );
@@ -466,28 +711,38 @@ export function resolveDrawLocationCard(
     return { ok: true };
   }
 
-  let trimmedOverflow = false;
+  const deckLabel =
+    deckId === 'investigation'
+      ? 'Khám Phá (Xanh)'
+      : deckId === 'equipment'
+        ? 'Cung Ứng (Trắng)'
+        : 'Đột Kích (Đen)';
+
+  // Chuẩn Shadow Hunters: Rút trúng Trang bị -> đặt ngửa ĐEO NGAY trước mặt!
+  if (!card.isConsumable && card.deck !== 'investigation') {
+    equipToPlayerSlot(actor, card.id);
+    state.turnPhase = 'MAIN_ACTION';
+    appendPublicLog(
+      state,
+      'equipment',
+      `🎒 ${actor.displayName} rút từ ${deckLabel} tại ${loc.name} và trang bị ngay "${card.title}"!`,
+      nowMs,
+      actor.playerId,
+    );
+    return { ok: true };
+  }
+
   if (actor.hand.length >= BOARD_GAME_MAX_HAND) {
     const discardedId = actor.hand.shift();
-    if (discardedId) {
-      discardCardId(state, discardedId);
-      trimmedOverflow = true;
-    }
+    if (discardedId) discardCardId(state, discardedId);
   }
   actor.hand.push(card.id);
   state.turnPhase = 'MAIN_ACTION';
 
-  const deckLabel =
-    deckId === 'investigation'
-      ? 'Khám Phá (Kín)'
-      : deckId === 'equipment'
-        ? 'Cung Ứng'
-        : 'Đột Kích';
-
   appendPublicLog(
     state,
     'draw',
-    `🃏 ${actor.displayName} rút 1 thẻ ${deckLabel} tại ${loc.name}${trimmedOverflow ? ` (đầy tay ${BOARD_GAME_MAX_HAND} lá, tự bỏ 1 lá cũ)` : ''}.`,
+    `🃏 ${actor.displayName} rút 1 thẻ ${deckLabel} tại ${loc.name} (cần giải quyết trong lượt).`,
     nowMs,
     actor.playerId,
   );
@@ -500,6 +755,7 @@ export function resolveLocationPower(
   targetPlayerId: string | undefined,
   mode: 'heal' | 'damage' | 'steal' | undefined,
   nowMs: number,
+  equipCardId?: string,
 ): EngineActionResult {
   if (state.turnPhase !== 'LOCATION_ACTION') {
     return { ok: false, error: 'Không ở pha hành động khu vực.' };
@@ -510,7 +766,14 @@ export function resolveLocationPower(
     if (!target || !target.alive) {
       return { ok: false, error: 'Mục tiêu Hành Lang (9) không hợp lệ hoặc đã bị loại.' };
     }
-    const chosenMode = mode === 'damage' ? 'damage' : mode === 'heal' ? 'heal' : target.playerId === actor.playerId ? 'heal' : 'damage';
+    const chosenMode =
+      mode === 'damage'
+        ? 'damage'
+        : mode === 'heal'
+          ? 'heal'
+          : target.playerId === actor.playerId
+            ? 'heal'
+            : 'damage';
     if (chosenMode === 'damage' && target.playerId === actor.playerId) {
       return { ok: false, error: 'Không thể tự gây sát thương lên chính mình tại Hành Lang (9).' };
     }
@@ -539,7 +802,10 @@ export function resolveLocationPower(
 
   if (actor.location === 'court') {
     if (!targetPlayerId) {
-      return { ok: false, error: 'Hãy chọn 1 người chơi đang đeo Trang bị để cướp, hoặc Bỏ qua khu vực.' };
+      return {
+        ok: false,
+        error: 'Hãy chọn 1 người chơi đang đeo Trang bị để cướp, hoặc Bỏ qua khu vực.',
+      };
     }
     const victim = state.players[targetPlayerId];
     if (!victim || !victim.alive || victim.playerId === actor.playerId) {
@@ -548,7 +814,7 @@ export function resolveLocationPower(
     if (victim.equipped.length === 0) {
       return { ok: false, error: `${victim.displayName} chưa đeo Trang bị nào để cướp.` };
     }
-    const stolen = stealOneEquippedGear(state, actor, victim);
+    const stolen = stealOneEquippedGear(state, actor, victim, equipCardId);
     if (stolen) {
       appendPublicLog(
         state,
@@ -562,7 +828,7 @@ export function resolveLocationPower(
     return { ok: true };
   }
 
-  return { ok: false, error: 'Khu vực hiện tại không có quyền năng đặc biệt (ô 9 hoặc ô 10).' };
+  return { ok: false, error: 'Khu vực hiện tại dùng hành động rút bài, không phải quyền năng đặc biệt.' };
 }
 
 export function resolveSkipLocation(
@@ -571,13 +837,13 @@ export function resolveSkipLocation(
   nowMs: number,
 ): EngineActionResult {
   if (state.turnPhase !== 'LOCATION_ACTION') {
-    return { ok: false, error: 'Chỉ bỏ qua được khi đang ở pha Hành động khu vực.' };
+    return { ok: false, error: 'Không ở pha hành động khu vực.' };
   }
   state.turnPhase = 'MAIN_ACTION';
   appendPublicLog(
     state,
     'system',
-    `⏭️ ${actor.displayName} bỏ qua hành động khu vực.`,
+    `⏭️ ${actor.displayName} bỏ qua hành động khu vực để vào pha Chiến đấu.`,
     nowMs,
     actor.playerId,
   );
@@ -618,8 +884,10 @@ export function resolveUseCard(
   actor: AuthoritativePlayerState,
   cardId: string,
   targetPlayerId: string | undefined,
-  targetLocation: BoardGameLocationId | undefined,
+  _targetLocation: BoardGameLocationId | undefined,
   nowMs: number,
+  equipCardId?: string,
+  skipEffect?: boolean,
 ): EngineActionResult {
   if (state.turnPhase !== 'LOCATION_ACTION' && state.turnPhase !== 'MAIN_ACTION') {
     return { ok: false, error: 'Hãy tung xúc xắc di chuyển trước khi dùng thẻ Hành động.' };
@@ -633,125 +901,425 @@ export function resolveUseCard(
     return { ok: false, error: 'Thẻ bài không tồn tại.' };
   }
   if (card.deck === 'investigation') {
-    return { ok: false, error: 'Thẻ Khám Phá cần dùng hành động Điều Tra lên 1 người chơi.' };
+    return { ok: false, error: 'Thẻ Khám Phá cần dùng hành động Điều Tra lên 1 người chơi khác.' };
   }
   if (!card.isConsumable) {
     return resolveEquipCard(state, actor, cardId, nowMs);
   }
 
   switch (card.effectKind) {
-    case 'ev_heal_2':
-    case 'ev_heal_3': {
-      const amount = card.effectKind === 'ev_heal_3' ? 3 : 2;
+    case 'eq_holy_water': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      const healed = applyHeal(state, actor, 2);
+      appendPublicLog(
+        state,
+        'equipment',
+        `💧 ${actor.displayName} uống "${card.title}": tự hồi ${healed} thương tích.`,
+        nowMs,
+        actor.playerId,
+      );
+      return { ok: true };
+    }
+
+    case 'eq_blessing': {
+      const target = targetPlayerId ? state.players[targetPlayerId] : null;
+      if (!target || !target.alive || target.playerId === actor.playerId) {
+        return { ok: false, error: 'Lời Chúc Cứu Viện yêu cầu chọn 1 người chơi KHÁC còn sống.' };
+      }
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      const roll = rollD6(state);
+      const healed = applyHeal(state, target, roll);
+      appendPublicLog(
+        state,
+        'equipment',
+        `✨ ${actor.displayName} dùng "${card.title}" cho ${target.displayName} (tung 1d6=${roll}) → hồi ${healed} thương tích!`,
+        nowMs,
+        actor.playerId,
+      );
+      return { ok: true };
+    }
+
+    case 'eq_first_aid': {
       const target = targetPlayerId ? state.players[targetPlayerId] : actor;
       if (!target || !target.alive) {
-        return { ok: false, error: 'Mục tiêu hồi sức không hợp lệ.' };
+        return { ok: false, error: 'Mục tiêu Sơ Cứu Mốc 7 không hợp lệ.' };
       }
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
-      const healed = applyHeal(state, target, amount);
+      const prevWounds = target.woundsTaken;
+      target.woundsTaken = Math.min(target.maxHp - 1, 7);
+      target.hp = target.maxHp - target.woundsTaken;
       appendPublicLog(
         state,
         'equipment',
-        `💊 ${actor.displayName} dùng "${card.title}": ${target.displayName} hồi ${healed} thương tích.`,
+        `🩺 ${actor.displayName} dùng "${card.title}" lên ${target.displayName}: thương tích chuyển từ ${prevWounds} → ${target.woundsTaken}!`,
         nowMs,
         actor.playerId,
       );
       return { ok: true };
     }
-    case 'ev_cluster_heal_2': {
+
+    case 'eq_guardian_angel': {
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
-      const affected = Object.values(state.players).filter(
-        (p) => p.alive && areInSameCluster(p.location, actor.location),
-      );
-      for (const p of affected) {
-        applyHeal(state, p, 2);
-      }
+      actor.guardianShieldActive = true;
       appendPublicLog(
         state,
         'equipment',
-        `💡 ${actor.displayName} bật "${card.title}": cả Cụm hồi 2 thương tích (${affected.length} người).`,
+        `🛡️ ${actor.displayName} kích hoạt "${card.title}" — miễn nhiễm đòn đánh thường tới đầu lượt kế tiếp!`,
         nowMs,
         actor.playerId,
       );
       return { ok: true };
     }
-    case 'ev_full_heal_hunter': {
+
+    case 'eq_flare': {
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
-      const fullClean = actor.faction === 'lantern-guard' && actor.revealed;
-      const healed = applyHeal(state, actor, fullClean ? actor.woundsTaken : 1);
-      appendPublicLog(
-        state,
-        'equipment',
-        `🪞 ${actor.displayName} dùng "${card.title}": hồi ${healed} thương tích${fullClean ? ' (hồi đầy Đội Săn Đêm!)' : '.'}`,
-        nowMs,
-        actor.playerId,
+      const others = Object.values(state.players).filter(
+        (p) => p.alive && p.playerId !== actor.playerId,
       );
-      return { ok: true };
-    }
-    case 'ev_snipe_2': {
-      if (!targetPlayerId) {
-        return { ok: false, error: 'Hãy chọn 1 người chơi để phóng điện.' };
+      for (const other of others) {
+        applyDamage(state, other, 2, 'event', actor, nowMs);
       }
-      const target = state.players[targetPlayerId];
-      if (!target || !target.alive || target.playerId === actor.playerId) {
-        return { ok: false, error: 'Mục tiêu không hợp lệ.' };
-      }
-      actor.hand.splice(idx, 1);
-      discardCardId(state, card.id);
-      const dealt = applyDamage(state, target, 2, 'event', actor, nowMs);
       appendPublicLog(
         state,
         'event',
-        `⚡ ${actor.displayName} dùng "${card.title}": ${target.displayName} chịu ${dealt} sát thương!`,
+        `💥 ${actor.displayName} bắn "${card.title}": tất cả ${others.length} người chơi khác chịu 2 sát thương!`,
         nowMs,
         actor.playerId,
       );
       return { ok: true };
     }
-    case 'ev_location_blast_2': {
-      const zoneId = targetLocation ?? actor.location;
-      const zoneDef = getLocationDefinition(zoneId);
+
+    case 'eq_mirror': {
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
-      const victims = Object.values(state.players).filter(
-        (p) => p.alive && p.location === zoneId,
+      if (
+        (actor.roleId === 'suong-an-danh' || actor.roleId === 'suong-gac-cong') &&
+        !actor.revealed
+      ) {
+        revealPlayerNow(state, actor, 'voluntary', nowMs);
+        const role = getRoleDesign(actor.roleId);
+        appendPublicLog(
+          state,
+          'reveal',
+          `🪞 ${actor.displayName} soi "${card.title}" và buộc phải lộ diện: ${role.name} (${FACTION_LABELS[actor.faction]})!`,
+          nowMs,
+          actor.playerId,
+        );
+      } else {
+        appendPublicLog(
+          state,
+          'equipment',
+          `🪞 ${actor.displayName} soi "${card.title}" — không có phản ứng lộ diện.`,
+          nowMs,
+          actor.playerId,
+        );
+      }
+      return { ok: true };
+    }
+
+    case 'eq_advent': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      if (!skipEffect && actor.faction === 'lantern-guard') {
+        revealPlayerNow(state, actor, 'voluntary', nowMs);
+        const healed = applyHeal(state, actor, actor.woundsTaken);
+        appendPublicLog(
+          state,
+          'reveal',
+          `🔦 ${actor.displayName} kích hoạt "${card.title}" (Đội Săn Đêm): lộ vai & hồi sạch ${healed} thương tích về 0!`,
+          nowMs,
+          actor.playerId,
+        );
+      } else {
+        appendPublicLog(
+          state,
+          'equipment',
+          `🃏 ${actor.displayName} bỏ qua "${card.title}" (giữ kín / không kích hoạt).`,
+          nowMs,
+          actor.playerId,
+        );
+      }
+      return { ok: true };
+    }
+
+    case 'eq_chocolate': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      const qualifies =
+        actor.roleId === 'lang-quan-sat' ||
+        actor.roleId === 'gac-truc-ban' ||
+        actor.roleId === 'suong-tin-gia';
+      if (!skipEffect && qualifies) {
+        revealPlayerNow(state, actor, 'voluntary', nowMs);
+        const healed = applyHeal(state, actor, actor.woundsTaken);
+        appendPublicLog(
+          state,
+          'reveal',
+          `🍫 ${actor.displayName} dùng "${card.title}": lộ vai ${getRoleDesign(actor.roleId).name} & hồi sạch ${healed} thương tích về 0!`,
+          nowMs,
+          actor.playerId,
+        );
+      } else {
+        appendPublicLog(
+          state,
+          'equipment',
+          `🍫 ${actor.displayName} đặt xuống "${card.title}" (không kích hoạt).`,
+          nowMs,
+          actor.playerId,
+        );
+      }
+      return { ok: true };
+    }
+
+    case 'eq_concealed_knowledge': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      state.extraTurnPending = true;
+      appendPublicLog(
+        state,
+        'equipment',
+        `📘 ${actor.displayName} kích hoạt "${card.title}" — sẽ được đi thêm 1 lượt phụ ngay sau lượt này!`,
+        nowMs,
+        actor.playerId,
       );
+      return { ok: true };
+    }
+
+    case 'ev_vampire_bat': {
+      const target = targetPlayerId ? state.players[targetPlayerId] : null;
+      if (!target || !target.alive || target.playerId === actor.playerId) {
+        return { ok: false, error: 'Hãy chọn 1 người chơi khác để dùng Dơi Hút Điện.' };
+      }
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      const dealt = applyDamage(state, target, 2, 'event', actor, nowMs, {
+        isTalismanWardable: true,
+      });
+      const healed = actor.alive ? applyHeal(state, actor, 1) : 0;
+      appendPublicLog(
+        state,
+        'event',
+        `🦇 ${actor.displayName} dùng "${card.title}" lên ${target.displayName} (-${dealt} HP, bản thân +${healed} HP).`,
+        nowMs,
+        actor.playerId,
+      );
+      return { ok: true };
+    }
+
+    case 'ev_spider': {
+      const target = targetPlayerId ? state.players[targetPlayerId] : null;
+      if (!target || !target.alive || target.playerId === actor.playerId) {
+        return { ok: false, error: 'Hãy chọn 1 người chơi khác để phóng Nhện Chập Mạch.' };
+      }
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      const dealtTarget = applyDamage(state, target, 2, 'event', actor, nowMs, {
+        isTalismanWardable: true,
+      });
+      const dealtSelf = applyDamage(state, actor, 2, 'event', null, nowMs, {
+        isTalismanWardable: true,
+      });
+      appendPublicLog(
+        state,
+        'event',
+        `🕷️ ${actor.displayName} tung "${card.title}": ${target.displayName} chịu ${dealtTarget} ST, bản thân chịu ${dealtSelf} ST!`,
+        nowMs,
+        actor.playerId,
+      );
+      return { ok: true };
+    }
+
+    case 'ev_dynamite': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      const d6 = rollD6(state);
+      const d4 = rollD4(state);
+      const total = d6 + d4;
+      const mapped = resolveLocationForDiceTotal(total);
+      if (mapped === 'choose-any') {
+        state.lastDiceRoll = {
+          id: `dyn-${state.turnNumber}-${nowMs}`,
+          round: state.round,
+          atMs: nowMs,
+          playerId: actor.playerId,
+          displayName: actor.displayName,
+          kind: 'attack',
+          d6,
+          d4,
+          total,
+          rerollRequired: false,
+          freeChoice: false,
+          resolvedLocation: null,
+          damageDealt: 0,
+        };
+        appendPublicLog(
+          state,
+          'event',
+          `🧨 ${actor.displayName} kích hoạt Kíp Nổ Tự Động (${d6}+${d4}=7) → BOM XỊT (0 sát thương)!`,
+          nowMs,
+          actor.playerId,
+        );
+        return { ok: true };
+      }
+      const zoneDef = getLocationDefinition(mapped);
+      const victims = Object.values(state.players).filter((p) => p.alive && p.location === mapped);
+      let totalDmg = 0;
       for (const v of victims) {
-        applyDamage(state, v, 2, 'event', actor, nowMs);
+        totalDmg += applyDamage(state, v, 3, 'event', actor, nowMs, {
+          isTalismanWardable: true,
+        });
       }
+      state.lastDiceRoll = {
+        id: `dyn-${state.turnNumber}-${nowMs}`,
+        round: state.round,
+        atMs: nowMs,
+        playerId: actor.playerId,
+        displayName: actor.displayName,
+        kind: 'attack',
+        d6,
+        d4,
+        total,
+        rerollRequired: false,
+        freeChoice: false,
+        resolvedLocation: mapped,
+        damageDealt: totalDmg,
+      };
       appendPublicLog(
         state,
         'event',
-        `💥 ${actor.displayName} tung "${card.title}" vào ${zoneDef.name} (${victims.length} người dính đòn)!`,
+        `🧨 ${actor.displayName} ném "${card.title}" (${d6}+${d4}=${total} → ${zoneDef.name}): ${victims.length} người dính vụ nổ 3 ST!`,
         nowMs,
         actor.playerId,
       );
       return { ok: true };
     }
-    case 'ev_drain_2': {
-      if (!targetPlayerId) {
-        return { ok: false, error: 'Hãy chọn 1 người chơi để rút hút.' };
-      }
-      const target = state.players[targetPlayerId];
+
+    case 'ev_spiritual_doll': {
+      const target = targetPlayerId ? state.players[targetPlayerId] : null;
       if (!target || !target.alive || target.playerId === actor.playerId) {
-        return { ok: false, error: 'Mục tiêu rút hút không hợp lệ.' };
+        return { ok: false, error: 'Hãy chọn 1 người chơi khác cho Búp Bê Tâm Linh.' };
       }
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
-      const dealt = applyDamage(state, target, 2, 'event', actor, nowMs);
-      const healed = dealt > 0 ? applyHeal(state, actor, 1) : 0;
+      const d6 = rollD6(state);
+      if (d6 <= 4) {
+        const dealt = applyDamage(state, target, 3, 'event', actor, nowMs);
+        appendPublicLog(
+          state,
+          'event',
+          `🪆 ${actor.displayName} gieo "${card.title}" (1d6=${d6}) → ${target.displayName} chịu ${dealt} ST!`,
+          nowMs,
+          actor.playerId,
+        );
+      } else {
+        const dealtSelf = applyDamage(state, actor, 3, 'event', null, nowMs);
+        appendPublicLog(
+          state,
+          'event',
+          `🪆 ${actor.displayName} gieo "${card.title}" (1d6=${d6}) → PHẢN TÁC DỤNG! ${actor.displayName} tự chịu ${dealtSelf} ST!`,
+          nowMs,
+          actor.playerId,
+        );
+      }
+      return { ok: true };
+    }
+
+    case 'ev_moody_goblin': {
+      const donors = Object.values(state.players).filter(
+        (p) => p.alive && p.playerId !== actor.playerId && p.equipped.length > 0,
+      );
+      if (donors.length === 0) {
+        actor.hand.splice(idx, 1);
+        discardCardId(state, card.id);
+        appendPublicLog(
+          state,
+          'event',
+          `👺 ${actor.displayName} dùng "${card.title}" nhưng chưa ai đeo Trang bị để cướp.`,
+          nowMs,
+          actor.playerId,
+        );
+        return { ok: true };
+      }
+      const victim =
+        (targetPlayerId ? donors.find((d) => d.playerId === targetPlayerId) : null) ?? donors[0];
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      const stolen = stealOneEquippedGear(state, actor, victim, equipCardId);
+      if (stolen) {
+        appendPublicLog(
+          state,
+          'steal',
+          `👺 ${actor.displayName} dùng "${card.title}": cướp "${stolen.title}" của ${victim.displayName}!`,
+          nowMs,
+          actor.playerId,
+        );
+      }
+      return { ok: true };
+    }
+
+    case 'ev_banana_peel': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      if (actor.equipped.length === 0) {
+        const dealt = applyDamage(state, actor, 1, 'event', null, nowMs);
+        appendPublicLog(
+          state,
+          'event',
+          `🍌 ${actor.displayName} trượt "${card.title}" (không có Trang bị để giao) → tự chịu ${dealt} ST!`,
+          nowMs,
+          actor.playerId,
+        );
+        return { ok: true };
+      }
+      const others = Object.values(state.players).filter(
+        (p) => p.alive && p.playerId !== actor.playerId,
+      );
+      const recipient =
+        (targetPlayerId ? others.find((p) => p.playerId === targetPlayerId) : null) ?? others[0];
+      if (!recipient) {
+        return { ok: true };
+      }
+      const given = transferLowestEquippedGear(actor, recipient, equipCardId);
       appendPublicLog(
         state,
         'event',
-        `🩸 ${actor.displayName} dùng "${card.title}" lên ${target.displayName} (-${dealt} HP, bản thân +${healed} HP).`,
+        `🍌 ${actor.displayName} dính "${card.title}": phải giao "${given?.title ?? '1 Trang bị'}" cho ${recipient.displayName}!`,
         nowMs,
         actor.playerId,
       );
       return { ok: true };
     }
+
+    case 'ev_diabolic_ritual': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      if (!skipEffect && actor.faction === 'mist-order') {
+        revealPlayerNow(state, actor, 'voluntary', nowMs);
+        const healed = applyHeal(state, actor, actor.woundsTaken);
+        appendPublicLog(
+          state,
+          'reveal',
+          `🌑 ${actor.displayName} cử hành "${card.title}" (Hội Bóng Đêm): lộ vai & hồi sạch ${healed} thương tích về 0!`,
+          nowMs,
+          actor.playerId,
+        );
+      } else {
+        appendPublicLog(
+          state,
+          'equipment',
+          `🌑 ${actor.displayName} gác lại "${card.title}" (giữ kín / không kích hoạt).`,
+          nowMs,
+          actor.playerId,
+        );
+      }
+      return { ok: true };
+    }
+
     default:
       return { ok: false, error: 'Thẻ bài này không hỗ trợ dùng trực tiếp.' };
   }
@@ -787,73 +1355,141 @@ export function resolveInvestigateCard(
     actor.investigatedTargetIds.push(target.playerId);
   }
 
-  let conditionMet = false;
-  let healCard = false;
+  // Trường hợp đặc biệt: inv-12 Tiên Tri (Hermit's Prediction) soi thẳng vai thật 1-đối-1
+  if (card.effectKind === 'inv_prediction') {
+    const targetRole = getRoleDesign(target.roleId);
+    appendPrivateClue(actor, {
+      round: state.round,
+      atMs: nowMs,
+      cardTitle: card.title,
+      targetPlayerId: target.playerId,
+      targetName: target.displayName,
+      outcome: 'condition-met',
+      detail: `🔮 Tiên Tri: ${target.displayName} chính là ${targetRole.name} (${FACTION_LABELS[target.faction]}, ${target.maxHp} HP).`,
+    });
+    appendPrivateClue(target, {
+      round: state.round,
+      atMs: nowMs,
+      cardTitle: card.title,
+      targetPlayerId: actor.playerId,
+      targetName: actor.displayName,
+      outcome: 'condition-met',
+      detail: `🔮 ${actor.displayName} đã đưa "Thăm Dò: Tiên Tri" và nhìn thấy vai thật của bạn (${targetRole.name}).`,
+    });
+    const pubMsg = `🔍 ${actor.displayName} đưa Thẻ Thăm Dò Kín cho ${target.displayName}: trao đổi mật tín bí mật.`;
+    state.lastInvestigation = {
+      id: `inv-${state.turnNumber}-${nowMs}`,
+      round: state.round,
+      atMs: nowMs,
+      cardId: 'inv-00',
+      cardTitle: 'Thẻ Thăm Dò Kín',
+      conditionLabel: 'Mật báo 1-đối-1',
+      investigatorId: actor.playerId,
+      investigatorName: actor.displayName,
+      targetPlayerId: target.playerId,
+      targetName: target.displayName,
+      outcome: 'condition-met',
+      publicMessage: pubMsg,
+    };
+    appendPublicLog(state, 'investigate', pubMsg, nowMs, actor.playerId);
+    return { ok: true };
+  }
+
+  let rawMatch = false;
+  let isHealHermit = false;
   switch (card.effectKind) {
-    case 'inv_is_hunter':
-      conditionMet = target.faction === 'lantern-guard';
+    case 'inv_anger':
+      rawMatch = target.faction === 'lantern-guard' || target.faction === 'mist-order';
       break;
-    case 'inv_is_shadow':
-      conditionMet = target.faction === 'mist-order';
+    case 'inv_blackmail':
+      rawMatch = target.faction === 'lantern-guard' || target.faction === 'wanderer';
       break;
-    case 'inv_is_wanderer':
-      conditionMet = target.faction === 'wanderer';
-      healCard = true;
+    case 'inv_greed':
+      rawMatch = target.faction === 'wanderer' || target.faction === 'mist-order';
       break;
-    case 'inv_hunter_or_wanderer':
-      conditionMet = target.faction === 'lantern-guard' || target.faction === 'wanderer';
+    case 'inv_slap':
+      rawMatch = target.faction === 'lantern-guard';
       break;
-    case 'inv_shadow_or_wanderer':
-      conditionMet = target.faction === 'mist-order' || target.faction === 'wanderer';
+    case 'inv_spell':
+    case 'inv_exorcism':
+      rawMatch = target.faction === 'mist-order';
       break;
-    case 'inv_hp_ge_12':
-      conditionMet = target.maxHp >= 12;
+    case 'inv_aid':
+      rawMatch = target.faction === 'lantern-guard';
+      isHealHermit = true;
       break;
-    case 'inv_hp_le_11':
-      conditionMet = target.maxHp <= 11;
-      healCard = true;
+    case 'inv_nurturance':
+      rawMatch = target.faction === 'wanderer';
+      isHealHermit = true;
       break;
-    case 'inv_unrevealed':
-      conditionMet = !target.revealed;
+    case 'inv_huddle':
+      rawMatch = target.faction === 'mist-order';
+      isHealHermit = true;
+      break;
+    case 'inv_bully':
+      rawMatch = target.maxHp <= 11;
+      break;
+    case 'inv_tough_lesson':
+      rawMatch = target.maxHp >= 12;
       break;
     default:
       break;
   }
 
-  const disguisedEvaded =
-    target.roleId === 'suong-tin-gia' && !target.revealed && conditionMet && !healCard;
-  if (disguisedEvaded) {
-    conditionMet = false;
-  }
-
-  if (conditionMet) {
-    if (healCard) {
-      applyHeal(state, target, 1);
+  // Khánh "Tin Giả" (Unknown - Deceit): khi đang úp vai có thể nói dối trước thẻ Hermit!
+  const isUnrevealedUnknown = target.roleId === 'suong-tin-gia' && !target.revealed;
+  let effectiveMatch = rawMatch;
+  let usedDeceit = false;
+  if (isUnrevealedUnknown) {
+    if (isHealHermit) {
+      // Đang mất máu -> giả danh để nhận hồi 1 máu; đang 0 vết -> nói "Không phản ứng" để tránh -1 ST!
+      effectiveMatch = target.woundsTaken > 0;
+      usedDeceit = effectiveMatch !== rawMatch;
     } else {
-      applyDamage(state, target, 1, 'investigation', actor, nowMs);
+      effectiveMatch = false;
+      usedDeceit = rawMatch;
     }
   }
 
-  // Bảo mật P0: Kênh công khai chỉ thấy đã đưa Thẻ Thăm Dò Kín & có phản ứng hay không,
-  // KHÔNG bao giờ lộ cardTitle hay điều kiện cụ thể cho người thứ 3!
-  const publicMessage = conditionMet
-    ? `🔍 ${actor.displayName} đưa Thẻ Thăm Dò Kín cho ${target.displayName}: Có phản ứng (${healCard ? 'hồi 1 thương tích nếu đang bị thương' : 'nhận hiệu ứng 1 thương tích'})!`
-    : `🔍 ${actor.displayName} đưa Thẻ Thăm Dò Kín cho ${target.displayName}: Không có phản ứng.`;
+  const outcome = effectiveMatch ? 'condition-met' : 'no-reaction';
+  const condTag = card.conditionText ?? card.title;
+  let effectNote = 'Không phản ứng.';
+  let transferredGearName: string | null = null;
 
-  state.lastInvestigation = {
-    id: `inv-${state.turnNumber}-${nowMs}`,
-    round: state.round,
-    atMs: nowMs,
-    cardId: 'inv-00',
-    cardTitle: 'Thẻ Thăm Dò Kín',
-    conditionLabel: 'Điều kiện bí mật 1-đối-1',
-    investigatorId: actor.playerId,
-    investigatorName: actor.displayName,
-    targetPlayerId: target.playerId,
-    targetName: target.displayName,
-    outcome: conditionMet ? 'condition-met' : 'no-reaction',
-    publicMessage,
-  };
+  if (effectiveMatch) {
+    if (
+      card.effectKind === 'inv_anger' ||
+      card.effectKind === 'inv_blackmail' ||
+      card.effectKind === 'inv_greed'
+    ) {
+      const preferGear =
+        target.equipped.length > 0 && (target.hp <= 2 || target.roleId !== 'lang-anh-san');
+      if (preferGear) {
+        const stolen = transferLowestEquippedGear(target, actor);
+        transferredGearName = stolen?.title ?? null;
+        effectNote = stolen
+          ? `Giao nộp "${stolen.title}" cho ${actor.displayName}!`
+          : 'Khớp điều kiện nhưng không có đồ để giao.';
+      } else {
+        const dealt = applyDamage(state, target, 1, 'investigation', actor, nowMs);
+        effectNote = `Khớp điều kiện — nhận ${dealt} thương tích.`;
+      }
+    } else if (isHealHermit) {
+      if (target.woundsTaken > 0) {
+        const healed = applyHeal(state, target, 1);
+        effectNote = `Khớp điều kiện — hồi ${healed} thương tích.`;
+      } else {
+        // Chuẩn Shadow Hunters (Aid/Nurturance/Huddle): đang 0 thương tích phải nhận 1 thương tích!
+        const dealt = applyDamage(state, target, 1, 'investigation', actor, nowMs);
+        effectNote = `Khớp điều kiện (đang 0 vết) — phải nhận ${dealt} thương tích!`;
+      }
+    } else {
+      const dmgAmount =
+        card.effectKind === 'inv_exorcism' || card.effectKind === 'inv_tough_lesson' ? 2 : 1;
+      const dealt = applyDamage(state, target, dmgAmount, 'investigation', actor, nowMs);
+      effectNote = `Khớp điều kiện — nhận ${dealt} thương tích.`;
+    }
+  }
 
   appendPrivateClue(actor, {
     round: state.round,
@@ -861,10 +1497,8 @@ export function resolveInvestigateCard(
     cardTitle: card.title,
     targetPlayerId: target.playerId,
     targetName: target.displayName,
-    outcome: conditionMet ? 'condition-met' : 'no-reaction',
-    detail: conditionMet
-      ? `✅ Thỏa điều kiện [${card.conditionText ?? card.title}] → ${target.displayName} khớp điều kiện này!`
-      : `❌ Không thỏa [${card.conditionText ?? card.title}] → loại trừ khả năng của ${target.displayName}.`,
+    outcome,
+    detail: `[${condTag}] ${target.displayName} → ${effectNote}`,
   });
 
   appendPrivateClue(target, {
@@ -873,13 +1507,36 @@ export function resolveInvestigateCard(
     cardTitle: card.title,
     targetPlayerId: actor.playerId,
     targetName: actor.displayName,
-    outcome: conditionMet ? 'condition-met' : 'no-reaction',
-    detail: disguisedEvaded
-      ? `${actor.displayName} đưa kín cho bạn "${card.title}" → Bạn khớp điều kiện nhưng 🎭 Ngụy Trang Tin Giả đã né sát thương & báo Không phản ứng!`
-      : `${actor.displayName} đưa kín cho bạn "${card.title}" → ${conditionMet ? 'Bạn khớp điều kiện!' : 'Không khớp.'}`,
+    outcome,
+    detail: usedDeceit
+      ? `🎭 ${actor.displayName} đưa "${card.title}" [${condTag}] — Bạn đã Ngụy Trang Đa Tầng → ${effectNote}`
+      : `Bạn nhận "${card.title}" [${condTag}] từ ${actor.displayName} → ${effectNote}`,
   });
 
-  appendPublicLog(state, 'investigate', publicMessage, nowMs, actor.playerId);
+  const publicEffectText = transferredGearName
+    ? `${target.displayName} phải chuyển "${transferredGearName}" cho ${actor.displayName}!`
+    : effectiveMatch
+      ? 'Có phản ứng (trên Thang Thương Tích)!'
+      : 'Không có gì xảy ra.';
+  const pubMsg = `🔍 ${actor.displayName} đưa Thẻ Thăm Dò Kín cho ${target.displayName}: ${publicEffectText}`;
+
+  state.lastInvestigation = {
+    id: `inv-${state.turnNumber}-${nowMs}`,
+    round: state.round,
+    atMs: nowMs,
+    // BẢO MẬT P0: Không lộ cardId/điều kiện thẻ ở kênh công khai!
+    cardId: 'inv-00',
+    cardTitle: 'Thẻ Thăm Dò Kín',
+    conditionLabel: 'Điều kiện bí mật 1-đối-1',
+    investigatorId: actor.playerId,
+    investigatorName: actor.displayName,
+    targetPlayerId: target.playerId,
+    targetName: target.displayName,
+    outcome,
+    publicMessage: pubMsg,
+  };
+
+  appendPublicLog(state, 'investigate', pubMsg, nowMs, actor.playerId);
   return { ok: true };
 }
 
@@ -890,34 +1547,98 @@ export function resolveAttack(
   nowMs: number,
 ): EngineActionResult {
   if (state.turnPhase !== 'MAIN_ACTION') {
-    return { ok: false, error: 'Chỉ được tấn công trong pha Hành động chính.' };
+    return { ok: false, error: 'Chỉ được tấn công khi đang ở pha Hành động chính.' };
   }
   const target = state.players[targetPlayerId];
-  if (!target || !canPlayerAttackTarget(state, actor, target)) {
+  if (!target || !target.alive || target.playerId === actor.playerId) {
+    return { ok: false, error: 'Mục tiêu tấn công không hợp lệ.' };
+  }
+  if (!canPlayerAttackTarget(state, actor, target)) {
     return {
       ok: false,
-      error: 'Mục tiêu không nằm trong tầm đánh (phải cùng Cụm Khu Vực, trừ khi đeo Dây Cáp Đàn Hồi).',
+      error: actor.equipped.includes('ev-05')
+        ? 'Súng Bắn Đinh (Handgun) chỉ bắn được các Cụm KHÁC ngoài Cụm bạn đang đứng!'
+        : 'Mục tiêu phải đứng cùng Cụm Khu Vực với bạn.',
     };
   }
 
-  const hasPreciseStick = actor.equipped.includes('ev-01');
-  const d6 = hasPreciseStick ? 0 : rollD6(state);
+  const hasMasamune = actor.equipped.includes('ev-01');
+  const hasMachineGun = actor.equipped.includes('ev-06');
+  const d6 = hasMasamune ? 0 : rollD6(state);
   const d4 = rollD4(state);
-  const baseDmg = hasPreciseStick ? d4 : Math.abs(d6 - d4);
+  const baseDmg = hasMasamune ? d4 : Math.abs(d6 - d4);
 
   actor.attacksMade += 1;
+  actor.attacksThisTurn += 1;
 
   let rawDmg = baseDmg;
   if (baseDmg > 0) {
-    if (actor.equipped.includes('eq-04')) {
-      rawDmg += actor.revealed && actor.faction === 'lantern-guard' ? 2 : 1;
+    // Thương Ánh Sáng (eq-04): chỉ +2 nếu là Đội Săn Đêm ĐÃ LẬT VAI
+    if (actor.equipped.includes('eq-04') && actor.revealed && actor.faction === 'lantern-guard') {
+      rawDmg += 2;
     }
-    if (actor.equipped.includes('ev-02')) rawDmg += 1;
-    if (actor.equipped.includes('ev-03')) rawDmg += 2;
-    if (actor.equipped.includes('ev-04')) rawDmg += 1;
+    if (actor.equipped.includes('ev-02')) rawDmg += 1; // Dao Rọc Kỹ Thuật
+    if (actor.equipped.includes('ev-03')) rawDmg += 1; // Cưa Máy Công Xưởng
+    if (actor.equipped.includes('ev-04')) rawDmg += 1; // Rìu Sắt Cứu Hỏa
+    if (actor.equipped.includes('eq-01')) rawDmg = Math.max(0, rawDmg - 1); // Áo Choàng Bảo Hộ
   }
 
-  const actualDealt = applyDamage(state, target, rawDmg, 'attack', actor, nowMs);
+  const targets = hasMachineGun ? listReachableAttackTargets(state, actor) : [target];
+  let totalDealt = 0;
+  const counterAttackers: AuthoritativePlayerState[] = [];
+  const rollDesc = hasMasamune ? `1d4=${d4}` : `|${d6}-${d4}|=${baseDmg}`;
+
+  for (const victim of targets) {
+    // Hải "Sưu Tầm" (Bob 4–6 người): gây >= 2 ST có thể cướp 1 Trang bị THAY VÌ gây sát thương
+    const bobStealInstead =
+      state.turnOrder.length <= 6 &&
+      actor.alive &&
+      actor.revealed &&
+      actor.roleId === 'lang-anh-san' &&
+      rawDmg >= 2 &&
+      victim.equipped.length > 0;
+
+    if (bobStealInstead) {
+      const stolen = stealOneEquippedGear(state, actor, victim);
+      if (stolen) {
+        appendPublicLog(
+          state,
+          'steal',
+          `🧲 Hải "Sưu Tầm" (${actor.displayName}) chọn Cướp Đồ Thay Đòn (${rollDesc}) → lấy "${stolen.title}" từ ${victim.displayName} (0 sát thương)!`,
+          nowMs,
+          actor.playerId,
+        );
+      }
+    } else {
+      const dealt = applyDamage(state, victim, rawDmg, 'attack', actor, nowMs);
+      totalDealt += dealt;
+      if (targets.length === 1) {
+        appendPublicLog(
+          state,
+          'attack',
+          rawDmg === 0
+            ? `⚔️ ${actor.displayName} đánh ${victim.displayName} (${rollDesc}) → ĐÁNH HỤT (0 sát thương)!`
+            : `⚔️ ${actor.displayName} tấn công ${victim.displayName} (${rollDesc}, tổng ${rawDmg}) → gây ${dealt} sát thương!`,
+          nowMs,
+          actor.playerId,
+        );
+      }
+    }
+
+    if (victim.alive && victim.revealed && victim.roleId === 'suong-gac-cong') {
+      counterAttackers.push(victim);
+    }
+  }
+
+  if (targets.length > 1) {
+    appendPublicLog(
+      state,
+      'attack',
+      `🔫 Súng Liên Thanh! ${actor.displayName} xả đạn (${rollDesc}, tổng ${rawDmg}) vào ${targets.length} người trong tầm → tổng ${totalDealt} sát thương!`,
+      nowMs,
+      actor.playerId,
+    );
+  }
 
   state.lastDiceRoll = {
     id: `atk-${state.turnNumber}-${nowMs}`,
@@ -933,30 +1654,11 @@ export function resolveAttack(
     freeChoice: false,
     resolvedLocation: null,
     targetPlayerId: target.playerId,
-    damageDealt: actualDealt,
+    damageDealt: totalDealt,
   };
 
-  const rollDesc = hasPreciseStick ? `1d4=${d4}` : `|${d6}-${d4}|=${baseDmg}`;
-  if (baseDmg === 0) {
-    appendPublicLog(
-      state,
-      'attack',
-      `⚔️ ${actor.displayName} đánh ${target.displayName} (${rollDesc}) → ĐÁNH HỤT (0 sát thương)!`,
-      nowMs,
-      actor.playerId,
-    );
-  } else {
-    appendPublicLog(
-      state,
-      'attack',
-      `⚔️ ${actor.displayName} tấn công ${target.displayName} (${rollDesc}, tổng ${rawDmg}) → gây ${actualDealt} sát thương!`,
-      nowMs,
-      actor.playerId,
-    );
-  }
-
-  // Nội tại Tú "Ẩn Danh": hồi 2 thương tích mỗi khi đánh trúng (> 0).
-  if (actualDealt > 0 && actor.alive && actor.revealed && actor.roleId === 'suong-an-danh') {
+  // Nội tại Tú "Ẩn Danh" (Vampire): hồi 2 thương tích nếu đòn đánh gây > 0 sát thương.
+  if (totalDealt > 0 && actor.alive && actor.revealed && actor.roleId === 'suong-an-danh') {
     const healed = applyHeal(state, actor, 2);
     if (healed > 0) {
       appendPublicLog(
@@ -969,48 +1671,25 @@ export function resolveAttack(
     }
   }
 
-  // Móc Kéo Đồ KTX (ev-05) hoặc Hải "Sưu Tầm" (lật vai): gây >= 2 sát thương -> cướp 1 Trang bị.
-  const canStealGear =
-    actor.equipped.includes('ev-05') || (actor.revealed && actor.roleId === 'lang-anh-san');
-  if (
-    actualDealt >= 2 &&
-    actor.alive &&
-    target.alive &&
-    canStealGear &&
-    target.equipped.length > 0
-  ) {
-    const stolen = stealOneEquippedGear(state, actor, target);
-    if (stolen) {
-      appendPublicLog(
-        state,
-        'steal',
-        actor.equipped.includes('ev-05')
-          ? `🪝 ${actor.displayName} kích hoạt Móc Kéo Đồ KTX: cướp "${stolen.title}" từ ${target.displayName}!`
-          : `🧲 Hải "Sưu Tầm" (${actor.displayName}) thu thập "${stolen.title}" từ ${target.displayName}!`,
-        nowMs,
-        actor.playerId,
-      );
-    }
-  }
-
-  // Nội tại Dũng "Gác Cổng": khi còn sống sau bị đánh thường -> lập tức tung đòn đánh trả (|1d6 - 1d4|).
-  if (target.alive && target.revealed && target.roleId === 'suong-gac-cong' && actor.alive) {
-    const cStick = target.equipped.includes('ev-01');
+  // Nội tại Dũng "Gác Cổng" (Werewolf): bị đánh mà còn sống -> phản kích ngay (kể cả bắn tầm xa).
+  for (const dung of counterAttackers) {
+    if (!dung.alive || !actor.alive) continue;
+    const cStick = dung.equipped.includes('ev-01');
     const cd6 = cStick ? 0 : rollD6(state);
     const cd4 = rollD4(state);
     const cBase = cStick ? cd4 : Math.abs(cd6 - cd4);
     let cRaw = cBase;
     if (cBase > 0) {
-      if (target.equipped.includes('eq-04')) cRaw += 1;
-      if (target.equipped.includes('ev-02')) cRaw += 1;
-      if (target.equipped.includes('ev-03')) cRaw += 2;
-      if (target.equipped.includes('ev-04')) cRaw += 1;
+      if (dung.equipped.includes('ev-02')) cRaw += 1;
+      if (dung.equipped.includes('ev-03')) cRaw += 1;
+      if (dung.equipped.includes('ev-04')) cRaw += 1;
+      if (dung.equipped.includes('eq-01')) cRaw = Math.max(0, cRaw - 1);
     }
-    const cDealt = applyDamage(state, actor, cRaw, 'attack', target, nowMs);
+    const cDealt = applyDamage(state, actor, cRaw, 'attack', dung, nowMs);
     if (state.lastDiceRoll) {
       state.lastDiceRoll.counterRoll = {
-        playerId: target.playerId,
-        displayName: target.displayName,
+        playerId: dung.playerId,
+        displayName: dung.displayName,
         d6: cd6,
         d4: cd4,
         total: cRaw,
@@ -1022,10 +1701,10 @@ export function resolveAttack(
       state,
       'skill',
       cDealt > 0
-        ? `🥊 Dũng "Gác Cổng" (${target.displayName}) phản kích tức thì (${cRollDesc}, tổng ${cRaw}) → ${actor.displayName} chịu ${cDealt} sát thương!`
-        : `🥊 Dũng "Gác Cổng" (${target.displayName}) phản kích (${cRollDesc}) nhưng đánh hụt ${actor.displayName}!`,
+        ? `🥊 Dũng "Gác Cổng" (${dung.displayName}) phản kích tức thì (${cRollDesc}, tổng ${cRaw}) → ${actor.displayName} chịu ${cDealt} sát thương!`
+        : `🥊 Dũng "Gác Cổng" (${dung.displayName}) phản kích (${cRollDesc}) nhưng không gây sát thương cho ${actor.displayName}!`,
       nowMs,
-      target.playerId,
+      dung.playerId,
     );
   }
 
@@ -1037,33 +1716,35 @@ export function resolveRevealRole(
   actor: AuthoritativePlayerState,
   nowMs: number,
 ): EngineActionResult {
-  if (actor.revealed) {
-    return { ok: false, error: 'Vai của bạn đã được lật công khai rồi.' };
+  if (
+    state.turnPhase !== 'ROLL_MOVE' &&
+    state.turnPhase !== 'LOCATION_ACTION' &&
+    state.turnPhase !== 'MAIN_ACTION'
+  ) {
+    return { ok: false, error: 'Không thể lật vai ở trạng thái hiện tại.' };
   }
-  actor.revealed = true;
+  if (actor.revealed) {
+    return { ok: false, error: 'Bạn đã lật vai công khai rồi.' };
+  }
+  if (actor.roleId === 'lang-tien-phong') {
+    return {
+      ok: false,
+      error: 'Đạt "Cảm Tử" không thể tự ý lật vai; sẽ tự động lộ diện khi có người khác đầu tiên gục ngã.',
+    };
+  }
+  revealPlayerNow(state, actor, 'voluntary', nowMs);
   const role = getRoleDesign(actor.roleId);
-  state.lastRevealEvent = {
-    id: `rev-${state.turnNumber}-${nowMs}`,
-    round: state.round,
-    atMs: nowMs,
-    playerId: actor.playerId,
-    displayName: actor.displayName,
-    roleId: actor.roleId,
-    roleName: role.name,
-    faction: actor.faction,
-    reason: 'voluntary',
-  };
   appendPublicLog(
     state,
     'reveal',
-    `🎭 ${actor.displayName} chủ động LẬT VAI: ${role.name} (${FACTION_LABELS[actor.faction]})!`,
+    `🎭 ${actor.displayName} lật vai công khai: ${role.name} (${FACTION_LABELS[actor.faction]})!`,
     nowMs,
     actor.playerId,
   );
   appendHighlight(
     state,
-    `${actor.displayName} lộ diện!`,
-    `${role.name} thuộc phe ${FACTION_LABELS[actor.faction]} bước ra ánh sáng.`,
+    `Lộ vai: ${actor.displayName}`,
+    `${role.name} (${FACTION_LABELS[actor.faction]}) — ${role.skillName}`,
     nowMs,
   );
   return { ok: true };
@@ -1075,52 +1756,70 @@ export function resolveUseSkill(
   targetPlayerId: string | undefined,
   nowMs: number,
 ): EngineActionResult {
-  if (state.turnPhase !== 'LOCATION_ACTION' && state.turnPhase !== 'MAIN_ACTION') {
-    return { ok: false, error: 'Hãy tung xúc xắc di chuyển trước khi dùng kỹ năng.' };
-  }
   if (!actor.revealed) {
     return { ok: false, error: 'Bạn cần Lật vai công khai trước khi kích hoạt kỹ năng.' };
   }
   const role = getRoleDesign(actor.roleId);
   if (role.targetMode === 'passive') {
-    return { ok: false, error: `Kỹ năng "${role.skillName}" là nội tại tự động, không cần bấm.` };
+    return { ok: false, error: `${role.name} sở hữu kỹ năng nội tại tự động.` };
   }
   if (role.oncePerMatch && actor.skillUsedOnce) {
-    return { ok: false, error: `Kỹ năng "${role.skillName}" chỉ dùng được 1 lần mỗi trận.` };
+    return { ok: false, error: `${role.skillName} chỉ dùng 1 lần duy nhất mỗi trận.` };
   }
   if (actor.skillCooldown > 0) {
-    return { ok: false, error: `Kỹ năng đang hồi chiêu (còn ${actor.skillCooldown} vòng).` };
+    return { ok: false, error: `${role.skillName} đang hồi chiêu (${actor.skillCooldown} vòng nữa).` };
   }
 
   switch (actor.roleId) {
-    case 'gac-ky-thuat': {
-      if (!targetPlayerId) {
-        return { ok: false, error: 'Chọn 1 người chơi bất kỳ để tung Đòn Phá Vây 1d4.' };
+    case 'gac-truc-ban': {
+      // Lan "Trực Ban" (Emi - Teleport): chỉ dùng thay thế tung xúc xắc ở Pha 1 (ROLL_MOVE)
+      if (state.turnPhase !== 'ROLL_MOVE') {
+        return {
+          ok: false,
+          error: 'Bước Nhảy Tắt chỉ dùng được ở Pha 1 (thay thế việc tung xúc xắc di chuyển).',
+        };
       }
-      const target = state.players[targetPlayerId];
-      if (!target || !target.alive || target.playerId === actor.playerId) {
-        return { ok: false, error: 'Mục tiêu phải là người chơi khác còn sống.' };
-      }
-      actor.skillUsedOnce = true;
-      const die = rollD4(state);
-      const dealt = applyDamage(state, target, die, 'skill', actor, nowMs);
+      const destId = getPairedLocationInCluster(
+        actor.location,
+        state.clusterPairs ?? DEFAULT_CLUSTER_PAIRS,
+      );
+      const destDef = getLocationDefinition(destId);
+      actor.location = destId;
+      actor.consecutiveSameZoneRolls = 0;
+      state.allowedMoveDestinations = undefined;
+      state.turnPhase = 'LOCATION_ACTION';
       appendPublicLog(
         state,
         'skill',
-        `💥 ${actor.displayName} kích hoạt Đòn Phá Vây (1d4=${die}) vào ${target.displayName} → ${dealt} sát thương!`,
+        `✨ Lan "Trực Ban" (${actor.displayName}) dùng Bước Nhảy Tắt sang Ô ${destDef.diceLabel} (${destDef.name}) không cần tung xúc xắc!`,
         nowMs,
         actor.playerId,
       );
       return { ok: true };
     }
 
-    case 'gac-truc-ban': {
+    case 'gac-ky-thuat': {
+      if (
+        state.turnPhase !== 'ROLL_MOVE' &&
+        state.turnPhase !== 'LOCATION_ACTION' &&
+        state.turnPhase !== 'MAIN_ACTION'
+      ) {
+        return { ok: false, error: 'Chưa thể kích hoạt kỹ năng lúc này.' };
+      }
+      if (!targetPlayerId) {
+        return { ok: false, error: 'Hãy chọn 1 người chơi bất kỳ làm mục tiêu.' };
+      }
+      const target = state.players[targetPlayerId];
+      if (!target || !target.alive || target.playerId === actor.playerId) {
+        return { ok: false, error: 'Mục tiêu Đòn Phá Vây phải là một người khác còn sống.' };
+      }
       actor.skillUsedOnce = true;
-      actor.guardianShieldActive = true;
+      const dmg = rollD4(state);
+      const dealt = applyDamage(state, target, dmg, 'skill', actor, nowMs);
       appendPublicLog(
         state,
         'skill',
-        `🛡️ ${actor.displayName} bật Lá Chắn Chốt Trực — miễn nhiễm mọi sát thương tới đầu lượt sau!`,
+        `⚡ ${actor.displayName} tung Đòn Phá Vây (1d4=${dmg}) lên ${target.displayName} → ${dealt} sát thương!`,
         nowMs,
         actor.playerId,
       );
@@ -1128,73 +1827,27 @@ export function resolveUseSkill(
     }
 
     case 'gac-radio': {
+      if (
+        state.turnPhase !== 'ROLL_MOVE' &&
+        state.turnPhase !== 'LOCATION_ACTION' &&
+        state.turnPhase !== 'MAIN_ACTION'
+      ) {
+        return { ok: false, error: 'Chưa thể kích hoạt kỹ năng lúc này.' };
+      }
       if (!targetPlayerId) {
-        return { ok: false, error: 'Chọn 1 người chơi bất kỳ để phóng Xung Cao Áp 1d6.' };
+        return { ok: false, error: 'Hãy chọn 1 người chơi bất kỳ để phóng Xung Cao Áp.' };
       }
       const target = state.players[targetPlayerId];
       if (!target || !target.alive || target.playerId === actor.playerId) {
         return { ok: false, error: 'Mục tiêu không hợp lệ.' };
       }
       actor.skillUsedOnce = true;
-      const die = rollD6(state);
-      const dealt = applyDamage(state, target, die, 'skill', actor, nowMs);
+      const dmg = rollD6(state);
+      const dealt = applyDamage(state, target, dmg, 'skill', actor, nowMs);
       appendPublicLog(
         state,
         'skill',
-        `⚡ ${actor.displayName} tung Xung Cao Áp (1d6=${die}) vào ${target.displayName} → ${dealt} sát thương!`,
-        nowMs,
-        actor.playerId,
-      );
-      return { ok: true };
-    }
-
-    case 'suong-tin-gia': {
-      if (!targetPlayerId) {
-        return { ok: false, error: 'Chọn 1 người cùng Cụm để tung Nhiễu Loạn KTX.' };
-      }
-      const target = state.players[targetPlayerId];
-      if (
-        !target ||
-        !target.alive ||
-        target.playerId === actor.playerId ||
-        !areInSameCluster(actor.location, target.location)
-      ) {
-        return { ok: false, error: 'Mục tiêu phải đang đứng cùng Cụm Khu Vực với bạn.' };
-      }
-      actor.skillCooldown = role.cooldownRounds;
-      const dealt = applyDamage(state, target, 2, 'skill', actor, nowMs);
-      appendPublicLog(
-        state,
-        'skill',
-        `🌀 ${actor.displayName} tung Nhiễu Loạn KTX: ${target.displayName} chịu ${dealt} sát thương!`,
-        nowMs,
-        actor.playerId,
-      );
-      return { ok: true };
-    }
-
-    case 'lang-anh-san': {
-      if (!targetPlayerId) {
-        return { ok: false, error: 'Chọn 1 người cùng Cụm đang đeo Trang bị để thu thập.' };
-      }
-      const victim = state.players[targetPlayerId];
-      if (
-        !victim ||
-        !victim.alive ||
-        victim.playerId === actor.playerId ||
-        !areInSameCluster(actor.location, victim.location)
-      ) {
-        return { ok: false, error: 'Mục tiêu phải đang đứng cùng Cụm Khu Vực với bạn.' };
-      }
-      if (victim.equipped.length === 0) {
-        return { ok: false, error: `${victim.displayName} chưa đeo Trang bị nào.` };
-      }
-      actor.skillCooldown = role.cooldownRounds;
-      const stolen = stealOneEquippedGear(state, actor, victim);
-      appendPublicLog(
-        state,
-        'steal',
-        `🧲 ${actor.displayName} dùng Thu Thập Chiến Lợi Phẩm: cướp "${stolen?.title ?? 'Trang bị'}" từ ${victim.displayName}!`,
+        `⚡ ${actor.displayName} phóng Xung Cao Áp (1d6=${dmg}) lên ${target.displayName} → ${dealt} sát thương!`,
         nowMs,
         actor.playerId,
       );
@@ -1202,6 +1855,13 @@ export function resolveUseSkill(
     }
 
     case 'lang-quan-sat': {
+      if (
+        state.turnPhase !== 'ROLL_MOVE' &&
+        state.turnPhase !== 'LOCATION_ACTION' &&
+        state.turnPhase !== 'MAIN_ACTION'
+      ) {
+        return { ok: false, error: 'Chưa thể kích hoạt kỹ năng lúc này.' };
+      }
       actor.skillUsedOnce = true;
       const healed = applyHeal(state, actor, actor.woundsTaken);
       appendPublicLog(
@@ -1215,43 +1875,36 @@ export function resolveUseSkill(
     }
 
     case 'lang-cuu-ho': {
+      // Bách "Cuồng Chiến" (Charles - Bloody Feast): sau đòn đánh thứ nhất trong lượt -> tự nhận 2 ST để đánh thêm 1 lần nữa
+      if (state.turnPhase !== 'MAIN_ACTION' || actor.attacksThisTurn !== 1) {
+        return {
+          ok: false,
+          error: 'Đòn Đánh Đẫm Máu chỉ kích hoạt được ngay sau đòn đánh thường đầu tiên trong lượt.',
+        };
+      }
+      if (actor.hand.length > 0) {
+        return { ok: false, error: 'Hãy giải quyết lá bài vừa rút trước khi tung đòn đánh bồi.' };
+      }
+      if (actor.hp <= 2) {
+        return { ok: false, error: 'Bạn cần còn trên 2 HP mới đủ sức tự nhận 2 thương tích để chém bồi!' };
+      }
       if (!targetPlayerId) {
-        return { ok: false, error: 'Chọn 1 người cùng Cụm để thực hiện Hộ Vệ & Báo Thù.' };
+        return { ok: false, error: 'Chọn 1 mục tiêu trong tầm đánh để tung đòn đánh thứ hai.' };
       }
       const target = state.players[targetPlayerId];
-      if (
-        !target ||
-        !target.alive ||
-        target.playerId === actor.playerId ||
-        !areInSameCluster(actor.location, target.location)
-      ) {
-        return { ok: false, error: 'Mục tiêu phải đứng cùng Cụm Khu Vực với bạn.' };
+      if (!target || !target.alive || !canPlayerAttackTarget(state, actor, target)) {
+        return { ok: false, error: 'Mục tiêu Đòn Đánh Đẫm Máu không hợp lệ hoặc ngoài tầm.' };
       }
-      actor.skillCooldown = role.cooldownRounds;
-      const prot = actor.protegePlayerId ? state.players[actor.protegePlayerId] : null;
-      if (!prot || prot.alive) {
-        const healed = applyHeal(state, target, 2);
-        if (actor.hp > 1) {
-          applyDamage(state, actor, 1, 'skill', null, nowMs);
-        }
-        appendPublicLog(
-          state,
-          'skill',
-          `🛟 ${actor.displayName} dùng Hộ Vệ: ${target.displayName} hồi ${healed} thương tích.`,
-          nowMs,
-          actor.playerId,
-        );
-      } else {
-        const dealt = applyDamage(state, target, 2, 'skill', actor, nowMs);
-        appendPublicLog(
-          state,
-          'skill',
-          `⚔️ ${actor.displayName} kích hoạt Báo Thù cho ${prot.displayName}: ${target.displayName} chịu ${dealt} sát thương!`,
-          nowMs,
-          actor.playerId,
-        );
-      }
-      return { ok: true };
+      applyDamage(state, actor, 2, 'skill', null, nowMs);
+      appendPublicLog(
+        state,
+        'skill',
+        `🩸 Bách "Cuồng Chiến" (${actor.displayName}) tự nhận 2 thương tích kích hoạt Đòn Đánh Đẫm Máu!`,
+        nowMs,
+        actor.playerId,
+      );
+      if (!actor.alive) return { ok: true };
+      return resolveAttack(state, actor, targetPlayerId, nowMs);
     }
 
     default:

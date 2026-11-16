@@ -1,12 +1,13 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/actions.ts — Điều phối hành động theo pha lượt v4
-// (`ROLL_MOVE -> CHOOSE_MOVE? -> LOCATION_ACTION -> MAIN_ACTION`) & kết thúc lượt.
+// features/boardgame/domain/actions.ts — Điều phối hành động chuẩn Shadow Hunters
+// (`ROLL_MOVE -> CHOOSE_MOVE? -> LOCATION_ACTION -> MAIN_ACTION`) & lượt đi phụ / Bách chém bồi.
 // ---------------------------------------------------------------------------
 
 import type { BoardGameActionPayload } from '../../../shared/contracts/boardgame';
 import {
   appendHighlight,
   appendPublicLog,
+  discardCardId,
   resolveAttack,
   resolveChooseDestination,
   resolveDiceRollMove,
@@ -19,7 +20,11 @@ import {
   resolveUseCard,
   resolveUseSkill,
 } from './effects';
-import { LOCATIONS_CATALOG, nextRandomInt } from './rules';
+import {
+  listReachableAttackTargets,
+  LOCATIONS_CATALOG,
+  nextRandomInt,
+} from './rules';
 import type {
   AuthoritativeGameState,
   AuthoritativePlayerState,
@@ -41,6 +46,8 @@ function finalizeIfFinished(state: AuthoritativeGameState, nowMs: number): boole
   state.finished = true;
   state.turnPhase = 'ENDED';
   state.activePlayerId = null;
+  state.allowedMoveDestinations = undefined;
+  state.extraTurnPending = false;
   state.winnerFaction = victory.winnerFaction;
   state.winnerLabel = victory.winnerLabel;
   state.winnerPlayerIds = [...victory.winnerPlayerIds];
@@ -66,6 +73,29 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
   if (state.finished) return;
   const order = state.turnOrder;
   if (order.length === 0) return;
+
+  // Lượt đi phụ từ Sổ Tay Bí Truyền (eq-15 / Concealed Knowledge)
+  if (state.extraTurnPending && state.activePlayerId) {
+    const current = state.players[state.activePlayerId];
+    state.extraTurnPending = false;
+    if (current && current.alive) {
+      current.guardianShieldActive = false;
+      current.consecutiveSameZoneRolls = 0;
+      current.attacksThisTurn = 0;
+      state.allowedMoveDestinations = undefined;
+      state.turnNumber += 1;
+      state.turnPhase = 'ROLL_MOVE';
+      appendPublicLog(
+        state,
+        'system',
+        `📘 Sổ Tay Bí Truyền: ${current.displayName} bắt đầu lượt đi phụ!`,
+        nowMs,
+        current.playerId,
+      );
+      finalizeIfFinished(state, nowMs);
+      return;
+    }
+  }
 
   const currentIdx = state.activePlayerId ? order.indexOf(state.activePlayerId) : -1;
   let nextPlayer: AuthoritativePlayerState | null = null;
@@ -98,7 +128,9 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
   }
   nextPlayer.guardianShieldActive = false;
   nextPlayer.consecutiveSameZoneRolls = 0;
+  nextPlayer.attacksThisTurn = 0;
 
+  state.allowedMoveDestinations = undefined;
   state.turnNumber += 1;
   state.activePlayerId = nextPlayer.playerId;
   state.turnPhase = 'ROLL_MOVE';
@@ -137,7 +169,14 @@ export function applyPlayerGameAction(
       result = resolveDrawLocationCard(state, actor, action.deck, nowMs);
       break;
     case 'USE_LOC_POWER':
-      result = resolveLocationPower(state, actor, action.targetPlayerId, action.mode, nowMs);
+      result = resolveLocationPower(
+        state,
+        actor,
+        action.targetPlayerId,
+        action.mode,
+        nowMs,
+        action.equipCardId,
+      );
       break;
     case 'SKIP_LOC':
       result = resolveSkipLocation(state, actor, nowMs);
@@ -153,28 +192,71 @@ export function applyPlayerGameAction(
         action.targetPlayerId,
         action.targetLocation,
         nowMs,
+        action.equipCardId,
+        action.skipEffect,
       );
       break;
     case 'INVESTIGATE_CARD':
       result = resolveInvestigateCard(state, actor, action.cardId, action.targetPlayerId, nowMs);
       break;
-    case 'ATTACK':
+    case 'ATTACK': {
+      if (actor.hand.length > 0) {
+        result = {
+          ok: false,
+          error: 'Hãy giải quyết lá bài vừa rút trên tay trước khi tấn công.',
+        };
+        break;
+      }
+      if (actor.attacksThisTurn >= 1) {
+        result = {
+          ok: false,
+          error: 'Mỗi lượt chỉ tung 1 đòn đánh thường (trừ khi Bách kích hoạt Đòn Đánh Đẫm Máu).',
+        };
+        break;
+      }
       result = resolveAttack(state, actor, action.targetPlayerId, nowMs);
       if (result.ok) {
-        autoEndTurnAfterAction = true;
+        const canBloodyFeast =
+          actor.alive &&
+          actor.revealed &&
+          actor.roleId === 'lang-cuu-ho' &&
+          actor.attacksThisTurn === 1 &&
+          actor.hp > 2 &&
+          listReachableAttackTargets(state, actor).length > 0;
+        autoEndTurnAfterAction = !canBloodyFeast;
       }
       break;
+    }
     case 'REVEAL_ROLE':
       result = resolveRevealRole(state, actor, nowMs);
       break;
     case 'USE_SKILL':
       result = resolveUseSkill(state, actor, action.targetPlayerId, nowMs);
+      if (result.ok && actor.roleId === 'lang-cuu-ho') {
+        autoEndTurnAfterAction = true;
+      }
       break;
     case 'END_TURN':
       if (state.turnPhase === 'ROLL_MOVE' || state.turnPhase === 'CHOOSE_MOVE') {
         return {
           ok: false,
           error: 'Hãy tung xúc xắc và di chuyển sang khu vực kế tiếp trước khi kết thúc lượt.',
+        };
+      }
+      if (actor.hand.length > 0) {
+        return {
+          ok: false,
+          error: 'Hãy giải quyết lá bài vừa rút trên tay trước khi kết thúc lượt.',
+        };
+      }
+      if (
+        actor.equipped.includes('ev-01') &&
+        actor.attacksThisTurn === 0 &&
+        listReachableAttackTargets(state, actor).length > 0
+      ) {
+        return {
+          ok: false,
+          error: 'Kiếm Gỗ Nguyền Rủa (Masamune): Bạn bắt buộc phải tấn công khi có mục tiêu trong tầm đánh!',
         };
       }
       appendPublicLog(
@@ -233,12 +315,19 @@ export function applyTimeoutAutoTurn(
     resolveDiceRollMove(state, actor, nowMs);
   }
   if (state.turnPhase === 'CHOOSE_MOVE' && !state.finished) {
-    const others = LOCATIONS_CATALOG.filter((l) => l.id !== actor.location);
-    const dest = others[nextRandomInt(state, others.length)];
-    resolveChooseDestination(state, actor, dest.id, nowMs);
+    const pool =
+      state.allowedMoveDestinations && state.allowedMoveDestinations.length > 0
+        ? state.allowedMoveDestinations
+        : LOCATIONS_CATALOG.filter((l) => l.id !== actor.location).map((l) => l.id);
+    const destId = pool[nextRandomInt(state, pool.length)] ?? 'lobby';
+    resolveChooseDestination(state, actor, destId, nowMs);
   }
   if (state.turnPhase === 'LOCATION_ACTION' && !state.finished) {
     state.turnPhase = 'MAIN_ACTION';
+  }
+  while (actor.hand.length > 0) {
+    const id = actor.hand.shift();
+    if (id) discardCardId(state, id);
   }
 
   if (!finalizeIfFinished(state, nowMs)) {

@@ -5,7 +5,6 @@ require('./register-ts.cjs');
 
 const assert = require('node:assert/strict');
 const {
-  CARDS_BY_ID,
   LOCATIONS_CATALOG,
   ROLES_BY_ID,
   ROLES_CATALOG,
@@ -13,6 +12,7 @@ const {
   areInSameCluster,
   createInitialGameState,
   getActivePlayer,
+  getPairedLocationInCluster,
   getPrivateGameView,
   getPublicGameView,
   getRoleDistribution,
@@ -40,19 +40,23 @@ function pickRandom(list, rng) {
 // Clue Deduction Filter (purely from public role catalog & private clues)
 // ---------------------------------------------------------------------------
 const CLUE_CONDITION_FILTERS = [
-  { key: '[Đội Săn Đêm]', fn: (r) => r.faction === 'lantern-guard' },
-  { key: '[Hội Bóng Đêm]', fn: (r) => r.faction === 'mist-order' },
-  { key: '[Kẻ Độc Hành]', fn: (r) => r.faction === 'wanderer' },
   {
-    key: '[Săn Đêm hoặc Độc Hành]',
+    key: '[Săn Đêm hoặc Bóng Đêm',
+    fn: (r) => r.faction === 'lantern-guard' || r.faction === 'mist-order',
+  },
+  {
+    key: '[Săn Đêm hoặc Độc Hành',
     fn: (r) => r.faction === 'lantern-guard' || r.faction === 'wanderer',
   },
   {
-    key: '[Bóng Đêm hoặc Độc Hành]',
-    fn: (r) => r.faction === 'mist-order' || r.faction === 'wanderer',
+    key: '[Độc Hành hoặc Bóng Đêm',
+    fn: (r) => r.faction === 'wanderer' || r.faction === 'mist-order',
   },
-  { key: '[Max HP >= 12]', fn: (r) => r.maxHp >= 12 },
-  { key: '[Max HP <= 11]', fn: (r) => r.maxHp <= 11 },
+  { key: '[Đội Săn Đêm', fn: (r) => r.faction === 'lantern-guard' },
+  { key: '[Hội Bóng Đêm', fn: (r) => r.faction === 'mist-order' },
+  { key: '[Kẻ Độc Hành', fn: (r) => r.faction === 'wanderer' },
+  { key: '[Max HP <= 11', fn: (r) => r.maxHp <= 11 },
+  { key: '[Max HP >= 12', fn: (r) => r.maxHp >= 12 },
 ];
 
 const PROFILES = [
@@ -87,7 +91,6 @@ function createBotMemory(playerIds, myPrivateViews) {
       selfId: pid,
       possible,
       attackedMe,
-      killerByVictim: {},
       seenClueKeys: new Set(),
       seenLogIds: new Set(),
     };
@@ -115,32 +118,26 @@ function updateBotMemory(botMem, pub, priv) {
     const set = botMem.possible[clue.targetPlayerId];
     if (!set) continue;
 
-    // Exact Radio reveal
+    // Exact Prediction (Tiên Tri) reveal
+    let exactMatched = false;
     for (const r of ROLES_CATALOG) {
       if (clue.detail.includes(`là ${r.name} (`)) {
         botMem.possible[clue.targetPlayerId] = new Set([r.id]);
+        exactMatched = true;
         break;
       }
     }
+    if (exactMatched) continue;
 
     const targetPub = pub.players.find((p) => p.playerId === clue.targetPlayerId);
-    const targetUnrevealed = targetPub && !targetPub.revealedRoleId;
+    const targetUnrevealed = Boolean(targetPub && !targetPub.revealedRoleId);
 
-    // If "[Chưa lật vai]" fails against an unrevealed target, only Khánh "Tin Giả" can evade damage probes!
-    if (clue.detail.includes('[Chưa lật vai]') && clue.outcome === 'no-reaction' && targetUnrevealed) {
-      botMem.possible[clue.targetPlayerId] = new Set(['suong-tin-gia']);
-      continue;
-    }
-
-    // Conditional investigation card filter
-    const isHealProbe =
-      clue.detail.includes('[Kẻ Độc Hành]') || clue.detail.includes('[Max HP <= 11]');
     for (const cond of CLUE_CONDITION_FILTERS) {
       if (clue.detail.includes(cond.key)) {
         const want = clue.outcome === 'condition-met';
         for (const roleId of Array.from(set)) {
-          // Khánh "Tin Giả" khi úp vai sẽ báo Không phản ứng trước các thẻ gây thương tích!
-          if (!want && !isHealProbe && targetUnrevealed && roleId === 'suong-tin-gia') {
+          // Khánh "Tin Giả" (Unknown) khi úp vai có thể né ST/cướp hoặc giả danh khớp thẻ Hồi 1
+          if (targetUnrevealed && roleId === 'suong-tin-gia') {
             continue;
           }
           const role = ROLES_BY_ID[roleId];
@@ -154,27 +151,37 @@ function updateBotMemory(botMem, pub, priv) {
 }
 
 function estimateTargetRoleScores(botMem, pub, priv, target) {
-  // Bình "Bảo Vệ" biết mặt Người được bảo hộ và bảo vệ người đó tuyệt đối; nếu bị hạ thì truy sát hung thủ!
-  if (priv.roleId === 'lang-cuu-ho' && priv.protegePlayerId) {
-    if (priv.protegePlayerId === target.playerId) {
-      return { isEnemyProb: 0, isAllyProb: 1 };
-    }
-    if (botMem.killerByVictim[priv.protegePlayerId] === target.playerId) {
-      return { isEnemyProb: 1, isAllyProb: 0 };
-    }
-  }
-
   const pubTarget = pub.players.find((p) => p.playerId === target.playerId);
+  const danielSupportsHunters = priv.roleId === 'lang-tien-phong' && pub.deadCount >= 1;
+  const remainingNeutralsDeadNeeded = Math.max(1, 3 - (pub.deadCount ?? 0));
+
   if (pubTarget?.revealedRoleId) {
     const role = ROLES_BY_ID[pubTarget.revealedRoleId];
+    if (danielSupportsHunters) {
+      return {
+        isEnemyProb: role.faction === 'lantern-guard' ? 0 : role.faction === 'mist-order' ? 1 : 0.35,
+        isAllyProb: role.faction === 'lantern-guard' ? 1 : 0,
+      };
+    }
+    if (priv.faction === 'lantern-guard') {
+      if (role.faction === 'mist-order') return { isEnemyProb: 1, isAllyProb: 0 };
+      if (role.faction === 'lantern-guard') return { isEnemyProb: 0, isAllyProb: 1 };
+      // Revealed Neutral: target only when near solo-win or feeding threat
+      if (role.id === 'lang-tien-phong') return { isEnemyProb: 0, isAllyProb: 0.65 };
+      if (role.id === 'lang-anh-san' && pubTarget.equipped.length >= 4) return { isEnemyProb: 0.95, isAllyProb: 0 };
+      if (role.id === 'lang-cuu-ho' && pub.deadCount >= 2) return { isEnemyProb: 0.85, isAllyProb: 0 };
+      return { isEnemyProb: 0.12, isAllyProb: 0.2 };
+    }
+    if (priv.faction === 'mist-order') {
+      if (role.faction === 'mist-order') return { isEnemyProb: 0, isAllyProb: 1 };
+      if (role.faction === 'lantern-guard') return { isEnemyProb: 1, isAllyProb: 0 };
+      // Shadows hunt weak Neutrals (especially 8-HP Allie) to secure 3-Neutral-dead victory
+      return { isEnemyProb: pub.players.length >= 6 ? 1 : 0.7, isAllyProb: 0 };
+    }
+    // Wanderer attacking revealed targets
     return {
-      isEnemyProb:
-        priv.faction === 'wanderer'
-          ? 1
-          : role.faction !== priv.faction
-            ? 1
-            : 0,
-      isAllyProb: priv.faction !== 'wanderer' && role.faction === priv.faction ? 1 : 0,
+      isEnemyProb: 1,
+      isAllyProb: 0,
     };
   }
 
@@ -182,23 +189,30 @@ function estimateTargetRoleScores(botMem, pub, priv, target) {
   if (!set || set.size === 0) {
     return { isEnemyProb: 0.5, isAllyProb: 0.3 };
   }
-  let enemyCount = 0;
-  let allyCount = 0;
+  let enemyWeight = 0;
+  let allyWeight = 0;
   for (const rid of set) {
     const r = ROLES_BY_ID[rid];
     if (!r) continue;
-    if (priv.faction === 'wanderer') {
-      if (priv.roleId === 'lang-cuu-ho' && r.faction === 'lantern-guard') allyCount += 1;
-      else enemyCount += 1;
-    } else if (r.faction === priv.faction) {
-      allyCount += 1;
+    if (danielSupportsHunters) {
+      if (r.faction === 'lantern-guard') allyWeight += 1;
+      else if (r.faction === 'mist-order') enemyWeight += 1;
+      else enemyWeight += 0.35;
+    } else if (priv.faction === 'lantern-guard') {
+      if (r.faction === 'lantern-guard') allyWeight += 1;
+      else if (r.faction === 'mist-order') enemyWeight += 1;
+      else enemyWeight += pub.players.length >= 7 && remainingNeutralsDeadNeeded <= 3 ? 0.15 : 0.3;
+    } else if (priv.faction === 'mist-order') {
+      if (r.faction === 'mist-order') allyWeight += 1;
+      else if (r.faction === 'lantern-guard') enemyWeight += 1;
+      else enemyWeight += pub.players.length >= 6 ? 0.85 : 0.5;
     } else {
-      enemyCount += 1;
+      enemyWeight += 1;
     }
   }
   const total = Math.max(1, set.size);
-  let isEnemyProb = enemyCount / total;
-  const isAllyProb = allyCount / total;
+  let isEnemyProb = enemyWeight / total;
+  const isAllyProb = allyWeight / total;
   if (botMem.attackedMe[target.playerId] > 0 && priv.faction !== 'wanderer') {
     isEnemyProb = Math.min(1, isEnemyProb + 0.25);
   }
@@ -212,25 +226,44 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
   const aliveOthers = pub.players.filter((p) => p.alive && p.playerId !== priv.playerId);
   if (!aliveOthers.length) return { type: 'END_TURN' };
 
+  const hasHandgun = selfPub.equipped.some((c) => c.id === 'ev-05');
+  const hasMachineGun = selfPub.equipped.some((c) => c.id === 'ev-06');
+  const hasMasamune = selfPub.equipped.some((c) => c.id === 'ev-01');
+  const hasSpear = selfPub.equipped.some((c) => c.id === 'eq-04');
+  const hasDamageWeapon = selfPub.equipped.some((c) =>
+    ['ev-01', 'ev-02', 'ev-03', 'ev-04', 'eq-04'].includes(c.id),
+  );
+
   // Score alive others
-  const avengeTargetId =
-    priv.roleId === 'lang-cuu-ho' && priv.protegePlayerId
-      ? botMem.killerByVictim[priv.protegePlayerId] || null
-      : null;
   const scoredOthers = aliveOthers
     .map((p) => {
       const { isEnemyProb, isAllyProb } = estimateTargetRoleScores(botMem, pub, priv, p);
-      // Priority: avenge protege killer > known enemy > wounded target > geared Wanderer
+      const isWerewolfDanger =
+        p.revealedRoleId === 'suong-gac-cong' && priv.roleId === 'lang-anh-san' && p.woundsTaken < 8;
+      const woundWeight =
+        priv.roleId === 'lang-cuu-ho' || priv.roleId === 'lang-quan-sat' ? 0.28 : 0.12;
+      const gearTargetBonus =
+        priv.roleId === 'lang-anh-san'
+          ? pub.players.length <= 6
+            ? p.equipped.length * 4.0
+            : p.equipped.length * 2.4 + (p.equipped.length > 0 ? p.woundsTaken * 0.45 : -0.6)
+          : p.equipped.length >= 2
+            ? 0.25
+            : 0;
       const threatBonus =
-        p.woundsTaken * 0.08 +
-        (p.equipped.length >= 2 ? 0.35 : 0) +
-        (p.revealedFaction && p.revealedFaction !== priv.faction ? 0.4 : 0) +
-        (avengeTargetId === p.playerId ? 3.5 : 0);
+        p.woundsTaken * woundWeight +
+        gearTargetBonus +
+        (p.revealedFaction === 'mist-order' && priv.faction === 'lantern-guard' ? 0.8 : 0) +
+        (p.revealedFaction === 'lantern-guard' && priv.faction === 'mist-order' ? 0.6 : 0) +
+        (p.revealedRoleId === 'lang-quan-sat' && priv.faction !== 'lantern-guard' ? 0.7 : 0) +
+        (p.revealedRoleId === 'lang-anh-san' && p.equipped.length >= 4 ? 1.8 : 0) +
+        (p.revealedRoleId === 'lang-cuu-ho' && pub.deadCount >= 2 ? 1.1 : 0) -
+        (isWerewolfDanger ? 1.5 : 0);
       return {
         player: p,
         isEnemyProb,
         isAllyProb,
-        attackScore: isEnemyProb * 2 - isAllyProb * 2.5 + threatBonus,
+        attackScore: isEnemyProb * 2 - isAllyProb * 2.6 + threatBonus,
       };
     })
     .sort((a, b) => b.attackScore - a.attackScore);
@@ -242,31 +275,86 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
 
   // Phase 1: ROLL_MOVE
   if (pub.turnPhase === 'ROLL_MOVE') {
+    if (priv.roleId === 'gac-truc-ban' && priv.revealed) {
+      const paired = getPairedLocationInCluster(selfPub.location, pub.clusterPairs);
+      if (paired) {
+        const shouldTeleport =
+          (paired === 'corridor' && (selfPub.woundsTaken >= 3 || bestTarget.woundsTaken >= 5)) ||
+          (paired === 'court' && scoredOthers.some((x) => x.player.equipped.length > 0)) ||
+          areInSameCluster(paired, bestTarget.location, pub.clusterPairs);
+        if (shouldTeleport) {
+          return { type: 'USE_SKILL' };
+        }
+      }
+    }
     return { type: 'ROLL_DICE' };
   }
 
-  // Phase 1B: CHOOSE_MOVE (dice rolled 7)
+  // Phase 1B: CHOOSE_MOVE (dice 7 or Mystic Compass eq-05)
   if (pub.turnPhase === 'CHOOSE_MOVE') {
-    const validLocs = LOCATIONS_CATALOG.filter((l) => l.id !== selfPub.location);
-    if (priv.roleId === 'lang-anh-san' && selfPub.equipped.length < 3) {
+    const poolIds =
+      pub.allowedMoveDestinations && pub.allowedMoveDestinations.length > 0
+        ? pub.allowedMoveDestinations
+        : LOCATIONS_CATALOG.filter((l) => l.id !== selfPub.location).map((l) => l.id);
+
+    if (priv.roleId === 'lang-anh-san' && selfPub.equipped.length < 5) {
       const geared = aliveOthers.find((p) => p.equipped.length > 0);
-      if (geared && selfPub.location !== 'court') return { type: 'CHOOSE_DEST', location: 'court' };
-      if (selfPub.location !== 'lobby') return { type: 'CHOOSE_DEST', location: 'lobby' };
+      if (geared && poolIds.includes('court')) return { type: 'CHOOSE_DEST', location: 'court' };
+      if (selfPub.woundsTaken >= 6 && poolIds.includes('corridor')) {
+        return { type: 'CHOOSE_DEST', location: 'corridor' };
+      }
+      // In 5-6p Robbery (or 7-8p kill-loot on weakened geared), jump into range if a juicy target sits there
+      const lootTarget = scoredOthers.find(
+        (x) =>
+          x.player.equipped.length > 0 &&
+          x.player.revealedRoleId !== 'suong-gac-cong' &&
+          (pub.players.length <= 6 ? hasDamageWeapon || selfPub.equipped.length >= 1 : x.player.woundsTaken >= 4),
+      )?.player;
+      if (lootTarget) {
+        const huntLoc = poolIds.find((locId) =>
+          hasHandgun
+            ? !areInSameCluster(locId, lootTarget.location, pub.clusterPairs)
+            : areInSameCluster(locId, lootTarget.location, pub.clusterPairs),
+        );
+        if (huntLoc && (pub.players.length <= 6 || huntLoc === 'lobby' || huntLoc === 'breaker' || huntLoc === 'canteen' || lootTarget.equipped.length >= 2)) {
+          return { type: 'CHOOSE_DEST', location: huntLoc };
+        }
+      }
+      if (selfPub.equipped.length <= 2) {
+        if (poolIds.includes('breaker')) return { type: 'CHOOSE_DEST', location: 'breaker' };
+        if (poolIds.includes('canteen')) return { type: 'CHOOSE_DEST', location: 'canteen' };
+        if (poolIds.includes('lobby')) return { type: 'CHOOSE_DEST', location: 'lobby' };
+      } else {
+        if (poolIds.includes('lobby')) return { type: 'CHOOSE_DEST', location: 'lobby' };
+        if (poolIds.includes('breaker')) return { type: 'CHOOSE_DEST', location: 'breaker' };
+        if (poolIds.includes('canteen')) return { type: 'CHOOSE_DEST', location: 'canteen' };
+      }
     }
-    if (priv.woundsTaken >= 5 && selfPub.location !== 'corridor') {
+    if (priv.roleId === 'lang-cuu-ho' && pub.deadCount < 2) {
+      if (selfPub.woundsTaken >= 5 && poolIds.includes('corridor')) {
+        return { type: 'CHOOSE_DEST', location: 'corridor' };
+      }
+      if (poolIds.includes('lobby')) return { type: 'CHOOSE_DEST', location: 'lobby' };
+      if (poolIds.includes('canteen')) return { type: 'CHOOSE_DEST', location: 'canteen' };
+    }
+    if (
+      priv.woundsTaken >= 5 &&
+      !(priv.roleId === 'lang-tien-phong' && pub.deadCount === 0) &&
+      poolIds.includes('corridor')
+    ) {
       return { type: 'CHOOSE_DEST', location: 'corridor' };
     }
-    if (bestTarget && bestTarget.woundsTaken >= 6 && selfPub.location !== 'corridor') {
+    if (bestTarget && bestTarget.woundsTaken >= 6 && poolIds.includes('corridor')) {
       return { type: 'CHOOSE_DEST', location: 'corridor' };
     }
-    if (pub.round <= 2 && priv.hand.filter((c) => c.deck === 'investigation').length === 0 && selfPub.location !== 'radio') {
+    if (pub.round <= 2 && priv.roleId !== 'lang-anh-san' && poolIds.includes('radio')) {
       return { type: 'CHOOSE_DEST', location: 'radio' };
     }
-    const desired =
-      validLocs.find((l) => l.clusterId === bestTarget.clusterId) ||
-      pickRandom(validLocs, rng) ||
-      LOCATIONS_CATALOG[0];
-    return { type: 'CHOOSE_DEST', location: desired.id };
+    const desiredId =
+      poolIds.find((locId) => areInSameCluster(locId, bestTarget.location, pub.clusterPairs)) ||
+      pickRandom(poolIds, rng) ||
+      poolIds[0];
+    return { type: 'CHOOSE_DEST', location: desiredId };
   }
 
   // Phase 2: LOCATION_ACTION
@@ -276,22 +364,93 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
         return { type: 'DRAW_CARD', deck: 'investigation' };
       case 'lobby':
         return { type: 'DRAW_CARD', deck: 'equipment' };
-      case 'breaker':
       case 'canteen':
         return { type: 'DRAW_CARD', deck: 'event' };
+      case 'breaker': {
+        if (priv.roleId === 'lang-anh-san') {
+          if (selfPub.equipped.length <= 2 && pub.deckCounts.event > 0) {
+            return { type: 'DRAW_CARD', deck: 'event' };
+          }
+          return {
+            type: 'DRAW_CARD',
+            deck: pub.deckCounts.equipment > 0 ? 'equipment' : 'event',
+          };
+        }
+        if (priv.roleId === 'lang-cuu-ho' && !hasDamageWeapon && pub.deckCounts.event > 0) {
+          return { type: 'DRAW_CARD', deck: 'event' };
+        }
+        if (pub.round <= 2 && rng() < 0.45 && pub.deckCounts.investigation > 0) {
+          return { type: 'DRAW_CARD', deck: 'investigation' };
+        }
+        return { type: 'DRAW_CARD', deck: rng() < 0.5 ? 'equipment' : 'event' };
+      }
       case 'corridor': {
-        if (selfPub.woundsTaken >= 2 || (bestAlly && bestAlly.woundsTaken >= 3 && bestTarget.woundsTaken < 8)) {
+        if (priv.roleId === 'lang-anh-san') {
+          if (selfPub.woundsTaken >= 2) {
+            return { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: selfPub.playerId };
+          }
+          const killableGeared = aliveOthers
+            .filter((p) => p.equipped.length >= 1 && p.woundsTaken >= 8)
+            .sort((a, b) => b.equipped.length - a.equipped.length)[0];
+          if (killableGeared) {
+            return { type: 'USE_LOC_POWER', mode: 'damage', targetPlayerId: killableGeared.playerId };
+          }
+          if (pub.players.length >= 7) {
+            const lootMark = aliveOthers
+              .filter((p) => p.equipped.length >= 2 && p.woundsTaken >= 4)
+              .sort((a, b) => b.equipped.length - a.equipped.length)[0];
+            if (lootMark) {
+              return { type: 'USE_LOC_POWER', mode: 'damage', targetPlayerId: lootMark.playerId };
+            }
+          }
+          const dyingNoGear = aliveOthers
+            .filter((p) => p.equipped.length === 0 && p.woundsTaken >= 6)
+            .sort((a, b) => b.woundsTaken - a.woundsTaken)[0];
+          if (dyingNoGear) {
+            return { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: dyingNoGear.playerId };
+          }
+          if (selfPub.woundsTaken >= 1) {
+            return { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: selfPub.playerId };
+          }
+          return { type: 'SKIP_LOC' };
+        }
+        if (priv.faction === 'lantern-guard' && pub.players.length >= 6 && pub.round <= 3 && scoredOthers[0].isEnemyProb < 0.55) {
+          if (selfPub.woundsTaken >= 1) return { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: selfPub.playerId };
+          if (bestAlly && bestAlly.woundsTaken >= 1) return { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: bestAlly.playerId };
+          return { type: 'SKIP_LOC' };
+        }
+        const danielSeekingFirstDeath = priv.roleId === 'lang-tien-phong' && pub.deadCount === 0;
+        if (
+          (selfPub.woundsTaken >= 2 && !danielSeekingFirstDeath) ||
+          (bestAlly && bestAlly.woundsTaken >= 3 && bestTarget.woundsTaken < 8)
+        ) {
           const healTarget =
-            selfPub.woundsTaken >= (bestAlly?.woundsTaken ?? 0) ? selfPub.playerId : bestAlly.playerId;
+            selfPub.woundsTaken >= (bestAlly?.woundsTaken ?? 0) && !danielSeekingFirstDeath
+              ? selfPub.playerId
+              : bestAlly.playerId;
           return { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: healTarget };
         }
-        if (pub.round === 1 && scoredOthers[0].isEnemyProb < 0.72 && profile !== 'aggressive') {
+        if (
+          (pub.round === 1 && scoredOthers[0].isEnemyProb < 0.72 && priv.roleId !== 'lang-tien-phong') ||
+          (priv.roleId === 'lang-anh-san' && selfPub.woundsTaken < 3 && bestTarget.woundsTaken < 6) ||
+          (priv.roleId === 'lang-cuu-ho' && pub.deadCount < 2 && bestTarget.woundsTaken < 6)
+        ) {
           return { type: 'SKIP_LOC' };
         }
         return { type: 'USE_LOC_POWER', mode: 'damage', targetPlayerId: bestTarget.playerId };
       }
       case 'court': {
-        const donor = scoredOthers.find((x) => x.player.equipped.length > 0)?.player;
+        const donor = scoredOthers
+          .filter((x) => x.player.equipped.length > 0)
+          .sort((a, b) => {
+            const aBobThreat = a.player.equipped.length >= 4 ? 10 : 0;
+            const bBobThreat = b.player.equipped.length >= 4 ? 10 : 0;
+            if (aBobThreat !== bBobThreat) return bBobThreat - aBobThreat;
+            const aMainFoe = a.player.revealedFaction && a.player.revealedFaction !== 'wanderer' && a.player.revealedFaction !== priv.faction ? 2 : 0;
+            const bMainFoe = b.player.revealedFaction && b.player.revealedFaction !== 'wanderer' && b.player.revealedFaction !== priv.faction ? 2 : 0;
+            if (aMainFoe !== bMainFoe) return bMainFoe - aMainFoe;
+            return b.attackScore - a.attackScore;
+          })[0]?.player;
         if (donor) {
           return { type: 'USE_LOC_POWER', mode: 'steal', targetPlayerId: donor.playerId };
         }
@@ -304,146 +463,220 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
 
   // Phase 3: MAIN_ACTION
   if (pub.turnPhase === 'MAIN_ACTION') {
-    // 1. Always equip passive gear from hand (helps win/combat; triggers Hải's 3-gear win!)
-    const equippable = priv.hand.find((c) => c.deck !== 'investigation' && !c.isConsumable);
-    if (equippable) {
-      return { type: 'EQUIP_CARD', cardId: equippable.id };
-    }
-
-    // 2. Heal if wounded substantially
-    const healCard = priv.hand.find((c) =>
-      ['eq-06', 'eq-07', 'eq-08', 'ev-02', 'ev-03'].includes(c.id),
-    );
-    if (healCard && (priv.woundsTaken >= 3 || (healCard.id === 'ev-03' && priv.faction === 'lantern-guard' && priv.revealed && priv.woundsTaken >= 4))) {
-      if (healCard.id === 'ev-03' && !priv.revealed && priv.faction === 'lantern-guard') {
-        return { type: 'REVEAL_ROLE' };
+    // Step 3A: Mandatory resolution of drawn hand cards before ATTACK or END_TURN
+    if (priv.hand.length > 0) {
+      const card = priv.hand[0];
+      if (!card.isConsumable && card.deck !== 'investigation') {
+        return { type: 'EQUIP_CARD', cardId: card.id };
       }
-      return { type: 'USE_CARD', cardId: healCard.id, targetPlayerId: priv.playerId };
-    }
-
-    // 3. Play Investigation Card on least-known alive player
-    const invCard = priv.hand.find((c) => c.deck === 'investigation');
-    if (invCard) {
-      const targetToProbe =
-        aliveOthers
-          .filter((p) => !p.revealedRoleId)
-          .sort((a, b) => (botMem.possible[b.playerId]?.size || 0) - (botMem.possible[a.playerId]?.size || 0))[0] ||
-        aliveOthers[0];
-      return {
-        type: 'INVESTIGATE_CARD',
-        cardId: invCard.id,
-        targetPlayerId: targetToProbe.playerId,
-      };
-    }
-
-    // 4. Offensive event cards (ev-06, ev-07, ev-08)
-    const offCard = priv.hand.find((c) => c.id === 'ev-06' || c.id === 'ev-07' || c.id === 'ev-08');
-    if (offCard && (pub.round >= 2 || bestTarget.woundsTaken >= 5 || scoredOthers[0].isEnemyProb >= 0.7)) {
-      if (offCard.id === 'ev-07') {
-        // Avoid self-blast unless urgent
-        const nonSelfLocTarget =
-          scoredOthers.find((x) => x.player.location !== selfPub.location)?.player || bestTarget;
-        if (nonSelfLocTarget.location !== selfPub.location || (selfPub.woundsTaken <= 7 && bestTarget.woundsTaken >= 8)) {
-          return { type: 'USE_CARD', cardId: 'ev-07', targetLocation: nonSelfLocTarget.location };
+      if (card.deck === 'investigation') {
+        if (['inv-01', 'inv-02', 'inv-03'].includes(card.id)) {
+          const gearedProbe = scoredOthers
+            .map((x) => x.player)
+            .filter((p) => p.equipped.length > 0 && !(p.revealedRoleId === 'suong-tin-gia'))
+            .filter((p) => {
+              if (!p.revealedFaction) return true;
+              if (card.id === 'inv-01') return p.revealedFaction !== 'wanderer';
+              if (card.id === 'inv-02') return p.revealedFaction !== 'mist-order';
+              return p.revealedFaction !== 'lantern-guard';
+            })[0];
+          if (gearedProbe) {
+            return { type: 'INVESTIGATE_CARD', cardId: card.id, targetPlayerId: gearedProbe.playerId };
+          }
         }
-      } else {
-        return { type: 'USE_CARD', cardId: offCard.id, targetPlayerId: bestTarget.playerId };
+        const targetToProbe =
+          aliveOthers
+            .filter((p) => !p.revealedRoleId)
+            .sort(
+              (a, b) => (botMem.possible[b.playerId]?.size || 0) - (botMem.possible[a.playerId]?.size || 0),
+            )[0] || aliveOthers[0];
+        return {
+          type: 'INVESTIGATE_CARD',
+          cardId: card.id,
+          targetPlayerId: targetToProbe.playerId,
+        };
       }
+      if (card.id === 'eq-08') {
+        const blessTarget = bestAlly || aliveOthers[aliveOthers.length - 1];
+        return { type: 'USE_CARD', cardId: card.id, targetPlayerId: blessTarget.playerId };
+      }
+      if (card.id === 'eq-09') {
+        let aidTargetId = bestTarget.playerId;
+        if (selfPub.woundsTaken >= 8) {
+          aidTargetId = selfPub.playerId;
+        } else if (bestAlly && bestAlly.woundsTaken >= 8) {
+          aidTargetId = bestAlly.playerId;
+        } else {
+          const healthyEnemy = scoredOthers
+            .filter((x) => x.isAllyProb < 0.5 && x.player.woundsTaken < 7)
+            .sort((a, b) => a.player.woundsTaken - b.player.woundsTaken)[0]?.player;
+          if (healthyEnemy) aidTargetId = healthyEnemy.playerId;
+        }
+        return { type: 'USE_CARD', cardId: 'eq-09', targetPlayerId: aidTargetId };
+      }
+      if (card.id === 'eq-13') {
+        const trigger = priv.faction === 'lantern-guard' && (priv.woundsTaken >= 2 || priv.revealed);
+        return { type: 'USE_CARD', cardId: 'eq-13', ...(trigger ? {} : { skipEffect: true }) };
+      }
+      if (card.id === 'eq-14') {
+        const trigger =
+          ['lang-quan-sat', 'gac-truc-ban', 'suong-tin-gia'].includes(priv.roleId) &&
+          (priv.woundsTaken >= 2 || priv.revealed);
+        return { type: 'USE_CARD', cardId: 'eq-14', ...(trigger ? {} : { skipEffect: true }) };
+      }
+      if (card.id === 'ev-13') {
+        const trigger = priv.faction === 'mist-order' && (priv.woundsTaken >= 2 || priv.revealed);
+        return { type: 'USE_CARD', cardId: 'ev-13', ...(trigger ? {} : { skipEffect: true }) };
+      }
+      if (card.id === 'ev-11') {
+        const donor = scoredOthers
+          .filter((x) => x.player.equipped.length > 0)
+          .sort((a, b) => {
+            const aBobThreat = a.player.equipped.length >= 4 ? 10 : 0;
+            const bBobThreat = b.player.equipped.length >= 4 ? 10 : 0;
+            if (aBobThreat !== bBobThreat) return bBobThreat - aBobThreat;
+            const aMainFoe = a.player.revealedFaction && a.player.revealedFaction !== 'wanderer' && a.player.revealedFaction !== priv.faction ? 2 : 0;
+            const bMainFoe = b.player.revealedFaction && b.player.revealedFaction !== 'wanderer' && b.player.revealedFaction !== priv.faction ? 2 : 0;
+            if (aMainFoe !== bMainFoe) return bMainFoe - aMainFoe;
+            return b.attackScore - a.attackScore;
+          })[0]?.player;
+        return {
+          type: 'USE_CARD',
+          cardId: 'ev-11',
+          ...(donor ? { targetPlayerId: donor.playerId } : {}),
+        };
+      }
+      if (card.id === 'ev-12') {
+        const recipient = bestAlly || aliveOthers[aliveOthers.length - 1];
+        return { type: 'USE_CARD', cardId: 'ev-12', targetPlayerId: recipient.playerId };
+      }
+      if (card.id === 'ev-07' || card.id === 'ev-08' || card.id === 'ev-10') {
+        return { type: 'USE_CARD', cardId: card.id, targetPlayerId: bestTarget.playerId };
+      }
+      return { type: 'USE_CARD', cardId: card.id };
     }
 
-    // 5. Strategic Voluntary Reveal
-    if (!priv.revealed) {
-      const deadCount = pub.players.filter((p) => !p.alive).length;
-      const aliveCount = pub.players.length - deadCount;
-      const sameClusterForSteal = scoredOthers.some(
-        (x) => areInSameCluster(selfPub.location, x.player.location) && x.player.equipped.length > 0,
+    const reachableScored = scoredOthers.filter((x) => {
+      const sameCluster = areInSameCluster(selfPub.location, x.player.location, pub.clusterPairs);
+      return hasHandgun ? !sameCluster : sameCluster;
+    });
+
+    // Step 3B: Strategic Voluntary Reveal (never Daniel or Unknown)
+    if (
+      !priv.revealed &&
+      priv.roleId !== 'lang-tien-phong' &&
+      priv.roleId !== 'suong-tin-gia'
+    ) {
+      const inRangeGeared = reachableScored.some((x) => x.player.equipped.length > 0);
+      const inRangeHighWoundsGeared = reachableScored.some(
+        (x) =>
+          x.player.equipped.length >= 2 &&
+          (x.player.woundsTaken >= 6 ||
+            (x.player.revealedMaxHp && x.player.revealedMaxHp - x.player.woundsTaken <= (hasDamageWeapon ? 4 : 3))),
       );
       const shouldRevealNow =
-        (priv.roleId === 'lang-quan-sat' && (priv.woundsTaken >= 4 || aliveCount <= 3)) ||
-        (priv.roleId === 'lang-cuu-ho' && (avengeTargetId || priv.woundsTaken >= 4 || pub.round >= 3)) ||
-        (priv.roleId === 'lang-anh-san' && pub.round >= 3 && (selfPub.equipped.length >= 3 || (selfPub.equipped.length >= 2 && sameClusterForSteal))) ||
-        (priv.roleId === 'gac-truc-ban' && (priv.woundsTaken >= 4 || aliveCount <= 4)) ||
-        (priv.roleId === 'gac-ky-thuat' &&
-          pub.round >= 2 &&
-          (scoredOthers[0].isEnemyProb >= 0.55 || bestTarget.woundsTaken >= 4)) ||
-        (priv.roleId === 'gac-radio' &&
-          pub.round >= 2 &&
-          (scoredOthers[0].isEnemyProb >= 0.55 || bestTarget.woundsTaken >= 4)) ||
-        (priv.roleId === 'suong-tin-gia' &&
-          pub.round >= 3 &&
-          scoredOthers.some((x) => areInSameCluster(selfPub.location, x.player.location))) ||
-        (priv.roleId === 'suong-gac-cong' && priv.woundsTaken >= 3) ||
-        (priv.roleId === 'suong-an-danh' && priv.woundsTaken >= 4) ||
-        pub.round >= 6;
+        ((priv.roleId === 'gac-ky-thuat' || priv.roleId === 'gac-radio') &&
+          ((pub.round >= 2 &&
+            (scoredOthers[0].isEnemyProb >= 0.68 ||
+              bestTarget.revealedFaction === 'mist-order' ||
+              bestTarget.woundsTaken >= 5)) ||
+            hasSpear ||
+            pub.round >= 4)) ||
+        (priv.roleId === 'gac-truc-ban' && (hasSpear || selfPub.woundsTaken >= 5 || pub.round >= 4)) ||
+        (priv.roleId === 'suong-an-danh' && priv.woundsTaken >= 2 && reachableScored.length > 0) ||
+        (priv.roleId === 'suong-gac-cong' && (priv.woundsTaken >= 2 || pub.round >= 2)) ||
+        (priv.roleId === 'lang-quan-sat' && priv.woundsTaken >= 4) ||
+        (priv.roleId === 'lang-anh-san' &&
+          (pub.players.length <= 6
+            ? inRangeGeared
+            : inRangeHighWoundsGeared ||
+              (selfPub.equipped.length >= 4 &&
+                reachableScored.some((x) => x.player.equipped.length >= 1 && x.player.woundsTaken >= 6)))) ||
+        (priv.roleId === 'lang-cuu-ho' &&
+          ((pub.deadCount >= 2 &&
+            priv.hp >= 5 &&
+            reachableScored.some((x) => x.player.woundsTaken >= 5)) ||
+            pub.deadCount >= 3));
       if (shouldRevealNow) {
         return { type: 'REVEAL_ROLE' };
       }
     }
 
-    // 6. Active Skill Usage when revealed & off cooldown
-    if (priv.revealed && !priv.skillUsedOnce && priv.skillCooldown === 0) {
-      const deadCount = pub.players.filter((p) => !p.alive).length;
-      const aliveCount = pub.players.length - deadCount;
-      const sameClusterTargets = scoredOthers.filter((x) =>
-        areInSameCluster(selfPub.location, x.player.location),
-      );
-      if (priv.roleId === 'gac-ky-thuat' || priv.roleId === 'gac-radio') {
-        if (scoredOthers[0].isEnemyProb >= 0.55 || bestTarget.woundsTaken >= 4 || pub.round >= 3) {
-          return { type: 'USE_SKILL', targetPlayerId: bestTarget.playerId };
-        }
-      } else if (priv.roleId === 'gac-truc-ban' && (priv.woundsTaken >= 4 || aliveCount <= 4)) {
+    // Step 3C: Active Skill Usage
+    if (priv.revealed) {
+      if (
+        (priv.roleId === 'gac-ky-thuat' || priv.roleId === 'gac-radio') &&
+        !priv.skillUsedOnce &&
+        (scoredOthers[0].isEnemyProb >= 0.65 ||
+          bestTarget.revealedFaction === 'mist-order' ||
+          bestTarget.woundsTaken >= 5 ||
+          pub.round >= 4)
+      ) {
+        return { type: 'USE_SKILL', targetPlayerId: bestTarget.playerId };
+      }
+      if (priv.roleId === 'lang-quan-sat' && !priv.skillUsedOnce && priv.woundsTaken >= 4) {
         return { type: 'USE_SKILL' };
-      } else if (priv.roleId === 'suong-tin-gia' && sameClusterTargets.length > 0) {
-        const t = sameClusterTargets[0];
-        if (t.isEnemyProb >= 0.5 || t.player.woundsTaken >= 4 || pub.round >= 3) {
-          return { type: 'USE_SKILL', targetPlayerId: t.player.playerId };
-        }
-      } else if (priv.roleId === 'lang-anh-san') {
-        const donor = sameClusterTargets.find((x) => x.player.equipped.length > 0);
-        if (donor) {
-          return { type: 'USE_SKILL', targetPlayerId: donor.player.playerId };
-        }
-      } else if (priv.roleId === 'lang-quan-sat' && priv.woundsTaken >= 4) {
-        return { type: 'USE_SKILL' };
-      } else if (priv.roleId === 'lang-cuu-ho' && sameClusterTargets.length > 0) {
-        const protegePub = priv.protegePlayerId
-          ? pub.players.find((p) => p.playerId === priv.protegePlayerId)
-          : null;
-        if (protegePub && !protegePub.alive) {
-          const revengeTarget =
-            sameClusterTargets.find((x) => x.player.playerId === avengeTargetId) || sameClusterTargets[0];
-          return { type: 'USE_SKILL', targetPlayerId: revengeTarget.player.playerId };
-        }
-        if (priv.hp >= 6) {
-          const protegeInCluster = sameClusterTargets.find(
-            (x) => x.player.playerId === priv.protegePlayerId && x.player.woundsTaken >= 2,
-          );
-          const needy = protegeInCluster || sameClusterTargets.find((x) => x.player.woundsTaken >= 3);
-          if (needy) {
-            return { type: 'USE_SKILL', targetPlayerId: needy.player.playerId };
-          }
+      }
+      if (
+        priv.roleId === 'lang-cuu-ho' &&
+        selfPub.attacksThisTurn === 1 &&
+        priv.hp > 4 &&
+        reachableScored.length > 0
+      ) {
+        const feastTarget = reachableScored.find(
+          (x) =>
+            (pub.deadCount >= 2 && x.player.woundsTaken >= 5) ||
+            (pub.deadCount >= 3 && priv.hp >= 6),
+        );
+        if (feastTarget) {
+          return { type: 'USE_SKILL', targetPlayerId: feastTarget.player.playerId };
         }
       }
     }
 
-    // 7. Combat Attack within legal cluster range
-    const hasOtherClusterBow = selfPub.equipped.some((c) => c.id === 'ev-04');
-    const hasWhirlwind = selfPub.equipped.some((c) => c.id === 'eq-03');
-    const reachable = scoredOthers.filter((x) => {
-      const sameCluster = areInSameCluster(selfPub.location, x.player.location);
-      return hasOtherClusterBow ? !sameCluster : sameCluster;
-    });
-
-    if (reachable.length > 0) {
-      const top = reachable[0];
-      const topIsConfirmedAlly = top.isAllyProb >= 0.85 && priv.faction !== 'wanderer';
-      const topIsProtege = priv.roleId === 'lang-cuu-ho' && priv.protegePlayerId === top.player.playerId;
+    // Step 3D: Combat Attack within legal cluster range (respecting Masamune mandatory attack)
+    if (selfPub.attacksThisTurn < 1 && reachableScored.length > 0) {
+      if (hasMasamune) {
+        return { type: 'ATTACK', targetPlayerId: reachableScored[0].player.playerId };
+      }
+      const top = reachableScored[0];
+      const topIsConfirmedAlly =
+        top.isAllyProb >= 0.85 &&
+        !['lang-anh-san', 'lang-quan-sat', 'lang-cuu-ho'].includes(priv.roleId) &&
+        !(priv.roleId === 'lang-tien-phong' && pub.deadCount === 0);
+      const hunterAvoidNeutral =
+        priv.faction === 'lantern-guard' &&
+        ((top.isEnemyProb < 0.3 && top.player.woundsTaken < 7 && pub.deadCount <= 2) ||
+          (pub.players.length >= 6 && pub.round <= 3 && top.isEnemyProb < 0.52));
+      const bobHoldFire =
+        priv.roleId === 'lang-anh-san' &&
+        (pub.players.length <= 6
+          ? top.player.equipped.length === 0 ||
+            !priv.revealed ||
+            (top.player.revealedRoleId === 'suong-gac-cong' && top.player.woundsTaken < 9 && !hasDamageWeapon)
+          : top.player.equipped.length === 0 || top.player.woundsTaken < 5);
+      const charlesHoldFire =
+        priv.roleId === 'lang-cuu-ho' &&
+        pub.deadCount < 2 &&
+        top.player.woundsTaken < 5 &&
+        !hasDamageWeapon;
       const suppressRound1Blind =
         pub.round === 1 &&
         top.isEnemyProb < 0.72 &&
-        !(profile === 'aggressive' && top.player.woundsTaken <= 2);
-      if (!topIsConfirmedAlly && !topIsProtege && !suppressRound1Blind) {
-        if (!(hasWhirlwind && reachable.some((x) => x.isAllyProb >= 0.85 && x.player.woundsTaken >= 9))) {
+        priv.roleId !== 'lang-tien-phong';
+      if (
+        !topIsConfirmedAlly &&
+        !hunterAvoidNeutral &&
+        !bobHoldFire &&
+        !charlesHoldFire &&
+        !suppressRound1Blind
+      ) {
+        if (
+          !(
+            hasMachineGun &&
+            reachableScored.some((x) => x.isAllyProb >= 0.85 && x.player.woundsTaken >= 8)
+          )
+        ) {
           return { type: 'ATTACK', targetPlayerId: top.player.playerId };
         }
       }
@@ -605,10 +838,22 @@ function runSimulation() {
           if (state.turnPhase === 'ROLL_MOVE') {
             res = applyPlayerGameAction(state, active.playerId, { type: 'ROLL_DICE' }, nowMs);
           } else if (state.turnPhase === 'CHOOSE_MOVE') {
-            const alt = LOCATIONS_CATALOG.find((l) => l.id !== active.location)?.id || 'lobby';
+            const alt =
+              state.allowedMoveDestinations?.[0] ||
+              LOCATIONS_CATALOG.find((l) => l.id !== active.location)?.id ||
+              'lobby';
             res = applyPlayerGameAction(state, active.playerId, { type: 'CHOOSE_DEST', location: alt }, nowMs);
           } else if (state.turnPhase === 'LOCATION_ACTION') {
             res = applyPlayerGameAction(state, active.playerId, { type: 'SKIP_LOC' }, nowMs);
+          } else if (active.hand.length > 0) {
+            const cid = active.hand[0];
+            if (cid.startsWith('inv-')) {
+              const oth = Object.values(state.players).find((p) => p.alive && p.playerId !== active.playerId);
+              res = applyPlayerGameAction(state, active.playerId, { type: 'INVESTIGATE_CARD', cardId: cid, targetPlayerId: oth.playerId }, nowMs);
+            } else {
+              const oth = Object.values(state.players).find((p) => p.alive && p.playerId !== active.playerId);
+              res = applyPlayerGameAction(state, active.playerId, { type: 'USE_CARD', cardId: cid, skipEffect: true, targetPlayerId: oth?.playerId }, nowMs);
+            }
           } else {
             res = applyPlayerGameAction(state, active.playerId, { type: 'END_TURN' }, nowMs);
           }
@@ -647,9 +892,6 @@ function runSimulation() {
         for (const p of Object.values(state.players)) {
           if (prevAliveSet.has(p.playerId) && !p.alive) {
             prevAliveSet.delete(p.playerId);
-            for (const bMem of Object.values(botMemMap)) {
-              bMem.killerByVictim[p.playerId] = p.eliminatedByPlayerId || active.playerId;
-            }
             stats.totalEliminations += 1;
             if (state.round === 1) {
               stats.round1Deaths += 1;
