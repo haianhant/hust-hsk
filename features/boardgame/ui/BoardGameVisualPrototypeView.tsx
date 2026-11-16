@@ -26,6 +26,7 @@ import {
 } from './BoardGameArt';
 import { MidnightActionCard } from './MidnightActionCard';
 import { MidnightCharacterCard } from './MidnightCharacterCard';
+import { BoardGameVfxSandbox } from './BoardGameVfxSandbox';
 import { RoleCard } from './RoleCard';
 import {
   MIDNIGHT_DECK_TOKENS,
@@ -427,6 +428,8 @@ export default function BoardGameVisualPrototypeView() {
       </header>
 
       <main className="mx-auto max-w-7xl space-y-10 px-4 py-6 sm:px-6 sm:py-8">
+        <BoardGameVfxSandbox />
+
         {/* Privacy Status Banner */}
         <section
           data-testid="proto-secrecy-status"

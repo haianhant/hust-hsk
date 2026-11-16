@@ -141,3 +141,54 @@ export function playVictoryFanfare(): void {
     { freq: 1046.5, startOffsetSec: 0.34, durationSec: 0.36, type: 'sine', gainPeak: 0.065 },
   ]);
 }
+
+export function playSlashHit(): void {
+  playNotes([
+    { freq: 640, endFreq: 130, startOffsetSec: 0, durationSec: 0.095, type: 'sawtooth', gainPeak: 0.05 },
+    { freq: 180, endFreq: 72, startOffsetSec: 0.03, durationSec: 0.11, type: 'triangle', gainPeak: 0.06 },
+  ]);
+}
+
+export function playGunfireBurst(): void {
+  playNotes([
+    { freq: 380, endFreq: 95, startOffsetSec: 0, durationSec: 0.06, type: 'square', gainPeak: 0.045 },
+    { freq: 410, endFreq: 90, startOffsetSec: 0.07, durationSec: 0.06, type: 'square', gainPeak: 0.045 },
+    { freq: 440, endFreq: 85, startOffsetSec: 0.14, durationSec: 0.075, type: 'sawtooth', gainPeak: 0.05 },
+  ]);
+}
+
+export function playLightningStrike(): void {
+  playNotes([
+    { freq: 1320, endFreq: 260, startOffsetSec: 0, durationSec: 0.12, type: 'sawtooth', gainPeak: 0.045 },
+    { freq: 880, endFreq: 140, startOffsetSec: 0.05, durationSec: 0.18, type: 'triangle', gainPeak: 0.055 },
+  ]);
+}
+
+export function playExplosionImpact(): void {
+  playNotes([
+    { freq: 170, endFreq: 42, startOffsetSec: 0, durationSec: 0.24, type: 'sawtooth', gainPeak: 0.07 },
+    { freq: 115, endFreq: 38, startOffsetSec: 0.04, durationSec: 0.26, type: 'triangle', gainPeak: 0.065 },
+  ]);
+}
+
+export function playBlockClang(): void {
+  playNotes([
+    { freq: 720, endFreq: 540, startOffsetSec: 0, durationSec: 0.09, type: 'triangle', gainPeak: 0.05 },
+    { freq: 1080, startOffsetSec: 0.03, durationSec: 0.14, type: 'sine', gainPeak: 0.04 },
+  ]);
+}
+
+export function playHealShimmer(): void {
+  playNotes([
+    { freq: 523.25, startOffsetSec: 0, durationSec: 0.1, type: 'sine', gainPeak: 0.04 },
+    { freq: 659.25, startOffsetSec: 0.06, durationSec: 0.12, type: 'sine', gainPeak: 0.045 },
+    { freq: 783.99, startOffsetSec: 0.12, durationSec: 0.18, type: 'sine', gainPeak: 0.05 },
+  ]);
+}
+
+export function playCutInWhoosh(): void {
+  playNotes([
+    { freq: 240, endFreq: 620, startOffsetSec: 0, durationSec: 0.14, type: 'triangle', gainPeak: 0.05 },
+    { freq: 620, endFreq: 880, startOffsetSec: 0.08, durationSec: 0.16, type: 'sine', gainPeak: 0.05 },
+  ]);
+}

@@ -37,9 +37,9 @@ import GameLog from './GameLog';
 import MatchPostcard from './MatchPostcard';
 import MatchResult from './MatchResult';
 import { toggleSelectedTargetId } from './target-selection';
+import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
 import {
   isBoardGameSoundMuted,
-  playCardDraw,
   playEmotePop,
   playRoleReveal,
   playTrackAdvance,
@@ -120,6 +120,16 @@ export function GameBoard({
   const [dicePulse, setDicePulse] = useState(false);
   const [seenClueCount, setSeenClueCount] = useState(0);
   const [seenLogCount, setSeenLogCount] = useState(() => publicGame.publicLog.length);
+  const boardStageRef = useRef<HTMLDivElement>(null);
+
+  const vfx = useBoardGameVfxQueue({
+    publicGame,
+    privateView,
+    selfPlayerId,
+    isSpectator,
+    handUnmasked: roleCardVisible || handUnmasked,
+    containerRef: boardStageRef,
+  });
 
   const prevTurnRef = useRef<number>(publicGame.turnNumber);
   const prevActiveRef = useRef<string | null>(publicGame.activePlayerId);
@@ -198,8 +208,7 @@ export function GameBoard({
     if (publicGame.publicLog.length > prevLogLenRef.current) {
       const latest = publicGame.publicLog[publicGame.publicLog.length - 1];
       prevLogLenRef.current = publicGame.publicLog.length;
-      if (latest?.kind === 'draw') playCardDraw();
-      else if (latest?.kind === 'dice' || latest?.kind === 'move') playTrackAdvance();
+      if (latest?.kind === 'dice' || latest?.kind === 'move') playTrackAdvance();
     }
   }, [publicGame.publicLog]);
 
@@ -371,6 +380,23 @@ export function GameBoard({
             >
               {effectiveMuted ? '🔇' : '🔊'}
             </button>
+            <button
+              type="button"
+              data-testid="bg-vfx-motion-toggle-btn"
+              onClick={() => vfx.setReducedMotionOverride(!vfx.reducedMotion)}
+              title={
+                vfx.reducedMotion
+                  ? 'Đang bật chế độ Giảm chuyển động (nhấn để bật VFX đầy đủ)'
+                  : 'VFX đầy đủ đang bật (nhấn để giảm chuyển động)'
+              }
+              className={`hidden sm:inline-flex items-center px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                vfx.reducedMotion
+                  ? 'bg-slate-900 border-slate-700 text-slate-400'
+                  : 'bg-indigo-950/70 border-indigo-400/50 text-indigo-200 hover:bg-indigo-900/70'
+              }`}
+            >
+              {vfx.reducedMotion ? '⏸️ Tĩnh' : '✨ VFX'}
+            </button>
             {onOpenLeaderboard && (
               <button
                 type="button"
@@ -522,8 +548,17 @@ export function GameBoard({
         </div>
       )}
 
-      {/* NỘI DUNG CHÍNH: BÀN CỜ CUỘN ĐỘC LẬP + THANH HÀNH ĐỘNG NEO ĐÁY + NGĂN PHỤ ĐỘC LẬP */}
-      <main className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden px-2.5 sm:px-4 py-2">
+      {/* NỘI DUNG CHÍNH: BÀN CỜ CUỘN ĐỘC LẬP + THANH HÀNH ĐỘNG NEO ĐÁY + NGĂN PHỤ ĐỘC LẬP + LỚP VFX */}
+      <div ref={boardStageRef} className="relative flex-1 min-h-0 flex flex-col">
+        <main
+          className={`flex-1 min-h-0 overflow-y-auto lg:overflow-hidden px-2.5 sm:px-4 py-2 ${
+            vfx.screenShake === 'heavy'
+              ? 'bg-vfx-shake-heavy'
+              : vfx.screenShake === 'light'
+                ? 'bg-vfx-shake-light'
+                : ''
+          }`}
+        >
         <div className="mx-auto max-w-[1680px] lg:h-full flex flex-col lg:flex-row gap-3 items-stretch">
           {/* CỘT CHÍNH: PHẦN BÀN CỜ TRÊN + THANH HÀNH ĐỘNG NEO ĐÁY */}
           <div
@@ -730,6 +765,7 @@ export function GameBoard({
                                     <button
                                       key={p.playerId}
                                       type="button"
+                                      data-vfx-player={p.playerId}
                                       data-testid={isSelfToken ? 'bg-loc-pawn-self' : undefined}
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -913,6 +949,7 @@ export function GameBoard({
                       <button
                         key={deckId}
                         type="button"
+                        data-vfx-deck={deckId}
                         data-testid={`bg-board-draw-${deckId}`}
                         onClick={() => dispatchAction({ type: 'DRAW_CARD', deck: deckId })}
                         className={`rounded-xl border px-2.5 py-1.5 min-h-[42px] flex items-center gap-2 transition cursor-pointer ${activeCls}`}
@@ -922,6 +959,7 @@ export function GameBoard({
                     ) : (
                       <div
                         key={deckId}
+                        data-vfx-deck={deckId}
                         className={`rounded-xl border border-slate-700 bg-slate-950/85 px-2.5 py-1.5 flex items-center gap-2 transition ${
                           isMyTurn && publicGame.turnPhase === 'LOCATION_ACTION'
                             ? 'opacity-55'
@@ -948,6 +986,7 @@ export function GameBoard({
                     <button
                       key={p.playerId}
                       type="button"
+                      data-vfx-player-strip={p.playerId}
                       data-testid={isSelfCard ? 'bg-player-strip-self' : undefined}
                       aria-pressed={selected}
                       onClick={() =>
@@ -1127,7 +1166,17 @@ export function GameBoard({
             </div>
           )}
         </div>
-      </main>
+        </main>
+
+        <BoardGameVfxStage
+          vfx={vfx}
+          containerRef={boardStageRef}
+          publicGame={publicGame}
+          sourcePlayerId={selfPlayerId}
+          selectedTargetId={selectedTargetId}
+          targetingTone={selectedTargetId && selectedTargetId === selfPlayerId ? 'heal' : 'hostile'}
+        />
+      </div>
 
       {/* MODAL TỔNG KẾT VÁN ĐẤU */}
       {publicGame.winnerLabel && publicGame.finalReveal && (

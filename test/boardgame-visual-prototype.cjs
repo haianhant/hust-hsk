@@ -185,7 +185,60 @@ async function main() {
     );
     assert.ok(desktopOverflow <= 1, `Desktop horizontal overflow: ${desktopOverflow}px`);
 
-    // Screenshot 1A: So sánh Cũ vs Mới (Minh)
+    // Screenshot 1A: VFX Sandbox Demo — Súng Liên Thanh & Vy Radio Tuyệt Kỹ
+    await page.locator('[data-testid="proto-section-vfx-sandbox"]').scrollIntoViewIfNeeded();
+    await page.waitForSelector('[data-testid="bg-vfx-targeting-line"]', { timeout: 5000 });
+
+    // Demo 1: Đánh thường
+    await page.locator('[data-testid="proto-vfx-demo-normal"]').click();
+    await page.waitForSelector('[data-testid="bg-vfx-dice-overlay"]', { timeout: 3000 });
+    await page.waitForSelector('[data-testid="bg-vfx-floating-popup"]', { timeout: 3000 });
+
+    // Demo 2: Masamune + Dũng Phản kích
+    await page.locator('[data-testid="proto-vfx-demo-masamune"]').click();
+    await page.waitForFunction(
+      () => Array.from(document.querySelectorAll('[data-testid="bg-vfx-floating-popup"]')).some((el) => el.textContent?.includes('COUNTER')),
+      null,
+      { timeout: 3000 },
+    );
+
+    // Demo 3: Súng Liên Thanh (đa mục tiêu + BLOCK)
+    await page.locator('[data-testid="proto-vfx-demo-machinegun"]').click();
+    await page.waitForFunction(
+      () => Array.from(document.querySelectorAll('[data-testid="bg-vfx-floating-popup"]')).some((el) => el.textContent?.includes('BLOCK')),
+      null,
+      { timeout: 3000 },
+    );
+
+    // Test Skip Animation (bấm Skip phải dọn sạch ngay cut-in/popup)
+    await page.locator('[data-testid="proto-vfx-demo-vy-radio"]').click();
+    await page.waitForSelector('[data-testid="bg-vfx-cutin"]', { timeout: 3000 });
+    const cutInMeta = await page.evaluate(() => {
+      const ci = document.querySelector('[data-testid="bg-vfx-cutin"]');
+      const img = ci?.querySelector('img');
+      return {
+        bannerType: ci?.getAttribute('data-banner-type'),
+        text: ci?.textContent || '',
+        portraitSrc: img?.getAttribute('src') || null,
+      };
+    });
+    assert.equal(cutInMeta.bannerType, 'ULTIMATE_SKILL');
+    assert.ok(cutInMeta.text.includes('XUNG CAO ÁP 1D6'));
+    assert.ok(cutInMeta.portraitSrc?.includes('role-vy-radio.webp'), 'Vy Radio Ultimate cut-in must show large Vy portrait');
+    await page.screenshot({ path: path.join(SHOT_DIR, 'prototype-06-desktop-vfx-demo.png') });
+
+    await page.locator('[data-testid="bg-skip-vfx-btn"]').click();
+    await page.locator('[data-testid="bg-vfx-cutin"]').waitFor({ state: 'detached', timeout: 2000 });
+
+    // Demo 5: Lật Vai Minh + Rút Trang Bị 3D
+    await page.locator('[data-testid="proto-vfx-demo-reveal"]').click();
+    await page.waitForSelector('[data-testid="bg-vfx-card-draw"]', { timeout: 3000 });
+    await page.waitForSelector('[data-testid="bg-vfx-cutin"]', { timeout: 3000 });
+    await page.locator('[data-testid="bg-skip-vfx-btn"]').click();
+
+    // Screenshot 1: So sánh Cũ vs Mới (Minh)
+    await page.locator('[data-testid="proto-compare-minh"]').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(SHOT_DIR, 'prototype-01-desktop-comparison.png') });
 
     // Screenshot 1B: So sánh Cũ vs Mới (Vy) + 3 Hệ màu phe
@@ -263,7 +316,16 @@ async function main() {
     );
     assert.ok(mobileOverflow <= 1, `Mobile horizontal overflow: ${mobileOverflow}px`);
 
-    // Screenshot 4: Mobile so sánh thẻ Minh & Vy
+    // Screenshot 4: Mobile VFX Demo + So sánh thẻ Minh & Vy
+    await mPage.locator('[data-testid="proto-vfx-demo-vy-radio"]').click();
+    await mPage.waitForSelector('[data-testid="bg-vfx-cutin"]', { timeout: 3000 });
+    await mPage.locator('[data-testid="proto-vfx-arena"]').evaluate((el) =>
+      el.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await mPage.waitForTimeout(180);
+    await mPage.screenshot({ path: path.join(SHOT_DIR, 'prototype-07-mobile-vfx-demo.png') });
+    await mPage.locator('[data-testid="bg-skip-vfx-btn"]').click();
+
     await mPage.locator('[data-testid="proto-new-card-minh"]').scrollIntoViewIfNeeded();
     await mPage.waitForTimeout(200);
     await mPage.screenshot({ path: path.join(SHOT_DIR, 'prototype-04-mobile-comparison.png') });

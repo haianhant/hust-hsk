@@ -756,7 +756,13 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
         .filter(Boolean);
       const rawStatus = (statusBar?.textContent || '').replace(/\s+/g, ' ');
       const turnMatch = rawStatus.match(/Lượt\s*#\d+/);
-      const turnNumStr = turnMatch ? turnMatch[0] : rawStatus.slice(0, 48);
+      const roundMatch = rawStatus.match(/Vòng\s*\d+/);
+      const actorMatch = rawStatus.match(/Lượt:\s*(.+?)(?=\s*(?:Mã:|Mở rộng|VFX|Bật|Tắt|🏆|📖|🚪|$))/u);
+      const turnNumStr = turnMatch
+        ? turnMatch[0]
+        : roundMatch
+          ? `${roundMatch[0]}::${(actorMatch?.[1] || '').trim()}`
+          : rawStatus.slice(0, 96);
       const phaseTag = enabledIds.includes('bg-roll-dice-btn')
         ? 'P1'
         : enabledIds.some((id) => id.startsWith('bg-choose-dest-'))

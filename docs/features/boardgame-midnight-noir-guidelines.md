@@ -71,3 +71,18 @@ Mọi giao diện mới bắt buộc sử dụng 2 hàm lọc thuần trong [`mi
    - Trên chồng bài (`draw-pile`): `showFront: false`, chỉ hiển thị mặt lưng Ấn Ký theo đúng màu chồng bài.
    - Thẻ Điều tra (`private-investigation`): chỉ `isParticipantInInvestigation === true` (người đưa & người nhận) mới thấy mặt trước.
    - Trang bị đang đeo (`equipped-table`) & Đột Kích vừa lật (`event-resolved`): hiển thị công khai toàn bàn.
+
+---
+
+## 6. Hệ Thống Combat VFX & Visual Event Queue (Giai đoạn 2)
+
+> Triển khai tại [`vfx-queue.ts`](../../features/boardgame/ui/vfx-queue.ts), [`BoardGameVfxStage.tsx`](../../features/boardgame/ui/BoardGameVfxStage.tsx) và [`BoardGameVfxSandbox.tsx`](../../features/boardgame/ui/BoardGameVfxSandbox.tsx).
+
+1. **Visual Event Queue chỉ phản chiếu delta đã được server xác nhận (`vfx-queue.ts`):**
+   - Mọi hiệu ứng được suy diễn thuần từ `BoardGamePublicGameView` (`publicLog` ID duy nhất + delta `lastDiceRoll` + `lastRevealEvent` + trạng thái `alive`/`winnerFaction`) — **tuyệt đối không tự tung xúc xắc hay quyết định sát thương ở client**.
+   - Thứ tự xử lý ưu tiên cố định mỗi nhịp: `DICE_ROLL` → `CARD_DRAW` → `CINEMATIC_CUTIN (ROLE_REVEAL / ULTIMATE_SKILL)` → `COMBAT_VFX` → `FLOATING_TEXT` → `CINEMATIC_CUTIN (ELIMINATION / VICTORY / YOUR_TURN)`.
+   - Chống phát trùng khi reload/F5 bằng `VisualEventTracker` kết hợp `sessionStorage`: lần hydrate đầu tiên (*baseline*) đánh dấu toàn bộ log/dice/reveal/turn cũ vào bộ nhớ đã xử lý và chỉ phát animation cho các delta mới về sau.
+   - **Bảo mật P0 qua VFX:** Người chưa lộ vai (`revealedRoleId === null`) không bao giờ kích hoạt banner tên vai/tuyệt kỹ; thẻ Khám Phá (Xanh) và Bẫy Đỏ chỉ lật mặt trước khi người xem là người tham gia hoặc được phép nhìn, còn người ngoài bàn / khán giả (`isSpectator`) chỉ thấy mặt lưng Ấn Ký.
+2. **Kiến trúc Render & Hiệu năng (`BoardGameVfxStage.tsx`):**
+   - Toàn bộ Combat VFX (đường nhắm mục tiêu SVG, vệt chém, Kiếm Gỗ Nguyền Rủa Masamune, Súng Ngắn, Súng Liên Thanh đa mục tiêu, Sét Vy Radio, Vụ nổ, Phản kích Dũng, Hồi máu, Lá chắn `BLOCK`, Dây cướp trang bị), Floating Text (`-5`, `+2`, `BLOCK`, `COUNTER`), Xúc xắc 3D nảy & khóa mặt theo `d6/d4` của server, Lật thẻ 3D và Cut-in chân dung lớn sử dụng **duy nhất CSS transforms, SVG và 1 Canvas 2D chung** (tự dừng `requestAnimationFrame` khi rảnh, **0 WebGL context phụ**).
+   - Toàn bộ lớp phủ dùng `pointer-events-none` và không bao giờ chặn đồng hồ lượt hay thao tác server; nút **`Skip Animation`** (`Bỏ qua hiệu ứng`) và chế độ **`prefers-reduced-motion`** (cùng nút toggle trên thanh công cụ) rút gọn hoặc bỏ qua mọi chuyển động/rung màn hình tức thì.
