@@ -1124,6 +1124,94 @@ test('BoardGame Visual Prototype — Midnight Noir Art Tokens, 2:3 AI Assets & P
   assert.equal(secretInvForParticipant.artworkSrc, PROTOTYPE_CARD_ART['inv-12']);
 });
 
+test('BoardGame Full Asset Library — 10 Roles, 40 Distinct Cards (48 Copies), 6 KTX Locations & P0 Secrecy', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { ROLES_CATALOG } = require('../features/boardgame/domain/roles.ts');
+  const { CARDS_CATALOG } = require('../features/boardgame/domain/cards.ts');
+  const { LOCATIONS_CATALOG } = require('../features/boardgame/domain/rules.ts');
+  const {
+    MIDNIGHT_CHARACTER_ART,
+    MIDNIGHT_CARD_ART,
+    MIDNIGHT_CARD_STAT_BADGE,
+    MIDNIGHT_LOCATION_ART,
+    MIDNIGHT_LOCATION_AMBIENCE,
+    resolveRoleCardPresentation,
+    resolveActionCardPresentation,
+  } = require('../features/boardgame/ui/midnight-noir-tokens.ts');
+
+  const publicDir = path.join(__dirname, '..', 'public');
+  const assertValidWebpAsset = (urlPath, label) => {
+    assert.ok(urlPath && urlPath.startsWith('/assets/boardgame/'), `Invalid asset URL for ${label}: ${urlPath}`);
+    const absPath = path.join(publicDir, urlPath.slice(1));
+    assert.equal(fs.existsSync(absPath), true, `Missing WebP file for ${label}: ${absPath}`);
+    const buf = fs.readFileSync(absPath);
+    assert.ok(buf.byteLength >= 8_000 && buf.byteLength <= 260_000, `Unexpected WebP size (${buf.byteLength}B) for ${label}`);
+    assert.equal(buf.slice(0, 4).toString('ascii'), 'RIFF', `${label} missing RIFF header`);
+    assert.equal(buf.slice(8, 12).toString('ascii'), 'WEBP', `${label} missing WEBP signature`);
+  };
+
+  // 1. Kiểm tra đủ 10/10 nhân vật
+  assert.equal(ROLES_CATALOG.length, 10);
+  for (const role of ROLES_CATALOG) {
+    assertValidWebpAsset(MIDNIGHT_CHARACTER_ART[role.id], `role:${role.id}`);
+    const hidden = resolveRoleCardPresentation({
+      viewerMode: 'other-player',
+      revealed: false,
+      roleId: role.id,
+      woundsTaken: 2,
+    });
+    assert.equal(hidden.showFront, false);
+    assert.equal(hidden.portraitSrc, null, `Role ${role.id} leaked portrait when hidden`);
+    assert.equal(hidden.maxHp, null, `Role ${role.id} leaked maxHp when hidden`);
+
+    const revealed = resolveRoleCardPresentation({
+      viewerMode: 'other-player',
+      revealed: true,
+      roleId: role.id,
+      woundsTaken: 2,
+    });
+    assert.equal(revealed.showFront, true);
+    assert.equal(revealed.portraitSrc, MIDNIGHT_CHARACTER_ART[role.id]);
+  }
+
+  // 2. Kiểm tra đủ 40 loại thẻ riêng biệt / 48 bản sao
+  assert.equal(CARDS_CATALOG.length, 40);
+  const totalCopies = CARDS_CATALOG.reduce((sum, c) => sum + c.copies, 0);
+  assert.equal(totalCopies, 48);
+  for (const card of CARDS_CATALOG) {
+    assertValidWebpAsset(MIDNIGHT_CARD_ART[card.id], `card:${card.id}`);
+    assert.ok(
+      MIDNIGHT_CARD_STAT_BADGE[card.id] && MIDNIGHT_CARD_STAT_BADGE[card.id].length >= 4,
+      `Missing stat badge for ${card.id}`,
+    );
+
+    const hiddenPile = resolveActionCardPresentation({
+      cardId: card.id,
+      zone: 'draw-pile',
+      isParticipantInInvestigation: false,
+    });
+    assert.equal(hiddenPile.showFront, false);
+    assert.equal(hiddenPile.artworkSrc, null, `Card ${card.id} leaked artwork on draw-pile`);
+
+    const shown = resolveActionCardPresentation({
+      cardId: card.id,
+      zone: card.deck === 'investigation' ? 'private-investigation' : 'equipped-table',
+      isParticipantInInvestigation: true,
+    });
+    assert.equal(shown.showFront, true);
+    assert.equal(shown.artworkSrc, MIDNIGHT_CARD_ART[card.id]);
+    assert.equal(shown.copies, card.copies);
+  }
+
+  // 3. Kiểm tra đủ 6/6 địa điểm KTX
+  assert.equal(LOCATIONS_CATALOG.length, 6);
+  for (const loc of LOCATIONS_CATALOG) {
+    assertValidWebpAsset(MIDNIGHT_LOCATION_ART[loc.id], `loc:${loc.id}`);
+    assert.ok(MIDNIGHT_LOCATION_AMBIENCE[loc.id], `Missing ambience config for ${loc.id}`);
+  }
+});
+
 
 
 

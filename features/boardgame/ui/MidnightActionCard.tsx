@@ -20,7 +20,10 @@ export interface MidnightActionCardProps {
   zone: ActionCardZone;
   isParticipantInInvestigation?: boolean;
   foilEnabled?: boolean;
+  priority?: boolean;
+  reducedMotion?: boolean;
   onFlipToggle?: () => void;
+  onZoom?: () => void;
   className?: string;
   testId?: string;
 }
@@ -36,7 +39,10 @@ export function MidnightActionCard({
   zone,
   isParticipantInInvestigation = true,
   foilEnabled = true,
+  priority = false,
+  reducedMotion = false,
   onFlipToggle,
+  onZoom,
   className = '',
   testId,
 }: MidnightActionCardProps) {
@@ -56,6 +62,10 @@ export function MidnightActionCard({
         <img
           src={presentation.artworkSrc}
           alt={presentation.title ?? 'Thẻ bài Bóng Đêm KTX'}
+          width={600}
+          height={900}
+          loading={priority ? 'eager' : 'lazy'}
+          decoding={priority ? 'sync' : 'async'}
           className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.04]"
           draggable={false}
         />
@@ -75,23 +85,39 @@ export function MidnightActionCard({
         secondaryHex={deckToken.secondaryHex}
       />
 
-      {/* TOP BADGES: Bộ bài + Chỉ số */}
-      <div className="relative z-10 flex items-start justify-between gap-2 p-3">
+      {/* TOP BADGES: Bộ bài + Chỉ số + Phóng lớn */}
+      <div className="relative z-10 flex items-start justify-between gap-1 p-2.5 sm:p-3">
         <span
-          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider shadow-lg backdrop-blur-md ${deckToken.badgeClass}`}
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wide whitespace-nowrap shrink-0 shadow-lg backdrop-blur-md ${deckToken.badgeClass}`}
         >
           <span>{DECK_ICON_GLYPH[presentation.deck]}</span>
           <span>{deckToken.label}</span>
         </span>
-        <span
-          className="rounded-lg border px-2 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-lg backdrop-blur-md"
-          style={{
-            background: 'rgba(2, 6, 23, 0.86)',
-            borderColor: `${deckToken.accentHex}99`,
-          }}
-        >
-          {deckToken.statLabel}
-        </span>
+        <div className="flex items-center gap-1 min-w-0">
+          <span
+            className="rounded-lg border px-1.5 py-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wide text-white truncate shadow-lg backdrop-blur-md"
+            style={{
+              background: 'rgba(2, 6, 23, 0.86)',
+              borderColor: `${deckToken.accentHex}99`,
+            }}
+          >
+            {presentation.statBadge ?? deckToken.statLabel}
+          </span>
+          {onZoom && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onZoom();
+              }}
+              aria-label={`Phóng lớn ${presentation.title ?? 'thẻ bài'}`}
+              title="Phóng lớn & đọc chi tiết"
+              className="flex h-6 w-6 items-center justify-center rounded-lg border border-white/25 bg-slate-950/85 text-[11px] text-slate-100 hover:border-amber-300/80 hover:text-amber-200 transition cursor-pointer"
+            >
+              🔍
+            </button>
+          )}
+        </div>
       </div>
 
       {/* BOTTOM PLAQUE */}
@@ -103,9 +129,16 @@ export function MidnightActionCard({
           >
             {deckToken.subtitle}
           </span>
-          <span className="rounded bg-slate-950/85 px-1.5 py-0.5 text-[9px] font-bold text-slate-300">
-            {presentation.visibilityBadge}
-          </span>
+          <div className="flex items-center gap-1">
+            {presentation.copies && presentation.copies > 1 && (
+              <span className="rounded border border-amber-400/40 bg-amber-950/85 px-1.5 py-0.5 text-[9px] font-black text-amber-200">
+                ×{presentation.copies} bản sao
+              </span>
+            )}
+            <span className="rounded bg-slate-950/85 px-1.5 py-0.5 text-[9px] font-bold text-slate-300">
+              {presentation.visibilityBadge}
+            </span>
+          </div>
         </div>
 
         <h4 className="text-base font-black leading-tight text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
@@ -113,7 +146,9 @@ export function MidnightActionCard({
         </h4>
 
         <div className="rounded-xl border border-white/15 bg-slate-950/84 p-2.5 backdrop-blur-md">
-          <p className="text-[11px] leading-snug text-slate-200">{presentation.summary}</p>
+          <p className="text-[11px] leading-snug text-slate-200 line-clamp-3">
+            {presentation.summary}
+          </p>
         </div>
       </div>
     </div>
@@ -131,6 +166,10 @@ export function MidnightActionCard({
       <img
         src={presentation.cardBackSrc}
         alt={`Mặt lưng ${deckToken.label}`}
+        width={720}
+        height={1080}
+        loading={priority ? 'eager' : 'lazy'}
+        decoding="async"
         className="absolute inset-0 h-full w-full object-cover opacity-80"
         draggable={false}
       />
@@ -144,16 +183,31 @@ export function MidnightActionCard({
         secondaryHex={deckToken.secondaryHex}
       />
 
-      <div className="relative z-10 flex items-center justify-between p-3">
+      <div className="relative z-10 flex items-center justify-between gap-1.5 p-3">
         <span
           className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider backdrop-blur-md ${deckToken.badgeClass}`}
         >
           <span>{DECK_ICON_GLYPH[presentation.deck]}</span>
           <span>{deckToken.label}</span>
         </span>
-        <span className="rounded-md border border-white/20 bg-slate-950/85 px-2 py-0.5 text-[9px] font-bold text-slate-200">
-          {presentation.visibilityBadge}
-        </span>
+        <div className="flex items-center gap-1">
+          <span className="rounded-md border border-white/20 bg-slate-950/85 px-2 py-0.5 text-[9px] font-bold text-slate-200">
+            {presentation.visibilityBadge}
+          </span>
+          {onZoom && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onZoom();
+              }}
+              aria-label="Phóng lớn mặt lưng thẻ"
+              className="flex h-6 w-6 items-center justify-center rounded-lg border border-white/25 bg-slate-950/85 text-[11px] text-slate-100 hover:border-amber-300/80 hover:text-amber-200 transition cursor-pointer"
+            >
+              🔍
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="relative z-10 mt-auto p-3">
@@ -176,6 +230,7 @@ export function MidnightActionCard({
       testId={testId}
       flipped={!presentation.showFront}
       foilEnabled={foilEnabled}
+      reducedMotion={reducedMotion}
       frameGradientCss={deckToken.frameGradientCss}
       foilGradientCss={deckToken.foilGradientCss}
       onClick={onFlipToggle}

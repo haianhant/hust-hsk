@@ -29,7 +29,10 @@ export interface MidnightCharacterCardProps {
   woundsTaken?: number;
   currentHp?: number;
   foilEnabled?: boolean;
+  priority?: boolean;
+  reducedMotion?: boolean;
   onFlipToggle?: () => void;
+  onZoom?: () => void;
   showGoalFooter?: boolean;
   className?: string;
   testId?: string;
@@ -42,7 +45,10 @@ export function MidnightCharacterCard({
   woundsTaken = 0,
   currentHp,
   foilEnabled = true,
+  priority = false,
+  reducedMotion = false,
   onFlipToggle,
+  onZoom,
   showGoalFooter = true,
   className = '',
   testId,
@@ -89,6 +95,10 @@ export function MidnightCharacterCard({
           <img
             src={presentation.portraitSrc}
             alt={presentation.roleName ?? 'Nhân vật Bóng Đêm KTX'}
+            width={720}
+            height={1080}
+            loading={priority ? 'eager' : 'lazy'}
+            decoding={priority ? 'sync' : 'async'}
             className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.03]"
             draggable={false}
           />
@@ -127,33 +137,49 @@ export function MidnightCharacterCard({
         />
 
         {/* HEADER (Top Safe Zone ~14%): Huy hiệu Phe + Con dấu Sinh lực HP */}
-        <div className="relative z-10 flex items-start justify-between gap-2 p-3">
+        <div className="relative z-10 flex items-start justify-between gap-1.5 p-2.5 sm:p-3">
           <div
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider shadow-lg backdrop-blur-md ${factionToken.badgeClass}`}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wide whitespace-nowrap shrink-0 shadow-lg backdrop-blur-md ${factionToken.badgeClass}`}
           >
-            <FactionCrestSvg faction={presentation.faction} size={18} />
+            <FactionCrestSvg faction={presentation.faction} size={15} />
             <span>{factionToken.label}</span>
           </div>
 
-          <div
-            data-testid={testId ? `${testId}-hp-seal` : undefined}
-            className="flex flex-col items-center rounded-xl border px-2.5 py-1 shadow-xl backdrop-blur-md"
-            style={{
-              background: factionToken.hpSealBg,
-              borderColor: isCritical ? '#fb7185' : `${factionToken.secondaryHex}cc`,
-              color: factionToken.hpSealText,
-            }}
-            title={`Sinh lực: ${hpVal}/${maxHpVal} HP (${presentation.publicWoundsTaken} vết thương)`}
-          >
-            <span className="text-sm font-black leading-none tracking-tight">
-              {hpVal}
-              <span className="text-[10px] opacity-80">/{maxHpVal}</span>
-            </span>
-            <span className="mt-0.5 text-[9px] font-extrabold uppercase tracking-widest opacity-90">
-              {presentation.publicWoundsTaken > 0
-                ? `-${presentation.publicWoundsTaken} ST`
-                : 'HP'}
-            </span>
+          <div className="flex items-center gap-1.5">
+            <div
+              data-testid={testId ? `${testId}-hp-seal` : undefined}
+              className="flex flex-col items-center rounded-xl border px-2.5 py-1 shadow-xl backdrop-blur-md"
+              style={{
+                background: factionToken.hpSealBg,
+                borderColor: isCritical ? '#fb7185' : `${factionToken.secondaryHex}cc`,
+                color: factionToken.hpSealText,
+              }}
+              title={`Sinh lực: ${hpVal}/${maxHpVal} HP (${presentation.publicWoundsTaken} vết thương)`}
+            >
+              <span className="text-sm font-black leading-none tracking-tight">
+                {hpVal}
+                <span className="text-[10px] opacity-80">/{maxHpVal}</span>
+              </span>
+              <span className="mt-0.5 text-[9px] font-extrabold uppercase tracking-widest opacity-90">
+                {presentation.publicWoundsTaken > 0
+                  ? `-${presentation.publicWoundsTaken} ST`
+                  : 'HP'}
+              </span>
+            </div>
+            {onZoom && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onZoom();
+                }}
+                aria-label={`Phóng lớn thẻ ${presentation.roleName ?? 'nhân vật'}`}
+                title="Phóng lớn & đọc chi tiết"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/25 bg-slate-950/85 text-xs text-slate-100 hover:border-amber-300/80 hover:text-amber-200 transition cursor-pointer"
+              >
+                🔍
+              </button>
+            )}
           </div>
         </div>
 
@@ -226,6 +252,10 @@ export function MidnightCharacterCard({
       <img
         src={presentation.cardBackSrc}
         alt="Mặt lưng thẻ nhân vật bí mật KTX"
+        width={720}
+        height={1080}
+        loading={priority ? 'eager' : 'lazy'}
+        decoding="async"
         className="absolute inset-0 h-full w-full object-cover opacity-90"
         draggable={false}
       />
@@ -235,13 +265,28 @@ export function MidnightCharacterCard({
       />
       <MidnightOrnamentFrameSvg primaryHex="#cbd5e1" secondaryHex="#fbbf24" />
 
-      <div className="relative z-10 flex items-center justify-between p-3">
+      <div className="relative z-10 flex items-center justify-between gap-1.5 p-3">
         <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/50 bg-slate-950/85 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-200 backdrop-blur-md">
           🃏 Vai Ẩn Danh
         </span>
-        <span className="rounded-lg border border-amber-400/45 bg-slate-950/90 px-2 py-0.5 text-[10px] font-extrabold text-amber-200">
-          {presentation.publicWoundsTaken} vết thương
-        </span>
+        <div className="flex items-center gap-1">
+          <span className="rounded-lg border border-amber-400/45 bg-slate-950/90 px-2 py-0.5 text-[10px] font-extrabold text-amber-200">
+            {presentation.publicWoundsTaken} vết thương
+          </span>
+          {onZoom && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onZoom();
+              }}
+              aria-label="Phóng lớn mặt lưng thẻ nhân vật"
+              className="flex h-6 w-6 items-center justify-center rounded-lg border border-white/25 bg-slate-950/85 text-[11px] text-slate-100 hover:border-amber-300/80 hover:text-amber-200 transition cursor-pointer"
+            >
+              🔍
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="relative z-10 mt-auto p-3">
@@ -262,6 +307,7 @@ export function MidnightCharacterCard({
       testId={testId}
       flipped={!presentation.showFront}
       foilEnabled={foilEnabled}
+      reducedMotion={reducedMotion}
       frameGradientCss={frontFrameCss}
       foilGradientCss={foilCss}
       glowShadowCss={factionToken?.glowShadowCss}

@@ -7,27 +7,34 @@
 // trên Desktop & Mobile, kiểm chứng bảo mật ẩn danh tính/mặt bài đúng luật.
 // ---------------------------------------------------------------------------
 
-import React, { useMemo, useState } from 'react';
-import { getCardById } from '@/features/boardgame/domain/cards';
-import { getRoleDesign } from '@/features/boardgame/domain/roles';
+import React, { useMemo, useRef, useState } from 'react';
+import { CARDS_CATALOG, getCardById } from '@/features/boardgame/domain/cards';
+import { getRoleDesign, ROLES_CATALOG } from '@/features/boardgame/domain/roles';
 import { DEFAULT_CLUSTER_PAIRS } from '@/features/boardgame/domain/rules';
 import {
   sanitizeBoardGameAppearance,
   type BoardGameCardPublicMeta,
   type BoardGameDeckId,
+  type BoardGameFactionId,
+  type BoardGameLocationId,
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
+  type BoardGamePublicPlayerView,
   type BoardGameRoleId,
 } from '@/shared/contracts/boardgame';
 import {
+  buildBoardClustersView,
   DeckCardBackSvg,
   FactionCrestSvg,
   LocationSceneSvg,
 } from './BoardGameArt';
 import { MidnightActionCard } from './MidnightActionCard';
+import { MidnightCardZoomModal, type MidnightZoomTarget } from './MidnightCardZoomModal';
 import { MidnightCharacterCard } from './MidnightCharacterCard';
 import { BoardGameVfxSandbox } from './BoardGameVfxSandbox';
 import { RoleCard } from './RoleCard';
+import { TabletopLocationTile } from './TabletopLocationTile';
+import { useSmoothPawnGlide } from './useSmoothPawnGlide';
 import {
   MIDNIGHT_DECK_TOKENS,
   MIDNIGHT_FACTION_TOKENS,
@@ -236,6 +243,31 @@ function LegacyClassicActionCardBox({ cardId }: { cardId: string }) {
   );
 }
 
+const DEMO_LOCATION_ROTATION: readonly BoardGameLocationId[] = [
+  'radio',
+  'breaker',
+  'lobby',
+  'canteen',
+  'corridor',
+  'court',
+];
+
+const DEMO_PAWN_ROSTER: ReadonlyArray<{
+  playerId: string;
+  displayName: string;
+  seatIndex: number;
+  roleId: BoardGameRoleId;
+  faction: BoardGameFactionId;
+  maxHp: number;
+  baseOffset: number;
+  wounds: number;
+}> = [
+  { playerId: 'demo-p1', displayName: 'Minh An', seatIndex: 0, roleId: 'gac-ky-thuat', faction: 'lantern-guard', maxHp: 14, baseOffset: 0, wounds: 2 },
+  { playerId: 'demo-p2', displayName: 'Vy Hà', seatIndex: 1, roleId: 'gac-radio', faction: 'lantern-guard', maxHp: 12, baseOffset: 2, wounds: 1 },
+  { playerId: 'demo-p3', displayName: 'Tú Linh', seatIndex: 2, roleId: 'suong-an-danh', faction: 'mist-order', maxHp: 13, baseOffset: 3, wounds: 4 },
+  { playerId: 'demo-p4', displayName: 'Hải Nam', seatIndex: 3, roleId: 'lang-anh-san', faction: 'wanderer', maxHp: 10, baseOffset: 5, wounds: 3 },
+];
+
 export default function BoardGameVisualPrototypeView() {
   const [scenarioId, setScenarioId] = useState<SecrecyScenario>('owner-peek');
   const [woundsTaken, setWoundsTaken] = useState<number>(2);
@@ -243,6 +275,62 @@ export default function BoardGameVisualPrototypeView() {
   const [mobileLayer, setMobileLayer] = useState<MobileLayerMode>('both');
   const [manualFlipIds, setManualFlipIds] = useState<Record<string, boolean>>({});
   const [actionZoneIdx, setActionZoneIdx] = useState<number>(0);
+  const [rosterFactionFilter, setRosterFactionFilter] = useState<'all' | BoardGameFactionId>('all');
+  const [libraryDeckFilter, setLibraryDeckFilter] = useState<'all' | BoardGameDeckId>('all');
+  const [pawnStep, setPawnStep] = useState<number>(0);
+  const [pawnsRevealed, setPawnsRevealed] = useState<boolean>(false);
+  const [selectedDemoPlayerId, setSelectedDemoPlayerId] = useState<string | null>('demo-p3');
+  const [zoomTarget, setZoomTarget] = useState<MidnightZoomTarget | null>(null);
+  const tabletopMapRef = useRef<HTMLDivElement>(null);
+
+  const demoTabletopPlayers = useMemo<BoardGamePublicPlayerView[]>(
+    () =>
+      DEMO_PAWN_ROSTER.map((item) => ({
+        playerId: item.playerId,
+        displayName: item.displayName,
+        seatIndex: item.seatIndex,
+        location: DEMO_LOCATION_ROTATION[(item.baseOffset + pawnStep) % DEMO_LOCATION_ROTATION.length],
+        woundsTaken: item.wounds,
+        handCount: 0,
+        equipped: [],
+        attacksMade: 1,
+        attacksThisTurn: 0,
+        investigationsCount: 1,
+        guardianShieldActive: false,
+        alive: true,
+        connected: true,
+        revealedRoleId: pawnsRevealed ? item.roleId : null,
+        revealedFaction: pawnsRevealed ? item.faction : null,
+        revealedMaxHp: pawnsRevealed ? item.maxHp : null,
+        revealedSkillCooldown: 0,
+        revealedSkillUsedOnce: false,
+        appearance: DEFAULT_MOCK_APPEARANCE,
+      })),
+    [pawnStep, pawnsRevealed],
+  );
+
+  useSmoothPawnGlide({
+    containerRef: tabletopMapRef,
+    players: demoTabletopPlayers,
+    matchId: 'proto-tabletop-demo',
+    reducedMotion: false,
+  });
+
+  const filteredRoles = useMemo(
+    () =>
+      rosterFactionFilter === 'all'
+        ? ROLES_CATALOG
+        : ROLES_CATALOG.filter((r) => r.faction === rosterFactionFilter),
+    [rosterFactionFilter],
+  );
+
+  const filteredLibraryCards = useMemo(
+    () =>
+      libraryDeckFilter === 'all'
+        ? CARDS_CATALOG
+        : CARDS_CATALOG.filter((c) => c.deck === libraryDeckFilter),
+    [libraryDeckFilter],
+  );
 
   const scenario = SECRECY_SCENARIOS.find((s) => s.id === scenarioId) ?? SECRECY_SCENARIOS[0];
   const cardZoneCfg = CARD_ZONE_MODES[actionZoneIdx] ?? CARD_ZONE_MODES[0];
@@ -559,7 +647,17 @@ export default function BoardGameVisualPrototypeView() {
                             viewerMode={eff.viewerMode}
                             woundsTaken={woundsTaken}
                             foilEnabled={foilEnabled}
+                            priority
                             onFlipToggle={() => toggleFlipKey(char.roleId)}
+                            onZoom={() =>
+                              setZoomTarget({
+                                kind: 'role',
+                                roleId: char.roleId,
+                                revealed: eff.revealed,
+                                viewerMode: eff.viewerMode,
+                                woundsTaken,
+                              })
+                            }
                           />
                         </div>
                       </div>
@@ -719,7 +817,16 @@ export default function BoardGameVisualPrototypeView() {
                         zone={zoneOverride}
                         isParticipantInInvestigation={isParticipant}
                         foilEnabled={foilEnabled}
+                        priority
                         onFlipToggle={() => toggleFlipKey(cardId)}
+                        onZoom={() =>
+                          setZoomTarget({
+                            kind: 'card',
+                            cardId,
+                            zone: zoneOverride,
+                            isParticipantInInvestigation: isParticipant,
+                          })
+                        }
                       />
                     </div>
                   </div>
@@ -801,12 +908,231 @@ export default function BoardGameVisualPrototypeView() {
             <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
               <p className="font-black text-white">Độ nhẹ Tài nguyên</p>
               <p className="mt-1 text-slate-400">
-                6 artwork AI 720×1080 WebP (87–239 KB/tấm, tổng &lt; 800 KB), không chữ nhúng trong ảnh, chữ &amp; khung vector sắc nét mọi màn hình.
+                57 artwork AI WebP tối ưu (10 nhân vật 720×1080 + 40 loại thẻ 600×900 + 6 địa điểm 960×540 + 1 mặt lưng), lazy-loading &amp; decoding async.
               </p>
             </div>
           </div>
         </section>
+
+        {/* PHẦN 5: TRỌN BỘ 10 NHÂN VẬT FULL-ART 2:3 */}
+        <section data-testid="proto-section-roster-10" className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-black text-white sm:text-2xl">
+                5. Trọn Bộ 10 Nhân Vật Full-Art 2:3 ({ROLES_CATALOG.length}/10 Vai Trò)
+              </h2>
+              <p className="text-xs text-slate-400 sm:text-sm">
+                Mỗi nhân vật sở hữu tạo hình, biểu cảm, đạo cụ KTX và màu phe riêng; bấm nút 🔍 để phóng lớn &amp; lật soi 2 mặt.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['all', 'Tất cả (10)'],
+                  ['lantern-guard', 'Đội Săn Đêm (3)'],
+                  ['mist-order', 'Hội Bóng Đêm (3)'],
+                  ['wanderer', 'Kẻ Độc Hành (4)'],
+                ] as const
+              ).map(([fid, label]) => (
+                <button
+                  key={fid}
+                  type="button"
+                  data-testid={`proto-roster-tab-${fid}`}
+                  onClick={() => setRosterFactionFilter(fid)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-extrabold transition cursor-pointer ${
+                    rosterFactionFilter === fid
+                      ? 'bg-emerald-400 text-slate-950 shadow'
+                      : 'border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div
+            data-testid="proto-roster-grid"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+          >
+            {filteredRoles.map((role) => {
+              const eff = effectiveCharacterSecrecy(role.id);
+              return (
+                <div key={role.id} className="mx-auto w-full max-w-[270px]">
+                  <MidnightCharacterCard
+                    testId={`proto-roster-card-${role.id}`}
+                    roleId={role.id}
+                    revealed={eff.revealed}
+                    viewerMode={eff.viewerMode}
+                    woundsTaken={woundsTaken}
+                    foilEnabled={foilEnabled}
+                    showGoalFooter={false}
+                    onFlipToggle={() => toggleFlipKey(role.id)}
+                    onZoom={() =>
+                      setZoomTarget({
+                        kind: 'role',
+                        roleId: role.id,
+                        revealed: eff.revealed,
+                        viewerMode: eff.viewerMode,
+                        woundsTaken,
+                      })
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* PHẦN 6: THƯ VIỆN ĐỦ 40 LOẠI THẺ / 48 BẢN SAO */}
+        <section data-testid="proto-section-card-library-40" className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-black text-white sm:text-2xl">
+                6. Thư Viện Đủ 40 Loại Thẻ / 48 Bản Sao (Điều Tra · Trang Bị · Đột Kích)
+              </h2>
+              <p className="text-xs text-slate-400 sm:text-sm">
+                Tất cả 40 mẫu minh họa AI 2:3 với huy hiệu chỉ số &amp; số bản sao; dùng template chung và lazy-loading cho độ mượt tối đa.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['all', 'Tất cả (40 loại / 48 lá)'],
+                  ['investigation', 'Điều Tra (12 / 16 lá)'],
+                  ['equipment', 'Cung Ứng (15 / 16 lá)'],
+                  ['event', 'Đột Kích (13 / 16 lá)'],
+                ] as const
+              ).map(([did, label]) => (
+                <button
+                  key={did}
+                  type="button"
+                  data-testid={`proto-lib-tab-${did}`}
+                  onClick={() => setLibraryDeckFilter(did)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-extrabold transition cursor-pointer ${
+                    libraryDeckFilter === did
+                      ? 'bg-amber-400 text-slate-950 shadow'
+                      : 'border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div
+            data-testid="proto-card-library"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+          >
+            {filteredLibraryCards.map((card) => {
+              const zoneOverride = manualFlipIds[card.id]
+                ? ('draw-pile' as ActionCardZone)
+                : cardZoneCfg.id;
+              const isParticipant = manualFlipIds[card.id] ? false : cardZoneCfg.isParticipant;
+              return (
+                <div key={card.id} className="mx-auto w-full max-w-[260px]">
+                  <MidnightActionCard
+                    testId={`proto-library-card-${card.id}`}
+                    cardId={card.id}
+                    zone={zoneOverride}
+                    isParticipantInInvestigation={isParticipant}
+                    foilEnabled={foilEnabled}
+                    onFlipToggle={() => toggleFlipKey(card.id)}
+                    onZoom={() =>
+                      setZoomTarget({
+                        kind: 'card',
+                        cardId: card.id,
+                        zone: zoneOverride,
+                        isParticipantInInvestigation: isParticipant,
+                      })
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* PHẦN 7: 6 ĐỊA ĐIỂM KTX TABLETOP TILES, QUÂN CỜ ĐẾ NỔI & DI CHUYỂN MƯỢT */}
+        <section data-testid="proto-section-tabletop-6-ktx" className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-black text-white sm:text-2xl">
+                7. Sáu Địa Điểm KTX Illustrated Tabletop Tiles &amp; Quân Cờ Đế Nổi
+              </h2>
+              <p className="text-xs text-slate-400 sm:text-sm">
+                Bối cảnh KTX ban đêm có ánh đèn, sương nhẹ, quân cờ đế nổi 3D trượt FLIP mượt và chỉ hiện chân dung thật sau khi Lật Vai (P0).
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                data-testid="proto-glide-pawn-btn"
+                onClick={() => setPawnStep((s) => s + 1)}
+                className="rounded-xl border border-cyan-400/55 bg-cyan-950/75 px-3 py-1.5 text-xs font-black text-cyan-100 hover:bg-cyan-900/80 transition cursor-pointer"
+              >
+                🎲 Di chuyển thử quân cờ (Bước {pawnStep + 1})
+              </button>
+              <button
+                type="button"
+                data-testid="proto-reveal-pawn-btn"
+                onClick={() => setPawnsRevealed((v) => !v)}
+                className={`rounded-xl border px-3 py-1.5 text-xs font-black transition cursor-pointer ${
+                  pawnsRevealed
+                    ? 'border-emerald-400/70 bg-emerald-950/80 text-emerald-200'
+                    : 'border-amber-400/60 bg-amber-950/75 text-amber-200 hover:bg-amber-900/70'
+                }`}
+              >
+                {pawnsRevealed ? '🔓 Đang lộ chân dung trên quân cờ' : '🎭 Lật vai thử trên quân cờ'}
+              </button>
+            </div>
+          </div>
+
+          <div
+            ref={tabletopMapRef}
+            data-testid="proto-tabletop-map"
+            className="grid grid-cols-1 gap-3 md:grid-cols-3 rounded-3xl border border-slate-800 bg-slate-900/60 p-3 sm:p-4"
+          >
+            {buildBoardClustersView(DEFAULT_CLUSTER_PAIRS).map((cluster) => (
+              <div
+                key={cluster.clusterId}
+                className={`rounded-2xl border p-2.5 space-y-2 ${cluster.ringClass}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full border text-[11px] font-black whitespace-nowrap ${cluster.badgeClass}`}
+                  >
+                    {cluster.title}
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-300">
+                    Đánh chung cụm
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {cluster.locations.map((locId) => (
+                    <TabletopLocationTile
+                      key={locId}
+                      locId={locId}
+                      occupants={demoTabletopPlayers.filter((p) => p.location === locId)}
+                      selfPlayerId="demo-p1"
+                      activePlayerId="demo-p2"
+                      selectedTargetId={selectedDemoPlayerId}
+                      attackableIds={new Set(['demo-p3'])}
+                      isSelfHere={demoTabletopPlayers[0]?.location === locId}
+                      canChooseMoveHere={locId === 'court'}
+                      rolledDestinationHere={locId === 'radio'}
+                      onSelectPlayer={setSelectedDemoPlayerId}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </main>
+
+      <MidnightCardZoomModal target={zoomTarget} onClose={() => setZoomTarget(null)} />
     </div>
   );
 }

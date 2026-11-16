@@ -17,7 +17,7 @@ import type {
   BoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
 import { getRoleDesign } from '../domain/roles';
-import { PROTOTYPE_CHARACTER_ART } from './midnight-noir-tokens';
+import { MIDNIGHT_CHARACTER_ART } from './midnight-noir-tokens';
 
 export type CombatVfxEffectKind =
   | 'SLASH'
@@ -211,7 +211,7 @@ function findPlayersByNameMention(
 
 function getRevealPortrait(roleId: BoardGameRoleId | null): string | null {
   if (!roleId) return null;
-  return PROTOTYPE_CHARACTER_ART[roleId] ?? null;
+  return MIDNIGHT_CHARACTER_ART[roleId] ?? null;
 }
 
 function scaleDuration(baseMs: number, reducedMotion: boolean): number {

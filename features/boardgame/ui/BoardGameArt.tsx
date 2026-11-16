@@ -15,6 +15,10 @@ import type {
   BoardGameRoleId,
   BoardGameZoneClusterId,
 } from '@/shared/contracts/boardgame';
+import {
+  MIDNIGHT_CARD_BACK_ART,
+  MIDNIGHT_CHARACTER_ART,
+} from './midnight-noir-tokens';
 
 export const FACTION_THEME: Record<
   BoardGameFactionId,
@@ -479,11 +483,11 @@ export function DeckCardBackSvg({
 }) {
   const palette =
     deck === 'investigation'
-      ? { bg: '#064e3b', border: '#10b981', glyph: '🔍' }
+      ? { bg: '#064e3b', border: '#10b981', glow: 'rgba(16,185,129,0.28)', glyph: '🔍' }
       : deck === 'equipment'
-        ? { bg: '#0c4a6e', border: '#38bdf8', glyph: '🛡️' }
-        : { bg: '#4c0519', border: '#f43f5e', glyph: '⚡' };
-  const h = Math.round(size * 1.32);
+        ? { bg: '#0c4a6e', border: '#38bdf8', glow: 'rgba(56,189,248,0.28)', glyph: '🛡️' }
+        : { bg: '#4c0519', border: '#f43f5e', glow: 'rgba(244,63,94,0.28)', glyph: '⚡' };
+  const h = Math.round(size * 1.36);
   return (
     <div
       style={{
@@ -491,11 +495,27 @@ export function DeckCardBackSvg({
         height: h,
         backgroundColor: palette.bg,
         borderColor: palette.border,
+        boxShadow: `0 3px 0 #020617, 0 5px 12px ${palette.glow}`,
       }}
-      className="shrink-0 rounded-xl border-2 flex flex-col items-center justify-center shadow-md select-none"
+      className="relative shrink-0 overflow-hidden rounded-lg border-2 flex flex-col items-center justify-center select-none"
       aria-hidden="true"
     >
-      <span className="text-lg leading-none">{palette.glyph}</span>
+      <img
+        src={MIDNIGHT_CARD_BACK_ART}
+        alt=""
+        width={720}
+        height={1080}
+        loading="lazy"
+        decoding="async"
+        className="absolute inset-0 h-full w-full object-cover opacity-55 mix-blend-luminosity"
+      />
+      <div
+        className="absolute inset-0"
+        style={{ background: `linear-gradient(160deg, ${palette.bg}99, rgba(2,6,23,0.75))` }}
+      />
+      <span className="relative z-10 text-sm leading-none drop-shadow-[0_1px_4px_rgba(0,0,0,0.95)]">
+        {palette.glyph}
+      </span>
     </div>
   );
 }
@@ -621,7 +641,9 @@ export function PlayerPawnToken({
   isActive,
   isSelf,
   revealedFaction,
+  revealedRoleId = null,
   compact = false,
+  elevated = true,
   size,
 }: {
   displayName: string;
@@ -630,7 +652,9 @@ export function PlayerPawnToken({
   isActive: boolean;
   isSelf: boolean;
   revealedFaction: BoardGameFactionId | null;
+  revealedRoleId?: BoardGameRoleId | null;
   compact?: boolean;
+  elevated?: boolean;
   size?: 'xs' | 'sm' | 'md';
 }) {
   const ringHex = SEAT_RING_PALETTE[seatIndex % SEAT_RING_PALETTE.length];
@@ -638,10 +662,10 @@ export function PlayerPawnToken({
   const resolvedSize = size ?? (compact ? 'sm' : 'md');
   const sizeClass =
     resolvedSize === 'xs'
-      ? 'w-6 h-6 text-[10px]'
+      ? 'w-7 h-7 text-[10px]'
       : resolvedSize === 'sm'
-        ? 'w-7 h-7 text-[11px]'
-        : 'w-9 h-9 text-xs';
+        ? 'w-8 h-8 text-[11px]'
+        : 'w-10 h-10 text-xs';
   const dotClass =
     resolvedSize === 'xs'
       ? 'w-2.5 h-2.5 -bottom-0.5 -right-0.5 border'
@@ -654,18 +678,51 @@ export function PlayerPawnToken({
         : revealedFaction === 'wanderer'
           ? 'bg-amber-700'
           : 'bg-slate-800';
+  const portraitSrc = revealedRoleId ? MIDNIGHT_CHARACTER_ART[revealedRoleId] ?? null : null;
 
   return (
     <div
-      style={{ borderColor: alive ? ringHex : '#475569' }}
-      className={`relative rounded-full border-2 ${sizeClass} ${factionBg} ${
-        !alive ? 'opacity-45 grayscale' : ''
-      } ${isActive ? 'ring-2 ring-amber-300 ring-offset-2 ring-offset-slate-950 scale-105' : ''} flex items-center justify-center font-black text-white shadow-md select-none transition-transform`}
+      data-pawn-revealed={revealedRoleId ? 'true' : 'false'}
+      style={{
+        borderColor: alive ? ringHex : '#475569',
+        boxShadow: elevated
+          ? `0 3px 0 #020617, 0 5px 10px rgba(2, 6, 23, 0.78), inset 0 1px 1px rgba(255,255,255,0.28)`
+          : undefined,
+      }}
+      className={`relative shrink-0 rounded-full border-2 ${sizeClass} ${factionBg} ${
+        !alive ? 'opacity-50 grayscale' : ''
+      } ${isActive ? 'ring-2 ring-amber-300 ring-offset-2 ring-offset-slate-950 scale-105' : ''} flex items-center justify-center font-black text-white select-none transition-transform`}
       title={displayName}
     >
-      <span>{alive ? initial : '✕'}</span>
+      {elevated && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-1 inset-x-0.5 h-1.5 rounded-full bg-slate-950/90 blur-[0.5px] -z-10"
+        />
+      )}
+      {portraitSrc ? (
+        <div className="relative h-full w-full overflow-hidden rounded-full">
+          <img
+            src={portraitSrc}
+            alt={displayName}
+            width={720}
+            height={1080}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover object-top"
+            draggable={false}
+          />
+          {!alive && (
+            <span className="absolute inset-0 flex items-center justify-center bg-slate-950/65 text-rose-300 font-black">
+              ✕
+            </span>
+          )}
+        </div>
+      ) : (
+        <span>{alive ? initial : '✕'}</span>
+      )}
       {isSelf && (
-        <span className={`absolute ${dotClass} rounded-full bg-cyan-400 border-slate-950`} />
+        <span className={`absolute ${dotClass} rounded-full bg-cyan-400 border-slate-950 shadow`} />
       )}
     </div>
   );

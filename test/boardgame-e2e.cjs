@@ -48,6 +48,8 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
   '.woff2': 'font/woff2',
 };
 
@@ -1224,6 +1226,13 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       return match ? match[0] : null;
     });
     assert.equal(leakedHpText, null, `Public board leaked HP text: ${leakedHpText}`);
+    await p1.page.evaluate(() =>
+      Promise.all(
+        Array.from(document.querySelectorAll('[data-testid="bg-role-card-secret"] img')).map((im) =>
+          typeof im.decode === 'function' ? im.decode().catch(() => undefined) : Promise.resolve(),
+        ),
+      ),
+    );
     await p1.page.waitForTimeout(250);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-02-gameboard-desktop.png') });
 

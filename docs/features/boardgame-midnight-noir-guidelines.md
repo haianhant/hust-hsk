@@ -86,3 +86,16 @@ Mọi giao diện mới bắt buộc sử dụng 2 hàm lọc thuần trong [`mi
 2. **Kiến trúc Render & Hiệu năng (`BoardGameVfxStage.tsx`):**
    - Toàn bộ Combat VFX (đường nhắm mục tiêu SVG, vệt chém, Kiếm Gỗ Nguyền Rủa Masamune, Súng Ngắn, Súng Liên Thanh đa mục tiêu, Sét Vy Radio, Vụ nổ, Phản kích Dũng, Hồi máu, Lá chắn `BLOCK`, Dây cướp trang bị), Floating Text (`-5`, `+2`, `BLOCK`, `COUNTER`), Xúc xắc 3D nảy & khóa mặt theo `d6/d4` của server, Lật thẻ 3D và Cut-in chân dung lớn sử dụng **duy nhất CSS transforms, SVG và 1 Canvas 2D chung** (tự dừng `requestAnimationFrame` khi rảnh, **0 WebGL context phụ**).
    - Toàn bộ lớp phủ dùng `pointer-events-none` và không bao giờ chặn đồng hồ lượt hay thao tác server; nút **`Skip Animation`** (`Bỏ qua hiệu ứng`) và chế độ **`prefers-reduced-motion`** (cùng nút toggle trên thanh công cụ) rút gọn hoặc bỏ qua mọi chuyển động/rung màn hình tức thì.
+
+---
+
+## 7. Thư Viện Tài Nguyên Hoàn Chỉnh & Bản Đồ Tabletop KTX (Giai đoạn 3)
+
+1. **Quy mô Thư viện 57 Asset WebP (`public/assets/boardgame/`):**
+   - **10/10 Nhân vật Full-Art (`2:3`, `720×1080` WebP):** `MIDNIGHT_CHARACTER_ART` ánh xạ đủ 3 Đội Săn Đêm (`gac-ky-thuat`, `gac-truc-ban`, `gac-radio`), 3 Hội Bóng Đêm (`suong-an-danh`, `suong-tin-gia`, `suong-gac-cong`) và 4 Kẻ Độc Hành (`lang-anh-san`, `lang-quan-sat`, `lang-cuu-ho`, `lang-tien-phong`), dùng chung cho thẻ `MidnightCharacterCard`, cut-in VFX, quân cờ sau khi lật và `MatchResult`.
+   - **40 loại thẻ riêng biệt / 48 bản sao (`2:3`, `600×900` WebP):** `MIDNIGHT_CARD_ART` & `MIDNIGHT_CARD_STAT_BADGE` phủ đủ 12 loại Khám Phá (16 lá), 15 loại Cung Ứng (16 lá) và 13 loại Đột Kích (16 lá); gắn `loading="lazy"` + `decoding="async"` và giữ `artworkSrc = null` trên chồng bài rút hoặc thẻ điều tra với người ngoài cuộc.
+   - **6 Địa điểm Tabletop KTX (`16:9`, `960×540` WebP):** `MIDNIGHT_LOCATION_ART` & `MIDNIGHT_LOCATION_AMBIENCE` minh họa `radio`, `breaker`, `lobby`, `canteen`, `corridor`, `court` qua [`TabletopLocationTile.tsx`](../../features/boardgame/ui/TabletopLocationTile.tsx) với ánh đèn điểm, lớp sương đêm nhẹ (tắt khi `prefers-reduced-motion`), viền nổi 3D và khay quân cờ đế nổi.
+   - **1 Mặt lưng Ấn Ký Chung:** [`card-back-midnight-seal.webp`](../../public/assets/boardgame/prototype/card-back-midnight-seal.webp) cho mọi trạng thái úp bài và chồng bài (`DeckCardBackSvg`).
+2. **Tương tác, Di chuyển Quân cờ & Phóng lớn Thẻ:**
+   - **Phóng lớn & Lật Soi ([`MidnightCardZoomModal.tsx`](../../features/boardgame/ui/MidnightCardZoomModal.tsx)):** Xem chi tiết 2 mặt ở kích thước lớn, chỉ cho phép lật xem mặt trước khi hợp lệ theo luật P0.
+   - **Quân cờ đế nổi & Di chuyển mượt ([`BoardGameArt.tsx`](../../features/boardgame/ui/BoardGameArt.tsx), [`useSmoothPawnGlide.ts`](../../features/boardgame/ui/useSmoothPawnGlide.ts)):** Quân cờ chỉ hiện chân dung khi `revealedRoleId !== null`, sử dụng kỹ thuật FLIP Web Animations API để trượt parabol `520ms` giữa các ô địa điểm mà không chặn thao tác server.

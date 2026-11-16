@@ -28,7 +28,6 @@ import {
   DiceD6Svg,
   FACTION_THEME,
   LOCATION_VISUAL_META,
-  LocationSceneSvg,
   PlayerPawnToken,
 } from './BoardGameArt';
 import RoleCard from './RoleCard';
@@ -38,6 +37,9 @@ import MatchPostcard from './MatchPostcard';
 import MatchResult from './MatchResult';
 import { toggleSelectedTargetId } from './target-selection';
 import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
+import { TabletopLocationTile } from './TabletopLocationTile';
+import { useSmoothPawnGlide } from './useSmoothPawnGlide';
+import { MidnightCardZoomModal, type MidnightZoomTarget } from './MidnightCardZoomModal';
 import {
   isBoardGameSoundMuted,
   playEmotePop,
@@ -120,6 +122,7 @@ export function GameBoard({
   const [dicePulse, setDicePulse] = useState(false);
   const [seenClueCount, setSeenClueCount] = useState(0);
   const [seenLogCount, setSeenLogCount] = useState(() => publicGame.publicLog.length);
+  const [zoomTarget, setZoomTarget] = useState<MidnightZoomTarget | null>(null);
   const boardStageRef = useRef<HTMLDivElement>(null);
 
   const vfx = useBoardGameVfxQueue({
@@ -129,6 +132,13 @@ export function GameBoard({
     isSpectator,
     handUnmasked: roleCardVisible || handUnmasked,
     containerRef: boardStageRef,
+  });
+
+  useSmoothPawnGlide({
+    containerRef: boardStageRef,
+    players: publicGame.players,
+    matchId: publicGame.matchId,
+    reducedMotion: vfx.reducedMotion,
   });
 
   const prevTurnRef = useRef<number>(publicGame.turnNumber);
@@ -147,6 +157,7 @@ export function GameBoard({
     setSeenClueCount(0);
     setSeenLogCount(publicGame.publicLog.length);
     setSelectedTargetId(null);
+    setZoomTarget(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicGame.matchId]);
 
@@ -633,12 +644,14 @@ export function GameBoard({
                             <PlayerPawnToken
                               key={p.playerId}
                               size="xs"
+                              elevated={false}
                               displayName={p.displayName}
                               seatIndex={p.seatIndex}
                               alive={p.alive}
                               isActive={p.playerId === publicGame.activePlayerId}
                               isSelf={p.playerId === selfPlayerId}
                               revealedFaction={p.revealedFaction}
+                              revealedRoleId={p.revealedRoleId}
                             />
                           ))}
                         </div>
@@ -668,7 +681,6 @@ export function GameBoard({
 
                     <div className="space-y-2">
                       {cluster.locations.map((locId) => {
-                        const meta = LOCATION_VISUAL_META[locId];
                         const occupants = publicGame.players.filter(
                           (p) => p.location === locId,
                         );
@@ -684,128 +696,23 @@ export function GameBoard({
                           publicGame.lastDiceRoll.resolvedLocation === locId;
 
                         return (
-                          <div
+                          <TabletopLocationTile
                             key={locId}
-                            data-testid={`bg-loc-${locId}`}
-                            onClick={
-                              canChooseMoveHere
-                                ? () => dispatchAction({ type: 'CHOOSE_DEST', location: locId })
-                                : undefined
+                            locId={locId}
+                            occupants={occupants}
+                            selfPlayerId={selfPlayerId}
+                            activePlayerId={publicGame.activePlayerId}
+                            selectedTargetId={selectedTargetId}
+                            attackableIds={attackableIdsOnBoard}
+                            isSelfHere={isSelfHere}
+                            canChooseMoveHere={canChooseMoveHere}
+                            rolledDestinationHere={rolledDestinationHere}
+                            reducedMotion={vfx.reducedMotion}
+                            onChooseDestination={(dest) =>
+                              dispatchAction({ type: 'CHOOSE_DEST', location: dest })
                             }
-                            role={canChooseMoveHere ? 'button' : undefined}
-                            tabIndex={canChooseMoveHere ? 0 : undefined}
-                            onKeyDown={
-                              canChooseMoveHere
-                                ? (e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault();
-                                      dispatchAction({ type: 'CHOOSE_DEST', location: locId });
-                                    }
-                                  }
-                                : undefined
-                            }
-                            className={`rounded-xl border p-2.5 bg-gradient-to-br ${meta.bgGradient} transition ${
-                              canChooseMoveHere
-                                ? 'border-amber-400 ring-2 ring-amber-400/60 hover:scale-[1.01] cursor-pointer'
-                                : isSelfHere
-                                  ? 'border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.22)]'
-                                  : rolledDestinationHere
-                                    ? 'border-emerald-400/80'
-                                    : 'border-white/15'
-                            }`}
-                          >
-                            <div className="flex items-start gap-2.5">
-                              <LocationSceneSvg location={locId} size={42} />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center justify-between gap-1.5">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span
-                                      style={{ backgroundColor: meta.accentHex }}
-                                      className="px-2 py-0.5 rounded-md text-slate-950 text-[11px] font-black whitespace-nowrap shrink-0 shadow"
-                                    >
-                                      Ô {meta.diceLabel}
-                                    </span>
-                                    {isSelfHere && (
-                                      <span className="px-2 py-0.5 rounded-md bg-cyan-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
-                                        📍 Bạn ở đây
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-white/10 text-slate-200 whitespace-nowrap truncate">
-                                    {meta.badgeText}
-                                  </span>
-                                </div>
-                                <h3 className="text-sm sm:text-[15px] font-black text-white mt-1 leading-tight">
-                                  {meta.name}
-                                </h3>
-                                <p className="text-xs text-slate-300 mt-0.5 leading-snug">
-                                  {meta.actionDesc}
-                                </p>
-                              </div>
-                            </div>
-
-                            {canChooseMoveHere && (
-                              <div className="mt-2 px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-black text-center">
-                                👆 Bấm để di chuyển tới đây
-                              </div>
-                            )}
-
-                            {/* Quân cờ sinh viên đang đứng ở khu vực này */}
-                            <div className="mt-2 pt-1.5 border-t border-white/10 min-h-[30px] flex flex-wrap items-center gap-1.5">
-                              {occupants.length === 0 ? (
-                                <span className="text-[11px] text-slate-400 italic">
-                                  Trống người
-                                </span>
-                              ) : (
-                                occupants.map((p) => {
-                                  const inAttackRange = attackableIdsOnBoard.has(p.playerId);
-                                  const isSelectedTarget = selectedTargetId === p.playerId;
-                                  const isSelfToken = p.playerId === selfPlayerId;
-                                  return (
-                                    <button
-                                      key={p.playerId}
-                                      type="button"
-                                      data-vfx-player={p.playerId}
-                                      data-testid={isSelfToken ? 'bg-loc-pawn-self' : undefined}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedTargetId((prev) =>
-                                          toggleSelectedTargetId(prev, p.playerId, p.alive),
-                                        );
-                                      }}
-                                      className={`flex items-center gap-1.5 rounded-full pr-2 pl-0.5 py-0.5 border text-xs font-bold transition cursor-pointer ${
-                                        isSelectedTarget
-                                          ? isSelfToken
-                                            ? 'bg-emerald-600/85 border-emerald-300 text-white'
-                                            : 'bg-rose-600/85 border-rose-300 text-white'
-                                          : inAttackRange
-                                            ? 'bg-rose-950/60 border-rose-400/65 text-rose-100 hover:border-rose-300'
-                                            : 'bg-slate-900/90 border-white/15 text-slate-100 hover:border-cyan-400/60'
-                                      }`}
-                                    >
-                                      <PlayerPawnToken
-                                        size="xs"
-                                        displayName={p.displayName}
-                                        seatIndex={p.seatIndex}
-                                        alive={p.alive}
-                                        isActive={p.playerId === publicGame.activePlayerId}
-                                        isSelf={p.playerId === selfPlayerId}
-                                        revealedFaction={p.revealedFaction}
-                                      />
-                                      <span className={!p.alive ? 'line-through text-slate-400' : ''}>
-                                        {p.displayName}
-                                      </span>
-                                      {inAttackRange && (
-                                        <span className="text-[10px] text-amber-200" title="Trong tầm đánh">
-                                          ⚔️
-                                        </span>
-                                      )}
-                                    </button>
-                                  );
-                                })
-                              )}
-                            </div>
-                          </div>
+                            onSelectPlayer={setSelectedTargetId}
+                          />
                         );
                       })}
                     </div>
@@ -983,18 +890,9 @@ export function GameBoard({
                   const factionTheme = p.revealedFaction ? FACTION_THEME[p.revealedFaction] : null;
                   const locMeta = LOCATION_VISUAL_META[p.location];
                   return (
-                    <button
+                    <div
                       key={p.playerId}
-                      type="button"
-                      data-vfx-player-strip={p.playerId}
-                      data-testid={isSelfCard ? 'bg-player-strip-self' : undefined}
-                      aria-pressed={selected}
-                      onClick={() =>
-                        setSelectedTargetId((prev) =>
-                          toggleSelectedTargetId(prev, p.playerId, p.alive),
-                        )
-                      }
-                      className={`rounded-xl border px-2.5 py-2 text-left transition cursor-pointer ${
+                      className={`rounded-xl border px-2.5 py-2 flex flex-col justify-between gap-1.5 transition ${
                         !p.alive
                           ? 'opacity-55 border-slate-800 bg-slate-950/60'
                           : selected
@@ -1008,66 +906,111 @@ export function GameBoard({
                                 : 'border-slate-700/80 bg-slate-900/80 hover:border-cyan-400/50'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <PlayerPawnToken
-                          compact
-                          displayName={p.displayName}
-                          seatIndex={p.seatIndex}
-                          alive={p.alive}
-                          isActive={isTurnHolder}
-                          isSelf={p.playerId === selfPlayerId}
-                          revealedFaction={p.revealedFaction}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <p className="text-xs sm:text-sm font-black text-white truncate">
-                              {p.displayName}
+                      <button
+                        type="button"
+                        data-vfx-player-strip={p.playerId}
+                        data-testid={isSelfCard ? 'bg-player-strip-self' : undefined}
+                        aria-pressed={selected}
+                        onClick={() =>
+                          setSelectedTargetId((prev) =>
+                            toggleSelectedTargetId(prev, p.playerId, p.alive),
+                          )
+                        }
+                        className="w-full text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <PlayerPawnToken
+                            compact
+                            elevated
+                            displayName={p.displayName}
+                            seatIndex={p.seatIndex}
+                            alive={p.alive}
+                            isActive={isTurnHolder}
+                            isSelf={isSelfCard}
+                            revealedFaction={p.revealedFaction}
+                            revealedRoleId={p.revealedRoleId}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <p className="text-xs sm:text-sm font-black text-white truncate">
+                                {p.displayName}
+                              </p>
+                              {inAttackRange && (
+                                <span className="text-[10px] font-black text-amber-200 shrink-0">
+                                  ⚔️
+                                </span>
+                              )}
+                            </div>
+                            <p
+                              className={`text-[11px] font-bold truncate ${factionTheme ? factionTheme.textClass : 'text-slate-400'}`}
+                            >
+                              {p.revealedRoleId
+                                ? `${FACTION_LABELS[p.revealedFaction!]} · Max ${p.revealedMaxHp}`
+                                : 'Vai ẩn danh'}
                             </p>
-                            {inAttackRange && (
-                              <span className="text-[10px] font-black text-amber-200 shrink-0">
-                                ⚔️
-                              </span>
-                            )}
                           </div>
-                          <p
-                            className={`text-[11px] font-bold truncate ${factionTheme ? factionTheme.textClass : 'text-slate-400'}`}
-                          >
-                            {p.revealedRoleId
-                              ? `${FACTION_LABELS[p.revealedFaction!]} · Max ${p.revealedMaxHp}`
-                              : 'Vai ẩn danh'}
-                          </p>
                         </div>
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-bold">
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-200">
-                          🩸 {p.woundsTaken} vết
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-200">
-                          Ô {locMeta.diceLabel}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">
-                          🃏 {p.handCount}
-                        </span>
-                        {p.guardianShieldActive && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-200">
-                            🛡️ Khiên
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-bold">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-200">
+                            🩸 {p.woundsTaken} vết
                           </span>
-                        )}
-                      </div>
-                      {p.equipped.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-200">
+                            Ô {locMeta.diceLabel}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">
+                            🃏 {p.handCount}
+                          </span>
+                          {p.guardianShieldActive && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-200">
+                              🛡️ Khiên
+                            </span>
+                          )}
+                        </div>
+                      </button>
+
+                      {(p.equipped.length > 0 || p.revealedRoleId) && (
+                        <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                          {p.revealedRoleId && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setZoomTarget({
+                                  kind: 'role',
+                                  roleId: p.revealedRoleId!,
+                                  revealed: true,
+                                  viewerMode: 'other-player',
+                                  woundsTaken: p.woundsTaken,
+                                  currentHp: p.revealedMaxHp
+                                    ? Math.max(0, p.revealedMaxHp - p.woundsTaken)
+                                    : undefined,
+                                })
+                              }
+                              title={`Phóng lớn thẻ vai đã lộ của ${p.displayName}`}
+                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-amber-950/70 border border-amber-400/45 text-amber-200 hover:bg-amber-900/70 transition cursor-pointer"
+                            >
+                              🔍 Soi vai
+                            </button>
+                          )}
                           {p.equipped.map((eq, i) => (
-                            <span
+                            <button
                               key={`${eq.id}-${i}`}
-                              title={eq.summary}
-                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-sky-950/70 border border-sky-500/40 text-sky-200 truncate max-w-full"
+                              type="button"
+                              onClick={() =>
+                                setZoomTarget({
+                                  kind: 'card',
+                                  cardId: eq.id,
+                                  zone: 'equipped-table',
+                                })
+                              }
+                              title={`${eq.summary} (Bấm để phóng lớn thẻ)`}
+                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-sky-950/70 border border-sky-500/40 text-sky-200 hover:border-sky-300 truncate max-w-full cursor-pointer"
                             >
                               🎒 {eq.title}
-                            </span>
+                            </button>
                           ))}
                         </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </section>
@@ -1092,6 +1035,14 @@ export function GameBoard({
                     setHandUnmasked(true);
                   }
                 }}
+                onZoomCard={(cardId, zone) =>
+                  setZoomTarget({
+                    kind: 'card',
+                    cardId,
+                    zone,
+                    isParticipantInInvestigation: true,
+                  })
+                }
               />
             </div>
           </div>
@@ -1111,7 +1062,28 @@ export function GameBoard({
                   isSpectator={isSpectator}
                   cardVisible={roleCardVisible}
                   unreadClueCount={unreadClueCount}
+                  visualStyle="midnight-noir"
+                  reducedMotion={vfx.reducedMotion}
                   onToggleCardVisible={() => setRoleCardVisible((v) => !v)}
+                  onZoomRole={() =>
+                    privateView &&
+                    setZoomTarget({
+                      kind: 'role',
+                      roleId: privateView.roleId,
+                      revealed: privateView.revealed,
+                      viewerMode: roleCardVisible ? 'owner-peek' : 'owner-facedown',
+                      woundsTaken: privateView.woundsTaken,
+                      currentHp: privateView.hp,
+                    })
+                  }
+                  onZoomCard={(cardId, zone = 'equipped-table') =>
+                    setZoomTarget({
+                      kind: 'card',
+                      cardId,
+                      zone,
+                      isParticipantInInvestigation: true,
+                    })
+                  }
                 />
               </div>
 
@@ -1190,6 +1162,13 @@ export function GameBoard({
           onLeaveMatch={onLeaveMatch}
         />
       )}
+
+      {/* MODAL PHÓNG LỚN THẺ BÀI */}
+      <MidnightCardZoomModal
+        target={zoomTarget}
+        reducedMotion={vfx.reducedMotion}
+        onClose={() => setZoomTarget(null)}
+      />
 
       {/* HỘP THOẠI XÁC NHẬN RỜI VÁN */}
       {leaveConfirmOpen && (

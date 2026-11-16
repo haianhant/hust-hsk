@@ -161,17 +161,144 @@ export const MIDNIGHT_DECK_TOKENS: Record<BoardGameDeckId, MidnightDeckToken> = 
 
 export const MIDNIGHT_CARD_BACK_ART = '/assets/boardgame/prototype/card-back-midnight-seal.webp';
 
-/** Artwork bán thân AI tỷ lệ 2:3 đã sinh cho bản Prototype (Minh & Vy). */
+/** Artwork bán thân AI tỷ lệ 2:3 đã sinh cho bản Prototype (Minh & Vy — giữ tương thích test cũ). */
 export const PROTOTYPE_CHARACTER_ART: Partial<Record<BoardGameRoleId, string>> = {
   'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
   'gac-radio': '/assets/boardgame/prototype/role-vy-radio.webp',
 };
 
-/** Artwork AI tỷ lệ 2:3 cho 3 lá bài mẫu: Điều tra, Trang bị, Đột Kích. */
+/** Artwork AI tỷ lệ 2:3 cho 3 lá bài mẫu bản Prototype (giữ tương thích test cũ). */
 export const PROTOTYPE_CARD_ART: Readonly<Record<string, string>> = {
   'inv-12': '/assets/boardgame/prototype/card-inv-tien-tri.webp',
   'eq-04': '/assets/boardgame/prototype/card-eq-thuong-anh-sang.webp',
   'ev-01': '/assets/boardgame/prototype/card-ev-kiem-go-nguyen-rua.webp',
+};
+
+/** Thư viện đầy đủ 10/10 chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP). */
+export const MIDNIGHT_CHARACTER_ART: Readonly<Record<BoardGameRoleId, string>> = {
+  'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
+  'gac-truc-ban': '/assets/boardgame/roles/role-lan-truc-ban.webp',
+  'gac-radio': '/assets/boardgame/prototype/role-vy-radio.webp',
+  'suong-an-danh': '/assets/boardgame/roles/role-tu-an-danh.webp',
+  'suong-tin-gia': '/assets/boardgame/roles/role-khanh-tin-gia.webp',
+  'suong-gac-cong': '/assets/boardgame/roles/role-dung-gac-cong.webp',
+  'lang-anh-san': '/assets/boardgame/roles/role-hai-suu-tam.webp',
+  'lang-quan-sat': '/assets/boardgame/roles/role-trang-kien-cuong.webp',
+  'lang-cuu-ho': '/assets/boardgame/roles/role-bach-cuong-chien.webp',
+  'lang-tien-phong': '/assets/boardgame/roles/role-dat-cam-tu.webp',
+};
+
+/** Thư viện đầy đủ 40 loại thẻ riêng biệt (tổng 48 bản sao) phong cách HUSTVerse Midnight (2:3 WebP). */
+export const MIDNIGHT_CARD_ART: Readonly<Record<string, string>> = {
+  'inv-01': '/assets/boardgame/cards/inv-01.webp',
+  'inv-02': '/assets/boardgame/cards/inv-02.webp',
+  'inv-03': '/assets/boardgame/cards/inv-03.webp',
+  'inv-04': '/assets/boardgame/cards/inv-04.webp',
+  'inv-05': '/assets/boardgame/cards/inv-05.webp',
+  'inv-06': '/assets/boardgame/cards/inv-06.webp',
+  'inv-07': '/assets/boardgame/cards/inv-07.webp',
+  'inv-08': '/assets/boardgame/cards/inv-08.webp',
+  'inv-09': '/assets/boardgame/cards/inv-09.webp',
+  'inv-10': '/assets/boardgame/cards/inv-10.webp',
+  'inv-11': '/assets/boardgame/cards/inv-11.webp',
+  'inv-12': '/assets/boardgame/prototype/card-inv-tien-tri.webp',
+  'eq-01': '/assets/boardgame/cards/eq-01.webp',
+  'eq-02': '/assets/boardgame/cards/eq-02.webp',
+  'eq-03': '/assets/boardgame/cards/eq-03.webp',
+  'eq-04': '/assets/boardgame/prototype/card-eq-thuong-anh-sang.webp',
+  'eq-05': '/assets/boardgame/cards/eq-05.webp',
+  'eq-06': '/assets/boardgame/cards/eq-06.webp',
+  'eq-07': '/assets/boardgame/cards/eq-07.webp',
+  'eq-08': '/assets/boardgame/cards/eq-08.webp',
+  'eq-09': '/assets/boardgame/cards/eq-09.webp',
+  'eq-10': '/assets/boardgame/cards/eq-10.webp',
+  'eq-11': '/assets/boardgame/cards/eq-11.webp',
+  'eq-12': '/assets/boardgame/cards/eq-12.webp',
+  'eq-13': '/assets/boardgame/cards/eq-13.webp',
+  'eq-14': '/assets/boardgame/cards/eq-14.webp',
+  'eq-15': '/assets/boardgame/cards/eq-15.webp',
+  'ev-01': '/assets/boardgame/prototype/card-ev-kiem-go-nguyen-rua.webp',
+  'ev-02': '/assets/boardgame/cards/ev-02.webp',
+  'ev-03': '/assets/boardgame/cards/ev-03.webp',
+  'ev-04': '/assets/boardgame/cards/ev-04.webp',
+  'ev-05': '/assets/boardgame/cards/ev-05.webp',
+  'ev-06': '/assets/boardgame/cards/ev-06.webp',
+  'ev-07': '/assets/boardgame/cards/ev-07.webp',
+  'ev-08': '/assets/boardgame/cards/ev-08.webp',
+  'ev-09': '/assets/boardgame/cards/ev-09.webp',
+  'ev-10': '/assets/boardgame/cards/ev-10.webp',
+  'ev-11': '/assets/boardgame/cards/ev-11.webp',
+  'ev-12': '/assets/boardgame/cards/ev-12.webp',
+  'ev-13': '/assets/boardgame/cards/ev-13.webp',
+};
+
+/** Nhãn chỉ số/hiệu ứng ngắn trên góc phải của từng loại trong 40 lá bài. */
+export const MIDNIGHT_CARD_STAT_BADGE: Readonly<Record<string, string>> = {
+  'inv-01': 'SĂN/BÓNG · CƯỚP/1 ST',
+  'inv-02': 'SĂN/ĐỘC · CƯỚP/1 ST',
+  'inv-03': 'ĐỘC/BÓNG · CƯỚP/1 ST',
+  'inv-04': 'SĂN ĐÊM · 1 ST',
+  'inv-05': 'BÓNG ĐÊM · 1 ST',
+  'inv-06': 'BÓNG ĐÊM · 2 ST',
+  'inv-07': 'SĂN ĐÊM · HỒI 1',
+  'inv-08': 'ĐỘC HÀNH · HỒI 1',
+  'inv-09': 'BÓNG ĐÊM · HỒI 1',
+  'inv-10': 'MAX ≤11 · 1 ST',
+  'inv-11': 'MAX ≥12 · 2 ST',
+  'inv-12': 'SOI VAI THẬT',
+  'eq-01': 'GIẢM 1 ST',
+  'eq-02': 'MIỄN Ô 9',
+  'eq-03': 'MIỄN BẪY ĐEN',
+  'eq-04': '+2 SÁT THƯƠNG',
+  'eq-05': 'TUNG 2 LẦN',
+  'eq-06': 'LỘT ĐỒ KHI HẠ',
+  'eq-07': 'HỒI 2 MÁU',
+  'eq-08': 'HỒI 1d6 KHÁC',
+  'eq-09': 'VỀ MỐC 7',
+  'eq-10': 'KHIÊN MIỄN ST',
+  'eq-11': 'TOÀN BÀN -2 HP',
+  'eq-12': 'SOI LẬT TÚ/DŨNG',
+  'eq-13': 'SĂN ĐÊM · HỒI 0',
+  'eq-14': 'TRANG/LAN/KHÁNH · 0',
+  'eq-15': 'THÊM 1 LƯỢT',
+  'ev-01': 'BẮT BUỘC · 1d4',
+  'ev-02': '+1 SÁT THƯƠNG',
+  'ev-03': '+1 SÁT THƯƠNG',
+  'ev-04': '+1 SÁT THƯƠNG',
+  'ev-05': 'BẮN CỤM KHÁC',
+  'ev-06': 'ĐA MỤC TIÊU',
+  'ev-07': '2 ST · HỒI 1',
+  'ev-08': 'ĐỔI MẠNG 2 ST',
+  'ev-09': 'BOM Ô 1d6+1d4',
+  'ev-10': '1d6 · 3 ST',
+  'ev-11': 'CƯỚP 1 TRANG BỊ',
+  'ev-12': 'GIAO ĐỒ / 1 ST',
+  'ev-13': 'BÓNG ĐÊM · HỒI 0',
+};
+
+/** 6 bối cảnh tabletop 16:9 (WebP) của các địa điểm KTX Bách Khoa ban đêm. */
+export const MIDNIGHT_LOCATION_ART: Readonly<Record<BoardGameLocationId, string>> = {
+  radio: '/assets/boardgame/locations/loc-radio.webp',
+  breaker: '/assets/boardgame/locations/loc-breaker.webp',
+  lobby: '/assets/boardgame/locations/loc-lobby.webp',
+  canteen: '/assets/boardgame/locations/loc-canteen.webp',
+  corridor: '/assets/boardgame/locations/loc-corridor.webp',
+  court: '/assets/boardgame/locations/loc-court.webp',
+};
+
+/** Tọa độ nguồn sáng đèn & sương đêm đặc trưng từng ô tabletop. */
+export const MIDNIGHT_LOCATION_AMBIENCE: Readonly<
+  Record<
+    BoardGameLocationId,
+    { lampX: number; lampY: number; lampHex: string; fogHex: string }
+  >
+> = {
+  radio: { lampX: 74, lampY: 58, lampHex: '#10b981', fogHex: 'rgba(16, 185, 129, 0.24)' },
+  breaker: { lampX: 56, lampY: 18, lampHex: '#f59e0b', fogHex: 'rgba(148, 163, 184, 0.22)' },
+  lobby: { lampX: 28, lampY: 52, lampHex: '#06b6d4', fogHex: 'rgba(6, 182, 212, 0.20)' },
+  canteen: { lampX: 62, lampY: 42, lampHex: '#f43f5e', fogHex: 'rgba(168, 85, 247, 0.22)' },
+  corridor: { lampX: 49, lampY: 16, lampHex: '#a78bfa', fogHex: 'rgba(139, 92, 246, 0.24)' },
+  court: { lampX: 24, lampY: 16, lampHex: '#38bdf8', fogHex: 'rgba(56, 189, 248, 0.22)' },
 };
 
 export const CARD_BACK_SECRET_TITLES: Record<BoardGameDeckId, string> = {
@@ -277,7 +404,7 @@ export function resolveRoleCardPresentation(
     skillName: design.skillName,
     skillSummary: design.skillSummary,
     secretGoalText: design.secretGoalText,
-    portraitSrc: PROTOTYPE_CHARACTER_ART[design.id] ?? null,
+    portraitSrc: MIDNIGHT_CHARACTER_ART[design.id] ?? null,
     cardBackSrc: MIDNIGHT_CARD_BACK_ART,
     publicWoundsTaken: woundsTaken,
     publicAlive: alive,
@@ -307,6 +434,8 @@ export interface ActionCardPresentation {
   title: string | null;
   summary: string | null;
   isConsumable: boolean | null;
+  statBadge: string | null;
+  copies: number | null;
   artworkSrc: string | null;
   cardBackSrc: string;
   backLabel: string;
@@ -333,6 +462,8 @@ export function resolveActionCardPresentation(
       title: null,
       summary: null,
       isConsumable: null,
+      statBadge: null,
+      copies: null,
       artworkSrc: null,
       cardBackSrc: MIDNIGHT_CARD_BACK_ART,
       backLabel: CARD_BACK_SECRET_TITLES[deck],
@@ -352,6 +483,8 @@ export function resolveActionCardPresentation(
       title: null,
       summary: null,
       isConsumable: null,
+      statBadge: null,
+      copies: null,
       artworkSrc: null,
       cardBackSrc: MIDNIGHT_CARD_BACK_ART,
       backLabel: 'THƯ KHÁM PHÁ KÍN 1-ĐỐI-1',
@@ -360,14 +493,18 @@ export function resolveActionCardPresentation(
   }
 
   const isConsumable = card ? card.isConsumable !== false : true;
+  const deckToken = MIDNIGHT_DECK_TOKENS[deck];
+  const resolvedCardId = card?.id ?? input.cardId;
   return {
     showFront: true,
     deck,
-    cardId: card?.id ?? input.cardId,
+    cardId: resolvedCardId,
     title: card?.title ?? input.cardId,
     summary: card?.summary ?? '',
     isConsumable,
-    artworkSrc: PROTOTYPE_CARD_ART[input.cardId] ?? null,
+    statBadge: MIDNIGHT_CARD_STAT_BADGE[resolvedCardId] ?? deckToken.statLabel,
+    copies: card?.copies ?? 1,
+    artworkSrc: MIDNIGHT_CARD_ART[resolvedCardId] ?? null,
     cardBackSrc: MIDNIGHT_CARD_BACK_ART,
     backLabel: CARD_BACK_SECRET_TITLES[deck],
     visibilityBadge:

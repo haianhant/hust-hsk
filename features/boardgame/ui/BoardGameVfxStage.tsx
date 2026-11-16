@@ -25,10 +25,10 @@ import {
 } from './BoardGameArt';
 import {
   CARD_BACK_SECRET_TITLES,
+  MIDNIGHT_CARD_ART,
   MIDNIGHT_CARD_BACK_ART,
   MIDNIGHT_DECK_TOKENS,
   MIDNIGHT_FACTION_TOKENS,
-  PROTOTYPE_CARD_ART,
 } from './midnight-noir-tokens';
 import {
   playBlockClang,
@@ -928,7 +928,7 @@ export function BoardGameVfxStage({
         const { event, revealedFace } = vfx.activeCardDraw;
         const deckTok = MIDNIGHT_DECK_TOKENS[event.deck];
         const canFlipFront = event.showFront && revealedFace;
-        const artSrc = event.cardId ? PROTOTYPE_CARD_ART[event.cardId] ?? null : null;
+        const artSrc = event.cardId ? MIDNIGHT_CARD_ART[event.cardId] ?? null : null;
         return (
           <div
             data-testid="bg-vfx-card-draw"

@@ -116,6 +116,27 @@ async function main() {
   try {
     // -------------------- 1. DESKTOP (1440x900) --------------------
     const desktopCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await desktopCtx.addInitScript(() => {
+      window.__clsTotal = 0;
+      window.__webglCreateCount = 0;
+      const origGetContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+        if (typeof type === 'string' && type.toLowerCase().includes('webgl')) {
+          window.__webglCreateCount += 1;
+        }
+        return origGetContext.call(this, type, ...rest);
+      };
+      try {
+        const obs = new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) {
+            if (!entry.hadRecentInput && typeof entry.value === 'number') {
+              window.__clsTotal += entry.value;
+            }
+          }
+        });
+        obs.observe({ type: 'layout-shift', buffered: true });
+      } catch {}
+    });
     const page = await desktopCtx.newPage();
     page.on('pageerror', (err) => errors.push(`desktop pageerror: ${err.message}`));
     page.on('response', (res) => {
@@ -138,20 +159,25 @@ async function main() {
     await page.waitForSelector('[data-testid="bg-visual-prototype-page"]', { timeout: 20_000 });
     await page.waitForSelector('[data-testid="proto-new-card-minh"]', { timeout: 20_000 });
 
-    // Kiểm tra toàn bộ ảnh đã tải thành công + kích thước hợp lệ
+    // Kiểm tra ảnh eager trên màn hình đầu + đếm thẻ sử dụng loading="lazy"
     const imgAudit = await page.evaluate(() => {
       const imgs = Array.from(document.querySelectorAll('img'));
       return imgs.map((im) => ({
         src: im.getAttribute('src'),
+        loading: im.getAttribute('loading') || 'eager',
+        decoding: im.getAttribute('decoding') || 'auto',
         complete: im.complete,
         naturalWidth: im.naturalWidth,
         naturalHeight: im.naturalHeight,
       }));
     });
-    assert.ok(imgAudit.length >= 8, `Expected prototype images on DOM, got ${imgAudit.length}`);
-    for (const im of imgAudit) {
-      assert.equal(im.complete, true, `Image not complete: ${im.src}`);
-      assert.ok(im.naturalWidth >= 700, `Image naturalWidth too small (${im.naturalWidth}): ${im.src}`);
+    const eagerImgs = imgAudit.filter((im) => im.loading !== 'lazy');
+    const lazyImgs = imgAudit.filter((im) => im.loading === 'lazy');
+    assert.ok(eagerImgs.length >= 6, `Expected eager priority images, got ${eagerImgs.length}`);
+    assert.ok(lazyImgs.length >= 40, `Expected lazy loading on below-fold library images, got ${lazyImgs.length}`);
+    for (const im of eagerImgs) {
+      assert.equal(im.complete, true, `Eager image not complete: ${im.src}`);
+      assert.ok(im.naturalWidth >= 600, `Eager image naturalWidth too small (${im.naturalWidth}): ${im.src}`);
     }
 
     // Kiểm tra tỷ lệ khung thẻ chuẩn 2:3 (Minh, Vy & 3 lá bài)
@@ -284,6 +310,118 @@ async function main() {
 
     // Screenshot 3: Chế độ Bảo mật Ẩn vai & Mặt lưng
     await page.screenshot({ path: path.join(SHOT_DIR, 'prototype-03-desktop-secrecy-facedown.png') });
+
+    // Quay về chế độ "Chủ thẻ soi vai" để kiểm thử Phần 5 (10 nhân vật), Phần 6 (40 thẻ), Phần 7 (6 KTX tiles + pawn glide) & Zoom Modal
+    await page.locator('[data-testid="proto-secrecy-owner-peek"]').click();
+    await page.locator('[data-testid="proto-card-zone-0"]').click();
+    await page.waitForTimeout(300);
+
+    // Phần 5: Trọn bộ 10/10 nhân vật full-art
+    const rosterCount = await page.locator('.mn-card-perspective[data-testid^="proto-roster-card-"]').count();
+    assert.equal(rosterCount, 10, `Expected all 10 character cards, got ${rosterCount}`);
+    await page.locator('[data-testid="proto-section-roster-10"]').scrollIntoViewIfNeeded();
+    const rosterCardLocs = page.locator('.mn-card-perspective[data-testid^="proto-roster-card-"]');
+    await rosterCardLocs.nth(0).scrollIntoViewIfNeeded();
+    await rosterCardLocs.nth(9).scrollIntoViewIfNeeded();
+    await page.waitForFunction(
+      () =>
+        Array.from(document.querySelectorAll('[data-testid="proto-roster-grid"] img')).every(
+          (im) => im.complete && im.naturalWidth >= 600,
+        ),
+      null,
+      { timeout: 15_000 },
+    );
+    await page.evaluate(() =>
+      Promise.all(
+        Array.from(document.querySelectorAll('[data-testid="proto-roster-grid"] img')).map((im) =>
+          typeof im.decode === 'function' ? im.decode().catch(() => undefined) : Promise.resolve(),
+        ),
+      ),
+    );
+    await page.locator('[data-testid="proto-section-roster-10"]').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: path.join(SHOT_DIR, 'phase2-01-desktop-10-characters.png') });
+
+    // Phần 6: Đủ 40 loại thẻ / 48 bản sao
+    await page.locator('[data-testid="proto-lib-tab-all"]').click();
+    const cardLocs = page.locator('.mn-card-perspective[data-testid^="proto-library-card-"]');
+    const libraryCardsCount = await cardLocs.count();
+    assert.equal(libraryCardsCount, 40, `Expected 40 distinct cards in library, got ${libraryCardsCount}`);
+    await page.locator('[data-testid="proto-section-card-library-40"]').scrollIntoViewIfNeeded();
+    // Cuộn từng phần lưới thư viện để kích hoạt lazy-loading cho đủ 40 ảnh và xác minh decode
+    for (const idx of [0, 10, 20, 30, 39]) {
+      await cardLocs.nth(idx).scrollIntoViewIfNeeded();
+      await page.waitForTimeout(100);
+    }
+    await page.waitForFunction(
+      () =>
+        Array.from(document.querySelectorAll('[data-testid="proto-card-library"] img')).every(
+          (im) => im.complete && im.naturalWidth >= 600,
+        ),
+      null,
+      { timeout: 20_000 },
+    );
+    await cardLocs.nth(0).scrollIntoViewIfNeeded();
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: path.join(SHOT_DIR, 'phase2-02-desktop-40-cards-library.png') });
+
+    // Mở Modal phóng lớn + kiểm thử nút Lật 2 Mặt & Đóng
+    await page.locator('[data-testid="proto-library-card-ev-06"] button[aria-label^="Phóng lớn"]').first().click();
+    await page.waitForSelector('[data-testid="bg-card-zoom-modal"]', { timeout: 3000 });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: path.join(SHOT_DIR, 'phase2-04-desktop-card-zoom-modal.png') });
+    await page.locator('[data-testid="bg-card-zoom-flip-btn"]').click();
+    await page.waitForTimeout(350);
+    await page.locator('[data-testid="bg-card-zoom-close-btn"]').click();
+    await page.locator('[data-testid="bg-card-zoom-modal"]').waitFor({ state: 'detached', timeout: 2000 });
+
+    // Phần 7: 6 Địa điểm KTX Tabletop Tiles, Quân cờ đế nổi & Di chuyển mượt + Lật vai P0
+    await page.locator('[data-testid="proto-section-tabletop-6-ktx"]').scrollIntoViewIfNeeded();
+    await page.waitForFunction(
+      () =>
+        Array.from(document.querySelectorAll('[data-testid="proto-tabletop-map"] > div img')).every(
+          (im) => im.complete && im.naturalWidth >= 600,
+        ),
+      null,
+      { timeout: 15_000 },
+    );
+    const hiddenPawnCheck = await page.evaluate(() => {
+      const hidden = Array.from(document.querySelectorAll('[data-testid="proto-tabletop-map"] [data-pawn-revealed="false"]'));
+      return {
+        count: hidden.length,
+        leakedImgs: hidden.filter((el) => el.querySelector('img') !== null).length,
+      };
+    });
+    assert.ok(hiddenPawnCheck.count >= 4, 'Expected at least 4 hidden pawns before reveal');
+    assert.equal(hiddenPawnCheck.leakedImgs, 0, 'Unrevealed pawns MUST NOT render portrait images');
+
+    // Bấm Lật vai -> kiểm tra quân cờ hiện chân dung thật & Di chuyển mượt
+    await page.locator('[data-testid="proto-reveal-pawn-btn"]').click();
+    await page.locator('[data-testid="proto-glide-pawn-btn"]').click();
+    await page.waitForFunction(
+      () => {
+        const shown = Array.from(document.querySelectorAll('[data-testid="proto-tabletop-map"] [data-pawn-revealed="true"] img'));
+        return shown.length >= 4 && shown.every((im) => im.complete && im.naturalWidth >= 600);
+      },
+      null,
+      { timeout: 5000 },
+    );
+    await page.waitForTimeout(580);
+    await page.screenshot({ path: path.join(SHOT_DIR, 'phase2-03-desktop-ktx-tabletop-tiles-pawns.png') });
+
+    const perfAudit = await page.evaluate(() => ({
+      cls: Number((window.__clsTotal || 0).toFixed(4)),
+      webglContexts: window.__webglCreateCount || 0,
+      decodedUniqueAssets: new Set(
+        Array.from(document.querySelectorAll('img'))
+          .filter((im) => im.complete && im.naturalWidth > 0)
+          .map((im) => im.getAttribute('src')),
+      ).size,
+    }));
+    assert.equal(perfAudit.webglContexts, 0, 'Prototype & 2D boardgame VFX must create zero WebGL contexts');
+    assert.ok(perfAudit.cls < 0.05, `Desktop CLS too high: ${perfAudit.cls}`);
+    assert.ok(perfAudit.decodedUniqueAssets >= 56, `Expected >= 56 decoded unique WebP assets, got ${perfAudit.decodedUniqueAssets}`);
+
     await desktopCtx.close();
 
     // -------------------- 2. MOBILE (390x844) --------------------
@@ -330,11 +468,16 @@ async function main() {
     await mPage.waitForTimeout(200);
     await mPage.screenshot({ path: path.join(SHOT_DIR, 'prototype-04-mobile-comparison.png') });
 
-    // Screenshot 5: Mobile 3 thẻ bài mẫu (lọc chế độ "Mới" cho gọn nét)
+    // Screenshot 5: Mobile 3 thẻ bài mẫu (lọc chế độ "Mới" cho gọn nét) + KTX Tabletop Tiles
     await mPage.locator('[data-testid="proto-mobile-view-new"]').click();
     await mPage.locator('[data-testid="proto-action-card-inv-12"]').scrollIntoViewIfNeeded();
     await mPage.waitForTimeout(250);
     await mPage.screenshot({ path: path.join(SHOT_DIR, 'prototype-05-mobile-action-cards.png') });
+
+    await mPage.locator('[data-testid="proto-reveal-pawn-btn"]').click();
+    await mPage.locator('[data-testid="proto-section-tabletop-6-ktx"]').scrollIntoViewIfNeeded();
+    await mPage.waitForTimeout(300);
+    await mPage.screenshot({ path: path.join(SHOT_DIR, 'phase2-05-mobile-ktx-tiles-and-cards.png') });
     await mobileCtx.close();
 
     assert.deepEqual(errors, [], `Unexpected browser errors:\n${errors.join('\n')}`);
@@ -345,7 +488,11 @@ async function main() {
           shotDir: SHOT_DIR,
           desktopOverflow,
           mobileOverflow,
-          imagesChecked: imgAudit.length,
+          eagerImagesCount: eagerImgs.length,
+          lazyImagesCount: lazyImgs.length,
+          rosterCount,
+          libraryCardsCount,
+          perfAudit,
           ratios: ratioAudit.map((r) => ({ id: r.id, size: `${Math.round(r.width)}x${Math.round(r.height)}`, ratio: +r.ratio.toFixed(3) })),
         },
         null,

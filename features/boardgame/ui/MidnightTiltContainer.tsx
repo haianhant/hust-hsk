@@ -6,13 +6,15 @@
 // Shimmer lấy cảm hứng từ Marvel Snap / Legends of Runeterra và lật 3D hai mặt.
 // ---------------------------------------------------------------------------
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface MidnightTiltContainerProps {
   /** `true` để lật sang mặt lưng (back face = rotateY 180deg). */
   flipped?: boolean;
   /** Bật/tắt lớp ánh kim Foil Shimmer. */
   foilEnabled?: boolean;
+  /** Tắt nghiêng 3D khi giảm chuyển động. */
+  reducedMotion?: boolean;
   /** Chuỗi CSS gradient cho khung viền kim loại ngoài cùng. */
   frameGradientCss: string;
   /** Chuỗi CSS gradient cho lớp ánh kim Foil. */
@@ -31,6 +33,7 @@ export interface MidnightTiltContainerProps {
 export function MidnightTiltContainer({
   flipped = false,
   foilEnabled = true,
+  reducedMotion = false,
   frameGradientCss,
   foilGradientCss,
   glowShadowCss,
@@ -43,30 +46,48 @@ export function MidnightTiltContainer({
 }: MidnightTiltContainerProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [tilt, setTilt] = useState({ rx: 0, ry: 0, gx: 50, gy: 32, active: false });
+  const [osReducedMotion, setOsReducedMotion] = useState(false);
 
-  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    const el = rootRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
-    const px = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const py = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    const ry = (px - 0.5) * 20;
-    const rx = (0.5 - py) * 18;
-    setTilt({
-      rx: Number(rx.toFixed(2)),
-      ry: Number(ry.toFixed(2)),
-      gx: Math.round(px * 100),
-      gy: Math.round(py * 100),
-      active: true,
-    });
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setOsReducedMotion(mq.matches);
+    sync();
+    mq.addEventListener?.('change', sync);
+    return () => mq.removeEventListener?.('change', sync);
   }, []);
+
+  const disableTilt = reducedMotion || osReducedMotion;
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (disableTilt) return;
+      const el = rootRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const px = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const py = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+      const ry = (px - 0.5) * 20;
+      const rx = (0.5 - py) * 18;
+      setTilt({
+        rx: Number(rx.toFixed(2)),
+        ry: Number(ry.toFixed(2)),
+        gx: Math.round(px * 100),
+        gy: Math.round(py * 100),
+        active: true,
+      });
+    },
+    [disableTilt],
+  );
 
   const handlePointerLeave = useCallback(() => {
     setTilt({ rx: 0, ry: 0, gx: 50, gy: 32, active: false });
   }, []);
 
-  const stageTransform = `rotateX(${tilt.rx}deg) rotateY(${tilt.ry + (flipped ? 180 : 0)}deg) scale(${tilt.active ? 1.02 : 1})`;
+  const stageTransform = disableTilt
+    ? `rotateY(${flipped ? 180 : 0}deg)`
+    : `rotateX(${tilt.rx}deg) rotateY(${tilt.ry + (flipped ? 180 : 0)}deg) scale(${tilt.active ? 1.02 : 1})`;
 
   return (
     <div

@@ -20,6 +20,7 @@ import type {
   BoardGamePrivateGameView,
   BoardGamePublicGameView,
 } from '@/shared/contracts/boardgame';
+import { MIDNIGHT_CARD_ART, type ActionCardZone } from './midnight-noir-tokens';
 import { resolveActionTargets } from './target-selection';
 
 export interface ActionPanelProps {
@@ -32,6 +33,7 @@ export interface ActionPanelProps {
   onAction: (action: BoardGameActionPayload) => void;
   handMaskLocked: boolean;
   onToggleHandMask: () => void;
+  onZoomCard?: (cardId: string, zone: ActionCardZone) => void;
 }
 
 export function ActionPanel({
@@ -44,6 +46,7 @@ export function ActionPanel({
   onAction,
   handMaskLocked,
   onToggleHandMask,
+  onZoomCard,
 }: ActionPanelProps) {
   const [confirmingReveal, setConfirmingReveal] = useState(false);
   const [healTargetId, setHealTargetId] = useState<string | null>(null);
@@ -395,6 +398,9 @@ export function ActionPanel({
               (isOtherSinglePlayer && !validOtherTarget) ||
               (isBlessing && !validOtherTarget);
 
+            const handArtSrc = MIDNIGHT_CARD_ART[card.id] ?? null;
+            const zoomZone: ActionCardZone = isInv ? 'private-investigation' : 'event-resolved';
+
             return (
               <div
                 key={`${card.id}-${idx}`}
@@ -406,11 +412,35 @@ export function ActionPanel({
                       : 'border-rose-500/45 bg-rose-950/35'
                 }`}
               >
-                <div>
-                  <p className="text-xs sm:text-sm font-black text-white">{card.title}</p>
-                  <p className="text-xs text-slate-200 mt-0.5 leading-snug" title={card.summary}>
-                    {card.summary}
-                  </p>
+                <div className="flex items-start gap-2.5">
+                  {handArtSrc && (
+                    <div className="shrink-0 space-y-1">
+                      <img
+                        src={handArtSrc}
+                        alt={card.title}
+                        width={600}
+                        height={900}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-[72px] w-12 rounded-lg border border-white/20 object-cover shadow"
+                      />
+                      {onZoomCard && (
+                        <button
+                          type="button"
+                          onClick={() => onZoomCard(card.id, zoomZone)}
+                          className="block w-full rounded bg-slate-900/90 border border-white/15 py-0.5 text-[10px] font-bold text-slate-200 hover:border-amber-300/70 hover:text-amber-200 cursor-pointer"
+                        >
+                          🔍 Soi
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-black text-white">{card.title}</p>
+                    <p className="text-xs text-slate-200 mt-0.5 leading-snug" title={card.summary}>
+                      {card.summary}
+                    </p>
+                  </div>
                 </div>
 
                 {isFirstAid && (
