@@ -527,6 +527,50 @@ export function DiceD4Svg({ value, size = 44 }: { value: number; size?: number }
   );
 }
 
+const GENERIC_PAWN_PREFIXES = new Set(['SINH', 'VIEN', 'SV', 'BAN', 'NGUOI', 'CHOI']);
+
+function toAsciiUpper(raw: string): string {
+  return raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'D')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+/**
+ * Derives a distinct 2-character badge from a Vietnamese/campus player display name
+ * (ignoring generic prefixes like "Sinh viên" or trailing cohort tags like "K67").
+ */
+function derivePawnLabel(displayName: string, seatIndex: number): string {
+  const rawParts = displayName.trim().split(/[\s_-]+/).filter(Boolean);
+  if (rawParts.length === 0) return `P${seatIndex + 1}`;
+
+  if (rawParts.length >= 2 && /^\d+$/.test(rawParts[rawParts.length - 1])) {
+    const firstChar = toAsciiUpper(rawParts[0]).slice(0, 1) || 'P';
+    return `${firstChar}${rawParts[rawParts.length - 1].slice(-1)}`;
+  }
+
+  let parts = [...rawParts];
+  while (parts.length > 1 && GENERIC_PAWN_PREFIXES.has(toAsciiUpper(parts[0]))) {
+    parts = parts.slice(1);
+  }
+  while (parts.length > 1 && /^(K\d{1,3}|\d+P|HUST|BKHN|BK)$/.test(toAsciiUpper(parts[parts.length - 1]))) {
+    parts = parts.slice(0, -1);
+  }
+
+  const lastAscii = toAsciiUpper(parts[parts.length - 1]);
+  if (/^[A-Z]\d$/.test(lastAscii)) {
+    return lastAscii;
+  }
+  if (parts.length >= 2) {
+    const prevAscii = toAsciiUpper(parts[parts.length - 2]);
+    const combined = `${prevAscii.slice(0, 1)}${lastAscii.slice(0, 1)}`;
+    if (combined.length > 0) return combined;
+  }
+  return lastAscii.slice(0, 2) || `P${seatIndex + 1}`;
+}
+
 export function PlayerPawnToken({
   displayName,
   seatIndex,
@@ -535,6 +579,7 @@ export function PlayerPawnToken({
   isSelf,
   revealedFaction,
   compact = false,
+  size,
 }: {
   displayName: string;
   seatIndex: number;
@@ -543,10 +588,21 @@ export function PlayerPawnToken({
   isSelf: boolean;
   revealedFaction: BoardGameFactionId | null;
   compact?: boolean;
+  size?: 'xs' | 'sm' | 'md';
 }) {
   const ringHex = SEAT_RING_PALETTE[seatIndex % SEAT_RING_PALETTE.length];
-  const initial = displayName.trim().slice(0, 2).toUpperCase() || `P${seatIndex + 1}`;
-  const sizeClass = compact ? 'w-7 h-7 text-[11px]' : 'w-9 h-9 text-xs';
+  const initial = derivePawnLabel(displayName, seatIndex);
+  const resolvedSize = size ?? (compact ? 'sm' : 'md');
+  const sizeClass =
+    resolvedSize === 'xs'
+      ? 'w-6 h-6 text-[10px]'
+      : resolvedSize === 'sm'
+        ? 'w-7 h-7 text-[11px]'
+        : 'w-9 h-9 text-xs';
+  const dotClass =
+    resolvedSize === 'xs'
+      ? 'w-2.5 h-2.5 -bottom-0.5 -right-0.5 border'
+      : 'w-3.5 h-3.5 -bottom-1 -right-1 border-2';
   const factionBg =
     revealedFaction === 'lantern-guard'
       ? 'bg-emerald-700'
@@ -566,7 +622,7 @@ export function PlayerPawnToken({
     >
       <span>{alive ? initial : '✕'}</span>
       {isSelf && (
-        <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-cyan-400 border-2 border-slate-950" />
+        <span className={`absolute ${dotClass} rounded-full bg-cyan-400 border-slate-950`} />
       )}
     </div>
   );

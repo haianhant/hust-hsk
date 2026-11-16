@@ -20,6 +20,7 @@ import {
   type BoardGamePublicGameView,
 } from '../network/contracts';
 import { FACTION_LABELS } from '../domain/roles';
+import { getLocationDefinition } from '../domain/rules';
 import {
   BOARD_CLUSTERS_ORDER,
   DeckCardBackSvg,
@@ -113,6 +114,7 @@ export function GameBoard({
   const [localError, setLocalError] = useState<string | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [localMuted, setLocalMuted] = useState(() => isBoardGameSoundMuted());
+  const [dicePulse, setDicePulse] = useState(false);
 
   const prevTurnRef = useRef<number>(publicGame.turnNumber);
   const prevActiveRef = useRef<string | null>(publicGame.activePlayerId);
@@ -120,6 +122,7 @@ export function GameBoard({
   const prevWinnerRef = useRef<string | null>(publicGame.winnerLabel);
   const prevLogLenRef = useRef<number>(publicGame.publicLog.length);
   const prevEmoteCountRef = useRef<number>(recentEmotes.length);
+  const prevDiceSigRef = useRef<string | null>(null);
 
   const effectiveMuted = propMuted ?? localMuted;
 
@@ -177,6 +180,17 @@ export function GameBoard({
     }
   }, [recentEmotes.length]);
 
+  useEffect(() => {
+    const roll = publicGame.lastDiceRoll;
+    if (!roll) return;
+    const sig = `${publicGame.turnNumber}-${roll.kind}-${roll.playerId}-${roll.d6}-${roll.d4}`;
+    if (sig === prevDiceSigRef.current) return;
+    prevDiceSigRef.current = sig;
+    setDicePulse(true);
+    const id = window.setTimeout(() => setDicePulse(false), 380);
+    return () => window.clearTimeout(id);
+  }, [publicGame.lastDiceRoll, publicGame.turnNumber]);
+
   const selfPlayer = useMemo(
     () => publicGame.players.find((p) => p.playerId === selfPlayerId) ?? null,
     [publicGame.players, selfPlayerId],
@@ -191,6 +205,42 @@ export function GameBoard({
     !publicGame.winnerLabel &&
     publicGame.turnPhase !== 'ENDED' &&
     publicGame.activePlayerId === selfPlayerId;
+
+  const currentSelfLocDef = selfPlayer ? getLocationDefinition(selfPlayer.location) : null;
+  const canRollOnBoard = isMyTurn && publicGame.turnPhase === 'ROLL_MOVE' && !actionBusy;
+  const canDrawDeckOnBoard = (deckId: 'investigation' | 'equipment' | 'event') =>
+    isMyTurn &&
+    publicGame.turnPhase === 'LOCATION_ACTION' &&
+    !actionBusy &&
+    Boolean(
+      currentSelfLocDef &&
+        (currentSelfLocDef.deckHint === deckId || currentSelfLocDef.deckHint === 'any'),
+    );
+
+  const attackableIdsOnBoard = useMemo(() => {
+    const ids = new Set<string>();
+    if (!isMyTurn || !selfPlayer || publicGame.turnPhase !== 'MAIN_ACTION') return ids;
+    const selfCluster = LOCATION_VISUAL_META[selfPlayer.location].clusterId;
+    const aliveOthers = publicGame.players.filter(
+      (p) => p.alive && p.playerId !== selfPlayerId,
+    );
+    const hasLongCable = selfPlayer.equipped.some((eq) => eq.id === 'ev-04');
+    if (hasLongCable) {
+      const remote = aliveOthers.filter(
+        (p) => LOCATION_VISUAL_META[p.location].clusterId !== selfCluster,
+      );
+      for (const p of remote.length > 0 ? remote : aliveOthers) {
+        ids.add(p.playerId);
+      }
+      return ids;
+    }
+    for (const p of aliveOthers) {
+      if (LOCATION_VISUAL_META[p.location].clusterId === selfCluster) {
+        ids.add(p.playerId);
+      }
+    }
+    return ids;
+  }, [isMyTurn, selfPlayer, selfPlayerId, publicGame.players, publicGame.turnPhase]);
 
   const playersByWoundNotch = useMemo(() => {
     const buckets: typeof publicGame.players[number][][] = Array.from(
@@ -242,7 +292,7 @@ export function GameBoard({
       {/* THANH HEADER TINH GỌN */}
       <header
         data-testid="bg-v3-status-bar"
-        className="shrink-0 border-b border-slate-800 bg-slate-900/95 px-3 sm:px-5 py-2.5"
+        className="shrink-0 border-b border-slate-800 bg-slate-900/95 px-3 sm:px-5 py-1.5"
       >
         <div className="mx-auto max-w-[1680px] flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
@@ -365,7 +415,7 @@ export function GameBoard({
         publicGame.lastInvestigation ||
         publicGame.lastRevealEvent ||
         latestEmote) && (
-        <div className="shrink-0 bg-slate-950/90 border-b border-slate-800/80 px-3 sm:px-5 py-2">
+        <div className="shrink-0 bg-slate-950/90 border-b border-slate-800/80 px-3 sm:px-5 py-1.5">
           <div className="mx-auto max-w-[1680px] flex flex-wrap items-center gap-2">
             {displayedError && (
               <div className="rounded-xl bg-rose-950/80 border border-rose-500/60 px-3 py-1.5 text-xs sm:text-sm font-bold text-rose-100">
@@ -404,381 +454,512 @@ export function GameBoard({
         </div>
       )}
 
-      {/* NỘI DUNG CHÍNH: BÀN CỜ RỘNG LỚN + NGĂN PHỤ THU GỌN */}
-      <main className="flex-1 overflow-y-auto px-3 sm:px-5 py-4">
-        <div className="mx-auto max-w-[1680px] flex flex-col lg:flex-row gap-4 items-start">
-          {/* CỘT CHÍNH: THANG THƯƠNG TÍCH + 3 CỤM KHU VỰC + XÚC XẮC + NGƯỜI CHƠI + BẢNG HÀNH ĐỘNG */}
+      {/* NỘI DUNG CHÍNH: BÀN CỜ CUỘN ĐỘC LẬP + THANH HÀNH ĐỘNG NEO ĐÁY + NGĂN PHỤ ĐỘC LẬP */}
+      <main className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden px-2.5 sm:px-4 py-2">
+        <div className="mx-auto max-w-[1680px] lg:h-full flex flex-col lg:flex-row gap-3 items-stretch">
+          {/* CỘT CHÍNH: PHẦN BÀN CỜ TRÊN + THANH HÀNH ĐỘNG NEO ĐÁY */}
           <div
-            className={`w-full min-w-0 flex-1 space-y-4 ${
-              mobileTab !== 'board' ? 'hidden lg:block' : 'block'
+            className={`w-full min-w-0 flex-1 flex flex-col gap-2 lg:h-full lg:min-h-0 ${
+              mobileTab !== 'board' ? 'hidden lg:flex' : 'flex'
             }`}
           >
-            {/* 1. THANG THƯƠNG TÍCH CÔNG KHAI 0..14 (Damage Track) */}
-            <section
-              data-testid="bg-damage-track"
-              className="rounded-2xl border border-slate-700/80 bg-slate-900/90 p-3 sm:p-4 space-y-2.5"
+            <div
+              data-testid="bg-board-scroll-area"
+              className="flex-1 min-h-0 lg:overflow-y-auto lg:pr-1 space-y-2.5"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-slate-200">
-                  🩸 Thang Thương Tích Công Khai (0 → 14)
-                </h2>
-                <span className="text-xs text-slate-400">
-                  Máu tối đa (9–14 HP) được giữ bí mật cho tới khi người chơi lật vai
-                </span>
-              </div>
-              <div className="grid grid-cols-5 sm:grid-cols-8 xl:grid-cols-[repeat(15,minmax(0,1fr))] gap-1.5">
-                {WOUND_NOTCHES.map((notch) => {
-                  const occupants = playersByWoundNotch[notch];
-                  const tone =
-                    notch === 0
-                      ? 'border-emerald-500/40 bg-emerald-950/35 text-emerald-200'
-                      : notch <= 6
-                        ? 'border-slate-700 bg-slate-950/80 text-slate-200'
-                        : notch <= 10
-                          ? 'border-amber-500/45 bg-amber-950/35 text-amber-200'
-                          : 'border-rose-500/55 bg-rose-950/45 text-rose-200';
-                  return (
-                    <div
-                      key={notch}
-                      className={`min-h-[54px] rounded-xl border p-1.5 flex flex-col items-center justify-between gap-1 ${tone}`}
-                    >
-                      <span className="text-xs font-black leading-none">
-                        {notch === 14 ? '14 💀' : notch}
-                      </span>
-                      <div className="flex flex-wrap items-center justify-center gap-0.5">
-                        {occupants.map((p) => (
-                          <PlayerPawnToken
-                            key={p.playerId}
-                            compact
-                            displayName={p.displayName}
-                            seatIndex={p.seatIndex}
-                            alive={p.alive}
-                            isActive={p.playerId === publicGame.activePlayerId}
-                            isSelf={p.playerId === selfPlayerId}
-                            revealedFaction={p.revealedFaction}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI (6 Ô ĐÁNH SỐ XÚC XẮC) */}
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-              {BOARD_CLUSTERS_ORDER.map((cluster) => (
-                <div
-                  key={cluster.clusterId}
-                  className={`rounded-2xl border p-3 sm:p-3.5 space-y-3 ${cluster.ringClass}`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`px-3 py-1 rounded-full border text-xs font-black whitespace-nowrap shrink-0 ${cluster.badgeClass}`}>
-                      {cluster.title}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-300">
-                      Đánh chung cụm
-                    </span>
-                  </div>
-
-                  <div className="space-y-3">
-                    {cluster.locations.map((locId) => {
-                      const meta = LOCATION_VISUAL_META[locId];
-                      const occupants = publicGame.players.filter(
-                        (p) => p.location === locId,
-                      );
-                      const isSelfHere = selfPlayer?.location === locId;
-                      const canChooseMoveHere =
-                        isMyTurn &&
-                        publicGame.turnPhase === 'CHOOSE_MOVE' &&
-                        !isSelfHere;
-                      const rolledDestinationHere =
-                        publicGame.lastDiceRoll?.kind === 'move' &&
-                        publicGame.lastDiceRoll.resolvedLocation === locId;
-
-                      return (
-                        <div
-                          key={locId}
-                          data-testid={`bg-loc-${locId}`}
-                          onClick={
-                            canChooseMoveHere
-                              ? () => dispatchAction({ type: 'CHOOSE_DEST', location: locId })
-                              : undefined
-                          }
-                          role={canChooseMoveHere ? 'button' : undefined}
-                          tabIndex={canChooseMoveHere ? 0 : undefined}
-                          onKeyDown={
-                            canChooseMoveHere
-                              ? (e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    dispatchAction({ type: 'CHOOSE_DEST', location: locId });
-                                  }
-                                }
-                              : undefined
-                          }
-                          className={`rounded-2xl border p-3.5 bg-gradient-to-br ${meta.bgGradient} transition ${
-                            canChooseMoveHere
-                              ? 'border-amber-400 ring-2 ring-amber-400/60 hover:scale-[1.01] cursor-pointer'
-                              : isSelfHere
-                                ? 'border-cyan-400 shadow-[0_0_24px_rgba(34,211,238,0.2)]'
-                                : rolledDestinationHere
-                                  ? 'border-emerald-400/80'
-                                  : 'border-white/15'
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <LocationSceneSvg location={locId} size={50} />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <span
-                                  style={{ backgroundColor: meta.accentHex }}
-                                  className="px-2.5 py-0.5 rounded-lg text-slate-950 text-xs font-black whitespace-nowrap shrink-0 shadow"
-                                >
-                                  Ô {meta.diceLabel}
-                                </span>
-                                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-white/10 text-slate-200 whitespace-nowrap truncate">
-                                  {meta.badgeText}
-                                </span>
-                              </div>
-                              <h3 className="text-base font-black text-white mt-1.5 leading-tight">
-                                {meta.name}
-                              </h3>
-                              <p className="text-xs sm:text-sm text-slate-300 mt-0.5 leading-snug">
-                                {meta.actionDesc}
-                              </p>
-                            </div>
-                          </div>
-
-                          {canChooseMoveHere && (
-                            <div className="mt-2.5 px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 text-xs font-black text-center">
-                              👆 Bấm để di chuyển tới đây
-                            </div>
-                          )}
-
-                          {/* Quân cờ sinh viên đang đứng ở khu vực này */}
-                          <div className="mt-3 pt-2.5 border-t border-white/10 min-h-[42px] flex flex-wrap items-center gap-2">
-                            {occupants.length === 0 ? (
-                              <span className="text-xs text-slate-400 italic">
-                                Trống người
-                              </span>
-                            ) : (
-                              occupants.map((p) => (
-                                <button
-                                  key={p.playerId}
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (p.playerId !== selfPlayerId) {
-                                      setSelectedTargetId(p.playerId);
-                                    }
-                                  }}
-                                  className={`flex items-center gap-1.5 rounded-full pr-2.5 pl-1 py-0.5 border text-xs font-bold transition cursor-pointer ${
-                                    selectedTargetId === p.playerId
-                                      ? 'bg-rose-600/80 border-rose-300 text-white'
-                                      : 'bg-slate-900/90 border-white/15 text-slate-100 hover:border-cyan-400/60'
-                                  }`}
-                                >
-                                  <PlayerPawnToken
-                                    compact
-                                    displayName={p.displayName}
-                                    seatIndex={p.seatIndex}
-                                    alive={p.alive}
-                                    isActive={p.playerId === publicGame.activePlayerId}
-                                    isSelf={p.playerId === selfPlayerId}
-                                    revealedFaction={p.revealedFaction}
-                                  />
-                                  <span className={!p.alive ? 'line-through text-slate-400' : ''}>
-                                    {p.displayName}
-                                  </span>
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+              {/* 1. THANG THƯƠNG TÍCH CÔNG KHAI GỌN 0..14 (Damage Track) */}
+              <section
+                data-testid="bg-damage-track"
+                className="rounded-2xl border border-slate-700/80 bg-slate-900/90 px-3 py-2 space-y-1.5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-[11px] sm:text-xs font-extrabold uppercase tracking-wider text-slate-200">
+                    🩸 Thang Thương Tích Công Khai (0 → 14)
+                  </h2>
+                  <span className="text-[11px] text-slate-400">
+                    Máu tối đa (9–14) giữ bí mật tới khi lật vai · 🎯 Mốc của bạn · 💀 Ngưỡng gục đã lộ
+                  </span>
                 </div>
-              ))}
-            </section>
+                <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-[minmax(92px,2fr)_repeat(14,minmax(0,1fr))] gap-1">
+                  {WOUND_NOTCHES.map((notch) => {
+                    const occupants = playersByWoundNotch[notch];
+                    const isSelfMaxNotch = Boolean(
+                      privateView &&
+                        (roleCardVisible || privateView.revealed) &&
+                        privateView.maxHp === notch,
+                    );
+                    const revealedAtNotch = publicGame.players.filter(
+                      (p) => p.revealedMaxHp === notch,
+                    );
+                    const tone = isSelfMaxNotch
+                      ? 'border-cyan-400/75 bg-cyan-950/35 text-cyan-100'
+                      : notch === 0
+                        ? 'border-emerald-500/40 bg-emerald-950/35 text-emerald-200'
+                        : notch <= 6
+                          ? 'border-slate-700 bg-slate-950/80 text-slate-200'
+                          : notch <= 10
+                            ? 'border-amber-500/45 bg-amber-950/35 text-amber-200'
+                            : 'border-rose-500/55 bg-rose-950/45 text-rose-200';
+                    const cellTitle = [
+                      `Mốc ${notch} vết thương`,
+                      isSelfMaxNotch ? 'Ngưỡng gục của bạn' : null,
+                      revealedAtNotch.length > 0
+                        ? `Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ');
 
-            {/* 3. KHAY XÚC XẮC 1d6+1d4 & 3 CHỒNG BÀI */}
-            <section
-              data-testid="bg-dice-tray"
-              className="rounded-2xl border border-slate-700/80 bg-slate-900/90 p-3.5 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-            >
-              {/* Kết quả xúc xắc gần nhất */}
-              <div className="flex items-center gap-3.5 flex-wrap">
-                {publicGame.lastDiceRoll ? (
-                  <>
-                    <div className="flex items-center gap-2">
-                      {publicGame.lastDiceRoll.d6 > 0 && (
-                        <DiceD6Svg value={publicGame.lastDiceRoll.d6} size={44} />
-                      )}
-                      <DiceD4Svg value={publicGame.lastDiceRoll.d4} size={44} />
-                    </div>
-                    <div>
-                      <p className="text-sm sm:text-base font-black text-white">
-                        {publicGame.lastDiceRoll.kind === 'move'
-                          ? `${publicGame.lastDiceRoll.displayName} tung ${publicGame.lastDiceRoll.d6} + ${publicGame.lastDiceRoll.d4} = ${publicGame.lastDiceRoll.total}`
-                          : `${publicGame.lastDiceRoll.displayName} tung đòn đánh (${
-                              publicGame.lastDiceRoll.d6 > 0
-                                ? `|${publicGame.lastDiceRoll.d6} - ${publicGame.lastDiceRoll.d4}|`
-                                : `1d4=${publicGame.lastDiceRoll.d4}`
-                            } → gây ${publicGame.lastDiceRoll.damageDealt ?? 0} sát thương)`}
-                      </p>
-                      <p className="text-xs sm:text-sm text-cyan-200 font-semibold">
-                        {publicGame.lastDiceRoll.rerollRequired
-                          ? '🔁 Trùng khu vực hiện tại — được quyền ĐỔ LẠI!'
-                          : publicGame.lastDiceRoll.freeChoice
-                            ? '✨ Tổng 7! Tự do chọn khu vực bất kỳ.'
-                            : publicGame.lastDiceRoll.resolvedLocation
-                              ? `Điểm đến: ${LOCATION_VISUAL_META[publicGame.lastDiceRoll.resolvedLocation].name}`
-                              : 'Sẵn sàng tung xúc xắc tiếp theo.'}
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <DiceD6Svg value={6} size={42} />
-                    <DiceD4Svg value={4} size={42} />
-                    <div>
-                      <p className="text-sm sm:text-base font-black text-white">
-                        Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)
-                      </p>
-                      <p className="text-xs sm:text-sm text-slate-300">
-                        Mỗi lượt tung xúc xắc để di chuyển · Tổng 7 chọn bất kỳ · Trùng chỗ được đổ lại
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+                    return (
+                      <div
+                        key={notch}
+                        title={cellTitle}
+                        className={`min-h-[42px] rounded-lg border px-1 py-0.5 flex flex-col items-center justify-between gap-0.5 ${tone}`}
+                      >
+                        <span className="text-[11px] font-black leading-none flex items-center gap-0.5">
+                          <span>{notch === 14 ? '14 💀' : notch}</span>
+                          {isSelfMaxNotch && <span title="Mốc tử trận của bạn">🎯</span>}
+                          {!isSelfMaxNotch && revealedAtNotch.length > 0 && notch !== 14 && (
+                            <span title={`Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`}>
+                              💀
+                            </span>
+                          )}
+                        </span>
+                        <div className="flex flex-wrap items-center justify-center -space-x-1.5 gap-y-0.5">
+                          {occupants.map((p) => (
+                            <PlayerPawnToken
+                              key={p.playerId}
+                              size="xs"
+                              displayName={p.displayName}
+                              seatIndex={p.seatIndex}
+                              alive={p.alive}
+                              isActive={p.playerId === publicGame.activePlayerId}
+                              isSelf={p.playerId === selfPlayerId}
+                              revealedFaction={p.revealedFaction}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
 
-              {/* 3 Chồng bài */}
-              <div className="grid grid-cols-3 gap-2.5 shrink-0">
-                {(
-                  [
-                    ['investigation', 'Khám Phá', 'text-emerald-300'],
-                    ['equipment', 'Cung Ứng', 'text-sky-300'],
-                    ['event', 'Đột Kích', 'text-rose-300'],
-                  ] as const
-                ).map(([deckId, label, cls]) => (
+              {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI (6 Ô ĐÁNH SỐ XÚC XẮC) */}
+              <section className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                {BOARD_CLUSTERS_ORDER.map((cluster) => (
                   <div
-                    key={deckId}
-                    className="rounded-xl border border-slate-700 bg-slate-950/85 px-2.5 py-2 flex items-center gap-2"
+                    key={cluster.clusterId}
+                    className={`rounded-2xl border p-2.5 space-y-2 ${cluster.ringClass}`}
                   >
-                    <DeckCardBackSvg deck={deckId} size={32} />
-                    <div>
-                      <p className={`text-xs font-extrabold ${cls}`}>{label}</p>
-                      <p className="text-sm font-black text-white">
-                        {publicGame.deckCounts[deckId]} lá
-                      </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full border text-[11px] font-black whitespace-nowrap shrink-0 ${cluster.badgeClass}`}
+                      >
+                        {cluster.title}
+                      </span>
+                      <span className="text-[11px] font-semibold text-slate-300">
+                        Đánh chung cụm
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {cluster.locations.map((locId) => {
+                        const meta = LOCATION_VISUAL_META[locId];
+                        const occupants = publicGame.players.filter(
+                          (p) => p.location === locId,
+                        );
+                        const isSelfHere = selfPlayer?.location === locId;
+                        const canChooseMoveHere =
+                          isMyTurn &&
+                          publicGame.turnPhase === 'CHOOSE_MOVE' &&
+                          !isSelfHere;
+                        const rolledDestinationHere =
+                          publicGame.lastDiceRoll?.kind === 'move' &&
+                          publicGame.lastDiceRoll.resolvedLocation === locId;
+
+                        return (
+                          <div
+                            key={locId}
+                            data-testid={`bg-loc-${locId}`}
+                            onClick={
+                              canChooseMoveHere
+                                ? () => dispatchAction({ type: 'CHOOSE_DEST', location: locId })
+                                : undefined
+                            }
+                            role={canChooseMoveHere ? 'button' : undefined}
+                            tabIndex={canChooseMoveHere ? 0 : undefined}
+                            onKeyDown={
+                              canChooseMoveHere
+                                ? (e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      dispatchAction({ type: 'CHOOSE_DEST', location: locId });
+                                    }
+                                  }
+                                : undefined
+                            }
+                            className={`rounded-xl border p-2.5 bg-gradient-to-br ${meta.bgGradient} transition ${
+                              canChooseMoveHere
+                                ? 'border-amber-400 ring-2 ring-amber-400/60 hover:scale-[1.01] cursor-pointer'
+                                : isSelfHere
+                                  ? 'border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.22)]'
+                                  : rolledDestinationHere
+                                    ? 'border-emerald-400/80'
+                                    : 'border-white/15'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <LocationSceneSvg location={locId} size={42} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span
+                                      style={{ backgroundColor: meta.accentHex }}
+                                      className="px-2 py-0.5 rounded-md text-slate-950 text-[11px] font-black whitespace-nowrap shrink-0 shadow"
+                                    >
+                                      Ô {meta.diceLabel}
+                                    </span>
+                                    {isSelfHere && (
+                                      <span className="px-2 py-0.5 rounded-md bg-cyan-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
+                                        📍 Bạn ở đây
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-white/10 text-slate-200 whitespace-nowrap truncate">
+                                    {meta.badgeText}
+                                  </span>
+                                </div>
+                                <h3 className="text-sm sm:text-[15px] font-black text-white mt-1 leading-tight">
+                                  {meta.name}
+                                </h3>
+                                <p className="text-xs text-slate-300 mt-0.5 leading-snug">
+                                  {meta.actionDesc}
+                                </p>
+                              </div>
+                            </div>
+
+                            {canChooseMoveHere && (
+                              <div className="mt-2 px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-black text-center">
+                                👆 Bấm để di chuyển tới đây
+                              </div>
+                            )}
+
+                            {/* Quân cờ sinh viên đang đứng ở khu vực này */}
+                            <div className="mt-2 pt-1.5 border-t border-white/10 min-h-[30px] flex flex-wrap items-center gap-1.5">
+                              {occupants.length === 0 ? (
+                                <span className="text-[11px] text-slate-400 italic">
+                                  Trống người
+                                </span>
+                              ) : (
+                                occupants.map((p) => {
+                                  const inAttackRange = attackableIdsOnBoard.has(p.playerId);
+                                  const isSelectedTarget = selectedTargetId === p.playerId;
+                                  return (
+                                    <button
+                                      key={p.playerId}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (p.playerId !== selfPlayerId) {
+                                          setSelectedTargetId(p.playerId);
+                                        }
+                                      }}
+                                      className={`flex items-center gap-1.5 rounded-full pr-2 pl-0.5 py-0.5 border text-xs font-bold transition cursor-pointer ${
+                                        isSelectedTarget
+                                          ? 'bg-rose-600/85 border-rose-300 text-white'
+                                          : inAttackRange
+                                            ? 'bg-rose-950/60 border-rose-400/65 text-rose-100 hover:border-rose-300'
+                                            : 'bg-slate-900/90 border-white/15 text-slate-100 hover:border-cyan-400/60'
+                                      }`}
+                                    >
+                                      <PlayerPawnToken
+                                        size="xs"
+                                        displayName={p.displayName}
+                                        seatIndex={p.seatIndex}
+                                        alive={p.alive}
+                                        isActive={p.playerId === publicGame.activePlayerId}
+                                        isSelf={p.playerId === selfPlayerId}
+                                        revealedFaction={p.revealedFaction}
+                                      />
+                                      <span className={!p.alive ? 'line-through text-slate-400' : ''}>
+                                        {p.displayName}
+                                      </span>
+                                      {inAttackRange && (
+                                        <span className="text-[10px] text-amber-200" title="Trong tầm đánh">
+                                          ⚔️
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
-              </div>
-            </section>
+              </section>
 
-            {/* 4. DẢI NGƯỜI CHƠI TINH GỌN */}
-            <section className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {publicGame.players.map((p) => {
-                const selected = selectedTargetId === p.playerId;
-                const isTurnHolder = p.playerId === publicGame.activePlayerId;
-                const factionTheme = p.revealedFaction ? FACTION_THEME[p.revealedFaction] : null;
-                const locMeta = LOCATION_VISUAL_META[p.location];
-                return (
-                  <button
-                    key={p.playerId}
-                    type="button"
-                    onClick={() => {
-                      if (p.playerId !== selfPlayerId) {
-                        setSelectedTargetId(p.playerId);
-                      }
-                    }}
-                    className={`rounded-2xl border p-2.5 text-left transition cursor-pointer ${
-                      !p.alive
-                        ? 'opacity-55 border-slate-800 bg-slate-950/60'
-                        : selected
-                          ? 'border-rose-400 bg-rose-950/40 ring-2 ring-rose-400/50'
-                          : isTurnHolder
-                            ? 'border-amber-400 bg-slate-900'
-                            : 'border-slate-700/80 bg-slate-900/80 hover:border-cyan-400/50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <PlayerPawnToken
-                        compact
-                        displayName={p.displayName}
-                        seatIndex={p.seatIndex}
-                        alive={p.alive}
-                        isActive={isTurnHolder}
-                        isSelf={p.playerId === selfPlayerId}
-                        revealedFaction={p.revealedFaction}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-black text-white truncate">
-                          {p.displayName}
+              {/* 3. KHAY XÚC XẮC TƯƠNG TÁC (1d6+1d4) & 3 CHỒNG BÀI BẤM RÚT TRỰC TIẾP */}
+              <section
+                data-testid="bg-dice-tray"
+                className="rounded-2xl border border-slate-700/80 bg-slate-900/90 px-3 py-2 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5"
+              >
+                {(() => {
+                  const diceAnimateCls = dicePulse
+                    ? 'scale-110 -rotate-6 transition-transform duration-200'
+                    : 'transition-transform duration-200';
+                  const rerollNeeded =
+                    canRollOnBoard &&
+                    Boolean(
+                      publicGame.lastDiceRoll?.rerollRequired &&
+                        publicGame.lastDiceRoll.playerId === selfPlayerId,
+                    );
+                  const diceSummary = publicGame.lastDiceRoll ? (
+                    <>
+                      <div className={`flex items-center gap-1.5 shrink-0 ${diceAnimateCls}`}>
+                        {publicGame.lastDiceRoll.d6 > 0 && (
+                          <DiceD6Svg value={publicGame.lastDiceRoll.d6} size={36} />
+                        )}
+                        <DiceD4Svg value={publicGame.lastDiceRoll.d4} size={36} />
+                      </div>
+                      <div className="min-w-0 flex-1 text-left">
+                        <p className="text-xs sm:text-sm font-black text-white truncate">
+                          {publicGame.lastDiceRoll.kind === 'move'
+                            ? `${publicGame.lastDiceRoll.displayName} tung ${publicGame.lastDiceRoll.d6} + ${publicGame.lastDiceRoll.d4} = ${publicGame.lastDiceRoll.total}`
+                            : `${publicGame.lastDiceRoll.displayName} tung đòn đánh (${
+                                publicGame.lastDiceRoll.d6 > 0
+                                  ? `|${publicGame.lastDiceRoll.d6} - ${publicGame.lastDiceRoll.d4}|`
+                                  : `1d4=${publicGame.lastDiceRoll.d4}`
+                              } → gây ${publicGame.lastDiceRoll.damageDealt ?? 0} sát thương)`}
                         </p>
-                        <p className={`text-xs font-bold truncate ${factionTheme ? factionTheme.textClass : 'text-slate-400'}`}>
-                          {p.revealedRoleId
-                            ? `${FACTION_LABELS[p.revealedFaction!]} · Max ${p.revealedMaxHp}`
-                            : 'Vai ẩn danh'}
+                        <p className="text-[11px] sm:text-xs text-cyan-200 font-semibold truncate">
+                          {publicGame.lastDiceRoll.rerollRequired
+                            ? '🔁 Trùng khu vực hiện tại — được quyền ĐỔ LẠI!'
+                            : publicGame.lastDiceRoll.freeChoice
+                              ? '✨ Tổng 7! Tự do chọn khu vực bất kỳ.'
+                              : publicGame.lastDiceRoll.resolvedLocation
+                                ? `Điểm đến: ${LOCATION_VISUAL_META[publicGame.lastDiceRoll.resolvedLocation].name}`
+                                : 'Sẵn sàng tung xúc xắc tiếp theo.'}
                         </p>
                       </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs font-bold">
-                      <span className="px-2 py-0.5 rounded bg-slate-800 text-rose-200">
-                        🩸 {p.woundsTaken} vết
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-slate-800 text-cyan-200">
-                        Ô {locMeta.diceLabel}
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-200">
-                        🃏 {p.handCount}
-                      </span>
-                      {p.guardianShieldActive && (
-                        <span className="px-2 py-0.5 rounded bg-amber-500/25 text-amber-200">
-                          🛡️ Khiên
+                      {canRollOnBoard && (
+                        <span className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-400 text-slate-950 text-xs font-black whitespace-nowrap">
+                          {rerollNeeded ? '🔁 Đổ lại!' : '🎲 Bấm tung'}
                         </span>
                       )}
-                    </div>
-                    {p.equipped.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {p.equipped.map((eq, i) => (
-                          <span
-                            key={`${eq.id}-${i}`}
-                            title={eq.summary}
-                            className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-sky-950/70 border border-sky-500/40 text-sky-200 truncate max-w-full"
-                          >
-                            🎒 {eq.title}
-                          </span>
-                        ))}
+                    </>
+                  ) : (
+                    <>
+                      <div className={`flex items-center gap-1.5 shrink-0 ${diceAnimateCls}`}>
+                        <DiceD6Svg value={6} size={36} />
+                        <DiceD4Svg value={4} size={36} />
                       </div>
-                    )}
-                  </button>
-                );
-              })}
-            </section>
+                      <div className="min-w-0 flex-1 text-left">
+                        <p className="text-xs sm:text-sm font-black text-white truncate">
+                          Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)
+                        </p>
+                        <p className="text-[11px] sm:text-xs text-slate-300 truncate">
+                          Tung xúc xắc di chuyển · Tổng 7 chọn bất kỳ · Trùng chỗ được đổ lại
+                        </p>
+                      </div>
+                      {canRollOnBoard && (
+                        <span className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-400 text-slate-950 text-xs font-black whitespace-nowrap">
+                          🎲 Bấm tung
+                        </span>
+                      )}
+                    </>
+                  );
 
-            {/* 5. BẢNG HÀNH ĐỘNG NGAY BÊN DƯỚI BÀN CỜ */}
-            <ActionPanel
-              publicGame={publicGame}
-              privateView={privateView}
-              selfPlayerId={selfPlayerId}
-              isSpectator={isSpectator}
-              selectedTargetId={selectedTargetId}
-              onSelectTarget={setSelectedTargetId}
-              onAction={dispatchAction}
-              handMaskLocked={!roleCardVisible && !handUnmasked}
-              onToggleHandMask={() => setHandUnmasked((v) => !v)}
-            />
+                  return canRollOnBoard ? (
+                    <button
+                      type="button"
+                      data-testid="bg-board-roll-dice-btn"
+                      onClick={() => dispatchAction({ type: 'ROLL_DICE' })}
+                      className="flex items-center gap-3 flex-1 min-w-0 rounded-xl border border-emerald-400/75 bg-emerald-950/35 hover:bg-emerald-900/45 px-2.5 py-1.5 shadow-[0_0_16px_rgba(16,185,129,0.2)] transition cursor-pointer"
+                    >
+                      {diceSummary}
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-3 flex-1 min-w-0 px-1">
+                      {diceSummary}
+                    </div>
+                  );
+                })()}
+
+                {/* 3 Chồng bài (bấm trực tiếp ở Pha 2 khi đang đứng ở khu vực hợp lệ) */}
+                <div className="grid grid-cols-3 gap-2 shrink-0">
+                  {(
+                    [
+                      ['investigation', 'Khám Phá', 'text-emerald-300', 'border-emerald-400 bg-emerald-950/50 hover:bg-emerald-900/60 shadow-[0_0_14px_rgba(16,185,129,0.24)]'],
+                      ['equipment', 'Cung Ứng', 'text-sky-300', 'border-sky-400 bg-sky-950/50 hover:bg-sky-900/60 shadow-[0_0_14px_rgba(56,189,248,0.24)]'],
+                      ['event', 'Đột Kích', 'text-rose-300', 'border-rose-400 bg-rose-950/50 hover:bg-rose-900/60 shadow-[0_0_14px_rgba(244,63,94,0.24)]'],
+                    ] as const
+                  ).map(([deckId, label, cls, activeCls]) => {
+                    const canDrawHere = canDrawDeckOnBoard(deckId);
+                    const deckInner = (
+                      <>
+                        <DeckCardBackSvg deck={deckId} size={28} />
+                        <div className="min-w-0 text-left">
+                          <div className="flex items-center gap-1">
+                            <p className={`text-[11px] font-extrabold truncate ${cls}`}>{label}</p>
+                            {canDrawHere && (
+                              <span className="text-[10px] font-black text-amber-200 whitespace-nowrap">
+                                👆 Rút
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs sm:text-sm font-black text-white">
+                            {publicGame.deckCounts[deckId]} lá
+                          </p>
+                        </div>
+                      </>
+                    );
+
+                    return canDrawHere ? (
+                      <button
+                        key={deckId}
+                        type="button"
+                        data-testid={`bg-board-draw-${deckId}`}
+                        onClick={() => dispatchAction({ type: 'DRAW_CARD', deck: deckId })}
+                        className={`rounded-xl border px-2.5 py-1.5 min-h-[42px] flex items-center gap-2 transition cursor-pointer ${activeCls}`}
+                      >
+                        {deckInner}
+                      </button>
+                    ) : (
+                      <div
+                        key={deckId}
+                        className={`rounded-xl border border-slate-700 bg-slate-950/85 px-2.5 py-1.5 flex items-center gap-2 transition ${
+                          isMyTurn && publicGame.turnPhase === 'LOCATION_ACTION'
+                            ? 'opacity-55'
+                            : ''
+                        }`}
+                      >
+                        {deckInner}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* 4. DẢI NGƯỜI CHƠI TINH GỌN */}
+              <section className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {publicGame.players.map((p) => {
+                  const selected = selectedTargetId === p.playerId;
+                  const isTurnHolder = p.playerId === publicGame.activePlayerId;
+                  const inAttackRange = attackableIdsOnBoard.has(p.playerId);
+                  const factionTheme = p.revealedFaction ? FACTION_THEME[p.revealedFaction] : null;
+                  const locMeta = LOCATION_VISUAL_META[p.location];
+                  return (
+                    <button
+                      key={p.playerId}
+                      type="button"
+                      onClick={() => {
+                        if (p.playerId !== selfPlayerId) {
+                          setSelectedTargetId(p.playerId);
+                        }
+                      }}
+                      className={`rounded-xl border px-2.5 py-2 text-left transition cursor-pointer ${
+                        !p.alive
+                          ? 'opacity-55 border-slate-800 bg-slate-950/60'
+                          : selected
+                            ? 'border-rose-400 bg-rose-950/40 ring-2 ring-rose-400/50'
+                            : isTurnHolder
+                              ? 'border-amber-400 bg-slate-900'
+                              : inAttackRange
+                                ? 'border-rose-500/60 bg-slate-900/90 hover:border-rose-400'
+                                : 'border-slate-700/80 bg-slate-900/80 hover:border-cyan-400/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <PlayerPawnToken
+                          compact
+                          displayName={p.displayName}
+                          seatIndex={p.seatIndex}
+                          alive={p.alive}
+                          isActive={isTurnHolder}
+                          isSelf={p.playerId === selfPlayerId}
+                          revealedFaction={p.revealedFaction}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="text-xs sm:text-sm font-black text-white truncate">
+                              {p.displayName}
+                            </p>
+                            {inAttackRange && (
+                              <span className="text-[10px] font-black text-amber-200 shrink-0">
+                                ⚔️
+                              </span>
+                            )}
+                          </div>
+                          <p
+                            className={`text-[11px] font-bold truncate ${factionTheme ? factionTheme.textClass : 'text-slate-400'}`}
+                          >
+                            {p.revealedRoleId
+                              ? `${FACTION_LABELS[p.revealedFaction!]} · Max ${p.revealedMaxHp}`
+                              : 'Vai ẩn danh'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-bold">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-200">
+                          🩸 {p.woundsTaken} vết
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-200">
+                          Ô {locMeta.diceLabel}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">
+                          🃏 {p.handCount}
+                        </span>
+                        {p.guardianShieldActive && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-200">
+                            🛡️ Khiên
+                          </span>
+                        )}
+                      </div>
+                      {p.equipped.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {p.equipped.map((eq, i) => (
+                            <span
+                              key={`${eq.id}-${i}`}
+                              title={eq.summary}
+                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-sky-950/70 border border-sky-500/40 text-sky-200 truncate max-w-full"
+                            >
+                              🎒 {eq.title}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </section>
+            </div>
+
+            {/* 5. THANH HÀNH ĐỘNG NEO CỐ ĐỊNH Ở ĐÁY TRÊN DESKTOP */}
+            <div className="shrink-0 lg:max-h-[44vh] lg:overflow-y-auto">
+              <ActionPanel
+                publicGame={publicGame}
+                privateView={privateView}
+                selfPlayerId={selfPlayerId}
+                isSpectator={isSpectator}
+                selectedTargetId={selectedTargetId}
+                onSelectTarget={setSelectedTargetId}
+                onAction={dispatchAction}
+                handMaskLocked={!roleCardVisible && !handUnmasked}
+                onToggleHandMask={() => setHandUnmasked((v) => !v)}
+              />
+            </div>
           </div>
 
-          {/* NGĂN KÉO PHỤ BÊN PHẢI: THẺ VAI + NHẬT KÝ + EMOTE & CHAT */}
+          {/* NGĂN KÉO PHỤ BÊN PHẢI (CUỘN ĐỘC LẬP TRÊN DESKTOP): THẺ VAI + NHẬT KÝ + EMOTE & CHAT */}
           {(sideDrawerOpen || mobileTab !== 'board') && (
             <div
-              className={`w-full lg:w-[390px] xl:w-[410px] shrink-0 space-y-4 ${
+              data-testid="bg-side-drawer"
+              className={`w-full lg:w-[376px] xl:w-[400px] shrink-0 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-1 space-y-3 ${
                 mobileTab === 'board' ? 'hidden lg:block' : 'block'
               }`}
             >
@@ -796,7 +977,7 @@ export function GameBoard({
                 <GameLog publicGame={publicGame} />
 
                 {/* Emote & Chat nhanh */}
-                <div className="mt-4 rounded-2xl border border-slate-700/80 bg-slate-900/90 p-3.5 space-y-2.5">
+                <div className="mt-3 rounded-2xl border border-slate-700/80 bg-slate-900/90 p-3 space-y-2">
                   <div className="flex flex-wrap gap-1.5">
                     {VALID_BOARD_GAME_EMOTES.map((eid) => (
                       <button

@@ -76,7 +76,7 @@ export function ActionPanel({
     return (
       <section
         data-testid="bg-action-spectator-banner"
-        className="rounded-2xl border border-slate-700/80 bg-slate-900/95 p-4 text-sm font-semibold text-slate-200 flex items-center justify-between gap-3"
+        className="rounded-2xl border border-slate-700/80 bg-slate-900/95 px-3.5 py-2.5 text-sm font-semibold text-slate-200 flex flex-wrap items-center justify-between gap-2"
       >
         <span>👀 Bạn đang theo dõi bàn đấu ở chế độ khán giả.</span>
         <span className="text-xs text-cyan-300 font-bold">
@@ -90,7 +90,7 @@ export function ActionPanel({
     return (
       <section
         data-testid="bg-eliminated-banner"
-        className="rounded-2xl border border-rose-500/40 bg-rose-950/35 p-4"
+        className="rounded-2xl border border-rose-500/40 bg-rose-950/35 px-3.5 py-2.5"
       >
         <p className="text-sm font-bold text-rose-200">
           💀 Bạn đã bị loại khỏi ván này. Có thể tiếp tục theo dõi bàn đấu cho tới khi kết thúc!
@@ -112,15 +112,15 @@ export function ActionPanel({
     return (
       <section
         data-testid="bg-waiting-turn-banner"
-        className="rounded-2xl border border-slate-700/80 bg-slate-900/95 p-4 flex flex-wrap items-center justify-between gap-3"
+        className="rounded-2xl border border-slate-700/80 bg-slate-900/95 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2"
       >
-        <p className="text-sm sm:text-base font-bold text-slate-100">
+        <p className="text-sm font-bold text-slate-100">
           ⏳ Đang chờ lượt của{' '}
           <span className="text-amber-300">
             {activePlayer?.displayName ?? 'người chơi khác'}
           </span>
         </p>
-        <span className="text-xs sm:text-sm font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/35 px-3 py-1.5 rounded-xl">
+        <span className="text-xs font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/35 px-2.5 py-1 rounded-xl">
           ∞ Không giới hạn thời gian — tự động tới lượt bạn ngay khi xong
         </span>
       </section>
@@ -135,6 +135,7 @@ export function ActionPanel({
     null;
   const validOtherTarget =
     aliveOthers.find((p) => p.playerId === selectedTargetId) ??
+    validAttackTarget ??
     aliveOthers[0] ??
     null;
   const validAnyTarget =
@@ -175,19 +176,23 @@ export function ActionPanel({
     publicGame.lastDiceRoll.playerId === selfPlayer.playerId;
 
   const equippedPreciseStick = selfPlayer.equipped.some((eq) => eq.id === 'ev-01');
+  const selectedIsOutOfRange = Boolean(
+    validOtherTarget &&
+      !attackableTargets.some((t) => t.playerId === validOtherTarget.playerId),
+  );
 
   return (
     <section
       data-testid="bg-action-panel"
-      className="rounded-2xl border border-amber-400/50 bg-slate-900/95 p-4 shadow-[0_12px_36px_rgba(245,158,11,0.12)] space-y-4"
+      className="rounded-2xl border border-amber-400/50 bg-slate-900/95 px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-[0_-6px_28px_rgba(15,23,42,0.75)] space-y-2.5"
     >
       {/* Thanh trạng thái lượt của tôi */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs sm:text-sm font-black">
+          <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs font-black">
             🎯 LƯỢT CỦA BẠN
           </span>
-          <span className="text-sm font-bold text-slate-100">
+          <span className="text-xs sm:text-sm font-bold text-slate-100">
             Đang đứng tại:{' '}
             <span className="text-cyan-300">
               Ô {currentLoc.diceLabel} · {currentLoc.name}
@@ -205,7 +210,7 @@ export function ActionPanel({
                   setConfirmingReveal(false);
                   onAction({ type: 'REVEAL_ROLE' });
                 }}
-                className="px-4 py-2 min-h-[42px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-black transition cursor-pointer"
+                className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black transition cursor-pointer"
               >
                 ✅ Xác nhận Lật Vai Công Khai
               </button>
@@ -214,7 +219,7 @@ export function ActionPanel({
                 type="button"
                 data-testid="bg-reveal-role-btn"
                 onClick={() => setConfirmingReveal(true)}
-                className="px-3.5 py-2 min-h-[42px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/50 text-amber-200 text-sm font-bold transition cursor-pointer"
+                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/50 text-amber-200 text-xs sm:text-sm font-bold transition cursor-pointer"
               >
                 🎭 Lật vai
               </button>
@@ -232,7 +237,7 @@ export function ActionPanel({
                   onAction({ type: 'USE_SKILL', targetPlayerId: skillTarget.playerId });
                 }
               }}
-              className="px-3.5 py-2 min-h-[42px] rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-45 text-white text-sm font-bold transition cursor-pointer"
+              className="px-3 py-1.5 min-h-[36px] rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-45 text-white text-xs sm:text-sm font-bold transition cursor-pointer"
             >
               ✨ {roleDesign.skillName}
               {skillTarget && roleDesign.targetMode !== 'self' ? ` (${skillTarget.displayName})` : ''}
@@ -243,47 +248,47 @@ export function ActionPanel({
 
       {/* PHA 1: TUNG XÚC XẮC DI CHUYỂN */}
       {publicGame.turnPhase === 'ROLL_MOVE' && (
-        <div className="space-y-3">
-          <p className="text-sm sm:text-base text-slate-200 font-semibold">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <p className="text-xs sm:text-sm text-slate-200 font-semibold">
             {rerollPrompt
-              ? `🎲 Bạn vừa tung trùng ô ${currentLoc.name} (${currentLoc.diceLabel}) — hãy bấm ĐỔ LẠI xúc xắc ngay!`
-              : 'Bước 1: Tung đồng thời 1d6 + 1d4 để di chuyển sang khu vực kế tiếp (tổng 7 được tự chọn).'}
+              ? `🎲 Vừa tung trùng ô ${currentLoc.name} (${currentLoc.diceLabel}) — bấm ĐỔ LẠI xúc xắc ngay!`
+              : 'Bước 1: Tung đồng thời 1d6 + 1d4 (hoặc bấm thẳng vào Khay Xúc Xắc trên bàn) để di chuyển.'}
           </p>
           <button
             type="button"
             data-testid="bg-roll-dice-btn"
             onClick={() => onAction({ type: 'ROLL_DICE' })}
-            className="w-full sm:w-auto px-6 py-3 min-h-[48px] rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-base font-black shadow-lg transition cursor-pointer"
+            className="w-full sm:w-auto shrink-0 px-5 py-2.5 min-h-[42px] rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-sm sm:text-base font-black shadow-lg transition cursor-pointer"
           >
             {rerollPrompt
-              ? '🎲 ĐỔ LẠI XÚC XẮC DI CHUYỂN (1d6 + 1d4)'
-              : '🎲 TUNG XÚC XẮC DI CHUYỂN (1d6 + 1d4)'}
+              ? '🎲 ĐỔ LẠI XÚC XẮC (1d6 + 1d4)'
+              : '🎲 TUNG XÚC XẮC (1d6 + 1d4)'}
           </button>
         </div>
       )}
 
       {/* PHA 1B: CHỌN KHU VỰC TỰ DO KHI TỔNG XÚC XẮC = 7 */}
       {publicGame.turnPhase === 'CHOOSE_MOVE' && (
-        <div className="space-y-3">
-          <p className="text-sm sm:text-base font-bold text-amber-200">
-            ✨ Tổng xúc xắc bằng 7! Hãy chọn bất kỳ khu vực nào khác để tới:
+        <div className="space-y-2">
+          <p className="text-xs sm:text-sm font-bold text-amber-200">
+            ✨ Tổng xúc xắc bằng 7! Chọn khu vực bên dưới hoặc bấm thẳng lên bàn cờ để di chuyển tới:
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
             {LOCATIONS_CATALOG.filter((l) => l.id !== selfPlayer.location).map((loc) => (
               <button
                 key={loc.id}
                 type="button"
                 data-testid={`bg-choose-dest-${loc.id}`}
                 onClick={() => onAction({ type: 'CHOOSE_DEST', location: loc.id })}
-                className="flex items-center justify-between gap-2 px-4 py-3 min-h-[48px] rounded-xl border border-amber-400/50 bg-amber-950/40 hover:bg-amber-900/55 text-left transition cursor-pointer"
+                className="flex items-center justify-between gap-2 px-3 py-2 min-h-[42px] rounded-xl border border-amber-400/50 bg-amber-950/40 hover:bg-amber-900/55 text-left transition cursor-pointer"
               >
-                <div>
-                  <p className="text-sm font-black text-white">
+                <div className="min-w-0">
+                  <p className="text-xs sm:text-sm font-black text-white truncate">
                     Ô {loc.diceLabel} · {loc.name}
                   </p>
-                  <p className="text-xs text-amber-100/90">{loc.subtitle}</p>
+                  <p className="text-[11px] text-amber-100/90 truncate">{loc.subtitle}</p>
                 </div>
-                <span className="text-sm font-black text-amber-300">→</span>
+                <span className="text-xs font-black text-amber-300 shrink-0">→</span>
               </button>
             ))}
           </div>
@@ -292,46 +297,15 @@ export function ActionPanel({
 
       {/* PHA 2: HÀNH ĐỘNG KHU VỰC */}
       {publicGame.turnPhase === 'LOCATION_ACTION' && (
-        <div className="space-y-3">
-          <p className="text-sm sm:text-base font-bold text-cyan-200">
+        <div className="space-y-2">
+          <p className="text-xs sm:text-sm font-bold text-cyan-200">
             Bước 2 — Quyền năng {currentLoc.name} (Ô {currentLoc.diceLabel}):{' '}
             <span className="font-normal text-slate-200">{currentLoc.actionSummary}</span>
           </p>
 
-          {(currentLoc.deckHint === 'investigation' || currentLoc.deckHint === 'any') && (
-            <button
-              type="button"
-              data-testid="bg-draw-investigation-btn"
-              onClick={() => onAction({ type: 'DRAW_CARD', deck: 'investigation' })}
-              className="mr-2 mb-1 px-5 py-3 min-h-[46px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black transition cursor-pointer"
-            >
-              🔍 Rút 1 Thẻ Khám Phá ({publicGame.deckCounts.investigation})
-            </button>
-          )}
-          {(currentLoc.deckHint === 'equipment' || currentLoc.deckHint === 'any') && (
-            <button
-              type="button"
-              data-testid="bg-draw-equipment-btn"
-              onClick={() => onAction({ type: 'DRAW_CARD', deck: 'equipment' })}
-              className="mr-2 mb-1 px-5 py-3 min-h-[46px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-black transition cursor-pointer"
-            >
-              🛡️ Rút 1 Thẻ Cung Ứng ({publicGame.deckCounts.equipment})
-            </button>
-          )}
-          {(currentLoc.deckHint === 'event' || currentLoc.deckHint === 'any') && (
-            <button
-              type="button"
-              data-testid="bg-draw-event-btn"
-              onClick={() => onAction({ type: 'DRAW_CARD', deck: 'event' })}
-              className="mr-2 mb-1 px-5 py-3 min-h-[46px] rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-black transition cursor-pointer"
-            >
-              ⚡ Rút 1 Thẻ Đột Kích ({publicGame.deckCounts.event})
-            </button>
-          )}
-
           {currentLoc.deckHint === 'power-9' && (
-            <div className="space-y-2.5">
-              <div className="flex flex-wrap gap-2">
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1.5">
                 {alivePlayers.map((p) => {
                   const selected = validAnyTarget.playerId === p.playerId;
                   return (
@@ -339,7 +313,7 @@ export function ActionPanel({
                       key={p.playerId}
                       type="button"
                       onClick={() => onSelectTarget(p.playerId)}
-                      className={`px-3 py-2 min-h-[40px] rounded-xl border text-xs sm:text-sm font-bold transition cursor-pointer ${
+                      className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
                         selected
                           ? 'bg-violet-600 border-violet-300 text-white'
                           : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
@@ -350,7 +324,70 @@ export function ActionPanel({
                   );
                 })}
               </div>
-              <div className="flex flex-wrap gap-2">
+            </div>
+          )}
+
+          {currentLoc.deckHint === 'power-10' && equippedTargets.length === 0 && (
+            <p className="text-xs sm:text-sm text-amber-200">
+              Hiện chưa có ai đeo Trang bị trên bàn — bạn có thể Bỏ qua khu vực để sang pha đánh/kết thúc.
+            </p>
+          )}
+
+          {currentLoc.deckHint === 'power-10' && equippedTargets.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {equippedTargets.map((p) => {
+                const selected = validStealTarget?.playerId === p.playerId;
+                return (
+                  <button
+                    key={p.playerId}
+                    type="button"
+                    onClick={() => onSelectTarget(p.playerId)}
+                    className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                      selected
+                        ? 'bg-sky-600 border-sky-300 text-white'
+                        : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                    }`}
+                  >
+                    {p.displayName} ({p.equipped.length} đồ)
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            {(currentLoc.deckHint === 'investigation' || currentLoc.deckHint === 'any') && (
+              <button
+                type="button"
+                data-testid="bg-draw-investigation-btn"
+                onClick={() => onAction({ type: 'DRAW_CARD', deck: 'investigation' })}
+                className="px-4 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+              >
+                🔍 Rút 1 Thẻ Khám Phá ({publicGame.deckCounts.investigation})
+              </button>
+            )}
+            {(currentLoc.deckHint === 'equipment' || currentLoc.deckHint === 'any') && (
+              <button
+                type="button"
+                data-testid="bg-draw-equipment-btn"
+                onClick={() => onAction({ type: 'DRAW_CARD', deck: 'equipment' })}
+                className="px-4 py-2 min-h-[40px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+              >
+                🛡️ Rút 1 Thẻ Cung Ứng ({publicGame.deckCounts.equipment})
+              </button>
+            )}
+            {(currentLoc.deckHint === 'event' || currentLoc.deckHint === 'any') && (
+              <button
+                type="button"
+                data-testid="bg-draw-event-btn"
+                onClick={() => onAction({ type: 'DRAW_CARD', deck: 'event' })}
+                className="px-4 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+              >
+                ⚡ Rút 1 Thẻ Đột Kích ({publicGame.deckCounts.event})
+              </button>
+            )}
+            {currentLoc.deckHint === 'power-9' && (
+              <>
                 <button
                   type="button"
                   data-testid="bg-loc-heal-btn"
@@ -361,7 +398,7 @@ export function ActionPanel({
                       mode: 'heal',
                     })
                   }
-                  className="px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black transition cursor-pointer"
+                  className="px-3.5 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
                 >
                   💚 Hồi 1 cho {validAnyTarget.displayName}
                 </button>
@@ -375,66 +412,33 @@ export function ActionPanel({
                       mode: 'damage',
                     })
                   }
-                  className="px-4 py-2.5 min-h-[44px] rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-black transition cursor-pointer"
+                  className="px-3.5 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
                 >
                   💥 Gây 2 dmg lên {validAnyTarget.displayName}
                 </button>
-              </div>
-            </div>
-          )}
-
-          {currentLoc.deckHint === 'power-10' && (
-            <div className="space-y-2">
-              {equippedTargets.length === 0 ? (
-                <p className="text-sm text-amber-200">
-                  Hiện chưa có ai đeo Trang bị trên bàn — bạn có thể Bỏ qua khu vực để sang pha đánh/kết thúc.
-                </p>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  {equippedTargets.map((p) => {
-                    const selected = validStealTarget?.playerId === p.playerId;
-                    return (
-                      <button
-                        key={p.playerId}
-                        type="button"
-                        onClick={() => onSelectTarget(p.playerId)}
-                        className={`px-3 py-2 min-h-[40px] rounded-xl border text-xs sm:text-sm font-bold transition cursor-pointer ${
-                          selected
-                            ? 'bg-sky-600 border-sky-300 text-white'
-                            : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
-                        }`}
-                      >
-                        {p.displayName} ({p.equipped.length} đồ)
-                      </button>
-                    );
-                  })}
-                  {validStealTarget && (
-                    <button
-                      type="button"
-                      data-testid="bg-loc-steal-btn"
-                      onClick={() =>
-                        onAction({
-                          type: 'USE_LOC_POWER',
-                          targetPlayerId: validStealTarget.playerId,
-                          mode: 'steal',
-                        })
-                      }
-                      className="px-4 py-2.5 min-h-[44px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-black transition cursor-pointer"
-                    >
-                      🧤 Cướp 1 Trang bị của {validStealTarget.displayName}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="pt-1">
+              </>
+            )}
+            {currentLoc.deckHint === 'power-10' && validStealTarget && (
+              <button
+                type="button"
+                data-testid="bg-loc-steal-btn"
+                onClick={() =>
+                  onAction({
+                    type: 'USE_LOC_POWER',
+                    targetPlayerId: validStealTarget.playerId,
+                    mode: 'steal',
+                  })
+                }
+                className="px-3.5 py-2 min-h-[40px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+              >
+                🧤 Cướp 1 Trang bị của {validStealTarget.displayName}
+              </button>
+            )}
             <button
               type="button"
               data-testid="bg-skip-loc-btn"
               onClick={() => onAction({ type: 'SKIP_LOC' })}
-              className="px-4 py-2 min-h-[40px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-sm font-bold transition cursor-pointer"
+              className="px-3.5 py-2 min-h-[38px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs sm:text-sm font-bold transition cursor-pointer sm:ml-auto"
             >
               ⏭️ Bỏ qua khu vực → Pha Hành Động
             </button>
@@ -444,33 +448,46 @@ export function ActionPanel({
 
       {/* PHA 3: DÙNG BÀI / TẤN CÔNG / KẾT THÚC LƯỢT */}
       {publicGame.turnPhase === 'MAIN_ACTION' && (
-        <div className="space-y-4">
+        <div className="space-y-2.5">
           {/* Chọn mục tiêu nhanh cho Thẻ & Đòn Đánh */}
-          <div className="space-y-1.5">
-            <p className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
-              Chọn mục tiêu hành động / tấn công:
-            </p>
-            <div className="flex flex-wrap gap-2">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
+                Chọn mục tiêu hành động / tấn công:
+              </p>
+              {selectedIsOutOfRange && validOtherTarget && (
+                <span className="text-[11px] font-semibold text-sky-300">
+                  {validOtherTarget.displayName} ngoài tầm đánh cùng Cụm — chỉ dùng được thẻ/kỹ năng tầm xa
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
               {aliveOthers.map((p) => {
                 const inRange = attackableTargets.some((t) => t.playerId === p.playerId);
-                const selected = (selectedTargetId ?? validOtherTarget?.playerId) === p.playerId;
+                const selected = validOtherTarget?.playerId === p.playerId;
                 return (
                   <button
                     key={p.playerId}
                     type="button"
                     onClick={() => onSelectTarget(p.playerId)}
-                    className={`px-3 py-2 min-h-[40px] rounded-xl border text-xs sm:text-sm font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                       selected
-                        ? 'bg-rose-600/85 border-rose-300 text-white'
+                        ? inRange
+                          ? 'bg-rose-600/85 border-rose-300 text-white'
+                          : 'bg-sky-700/80 border-sky-300 text-white'
                         : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
                     }`}
                   >
                     <span>{p.displayName}</span>
-                    {inRange && (
+                    {inRange ? (
                       <span className="text-[11px] px-1.5 py-0.5 rounded bg-black/30 text-amber-200">
                         🎯 Tầm đánh
                       </span>
-                    )}
+                    ) : selected ? (
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-black/30 text-sky-100">
+                        🃏 Dùng thẻ
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
@@ -478,16 +495,16 @@ export function ActionPanel({
           </div>
 
           {/* Bài trên tay (kèm lớp che chống nhìn trộm màn hình) */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
                 🃏 Bài trên tay ({privateView.hand.length}/3):
               </p>
               {privateView.hand.length > 0 && (
                 <button
                   type="button"
                   onClick={onToggleHandMask}
-                  className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 cursor-pointer"
+                  className="px-2.5 py-1 min-h-[32px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 cursor-pointer"
                 >
                   {handMaskLocked ? '👁️ Hiện bài trên tay' : '🙈 Che bài'}
                 </button>
@@ -495,26 +512,26 @@ export function ActionPanel({
             </div>
 
             {privateView.hand.length === 0 ? (
-              <p className="text-sm text-slate-400">Chưa có thẻ nào trên tay.</p>
+              <p className="text-xs sm:text-sm text-slate-400">Chưa có thẻ nào trên tay.</p>
             ) : handMaskLocked ? (
               <div
                 data-testid="bg-hand-masked-banner"
-                className="rounded-xl border border-dashed border-amber-400/45 bg-slate-950/85 p-4 flex flex-wrap items-center justify-between gap-3"
+                className="rounded-xl border border-dashed border-amber-400/45 bg-slate-950/85 px-3 py-2 flex flex-wrap items-center justify-between gap-2.5"
               >
-                <p className="text-sm font-semibold text-amber-100">
+                <p className="text-xs sm:text-sm font-semibold text-amber-100">
                   🙈 Bài trên tay đang được che để chống nhìn màn hình ({privateView.hand.length} lá).
                 </p>
                 <button
                   type="button"
                   data-testid="bg-unmask-hand-btn"
                   onClick={onToggleHandMask}
-                  className="px-4 py-2 min-h-[40px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-black cursor-pointer"
+                  className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black cursor-pointer"
                 >
                   👁️ Mở xem bài của tôi
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {privateView.hand.map((card, idx) => {
                   const isInv = card.deck === 'investigation';
                   const isGear = !isInv && !card.isConsumable;
@@ -523,7 +540,7 @@ export function ActionPanel({
                   return (
                     <div
                       key={`${card.id}-${idx}`}
-                      className={`rounded-xl border p-3 flex flex-col justify-between gap-2.5 ${
+                      className={`rounded-xl border p-2.5 flex flex-col justify-between gap-2 ${
                         isInv
                           ? 'border-emerald-500/45 bg-emerald-950/35'
                           : card.deck === 'equipment'
@@ -532,8 +549,8 @@ export function ActionPanel({
                       }`}
                     >
                       <div>
-                        <p className="text-sm font-black text-white">{card.title}</p>
-                        <p className="text-xs sm:text-sm text-slate-200 mt-1 leading-snug">
+                        <p className="text-xs sm:text-sm font-black text-white">{card.title}</p>
+                        <p className="text-xs text-slate-200 mt-0.5 leading-snug" title={card.summary}>
                           {card.summary}
                         </p>
                       </div>
@@ -542,7 +559,7 @@ export function ActionPanel({
                         <select
                           value={blastLocation}
                           onChange={(e) => setBlastLocation(e.target.value as BoardGameLocationId)}
-                          className="w-full rounded-lg bg-slate-950 border border-slate-700 px-2.5 py-1.5 text-xs font-bold text-slate-100"
+                          className="w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1 text-xs font-bold text-slate-100"
                           aria-label="Chọn khu vực ném thẻ Mất Điện"
                         >
                           {LOCATIONS_CATALOG.map((l) => (
@@ -588,7 +605,7 @@ export function ActionPanel({
                             onAction({ type: 'USE_CARD', cardId: card.id });
                           }
                         }}
-                        className="w-full px-3 py-2 min-h-[40px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/15 text-xs sm:text-sm font-black text-white transition cursor-pointer"
+                        className="w-full px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/15 text-xs font-black text-white transition cursor-pointer"
                       >
                         {isInv
                           ? `🔍 Đưa kín → ${validOtherTarget?.displayName ?? '?'}`
@@ -610,7 +627,7 @@ export function ActionPanel({
           </div>
 
           {/* Hàng nút chính cuối pha: Tấn công hoặc Kết thúc lượt */}
-          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800">
+          <div className="flex flex-wrap items-center gap-2.5 pt-1.5 border-t border-slate-800/80">
             <button
               type="button"
               data-testid="bg-attack-btn"
@@ -620,7 +637,7 @@ export function ActionPanel({
                   onAction({ type: 'ATTACK', targetPlayerId: validAttackTarget.playerId });
                 }
               }}
-              className="px-5 py-3 min-h-[46px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-sm sm:text-base font-black shadow transition cursor-pointer"
+              className="px-4 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs sm:text-sm font-black shadow transition cursor-pointer"
             >
               {validAttackTarget
                 ? `⚔️ Tấn công ${validAttackTarget.displayName} (${equippedPreciseStick ? '1d4' : '|1d6-1d4|'})`
@@ -631,7 +648,7 @@ export function ActionPanel({
               type="button"
               data-testid="bg-end-turn-btn"
               onClick={() => onAction({ type: 'END_TURN' })}
-              className="px-5 py-3 min-h-[46px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm sm:text-base font-black shadow transition cursor-pointer"
+              className="px-4 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-black shadow transition cursor-pointer"
             >
               ✔️ Kết thúc lượt
             </button>
