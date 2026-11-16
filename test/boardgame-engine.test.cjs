@@ -37,6 +37,10 @@ const {
   getRoleDistribution,
   resolveLocationForDiceTotal,
 } = require('../features/boardgame/domain/index.ts');
+const {
+  resolveActionTargets,
+  toggleSelectedTargetId,
+} = require('../features/boardgame/ui/target-selection.ts');
 
 function makePlayers(n) {
   return Array.from({ length: n }, (_, i) => ({
@@ -492,4 +496,134 @@ test('V4.6 — Hợp đồng Validate Action & turnTimeoutMs === 0 (Vô hạn)',
     turnTimeoutMs: 0,
   });
   assert.equal(startZero.ok, true);
+});
+
+test('V4.7 — Tự hồi máu (eq-05, eq-06, eq-07, eq-08, ô 9) & không bị kẹt mục tiêu đối thủ trên UI', () => {
+  const state = createInitialGameState({
+    matchId: 'v4-self-heal',
+    seed: 515,
+    nowMs: 1_750_000_000_000,
+    players: makePlayers(4),
+  });
+  const list = Object.values(state.players);
+  const actor = getActivePlayer(state);
+  const enemy = list.find((p) => p.playerId !== actor.playerId);
+  const ally = list.find((p) => p.playerId !== actor.playerId && p.playerId !== enemy.playerId);
+  assert.ok(actor && enemy && ally);
+
+  // 1. Engine: eq-05 (Nước Tăng Lực) & eq-06 (Bộ Sơ Cứu) hồi cho chính bản thân ngay cả sau khi tương tác đối thủ
+  state.turnPhase = 'LOCATION_ACTION';
+  actor.location = 'corridor';
+  actor.woundsTaken = 5;
+  actor.hp = actor.maxHp - 5;
+  const locSelfHeal = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'USE_LOC_POWER', targetPlayerId: actor.playerId, mode: 'heal' },
+    1_750_000_001_000,
+  );
+  assert.equal(locSelfHeal.ok, true);
+  assert.equal(actor.woundsTaken, 4);
+  assert.equal(state.turnPhase, 'MAIN_ACTION');
+
+  actor.hand.push('eq-05', 'eq-06', 'eq-07');
+  const eq05Res = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'USE_CARD', cardId: 'eq-05', targetPlayerId: actor.playerId },
+    1_750_000_002_000,
+  );
+  assert.equal(eq05Res.ok, true);
+  assert.equal(actor.woundsTaken, 2, 'eq-05 phải hồi 2 vết thương cho chính mình');
+
+  actor.woundsTaken = 5;
+  actor.hp = actor.maxHp - 5;
+  const eq06Res = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'USE_CARD', cardId: 'eq-06', targetPlayerId: actor.playerId },
+    1_750_000_003_000,
+  );
+  assert.equal(eq06Res.ok, true);
+  assert.equal(actor.woundsTaken, 2, 'eq-06 phải hồi 3 vết thương cho chính mình');
+
+  // eq-07 hồi cả cụm gồm cả bản thân
+  enemy.location = actor.location;
+  enemy.woundsTaken = 3;
+  enemy.hp = enemy.maxHp - 3;
+  const eq07Res = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'USE_CARD', cardId: 'eq-07' },
+    1_750_000_004_000,
+  );
+  assert.equal(eq07Res.ok, true);
+  assert.equal(actor.woundsTaken, 0, 'eq-07 phải hồi 2 vết thương cho bản thân');
+  assert.equal(enemy.woundsTaken, 1, 'eq-07 phải hồi 2 vết thương cho người cùng cụm');
+
+  // eq-08 hồi đầy cho Đội Săn Đêm đã lật vai
+  actor.faction = 'lantern-guard';
+  actor.revealed = true;
+  actor.woundsTaken = 4;
+  actor.hp = actor.maxHp - 4;
+  actor.hand.push('eq-08');
+  const eq08Res = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'USE_CARD', cardId: 'eq-08' },
+    1_750_000_005_000,
+  );
+  assert.equal(eq08Res.ok, true);
+  assert.equal(actor.woundsTaken, 0);
+
+  // 2. UI target-selection logic: click lại chính mình & tách riêng mục tiêu thẻ hồi máu
+  const pub = getPublicGameView(state);
+  const selfPub = pub.players.find((p) => p.playerId === actor.playerId);
+  const enemyPub = pub.players.find((p) => p.playerId === enemy.playerId);
+  const allyPub = pub.players.find((p) => p.playerId === ally.playerId);
+  const alivePlayers = pub.players.filter((p) => p.alive);
+  const aliveOthers = alivePlayers.filter((p) => p.playerId !== selfPub.playerId);
+  const attackableTargets = [enemyPub];
+
+  // Cho phép toggle chọn chính mình và bỏ chọn
+  assert.equal(toggleSelectedTargetId(enemyPub.playerId, selfPub.playerId, true), selfPub.playerId);
+  assert.equal(toggleSelectedTargetId(selfPub.playerId, selfPub.playerId, true), null);
+  assert.equal(toggleSelectedTargetId(null, selfPub.playerId, false), null);
+
+  // Sau khi đã click vào kẻ địch để đánh (selectedTargetId = enemy), thẻ hồi máu vẫn phải mặc định chọn Bản thân!
+  const afterEnemySelected = resolveActionTargets({
+    selfPlayer: selfPub,
+    alivePlayers,
+    aliveOthers,
+    attackableTargets,
+    selectedTargetId: enemyPub.playerId,
+    healTargetId: null,
+  });
+  assert.equal(afterEnemySelected.validAttackTarget?.playerId, enemyPub.playerId);
+  assert.equal(afterEnemySelected.validOtherTarget?.playerId, enemyPub.playerId);
+  assert.equal(afterEnemySelected.validHealCardTarget.playerId, selfPub.playerId);
+
+  // Người chơi chủ động chọn hồi cho đồng đội rồi đổi về lại bản thân đều hợp lệ
+  const allyHeal = resolveActionTargets({
+    selfPlayer: selfPub,
+    alivePlayers,
+    aliveOthers,
+    attackableTargets,
+    selectedTargetId: enemyPub.playerId,
+    healTargetId: allyPub.playerId,
+  });
+  assert.equal(allyHeal.validHealCardTarget.playerId, allyPub.playerId);
+
+  const backToSelf = resolveActionTargets({
+    selfPlayer: selfPub,
+    alivePlayers,
+    aliveOthers,
+    attackableTargets,
+    selectedTargetId: selfPub.playerId,
+    healTargetId: selfPub.playerId,
+  });
+  assert.equal(backToSelf.validHealCardTarget.playerId, selfPub.playerId);
+  assert.equal(backToSelf.validAnyTarget.playerId, selfPub.playerId);
+  assert.notEqual(backToSelf.validAttackTarget?.playerId, selfPub.playerId);
+  assert.notEqual(backToSelf.validOtherTarget?.playerId, selfPub.playerId);
 });

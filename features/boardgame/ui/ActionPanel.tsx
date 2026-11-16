@@ -5,7 +5,7 @@
 // Đứng ngay dưới bàn cờ, chữ to rõ ràng, mỗi nút đúng pha hiện tại, zero wall of text.
 // ---------------------------------------------------------------------------
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getRoleDesign } from '@/features/boardgame/domain/roles';
 import { getLocationDefinition, LOCATIONS_CATALOG } from '@/features/boardgame/domain/rules';
 import type {
@@ -16,6 +16,7 @@ import type {
   BoardGamePublicPlayerView,
 } from '@/shared/contracts/boardgame';
 import { LOCATION_VISUAL_META } from './BoardGameArt';
+import { resolveActionTargets } from './target-selection';
 
 export interface ActionPanelProps {
   publicGame: BoardGamePublicGameView;
@@ -46,6 +47,17 @@ export function ActionPanel({
 }: ActionPanelProps) {
   const [confirmingReveal, setConfirmingReveal] = useState(false);
   const [blastLocation, setBlastLocation] = useState<BoardGameLocationId>('lobby');
+  const [healTargetId, setHealTargetId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHealTargetId(null);
+  }, [publicGame.turnNumber]);
+
+  useEffect(() => {
+    if (selfPlayerId && selectedTargetId === selfPlayerId) {
+      setHealTargetId(selfPlayerId);
+    }
+  }, [selectedTargetId, selfPlayerId]);
 
   const selfPlayer = useMemo(
     () => publicGame.players.find((p) => p.playerId === selfPlayerId) ?? null,
@@ -129,22 +141,21 @@ export function ActionPanel({
 
   const currentLoc = getLocationDefinition(selfPlayer.location);
   const roleDesign = getRoleDesign(privateView.roleId);
-  const validAttackTarget =
-    attackableTargets.find((p) => p.playerId === selectedTargetId) ??
-    attackableTargets[0] ??
-    null;
-  const validOtherTarget =
-    aliveOthers.find((p) => p.playerId === selectedTargetId) ??
-    validAttackTarget ??
-    aliveOthers[0] ??
-    null;
-  const validAnyTarget =
-    alivePlayers.find((p) => p.playerId === selectedTargetId) ?? selfPlayer;
+  const {
+    validAttackTarget,
+    validOtherTarget,
+    validAnyTarget,
+    validHealCardTarget,
+    validStealTarget,
+  } = resolveActionTargets({
+    selfPlayer,
+    alivePlayers,
+    aliveOthers,
+    attackableTargets,
+    selectedTargetId,
+    healTargetId,
+  });
   const equippedTargets = aliveOthers.filter((p) => p.equipped.length > 0);
-  const validStealTarget =
-    equippedTargets.find((p) => p.playerId === selectedTargetId) ??
-    equippedTargets[0] ??
-    null;
 
   const sameClusterOthers = aliveOthers.filter(
     (p) => getClusterForPlayer(p) === getClusterForPlayer(selfPlayer),
@@ -176,8 +187,10 @@ export function ActionPanel({
     publicGame.lastDiceRoll.playerId === selfPlayer.playerId;
 
   const equippedPreciseStick = selfPlayer.equipped.some((eq) => eq.id === 'ev-01');
+  const selectedIsSelf = selectedTargetId === selfPlayer.playerId;
   const selectedIsOutOfRange = Boolean(
-    validOtherTarget &&
+    !selectedIsSelf &&
+      validOtherTarget &&
       !attackableTargets.some((t) => t.playerId === validOtherTarget.playerId),
   );
 
@@ -319,7 +332,10 @@ export function ActionPanel({
                           : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
                       }`}
                     >
-                      {p.displayName} ({p.woundsTaken} vết)
+                      {p.playerId === selfPlayer.playerId
+                        ? `💚 ${p.displayName} (Bạn)`
+                        : p.displayName}{' '}
+                      ({p.woundsTaken} vết)
                     </button>
                   );
                 })}
@@ -455,22 +471,47 @@ export function ActionPanel({
               <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
                 Chọn mục tiêu hành động / tấn công:
               </p>
-              {selectedIsOutOfRange && validOtherTarget && (
-                <span className="text-[11px] font-semibold text-sky-300">
-                  {validOtherTarget.displayName} ngoài tầm đánh cùng Cụm — chỉ dùng được thẻ/kỹ năng tầm xa
+              {selectedIsSelf ? (
+                <span className="text-[11px] font-semibold text-emerald-300">
+                  💚 Đang chọn Bản thân — các thẻ hồi sức ưu tiên tự hồi cho bạn
                 </span>
+              ) : (
+                selectedIsOutOfRange &&
+                validOtherTarget && (
+                  <span className="text-[11px] font-semibold text-sky-300">
+                    {validOtherTarget.displayName} ngoài tầm đánh cùng Cụm — chỉ dùng được thẻ/kỹ năng tầm xa
+                  </span>
+                )
               )}
             </div>
             <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                data-testid="bg-target-pill-self"
+                aria-pressed={selectedIsSelf}
+                onClick={() => {
+                  onSelectTarget(selfPlayer.playerId);
+                  setHealTargetId(selfPlayer.playerId);
+                }}
+                className={`px-2.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                  selectedIsSelf
+                    ? 'bg-emerald-600/85 border-emerald-300 text-white'
+                    : 'bg-slate-800 border-emerald-500/40 text-emerald-200 hover:bg-slate-700'
+                }`}
+              >
+                <span>💚 Bản thân ({selfPlayer.woundsTaken} vết)</span>
+              </button>
               {aliveOthers.map((p) => {
                 const inRange = attackableTargets.some((t) => t.playerId === p.playerId);
-                const selected = validOtherTarget?.playerId === p.playerId;
+                const selected = !selectedIsSelf && validOtherTarget?.playerId === p.playerId;
                 return (
                   <button
                     key={p.playerId}
                     type="button"
+                    data-testid={`bg-target-pill-other-${p.seatIndex}`}
+                    aria-pressed={selected}
                     onClick={() => onSelectTarget(p.playerId)}
-                    className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
                       selected
                         ? inRange
                           ? 'bg-rose-600/85 border-rose-300 text-white'
@@ -536,6 +577,10 @@ export function ActionPanel({
                   const isInv = card.deck === 'investigation';
                   const isGear = !isInv && !card.isConsumable;
                   const isLocBlast = card.effectId === 'ev-07';
+                  const isSingleHeal =
+                    card.deck === 'equipment' &&
+                    Boolean(card.isConsumable) &&
+                    card.targetMode === 'single-player';
 
                   return (
                     <div
@@ -555,6 +600,25 @@ export function ActionPanel({
                         </p>
                       </div>
 
+                      {isSingleHeal && (
+                        <select
+                          data-testid={`bg-heal-select-${card.id}`}
+                          value={validHealCardTarget.playerId}
+                          onChange={(e) => setHealTargetId(e.target.value)}
+                          className="w-full rounded-lg bg-slate-950 border border-emerald-500/50 px-2 py-1 text-xs font-bold text-emerald-100"
+                          aria-label="Chọn người nhận hồi sức"
+                        >
+                          <option value={selfPlayer.playerId}>
+                            💚 Bản thân: {selfPlayer.displayName} ({selfPlayer.woundsTaken} vết)
+                          </option>
+                          {aliveOthers.map((p) => (
+                            <option key={p.playerId} value={p.playerId}>
+                              🤝 {p.displayName} ({p.woundsTaken} vết)
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
                       {isLocBlast && (
                         <select
                           value={blastLocation}
@@ -573,7 +637,15 @@ export function ActionPanel({
                       <button
                         type="button"
                         data-testid={`bg-use-card-${card.id}`}
-                        disabled={isInv && !validOtherTarget}
+                        disabled={
+                          (isInv && !validOtherTarget) ||
+                          (!isInv &&
+                            !isGear &&
+                            !isLocBlast &&
+                            !isSingleHeal &&
+                            card.targetMode === 'single-player' &&
+                            !validOtherTarget)
+                        }
                         onClick={() => {
                           if (isInv && validOtherTarget) {
                             onAction({
@@ -589,18 +661,18 @@ export function ActionPanel({
                               cardId: card.id,
                               targetLocation: blastLocation,
                             });
-                          } else if (card.targetMode === 'single-player') {
-                            const tgt =
-                              card.deck === 'equipment'
-                                ? validAnyTarget.playerId
-                                : validOtherTarget?.playerId;
-                            if (tgt) {
-                              onAction({
-                                type: 'USE_CARD',
-                                cardId: card.id,
-                                targetPlayerId: tgt,
-                              });
-                            }
+                          } else if (isSingleHeal) {
+                            onAction({
+                              type: 'USE_CARD',
+                              cardId: card.id,
+                              targetPlayerId: validHealCardTarget.playerId,
+                            });
+                          } else if (card.targetMode === 'single-player' && validOtherTarget) {
+                            onAction({
+                              type: 'USE_CARD',
+                              cardId: card.id,
+                              targetPlayerId: validOtherTarget.playerId,
+                            });
                           } else {
                             onAction({ type: 'USE_CARD', cardId: card.id });
                           }
@@ -613,11 +685,19 @@ export function ActionPanel({
                             ? '🎒 Trang bị ngay'
                             : isLocBlast
                               ? `💥 Nổ tại Ô ${LOCATION_VISUAL_META[blastLocation].diceLabel}`
-                              : card.deck === 'equipment' && card.targetMode === 'single-player'
-                                ? `💚 Hồi → ${validAnyTarget.displayName}`
-                                : card.targetMode === 'single-player'
-                                  ? `⚡ Kích hoạt → ${validOtherTarget?.displayName ?? '?'}`
-                                  : '⚡ Kích hoạt ngay'}
+                              : isSingleHeal
+                                ? `💚 Hồi → ${
+                                    validHealCardTarget.playerId === selfPlayer.playerId
+                                      ? `${selfPlayer.displayName} (Bạn)`
+                                      : validHealCardTarget.displayName
+                                  }`
+                                : card.id === 'eq-07'
+                                  ? '💚 Hồi cả Cụm'
+                                  : card.id === 'eq-08'
+                                    ? '💚 Tự hồi sức'
+                                    : card.targetMode === 'single-player'
+                                      ? `⚡ Kích hoạt → ${validOtherTarget?.displayName ?? '?'}`
+                                      : '⚡ Kích hoạt ngay'}
                       </button>
                     </div>
                   );

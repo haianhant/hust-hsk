@@ -1099,6 +1099,54 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     await activePlayer.page.waitForSelector('[data-testid="bg-hand-masked-banner"]', { timeout: UI_TIMEOUT });
     await activePlayer.page.locator('[data-testid="bg-unmask-hand-btn"]').click();
     await activePlayer.page.waitForSelector('[data-testid^="bg-use-card-"]', { timeout: UI_TIMEOUT });
+
+    // Verify self-targeting never gets stuck on an opponent after clicking another player pill/card
+    const otherPill = activePlayer.page.locator('[data-testid^="bg-target-pill-other-"]').first();
+    await otherPill.click();
+    assert.equal(
+      await activePlayer.page.locator('[data-testid="bg-target-pill-self"]').getAttribute('aria-pressed'),
+      'false',
+      'Clicking opponent pill must leave bg-target-pill-self unpressed',
+    );
+    await activePlayer.page.locator('[data-testid="bg-target-pill-self"]').click();
+    assert.equal(
+      await activePlayer.page.locator('[data-testid="bg-target-pill-self"]').getAttribute('aria-pressed'),
+      'true',
+      'Clicking bg-target-pill-self must select self cleanly',
+    );
+    const stripSelf = activePlayer.page.locator('[data-testid="bg-player-strip-self"]');
+    await stripSelf.click();
+    assert.equal(
+      await activePlayer.page.locator('[data-testid="bg-target-pill-self"]').getAttribute('aria-pressed'),
+      'false',
+      'Clicking self player strip card while selected must toggle selection back to null',
+    );
+    await stripSelf.click();
+    assert.equal(
+      await activePlayer.page.locator('[data-testid="bg-target-pill-self"]').getAttribute('aria-pressed'),
+      'true',
+      'Clicking self player strip card again must re-select self',
+    );
+
+    const healSelectCount = await activePlayer.page.locator('[data-testid^="bg-heal-select-"]').count();
+    if (healSelectCount > 0) {
+      const healSel = activePlayer.page.locator('[data-testid^="bg-heal-select-"]').first();
+      const healCardId = (await healSel.getAttribute('data-testid')).replace('bg-heal-select-', '');
+      const initialHealTarget = await healSel.inputValue();
+      assert.equal(
+        initialHealTarget,
+        activePlayer.audit.selfPlayerId,
+        'Single-player healing card select must default to self even after clicking opponents',
+      );
+      const optionVals = await healSel.locator('option').evaluateAll((els) => els.map((o) => o.value));
+      if (optionVals.length > 1) {
+        await healSel.selectOption(optionVals[1]);
+        await healSel.selectOption(activePlayer.audit.selfPlayerId);
+      }
+      const healBtnText = await activePlayer.page.locator(`[data-testid="bg-use-card-${healCardId}"]`).innerText();
+      assert.ok(healBtnText.includes('(Bạn)'), `Heal button must target self after reset, got: ${healBtnText}`);
+    }
+
     await activePlayer.page.locator('[data-testid="bg-end-turn-btn"]').click();
 
     await p1.page.bringToFront();
@@ -1169,6 +1217,31 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
             assert.ok(m.left >= -1 && m.right <= 391, `Mobile action button ${m.id} off-screen: ${m.right}`);
           }
           p4MobileButtonsChecked = true;
+        }
+        const healSelectOnTurn = await activeUi.page
+          .evaluate((selfId) => {
+            const sel = document.querySelector('[data-testid^="bg-heal-select-"]');
+            if (!sel) return null;
+            const id = (sel.getAttribute('data-testid') || '').replace('bg-heal-select-', '');
+            const btn = document.querySelector(`[data-testid="bg-use-card-${id}"]`);
+            return {
+              id,
+              val: sel.value,
+              selfId,
+              btnText: btn ? (btn.textContent || '').trim() : '',
+            };
+          }, activeUi.audit.selfPlayerId)
+          .catch(() => null);
+        if (healSelectOnTurn) {
+          assert.equal(
+            healSelectOnTurn.val,
+            healSelectOnTurn.selfId,
+            `Heal card ${healSelectOnTurn.id} must default to self (${healSelectOnTurn.selfId})`,
+          );
+          assert.ok(
+            healSelectOnTurn.btnText.includes('(Bạn)'),
+            `Heal card button must display (Bạn) when targeting self, got: ${healSelectOnTurn.btnText}`,
+          );
         }
         const acted = await playFirstValidStepOnPage(activeUi.page, step, triedActionsPerTurn);
         if (acted && activeUi === p4) {

@@ -36,6 +36,7 @@ import ActionPanel from './ActionPanel';
 import GameLog from './GameLog';
 import MatchPostcard from './MatchPostcard';
 import MatchResult from './MatchResult';
+import { toggleSelectedTargetId } from './target-selection';
 import {
   isBoardGameSoundMuted,
   playCardDraw,
@@ -137,6 +138,7 @@ export function GameBoard({
     if (prevTurnRef.current !== publicGame.turnNumber) {
       prevTurnRef.current = publicGame.turnNumber;
       setHandUnmasked(false);
+      setSelectedTargetId(null);
       setLocalError(null);
       if (
         publicGame.activePlayerId &&
@@ -655,19 +657,23 @@ export function GameBoard({
                                 occupants.map((p) => {
                                   const inAttackRange = attackableIdsOnBoard.has(p.playerId);
                                   const isSelectedTarget = selectedTargetId === p.playerId;
+                                  const isSelfToken = p.playerId === selfPlayerId;
                                   return (
                                     <button
                                       key={p.playerId}
                                       type="button"
+                                      data-testid={isSelfToken ? 'bg-loc-pawn-self' : undefined}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (p.playerId !== selfPlayerId) {
-                                          setSelectedTargetId(p.playerId);
-                                        }
+                                        setSelectedTargetId((prev) =>
+                                          toggleSelectedTargetId(prev, p.playerId, p.alive),
+                                        );
                                       }}
                                       className={`flex items-center gap-1.5 rounded-full pr-2 pl-0.5 py-0.5 border text-xs font-bold transition cursor-pointer ${
                                         isSelectedTarget
-                                          ? 'bg-rose-600/85 border-rose-300 text-white'
+                                          ? isSelfToken
+                                            ? 'bg-emerald-600/85 border-emerald-300 text-white'
+                                            : 'bg-rose-600/85 border-rose-300 text-white'
                                           : inAttackRange
                                             ? 'bg-rose-950/60 border-rose-400/65 text-rose-100 hover:border-rose-300'
                                             : 'bg-slate-900/90 border-white/15 text-slate-100 hover:border-cyan-400/60'
@@ -851,22 +857,27 @@ export function GameBoard({
                   const selected = selectedTargetId === p.playerId;
                   const isTurnHolder = p.playerId === publicGame.activePlayerId;
                   const inAttackRange = attackableIdsOnBoard.has(p.playerId);
+                  const isSelfCard = p.playerId === selfPlayerId;
                   const factionTheme = p.revealedFaction ? FACTION_THEME[p.revealedFaction] : null;
                   const locMeta = LOCATION_VISUAL_META[p.location];
                   return (
                     <button
                       key={p.playerId}
                       type="button"
-                      onClick={() => {
-                        if (p.playerId !== selfPlayerId) {
-                          setSelectedTargetId(p.playerId);
-                        }
-                      }}
+                      data-testid={isSelfCard ? 'bg-player-strip-self' : undefined}
+                      aria-pressed={selected}
+                      onClick={() =>
+                        setSelectedTargetId((prev) =>
+                          toggleSelectedTargetId(prev, p.playerId, p.alive),
+                        )
+                      }
                       className={`rounded-xl border px-2.5 py-2 text-left transition cursor-pointer ${
                         !p.alive
                           ? 'opacity-55 border-slate-800 bg-slate-950/60'
                           : selected
-                            ? 'border-rose-400 bg-rose-950/40 ring-2 ring-rose-400/50'
+                            ? isSelfCard
+                              ? 'border-emerald-400 bg-emerald-950/40 ring-2 ring-emerald-400/50'
+                              : 'border-rose-400 bg-rose-950/40 ring-2 ring-rose-400/50'
                             : isTurnHolder
                               ? 'border-amber-400 bg-slate-900'
                               : inAttackRange
