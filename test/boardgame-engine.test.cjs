@@ -229,6 +229,7 @@ test('V4.3 — Quyền năng 6 ô & Thẻ Thăm Dò Kín 1-đối-1 bảo mật 
   assert.equal(state.turnPhase, 'MAIN_ACTION');
 
   // Cầm inv-01..inv-02 chính xác và kiểm tra P0 không rò tên thẻ công khai
+  target.roleId = 'gac-ky-thuat';
   target.faction = 'lantern-guard';
   target.hp = target.maxHp;
   target.woundsTaken = 0;
@@ -252,6 +253,33 @@ test('V4.3 — Quyền năng 6 ô & Thẻ Thăm Dò Kín 1-đối-1 bảo mật 
   const targetPriv = getPrivateGameView(state, target.playerId);
   assert.equal(actorPriv.privateClues[actorPriv.privateClues.length - 1].cardTitle, 'Phiếu Thử: Đội Săn Đêm');
   assert.equal(targetPriv.privateClues[targetPriv.privateClues.length - 1].cardTitle, 'Phiếu Thử: Đội Săn Đêm');
+
+  // Khánh "Tin Giả" (suong-tin-gia) khi đang úp vai phải né mọi Thẻ Khám Phá Kín gây thương tích (báo Không phản ứng)
+  const khanh = Object.values(state.players).find(
+    (p) => p.playerId !== actor.playerId && p.playerId !== target.playerId,
+  );
+  khanh.roleId = 'suong-tin-gia';
+  khanh.faction = 'mist-order';
+  khanh.revealed = false;
+  khanh.woundsTaken = 0;
+  khanh.hp = 11;
+  actor.hand = ['inv-02', 'inv-08'];
+  applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'INVESTIGATE_CARD', cardId: 'inv-02', targetPlayerId: khanh.playerId },
+    1_750_000_002_100,
+  );
+  assert.equal(khanh.woundsTaken, 0, 'Unrevealed Khánh must evade inv-02 shadow damage');
+  assert.equal(state.lastInvestigation.outcome, 'no-reaction');
+  applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'INVESTIGATE_CARD', cardId: 'inv-08', targetPlayerId: khanh.playerId },
+    1_750_000_002_200,
+  );
+  assert.equal(khanh.woundsTaken, 0, 'Unrevealed Khánh must evade inv-08 unrevealed damage');
+  assert.equal(state.lastInvestigation.outcome, 'no-reaction');
 });
 
 test('V4.4 — Tầm đánh 3 Cụm, Gậy 1d4 (ev-01), Dây Cáp (ev-04), Móc Kéo (ev-05), Tú hút máu & Dũng phản đòn', () => {
@@ -292,13 +320,14 @@ test('V4.4 — Tầm đánh 3 Cụm, Gậy 1d4 (ev-01), Dây Cáp (ev-04), Móc 
   p2.location = 'radio';
   p2.roleId = 'suong-gac-cong';
   p2.faction = 'mist-order';
-  p2.maxHp = 11;
-  p2.hp = 11;
+  p2.maxHp = 14;
+  p2.hp = 14;
   p2.woundsTaken = 0;
   p2.revealed = true;
-  p2.equipped = ['eq-03'];
+  p2.equipped = ['eq-03', 'ev-01']; // Gậy 1d4 phản công chắc chắn gây 1..4 sát thương!
 
   const p2HpBefore = p2.hp;
+  const p1WoundsBefore = p1.woundsTaken;
   const res = applyPlayerGameAction(
     state,
     p1.playerId,
@@ -308,12 +337,57 @@ test('V4.4 — Tầm đánh 3 Cụm, Gậy 1d4 (ev-01), Dây Cáp (ev-04), Móc 
   assert.equal(res.ok, true);
   assert.ok(p2.woundsTaken >= 1 && p2.woundsTaken <= 4);
   assert.ok(p2.hp < p2HpBefore);
-  // Dũng sống nên p1 phải nhận 2 phản đòn (lưu ý Tú có hồi 2 khi đánh trúng -> tổng đổi = 0)
-  assert.equal(p1.woundsTaken, 3);
+  // Dũng (14 HP) sống nên lập tức tung phản kích (với Gậy 1d4 gây 1..4 dmg; Tú hút 2 khi trúng -> tổng wounds >= p1WoundsBefore - 1)
+  assert.ok(p1.woundsTaken >= p1WoundsBefore - 1 && p1.woundsTaken <= p1WoundsBefore + 2);
   if (p2.woundsTaken >= 2) {
-    assert.equal(p2.equipped.length, 0, 'Móc Kéo Đồ KTX phải cướp đồ khi gây >=2 dmg');
-    assert.ok(p1.equipped.includes('eq-03'));
+    assert.equal(p2.equipped.length, 1, 'Móc Kéo Đồ KTX phải cướp đồ giá trị cao nhất từ Dũng');
+    assert.ok(p1.equipped.includes('ev-01'));
   }
+
+  // Kiểm tra Minh 1d4 toàn bàn, Vy 1d6 toàn bàn, Lan khiên 1 vòng & Trang 9 HP hồi đầy máu
+  state.activePlayerId = p1.playerId;
+  state.turnPhase = 'MAIN_ACTION';
+  p1.roleId = 'gac-ky-thuat';
+  p1.revealed = true;
+  p1.skillUsedOnce = false;
+  p3.hp = 14;
+  p3.woundsTaken = 0;
+  const minhSkill = applyPlayerGameAction(
+    state,
+    p1.playerId,
+    { type: 'USE_SKILL', targetPlayerId: p3.playerId },
+    1_750_000_011_000,
+  );
+  assert.equal(minhSkill.ok, true);
+  assert.ok(p3.woundsTaken >= 1 && p3.woundsTaken <= 4, 'Minh 1d4 must deal 1..4 global dmg');
+
+  p1.roleId = 'gac-radio';
+  p1.skillUsedOnce = false;
+  const p3WoundsAfterMinh = p3.woundsTaken;
+  const vySkill = applyPlayerGameAction(
+    state,
+    p1.playerId,
+    { type: 'USE_SKILL', targetPlayerId: p3.playerId },
+    1_750_000_012_000,
+  );
+  assert.equal(vySkill.ok, true);
+  assert.ok(p3.woundsTaken >= p3WoundsAfterMinh + 1 && p3.woundsTaken <= p3WoundsAfterMinh + 6);
+
+  p1.roleId = 'gac-truc-ban';
+  p1.skillUsedOnce = false;
+  const lanSkill = applyPlayerGameAction(state, p1.playerId, { type: 'USE_SKILL' }, 1_750_000_013_000);
+  assert.equal(lanSkill.ok, true);
+  assert.equal(p1.guardianShieldActive, true);
+
+  p1.roleId = 'lang-quan-sat';
+  p1.skillUsedOnce = false;
+  p1.maxHp = 9;
+  p1.woundsTaken = 6;
+  p1.hp = 3;
+  const trangSkill = applyPlayerGameAction(state, p1.playerId, { type: 'USE_SKILL' }, 1_750_000_014_000);
+  assert.equal(trangSkill.ok, true);
+  assert.equal(p1.woundsTaken, 0);
+  assert.equal(p1.hp, 9);
 });
 
 function createStateWithRole(playerCount, roleId, matchPrefix) {
@@ -343,13 +417,11 @@ test('V4.5 — Điều kiện thắng: Đội Săn Đêm, Hội Bóng Đêm, H�
   assert.equal(vHai.finished, true);
   assert.ok(vHai.winnerPlayerIds.includes(hai.playerId));
 
-  // 2. Trang sống + đã lật vai khi bàn <= 2 sống sót & >= 2 người ngã
+  // 2. Trang sống sót tới cuối trận (khi phe chính thắng) sẽ thắng cùng phe kết thúc trận đấu
   const { state: sTrang, player: trang } = createStateWithRole(6, 'lang-quan-sat', 'win-trang');
   assert.ok(trang);
-  trang.revealed = true;
-  const oneShadow = Object.values(sTrang.players).find((p) => p.faction === 'mist-order');
   for (const p of Object.values(sTrang.players)) {
-    if (p.playerId !== trang.playerId && p.playerId !== oneShadow.playerId) {
+    if (p.faction === 'mist-order') {
       p.alive = false;
       p.hp = 0;
     }

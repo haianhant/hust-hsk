@@ -65,9 +65,7 @@ import { getEarnedGlobalBadgeIds, GLOBAL_BADGES } from '../lib/learn/badges';
 import type { PassportMainSection } from '../components/learn/CampusPassportHandbook';
 import type { QuestAnswer } from '../components/learn/QuestPanel';
 import CharacterCreatorModal from '../components/ui/CharacterCreatorModal';
-import { LibraryFloorNav } from '../components/ui/LibraryFloorNav';
 import type { HomeworkState } from '../components/three/Classroom';
-import BuildingEdTechModal from '../features/campus/checkin/BuildingEdTechModal';
 import {
   createEmptyPassportState,
   getCampusLandmarkById,
@@ -88,20 +86,13 @@ import {
   getAnyLibrarySeatDefinition,
   getHook,
   isLibraryLobbySeatId,
-  LibraryLobbyModal,
   releaseActiveSeatSafely,
   SPEECH_RATES,
   TOAST_MS,
   validateSeatSelection,
-  type LibraryLobbyTopic,
 } from '../features/campus/interaction';
-import {
-  CampusHud,
-  CampusQuestsModal,
-  PHOTO_FILTERS,
-  PhotoModeOverlay,
-  type PhotoFilterId,
-} from '../features/campus/ui';
+import type { LibraryLobbyModalTopic as LibraryLobbyTopic } from '../features/campus/interaction/LibraryLobbyModal';
+import type { PhotoFilterId } from '../features/campus/ui/PhotoModeOverlay';
 import {
   CAMPUS_LIFE_QUESTS,
   claimCampusQuest,
@@ -113,15 +104,11 @@ import {
   type CampusQuestMetricKey,
   type CampusQuestsState,
 } from '../features/campus/quests/campus-quests';
-import CampusMemoryWallModal from '../features/social/memory-wall/CampusMemoryWallModal';
 import {
-  BoardGameHUD,
-  BoardGameLobby,
-  GameBoard,
   boardGameClient,
   useBoardGameClientSnapshot,
-  type BoardGameSeatOccupant,
-} from '../features/boardgame';
+} from '../features/boardgame/network/client';
+import type { BoardGameSeatOccupant } from '../features/boardgame/world/BoardGameSeats';
 import {
   BOARD_GAME_MIN_PLAYERS,
   sanitizeInviteCode,
@@ -129,36 +116,86 @@ import {
   type BoardGameTableId,
 } from '../shared/contracts/boardgame';
 import type { MemoryBoardId } from '../features/social/memory-wall/memory-wall';
-import {
-  EntryScreen,
-  LearningOverlayModal,
-  LessonPickerCard,
-  type HandbookTab,
-  type LearningPanelType,
-  type ReviewSessionState,
-} from '../features/learning/hsk';
+import { EntryScreen, type HandbookTab } from '../features/learning/hsk/EntryScreen';
+import type {
+  LearningPanelType,
+  ReviewSessionState,
+} from '../features/learning/hsk/LearningOverlayModal';
 import { useMultiplayerBridge } from '../features/social/multiplayer';
 import {
   derivePlayerPresence,
   isSamePublicPresence,
 } from '../features/social/presence/presence';
-import {
-  FocusModeView,
-  StudyLeaderboardModal,
-  StudyPanel,
-  useStudySession,
-} from '../features/study';
+import { useStudySession } from '../features/study/study-session/useStudySession';
 import {
   getSeatDefinition,
   type PlayerStudyPresence,
   type StudyRoomZoneId,
 } from '../shared/contracts/study';
 
-// CampusScene chỉ mount sau khi bấm "Vào trường" — tránh autoplay/WebGL
-// trước khi người dùng tương tác.
+// Lazy-load toàn bộ 3D & HUD/Modal phụ để màn hình khởi tạo đạt FCP/TTI tức thì.
 const CampusScene = dynamic(() => import('../components/three/CampusScene'), {
   ssr: false,
 });
+const CampusHud = dynamic(() => import('../features/campus/ui/CampusHud'), {
+  ssr: false,
+});
+const CampusQuestsModal = dynamic(() => import('../features/campus/ui/CampusQuestsModal'), {
+  ssr: false,
+});
+const PhotoModeOverlay = dynamic(() => import('../features/campus/ui/PhotoModeOverlay'), {
+  ssr: false,
+});
+const BuildingEdTechModal = dynamic(
+  () => import('../features/campus/checkin/BuildingEdTechModal'),
+  { ssr: false },
+);
+const LibraryLobbyModal = dynamic(
+  () => import('../features/campus/interaction/LibraryLobbyModal'),
+  { ssr: false },
+);
+const LibraryFloorNav = dynamic(
+  () => import('../components/ui/LibraryFloorNav').then((m) => m.LibraryFloorNav),
+  { ssr: false },
+);
+const CampusMemoryWallModal = dynamic(
+  () => import('../features/social/memory-wall/CampusMemoryWallModal'),
+  { ssr: false },
+);
+const BoardGameHUD = dynamic(() => import('../features/boardgame/ui/BoardGameHUD'), {
+  ssr: false,
+});
+const BoardGameLobby = dynamic(() => import('../features/boardgame/ui/BoardGameLobby'), {
+  ssr: false,
+});
+const GameBoard = dynamic(() => import('../features/boardgame/ui/GameBoard'), {
+  ssr: false,
+});
+const LearningOverlayModal = dynamic(
+  () => import('../features/learning/hsk/LearningOverlayModal'),
+  { ssr: false },
+);
+const LessonPickerCard = dynamic(
+  () => import('../features/learning/hsk/LessonPickerCard'),
+  { ssr: false },
+);
+const FocusModeView = dynamic(() => import('../features/study/focus-mode/FocusModeView'), {
+  ssr: false,
+});
+const StudyPanel = dynamic(() => import('../features/study/ui/StudyPanel'), {
+  ssr: false,
+});
+const StudyLeaderboardModal = dynamic(
+  () => import('../features/study/ui/StudyLeaderboardModal'),
+  { ssr: false },
+);
+
+const PHOTO_FILTER_CSS: Record<PhotoFilterId, string> = {
+  none: 'none',
+  'warm-sunset': 'saturate(1.22) sepia(0.18) contrast(1.06)',
+  'film-vintage': 'contrast(1.1) sepia(0.28) brightness(0.98)',
+  'vivid-bk': 'saturate(1.32) contrast(1.08) brightness(1.03)',
+};
 
 function computeRealWorldTimeOfDay(now: Date = new Date()): {
   timeOfDay: TimeOfDay;
@@ -227,6 +264,7 @@ function countBoardGameTablePlayers(
 
 export default function HomePage() {
   const [entered, setEntered] = useState(false);
+  const [sceneFirstFrameReady, setSceneFirstFrameReady] = useState(false);
   const [zone, setZone] = useState(playerState.zone);
   const [viewMode, setViewMode] = useState<CameraViewMode>(playerState.viewMode);
   const [photoMode, setPhotoMode] = useState<boolean>(false);
@@ -356,6 +394,31 @@ export default function HomePage() {
     if (entered && !lofiManuallyPausedRef.current) {
       lofiAudio.start();
     }
+  }, [entered]);
+
+  // Nạp font Google Fonts bất đồng bộ (non-blocking) & preload trước CampusScene/CampusHud khi user đang ở màn hình chào
+  useEffect(() => {
+    if (typeof document !== 'undefined' && !document.querySelector('link[data-bkhn-font]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href =
+        'https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap';
+      link.setAttribute('data-bkhn-font', '1');
+      document.head.appendChild(link);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (entered) {
+      const safetyTimer = window.setTimeout(() => setSceneFirstFrameReady(true), 2200);
+      return () => window.clearTimeout(safetyTimer);
+    }
+    setSceneFirstFrameReady(false);
+    const preloadTimer = window.setTimeout(() => {
+      void import('../components/three/CampusScene');
+      void import('../features/campus/ui/CampusHud');
+    }, 250);
+    return () => window.clearTimeout(preloadTimer);
   }, [entered]);
 
   const [noVoice, setNoVoice] = useState(false);
@@ -2624,12 +2687,10 @@ export default function HomePage() {
   const unclaimedQuestCount = CAMPUS_LIFE_QUESTS.filter(
     (q) => isCampusQuestCompleted(campusQuests, q) && !campusQuests.claimedIds.includes(q.id),
   ).length;
-  const activePhotoCssFilter = photoMode
-    ? PHOTO_FILTERS.find((f) => f.id === photoFilter)?.cssFilter ?? 'none'
-    : 'none';
+  const activePhotoCssFilter = photoMode ? PHOTO_FILTER_CSS[photoFilter] ?? 'none' : 'none';
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden">
+    <main className="relative h-dvh w-full overflow-hidden bg-[#0f172a]">
       {study.focusPolicy.suspend3DRendering ? (
         <FocusModeView
           zoneLabel={currentZoneLabel}
@@ -2686,7 +2747,29 @@ export default function HomePage() {
               homework={homework}
               onObjectClick={handleObjectClick}
               onSelectBoardGameSeat={handleSelectBoardGameSeat}
+              onFirstFrameReady={() => setSceneFirstFrameReady(true)}
             />
+          </div>
+
+          {/* Màn chuyển cảnh mượt không nháy trắng khi khởi tạo khung hình 3D đầu tiên */}
+          <div
+            data-testid="campus-loading-overlay"
+            aria-hidden={sceneFirstFrameReady}
+            className={`pointer-events-none fixed inset-0 z-20 flex flex-col items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#13221a] to-[#0f172a] text-white transition-opacity duration-300 ${
+              sceneFirstFrameReady ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            <div className="flex flex-col items-center gap-3 px-6 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/40 bg-[#B5121B] text-xl font-black shadow-lg">
+                BK
+              </div>
+              <p className="text-sm font-extrabold tracking-wide text-amber-200 sm:text-base">
+                Đang khởi tạo khuôn viên 3D ĐHBK Hà Nội...
+              </p>
+              <div className="h-1.5 w-48 overflow-hidden rounded-full bg-white/15">
+                <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-[#B5121B] via-amber-400 to-emerald-400" />
+              </div>
+            </div>
           </div>
 
           {/* Fade chuyển cảnh vào/ra phòng học. */}
@@ -2791,16 +2874,18 @@ export default function HomePage() {
           )}
 
           {/* Bảng điều khiển Thang máy & Chuyển tầng Thư viện Tạ Quang Bửu (Tầng 1–10) */}
-          <LibraryFloorNav
-            visible={inLibraryLobby && !study.focusPolicy.suspend3DRendering}
-            externalModal={libraryExtraModal}
-            onClearExternalModal={() => setLibraryExtraModal(null)}
-          />
+          {inLibraryLobby && !study.focusPolicy.suspend3DRendering && (
+            <LibraryFloorNav
+              visible={true}
+              externalModal={libraryExtraModal}
+              onClearExternalModal={() => setLibraryExtraModal(null)}
+            />
+          )}
         </>
       )}
 
       {/* Bảng Tự học Bách khoa (Pomodoro + Nhiệm vụ tự học + Focus Mode) */}
-      {!study.focusPolicy.suspend3DRendering && (
+      {study.studyPanelOpen && !study.focusPolicy.suspend3DRendering && (
         <StudyPanel
           open={study.studyPanelOpen}
           zoneLabel={currentZoneLabel}
@@ -2841,36 +2926,42 @@ export default function HomePage() {
       )}
 
       {/* Bảng Xếp Hạng Giờ Học Bách Khoa (SQLite Cloud Sync) */}
-      <StudyLeaderboardModal
-        open={leaderboardOpen}
-        session={study.session}
-        onClose={() => setLeaderboardOpen(false)}
-        onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
-      />
+      {leaderboardOpen && (
+        <StudyLeaderboardModal
+          open={leaderboardOpen}
+          session={study.session}
+          onClose={() => setLeaderboardOpen(false)}
+          onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
+        />
+      )}
 
       {/* Bảng Lưu bút Sân trường (Async Memory Wall) */}
-      <CampusMemoryWallModal
-        open={memoryWallOpen && entered}
-        initialBoardId={memoryWallBoardId}
-        characterProfile={characterProfile}
-        onMemoryAction={() => {
-          bumpQuestMetric('memoryActions');
-        }}
-        onClose={() => setMemoryWallOpen(false)}
-      />
+      {memoryWallOpen && entered && (
+        <CampusMemoryWallModal
+          open={memoryWallOpen && entered}
+          initialBoardId={memoryWallBoardId}
+          characterProfile={characterProfile}
+          onMemoryAction={() => {
+            bumpQuestMetric('memoryActions');
+          }}
+          onClose={() => setMemoryWallOpen(false)}
+        />
+      )}
 
       {/* Bảng Hành trình Sinh viên Bách Khoa & Danh hiệu mở khóa */}
-      <CampusQuestsModal
-        open={campusQuestsOpen && entered}
-        questsState={campusQuests}
-        characterProfile={characterProfile}
-        heldDrink={characterProfile.heldDrink ?? 'none'}
-        onClaimQuest={handleClaimCampusQuest}
-        onFastTravel={doFastTravel}
-        onUpdateCosmetics={handleUpdateCosmetics}
-        onSelectDrink={handleSelectDrink}
-        onClose={() => setCampusQuestsOpen(false)}
-      />
+      {campusQuestsOpen && entered && (
+        <CampusQuestsModal
+          open={campusQuestsOpen && entered}
+          questsState={campusQuests}
+          characterProfile={characterProfile}
+          heldDrink={characterProfile.heldDrink ?? 'none'}
+          onClaimQuest={handleClaimCampusQuest}
+          onFastTravel={doFastTravel}
+          onUpdateCosmetics={handleUpdateCosmetics}
+          onSelectDrink={handleSelectDrink}
+          onClose={() => setCampusQuestsOpen(false)}
+        />
+      )}
 
       {/* Cửa sổ 3D Nhân vật & Trang phục HUST mở từ HUD trong sân trường */}
       {outfitOpen && entered && (
@@ -2931,43 +3022,45 @@ export default function HomePage() {
             onStartMatch={() => boardGameClient.startMatch()}
             onRequestExit={handleRequestExitBoardGameClub}
           />
-          <BoardGameLobby
-            open={boardGameLobbyOpen}
-            rulesOpen={boardGameRulesOpen}
-            exitConfirmOpen={boardGameExitConfirmOpen}
-            currentSeatId={boardGameSeatId}
-            occupants={boardGameOccupants}
-            table1Count={bgTable1Count}
-            table2Count={bgTable2Count}
-            directoryMatches={bgSnap.directoryMatches}
-            activePlayers={bgSnap.players}
-            spectatorCount={bgSnap.spectatorCount}
-            selfPlayerId={bgSnap.playerId}
-            isSpectator={bgSnap.isSpectator}
-            inviteCode={bgSnap.inviteCode}
-            matchStatusLabel={bgStatusLabel}
-            isHost={isBgHost}
-            localReady={Boolean(selfBgPlayer?.ready)}
-            serverNotice={bgSnap.lastError}
-            supportsOnlineLobby
-            canStartMatch={canStartBgMatch}
-            onCloseLobby={() => setBoardGameLobbyOpen(false)}
-            onCloseRules={() => setBoardGameRulesOpen(false)}
-            onCancelExit={() => setBoardGameExitConfirmOpen(false)}
-            onConfirmExit={exitBoardGameClubFade}
-            onSelectSeat={handleSelectBoardGameSeat}
-            onStandUpSeat={handleStandUpBoardGameSeat}
-            onCreateMatch={handleCreateBoardGameMatch}
-            onJoinByCode={handleJoinBoardGameByCode}
-            onJoinDirectoryMatch={handleJoinDirectoryBoardGameMatch}
-            onToggleReady={() => boardGameClient.setReady(!selfBgPlayer?.ready)}
-            onStartMatch={() => boardGameClient.startMatch()}
-            onLeaveMatch={() => {
-              boardGameClient.leaveMatch();
-              getHook()?.standUpBoardGameSeat?.();
-              setBoardGameSeatId(null);
-            }}
-          />
+          {(boardGameLobbyOpen || boardGameRulesOpen || boardGameExitConfirmOpen) && (
+            <BoardGameLobby
+              open={boardGameLobbyOpen}
+              rulesOpen={boardGameRulesOpen}
+              exitConfirmOpen={boardGameExitConfirmOpen}
+              currentSeatId={boardGameSeatId}
+              occupants={boardGameOccupants}
+              table1Count={bgTable1Count}
+              table2Count={bgTable2Count}
+              directoryMatches={bgSnap.directoryMatches}
+              activePlayers={bgSnap.players}
+              spectatorCount={bgSnap.spectatorCount}
+              selfPlayerId={bgSnap.playerId}
+              isSpectator={bgSnap.isSpectator}
+              inviteCode={bgSnap.inviteCode}
+              matchStatusLabel={bgStatusLabel}
+              isHost={isBgHost}
+              localReady={Boolean(selfBgPlayer?.ready)}
+              serverNotice={bgSnap.lastError}
+              supportsOnlineLobby
+              canStartMatch={canStartBgMatch}
+              onCloseLobby={() => setBoardGameLobbyOpen(false)}
+              onCloseRules={() => setBoardGameRulesOpen(false)}
+              onCancelExit={() => setBoardGameExitConfirmOpen(false)}
+              onConfirmExit={exitBoardGameClubFade}
+              onSelectSeat={handleSelectBoardGameSeat}
+              onStandUpSeat={handleStandUpBoardGameSeat}
+              onCreateMatch={handleCreateBoardGameMatch}
+              onJoinByCode={handleJoinBoardGameByCode}
+              onJoinDirectoryMatch={handleJoinDirectoryBoardGameMatch}
+              onToggleReady={() => boardGameClient.setReady(!selfBgPlayer?.ready)}
+              onStartMatch={() => boardGameClient.startMatch()}
+              onLeaveMatch={() => {
+                boardGameClient.leaveMatch();
+                getHook()?.standUpBoardGameSeat?.();
+                setBoardGameSeatId(null);
+              }}
+            />
+          )}
           {bgGameActive && bgSnap.publicGame && (
             <GameBoard
               inviteCode={bgSnap.inviteCode}
@@ -3017,8 +3110,9 @@ export default function HomePage() {
       )}
 
       {/* Panel học / sổ tay / kết quả (DOM overlay, khóa di chuyển khi mở). */}
-      <LearningOverlayModal
-        panel={panel}
+      {panel !== null && (
+        <LearningOverlayModal
+          panel={panel}
         passport={passport}
         passportSection={passportSection}
         progress={progress}
@@ -3068,7 +3162,8 @@ export default function HomePage() {
         onReviewNow={handleReviewNow}
         onCompleteQuest={completeQuest}
         onStartQuest={(qId) => startQuest(qId, true)}
-      />
+        />
+      )}
     </main>
   );
 }

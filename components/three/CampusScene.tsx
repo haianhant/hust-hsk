@@ -13,10 +13,11 @@ import Ground from './Ground';
 import Landmarks from './Landmarks';
 import Player from './Player';
 import RemotePlayers from './RemotePlayers';
-import Classroom, { type HomeworkState } from './Classroom';
-import LibraryLobby from './LibraryLobby';
+import type { HomeworkState } from './Classroom';
 import type { BoardGameSeatOccupant } from '../../features/boardgame/world/BoardGameSeats';
 
+const Classroom = lazy(() => import('./Classroom'));
+const LibraryLobby = lazy(() => import('./LibraryLobby'));
 const BoardGameLounge = lazy(() => import('../../features/boardgame/world/BoardGameLounge'));
 import { MinhNpc } from './Npc';
 import BackgroundBuildings from './BackgroundBuildings';
@@ -80,6 +81,7 @@ export interface CampusSceneProps {
   homework?: HomeworkState;
   onObjectClick?: (id: string) => void;
   onSelectBoardGameSeat?: (seatId: string) => void;
+  onFirstFrameReady?: () => void;
 }
 
 const ATMOSPHERE: Record<
@@ -239,6 +241,32 @@ function isSoftwareWebGLRenderer(gl: THREE.WebGLRenderer): boolean {
   }
 }
 
+function FirstFrameNotifier({
+  onReady,
+  suspended,
+}: {
+  onReady?: () => void;
+  suspended?: boolean;
+}) {
+  const notifiedRef = useRef(false);
+
+  useEffect(() => {
+    if (suspended && onReady && !notifiedRef.current) {
+      notifiedRef.current = true;
+      onReady();
+    }
+  }, [suspended, onReady]);
+
+  useFrame(() => {
+    if (!notifiedRef.current && onReady) {
+      notifiedRef.current = true;
+      onReady();
+    }
+  });
+
+  return null;
+}
+
 /**
  * Tạo bản đồ phản xạ môi trường vật lý (IBL — Image-Based Lighting) bằng THREE.PMREMGenerator
  * từ texture Equirectangular tự sinh để mọi mặt kính, mặt nước Hồ Tiền, kim loại có phản chiếu chân thực.
@@ -253,35 +281,47 @@ function ProceduralEnvironment({
   const { gl, scene } = useThree();
 
   useEffect(() => {
-    // Trên trình render phần mềm (SwiftShader CI), bỏ qua PMREM trong nhà để giữ tốc độ tối đa
-    if (isIndoor && isSoftwareWebGLRenderer(gl)) {
+    // Trên trình render phần mềm (SwiftShader CI), bỏ qua PMREM để giữ tốc độ khởi tạo tối đa
+    if (isSoftwareWebGLRenderer(gl)) {
       scene.environment = null;
       return;
     }
 
-    const equirect = isIndoor
-      ? makeIndoorAtriumEnvEquirectTexture(timeOfDay)
-      : makeSkyEnvEquirectTexture(timeOfDay);
-    const pmrem = new THREE.PMREMGenerator(gl);
-    pmrem.compileEquirectangularShader();
-    const envTarget = pmrem.fromEquirectangular(equirect);
+    let cancelled = false;
+    let equirect: THREE.CanvasTexture | null = null;
+    let pmrem: THREE.PMREMGenerator | null = null;
+    let envTarget: THREE.WebGLRenderTarget | null = null;
 
-    scene.environment = envTarget.texture;
-    if ('environmentIntensity' in scene) {
-      (scene as THREE.Scene & { environmentIntensity: number }).environmentIntensity = isIndoor
-        ? 0.5
-        : timeOfDay === 'night'
-          ? 0.3
-          : 0.55;
-    }
+    const buildEnv = () => {
+      if (cancelled) return;
+      equirect = isIndoor
+        ? makeIndoorAtriumEnvEquirectTexture(timeOfDay)
+        : makeSkyEnvEquirectTexture(timeOfDay);
+      pmrem = new THREE.PMREMGenerator(gl);
+      pmrem.compileEquirectangularShader();
+      envTarget = pmrem.fromEquirectangular(equirect);
+
+      scene.environment = envTarget.texture;
+      if ('environmentIntensity' in scene) {
+        (scene as THREE.Scene & { environmentIntensity: number }).environmentIntensity = isIndoor
+          ? 0.5
+          : timeOfDay === 'night'
+            ? 0.3
+            : 0.55;
+      }
+    };
+
+    const delayTimer = window.setTimeout(buildEnv, isIndoor ? 20 : 120);
 
     return () => {
-      if (scene.environment === envTarget.texture) {
+      cancelled = true;
+      window.clearTimeout(delayTimer);
+      if (envTarget && scene.environment === envTarget.texture) {
         scene.environment = null;
       }
-      envTarget.dispose();
-      equirect.dispose();
-      pmrem.dispose();
+      envTarget?.dispose();
+      equirect?.dispose();
+      pmrem?.dispose();
     };
   }, [gl, scene, timeOfDay, isIndoor]);
 
@@ -678,8 +718,28 @@ export default function CampusScene({
   homework = 'desk',
   onObjectClick,
   onSelectBoardGameSeat,
+  onFirstFrameReady,
 }: CampusSceneProps) {
+  const [mountWave, setMountWave] = useState<0 | 1 | 2>(0);
   const [libraryFloor, setLibraryFloor] = useState<number>(() => playerState.libraryFloor);
+
+  useEffect(() => {
+    let waveTimer: number | null = null;
+    let preloadTimer: number | null = null;
+    const rafId = window.requestAnimationFrame(() => {
+      setMountWave(1);
+      waveTimer = window.setTimeout(() => setMountWave(2), 90);
+    });
+    preloadTimer = window.setTimeout(() => {
+      void import('./LibraryLobby');
+      void import('./Classroom');
+    }, 1200);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      if (waveTimer !== null) window.clearTimeout(waveTimer);
+      if (preloadTimer !== null) window.clearTimeout(preloadTimer);
+    };
+  }, []);
   useEffect(() => {
     if (!inLibraryLobby) return;
     setLibraryFloor(playerState.libraryFloor);
@@ -726,8 +786,9 @@ export default function CampusScene({
     >
       <color attach="background" args={[activeAtm.bg]} />
       <fog attach="fog" args={[activeAtm.fogColor, activeAtm.fogNear, activeAtm.fogFar]} />
+      <FirstFrameNotifier onReady={onFirstFrameReady} suspended={suspend3D || testPause3D} />
       <AdaptiveDprController />
-      <ProceduralEnvironment timeOfDay={timeOfDay} isIndoor={isIndoor} />
+      {mountWave >= 2 && <ProceduralEnvironment timeOfDay={timeOfDay} isIndoor={isIndoor} />}
 
       <hemisphereLight args={[activeAtm.hemiSky, activeAtm.hemiGround, activeAtm.hemiIntensity]} />
       <PlayerCenteredSunLight atm={activeAtm} isIndoor={isIndoor} />
@@ -748,12 +809,14 @@ export default function CampusScene({
       />
 
       {inClassroom ? (
-        <Classroom
-          notebookOpen={notebookOpen}
-          homework={homework}
-          timeOfDay={timeOfDay}
-          onObjectClick={onObjectClick ?? (() => undefined)}
-        />
+        <Suspense fallback={null}>
+          <Classroom
+            notebookOpen={notebookOpen}
+            homework={homework}
+            timeOfDay={timeOfDay}
+            onObjectClick={onObjectClick ?? (() => undefined)}
+          />
+        </Suspense>
       ) : inBoardGameClub ? (
         <Suspense fallback={null}>
           <BoardGameLounge
@@ -785,34 +848,34 @@ export default function CampusScene({
               </group>
             </>
           )}
-          <LibraryLobby
-            activeSeatId={activeSeatId}
-            nearestSeatId={nearestSeatId}
-            timeOfDay={timeOfDay}
-            onObjectClick={onObjectClick}
-          />
+          <Suspense fallback={null}>
+            <LibraryLobby
+              activeSeatId={activeSeatId}
+              nearestSeatId={nearestSeatId}
+              timeOfDay={timeOfDay}
+              onObjectClick={onObjectClick}
+            />
+          </Suspense>
         </>
       ) : (
         <CampusTreeBatchProvider>
-          <SkyAtmosphereAndNightLights timeOfDay={timeOfDay} />
+          {mountWave >= 1 && <SkyAtmosphereAndNightLights timeOfDay={timeOfDay} />}
           <Ground />
           <Landmarks timeOfDay={timeOfDay} />
-          {/* Khối nhà phụ + cây nền + ghế/đèn rìa campus (đợt sửa lần 2 §4).
-              Đã gắn ở đây — luồng tích hợp KHÔNG gắn lần 2. */}
-          <BackgroundBuildings timeOfDay={timeOfDay} />
-          {/* Mở rộng toàn bộ khuôn viên ĐHBK Hà Nội theo Bản đồ Số chuẩn https://hustmap.com/. */}
-          <CampusExpansion timeOfDay={timeOfDay} hskMode={hskMode} />
-          {/* Quần thể sinh viên NPC đi dạo & sinh hoạt trong sân trường. */}
-          <AmbientLife />
-          {/* NPC bạn đồng hành Minh đứng gần cổng Parabol, gần spawn. */}
+          {/* Đợt 2 (wave >= 2): Khối nhà phụ, NPC, biển check-in & hiệu ứng để Frame 0 khởi tạo tức thì */}
+          {mountWave >= 2 && <BackgroundBuildings timeOfDay={timeOfDay} />}
+          {/* Đợt 1 (wave >= 1): Toàn bộ khuôn viên C6-C7-C15, KTX, B1, SVĐ */}
+          {mountWave >= 1 && <CampusExpansion timeOfDay={timeOfDay} hskMode={hskMode} />}
+          {mountWave >= 2 && (
+            <>
+              <AmbientLife />
+              <CampusCheckinMarkers isNight={timeOfDay === 'night'} hskMode={hskMode} />
+              <CampusAtmosphereFX timeOfDay={timeOfDay} />
+              <CampusInteractiveLife timeOfDay={timeOfDay} />
+            </>
+          )}
           <MinhNpc />
-          {/* Xe máy cá nhân (đợt 3 giai đoạn 4) — chỉ ngoài sân, không vào phòng học. */}
           <Motorbike />
-          {/* Hệ thống trụ Check-in & Giới thiệu EdTech 9 công trình biểu tượng ĐHBK Hà Nội */}
-          <CampusCheckinMarkers isNight={timeOfDay === 'night'} hskMode={hskMode} />
-          {/* Hiệu ứng không gian sống động & Tương tác đời thường HUSTVerse */}
-          <CampusAtmosphereFX timeOfDay={timeOfDay} />
-          <CampusInteractiveLife timeOfDay={timeOfDay} />
         </CampusTreeBatchProvider>
       )}
       <RemotePlayers

@@ -185,7 +185,7 @@ export function applyDamage(
     appendPublicLog(
       state,
       'skill',
-      `🛡️ Khiên Bất Hoại che chở ${target.displayName} — miễn nhiễm sát thương!`,
+      `🛡️ Lá Chắn Chốt Trực che chở ${target.displayName} — miễn nhiễm sát thương!`,
       nowMs,
       target.playerId,
     );
@@ -819,6 +819,12 @@ export function resolveInvestigateCard(
       break;
   }
 
+  const disguisedEvaded =
+    target.roleId === 'suong-tin-gia' && !target.revealed && conditionMet && !healCard;
+  if (disguisedEvaded) {
+    conditionMet = false;
+  }
+
   if (conditionMet) {
     if (healCard) {
       applyHeal(state, target, 1);
@@ -867,7 +873,9 @@ export function resolveInvestigateCard(
     targetPlayerId: actor.playerId,
     targetName: actor.displayName,
     outcome: conditionMet ? 'condition-met' : 'no-reaction',
-    detail: `${actor.displayName} đưa kín cho bạn "${card.title}" → ${conditionMet ? 'Bạn khớp điều kiện!' : 'Không khớp.'}`,
+    detail: disguisedEvaded
+      ? `${actor.displayName} đưa kín cho bạn "${card.title}" → Bạn khớp điều kiện nhưng 🎭 Ngụy Trang Tin Giả đã né sát thương & báo Không phản ứng!`
+      : `${actor.displayName} đưa kín cho bạn "${card.title}" → ${conditionMet ? 'Bạn khớp điều kiện!' : 'Không khớp.'}`,
   });
 
   appendPublicLog(state, 'investigate', publicMessage, nowMs, actor.playerId);
@@ -960,12 +968,14 @@ export function resolveAttack(
     }
   }
 
-  // Móc Kéo Đồ KTX (ev-05): gây >= 2 sát thương khi mục tiêu còn sống -> cướp 1 Trang bị.
+  // Móc Kéo Đồ KTX (ev-05) hoặc Hải "Sưu Tầm" (lật vai): gây >= 2 sát thương -> cướp 1 Trang bị.
+  const canStealGear =
+    actor.equipped.includes('ev-05') || (actor.revealed && actor.roleId === 'lang-anh-san');
   if (
     actualDealt >= 2 &&
     actor.alive &&
     target.alive &&
-    actor.equipped.includes('ev-05') &&
+    canStealGear &&
     target.equipped.length > 0
   ) {
     const stolen = stealOneEquippedGear(state, actor, target);
@@ -973,20 +983,36 @@ export function resolveAttack(
       appendPublicLog(
         state,
         'steal',
-        `🪝 ${actor.displayName} kích hoạt Móc Kéo Đồ KTX: cướp "${stolen.title}" từ ${target.displayName}!`,
+        actor.equipped.includes('ev-05')
+          ? `🪝 ${actor.displayName} kích hoạt Móc Kéo Đồ KTX: cướp "${stolen.title}" từ ${target.displayName}!`
+          : `🧲 Hải "Sưu Tầm" (${actor.displayName}) thu thập "${stolen.title}" từ ${target.displayName}!`,
         nowMs,
         actor.playerId,
       );
     }
   }
 
-  // Nội tại Dũng "Gác Cổng": khi còn sống sau cú đánh trúng -> phản lại 2 sát thương.
-  if (actualDealt > 0 && target.alive && target.revealed && target.roleId === 'suong-gac-cong' && actor.alive) {
-    const reflected = applyDamage(state, actor, 2, 'skill', target, nowMs);
+  // Nội tại Dũng "Gác Cổng": khi còn sống sau bị đánh thường -> lập tức tung đòn đánh trả (|1d6 - 1d4|).
+  if (target.alive && target.revealed && target.roleId === 'suong-gac-cong' && actor.alive) {
+    const cStick = target.equipped.includes('ev-01');
+    const cd6 = cStick ? 0 : rollD6(state);
+    const cd4 = rollD4(state);
+    const cBase = cStick ? cd4 : Math.abs(cd6 - cd4);
+    let cRaw = cBase;
+    if (cBase > 0) {
+      if (target.equipped.includes('eq-04')) cRaw += 1;
+      if (target.equipped.includes('ev-02')) cRaw += 1;
+      if (target.equipped.includes('ev-03')) cRaw += 2;
+      if (target.equipped.includes('ev-04')) cRaw += 1;
+    }
+    const cDealt = applyDamage(state, actor, cRaw, 'attack', target, nowMs);
+    const cRollDesc = cStick ? `1d4=${cd4}` : `|${cd6}-${cd4}|=${cBase}`;
     appendPublicLog(
       state,
       'skill',
-      `🛡️ Dũng "Gác Cổng" (${target.displayName}) phản đòn ${reflected} sát thương ngược vào ${actor.displayName}!`,
+      cDealt > 0
+        ? `🥊 Dũng "Gác Cổng" (${target.displayName}) phản kích tức thì (${cRollDesc}, tổng ${cRaw}) → ${actor.displayName} chịu ${cDealt} sát thương!`
+        : `🥊 Dũng "Gác Cổng" (${target.displayName}) phản kích (${cRollDesc}) nhưng đánh hụt ${actor.displayName}!`,
       nowMs,
       target.playerId,
     );
@@ -1058,23 +1084,19 @@ export function resolveUseSkill(
   switch (actor.roleId) {
     case 'gac-ky-thuat': {
       if (!targetPlayerId) {
-        return { ok: false, error: 'Chọn 1 người chơi đang đứng cùng Cụm để tung Đòn Phá Giáp.' };
+        return { ok: false, error: 'Chọn 1 người chơi bất kỳ để tung Đòn Phá Vây 1d4.' };
       }
       const target = state.players[targetPlayerId];
-      if (
-        !target ||
-        !target.alive ||
-        target.playerId === actor.playerId ||
-        !areInSameCluster(actor.location, target.location)
-      ) {
-        return { ok: false, error: 'Mục tiêu phải còn sống và đứng cùng Cụm Khu Vực với bạn.' };
+      if (!target || !target.alive || target.playerId === actor.playerId) {
+        return { ok: false, error: 'Mục tiêu phải là người chơi khác còn sống.' };
       }
       actor.skillUsedOnce = true;
-      const dealt = applyDamage(state, target, 4, 'skill', actor, nowMs);
+      const die = rollD4(state);
+      const dealt = applyDamage(state, target, die, 'skill', actor, nowMs);
       appendPublicLog(
         state,
         'skill',
-        `💥 ${actor.displayName} kích hoạt Đòn Phá Giáp Toàn Lực: ${target.displayName} chịu ${dealt} sát thương!`,
+        `💥 ${actor.displayName} kích hoạt Đòn Phá Vây (1d4=${die}) vào ${target.displayName} → ${dealt} sát thương!`,
         nowMs,
         actor.playerId,
       );
@@ -1082,16 +1104,12 @@ export function resolveUseSkill(
     }
 
     case 'gac-truc-ban': {
-      const target = targetPlayerId ? state.players[targetPlayerId] : actor;
-      if (!target || !target.alive) {
-        return { ok: false, error: 'Mục tiêu hồi sức không hợp lệ.' };
-      }
       actor.skillUsedOnce = true;
-      const healed = applyHeal(state, target, target.woundsTaken);
+      actor.guardianShieldActive = true;
       appendPublicLog(
         state,
         'skill',
-        `💚 ${actor.displayName} kích hoạt Hiệu Lệnh Hồi Sức: ${target.displayName} hồi đầy ${healed} thương tích!`,
+        `🛡️ ${actor.displayName} bật Lá Chắn Chốt Trực — miễn nhiễm mọi sát thương tới đầu lượt sau!`,
         nowMs,
         actor.playerId,
       );
@@ -1100,41 +1118,7 @@ export function resolveUseSkill(
 
     case 'gac-radio': {
       if (!targetPlayerId) {
-        return { ok: false, error: 'Chọn 1 người chơi khác để Soi Tần Số Thật.' };
-      }
-      const target = state.players[targetPlayerId];
-      if (!target || !target.alive || target.playerId === actor.playerId) {
-        return { ok: false, error: 'Mục tiêu không hợp lệ.' };
-      }
-      actor.skillCooldown = role.cooldownRounds;
-      const targetRole = getRoleDesign(target.roleId);
-      appendPrivateClue(actor, {
-        round: state.round,
-        atMs: nowMs,
-        cardTitle: 'Soi Tần Số Thật (Vy)',
-        targetPlayerId: target.playerId,
-        targetName: target.displayName,
-        outcome: 'condition-met',
-        detail: `📡 Tín hiệu xác thực: ${target.displayName} là ${targetRole.name} (${FACTION_LABELS[target.faction]}).`,
-      });
-      let extraText = '';
-      if (target.faction === 'mist-order') {
-        const dealt = applyDamage(state, target, 1, 'skill', actor, nowMs);
-        extraText = ` (tín hiệu nhiễu Bóng Đêm gây ${dealt} sát thương)`;
-      }
-      appendPublicLog(
-        state,
-        'skill',
-        `📡 ${actor.displayName} soi tần số lên ${target.displayName}${extraText}.`,
-        nowMs,
-        actor.playerId,
-      );
-      return { ok: true };
-    }
-
-    case 'suong-tin-gia': {
-      if (!targetPlayerId) {
-        return { ok: false, error: 'Chọn 1 người chơi khác để phóng Sấm Chớp Ký Túc.' };
+        return { ok: false, error: 'Chọn 1 người chơi bất kỳ để phóng Xung Cao Áp 1d6.' };
       }
       const target = state.players[targetPlayerId];
       if (!target || !target.alive || target.playerId === actor.playerId) {
@@ -1146,7 +1130,32 @@ export function resolveUseSkill(
       appendPublicLog(
         state,
         'skill',
-        `⚡ ${actor.displayName} tung Sấm Chớp Ký Túc (1d6=${die}) vào ${target.displayName} → ${dealt} sát thương!`,
+        `⚡ ${actor.displayName} tung Xung Cao Áp (1d6=${die}) vào ${target.displayName} → ${dealt} sát thương!`,
+        nowMs,
+        actor.playerId,
+      );
+      return { ok: true };
+    }
+
+    case 'suong-tin-gia': {
+      if (!targetPlayerId) {
+        return { ok: false, error: 'Chọn 1 người cùng Cụm để tung Nhiễu Loạn KTX.' };
+      }
+      const target = state.players[targetPlayerId];
+      if (
+        !target ||
+        !target.alive ||
+        target.playerId === actor.playerId ||
+        !areInSameCluster(actor.location, target.location)
+      ) {
+        return { ok: false, error: 'Mục tiêu phải đang đứng cùng Cụm Khu Vực với bạn.' };
+      }
+      actor.skillCooldown = role.cooldownRounds;
+      const dealt = applyDamage(state, target, 2, 'skill', actor, nowMs);
+      appendPublicLog(
+        state,
+        'skill',
+        `🌀 ${actor.displayName} tung Nhiễu Loạn KTX: ${target.displayName} chịu ${dealt} sát thương!`,
         nowMs,
         actor.playerId,
       );
@@ -1174,7 +1183,7 @@ export function resolveUseSkill(
       appendPublicLog(
         state,
         'steal',
-        `🧲 ${actor.displayName} dùng Thu Thập Nhanh: cướp "${stolen?.title ?? 'Trang bị'}" từ ${victim.displayName}!`,
+        `🧲 ${actor.displayName} dùng Thu Thập Chiến Lợi Phẩm: cướp "${stolen?.title ?? 'Trang bị'}" từ ${victim.displayName}!`,
         nowMs,
         actor.playerId,
       );
@@ -1183,11 +1192,11 @@ export function resolveUseSkill(
 
     case 'lang-quan-sat': {
       actor.skillUsedOnce = true;
-      actor.guardianShieldActive = true;
+      const healed = applyHeal(state, actor, actor.woundsTaken);
       appendPublicLog(
         state,
         'skill',
-        `🛡️ ${actor.displayName} bật Khiên Bất Hoại — miễn nhiễm mọi sát thương tới lượt sau!`,
+        `💚 ${actor.displayName} kích hoạt Ý Chí Hồi Sinh: hồi sạch ${healed} thương tích về 0!`,
         nowMs,
         actor.playerId,
       );
@@ -1196,7 +1205,7 @@ export function resolveUseSkill(
 
     case 'lang-cuu-ho': {
       if (!targetPlayerId) {
-        return { ok: false, error: 'Chọn 1 người cùng Cụm để Che Chắn Sinh Tử.' };
+        return { ok: false, error: 'Chọn 1 người cùng Cụm để thực hiện Hộ Vệ & Báo Thù.' };
       }
       const target = state.players[targetPlayerId];
       if (
@@ -1208,17 +1217,29 @@ export function resolveUseSkill(
         return { ok: false, error: 'Mục tiêu phải đứng cùng Cụm Khu Vực với bạn.' };
       }
       actor.skillCooldown = role.cooldownRounds;
-      const healed = applyHeal(state, target, 2);
-      if (actor.hp > 1) {
-        applyDamage(state, actor, 1, 'skill', null, nowMs);
+      const prot = actor.protegePlayerId ? state.players[actor.protegePlayerId] : null;
+      if (!prot || prot.alive) {
+        const healed = applyHeal(state, target, 2);
+        if (actor.hp > 1) {
+          applyDamage(state, actor, 1, 'skill', null, nowMs);
+        }
+        appendPublicLog(
+          state,
+          'skill',
+          `🛟 ${actor.displayName} dùng Hộ Vệ: ${target.displayName} hồi ${healed} thương tích.`,
+          nowMs,
+          actor.playerId,
+        );
+      } else {
+        const dealt = applyDamage(state, target, 2, 'skill', actor, nowMs);
+        appendPublicLog(
+          state,
+          'skill',
+          `⚔️ ${actor.displayName} kích hoạt Báo Thù cho ${prot.displayName}: ${target.displayName} chịu ${dealt} sát thương!`,
+          nowMs,
+          actor.playerId,
+        );
       }
-      appendPublicLog(
-        state,
-        'skill',
-        `🛟 ${actor.displayName} dùng Che Chắn Sinh Tử: ${target.displayName} hồi ${healed} thương tích.`,
-        nowMs,
-        actor.playerId,
-      );
       return { ok: true };
     }
 

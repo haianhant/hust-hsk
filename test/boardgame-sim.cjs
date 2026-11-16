@@ -123,11 +123,26 @@ function updateBotMemory(botMem, pub, priv) {
       }
     }
 
+    const targetPub = pub.players.find((p) => p.playerId === clue.targetPlayerId);
+    const targetUnrevealed = targetPub && !targetPub.revealedRoleId;
+
+    // If "[Chưa lật vai]" fails against an unrevealed target, only Khánh "Tin Giả" can evade damage probes!
+    if (clue.detail.includes('[Chưa lật vai]') && clue.outcome === 'no-reaction' && targetUnrevealed) {
+      botMem.possible[clue.targetPlayerId] = new Set(['suong-tin-gia']);
+      continue;
+    }
+
     // Conditional investigation card filter
+    const isHealProbe =
+      clue.detail.includes('[Kẻ Độc Hành]') || clue.detail.includes('[Max HP <= 11]');
     for (const cond of CLUE_CONDITION_FILTERS) {
       if (clue.detail.includes(cond.key)) {
         const want = clue.outcome === 'condition-met';
         for (const roleId of Array.from(set)) {
+          // Khánh "Tin Giả" khi úp vai sẽ báo Không phản ứng trước các thẻ gây thương tích!
+          if (!want && !isHealProbe && targetUnrevealed && roleId === 'suong-tin-gia') {
+            continue;
+          }
           const role = ROLES_BY_ID[roleId];
           if (role && cond.fn(role) !== want && set.size > 1) {
             set.delete(roleId);
@@ -344,17 +359,21 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
         (x) => areInSameCluster(selfPub.location, x.player.location) && x.player.equipped.length > 0,
       );
       const shouldRevealNow =
-        (priv.roleId === 'lang-quan-sat' && (aliveCount <= 4 || (deadCount >= 2 && pub.round >= 3))) ||
+        (priv.roleId === 'lang-quan-sat' && (priv.woundsTaken >= 4 || aliveCount <= 3)) ||
         (priv.roleId === 'lang-cuu-ho' && (avengeTargetId || priv.woundsTaken >= 4 || pub.round >= 3)) ||
         (priv.roleId === 'lang-anh-san' && pub.round >= 3 && (selfPub.equipped.length >= 3 || (selfPub.equipped.length >= 2 && sameClusterForSteal))) ||
-        (priv.roleId === 'gac-truc-ban' && priv.woundsTaken >= 5) ||
+        (priv.roleId === 'gac-truc-ban' && (priv.woundsTaken >= 4 || aliveCount <= 4)) ||
         (priv.roleId === 'gac-ky-thuat' &&
           pub.round >= 2 &&
-          scoredOthers.some((x) => areInSameCluster(selfPub.location, x.player.location) && (x.isEnemyProb >= 0.55 || x.player.woundsTaken >= 6))) ||
-        (priv.roleId === 'gac-radio' && pub.round >= 2) ||
-        (priv.roleId === 'suong-tin-gia' && pub.round >= 2 && bestTarget.woundsTaken >= 4) ||
-        (priv.roleId === 'suong-gac-cong' && priv.woundsTaken >= 4) ||
-        (priv.roleId === 'suong-an-danh' && priv.woundsTaken >= 5) ||
+          (scoredOthers[0].isEnemyProb >= 0.55 || bestTarget.woundsTaken >= 4)) ||
+        (priv.roleId === 'gac-radio' &&
+          pub.round >= 2 &&
+          (scoredOthers[0].isEnemyProb >= 0.55 || bestTarget.woundsTaken >= 4)) ||
+        (priv.roleId === 'suong-tin-gia' &&
+          pub.round >= 3 &&
+          scoredOthers.some((x) => areInSameCluster(selfPub.location, x.player.location))) ||
+        (priv.roleId === 'suong-gac-cong' && priv.woundsTaken >= 3) ||
+        (priv.roleId === 'suong-an-danh' && priv.woundsTaken >= 4) ||
         pub.round >= 6;
       if (shouldRevealNow) {
         return { type: 'REVEAL_ROLE' };
@@ -363,38 +382,46 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
 
     // 6. Active Skill Usage when revealed & off cooldown
     if (priv.revealed && !priv.skillUsedOnce && priv.skillCooldown === 0) {
+      const deadCount = pub.players.filter((p) => !p.alive).length;
+      const aliveCount = pub.players.length - deadCount;
       const sameClusterTargets = scoredOthers.filter((x) =>
         areInSameCluster(selfPub.location, x.player.location),
       );
-      if (priv.roleId === 'gac-ky-thuat' && sameClusterTargets.length > 0) {
-        const t = sameClusterTargets[0];
-        if (t.isEnemyProb >= 0.5 || pub.round >= 3) {
-          return { type: 'USE_SKILL', targetPlayerId: t.player.playerId };
-        }
-      } else if (priv.roleId === 'gac-truc-ban' && (priv.woundsTaken >= 5 || (bestAlly && bestAlly.woundsTaken >= 6))) {
-        const healId = priv.woundsTaken >= 5 ? priv.playerId : bestAlly.playerId;
-        return { type: 'USE_SKILL', targetPlayerId: healId };
-      } else if (priv.roleId === 'gac-radio') {
-        const unknown = aliveOthers.find((p) => !p.revealedRoleId && (botMem.possible[p.playerId]?.size || 0) > 1);
-        if (unknown) {
-          return { type: 'USE_SKILL', targetPlayerId: unknown.playerId };
-        }
-      } else if (priv.roleId === 'suong-tin-gia') {
-        if (scoredOthers[0].isEnemyProb >= 0.55 || bestTarget.woundsTaken >= 5 || pub.round >= 3) {
+      if (priv.roleId === 'gac-ky-thuat' || priv.roleId === 'gac-radio') {
+        if (scoredOthers[0].isEnemyProb >= 0.55 || bestTarget.woundsTaken >= 4 || pub.round >= 3) {
           return { type: 'USE_SKILL', targetPlayerId: bestTarget.playerId };
+        }
+      } else if (priv.roleId === 'gac-truc-ban' && (priv.woundsTaken >= 4 || aliveCount <= 4)) {
+        return { type: 'USE_SKILL' };
+      } else if (priv.roleId === 'suong-tin-gia' && sameClusterTargets.length > 0) {
+        const t = sameClusterTargets[0];
+        if (t.isEnemyProb >= 0.5 || t.player.woundsTaken >= 4 || pub.round >= 3) {
+          return { type: 'USE_SKILL', targetPlayerId: t.player.playerId };
         }
       } else if (priv.roleId === 'lang-anh-san') {
         const donor = sameClusterTargets.find((x) => x.player.equipped.length > 0);
         if (donor) {
           return { type: 'USE_SKILL', targetPlayerId: donor.player.playerId };
         }
-      } else if (priv.roleId === 'lang-quan-sat' && (priv.woundsTaken >= 3 || pub.players.filter((p) => p.alive).length <= 4)) {
+      } else if (priv.roleId === 'lang-quan-sat' && priv.woundsTaken >= 4) {
         return { type: 'USE_SKILL' };
-      } else if (priv.roleId === 'lang-cuu-ho' && sameClusterTargets.length > 0 && priv.hp >= 6) {
-        const protegeInCluster = sameClusterTargets.find((x) => x.player.playerId === priv.protegePlayerId && x.player.woundsTaken >= 2);
-        const needy = protegeInCluster || sameClusterTargets.find((x) => x.player.woundsTaken >= 3);
-        if (needy) {
-          return { type: 'USE_SKILL', targetPlayerId: needy.player.playerId };
+      } else if (priv.roleId === 'lang-cuu-ho' && sameClusterTargets.length > 0) {
+        const protegePub = priv.protegePlayerId
+          ? pub.players.find((p) => p.playerId === priv.protegePlayerId)
+          : null;
+        if (protegePub && !protegePub.alive) {
+          const revengeTarget =
+            sameClusterTargets.find((x) => x.player.playerId === avengeTargetId) || sameClusterTargets[0];
+          return { type: 'USE_SKILL', targetPlayerId: revengeTarget.player.playerId };
+        }
+        if (priv.hp >= 6) {
+          const protegeInCluster = sameClusterTargets.find(
+            (x) => x.player.playerId === priv.protegePlayerId && x.player.woundsTaken >= 2,
+          );
+          const needy = protegeInCluster || sameClusterTargets.find((x) => x.player.woundsTaken >= 3);
+          if (needy) {
+            return { type: 'USE_SKILL', targetPlayerId: needy.player.playerId };
+          }
         }
       }
     }

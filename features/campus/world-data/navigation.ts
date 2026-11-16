@@ -34,6 +34,8 @@ export const FAST_TRAVEL_DESTINATIONS: FastTravelDestination[] = [
   { id: 'c9', name: 'Khu C9', icon: '🏢', desc: 'Trước cầu thang đỏ zic-zac', x: -60, z: -17, yaw: Math.PI / 2, facing: -Math.PI / 2 },
   { id: 'ktx', name: 'Khu KTX B8–B9', icon: '🏘️', desc: 'Đời sống nội trú, Căng tin B5-9 & CLB Board Game', x: 112.5, z: -45, yaw: -Math.PI / 2, facing: Math.PI / 2 },
   { id: 'stadium', name: 'SVĐ Bách Khoa', icon: '⚽', desc: 'Sân bóng đá tương tác & Khu thể thao', x: 132, z: 73.2, yaw: Math.PI, facing: 0 },
+  { id: 'dcv', name: 'Cổng Đại Cồ Việt', icon: '🏛️', desc: 'Cổng chính phía Bắc & Hội trường C2', x: -58, z: -67.5, yaw: 0, facing: Math.PI },
+  { id: 'nga5', name: 'Quảng trường Ngã 5', icon: '🧭', desc: 'Giao lộ trung tâm C1 – C9 – Đường Tình Yêu', x: -38, z: -16, yaw: -Math.PI / 2, facing: Math.PI / 2 },
   { id: 'spawn', name: 'Điểm bắt đầu', icon: '📍', desc: 'Cổng Trần Đại Nghĩa', x: SPAWN.x, z: SPAWN.z, yaw: Math.PI / 2, facing: -Math.PI / 2 },
 ];
 

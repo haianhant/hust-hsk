@@ -423,7 +423,7 @@ export function GameBoard({
                   🩸 Thang Thương Tích Công Khai (0 → 14)
                 </h2>
                 <span className="text-xs text-slate-400">
-                  Máu tối đa (11–14) được giữ bí mật cho tới khi người chơi lật vai
+                  Máu tối đa (9–14 HP) được giữ bí mật cho tới khi người chơi lật vai
                 </span>
               </div>
               <div className="grid grid-cols-5 sm:grid-cols-8 xl:grid-cols-[repeat(15,minmax(0,1fr))] gap-1.5">

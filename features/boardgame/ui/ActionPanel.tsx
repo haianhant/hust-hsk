@@ -155,6 +155,9 @@ export function ActionPanel({
     !(roleDesign.oncePerMatch && privateView.skillUsedOnce) &&
     (publicGame.turnPhase === 'LOCATION_ACTION' || publicGame.turnPhase === 'MAIN_ACTION');
 
+  const sameClusterEquippedOthers = sameClusterOthers.filter((p) => p.equipped.length > 0);
+  const skillCandidates =
+    privateView.roleId === 'lang-anh-san' ? sameClusterEquippedOthers : sameClusterOthers;
   const skillTarget =
     roleDesign.targetMode === 'self'
       ? selfPlayer
@@ -162,8 +165,8 @@ export function ActionPanel({
         ? validAnyTarget
         : roleDesign.targetMode === 'any-other'
           ? validOtherTarget
-          : sameClusterOthers.find((p) => p.playerId === selectedTargetId) ??
-            sameClusterOthers[0] ??
+          : skillCandidates.find((p) => p.playerId === selectedTargetId) ??
+            skillCandidates[0] ??
             null;
 
   const rerollPrompt =

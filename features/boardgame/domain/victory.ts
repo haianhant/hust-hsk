@@ -30,8 +30,7 @@ function qualifiesWandererVictory(
         ? player.equipped.length >= 2
         : state.round >= 3 && player.revealed && player.equipped.length >= 3;
     case 'lang-quan-sat':
-      if (isFinalFallback) return true;
-      return alivePlayers.length === 1 || (player.revealed && deadCount >= 2);
+      return true;
     case 'lang-cuu-ho': {
       if (player.avengedProtegeKiller) return true;
       const prot = player.protegePlayerId ? state.players[player.protegePlayerId] : null;
@@ -185,13 +184,9 @@ export function evaluateVictory(state: AuthoritativeGameState): VictoryEvaluatio
     };
   }
 
-  // 3. Trang "Kiên Cường" solo survivor (khi bàn đã có >=3 người bị loại & chỉ còn <=2 sống sót).
+  // 3. Trang "Kiên Cường" solo survivor khi chỉ còn duy nhất Trang đứng vững trên bàn.
   for (const w of wanderers) {
-    if (
-      w.roleId === 'lang-quan-sat' &&
-      w.alive &&
-      (alivePlayers.length === 1 || (w.revealed && deadCount >= 3 && alivePlayers.length <= 2))
-    ) {
+    if (w.roleId === 'lang-quan-sat' && w.alive && alivePlayers.length === 1) {
       const winnerSet = new Set<string>([w.playerId]);
       for (const other of wanderers) {
         if (
