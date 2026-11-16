@@ -175,6 +175,9 @@ function estimateTargetRoleScores(botMem, pub, priv, target) {
     if (priv.faction === 'mist-order') {
       if (role.faction === 'mist-order') return { isEnemyProb: 0, isAllyProb: 1 };
       if (role.faction === 'lantern-guard') return { isEnemyProb: 1, isAllyProb: 0 };
+      if (role.id === 'lang-anh-san' && pub.players.length !== 7) {
+        return { isEnemyProb: pubTarget.equipped.length >= 4 ? 0.95 : 0.2, isAllyProb: 0 };
+      }
       // Shadows hunt weak Neutrals (especially 8-HP Allie) to secure 3-Neutral-dead victory
       return { isEnemyProb: pub.players.length >= 6 ? 1 : 0.7, isAllyProb: 0 };
     }
@@ -245,8 +248,10 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
       const gearTargetBonus =
         priv.roleId === 'lang-anh-san'
           ? pub.players.length <= 6
-            ? p.equipped.length * 4.0
-            : p.equipped.length * 2.4 + (p.equipped.length > 0 ? p.woundsTaken * 0.45 : -0.6)
+            ? p.equipped.length * 4.2 + (p.woundsTaken >= 8 ? 1.5 : 0)
+            : p.equipped.length > 0
+              ? p.equipped.length * 3.5 + p.woundsTaken * 0.85
+              : -0.8
           : p.equipped.length >= 2
             ? 0.25
             : 0;
@@ -303,32 +308,38 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
       if (selfPub.woundsTaken >= 6 && poolIds.includes('corridor')) {
         return { type: 'CHOOSE_DEST', location: 'corridor' };
       }
-      // In 5-6p Robbery (or 7-8p kill-loot on weakened geared), jump into range if a juicy target sits there
+      // In 5-6p Robbery (only without Machine Gun) or 7-8p kill-loot on weakened geared, jump into range
       const lootTarget = scoredOthers.find(
         (x) =>
           x.player.equipped.length > 0 &&
           x.player.revealedRoleId !== 'suong-gac-cong' &&
-          (pub.players.length <= 6 ? hasDamageWeapon || selfPub.equipped.length >= 1 : x.player.woundsTaken >= 4),
+          (pub.players.length <= 6 && !hasMachineGun
+            ? true
+            : x.player.woundsTaken >= (hasDamageWeapon || hasMachineGun ? 2 : 4)),
       )?.player;
       if (lootTarget) {
-        const huntLoc = poolIds.find((locId) =>
+        const huntLocs = poolIds.filter((locId) =>
           hasHandgun
             ? !areInSameCluster(locId, lootTarget.location, pub.clusterPairs)
             : areInSameCluster(locId, lootTarget.location, pub.clusterPairs),
         );
-        if (huntLoc && (pub.players.length <= 6 || huntLoc === 'lobby' || huntLoc === 'breaker' || huntLoc === 'canteen' || lootTarget.equipped.length >= 2)) {
-          return { type: 'CHOOSE_DEST', location: huntLoc };
+        const preferredDrawHunt =
+          huntLocs.find((id) => id === 'lobby') ||
+          huntLocs.find((id) => id === 'breaker') ||
+          huntLocs.find((id) => id === 'canteen') ||
+          huntLocs[0];
+        if (
+          preferredDrawHunt &&
+          (pub.players.length <= 6 ||
+            ['lobby', 'breaker', 'canteen'].includes(preferredDrawHunt) ||
+            lootTarget.equipped.length >= 2)
+        ) {
+          return { type: 'CHOOSE_DEST', location: preferredDrawHunt };
         }
       }
-      if (selfPub.equipped.length <= 2) {
-        if (poolIds.includes('breaker')) return { type: 'CHOOSE_DEST', location: 'breaker' };
-        if (poolIds.includes('canteen')) return { type: 'CHOOSE_DEST', location: 'canteen' };
-        if (poolIds.includes('lobby')) return { type: 'CHOOSE_DEST', location: 'lobby' };
-      } else {
-        if (poolIds.includes('lobby')) return { type: 'CHOOSE_DEST', location: 'lobby' };
-        if (poolIds.includes('breaker')) return { type: 'CHOOSE_DEST', location: 'breaker' };
-        if (poolIds.includes('canteen')) return { type: 'CHOOSE_DEST', location: 'canteen' };
-      }
+      if (poolIds.includes('lobby')) return { type: 'CHOOSE_DEST', location: 'lobby' };
+      if (poolIds.includes('breaker')) return { type: 'CHOOSE_DEST', location: 'breaker' };
+      if (poolIds.includes('canteen')) return { type: 'CHOOSE_DEST', location: 'canteen' };
     }
     if (priv.roleId === 'lang-cuu-ho' && pub.deadCount < 2) {
       if (selfPub.woundsTaken >= 5 && poolIds.includes('corridor')) {
@@ -347,7 +358,7 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
     if (bestTarget && bestTarget.woundsTaken >= 6 && poolIds.includes('corridor')) {
       return { type: 'CHOOSE_DEST', location: 'corridor' };
     }
-    if (pub.round <= 2 && priv.roleId !== 'lang-anh-san' && poolIds.includes('radio')) {
+    if (pub.round === 1 && selfPub.equipped.length >= 1 && priv.roleId !== 'lang-anh-san' && poolIds.includes('radio')) {
       return { type: 'CHOOSE_DEST', location: 'radio' };
     }
     const desiredId =
@@ -368,7 +379,7 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
         return { type: 'DRAW_CARD', deck: 'event' };
       case 'breaker': {
         if (priv.roleId === 'lang-anh-san') {
-          if (selfPub.equipped.length <= 2 && pub.deckCounts.event > 0) {
+          if (pub.players.length >= 7 && !hasDamageWeapon && pub.deckCounts.event > 0) {
             return { type: 'DRAW_CARD', deck: 'event' };
           }
           return {
@@ -379,14 +390,14 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
         if (priv.roleId === 'lang-cuu-ho' && !hasDamageWeapon && pub.deckCounts.event > 0) {
           return { type: 'DRAW_CARD', deck: 'event' };
         }
-        if (pub.round <= 2 && rng() < 0.45 && pub.deckCounts.investigation > 0) {
+        if (pub.round <= 2 && selfPub.equipped.length >= 1 && rng() < 0.3 && pub.deckCounts.investigation > 0) {
           return { type: 'DRAW_CARD', deck: 'investigation' };
         }
         return { type: 'DRAW_CARD', deck: rng() < 0.5 ? 'equipment' : 'event' };
       }
       case 'corridor': {
         if (priv.roleId === 'lang-anh-san') {
-          if (selfPub.woundsTaken >= 2) {
+          if (selfPub.woundsTaken >= 5) {
             return { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: selfPub.playerId };
           }
           const killableGeared = aliveOthers
@@ -395,9 +406,9 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
           if (killableGeared) {
             return { type: 'USE_LOC_POWER', mode: 'damage', targetPlayerId: killableGeared.playerId };
           }
-          if (pub.players.length >= 7) {
+          if (pub.players.length >= 7 || hasMachineGun) {
             const lootMark = aliveOthers
-              .filter((p) => p.equipped.length >= 2 && p.woundsTaken >= 4)
+              .filter((p) => p.equipped.length >= 2 && p.woundsTaken >= 3)
               .sort((a, b) => b.equipped.length - a.equipped.length)[0];
             if (lootMark) {
               return { type: 'USE_LOC_POWER', mode: 'damage', targetPlayerId: lootMark.playerId };
@@ -409,7 +420,7 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
           if (dyingNoGear) {
             return { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: dyingNoGear.playerId };
           }
-          if (selfPub.woundsTaken >= 1) {
+          if (selfPub.woundsTaken >= 2) {
             return { type: 'USE_LOC_POWER', mode: 'heal', targetPlayerId: selfPub.playerId };
           }
           return { type: 'SKIP_LOC' };
@@ -449,6 +460,12 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
             const aMainFoe = a.player.revealedFaction && a.player.revealedFaction !== 'wanderer' && a.player.revealedFaction !== priv.faction ? 2 : 0;
             const bMainFoe = b.player.revealedFaction && b.player.revealedFaction !== 'wanderer' && b.player.revealedFaction !== priv.faction ? 2 : 0;
             if (aMainFoe !== bMainFoe) return bMainFoe - aMainFoe;
+            const aHarmlessBob = a.player.revealedRoleId === 'lang-anh-san' && a.player.equipped.length <= 3 ? 1 : 0;
+            const bHarmlessBob = b.player.revealedRoleId === 'lang-anh-san' && b.player.equipped.length <= 3 ? 1 : 0;
+            if (aHarmlessBob !== bHarmlessBob) return aHarmlessBob - bHarmlessBob;
+            const aWeap = a.player.equipped.some((c) => ['ev-01', 'ev-02', 'ev-03', 'ev-04', 'ev-05', 'ev-06', 'eq-04'].includes(c.id)) ? 1 : 0;
+            const bWeap = b.player.equipped.some((c) => ['ev-01', 'ev-02', 'ev-03', 'ev-04', 'ev-05', 'ev-06', 'eq-04'].includes(c.id)) ? 1 : 0;
+            if (aWeap !== bWeap) return bWeap - aWeap;
             return b.attackScore - a.attackScore;
           })[0]?.player;
         if (donor) {
@@ -479,6 +496,10 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
               if (card.id === 'inv-01') return p.revealedFaction !== 'wanderer';
               if (card.id === 'inv-02') return p.revealedFaction !== 'mist-order';
               return p.revealedFaction !== 'lantern-guard';
+            })
+            .sort((a, b) => {
+              if (b.woundsTaken !== a.woundsTaken) return b.woundsTaken - a.woundsTaken;
+              return b.equipped.length - a.equipped.length;
             })[0];
           if (gearedProbe) {
             return { type: 'INVESTIGATE_CARD', cardId: card.id, targetPlayerId: gearedProbe.playerId };
@@ -538,6 +559,12 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
             const aMainFoe = a.player.revealedFaction && a.player.revealedFaction !== 'wanderer' && a.player.revealedFaction !== priv.faction ? 2 : 0;
             const bMainFoe = b.player.revealedFaction && b.player.revealedFaction !== 'wanderer' && b.player.revealedFaction !== priv.faction ? 2 : 0;
             if (aMainFoe !== bMainFoe) return bMainFoe - aMainFoe;
+            const aHarmlessBob = a.player.revealedRoleId === 'lang-anh-san' && a.player.equipped.length <= 3 ? 1 : 0;
+            const bHarmlessBob = b.player.revealedRoleId === 'lang-anh-san' && b.player.equipped.length <= 3 ? 1 : 0;
+            if (aHarmlessBob !== bHarmlessBob) return aHarmlessBob - bHarmlessBob;
+            const aWeap = a.player.equipped.some((c) => ['ev-01', 'ev-02', 'ev-03', 'ev-04', 'ev-05', 'ev-06', 'eq-04'].includes(c.id)) ? 1 : 0;
+            const bWeap = b.player.equipped.some((c) => ['ev-01', 'ev-02', 'ev-03', 'ev-04', 'ev-05', 'ev-06', 'eq-04'].includes(c.id)) ? 1 : 0;
+            if (aWeap !== bWeap) return bWeap - aWeap;
             return b.attackScore - a.attackScore;
           })[0]?.player;
         return {
@@ -570,9 +597,11 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
       const inRangeGeared = reachableScored.some((x) => x.player.equipped.length > 0);
       const inRangeHighWoundsGeared = reachableScored.some(
         (x) =>
-          x.player.equipped.length >= 2 &&
-          (x.player.woundsTaken >= 6 ||
-            (x.player.revealedMaxHp && x.player.revealedMaxHp - x.player.woundsTaken <= (hasDamageWeapon ? 4 : 3))),
+          (x.player.equipped.length >= 2 &&
+            (x.player.woundsTaken >= (hasDamageWeapon ? 6 : 7) ||
+              (x.player.revealedMaxHp &&
+                x.player.revealedMaxHp - x.player.woundsTaken <= (hasDamageWeapon ? 4 : 3)))) ||
+          (x.player.equipped.length >= 1 && x.player.woundsTaken >= 8),
       );
       const shouldRevealNow =
         ((priv.roleId === 'gac-ky-thuat' || priv.roleId === 'gac-radio') &&
@@ -588,7 +617,8 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
         (priv.roleId === 'lang-quan-sat' && priv.woundsTaken >= 4) ||
         (priv.roleId === 'lang-anh-san' &&
           (pub.players.length <= 6
-            ? inRangeGeared
+            ? (inRangeGeared && !hasMachineGun) ||
+              (selfPub.equipped.some((c) => c.id === 'eq-06') && inRangeHighWoundsGeared)
             : inRangeHighWoundsGeared ||
               (selfPub.equipped.length >= 4 &&
                 reachableScored.some((x) => x.player.equipped.length >= 1 && x.player.woundsTaken >= 6)))) ||
@@ -619,14 +649,16 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
       }
       if (
         priv.roleId === 'lang-cuu-ho' &&
-        selfPub.attacksThisTurn === 1 &&
+        selfPub.attacksThisTurn >= 1 &&
+        selfPub.lastAttackTargetId &&
         priv.hp > 4 &&
         reachableScored.length > 0
       ) {
         const feastTarget = reachableScored.find(
           (x) =>
-            (pub.deadCount >= 2 && x.player.woundsTaken >= 5) ||
-            (pub.deadCount >= 3 && priv.hp >= 6),
+            x.player.playerId === selfPub.lastAttackTargetId &&
+            ((pub.deadCount >= 2 && x.player.woundsTaken >= 5) ||
+              (pub.deadCount >= 3 && priv.hp >= 6)),
         );
         if (feastTarget) {
           return { type: 'USE_SKILL', targetPlayerId: feastTarget.player.playerId };
@@ -650,11 +682,12 @@ function chooseBotAction(pub, priv, botMem, profile, rng) {
           (pub.players.length >= 6 && pub.round <= 3 && top.isEnemyProb < 0.52));
       const bobHoldFire =
         priv.roleId === 'lang-anh-san' &&
-        (pub.players.length <= 6
+        (pub.players.length <= 6 && !hasMachineGun
           ? top.player.equipped.length === 0 ||
             !priv.revealed ||
             (top.player.revealedRoleId === 'suong-gac-cong' && top.player.woundsTaken < 9 && !hasDamageWeapon)
-          : top.player.equipped.length === 0 || top.player.woundsTaken < 5);
+          : top.player.equipped.length === 0 ||
+            (!hasDamageWeapon && !hasMachineGun && top.player.woundsTaken < 3));
       const charlesHoldFire =
         priv.roleId === 'lang-cuu-ho' &&
         pub.deadCount < 2 &&

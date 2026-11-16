@@ -216,6 +216,40 @@ export interface BoardGameMatchSummary {
   updatedAtMs: number;
 }
 
+export type BoardGameLeaderboardPeriod = 'weekly' | 'alltime';
+export type BoardGameLeaderboardFactionFilter = 'all' | BoardGameFactionId;
+
+export interface BoardGameLeaderboardEntry {
+  rank: number;
+  playerKey: string;
+  displayName: string;
+  appearance: RemoteAppearance;
+  ratingPoints: number;
+  wins: number;
+  matchesPlayed: number;
+  winRatePct: number;
+  hunterWins: number;
+  shadowWins: number;
+  wandererWins: number;
+  eliminationsDealt: number;
+  survivalsTotal: number;
+  currentWinStreak: number;
+  bestWinStreak: number;
+  lastRoleId: BoardGameRoleId | null;
+  lastPlayedAtMs: number;
+  isSelf?: boolean;
+}
+
+export interface BoardGameLeaderboardResponse {
+  ok: true;
+  period: BoardGameLeaderboardPeriod;
+  faction: BoardGameLeaderboardFactionFilter;
+  updatedAtMs: number;
+  totalPlayers: number;
+  entries: BoardGameLeaderboardEntry[];
+  myEntry: BoardGameLeaderboardEntry | null;
+}
+
 export interface BoardGameClusterPair {
   clusterId: BoardGameZoneClusterId;
   locationIds: readonly [BoardGameLocationId, BoardGameLocationId];
@@ -232,6 +266,7 @@ export interface BoardGamePublicPlayerView {
   equipped: readonly BoardGameCardPublicMeta[];
   attacksMade: number;
   attacksThisTurn: number;
+  lastAttackTargetId?: string | null;
   investigationsCount: number;
   /** Trạng thái khiên che chắn 1 vòng sau khi Trang lật vai/kích hoạt bảo vệ. */
   guardianShieldActive: boolean;
@@ -450,6 +485,7 @@ export interface BoardGameClientJoinMessage {
   matchId: string;
   inviteCode?: string;
   displayName: string;
+  playerKey?: string;
   appearance?: RemoteAppearance;
   asSpectator?: boolean;
   preferredSeatIndex?: number | null;
@@ -673,6 +709,30 @@ export function sanitizeBoardGameToken(raw: unknown): string | null {
 export function sanitizeBoardGameAppearance(raw: unknown): RemoteAppearance {
   if (!raw || typeof raw !== 'object') return {};
   return extractValidAppearance(raw as Record<string, unknown>) ?? {};
+}
+
+export function sanitizeBoardGamePlayerKey(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const clean = raw.trim();
+  if (!/^bgk_[A-Za-z0-9_-]{8,36}$/.test(clean)) return null;
+  return clean;
+}
+
+export function isValidBoardGameLeaderboardPeriod(
+  raw: unknown,
+): raw is BoardGameLeaderboardPeriod {
+  return raw === 'weekly' || raw === 'alltime';
+}
+
+export function isValidBoardGameLeaderboardFactionFilter(
+  raw: unknown,
+): raw is BoardGameLeaderboardFactionFilter {
+  return (
+    raw === 'all' ||
+    raw === 'lantern-guard' ||
+    raw === 'mist-order' ||
+    raw === 'wanderer'
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -921,6 +981,7 @@ const CLIENT_MSG_ALLOWED_KEYS: Record<BoardGameClientMessage['type'], ReadonlySe
     'matchId',
     'inviteCode',
     'displayName',
+    'playerKey',
     'appearance',
     'asSpectator',
     'preferredSeatIndex',
@@ -1036,6 +1097,18 @@ export function validateBoardGameClientMessage(
           ok: false,
           code: 'INVALID_ACTION',
           error: 'Vị trí ghế ưu tiên không hợp lệ.',
+          requestId: reqId,
+        };
+      }
+      if (
+        raw.playerKey !== undefined &&
+        raw.playerKey !== '' &&
+        sanitizeBoardGamePlayerKey(raw.playerKey) === null
+      ) {
+        return {
+          ok: false,
+          code: 'INVALID_ACTION',
+          error: 'playerKey không hợp lệ.',
           requestId: reqId,
         };
       }

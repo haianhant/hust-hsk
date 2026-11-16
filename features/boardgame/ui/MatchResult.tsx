@@ -18,6 +18,7 @@ export interface MatchResultProps {
   selfPlayerId: string | null;
   isSpectator: boolean;
   postcardSlot?: ReactNode;
+  onOpenLeaderboard?: () => void;
   onPlayAgain?: () => void;
   onLeaveMatch: () => void;
 }
@@ -27,6 +28,7 @@ export default function MatchResult({
   selfPlayerId,
   isSpectator,
   postcardSlot,
+  onOpenLeaderboard,
   onPlayAgain,
   onLeaveMatch,
 }: MatchResultProps) {
@@ -160,6 +162,16 @@ export default function MatchResult({
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/85 px-4 py-3">
+          {onOpenLeaderboard && (
+            <button
+              type="button"
+              data-testid="bg-result-open-leaderboard-btn"
+              onClick={onOpenLeaderboard}
+              className="rounded-xl border border-amber-400/50 bg-amber-950/50 px-3.5 py-2 text-xs font-bold text-amber-200 hover:bg-amber-900/60"
+            >
+              🏆 Bảng xếp hạng CLB
+            </button>
+          )}
           {!isSpectator && onPlayAgain && (
             <button
               type="button"

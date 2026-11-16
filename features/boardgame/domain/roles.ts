@@ -149,7 +149,7 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
     maxHp: 11,
     skillName: 'Đòn Đánh Đẫm Máu',
     skillSummary:
-      'Sau khi đánh thường xong (đã lật vai & còn > 2 HP): Tự nhận 2 thương tích để tung tiếp đòn đánh thường thứ 2 lên mục tiêu trong tầm.',
+      'Sau khi đánh thường (đã lật vai & còn > 2 HP): Có thể tự nhận 2 thương tích để chém bồi tiếp lên ĐÚNG mục tiêu vừa đánh (lặp lại được nếu còn > 2 HP).',
     cooldownRounds: 0,
     oncePerMatch: false,
     targetMode: 'same-cluster',

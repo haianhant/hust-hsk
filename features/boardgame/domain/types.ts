@@ -124,6 +124,7 @@ export interface AuthoritativePlayerState {
   guardianShieldActive: boolean;
   attacksMade: number;
   attacksThisTurn: number;
+  lastAttackTargetId?: string | null;
   investigationsCount: number;
   consecutiveSameZoneRolls: number;
   eliminatedRound: number | null;

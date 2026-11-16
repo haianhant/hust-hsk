@@ -151,6 +151,14 @@ export async function handleBoardGameRequest(
     return Response.json(data, { status: res.status, headers });
   }
 
+  // GET /api/boardgame/leaderboard — Bảng Xếp Hạng CLB Board Game (tuần & toàn thời gian)
+  if (url.pathname === '/api/boardgame/leaderboard' && request.method === 'GET') {
+    const dirStub = ns.get(ns.idFromName(BG_DIRECTORY_ROOM_NAME));
+    const res = await dirStub.fetch(`https://internal/__dir/leaderboard${url.search}`);
+    const data = await res.json();
+    return Response.json(data, { status: res.status, headers });
+  }
+
   // POST /api/boardgame/matches — Tạo phòng đấu mới + sinh mã mời 6 ký tự duy nhất
   if (url.pathname === '/api/boardgame/matches' && request.method === 'POST') {
     if (!checkIpRateLimit(`create:${clientIp}`, 20)) {

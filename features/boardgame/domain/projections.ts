@@ -38,6 +38,7 @@ export function getPublicPlayerView(
     equipped: mapCardIdsToMeta(player.equipped),
     attacksMade: player.attacksMade,
     attacksThisTurn: player.attacksThisTurn ?? 0,
+    lastAttackTargetId: player.lastAttackTargetId ?? null,
     investigationsCount: player.investigationsCount,
     guardianShieldActive: player.guardianShieldActive,
     alive: player.alive,

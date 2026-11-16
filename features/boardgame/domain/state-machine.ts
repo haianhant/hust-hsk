@@ -124,6 +124,7 @@ export function createInitialGameState(
       guardianShieldActive: false,
       attacksMade: 0,
       attacksThisTurn: 0,
+      lastAttackTargetId: null,
       investigationsCount: 0,
       consecutiveSameZoneRolls: 0,
       eliminatedRound: null,

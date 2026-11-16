@@ -171,6 +171,10 @@ const BoardGameLobby = dynamic(() => import('../features/boardgame/ui/BoardGameL
 const GameBoard = dynamic(() => import('../features/boardgame/ui/GameBoard'), {
   ssr: false,
 });
+const BoardGameLeaderboardModal = dynamic(
+  () => import('../features/boardgame/ui/BoardGameLeaderboardModal'),
+  { ssr: false },
+);
 const LearningOverlayModal = dynamic(
   () => import('../features/learning/hsk/LearningOverlayModal'),
   { ssr: false },
@@ -331,6 +335,7 @@ export default function HomePage() {
   const [nearestBoardGameSeatId, setNearestBoardGameSeatId] = useState<string | null>(null);
   const [boardGameLobbyOpen, setBoardGameLobbyOpen] = useState(false);
   const [boardGameRulesOpen, setBoardGameRulesOpen] = useState(false);
+  const [boardGameLeaderboardOpen, setBoardGameLeaderboardOpen] = useState(false);
   const [boardGameExitConfirmOpen, setBoardGameExitConfirmOpen] = useState(false);
   const bgSnap = useBoardGameClientSnapshot();
   const bgSessionRestoredRef = useRef(false);
@@ -1026,6 +1031,7 @@ export default function HomePage() {
       campusQuestsOpen ||
       boardGameLobbyOpen ||
       boardGameRulesOpen ||
+      boardGameLeaderboardOpen ||
       boardGameExitConfirmOpen ||
       bgGameActive ||
       study.studyPanelOpen ||
@@ -1044,6 +1050,7 @@ export default function HomePage() {
     campusQuestsOpen,
     boardGameLobbyOpen,
     boardGameRulesOpen,
+    boardGameLeaderboardOpen,
     boardGameExitConfirmOpen,
     bgGameActive,
     study.studyPanelOpen,
@@ -1606,6 +1613,7 @@ export default function HomePage() {
   const exitBoardGameClubFade = useCallback(() => {
     setBoardGameLobbyOpen(false);
     setBoardGameRulesOpen(false);
+    setBoardGameLeaderboardOpen(false);
     setBoardGameExitConfirmOpen(false);
     boardGameClient.leaveMatch();
     setFade(true);
@@ -3023,6 +3031,7 @@ export default function HomePage() {
             table2Count={bgTable2Count}
             lobbyOpen={boardGameLobbyOpen}
             rulesOpen={boardGameRulesOpen}
+            leaderboardOpen={boardGameLeaderboardOpen}
             hasActiveMatch={Boolean(boardGameSeatId || bgSnap.matchId)}
             inviteCode={bgSnap.inviteCode}
             matchStatusLabel={bgStatusLabel}
@@ -3035,6 +3044,7 @@ export default function HomePage() {
             gameActive={bgGameActive}
             onToggleLobby={() => setBoardGameLobbyOpen((v) => !v)}
             onToggleRules={() => setBoardGameRulesOpen((v) => !v)}
+            onToggleLeaderboard={() => setBoardGameLeaderboardOpen((v) => !v)}
             onStandUpSeat={handleStandUpBoardGameSeat}
             onToggleReady={() => boardGameClient.setReady(!selfBgPlayer?.ready)}
             onStartMatch={() => boardGameClient.startMatch()}
@@ -3063,6 +3073,7 @@ export default function HomePage() {
               canStartMatch={canStartBgMatch}
               onCloseLobby={() => setBoardGameLobbyOpen(false)}
               onCloseRules={() => setBoardGameRulesOpen(false)}
+              onOpenLeaderboard={() => setBoardGameLeaderboardOpen(true)}
               onCancelExit={() => setBoardGameExitConfirmOpen(false)}
               onConfirmExit={exitBoardGameClubFade}
               onSelectSeat={handleSelectBoardGameSeat}
@@ -3093,6 +3104,7 @@ export default function HomePage() {
               onSendEmote={(emote) => boardGameClient.sendEmote(emote)}
               onSendChat={(text) => boardGameClient.sendChat(text)}
               onOpenRules={() => setBoardGameRulesOpen(true)}
+              onOpenLeaderboard={() => setBoardGameLeaderboardOpen(true)}
               onPlayAgain={() => {
                 boardGameClient.setReady(true);
                 setBoardGameLobbyOpen(true);
@@ -3104,6 +3116,10 @@ export default function HomePage() {
               }}
             />
           )}
+          <BoardGameLeaderboardModal
+            open={boardGameLeaderboardOpen}
+            onClose={() => setBoardGameLeaderboardOpen(false)}
+          />
         </>
       )}
 

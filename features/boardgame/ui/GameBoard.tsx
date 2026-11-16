@@ -82,6 +82,7 @@ export interface GameBoardProps {
   onSendChat?: (text: string) => void;
   onToggleSound?: () => void;
   onOpenRules: () => void;
+  onOpenLeaderboard?: () => void;
   onPlayAgain?: () => void;
   onLeaveMatch: () => void;
 }
@@ -101,6 +102,7 @@ export function GameBoard({
   onSendChat,
   onToggleSound,
   onOpenRules,
+  onOpenLeaderboard,
   onPlayAgain,
   onLeaveMatch,
 }: GameBoardProps) {
@@ -369,6 +371,16 @@ export function GameBoard({
             >
               {effectiveMuted ? '🔇' : '🔊'}
             </button>
+            {onOpenLeaderboard && (
+              <button
+                type="button"
+                data-testid="bg-board-open-leaderboard-btn"
+                onClick={onOpenLeaderboard}
+                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-amber-950/60 hover:bg-amber-900/70 border border-amber-400/50 text-xs sm:text-sm font-bold text-amber-200 transition cursor-pointer"
+              >
+                🏆 Hạng
+              </button>
+            )}
             <button
               type="button"
               data-testid="bg-board-rules-btn"
@@ -533,7 +545,7 @@ export function GameBoard({
                     🩸 Thang Thương Tích Công Khai (0 → 14)
                   </h2>
                   <span className="text-[11px] text-slate-400">
-                    Máu tối đa (9–14) giữ bí mật tới khi lật vai · 🎯 Mốc của bạn · 💀 Ngưỡng gục đã lộ
+                    Máu tối đa (8–14) giữ bí mật tới khi lật vai · 🎯 Mốc của bạn · 💀 Ngưỡng gục đã lộ
                   </span>
                 </div>
                 <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-[minmax(92px,2fr)_repeat(14,minmax(0,1fr))] gap-1">
@@ -1124,6 +1136,7 @@ export function GameBoard({
           selfPlayerId={selfPlayerId}
           isSpectator={isSpectator}
           postcardSlot={<MatchPostcard publicGame={publicGame} inviteCode={inviteCode} />}
+          onOpenLeaderboard={onOpenLeaderboard}
           onPlayAgain={onPlayAgain}
           onLeaveMatch={onLeaveMatch}
         />

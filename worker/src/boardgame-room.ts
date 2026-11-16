@@ -26,10 +26,13 @@ import {
   BOARD_GAME_RECONNECT_HOLD_MS,
   BOARD_GAME_RULESET_VERSION,
   canTransitionBoardGameStatus,
+  isValidBoardGameLeaderboardFactionFilter,
+  isValidBoardGameLeaderboardPeriod,
   sanitizeBoardGameAppearance,
   sanitizeBoardGameChatText,
   sanitizeBoardGameMatchId,
   sanitizeBoardGameName,
+  sanitizeBoardGamePlayerKey,
   sanitizeBoardGameRequestId,
   sanitizeBoardGameSeatIndex,
   sanitizeBoardGameTableId,
@@ -40,11 +43,17 @@ import {
   validateBoardGameActionPayload,
   validateBoardGameClientMessage,
   type BoardGameActionPayload,
+  type BoardGameFactionId,
+  type BoardGameLeaderboardEntry,
+  type BoardGameLeaderboardFactionFilter,
+  type BoardGameLeaderboardPeriod,
+  type BoardGameLeaderboardResponse,
   type BoardGameLobbyPlayerView,
   type BoardGameMatchStatus,
   type BoardGameMatchSummary,
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
+  type BoardGameRoleId,
   type BoardGameServerMessage,
   type BoardGameTableId,
 } from '../../shared/contracts/boardgame';
@@ -111,6 +120,7 @@ interface MatchDbRow {
   created_at_ms: number;
   updated_at_ms: number;
   game_state_json: string | null;
+  leaderboard_recorded?: number;
 }
 
 interface MatchPlayerDbRow {
@@ -123,6 +133,53 @@ interface MatchPlayerDbRow {
   connected: number;
   reconnect_token_hash: string;
   last_seen_ms: number;
+  leaderboard_key?: string | null;
+}
+
+interface BoardGameLeaderboardDbRow {
+  player_key: string;
+  display_name: string;
+  appearance_json: string;
+  matches_played: number;
+  wins_total: number;
+  hunter_wins: number;
+  shadow_wins: number;
+  wanderer_wins: number;
+  eliminations_dealt: number;
+  investigations_total: number;
+  survivals_total: number;
+  current_win_streak: number;
+  best_win_streak: number;
+  rating_points: number;
+  week_key: string;
+  weekly_matches: number;
+  weekly_wins: number;
+  weekly_points: number;
+  last_role_id: string | null;
+  last_played_at_ms: number;
+}
+
+interface LeaderboardParticipantPayload {
+  playerKey: string;
+  displayName: string;
+  appearance: ReturnType<typeof sanitizeBoardGameAppearance>;
+  won: boolean;
+  faction: BoardGameFactionId;
+  roleId: BoardGameRoleId;
+  alive: boolean;
+  eliminationsDealt: number;
+  investigationsCount: number;
+}
+
+function computeVnWeekKey(nowMs: number): string {
+  const vnDate = new Date(nowMs + 7 * 3600_000);
+  const utcMid = Date.UTC(vnDate.getUTCFullYear(), vnDate.getUTCMonth(), vnDate.getUTCDate());
+  const d = new Date(utcMid);
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = Date.UTC(d.getUTCFullYear(), 0, 1);
+  const weekNo = Math.ceil(((d.getTime() - yearStart) / 86_400_000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
 interface DirectoryRow {
@@ -222,10 +279,13 @@ export class BoardGameRoom {
       const dirCount = this.sql
         .exec<{ c: number }>('SELECT COUNT(*) AS c FROM directory_matches')
         .one();
+      const lbCount = this.sql
+        .exec<{ c: number }>('SELECT COUNT(*) AS c FROM boardgame_leaderboard')
+        .one();
       const matchCount = this.sql
         .exec<{ c: number }>('SELECT COUNT(*) AS c FROM matches')
         .one();
-      return (dirCount?.c ?? 0) > 0 && (matchCount?.c ?? 0) === 0;
+      return ((dirCount?.c ?? 0) > 0 || (lbCount?.c ?? 0) > 0) && (matchCount?.c ?? 0) === 0;
     } catch {
       return false;
     }
@@ -246,9 +306,15 @@ export class BoardGameRoom {
         turn_timeout_ms INTEGER NOT NULL DEFAULT 0,
         created_at_ms INTEGER NOT NULL,
         updated_at_ms INTEGER NOT NULL,
-        game_state_json TEXT
+        game_state_json TEXT,
+        leaderboard_recorded INTEGER NOT NULL DEFAULT 0
       )
     `);
+    try {
+      sql.exec('ALTER TABLE matches ADD COLUMN leaderboard_recorded INTEGER NOT NULL DEFAULT 0');
+    } catch {
+      // already migrated
+    }
     sql.exec(`
       CREATE TABLE IF NOT EXISTS match_players (
         player_id TEXT PRIMARY KEY,
@@ -259,9 +325,15 @@ export class BoardGameRoom {
         ready INTEGER NOT NULL DEFAULT 0,
         connected INTEGER NOT NULL DEFAULT 1,
         reconnect_token_hash TEXT NOT NULL,
-        last_seen_ms INTEGER NOT NULL
+        last_seen_ms INTEGER NOT NULL,
+        leaderboard_key TEXT
       )
     `);
+    try {
+      sql.exec('ALTER TABLE match_players ADD COLUMN leaderboard_key TEXT');
+    } catch {
+      // already migrated
+    }
     sql.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_mp_seat_unique
       ON match_players(seat_index)
@@ -292,6 +364,40 @@ export class BoardGameRoom {
     sql.exec(`
       CREATE INDEX IF NOT EXISTS idx_dir_status_updated
       ON directory_matches(status, updated_at_ms DESC)
+    `);
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS boardgame_leaderboard_matches (
+        match_id TEXT PRIMARY KEY,
+        recorded_at_ms INTEGER NOT NULL
+      )
+    `);
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS boardgame_leaderboard (
+        player_key TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        appearance_json TEXT NOT NULL,
+        matches_played INTEGER NOT NULL DEFAULT 0,
+        wins_total INTEGER NOT NULL DEFAULT 0,
+        hunter_wins INTEGER NOT NULL DEFAULT 0,
+        shadow_wins INTEGER NOT NULL DEFAULT 0,
+        wanderer_wins INTEGER NOT NULL DEFAULT 0,
+        eliminations_dealt INTEGER NOT NULL DEFAULT 0,
+        investigations_total INTEGER NOT NULL DEFAULT 0,
+        survivals_total INTEGER NOT NULL DEFAULT 0,
+        current_win_streak INTEGER NOT NULL DEFAULT 0,
+        best_win_streak INTEGER NOT NULL DEFAULT 0,
+        rating_points INTEGER NOT NULL DEFAULT 0,
+        week_key TEXT NOT NULL DEFAULT '',
+        weekly_matches INTEGER NOT NULL DEFAULT 0,
+        weekly_wins INTEGER NOT NULL DEFAULT 0,
+        weekly_points INTEGER NOT NULL DEFAULT 0,
+        last_role_id TEXT,
+        last_played_at_ms INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    sql.exec(`
+      CREATE INDEX IF NOT EXISTS idx_bg_lb_points
+      ON boardgame_leaderboard(rating_points DESC, wins_total DESC)
     `);
     this.schemaReady = true;
   }
@@ -557,6 +663,268 @@ export class BoardGameRoom {
       });
     }
 
+    if (url.pathname === '/__dir/record-match' && request.method === 'POST') {
+      this.roomName = BG_DIRECTORY_ROOM_NAME;
+      const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!body || typeof body.recordKey !== 'string' || !Array.isArray(body.participants)) {
+        return Response.json({ ok: false, error: 'invalid-payload' }, { status: 400 });
+      }
+      const recordKey = body.recordKey.trim().slice(0, 128);
+      if (!recordKey) {
+        return Response.json({ ok: false, error: 'missing-record-key' }, { status: 400 });
+      }
+      const existing = this.sql
+        .exec<{ match_id: string }>(
+          'SELECT match_id FROM boardgame_leaderboard_matches WHERE match_id = ? LIMIT 1',
+          recordKey,
+        )
+        .toArray();
+      if (existing.length > 0) {
+        return Response.json({ ok: true, alreadyRecorded: true });
+      }
+      const recordedAt =
+        typeof body.nowMs === 'number' && Number.isFinite(body.nowMs) ? body.nowMs : nowMs;
+      const weekKey = computeVnWeekKey(recordedAt);
+      this.sql.exec(
+        'INSERT INTO boardgame_leaderboard_matches (match_id, recorded_at_ms) VALUES (?, ?)',
+        recordKey,
+        recordedAt,
+      );
+      for (const rawItem of body.participants) {
+        if (!rawItem || typeof rawItem !== 'object') continue;
+        const item = rawItem as Partial<LeaderboardParticipantPayload>;
+        const rawKey = typeof item.playerKey === 'string' ? item.playerKey.trim() : '';
+        const cleanKey = /^lb_[a-f0-9]{16,32}$/.test(rawKey)
+          ? rawKey
+          : sanitizeBoardGamePlayerKey(rawKey);
+        if (!cleanKey) continue;
+        const cleanName = sanitizeBoardGameName(item.displayName);
+        const appearanceJson = JSON.stringify(sanitizeBoardGameAppearance(item.appearance));
+        const won = Boolean(item.won);
+        const faction: BoardGameFactionId =
+          item.faction === 'lantern-guard' ||
+          item.faction === 'mist-order' ||
+          item.faction === 'wanderer'
+            ? item.faction
+            : 'wanderer';
+        const roleId =
+          typeof item.roleId === 'string' && item.roleId in ROLES_BY_ID
+            ? (item.roleId as BoardGameRoleId)
+            : null;
+        const alive = Boolean(item.alive);
+        const eliminationsDealt =
+          typeof item.eliminationsDealt === 'number' && Number.isFinite(item.eliminationsDealt)
+            ? Math.max(0, Math.min(8, Math.floor(item.eliminationsDealt)))
+            : 0;
+        const investigationsCount =
+          typeof item.investigationsCount === 'number' && Number.isFinite(item.investigationsCount)
+            ? Math.max(0, Math.min(64, Math.floor(item.investigationsCount)))
+            : 0;
+        const matchPts =
+          5 +
+          (won ? (faction === 'wanderer' ? 30 : 25) : 0) +
+          eliminationsDealt * 3 +
+          (alive ? 2 : 0);
+        const hunterInc = won && faction === 'lantern-guard' ? 1 : 0;
+        const shadowInc = won && faction === 'mist-order' ? 1 : 0;
+        const wandererInc = won && faction === 'wanderer' ? 1 : 0;
+
+        const prev = this.sql
+          .exec<BoardGameLeaderboardDbRow>(
+            'SELECT * FROM boardgame_leaderboard WHERE player_key = ? LIMIT 1',
+            cleanKey,
+          )
+          .toArray()[0];
+
+        if (!prev) {
+          const streak = won ? 1 : 0;
+          this.sql.exec(
+            `INSERT INTO boardgame_leaderboard (
+              player_key, display_name, appearance_json, matches_played, wins_total,
+              hunter_wins, shadow_wins, wanderer_wins, eliminations_dealt,
+              investigations_total, survivals_total, current_win_streak, best_win_streak,
+              rating_points, week_key, weekly_matches, weekly_wins, weekly_points,
+              last_role_id, last_played_at_ms
+            ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+            cleanKey,
+            cleanName,
+            appearanceJson,
+            won ? 1 : 0,
+            hunterInc,
+            shadowInc,
+            wandererInc,
+            eliminationsDealt,
+            investigationsCount,
+            alive ? 1 : 0,
+            streak,
+            streak,
+            matchPts,
+            weekKey,
+            won ? 1 : 0,
+            matchPts,
+            roleId,
+            recordedAt,
+          );
+        } else {
+          const nextStreak = won ? prev.current_win_streak + 1 : 0;
+          const nextBest = Math.max(prev.best_win_streak, nextStreak);
+          const sameWeek = prev.week_key === weekKey;
+          const nextWeeklyMatches = sameWeek ? prev.weekly_matches + 1 : 1;
+          const nextWeeklyWins = (sameWeek ? prev.weekly_wins : 0) + (won ? 1 : 0);
+          const nextWeeklyPoints = (sameWeek ? prev.weekly_points : 0) + matchPts;
+          this.sql.exec(
+            `UPDATE boardgame_leaderboard
+             SET display_name = ?,
+                 appearance_json = ?,
+                 matches_played = matches_played + 1,
+                 wins_total = wins_total + ?,
+                 hunter_wins = hunter_wins + ?,
+                 shadow_wins = shadow_wins + ?,
+                 wanderer_wins = wanderer_wins + ?,
+                 eliminations_dealt = eliminations_dealt + ?,
+                 investigations_total = investigations_total + ?,
+                 survivals_total = survivals_total + ?,
+                 current_win_streak = ?,
+                 best_win_streak = ?,
+                 rating_points = rating_points + ?,
+                 week_key = ?,
+                 weekly_matches = ?,
+                 weekly_wins = ?,
+                 weekly_points = ?,
+                 last_role_id = ?,
+                 last_played_at_ms = ?
+             WHERE player_key = ?`,
+            cleanName,
+            appearanceJson,
+            won ? 1 : 0,
+            hunterInc,
+            shadowInc,
+            wandererInc,
+            eliminationsDealt,
+            investigationsCount,
+            alive ? 1 : 0,
+            nextStreak,
+            nextBest,
+            matchPts,
+            weekKey,
+            nextWeeklyMatches,
+            nextWeeklyWins,
+            nextWeeklyPoints,
+            roleId,
+            recordedAt,
+            cleanKey,
+          );
+        }
+      }
+      return Response.json({ ok: true, recorded: true });
+    }
+
+    if (url.pathname === '/__dir/leaderboard' && request.method === 'GET') {
+      this.roomName = BG_DIRECTORY_ROOM_NAME;
+      const rawPeriod = url.searchParams.get('period');
+      const rawFaction = url.searchParams.get('faction');
+      const period: BoardGameLeaderboardPeriod = isValidBoardGameLeaderboardPeriod(rawPeriod)
+        ? rawPeriod
+        : 'alltime';
+      const faction: BoardGameLeaderboardFactionFilter = isValidBoardGameLeaderboardFactionFilter(
+        rawFaction,
+      )
+        ? rawFaction
+        : 'all';
+      const rawSelfKey = sanitizeBoardGamePlayerKey(url.searchParams.get('playerKey'));
+      const hashedSelfKey = rawSelfKey ? await this.hashLeaderboardKey(rawSelfKey) : null;
+      const currentWeekKey = computeVnWeekKey(nowMs);
+
+      const conditions: string[] = [];
+      const params: unknown[] = [];
+      if (period === 'weekly') {
+        conditions.push('week_key = ? AND weekly_matches > 0');
+        params.push(currentWeekKey);
+      } else {
+        conditions.push('matches_played > 0');
+      }
+      if (faction === 'lantern-guard') {
+        conditions.push('hunter_wins > 0');
+      } else if (faction === 'mist-order') {
+        conditions.push('shadow_wins > 0');
+      } else if (faction === 'wanderer') {
+        conditions.push('wanderer_wins > 0');
+      }
+
+      let orderBy =
+        'rating_points DESC, wins_total DESC, eliminations_dealt DESC, best_win_streak DESC, last_played_at_ms DESC';
+      if (period === 'weekly') {
+        if (faction === 'lantern-guard') {
+          orderBy = 'weekly_points DESC, hunter_wins DESC, weekly_wins DESC, last_played_at_ms DESC';
+        } else if (faction === 'mist-order') {
+          orderBy = 'weekly_points DESC, shadow_wins DESC, weekly_wins DESC, last_played_at_ms DESC';
+        } else if (faction === 'wanderer') {
+          orderBy = 'weekly_points DESC, wanderer_wins DESC, weekly_wins DESC, last_played_at_ms DESC';
+        } else {
+          orderBy = 'weekly_points DESC, weekly_wins DESC, best_win_streak DESC, last_played_at_ms DESC';
+        }
+      } else if (faction === 'lantern-guard') {
+        orderBy = 'hunter_wins DESC, rating_points DESC, wins_total DESC, last_played_at_ms DESC';
+      } else if (faction === 'mist-order') {
+        orderBy = 'shadow_wins DESC, rating_points DESC, wins_total DESC, last_played_at_ms DESC';
+      } else if (faction === 'wanderer') {
+        orderBy = 'wanderer_wins DESC, rating_points DESC, wins_total DESC, last_played_at_ms DESC';
+      }
+
+      const rows = this.sql
+        .exec<BoardGameLeaderboardDbRow>(
+          `SELECT * FROM boardgame_leaderboard WHERE ${conditions.join(' AND ')} ORDER BY ${orderBy} LIMIT 200`,
+          ...params,
+        )
+        .toArray();
+
+      const allEntries: BoardGameLeaderboardEntry[] = rows.map((row, idx) => {
+        const ratingPoints = period === 'weekly' ? row.weekly_points : row.rating_points;
+        const wins = period === 'weekly' ? row.weekly_wins : row.wins_total;
+        const matchesPlayed = period === 'weekly' ? row.weekly_matches : row.matches_played;
+        const winRatePct = matchesPlayed > 0 ? Math.round((wins * 100) / matchesPlayed) : 0;
+        const isSelf = hashedSelfKey !== null && row.player_key === hashedSelfKey;
+        const validLastRole =
+          row.last_role_id && row.last_role_id in ROLES_BY_ID
+            ? (row.last_role_id as BoardGameRoleId)
+            : null;
+        return {
+          rank: idx + 1,
+          playerKey: row.player_key,
+          displayName: row.display_name,
+          appearance: sanitizeBoardGameAppearance(parseJsonObject(row.appearance_json)),
+          ratingPoints,
+          wins,
+          matchesPlayed,
+          winRatePct,
+          hunterWins: row.hunter_wins,
+          shadowWins: row.shadow_wins,
+          wandererWins: row.wanderer_wins,
+          eliminationsDealt: row.eliminations_dealt,
+          survivalsTotal: row.survivals_total,
+          currentWinStreak: row.current_win_streak,
+          bestWinStreak: row.best_win_streak,
+          lastRoleId: validLastRole,
+          lastPlayedAtMs: row.last_played_at_ms,
+          ...(isSelf ? { isSelf: true } : {}),
+        };
+      });
+
+      const myEntry = hashedSelfKey
+        ? (allEntries.find((e) => e.playerKey === hashedSelfKey) ?? null)
+        : null;
+      const body: BoardGameLeaderboardResponse = {
+        ok: true,
+        period,
+        faction,
+        updatedAtMs: nowMs,
+        totalPlayers: allEntries.length,
+        entries: allEntries.slice(0, 50),
+        myEntry,
+      };
+      return Response.json(body);
+    }
+
     // Match DO initialization (`POST /__init`)
     if (url.pathname === '/__init' && request.method === 'POST') {
       const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
@@ -691,6 +1059,69 @@ export class BoardGameRoom {
       } catch {
         // ignore dead socket
       }
+    }
+  }
+
+  private async hashLeaderboardKey(rawKey: string): Promise<string> {
+    const digest = await sha256Hex(`bg-lb:${rawKey}`);
+    return `lb_${digest.slice(0, 24)}`;
+  }
+
+  private async recordFinishedMatchToLeaderboard(nowMs: number): Promise<void> {
+    const ns = this.env.BOARD_GAME_ROOM;
+    const match = this.getMatchRow();
+    if (!ns || !match || match.leaderboard_recorded === 1) return;
+    const playerRows = this.listPlayerRows();
+    const engineState = this.loadEngineState(match, playerRows);
+    if (!engineState || !engineState.finished) return;
+
+    const rowByPlayerId = new Map<string, MatchPlayerDbRow>();
+    for (const r of playerRows) {
+      rowByPlayerId.set(r.player_id, r);
+    }
+
+    const winnerSet = new Set(engineState.winnerPlayerIds);
+    const allEnginePlayers = Object.values(engineState.players);
+    const participants: LeaderboardParticipantPayload[] = [];
+    for (const ep of allEnginePlayers) {
+      const row = rowByPlayerId.get(ep.playerId);
+      const playerKey = row?.leaderboard_key ?? (await this.hashLeaderboardKey(ep.playerId));
+      const eliminationsDealt = allEnginePlayers.filter(
+        (other) => other.eliminatedByPlayerId === ep.playerId,
+      ).length;
+      const appearance = row
+        ? sanitizeBoardGameAppearance(parseJsonObject(row.outfit_json))
+        : sanitizeBoardGameAppearance(ep.appearance);
+      participants.push({
+        playerKey,
+        displayName: row?.display_name ?? ep.displayName,
+        appearance,
+        won: winnerSet.has(ep.playerId),
+        faction: ep.faction,
+        roleId: ep.roleId,
+        alive: ep.alive,
+        eliminationsDealt,
+        investigationsCount: ep.investigationsCount,
+      });
+    }
+
+    const stub = ns.get(ns.idFromName(BG_DIRECTORY_ROOM_NAME));
+    const res = await stub
+      .fetch('https://internal/__dir/record-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordKey: `${match.match_id}:${engineState.seed}`,
+          nowMs,
+          participants,
+        }),
+      })
+      .catch(() => null);
+    if (res?.ok) {
+      this.sql.exec(
+        'UPDATE matches SET leaderboard_recorded = 1 WHERE match_id = ?',
+        match.match_id,
+      );
     }
   }
 
@@ -1133,6 +1564,7 @@ export class BoardGameRoom {
             turnNumber: engineState.turnNumber,
             winnerFaction: engineState.winnerFaction,
           });
+          await this.recordFinishedMatchToLeaderboard(nowMs);
         }
         await this.scheduleNextAlarm(nowMs);
         this.broadcastStateSync();
@@ -1228,6 +1660,7 @@ export class BoardGameRoom {
 
     const displayName = sanitizeBoardGameName(msg.displayName);
     const appearanceJson = JSON.stringify(sanitizeBoardGameAppearance(msg.appearance));
+    const cleanPlayerKey = sanitizeBoardGamePlayerKey(msg.playerKey);
     const hasSuppliedTokenRaw =
       typeof msg.reconnectToken === 'string' && msg.reconnectToken.trim().length > 0;
     const suppliedToken = sanitizeBoardGameToken(msg.reconnectToken);
@@ -1257,13 +1690,22 @@ export class BoardGameRoom {
       if (existing) {
         // Fence any prior live WebSocket belonging to this playerId with close code 4001
         this.fenceExistingSockets(existing.player_id, ws);
+        const hashedLbKey =
+          existing.is_spectator === 0 && cleanPlayerKey
+            ? await this.hashLeaderboardKey(cleanPlayerKey)
+            : null;
         this.sql.exec(
           `UPDATE match_players
-           SET connected = 1, display_name = ?, outfit_json = ?, last_seen_ms = ?
+           SET connected = 1,
+               display_name = ?,
+               outfit_json = ?,
+               last_seen_ms = ?,
+               leaderboard_key = COALESCE(?, leaderboard_key)
            WHERE player_id = ?`,
           displayName,
           appearanceJson,
           nowMs,
+          hashedLbKey,
           existing.player_id,
         );
         if (latestMatch.status === 'WAITING' || latestMatch.status === 'READY_CHECK') {
@@ -1379,11 +1821,14 @@ export class BoardGameRoom {
     }
 
     const playerId = `bgp_${randomBase64Url(8)}`;
+    const hashedLbKey = isSpectator
+      ? null
+      : await this.hashLeaderboardKey(cleanPlayerKey ?? playerId);
     try {
       this.sql.exec(
         `INSERT INTO match_players (
-          player_id, seat_index, display_name, outfit_json, is_spectator, ready, connected, reconnect_token_hash, last_seen_ms
-        ) VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?)`,
+          player_id, seat_index, display_name, outfit_json, is_spectator, ready, connected, reconnect_token_hash, last_seen_ms, leaderboard_key
+        ) VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?, ?)`,
         playerId,
         assignedSeat,
         displayName,
@@ -1391,6 +1836,7 @@ export class BoardGameRoom {
         isSpectator ? 1 : 0,
         tokenHash,
         nowMs,
+        hashedLbKey,
       );
     } catch {
       this.sendError(ws, 'SEAT_TAKEN', 'Ghế vừa có người khác ngồi trước, vui lòng thử lại.');
@@ -1667,6 +2113,7 @@ export class BoardGameRoom {
            turn_deadline_ms = ?,
            turn_timeout_ms = ?,
            updated_at_ms = ?,
+           leaderboard_recorded = 0,
            game_state_json = ?
        WHERE match_id = ?`,
       deadlineMs,
@@ -1942,6 +2389,7 @@ export class BoardGameRoom {
         turnNumber: engineState.turnNumber,
         winnerFaction: engineState.winnerFaction,
       });
+      await this.recordFinishedMatchToLeaderboard(nowMs);
     }
     this.send(ws, {
       type: 'BG_ACTION_ACK',
@@ -2212,6 +2660,7 @@ export class BoardGameRoom {
         guardianShieldActive: false,
         attacksMade: typeof p.attacksMade === 'number' ? p.attacksMade : 0,
         attacksThisTurn: typeof p.attacksThisTurn === 'number' ? p.attacksThisTurn : 0,
+        lastAttackTargetId: null,
         investigationsCount: typeof p.investigationsCount === 'number' ? p.investigationsCount : 0,
         consecutiveSameZoneRolls: 0,
         eliminatedRound: null,
@@ -2362,6 +2811,7 @@ export class BoardGameRoom {
           }
         }
         if (typeof ep.attacksThisTurn !== 'number') ep.attacksThisTurn = 0;
+        if (ep.lastAttackTargetId === undefined) ep.lastAttackTargetId = null;
         if (typeof ep.charlesKillWon !== 'boolean') ep.charlesKillWon = false;
       }
     }

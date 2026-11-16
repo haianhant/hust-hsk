@@ -1462,8 +1462,12 @@ export function resolveInvestigateCard(
       card.effectKind === 'inv_blackmail' ||
       card.effectKind === 'inv_greed'
     ) {
+      // Thực tế Shadow Hunters: người còn > 3 máu thường giữ Trang bị & chọn chịu 1 ST;
+      // chỉ nộp đồ khi máu chạm mức nguy kịch (<= 3 HP; riêng Hải chỉ chịu giao khi HP === 1).
       const preferGear =
-        target.equipped.length > 0 && (target.hp <= 2 || target.roleId !== 'lang-anh-san');
+        target.equipped.length > 0 &&
+        target.hp <= 3 &&
+        !(target.roleId === 'lang-anh-san' && target.hp >= 2);
       if (preferGear) {
         const stolen = transferLowestEquippedGear(target, actor);
         transferredGearName = stolen?.title ?? null;
@@ -1570,6 +1574,7 @@ export function resolveAttack(
 
   actor.attacksMade += 1;
   actor.attacksThisTurn += 1;
+  actor.lastAttackTargetId = target.playerId;
 
   let rawDmg = baseDmg;
   if (baseDmg > 0) {
@@ -1589,8 +1594,21 @@ export function resolveAttack(
   const rollDesc = hasMasamune ? `1d4=${d4}` : `|${d6}-${d4}|=${baseDmg}`;
 
   for (const victim of targets) {
+    const expectedDealt = victim.guardianShieldActive
+      ? 0
+      : victim.equipped.includes('eq-01')
+        ? Math.max(0, rawDmg - 1)
+        : rawDmg;
+    const wouldKillForMultiLoot =
+      actor.equipped.includes('eq-06') &&
+      victim.equipped.length >= 2 &&
+      expectedDealt >= victim.hp;
+
     // Hải "Sưu Tầm" (Bob 4–6 người): gây >= 2 ST có thể cướp 1 Trang bị THAY VÌ gây sát thương
+    // (theo FAQ gốc: Súng Liên Thanh ev-06 không kích hoạt cướp hàng loạt; nếu Chuỗi Hạt eq-06 đủ sức kết liễu để hốt >=2 đồ thì đánh kết liễu).
     const bobStealInstead =
+      !hasMachineGun &&
+      !wouldKillForMultiLoot &&
       state.turnOrder.length <= 6 &&
       actor.alive &&
       actor.revealed &&
@@ -1718,6 +1736,7 @@ export function resolveRevealRole(
 ): EngineActionResult {
   if (
     state.turnPhase !== 'ROLL_MOVE' &&
+    state.turnPhase !== 'CHOOSE_MOVE' &&
     state.turnPhase !== 'LOCATION_ACTION' &&
     state.turnPhase !== 'MAIN_ACTION'
   ) {
@@ -1801,6 +1820,7 @@ export function resolveUseSkill(
     case 'gac-ky-thuat': {
       if (
         state.turnPhase !== 'ROLL_MOVE' &&
+        state.turnPhase !== 'CHOOSE_MOVE' &&
         state.turnPhase !== 'LOCATION_ACTION' &&
         state.turnPhase !== 'MAIN_ACTION'
       ) {
@@ -1829,6 +1849,7 @@ export function resolveUseSkill(
     case 'gac-radio': {
       if (
         state.turnPhase !== 'ROLL_MOVE' &&
+        state.turnPhase !== 'CHOOSE_MOVE' &&
         state.turnPhase !== 'LOCATION_ACTION' &&
         state.turnPhase !== 'MAIN_ACTION'
       ) {
@@ -1857,6 +1878,7 @@ export function resolveUseSkill(
     case 'lang-quan-sat': {
       if (
         state.turnPhase !== 'ROLL_MOVE' &&
+        state.turnPhase !== 'CHOOSE_MOVE' &&
         state.turnPhase !== 'LOCATION_ACTION' &&
         state.turnPhase !== 'MAIN_ACTION'
       ) {
@@ -1875,11 +1897,11 @@ export function resolveUseSkill(
     }
 
     case 'lang-cuu-ho': {
-      // Bách "Cuồng Chiến" (Charles - Bloody Feast): sau đòn đánh thứ nhất trong lượt -> tự nhận 2 ST để đánh thêm 1 lần nữa
-      if (state.turnPhase !== 'MAIN_ACTION' || actor.attacksThisTurn !== 1) {
+      // Bách "Cuồng Chiến" (Charles - Bloody Feast): sau đòn đánh -> tự nhận 2 ST để đánh bồi vào ĐÚNG mục tiêu đó (lặp lại được khi còn > 2 HP)
+      if (state.turnPhase !== 'MAIN_ACTION' || actor.attacksThisTurn < 1) {
         return {
           ok: false,
-          error: 'Đòn Đánh Đẫm Máu chỉ kích hoạt được ngay sau đòn đánh thường đầu tiên trong lượt.',
+          error: 'Đòn Đánh Đẫm Máu chỉ kích hoạt được ngay sau khi bạn vừa tấn công mục tiêu trong lượt.',
         };
       }
       if (actor.hand.length > 0) {
@@ -1888,23 +1910,30 @@ export function resolveUseSkill(
       if (actor.hp <= 2) {
         return { ok: false, error: 'Bạn cần còn trên 2 HP mới đủ sức tự nhận 2 thương tích để chém bồi!' };
       }
-      if (!targetPlayerId) {
-        return { ok: false, error: 'Chọn 1 mục tiêu trong tầm đánh để tung đòn đánh thứ hai.' };
+      const expectedId = actor.lastAttackTargetId ?? targetPlayerId;
+      if (!expectedId) {
+        return { ok: false, error: 'Chưa xác định được mục tiêu vừa tấn công để chém bồi.' };
       }
-      const target = state.players[targetPlayerId];
+      if (targetPlayerId && actor.lastAttackTargetId && targetPlayerId !== actor.lastAttackTargetId) {
+        return {
+          ok: false,
+          error: 'Đòn Đánh Đẫm Máu chuẩn gốc chỉ được chém bồi tiếp vào ĐÚNG mục tiêu vừa tấn công!',
+        };
+      }
+      const target = state.players[expectedId];
       if (!target || !target.alive || !canPlayerAttackTarget(state, actor, target)) {
-        return { ok: false, error: 'Mục tiêu Đòn Đánh Đẫm Máu không hợp lệ hoặc ngoài tầm.' };
+        return { ok: false, error: 'Mục tiêu vừa chém đã bị loại hoặc không còn trong tầm đánh.' };
       }
       applyDamage(state, actor, 2, 'skill', null, nowMs);
       appendPublicLog(
         state,
         'skill',
-        `🩸 Bách "Cuồng Chiến" (${actor.displayName}) tự nhận 2 thương tích kích hoạt Đòn Đánh Đẫm Máu!`,
+        `🩸 Bách "Cuồng Chiến" (${actor.displayName}) tự nhận 2 thương tích kích hoạt Đòn Đánh Đẫm Máu lên ${target.displayName}!`,
         nowMs,
         actor.playerId,
       );
       if (!actor.alive) return { ok: true };
-      return resolveAttack(state, actor, targetPlayerId, nowMs);
+      return resolveAttack(state, actor, expectedId, nowMs);
     }
 
     default:

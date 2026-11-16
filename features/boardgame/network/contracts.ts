@@ -24,6 +24,44 @@ import {
 export * from '../../../shared/contracts/boardgame';
 
 export const BOARD_GAME_STORAGE_PREFIX = 'hustverse:bg-auth:v1:';
+export const BOARD_GAME_PLAYER_KEY_STORAGE = 'hustverse:bg-player-key:v1';
+
+let fallbackInMemoryPlayerKey: string | null = null;
+
+export function getOrCreateStoredBoardGamePlayerKey(): string {
+  const randomKey = (): string => {
+    const bytes = new Uint8Array(12);
+    if (typeof globalThis.crypto?.getRandomValues === 'function') {
+      globalThis.crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = Math.floor(Math.random() * 256);
+      }
+    }
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) {
+      hex += bytes[i].toString(16).padStart(2, '0');
+    }
+    return `bgk_${hex}`;
+  };
+
+  if (typeof window === 'undefined' || !window.localStorage) {
+    if (!fallbackInMemoryPlayerKey) fallbackInMemoryPlayerKey = randomKey();
+    return fallbackInMemoryPlayerKey;
+  }
+  try {
+    const existing = window.localStorage.getItem(BOARD_GAME_PLAYER_KEY_STORAGE);
+    if (existing && /^bgk_[A-Za-z0-9_-]{8,36}$/.test(existing)) {
+      return existing;
+    }
+    const created = randomKey();
+    window.localStorage.setItem(BOARD_GAME_PLAYER_KEY_STORAGE, created);
+    return created;
+  } catch {
+    if (!fallbackInMemoryPlayerKey) fallbackInMemoryPlayerKey = randomKey();
+    return fallbackInMemoryPlayerKey;
+  }
+}
 
 export interface StoredBoardGameAuth {
   matchId: string;

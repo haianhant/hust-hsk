@@ -47,6 +47,7 @@ export interface BoardGameLobbyProps {
   canStartMatch?: boolean;
   onCloseLobby: () => void;
   onCloseRules: () => void;
+  onOpenLeaderboard?: () => void;
   onCancelExit: () => void;
   onConfirmExit: () => void;
   onSelectSeat: (seatId: string) => void;
@@ -81,6 +82,7 @@ export default function BoardGameLobby({
   canStartMatch = false,
   onCloseLobby,
   onCloseRules,
+  onOpenLeaderboard,
   onCancelExit,
   onConfirmExit,
   onSelectSeat,
@@ -130,14 +132,26 @@ export default function BoardGameLobby({
                   Phòng Sinh Hoạt Chung KTX B5–B9 · 4–8 người/bàn · Suy luận vai trò bí mật
                 </p>
               </div>
-              <button
-                type="button"
-                data-testid="bg-close-lobby-btn"
-                onClick={onCloseLobby}
-                className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
-              >
-                ✕ Đóng
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {onOpenLeaderboard && (
+                  <button
+                    type="button"
+                    data-testid="bg-lobby-open-leaderboard-btn"
+                    onClick={onOpenLeaderboard}
+                    className="rounded-lg border border-amber-400/50 bg-amber-950/60 px-2.5 py-1 text-xs font-bold text-amber-200 hover:bg-amber-900/70 cursor-pointer"
+                  >
+                    🏆 Bảng xếp hạng
+                  </button>
+                )}
+                <button
+                  type="button"
+                  data-testid="bg-close-lobby-btn"
+                  onClick={onCloseLobby}
+                  className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                >
+                  ✕ Đóng
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto p-4 text-sm">

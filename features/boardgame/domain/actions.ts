@@ -21,6 +21,7 @@ import {
   resolveUseSkill,
 } from './effects';
 import {
+  canPlayerAttackTarget,
   listReachableAttackTargets,
   LOCATIONS_CATALOG,
   nextRandomInt,
@@ -82,6 +83,7 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
       current.guardianShieldActive = false;
       current.consecutiveSameZoneRolls = 0;
       current.attacksThisTurn = 0;
+      current.lastAttackTargetId = null;
       state.allowedMoveDestinations = undefined;
       state.turnNumber += 1;
       state.turnPhase = 'ROLL_MOVE';
@@ -129,6 +131,7 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
   nextPlayer.guardianShieldActive = false;
   nextPlayer.consecutiveSameZoneRolls = 0;
   nextPlayer.attacksThisTurn = 0;
+  nextPlayer.lastAttackTargetId = null;
 
   state.allowedMoveDestinations = undefined;
   state.turnNumber += 1;
@@ -136,6 +139,24 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
   state.turnPhase = 'ROLL_MOVE';
 
   finalizeIfFinished(state, nowMs);
+}
+
+function canTriggerCharlesBloodyFeast(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+): boolean {
+  const lastTarget = actor.lastAttackTargetId ? state.players[actor.lastAttackTargetId] : null;
+  return Boolean(
+    actor.alive &&
+      actor.revealed &&
+      actor.roleId === 'lang-cuu-ho' &&
+      actor.attacksThisTurn >= 1 &&
+      actor.hp > 2 &&
+      actor.hand.length === 0 &&
+      lastTarget &&
+      lastTarget.alive &&
+      canPlayerAttackTarget(state, actor, lastTarget),
+  );
 }
 
 export function applyPlayerGameAction(
@@ -216,14 +237,7 @@ export function applyPlayerGameAction(
       }
       result = resolveAttack(state, actor, action.targetPlayerId, nowMs);
       if (result.ok) {
-        const canBloodyFeast =
-          actor.alive &&
-          actor.revealed &&
-          actor.roleId === 'lang-cuu-ho' &&
-          actor.attacksThisTurn === 1 &&
-          actor.hp > 2 &&
-          listReachableAttackTargets(state, actor).length > 0;
-        autoEndTurnAfterAction = !canBloodyFeast;
+        autoEndTurnAfterAction = !canTriggerCharlesBloodyFeast(state, actor);
       }
       break;
     }
@@ -233,7 +247,7 @@ export function applyPlayerGameAction(
     case 'USE_SKILL':
       result = resolveUseSkill(state, actor, action.targetPlayerId, nowMs);
       if (result.ok && actor.roleId === 'lang-cuu-ho') {
-        autoEndTurnAfterAction = true;
+        autoEndTurnAfterAction = !canTriggerCharlesBloodyFeast(state, actor);
       }
       break;
     case 'END_TURN':

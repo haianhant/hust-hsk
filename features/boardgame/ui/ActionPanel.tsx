@@ -172,6 +172,10 @@ export function ActionPanel({
   const hasHandgun = selfPlayer.equipped.some((eq) => eq.id === 'ev-05');
   const attacksThisTurn = selfPlayer.attacksThisTurn ?? 0;
 
+  const charlesFeastTarget = selfPlayer.lastAttackTargetId
+    ? attackableTargets.find((p) => p.playerId === selfPlayer.lastAttackTargetId) ?? null
+    : null;
+
   // Điều kiện kích hoạt kỹ năng theo từng nhân vật chuẩn Shadow Hunters
   const canUseSkillNow = (() => {
     if (!privateView.revealed || roleDesign.targetMode === 'passive') return false;
@@ -180,17 +184,18 @@ export function ActionPanel({
     switch (privateView.roleId) {
       case 'gac-truc-ban': // Emi Teleport: Pha 1 ROLL_MOVE
         return publicGame.turnPhase === 'ROLL_MOVE';
-      case 'lang-cuu-ho': // Charles Bloody Feast: sau đòn đánh 1 trong MAIN_ACTION & còn > 2 HP
+      case 'lang-cuu-ho': // Charles Bloody Feast: lặp lại đòn chém bồi vào đúng mục tiêu vừa đánh khi còn > 2 HP
         return (
           publicGame.turnPhase === 'MAIN_ACTION' &&
-          attacksThisTurn === 1 &&
+          attacksThisTurn >= 1 &&
           privateView.hp > 2 &&
           !hasAnyHandCard &&
-          attackableTargets.length > 0
+          Boolean(charlesFeastTarget)
         );
-      default: // George, Franklin, Allie: ROLL_MOVE / LOCATION_ACTION / MAIN_ACTION
+      default: // George, Franklin, Allie: ROLL_MOVE / CHOOSE_MOVE / LOCATION_ACTION / MAIN_ACTION
         return (
           publicGame.turnPhase === 'ROLL_MOVE' ||
+          publicGame.turnPhase === 'CHOOSE_MOVE' ||
           publicGame.turnPhase === 'LOCATION_ACTION' ||
           publicGame.turnPhase === 'MAIN_ACTION'
         );
@@ -201,7 +206,7 @@ export function ActionPanel({
     roleDesign.targetMode === 'self'
       ? selfPlayer
       : privateView.roleId === 'lang-cuu-ho'
-        ? validAttackTarget
+        ? charlesFeastTarget
         : validOtherTarget;
 
   const rerollPrompt =
@@ -679,6 +684,9 @@ export function ActionPanel({
               ? `🧭 La Bàn Định Hướng! Chọn 1 trong ${allowedMoveList.length} khu vực bên dưới hoặc bấm thẳng lên bàn cờ:`
               : '✨ Tổng xúc xắc bằng 7! Chọn khu vực bên dưới hoặc bấm thẳng lên bàn cờ để di chuyển tới:'}
           </p>
+          {canUseSkillNow &&
+            roleDesign.targetMode !== 'self' &&
+            renderTargetSelector('Chọn mục tiêu cho Kỹ năng (có thể kích hoạt trước khi chọn khu vực):')}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
             {allowedMoveList.map((loc) => (
               <button

@@ -15,6 +15,7 @@ export interface BoardGameHUDProps {
   table2Count: number;
   lobbyOpen: boolean;
   rulesOpen: boolean;
+  leaderboardOpen?: boolean;
   hasActiveMatch?: boolean;
   inviteCode?: string | null;
   matchStatusLabel?: string | null;
@@ -27,6 +28,7 @@ export interface BoardGameHUDProps {
   gameActive?: boolean;
   onToggleLobby: () => void;
   onToggleRules: () => void;
+  onToggleLeaderboard?: () => void;
   onStandUpSeat: () => void;
   onSitQuickSeat?: (tableId: BoardGameTableId) => void;
   onToggleReady?: () => void;
@@ -40,6 +42,7 @@ export default function BoardGameHUD({
   table2Count,
   lobbyOpen,
   rulesOpen,
+  leaderboardOpen = false,
   hasActiveMatch = false,
   inviteCode = null,
   matchStatusLabel = null,
@@ -52,6 +55,7 @@ export default function BoardGameHUD({
   gameActive = false,
   onToggleLobby,
   onToggleRules,
+  onToggleLeaderboard,
   onStandUpSeat,
   onToggleReady,
   onStartMatch,
@@ -126,6 +130,21 @@ export default function BoardGameHUD({
           >
             📖 Luật chơi
           </button>
+
+          {onToggleLeaderboard && (
+            <button
+              type="button"
+              data-testid="bg-toggle-leaderboard-btn"
+              onClick={onToggleLeaderboard}
+              className={`rounded-xl px-2.5 py-1 text-[11px] font-semibold transition ${
+                leaderboardOpen
+                  ? 'bg-amber-400 text-slate-950'
+                  : 'bg-slate-800 text-amber-200 hover:bg-slate-700'
+              }`}
+            >
+              🏆 Xếp hạng
+            </button>
+          )}
 
           {activeSeat && (
             <button

@@ -191,7 +191,13 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     const players = [];
     for (let i = 0; i < 4; i++) {
       const c = await openBgClient(srv.wsBaseUrl, { matchId });
-      c.send({ type: 'BG_JOIN', matchId, inviteCode, displayName: rawNames[i] });
+      c.send({
+        type: 'BG_JOIN',
+        matchId,
+        inviteCode,
+        displayName: rawNames[i],
+        playerKey: `bgk_do_test_${i}_abcd12`,
+      });
       const auth = await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
       players.push({ c, auth, playerId: auth.playerId });
     }
@@ -439,6 +445,44 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
         }
       }
     }
+
+    // Kiểm tra Bảng Xếp Hạng CLB (DO SQLite authoritative, weekly + alltime, zero-MSSV & hashed playerKey)
+    const lbRes = await fetch(
+      `${srv.httpBaseUrl}/api/boardgame/leaderboard?period=alltime&faction=all&playerKey=bgk_do_test_0_abcd12`,
+    );
+    assert.equal(lbRes.status, 200);
+    const lbData = await lbRes.json();
+    assert.equal(lbData.ok, true);
+    assert.equal(lbData.entries.length, 4, 'BXH chỉ ghi 4 người chơi thật, loại bỏ khán giả');
+    const lbRawText = JSON.stringify(lbData);
+    for (const mssv of [...mssvList, '20229999']) {
+      assert.equal(lbRawText.includes(mssv), false, `Leaderboard leaked MSSV ${mssv}`);
+    }
+    assert.equal(lbRawText.includes('bgk_do_test_'), false, 'BXH không được lộ raw playerKey ra client');
+    for (const entry of lbData.entries) {
+      assert.ok(entry.playerKey.startsWith('lb_'), `Expected hashed playerKey, got ${entry.playerKey}`);
+      assert.equal(entry.matchesPlayed, 1);
+    }
+    assert.ok(lbData.myEntry && lbData.myEntry.isSelf === true, 'Phải trả myEntry đánh dấu isSelf');
+    const topPts = lbData.entries[0].ratingPoints;
+    const bottomPts = lbData.entries[lbData.entries.length - 1].ratingPoints;
+    assert.ok(topPts >= 30 && bottomPts >= 5 && topPts > bottomPts, `Winner points (${topPts}) > Loser (${bottomPts})`);
+
+    const weeklyRes = await fetch(
+      `${srv.httpBaseUrl}/api/boardgame/leaderboard?period=weekly&faction=all&playerKey=bgk_do_test_0_abcd12`,
+    );
+    assert.equal(weeklyRes.status, 200);
+    const weeklyData = await weeklyRes.json();
+    assert.equal(weeklyData.ok, true);
+    assert.equal(weeklyData.entries.length, 4);
+
+    // Đảm bảo idempotent: lặp lại truy vấn sau không đổi số trận
+    const lbResRepeat = await fetch(
+      `${srv.httpBaseUrl}/api/boardgame/leaderboard?period=alltime&faction=all&playerKey=bgk_do_test_0_abcd12`,
+    );
+    const lbRepeatData = await lbResRepeat.json();
+    assert.equal(lbRepeatData.myEntry.matchesPlayed, 1);
+    assert.equal(lbRepeatData.myEntry.ratingPoints, lbData.myEntry.ratingPoints);
 
     // Luồng Sẵn sàng ván mới: FINISHED -> WAITING
     const beforeRematchLen = players[0].c.inbox.length;

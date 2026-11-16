@@ -1375,6 +1375,29 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     }
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-04-match-result-postcard.png') });
 
+    // Gate Leaderboard UI từ MatchResult (Tuần này / Lọc phe / Toàn thời gian & Zero-MSSV)
+    await p1.page.locator('[data-testid="bg-result-open-leaderboard-btn"]').click();
+    await p1.page.waitForSelector('[data-testid="boardgame-leaderboard-modal"]', { timeout: UI_TIMEOUT });
+    await p1.page.waitForFunction(
+      () => document.querySelectorAll('[data-testid="bg-leaderboard-row"]').length >= 4,
+      null,
+      { timeout: UI_TIMEOUT },
+    );
+    const lbModalText = await p1.page
+      .locator('[data-testid="boardgame-leaderboard-modal"]')
+      .innerText();
+    for (const mssv of ALL_TEST_MSSVS) {
+      assert.equal(lbModalText.includes(mssv), false, `Leaderboard leaked MSSV ${mssv}`);
+    }
+    await p1.page.locator('[data-testid="bg-leaderboard-tab-weekly"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-leaderboard-my-summary"]', { timeout: UI_TIMEOUT });
+    await p1.page.locator('[data-testid="bg-leaderboard-faction-lantern-guard"]').click();
+    await p1.page.locator('[data-testid="bg-leaderboard-faction-all"]').click();
+    await p1.page.locator('[data-testid="bg-close-leaderboard-btn"]').click();
+    await p1.page
+      .locator('[data-testid="boardgame-leaderboard-modal"]')
+      .waitFor({ state: 'detached', timeout: UI_TIMEOUT });
+
     verifyCommonAudits(allAudited);
     await p4.context.close().catch(() => undefined);
     if (p4.browser) await p4.browser.close().catch(() => undefined);
