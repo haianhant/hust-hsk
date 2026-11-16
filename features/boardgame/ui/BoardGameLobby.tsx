@@ -519,6 +519,19 @@ export default function BoardGameLobby({
                   </p>
                 )}
               </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/25 bg-emerald-950/20 px-3 py-2 text-xs text-slate-300">
+                <span>🎨 Thử nghiệm đồ họa thẻ bài 2:3 &amp; Foil 3D (HUSTVerse Midnight):</span>
+                <a
+                  href="/boardgame-prototype"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="bg-lobby-open-prototype-link"
+                  className="rounded-lg border border-emerald-400/50 bg-emerald-900/60 px-2.5 py-1 text-[11px] font-bold text-emerald-100 hover:bg-emerald-800/80 transition"
+                >
+                  Mở Visual Prototype ↗
+                </a>
+              </div>
             </div>
           </div>
         </div>

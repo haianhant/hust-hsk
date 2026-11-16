@@ -19,6 +19,7 @@ import {
   ROLE_VISUAL_META,
   RolePortraitSvg,
 } from './BoardGameArt';
+import { MidnightCharacterCard } from './MidnightCharacterCard';
 
 export interface RoleCardProps {
   publicGame: BoardGamePublicGameView;
@@ -26,6 +27,7 @@ export interface RoleCardProps {
   isSpectator: boolean;
   cardVisible: boolean;
   unreadClueCount?: number;
+  visualStyle?: 'classic' | 'midnight-noir';
   onToggleCardVisible: () => void;
 }
 
@@ -35,6 +37,7 @@ export function RoleCard({
   isSpectator,
   cardVisible,
   unreadClueCount = 0,
+  visualStyle = 'classic',
   onToggleCardVisible,
 }: RoleCardProps) {
   if (isSpectator || !privateView) {
@@ -97,7 +100,28 @@ export function RoleCard({
         </button>
       </div>
 
-      {!cardVisible ? (
+      {visualStyle === 'midnight-noir' ? (
+        <div className="space-y-3">
+          <div className="mx-auto w-full max-w-[290px]">
+            <MidnightCharacterCard
+              roleId={privateView.roleId}
+              revealed={privateView.revealed}
+              viewerMode={cardVisible ? 'owner-peek' : 'owner-facedown'}
+              woundsTaken={privateView.woundsTaken}
+              currentHp={privateView.hp}
+              onFlipToggle={onToggleCardVisible}
+            />
+          </div>
+          {!cardVisible && unreadClueCount > 0 && (
+            <p
+              data-testid="bg-facedown-unread-clues"
+              className="mx-auto block w-fit rounded-lg border border-emerald-400/50 bg-emerald-950/60 px-2.5 py-1 text-xs font-bold text-emerald-200"
+            >
+              🕵️ +{unreadClueCount} mật báo mới — chạm thẻ để soi lại
+            </p>
+          )}
+        </div>
+      ) : !cardVisible ? (
         <div
           data-testid="bg-role-card-facedown"
           className="rounded-2xl border border-dashed border-slate-600 bg-slate-950/85 p-5 text-center space-y-2"

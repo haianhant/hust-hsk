@@ -21,3 +21,47 @@ canvas {
   touch-action: none;
   display: block;
 }
+
+/* ---------------------------------------------------------------------------
+ * HUSTVerse Midnight — Anime Noir TCG Card Shimmer & 3D Flip Utilities
+ * --------------------------------------------------------------------------- */
+@keyframes mn-foil-sweep {
+  0% {
+    background-position: -140% 50%;
+  }
+  100% {
+    background-position: 240% 50%;
+  }
+}
+
+.mn-card-perspective {
+  perspective: 1100px;
+}
+
+.mn-card-flip-stage {
+  transform-style: preserve-3d;
+  transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mn-card-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.mn-card-face-back {
+  transform: rotateY(180deg);
+}
+
+.mn-foil-sweep {
+  background-size: 220% 220%;
+  animation: mn-foil-sweep 4.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-card-flip-stage {
+    transition-duration: 120ms;
+  }
+  .mn-foil-sweep {
+    animation: none;
+  }
+}

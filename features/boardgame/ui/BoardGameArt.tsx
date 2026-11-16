@@ -670,3 +670,67 @@ export function PlayerPawnToken({
     </div>
   );
 }
+
+/**
+ * Khung viền góc khắc kim loại Anime Noir (tái sử dụng cho Thẻ Nhân vật & Thẻ Bài 2:3).
+ */
+export function MidnightOrnamentFrameSvg({
+  primaryHex,
+  secondaryHex,
+}: {
+  primaryHex: string;
+  secondaryHex: string;
+}) {
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      viewBox="0 0 240 360"
+      fill="none"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      {/* Viền chỉ mảnh bên trong */}
+      <rect
+        x="8"
+        y="8"
+        width="224"
+        height="344"
+        rx="12"
+        stroke={secondaryHex}
+        strokeOpacity="0.45"
+        strokeWidth="1"
+      />
+      {/* Góc trên trái */}
+      <path
+        d="M12 34V16C12 13.8 13.8 12 16 12H36M16 18H28"
+        stroke={primaryHex}
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+      {/* Góc trên phải */}
+      <path
+        d="M204 12H224C226.2 12 228 13.8 228 16V34M212 18H224"
+        stroke={secondaryHex}
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+      {/* Góc dưới trái */}
+      <path
+        d="M12 326V344C12 346.2 13.8 348 16 348H36"
+        stroke={secondaryHex}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      {/* Góc dưới phải */}
+      <path
+        d="M204 348H224C226.2 348 228 346.2 228 344V326"
+        stroke={primaryHex}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      {/* Kim cương trang trí giữa viền trên & dưới */}
+      <polygon points="120,4 125,9 120,14 115,9" fill={secondaryHex} fillOpacity="0.9" />
+      <polygon points="120,346 125,351 120,356 115,351" fill={primaryHex} fillOpacity="0.85" />
+    </svg>
+  );
+}
