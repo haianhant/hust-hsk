@@ -262,6 +262,39 @@ function countBoardGameTablePlayers(
   return Math.min(8, Math.max(seatSet.size, dirCount));
 }
 
+/**
+ * Polls for the Three.js scene hook until `enterBoardGameClub` is mounted and
+ * moves the 3D player avatar into the Board Game lounge. Returns a cancel callback.
+ */
+function syncBoardGameClubHookWhenReady(intervalMs = 120, maxAttempts = 120): () => void {
+  let cancelled = false;
+  let attempts = 0;
+  let activeTimer: number | null = null;
+  const step = () => {
+    activeTimer = null;
+    if (cancelled) return;
+    const hook = getHook();
+    if (hook?.enterBoardGameClub) {
+      if (!hook.isInBoardGameClub?.()) {
+        hook.enterBoardGameClub();
+      }
+      return;
+    }
+    if (attempts < maxAttempts) {
+      attempts += 1;
+      activeTimer = window.setTimeout(step, intervalMs);
+    }
+  };
+  activeTimer = window.setTimeout(step, intervalMs);
+  return () => {
+    cancelled = true;
+    if (activeTimer !== null) {
+      window.clearTimeout(activeTimer);
+      activeTimer = null;
+    }
+  };
+}
+
 export default function HomePage() {
   const [entered, setEntered] = useState(false);
   const [sceneFirstFrameReady, setSceneFirstFrameReady] = useState(false);
@@ -301,6 +334,7 @@ export default function HomePage() {
   const [boardGameExitConfirmOpen, setBoardGameExitConfirmOpen] = useState(false);
   const bgSnap = useBoardGameClientSnapshot();
   const bgSessionRestoredRef = useRef(false);
+  const cancelBgHookSyncRef = useRef<(() => void) | null>(null);
   const pendingBgInviteRef = useRef<string | null>(null);
   const [seatedSeatId, setSeatedSeatId] = useState<string | null>(null);
   const [seatedSeatLabel, setSeatedSeatLabel] = useState<string | null>(null);
@@ -1695,6 +1729,14 @@ export default function HomePage() {
     return boardGameClient.subscribeDirectory();
   }, [entered, inBoardGameClub]);
 
+  useEffect(
+    () => () => {
+      cancelBgHookSyncRef.current?.();
+      cancelBgHookSyncRef.current = null;
+    },
+    [],
+  );
+
   // Khôi phục tự động nếu người chơi F5 giữa phòng chờ hoặc ván đấu Board Game
   useEffect(() => {
     if (!entered || bgSessionRestoredRef.current) return;
@@ -1705,10 +1747,9 @@ export default function HomePage() {
       bgAppearance,
     );
     if (restoredMatchId) {
-      window.setTimeout(() => {
-        getHook()?.enterBoardGameClub?.();
-        setInBoardGameClub(true);
-      }, 250);
+      setInBoardGameClub(true);
+      cancelBgHookSyncRef.current?.();
+      cancelBgHookSyncRef.current = syncBoardGameClubHookWhenReady(120, 120);
     }
   }, [entered, characterProfile.name, bgAppearance]);
 
@@ -1777,30 +1818,7 @@ export default function HomePage() {
     void handleJoinBoardGameByCode(code, false);
 
     // Đồng bộ Player 3D vào phòng CLB ngay khi Three.js Canvas hoàn tất mount
-    let cancelled = false;
-    let attempts = 0;
-    let activeTimer: number | null = null;
-    const syncPlayerHook = () => {
-      if (cancelled) return;
-      const hook = getHook();
-      if (hook?.enterBoardGameClub) {
-        if (!hook.isInBoardGameClub?.()) {
-          hook.enterBoardGameClub();
-        }
-        return;
-      }
-      if (attempts < 150) {
-        attempts += 1;
-        activeTimer = window.setTimeout(syncPlayerHook, 150);
-      }
-    };
-    activeTimer = window.setTimeout(syncPlayerHook, 150);
-    return () => {
-      cancelled = true;
-      if (activeTimer !== null) {
-        window.clearTimeout(activeTimer);
-      }
-    };
+    return syncBoardGameClubHookWhenReady(150, 150);
   }, [entered, handleJoinBoardGameByCode]);
 
   const handleJoinDirectoryBoardGameMatch = useCallback(

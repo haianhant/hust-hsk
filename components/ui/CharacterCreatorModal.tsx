@@ -678,8 +678,9 @@ export default function CharacterCreatorModal({
               <button
                 id={mode === 'entry' ? 'enter-campus' : 'save-character'}
                 type="button"
+                disabled={mode === 'entry' && !canvasReady}
                 onClick={() => handleSubmit(false)}
-                className="w-full rounded-full bg-[#B5121B] px-6 py-3 text-base font-extrabold text-white shadow-lg transition hover:bg-[#8F1418] sm:w-auto"
+                className="w-full rounded-full bg-[#B5121B] px-6 py-3 text-base font-extrabold text-white shadow-lg transition hover:bg-[#8F1418] disabled:cursor-wait disabled:opacity-75 sm:w-auto"
               >
                 {mode === 'entry' ? 'Vào cổng Trần Đại Nghĩa →' : 'Lưu nhân vật & trang phục'}
               </button>
