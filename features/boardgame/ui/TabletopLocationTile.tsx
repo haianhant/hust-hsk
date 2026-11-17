@@ -84,7 +84,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
             }
           : undefined
       }
-      className={`group/tile relative rounded-2xl border bg-slate-950 transition-all duration-200 ${
+      className={`group/tile relative h-full rounded-2xl border bg-slate-950 transition-all duration-200 ${
         canChooseMoveHere
           ? 'border-amber-400 border-b-4 border-b-amber-500 ring-2 ring-amber-400/75 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(251,191,36,0.34)] cursor-pointer'
           : isHighlightedDestination
@@ -139,7 +139,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
       </div>
 
       {/* NỘI DUNG CHÍNH TRÊN BỀ MẶT TILE (GIẢM NHIỄU VIỀN, TĂNG ĐỘ ĐỌC CHỮ) */}
-      <div className="relative z-10 p-2.5 sm:p-3 flex flex-col justify-between min-h-[122px]">
+      <div className="relative z-10 h-full p-2 sm:p-2.5 flex flex-col justify-between min-h-[104px] lg:min-h-[108px] xl:min-h-[118px]">
         <div>
           <div className="flex items-center justify-between gap-1.5">
             <span
@@ -153,34 +153,37 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
             </span>
             <div className="flex items-center gap-1">
               {isHighlightedDestination && (
-                <span className="px-2 py-0.5 rounded-md bg-emerald-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
+                <span className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
                   🎯 Điểm đáp
                 </span>
               )}
               {isSelfHere && (
-                <span className="px-2 py-0.5 rounded-md bg-cyan-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
+                <span className="px-1.5 py-0.5 rounded-md bg-cyan-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
                   📍 Bạn ở đây
                 </span>
               )}
             </div>
           </div>
 
-          <h3 className="text-[15px] sm:text-base font-black tracking-tight text-white mt-1.5 leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
+          <h3 className="text-sm sm:text-[15px] font-black tracking-tight text-white mt-1 leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
             {meta.name}
           </h3>
-          <p className="text-xs font-medium text-slate-100/95 mt-0.5 leading-snug drop-shadow-[0_1px_5px_rgba(0,0,0,0.95)]">
+          <p
+            title={meta.actionDesc}
+            className="text-[11px] sm:text-xs font-medium text-slate-100/95 mt-0.5 leading-snug line-clamp-2 drop-shadow-[0_1px_5px_rgba(0,0,0,0.95)]"
+          >
             {meta.actionDesc}
           </p>
         </div>
 
         {canChooseMoveHere && (
-          <div className="mt-2 px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-black text-center shadow-lg">
+          <div className="mt-1.5 px-2 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-black text-center shadow-lg">
             👆 Bấm để di chuyển tới đây
           </div>
         )}
 
         {/* KHAY QUÂN CỜ ĐẾ NỔI ĐỨNG TRONG KHU VỰC */}
-        <div className="mt-2 pt-1.5 border-t border-white/15 min-h-[38px] flex flex-wrap items-center gap-1.5">
+        <div className="mt-1.5 pt-1 border-t border-white/15 min-h-[30px] flex flex-wrap items-center gap-1">
           {occupants.length === 0 ? (
             <span className="text-[11px] text-slate-400/90 italic drop-shadow">
               Trống người

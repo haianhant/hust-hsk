@@ -115,7 +115,10 @@ export function GameBoard({
 }: GameBoardProps) {
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [sideDrawerOpen, setSideDrawerOpen] = useState(true);
-  const [isDesktopLayout, setIsDesktopLayout] = useState(false);
+  const [desktopSidebarTab, setDesktopSidebarTab] = useState<'role' | 'gear' | 'log'>('role');
+  const [isDesktopLayout, setIsDesktopLayout] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : false,
+  );
   const [mobileTab, setMobileTab] = useState<'board' | 'role' | 'log'>('board');
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [chatText, setChatText] = useState('');
@@ -209,26 +212,36 @@ export function GameBoard({
   }, [publicGame.matchId]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const sync = () => setIsDesktopLayout(mq.matches);
+    if (typeof window === 'undefined') return;
+    const sync = () => {
+      if (window.matchMedia) {
+        setIsDesktopLayout(window.matchMedia('(min-width: 1024px)').matches);
+      } else {
+        setIsDesktopLayout(window.innerWidth >= 1024);
+      }
+    };
     sync();
-    mq.addEventListener?.('change', sync);
-    return () => mq.removeEventListener?.('change', sync);
+    const mq = window.matchMedia?.('(min-width: 1024px)');
+    mq?.addEventListener?.('change', sync);
+    window.addEventListener('resize', sync);
+    return () => {
+      mq?.removeEventListener?.('change', sync);
+      window.removeEventListener('resize', sync);
+    };
   }, []);
 
   const totalClues = privateView?.privateClues.length ?? 0;
   useEffect(() => {
-    if ((isDesktopLayout && sideDrawerOpen) || mobileTab === 'role') {
+    if ((isDesktopLayout && sideDrawerOpen && desktopSidebarTab === 'gear') || (!isDesktopLayout && mobileTab === 'role')) {
       setSeenClueCount((prev) => Math.max(prev, totalClues));
     }
-  }, [isDesktopLayout, sideDrawerOpen, mobileTab, totalClues]);
+  }, [isDesktopLayout, sideDrawerOpen, desktopSidebarTab, mobileTab, totalClues]);
 
   useEffect(() => {
-    if (mobileTab === 'log') {
+    if ((isDesktopLayout && sideDrawerOpen && desktopSidebarTab === 'log') || (!isDesktopLayout && mobileTab === 'log')) {
       setSeenLogCount((prev) => Math.max(prev, publicGame.publicLog.length));
     }
-  }, [mobileTab, publicGame.publicLog.length]);
+  }, [isDesktopLayout, sideDrawerOpen, desktopSidebarTab, mobileTab, publicGame.publicLog.length]);
 
   const unreadClueCount = isSpectator ? 0 : Math.max(0, totalClues - seenClueCount);
   const unreadLogCount = Math.max(0, publicGame.publicLog.length - seenLogCount);
@@ -371,25 +384,25 @@ export function GameBoard({
       data-testid="boardgame-2d-board"
       className="fixed inset-0 z-[44] flex flex-col bg-slate-950 text-slate-100 overflow-x-hidden"
     >
-      {/* THANH HEADER TINH GỌN */}
+      {/* THANH HEADER MỘT HÀNG TINH GỌN (THU GỌN NÚT PHỤ VÀO SETTINGS) */}
       <header
         data-testid="bg-v3-status-bar"
-        className="shrink-0 border-b border-slate-800 bg-slate-900/95 px-3 sm:px-5 py-1.5"
+        className="relative z-50 shrink-0 h-11 border-b border-slate-800 bg-slate-900/95 px-2.5 sm:px-3.5 flex items-center"
       >
-        <div className="mx-auto max-w-[1680px] flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <span className="text-sm sm:text-base font-black tracking-tight text-white">
+        <div className="w-full mx-auto max-w-[1840px] flex flex-nowrap items-center justify-between gap-2 min-w-0">
+          <div className="flex flex-nowrap items-center gap-1.5 sm:gap-2 min-w-0 overflow-hidden">
+            <span className="text-xs sm:text-sm font-black tracking-tight text-white whitespace-nowrap shrink-0">
               🌙 Săn Bóng Đêm KTX
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs sm:text-sm font-bold text-cyan-200">
+            <span className="px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-[11px] sm:text-xs font-bold text-cyan-200 whitespace-nowrap shrink-0">
               Vòng {publicGame.round}
             </span>
-            <span className="hidden md:inline-flex px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs sm:text-sm font-semibold text-amber-200">
+            <span className="hidden md:inline-flex px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-semibold text-amber-200 truncate max-w-[200px] xl:max-w-[300px]">
               {PHASE_LABEL[publicGame.turnPhase]}
             </span>
             <span
               data-testid="bg-turn-timer"
-              className={`px-3 py-1 rounded-lg border text-xs sm:text-sm font-extrabold ${
+              className={`px-2 py-0.5 rounded-lg border text-[11px] sm:text-xs font-extrabold whitespace-nowrap shrink-0 ${
                 remainingSec === null
                   ? 'bg-emerald-500/15 border-emerald-400/45 text-emerald-200'
                   : remainingSec <= 10
@@ -397,10 +410,17 @@ export function GameBoard({
                     : 'bg-amber-500/15 border-amber-400/45 text-amber-100'
               }`}
             >
-              {remainingSec === null ? '∞ Suy nghĩ tự do' : `⏱️ ${remainingSec}s`}
+              {remainingSec === null ? (
+                <>
+                  <span>∞</span>
+                  <span className="hidden sm:inline"> Suy nghĩ tự do</span>
+                </>
+              ) : (
+                `⏱️ ${remainingSec}s`
+              )}
             </span>
             {activePlayer && !publicGame.winnerLabel && (
-              <span className="text-xs sm:text-sm font-semibold text-slate-300">
+              <span className="text-[11px] sm:text-xs font-semibold text-slate-300 truncate min-w-0">
                 Lượt:{' '}
                 <strong className={isMyTurn ? 'text-amber-300' : 'text-white'}>
                   {activePlayer.displayName}
@@ -409,85 +429,42 @@ export function GameBoard({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex flex-nowrap items-center gap-1.5 shrink-0">
             {inviteCode && (
-              <span className="hidden xl:inline-flex px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-mono font-bold text-slate-300">
+              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-mono font-bold text-slate-300 whitespace-nowrap">
                 Mã: {inviteCode}
               </span>
             )}
-            <button
-              type="button"
-              data-testid="bg-toggle-drawer-btn"
-              onClick={() => setSideDrawerOpen((v) => !v)}
-              className="hidden lg:inline-flex items-center px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-100 transition cursor-pointer"
-            >
-              {sideDrawerOpen ? '◨ Mở rộng bàn' : '◧ Mở Thẻ & Nhật ký'}
-            </button>
-            <button
-              type="button"
-              data-testid="bg-sound-toggle-btn"
-              onClick={handleToggleSoundClick}
-              className="px-2.5 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-100 transition cursor-pointer"
-              aria-label="Bật/tắt âm thanh"
-            >
-              {effectiveMuted ? '🔇' : '🔊'}
-            </button>
-            <button
-              type="button"
-              data-testid="bg-vfx-motion-toggle-btn"
-              onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
-              title={
-                vfx.reducedMotion
-                  ? 'Đang bật chế độ Giảm chuyển động (nhấn để bật VFX đầy đủ)'
-                  : 'VFX đầy đủ đang bật (nhấn để giảm chuyển động)'
-              }
-              className={`hidden sm:inline-flex items-center px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
-                vfx.reducedMotion
-                  ? 'bg-slate-900 border-slate-700 text-slate-400'
-                  : 'bg-indigo-950/70 border-indigo-400/50 text-indigo-200 hover:bg-indigo-900/70'
-              }`}
-            >
-              {vfx.reducedMotion ? '⏸️ Tĩnh' : '✨ VFX'}
-            </button>
+            {isDesktopLayout && !sideDrawerOpen && (
+              <button
+                type="button"
+                onClick={() => setSideDrawerOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 min-h-[32px] rounded-xl bg-cyan-950/60 hover:bg-cyan-900/70 border border-cyan-500/45 text-xs font-bold text-cyan-200 whitespace-nowrap transition cursor-pointer"
+              >
+                ◧ Sidebar
+              </button>
+            )}
             <button
               type="button"
               data-testid="bg-graphics-settings-btn"
               onClick={() => setSettingsPanelOpen((v) => !v)}
               aria-expanded={settingsPanelOpen}
-              aria-label="Cài đặt đồ họa và trợ năng"
-              title={`Đồ họa: ${GRAPHICS_TIER_LABELS[gfx.profile.tier]} · Cài đặt hiệu ứng & rung`}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+              aria-label="Cài đặt đồ họa, luật chơi và trợ năng"
+              title={`Cài đặt (${GRAPHICS_TIER_LABELS[gfx.profile.tier]})`}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 min-h-[32px] rounded-xl border text-xs font-bold whitespace-nowrap transition cursor-pointer ${
                 settingsPanelOpen
-                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-100'
+                  ? 'bg-cyan-500/25 border-cyan-400 text-cyan-100'
                   : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-100'
               }`}
             >
               <span>⚙️</span>
-              <span className="hidden xl:inline">{GRAPHICS_TIER_LABELS[gfx.profile.tier]}</span>
-            </button>
-            {onOpenLeaderboard && (
-              <button
-                type="button"
-                data-testid="bg-board-open-leaderboard-btn"
-                onClick={onOpenLeaderboard}
-                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-amber-950/60 hover:bg-amber-900/70 border border-amber-400/50 text-xs sm:text-sm font-bold text-amber-200 transition cursor-pointer"
-              >
-                🏆 Hạng
-              </button>
-            )}
-            <button
-              type="button"
-              data-testid="bg-board-rules-btn"
-              onClick={onOpenRules}
-              className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs sm:text-sm font-bold text-slate-100 transition cursor-pointer"
-            >
-              📖 Luật
+              <span className="hidden sm:inline">Cài đặt</span>
             </button>
             <button
               type="button"
               data-testid="bg-board-leave-btn"
               onClick={() => setLeaveConfirmOpen(true)}
-              className="px-3 py-1.5 min-h-[36px] rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-500/50 text-xs sm:text-sm font-bold text-rose-100 transition cursor-pointer"
+              className="inline-flex items-center px-2.5 py-1 min-h-[32px] rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-500/50 text-xs font-bold text-rose-100 whitespace-nowrap transition cursor-pointer"
             >
               🚪 Rời
             </button>
@@ -495,167 +472,233 @@ export function GameBoard({
         </div>
       </header>
 
-      {/* BẢNG CÀI ĐẶT ĐỒ HỌA (HIGH / BALANCED / LOW) & TRỢ NĂNG */}
+      {/* POPOVER CÀI ĐẶT NỔI (TRÁNH ĐẨY CHIỀU CAO BÀN CỜ): ĐỒ HỌA / ÂM THANH / VFX / LUẬT / HẠNG */}
       {settingsPanelOpen && (
-        <section
-          data-testid="bg-graphics-settings-panel"
-          aria-label="Tùy chỉnh đồ họa, âm thanh và rung màn hình"
-          className="shrink-0 border-b border-cyan-500/35 bg-slate-900/98 px-3 sm:px-5 py-2.5"
-        >
-          <div className="mx-auto max-w-[1680px] flex flex-wrap items-center justify-between gap-2.5">
+        <>
+          <div
+            aria-hidden="true"
+            onClick={() => setSettingsPanelOpen(false)}
+            className="fixed inset-x-0 top-11 bottom-0 z-[45] bg-slate-950/25"
+          />
+          <section
+            data-testid="bg-graphics-settings-panel"
+            aria-label="Cài đặt đồ họa, âm thanh, luật chơi và trợ năng"
+            className="fixed right-2.5 top-12 z-50 w-[min(94vw,420px)] rounded-2xl border border-cyan-500/45 bg-slate-900/95 p-3.5 shadow-2xl backdrop-blur-md space-y-3"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <p className="text-xs font-extrabold uppercase tracking-wider text-cyan-200">
+                ⚙️ Cài đặt &amp; Tiện ích Bàn Chơi
+              </p>
+              <button
+                type="button"
+                onClick={() => setSettingsPanelOpen(false)}
+                aria-label="Đóng bảng cài đặt"
+                className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Tiện ích & Điều hướng phụ đã thu gọn */}
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-cyan-200 mr-1">
-                Đồ họa ({GRAPHICS_TIER_LABELS[gfx.profile.tier]}):
-              </span>
-              {(['auto', 'high', 'balanced', 'low'] as const satisfies readonly BoardGameQualitySetting[]).map(
-                (q) => {
-                  const active = gfx.prefs.quality === q;
-                  return (
-                    <button
-                      key={q}
-                      type="button"
-                      data-testid={`bg-quality-${q}`}
-                      aria-pressed={active}
-                      onClick={() => gfx.setQuality(q)}
-                      className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
-                        active
-                          ? 'bg-cyan-500 text-slate-950 border-cyan-300'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
-                      }`}
-                    >
-                      {GRAPHICS_QUALITY_LABELS[q]}
-                    </button>
-                  );
-                },
+              <button
+                type="button"
+                data-testid="bg-board-rules-btn"
+                onClick={() => {
+                  setSettingsPanelOpen(false);
+                  onOpenRules();
+                }}
+                className="px-2.5 py-1.5 min-h-[34px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-100 transition cursor-pointer"
+              >
+                📖 Luật chơi
+              </button>
+              {onOpenLeaderboard && (
+                <button
+                  type="button"
+                  data-testid="bg-board-open-leaderboard-btn"
+                  onClick={() => {
+                    setSettingsPanelOpen(false);
+                    onOpenLeaderboard();
+                  }}
+                  className="px-2.5 py-1.5 min-h-[34px] rounded-xl bg-amber-950/70 hover:bg-amber-900/75 border border-amber-400/50 text-xs font-bold text-amber-200 transition cursor-pointer"
+                >
+                  🏆 Bảng xếp hạng
+                </button>
+              )}
+              {isDesktopLayout && (
+                <button
+                  type="button"
+                  data-testid="bg-toggle-drawer-btn"
+                  onClick={() => setSideDrawerOpen((v) => !v)}
+                  className="px-2.5 py-1.5 min-h-[34px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-100 transition cursor-pointer"
+                >
+                  {sideDrawerOpen ? '◨ Ẩn Sidebar' : '◧ Hiện Sidebar'}
+                </button>
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5">
+            {/* Chất lượng Đồ họa */}
+            <div className="space-y-1.5 border-t border-slate-800 pt-2.5">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
+                Chất lượng Đồ họa ({GRAPHICS_TIER_LABELS[gfx.profile.tier]})
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {(['auto', 'high', 'balanced', 'low'] as const satisfies readonly BoardGameQualitySetting[]).map(
+                  (q) => {
+                    const active = gfx.prefs.quality === q;
+                    return (
+                      <button
+                        key={q}
+                        type="button"
+                        data-testid={`bg-quality-${q}`}
+                        aria-pressed={active}
+                        onClick={() => gfx.setQuality(q)}
+                        className={`px-2 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                          active
+                            ? 'bg-cyan-500 text-slate-950 border-cyan-300'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
+                        }`}
+                      >
+                        {GRAPHICS_QUALITY_LABELS[q]}
+                      </button>
+                    );
+                  },
+                )}
+              </div>
+            </div>
+
+            {/* Âm thanh, Hiệu ứng & Trợ năng */}
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-800 pt-2.5">
               <button
                 type="button"
-                data-testid="bg-shake-toggle-btn"
-                aria-pressed={!gfx.prefs.shakeEnabled}
-                onClick={() => gfx.setShakeEnabled(!gfx.prefs.shakeEnabled)}
-                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
-                  !gfx.prefs.shakeEnabled
-                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
-                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
-                }`}
-              >
-                {gfx.prefs.shakeEnabled ? '📳 Rung mạnh: BẬT' : '🛡️ Tắt rung mạnh'}
-              </button>
-              <button
-                type="button"
-                data-testid="bg-reduced-motion-toggle-btn"
-                aria-pressed={vfx.reducedMotion}
-                onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
-                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
-                  vfx.reducedMotion
-                    ? 'bg-amber-500/20 border-amber-400 text-amber-100'
-                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
-                }`}
-              >
-                {vfx.reducedMotion ? '⏸️ Giảm chuyển động: BẬT' : '✨ Chuyển động: ĐẦY ĐỦ'}
-              </button>
-              <button
-                type="button"
-                data-testid="bg-panel-mute-toggle-btn"
+                data-testid="bg-sound-toggle-btn"
                 aria-pressed={effectiveMuted}
                 onClick={handleToggleSoundClick}
-                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                className={`px-2.5 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer ${
                   effectiveMuted
                     ? 'bg-rose-500/20 border-rose-400 text-rose-100'
                     : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
                 }`}
               >
-                {effectiveMuted ? '🔇 Đang tắt tiếng' : '🔊 Âm thanh: BẬT'}
+                {effectiveMuted ? '🔇 Tắt tiếng' : '🔊 Âm thanh: BẬT'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-vfx-motion-toggle-btn"
+                aria-pressed={vfx.reducedMotion}
+                onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
+                className={`px-2.5 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  vfx.reducedMotion
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                    : 'bg-indigo-950/70 hover:bg-indigo-900/70 border-indigo-400/50 text-indigo-200'
+                }`}
+              >
+                {vfx.reducedMotion ? '⏸️ Giảm chuyển động' : '✨ VFX Đầy đủ'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-shake-toggle-btn"
+                aria-pressed={!gfx.prefs.shakeEnabled}
+                onClick={() => gfx.setShakeEnabled(!gfx.prefs.shakeEnabled)}
+                className={`px-2.5 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  !gfx.prefs.shakeEnabled
+                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                }`}
+              >
+                {gfx.prefs.shakeEnabled ? '📳 Rung mạnh: BẬT' : '🛡️ Tắt rung'}
               </button>
               <button
                 type="button"
                 data-testid="bg-panel-skip-cinematic-btn"
-                onClick={vfx.skipAllAnimations}
-                className="px-2.5 py-1.5 min-h-[36px] rounded-xl border border-amber-400/60 bg-amber-950/50 hover:bg-amber-900/60 text-xs font-bold text-amber-200 transition cursor-pointer"
+                onClick={() => {
+                  vfx.skipAllAnimations();
+                  setSettingsPanelOpen(false);
+                }}
+                className="px-2.5 py-1.5 min-h-[34px] rounded-xl border border-amber-400/60 bg-amber-950/50 hover:bg-amber-900/60 text-xs font-bold text-amber-200 transition cursor-pointer"
               >
-                ⏭️ Skip Cinematic
+                ⏭️ Skip Animation
               </button>
             </div>
-          </div>
-        </section>
+          </section>
+        </>
       )}
 
-      {/* THANH TAB MOBILE (< lg) — 3 nút gọn vừa khít 390px */}
-      <nav
-        aria-label="Điều hướng bàn cờ di động"
-        className="lg:hidden shrink-0 grid grid-cols-3 gap-1.5 border-b border-slate-800 bg-slate-900/90 px-2.5 py-2"
-      >
-        <button
-          type="button"
-          onClick={() => setMobileTab('board')}
-          className={`min-h-[40px] rounded-xl px-2 text-xs font-black transition cursor-pointer ${
-            mobileTab === 'board'
-              ? 'bg-cyan-500 text-slate-950'
-              : 'bg-slate-800 text-slate-200 border border-slate-700'
-          }`}
+      {/* THANH TAB MOBILE (< 1024px) — chỉ mount trên mobile để không trùng selector Desktop */}
+      {!isDesktopLayout && (
+        <nav
+          aria-label="Điều hướng bàn cờ di động"
+          className="shrink-0 grid grid-cols-3 gap-1.5 border-b border-slate-800 bg-slate-900/90 px-2.5 py-1.5"
         >
-          🎲 Bàn & Lượt
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileTab('role')}
-          className={`min-h-[40px] rounded-xl px-2 text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
-            mobileTab === 'role'
-              ? 'bg-amber-400 text-slate-950'
-              : 'bg-slate-800 text-slate-200 border border-slate-700'
-          }`}
-        >
-          <span>🎭 Vai bí mật</span>
-          {unreadClueCount > 0 && (
-            <span
-              data-testid="bg-mobile-tab-role-badge"
-              className="inline-flex items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black leading-none text-white"
-            >
-              {unreadClueCount}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileTab('log')}
-          className={`min-h-[40px] rounded-xl px-2 text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
-            mobileTab === 'log'
-              ? 'bg-emerald-400 text-slate-950'
-              : 'bg-slate-800 text-slate-200 border border-slate-700'
-          }`}
-        >
-          <span>📜 Nhật ký</span>
-          {unreadLogCount > 0 && mobileTab !== 'log' && (
-            <span
-              data-testid="bg-mobile-tab-log-badge"
-              className="inline-flex items-center justify-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-black leading-none text-slate-950"
-            >
-              {unreadLogCount > 9 ? '9+' : unreadLogCount}
-            </span>
-          )}
-        </button>
-      </nav>
+          <button
+            type="button"
+            onClick={() => setMobileTab('board')}
+            className={`min-h-[38px] rounded-xl px-2 text-xs font-black transition cursor-pointer ${
+              mobileTab === 'board'
+                ? 'bg-cyan-500 text-slate-950'
+                : 'bg-slate-800 text-slate-200 border border-slate-700'
+            }`}
+          >
+            🎲 Bàn &amp; Lượt
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab('role')}
+            className={`min-h-[38px] rounded-xl px-2 text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
+              mobileTab === 'role'
+                ? 'bg-amber-400 text-slate-950'
+                : 'bg-slate-800 text-slate-200 border border-slate-700'
+            }`}
+          >
+            <span>🎭 Vai bí mật</span>
+            {unreadClueCount > 0 && (
+              <span
+                data-testid="bg-mobile-tab-role-badge"
+                className="inline-flex items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black leading-none text-white"
+              >
+                {unreadClueCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab('log')}
+            className={`min-h-[38px] rounded-xl px-2 text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
+              mobileTab === 'log'
+                ? 'bg-emerald-400 text-slate-950'
+                : 'bg-slate-800 text-slate-200 border border-slate-700'
+            }`}
+          >
+            <span>📜 Nhật ký</span>
+            {unreadLogCount > 0 && mobileTab !== 'log' && (
+              <span
+                data-testid="bg-mobile-tab-log-badge"
+                className="inline-flex items-center justify-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-black leading-none text-slate-950"
+              >
+                {unreadLogCount > 9 ? '9+' : unreadLogCount}
+              </span>
+            )}
+          </button>
+        </nav>
+      )}
 
       {/* BANNER THÔNG BÁO SỰ KIỆN NỔI BẬT (NẾU CÓ) */}
       {(displayedError ||
         publicGame.lastInvestigation ||
         publicGame.lastRevealEvent ||
         unreadClueCount > 0 ||
-        latestEmote) && (
-        <div className="shrink-0 bg-slate-950/90 border-b border-slate-800/80 px-3 sm:px-5 py-1.5">
-          <div className="mx-auto max-w-[1680px] flex flex-wrap items-center gap-2">
+        (latestEmote && (!isDesktopLayout || !sideDrawerOpen))) && (
+        <div className="shrink-0 bg-slate-950/90 border-b border-slate-800/80 px-3 py-1">
+          <div className="w-full mx-auto max-w-[1840px] flex flex-wrap items-center gap-1.5">
             {displayedError && (
-              <div className="rounded-xl bg-rose-950/80 border border-rose-500/60 px-3 py-1.5 text-xs sm:text-sm font-bold text-rose-100">
+              <div className="rounded-lg bg-rose-950/80 border border-rose-500/60 px-2.5 py-1 text-xs font-bold text-rose-100">
                 ⚠️ {displayedError}
               </div>
             )}
             {unreadClueCount > 0 && (
               <div
                 data-testid="bg-unread-clue-banner"
-                className="rounded-xl bg-amber-950/70 border border-amber-400/60 px-3 py-1.5 text-xs sm:text-sm font-bold text-amber-100 flex items-center gap-2"
+                className="rounded-lg bg-amber-950/70 border border-amber-400/60 px-2.5 py-1 text-xs font-bold text-amber-100 flex items-center gap-2"
               >
                 <span>🕵️ Bạn có {unreadClueCount} mật báo thăm dò mới!</span>
                 <button
@@ -663,9 +706,10 @@ export function GameBoard({
                   data-testid="bg-open-unread-clues-btn"
                   onClick={() => {
                     setSideDrawerOpen(true);
+                    setDesktopSidebarTab('gear');
                     setMobileTab('role');
                   }}
-                  className="px-2 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
+                  className="px-2 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-black cursor-pointer"
                 >
                   Mở đọc
                 </button>
@@ -674,7 +718,7 @@ export function GameBoard({
             {publicGame.lastInvestigation && (
               <div
                 data-testid="bg-last-investigation-banner"
-                className="rounded-xl bg-emerald-950/60 border border-emerald-500/45 px-3 py-1.5 text-xs sm:text-sm font-semibold text-emerald-100"
+                className="rounded-lg bg-emerald-950/60 border border-emerald-500/45 px-2.5 py-1 text-xs font-semibold text-emerald-100"
               >
                 {publicGame.lastInvestigation.publicMessage}
               </div>
@@ -682,17 +726,17 @@ export function GameBoard({
             {publicGame.lastRevealEvent && (
               <div
                 data-testid="bg-last-reveal-banner"
-                className="rounded-xl bg-indigo-950/65 border border-indigo-400/50 px-3 py-1.5 text-xs sm:text-sm font-bold text-indigo-100"
+                className="rounded-lg bg-indigo-950/65 border border-indigo-400/50 px-2.5 py-1 text-xs font-bold text-indigo-100"
               >
                 🎭 {publicGame.lastRevealEvent.displayName} đã lộ vai{' '}
                 {publicGame.lastRevealEvent.roleName} (
                 {FACTION_LABELS[publicGame.lastRevealEvent.faction]})!
               </div>
             )}
-            {latestEmote && (
+            {latestEmote && (!isDesktopLayout || !sideDrawerOpen) && (
               <div
                 data-testid="bg-emote-toast"
-                className="ml-auto rounded-xl bg-slate-800/90 border border-slate-600 px-3 py-1.5 text-xs sm:text-sm font-semibold text-amber-100"
+                className="ml-auto rounded-lg bg-slate-800/90 border border-slate-600 px-2.5 py-1 text-xs font-semibold text-amber-100"
               >
                 {latestEmote.emote ? EMOTE_META[latestEmote.emote]?.icon ?? '💬' : '💬'}{' '}
                 <strong>{latestEmote.displayName}:</strong>{' '}
@@ -703,10 +747,10 @@ export function GameBoard({
         </div>
       )}
 
-      {/* NỘI DUNG CHÍNH: BÀN CỜ CUỘN ĐỘC LẬP + THANH HÀNH ĐỘNG NEO ĐÁY + NGĂN PHỤ ĐỘC LẬP + LỚP VFX */}
+      {/* NỘI DUNG CHÍNH: 75% BÀN CỜ TACTICAL + 25% SIDEBAR TABBED (DESKTOP) / 3 TAB (MOBILE) + LỚP VFX */}
       <div ref={boardStageRef} className="relative flex-1 min-h-0 flex flex-col">
         <main
-          className={`flex-1 min-h-0 overflow-y-auto lg:overflow-hidden px-2.5 sm:px-4 py-2 ${
+          className={`flex-1 min-h-0 overflow-y-auto lg:overflow-hidden px-2 sm:px-3 py-1.5 sm:py-2 ${
             vfx.screenShake === 'heavy'
               ? 'bg-vfx-shake-heavy'
               : vfx.screenShake === 'light'
@@ -714,31 +758,40 @@ export function GameBoard({
                 : ''
           }`}
         >
-        <div className="mx-auto max-w-[1680px] lg:h-full flex flex-col lg:flex-row gap-3 items-stretch">
-          {/* CỘT CHÍNH: PHẦN BÀN CỜ TRÊN + THANH HÀNH ĐỘNG NEO ĐÁY */}
+        <div
+          className={`w-full mx-auto max-w-[1840px] ${
+            isDesktopLayout
+              ? sideDrawerOpen
+                ? 'h-full grid grid-cols-[minmax(0,3fr)_minmax(290px,1fr)] gap-2.5 items-stretch'
+                : 'h-full grid grid-cols-1 items-stretch'
+              : 'flex flex-col gap-2'
+          }`}
+        >
+          {/* CỘT CHÍNH (75% TRÊN DESKTOP): BÀN CỜ + THANH HÀNH ĐỘNG ĐÁY */}
           <div
-            className={`w-full min-w-0 flex-1 flex flex-col gap-2 lg:h-full lg:min-h-0 ${
-              mobileTab !== 'board' ? 'hidden lg:flex' : 'flex'
+            data-testid="bg-board-main-column"
+            className={`w-full min-w-0 flex-col gap-1.5 lg:h-full lg:min-h-0 ${
+              isDesktopLayout || mobileTab === 'board' ? 'flex' : 'hidden'
             }`}
           >
             <div
               data-testid="bg-board-scroll-area"
-              className="flex-1 min-h-0 lg:overflow-y-auto lg:pr-1 space-y-2.5"
+              className="flex-1 min-h-0 flex flex-col justify-between gap-1.5 lg:overflow-y-auto lg:pr-0.5"
             >
               {/* 1. THANG THƯƠNG TÍCH CÔNG KHAI GỌN 0..14 (Damage Track) */}
               <section
                 data-testid="bg-damage-track"
-                className="rounded-2xl border border-slate-700/80 bg-slate-900/90 px-3 py-2 space-y-1.5"
+                className="shrink-0 rounded-2xl border border-slate-700/80 bg-slate-900/90 px-2.5 py-1.5 space-y-1"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-[11px] sm:text-xs font-extrabold uppercase tracking-wider text-slate-200">
+                  <h2 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-200">
                     🩸 Thang Thương Tích Công Khai (0 → 14)
                   </h2>
-                  <span className="text-[11px] text-slate-400">
-                    Máu tối đa (8–14) giữ bí mật tới khi lật vai · 🎯 Mốc của bạn · 💀 Ngưỡng gục đã lộ
+                  <span className="text-[10px] sm:text-[11px] text-slate-400">
+                    Máu tối đa ẩn tới khi lật vai · 🎯 Mốc của bạn · 💀 Ngưỡng gục đã lộ
                   </span>
                 </div>
-                <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-[minmax(92px,2fr)_repeat(14,minmax(0,1fr))] gap-1">
+                <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-[minmax(86px,1.9fr)_repeat(14,minmax(0,1fr))] gap-1">
                   {WOUND_NOTCHES.map((notch) => {
                     const occupants = playersByWoundNotch[notch];
                     const isSelfMaxNotch = Boolean(
@@ -770,10 +823,10 @@ export function GameBoard({
                       <div
                         key={notch}
                         title={cellTitle}
-                        className={`min-h-[42px] rounded-lg border px-1 py-0.5 flex flex-col items-center justify-between gap-0.5 ${tone}`}
+                        className={`min-h-[38px] rounded-lg border px-1 py-1 flex flex-col items-center justify-between gap-1 ${tone}`}
                       >
-                        <span className="text-[11px] font-black leading-none flex items-center gap-0.5">
-                          <span>{notch === 14 ? '14 💀' : notch}</span>
+                        <span className="text-[10px] sm:text-[11px] font-black leading-none flex items-center gap-0.5 shrink-0">
+                          <span>{notch === 14 ? '14💀' : notch}</span>
                           {isSelfMaxNotch && <span title="Mốc tử trận của bạn">🎯</span>}
                           {!isSelfMaxNotch && revealedAtNotch.length > 0 && notch !== 14 && (
                             <span title={`Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`}>
@@ -781,20 +834,21 @@ export function GameBoard({
                             </span>
                           )}
                         </span>
-                        <div className="flex flex-wrap items-center justify-center -space-x-1.5 gap-y-0.5">
+                        <div className="min-h-[22px] flex flex-wrap items-center justify-center -space-x-2 gap-y-0.5 pt-0.5">
                           {occupants.map((p) => (
-                            <PlayerPawnToken
-                              key={p.playerId}
-                              size="xs"
-                              elevated={false}
-                              displayName={p.displayName}
-                              seatIndex={p.seatIndex}
-                              alive={p.alive}
-                              isActive={p.playerId === publicGame.activePlayerId}
-                              isSelf={p.playerId === selfPlayerId}
-                              revealedFaction={p.revealedFaction}
-                              revealedRoleId={p.revealedRoleId}
-                            />
+                            <div key={p.playerId} className="origin-center scale-[0.78]">
+                              <PlayerPawnToken
+                                size="xs"
+                                elevated={false}
+                                displayName={p.displayName}
+                                seatIndex={p.seatIndex}
+                                alive={p.alive}
+                                isActive={p.playerId === publicGame.activePlayerId}
+                                isSelf={p.playerId === selfPlayerId}
+                                revealedFaction={p.revealedFaction}
+                                revealedRoleId={p.revealedRoleId}
+                              />
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -803,25 +857,25 @@ export function GameBoard({
                 </div>
               </section>
 
-              {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI (XÁO NGẪU NHIÊN ĐẦU MỖI VÁN) */}
-              <section className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+              {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI (6 ĐỊA ĐIỂM TRỌN VẸN TRONG VIEWPORT) */}
+              <section className="grid grid-cols-1 md:grid-cols-3 gap-2 lg:flex-1 lg:min-h-0">
                 {boardClusters.map((cluster) => (
                   <div
                     key={cluster.clusterId}
-                    className="rounded-2xl border border-slate-800/90 bg-slate-900/45 p-2.5 space-y-2"
+                    className="rounded-2xl border border-slate-800/90 bg-slate-900/55 p-1.5 sm:p-2 flex flex-col gap-1.5 lg:h-full lg:min-h-0"
                   >
-                    <div className="flex items-center justify-between gap-2 px-0.5">
+                    <div className="flex items-center justify-between gap-2 px-0.5 shrink-0">
                       <span
-                        className={`px-2.5 py-0.5 rounded-full border text-[11px] font-black whitespace-nowrap shrink-0 ${cluster.badgeClass}`}
+                        className={`px-2 py-0.5 rounded-full border text-[10px] sm:text-[11px] font-black whitespace-nowrap shrink-0 ${cluster.badgeClass}`}
                       >
                         {cluster.title}
                       </span>
-                      <span className="text-[11px] font-medium text-slate-400">
+                      <span className="text-[10px] font-medium text-slate-400 truncate">
                         Cùng cụm đánh chung
                       </span>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="grid grid-cols-1 md:grid-rows-2 gap-1.5 lg:flex-1 lg:min-h-0">
                       {cluster.locations.map((locId) => {
                         const occupants = publicGame.players.filter(
                           (p) => p.location === locId,
@@ -870,7 +924,7 @@ export function GameBoard({
                 data-testid="bg-dice-tray"
                 data-turn-active={canRollOnBoard ? 'true' : 'false'}
                 data-dice-settled={String(vfx.isDiceSettled)}
-                className={`rounded-2xl border px-3 py-2 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 transition-all duration-200 ${
+                className={`shrink-0 rounded-2xl border px-2.5 py-1.5 flex flex-col lg:flex-row lg:items-center justify-between gap-2 transition-all duration-200 ${
                   canRollOnBoard
                     ? `border-amber-400/90 bg-gradient-to-r from-emerald-950/75 via-slate-900/95 to-amber-950/35 ring-1 ring-amber-300/40 ${
                         vfx.reducedMotion ? '' : 'mn-dice-tray-spotlight'
@@ -895,7 +949,7 @@ export function GameBoard({
                         d6={publicGame.lastDiceRoll.d6}
                         d4={publicGame.lastDiceRoll.d4}
                         stage={trayDiceStage}
-                        size={38}
+                        size={34}
                         enable3D={enable3DDice}
                       />
                       <div className="min-w-0 flex-1 text-left">
@@ -904,7 +958,7 @@ export function GameBoard({
                             <p className="text-xs sm:text-sm font-black text-amber-200 truncate">
                               🎲 {publicGame.lastDiceRoll.displayName} đang tung xúc xắc...
                             </p>
-                            <p className="text-[11px] sm:text-xs text-slate-300 font-semibold truncate">
+                            <p className="text-[11px] text-slate-300 font-semibold truncate">
                               Chờ xúc xắc dừng trên mặt bàn để chốt kết quả từ server.
                             </p>
                           </>
@@ -919,7 +973,7 @@ export function GameBoard({
                                       : `1d4=${publicGame.lastDiceRoll.d4}`
                                   } → gây ${publicGame.lastDiceRoll.damageDealt ?? 0} sát thương)`}
                             </p>
-                            <p className="text-[11px] sm:text-xs text-cyan-200 font-semibold truncate">
+                            <p className="text-[11px] text-cyan-200 font-semibold truncate">
                               {publicGame.lastDiceRoll.rerollRequired
                                 ? '🔁 Trùng khu vực hiện tại — được quyền ĐỔ LẠI!'
                                 : publicGame.lastDiceRoll.freeChoice
@@ -935,7 +989,7 @@ export function GameBoard({
                               publicGame.lastDiceRoll.counterRoll && (
                                 <p
                                   data-testid="bg-dice-counter-roll"
-                                  className="text-[11px] sm:text-xs text-amber-300 font-bold truncate"
+                                  className="text-[11px] text-amber-300 font-bold truncate"
                                 >
                                   🥊 {publicGame.lastDiceRoll.counterRoll.displayName} phản kích (
                                   {publicGame.lastDiceRoll.counterRoll.d6 > 0
@@ -948,7 +1002,7 @@ export function GameBoard({
                         )}
                       </div>
                       {canRollOnBoard && (
-                        <span className="shrink-0 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
+                        <span className="shrink-0 px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
                           {diceRollingNow
                             ? '🎲 Đang lăn...'
                             : rerollNeeded
@@ -963,7 +1017,7 @@ export function GameBoard({
                         d6={6}
                         d4={4}
                         stage={trayDiceStage}
-                        size={38}
+                        size={34}
                         enable3D={enable3DDice}
                       />
                       <div className="min-w-0 flex-1 text-left">
@@ -972,12 +1026,12 @@ export function GameBoard({
                             ? '⚡ Lượt của bạn! Tung Xúc Xắc Bóng Đêm (1d6 + 1d4)'
                             : 'Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)'}
                         </p>
-                        <p className="text-[11px] sm:text-xs text-slate-300 truncate">
+                        <p className="text-[11px] text-slate-300 truncate">
                           Tung xúc xắc di chuyển · Tổng 7 chọn bất kỳ · Trùng chỗ được đổ lại
                         </p>
                       </div>
                       {canRollOnBoard && (
-                        <span className="shrink-0 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
+                        <span className="shrink-0 px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
                           🎲 Tung Xúc Xắc
                         </span>
                       )}
@@ -989,19 +1043,19 @@ export function GameBoard({
                       type="button"
                       data-testid="bg-board-roll-dice-btn"
                       onClick={() => dispatchAction({ type: 'ROLL_DICE' })}
-                      className="flex items-center gap-3 flex-1 min-w-0 rounded-xl border border-emerald-400/80 bg-emerald-950/55 hover:bg-emerald-900/65 px-3 py-2 shadow-[0_0_20px_rgba(16,185,129,0.28)] transition cursor-pointer"
+                      className="flex items-center gap-2.5 flex-1 min-w-0 rounded-xl border border-emerald-400/80 bg-emerald-950/55 hover:bg-emerald-900/65 px-2.5 py-1.5 shadow-[0_0_20px_rgba(16,185,129,0.28)] transition cursor-pointer"
                     >
                       {diceSummary}
                     </button>
                   ) : (
-                    <div className="flex items-center gap-3 flex-1 min-w-0 px-1">
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0 px-1">
                       {diceSummary}
                     </div>
                   );
                 })()}
 
                 {/* 3 Chồng bài (bấm trực tiếp ở Pha 2 khi đang đứng ở khu vực hợp lệ) */}
-                <div className="grid grid-cols-3 gap-2 shrink-0">
+                <div className="grid grid-cols-3 gap-1.5 shrink-0">
                   {(
                     [
                       ['investigation', 'Khám Phá', 'text-emerald-300', 'border-emerald-400 bg-emerald-950/50 hover:bg-emerald-900/60 shadow-[0_0_14px_rgba(16,185,129,0.24)]'],
@@ -1012,17 +1066,17 @@ export function GameBoard({
                     const canDrawHere = canDrawDeckOnBoard(deckId);
                     const deckInner = (
                       <>
-                        <DeckCardBackSvg deck={deckId} size={28} />
+                        <DeckCardBackSvg deck={deckId} size={24} />
                         <div className="min-w-0 text-left">
                           <div className="flex items-center gap-1">
-                            <p className={`text-[11px] font-extrabold truncate ${cls}`}>{label}</p>
+                            <p className={`text-[10px] sm:text-[11px] font-extrabold truncate ${cls}`}>{label}</p>
                             {canDrawHere && (
                               <span className="text-[10px] font-black text-amber-200 whitespace-nowrap">
                                 👆 Rút
                               </span>
                             )}
                           </div>
-                          <p className="text-xs sm:text-sm font-black text-white">
+                          <p className="text-xs font-black text-white">
                             {publicGame.deckCounts[deckId]} lá
                           </p>
                         </div>
@@ -1036,7 +1090,7 @@ export function GameBoard({
                         data-vfx-deck={deckId}
                         data-testid={`bg-board-draw-${deckId}`}
                         onClick={() => dispatchAction({ type: 'DRAW_CARD', deck: deckId })}
-                        className={`rounded-xl border px-2.5 py-1.5 min-h-[42px] flex items-center gap-2 transition cursor-pointer ${activeCls}`}
+                        className={`rounded-xl border px-2 py-1 min-h-[38px] flex items-center gap-1.5 transition cursor-pointer ${activeCls}`}
                       >
                         {deckInner}
                       </button>
@@ -1044,7 +1098,7 @@ export function GameBoard({
                       <div
                         key={deckId}
                         data-vfx-deck={deckId}
-                        className={`rounded-xl border border-slate-700 bg-slate-950/85 px-2.5 py-1.5 flex items-center gap-2 transition ${
+                        className={`rounded-xl border border-slate-700 bg-slate-950/85 px-2 py-1 flex items-center gap-1.5 transition ${
                           isMyTurn && publicGame.turnPhase === 'LOCATION_ACTION'
                             ? 'opacity-55'
                             : ''
@@ -1057,8 +1111,8 @@ export function GameBoard({
                 </div>
               </section>
 
-              {/* 4. DẢI NGƯỜI CHƠI TINH GỌN */}
-              <section className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {/* 4. DẢI NGƯỜI CHƠI TACTICAL TINH GỌN (CHI TIẾT ĐỒ NẰM TRONG TAB TRANG BỊ) */}
+              <section className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 {publicGame.players.map((p) => {
                   const selected = selectedTargetId === p.playerId;
                   const isTurnHolder = p.playerId === publicGame.activePlayerId;
@@ -1069,7 +1123,7 @@ export function GameBoard({
                   return (
                     <div
                       key={p.playerId}
-                      className={`rounded-xl border px-2.5 py-2 flex flex-col justify-between gap-1.5 transition ${
+                      className={`min-w-0 rounded-xl border px-2 py-1 flex items-center justify-between gap-1.5 transition ${
                         !p.alive
                           ? 'opacity-55 border-slate-800 bg-slate-950/60'
                           : selected
@@ -1093,12 +1147,12 @@ export function GameBoard({
                             toggleSelectedTargetId(prev, p.playerId, p.alive),
                           )
                         }
-                        className="w-full text-left cursor-pointer"
+                        className="min-w-0 flex-1 text-left cursor-pointer"
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <PlayerPawnToken
                             compact
-                            elevated
+                            elevated={false}
                             displayName={p.displayName}
                             seatIndex={p.seatIndex}
                             alive={p.alive}
@@ -1108,8 +1162,8 @@ export function GameBoard({
                             revealedRoleId={p.revealedRoleId}
                           />
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-1">
-                              <p className="text-xs sm:text-sm font-black text-white truncate">
+                            <div className="flex items-center gap-1">
+                              <p className="text-xs font-black text-white truncate">
                                 {p.displayName}
                               </p>
                               {inAttackRange && (
@@ -1119,82 +1173,79 @@ export function GameBoard({
                               )}
                             </div>
                             <p
-                              className={`text-[11px] font-bold truncate ${factionTheme ? factionTheme.textClass : 'text-slate-400'}`}
+                              className={`text-[10px] font-semibold truncate ${factionTheme ? factionTheme.textClass : 'text-slate-400'}`}
                             >
                               {p.revealedRoleId
                                 ? `${FACTION_LABELS[p.revealedFaction!]} · Max ${p.revealedMaxHp}`
-                                : 'Vai ẩn danh'}
+                                : `Ô ${locMeta.diceLabel} · Vai ẩn`}
                             </p>
                           </div>
                         </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-bold">
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-200">
-                            🩸 {p.woundsTaken} vết
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-200">
-                            Ô {locMeta.diceLabel}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">
-                            🃏 {p.handCount}
-                          </span>
-                          {p.guardianShieldActive && (
-                            <span className="px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-200">
-                              🛡️ Khiên
-                            </span>
-                          )}
-                        </div>
                       </button>
 
-                      {(p.equipped.length > 0 || p.revealedRoleId) && (
-                        <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                          {p.revealedRoleId && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setZoomTarget({
-                                  kind: 'role',
-                                  roleId: p.revealedRoleId!,
-                                  revealed: true,
-                                  viewerMode: 'other-player',
-                                  woundsTaken: p.woundsTaken,
-                                  currentHp: p.revealedMaxHp
-                                    ? Math.max(0, p.revealedMaxHp - p.woundsTaken)
-                                    : undefined,
-                                })
-                              }
-                              title={`Phóng lớn thẻ vai đã lộ của ${p.displayName}`}
-                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-amber-950/70 border border-amber-400/45 text-amber-200 hover:bg-amber-900/70 transition cursor-pointer"
-                            >
-                              🔍 Soi vai
-                            </button>
-                          )}
-                          {p.equipped.map((eq, i) => (
-                            <button
-                              key={`${eq.id}-${i}`}
-                              type="button"
-                              onClick={() =>
+                      <div className="flex items-center gap-1 shrink-0 text-[10px] font-bold">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-200" title={`${p.woundsTaken} vết thương`}>
+                          🩸{p.woundsTaken}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200" title={`${p.handCount} thẻ chờ`}>
+                          🃏{p.handCount}
+                        </span>
+                        {p.guardianShieldActive && (
+                          <span className="px-1 py-0.5 rounded bg-amber-500/25 text-amber-200" title="Đang có Khiên Bảo Vệ">
+                            🛡️
+                          </span>
+                        )}
+                        {p.equipped.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isDesktopLayout) {
+                                setSideDrawerOpen(true);
+                                setDesktopSidebarTab('gear');
+                              } else {
                                 setZoomTarget({
                                   kind: 'card',
-                                  cardId: eq.id,
+                                  cardId: p.equipped[0].id,
                                   zone: 'equipped-table',
-                                })
+                                });
                               }
-                              title={`${eq.summary} (Bấm để phóng lớn thẻ)`}
-                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-sky-950/70 border border-sky-500/40 text-sky-200 hover:border-sky-300 truncate max-w-full cursor-pointer"
-                            >
-                              🎒 {eq.title}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                            }}
+                            title={`Xem ${p.equipped.length} trang bị của ${p.displayName}`}
+                            className="px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-sky-200 hover:border-sky-300 cursor-pointer"
+                          >
+                            🎒{p.equipped.length}
+                          </button>
+                        )}
+                        {p.revealedRoleId && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setZoomTarget({
+                                kind: 'role',
+                                roleId: p.revealedRoleId!,
+                                revealed: true,
+                                viewerMode: 'other-player',
+                                woundsTaken: p.woundsTaken,
+                                currentHp: p.revealedMaxHp
+                                  ? Math.max(0, p.revealedMaxHp - p.woundsTaken)
+                                  : undefined,
+                              })
+                            }
+                            title={`Phóng lớn thẻ vai đã lộ của ${p.displayName}`}
+                            className="px-1 py-0.5 rounded bg-amber-950/70 border border-amber-400/45 text-amber-200 hover:bg-amber-900/70 cursor-pointer"
+                          >
+                            🔍
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </section>
             </div>
 
-            {/* 5. THANH HÀNH ĐỘNG NEO CỐ ĐỊNH Ở ĐÁY TRÊN DESKTOP */}
-            <div className="shrink-0 lg:max-h-[44vh] lg:overflow-y-auto">
+            {/* 5. THANH HÀNH ĐỘNG CHÍNH NEO CỐ ĐỊNH Ở ĐÁY */}
+            <div className="shrink-0 lg:max-h-[40vh] lg:overflow-y-auto">
               <ActionPanel
                 publicGame={publicGame}
                 privateView={privateView}
@@ -1215,19 +1266,225 @@ export function GameBoard({
             </div>
           </div>
 
-          {/* NGĂN KÉO PHỤ BÊN PHẢI (CUỘN ĐỘC LẬP TRÊN DESKTOP): THẺ VAI + NHẬT KÝ + EMOTE & CHAT */}
-          {(sideDrawerOpen || mobileTab !== 'board') && (
-            <div
+          {/* SIDEBAR BÊN PHẢI (25% TRÊN DESKTOP VỚI 3 TAB: NHÂN VẬT / TRANG BỊ / NHẬT KÝ + EMOTE) */}
+          {isDesktopLayout && sideDrawerOpen && (
+            <aside
               data-testid="bg-side-drawer"
-              className={`w-full lg:w-[376px] xl:w-[400px] shrink-0 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-1 space-y-3 ${
-                mobileTab === 'board' ? 'hidden lg:block' : 'block'
-              }`}
+              className="h-full min-h-0 flex flex-col rounded-2xl border border-slate-800 bg-slate-900/95 overflow-hidden shadow-xl"
             >
-              <div className={mobileTab === 'log' ? 'hidden lg:block' : 'block'}>
+              <div
+                role="tablist"
+                aria-label="Thanh tác vụ bên phải"
+                className="shrink-0 grid grid-cols-3 gap-1 p-1.5 border-b border-slate-800 bg-slate-950/90"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={desktopSidebarTab === 'role'}
+                  data-testid="bg-sidebar-tab-role"
+                  onClick={() => setDesktopSidebarTab('role')}
+                  className={`min-h-[34px] rounded-xl px-1.5 text-[11px] xl:text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center justify-center gap-1 ${
+                    desktopSidebarTab === 'role'
+                      ? 'bg-amber-400 text-slate-950 shadow'
+                      : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+                  }`}
+                >
+                  <span>🎭 Nhân vật</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={desktopSidebarTab === 'gear'}
+                  data-testid="bg-sidebar-tab-gear"
+                  onClick={() => setDesktopSidebarTab('gear')}
+                  className={`min-h-[34px] rounded-xl px-1.5 text-[11px] xl:text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center justify-center gap-1 ${
+                    desktopSidebarTab === 'gear'
+                      ? 'bg-cyan-400 text-slate-950 shadow'
+                      : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+                  }`}
+                >
+                  <span>🎒 Trang bị</span>
+                  {(unreadClueCount > 0 || (privateView?.equipped.length ?? 0) > 0) && (
+                    <span
+                      className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                        unreadClueCount > 0
+                          ? 'bg-rose-500 text-white'
+                          : desktopSidebarTab === 'gear'
+                            ? 'bg-slate-950/20 text-slate-950'
+                            : 'bg-sky-500/25 text-sky-200'
+                      }`}
+                    >
+                      {unreadClueCount > 0 ? unreadClueCount : privateView?.equipped.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={desktopSidebarTab === 'log'}
+                  data-testid="bg-sidebar-tab-log"
+                  onClick={() => setDesktopSidebarTab('log')}
+                  className={`min-h-[34px] rounded-xl px-1.5 text-[11px] xl:text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center justify-center gap-1 ${
+                    desktopSidebarTab === 'log'
+                      ? 'bg-emerald-400 text-slate-950 shadow'
+                      : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+                  }`}
+                >
+                  <span>📜 Nhật ký</span>
+                  {unreadLogCount > 0 && desktopSidebarTab !== 'log' && (
+                    <span
+                      data-testid="bg-sidebar-tab-log-badge"
+                      className="inline-flex items-center justify-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-black leading-none text-slate-950"
+                    >
+                      {unreadLogCount > 9 ? '9+' : unreadLogCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              <div className="flex-1 min-h-0 overflow-y-auto p-2.5">
+                {desktopSidebarTab === 'role' && (
+                  <RoleCard
+                    publicGame={publicGame}
+                    privateView={privateView}
+                    isSpectator={isSpectator}
+                    section="character"
+                    selfPlayerId={selfPlayerId}
+                    visualStyle="midnight-noir"
+                    foilEnabled={gfx.profile.enableFoil}
+                    reducedMotion={!gfx.profile.enable3DTilt || vfx.reducedMotion}
+                    onZoomRole={() =>
+                      privateView &&
+                      setZoomTarget({
+                        kind: 'role',
+                        roleId: privateView.roleId,
+                        revealed: privateView.revealed,
+                        viewerMode: 'owner-peek',
+                        woundsTaken: privateView.woundsTaken,
+                        currentHp: privateView.hp,
+                      })
+                    }
+                    onZoomCard={(cardId, zone = 'equipped-table') =>
+                      setZoomTarget({
+                        kind: 'card',
+                        cardId,
+                        zone,
+                        isParticipantInInvestigation: true,
+                      })
+                    }
+                  />
+                )}
+
+                {desktopSidebarTab === 'gear' && (
+                  <RoleCard
+                    publicGame={publicGame}
+                    privateView={privateView}
+                    isSpectator={isSpectator}
+                    section="gear"
+                    selfPlayerId={selfPlayerId}
+                    visualStyle="midnight-noir"
+                    onZoomRevealedRole={(p) =>
+                      p.revealedRoleId &&
+                      setZoomTarget({
+                        kind: 'role',
+                        roleId: p.revealedRoleId,
+                        revealed: true,
+                        viewerMode: 'other-player',
+                        woundsTaken: p.woundsTaken,
+                        currentHp: p.revealedMaxHp
+                          ? Math.max(0, p.revealedMaxHp - p.woundsTaken)
+                          : undefined,
+                      })
+                    }
+                    onZoomCard={(cardId, zone = 'equipped-table') =>
+                      setZoomTarget({
+                        kind: 'card',
+                        cardId,
+                        zone,
+                        isParticipantInInvestigation: true,
+                      })
+                    }
+                  />
+                )}
+
+                {desktopSidebarTab === 'log' && (
+                  <GameLog
+                    publicGame={publicGame}
+                    unsettledRoll={!vfx.isDiceSettled ? publicGame.lastDiceRoll : null}
+                    fillHeight
+                  />
+                )}
+              </div>
+
+              {/* Thanh Emote & Chat nhanh ghim gọn đáy Sidebar Desktop */}
+              <div className="shrink-0 border-t border-slate-800 bg-slate-950/90 p-2 space-y-1.5">
+                {latestEmote && (
+                  <div
+                    data-testid="bg-emote-toast"
+                    className="rounded-lg bg-slate-800/90 border border-slate-700 px-2 py-1 text-[11px] font-semibold text-amber-100 truncate"
+                  >
+                    {latestEmote.emote ? EMOTE_META[latestEmote.emote]?.icon ?? '💬' : '💬'}{' '}
+                    <strong>{latestEmote.displayName}:</strong>{' '}
+                    {latestEmote.text || (latestEmote.emote ? EMOTE_META[latestEmote.emote]?.label : '')}
+                  </div>
+                )}
+                <div className="grid grid-cols-6 gap-1">
+                  {VALID_BOARD_GAME_EMOTES.map((eid) => (
+                    <button
+                      key={eid}
+                      type="button"
+                      data-testid={`bg-emote-${eid}`}
+                      title={EMOTE_META[eid].label}
+                      aria-label={EMOTE_META[eid].label}
+                      onClick={() => onSendEmote?.(eid)}
+                      className="px-1 py-1 min-h-[30px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-100 cursor-pointer flex items-center justify-center"
+                    >
+                      {EMOTE_META[eid].icon}
+                    </button>
+                  ))}
+                </div>
+                {onSendChat && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const trimmed = chatText.trim();
+                      if (!trimmed) return;
+                      onSendChat(trimmed);
+                      setChatText('');
+                    }}
+                    className="flex gap-1.5"
+                  >
+                    <input
+                      type="text"
+                      data-testid="bg-chat-input"
+                      value={chatText}
+                      onChange={(e) => setChatText(e.target.value)}
+                      maxLength={120}
+                      placeholder="Nhắn nhanh với bàn..."
+                      className="flex-1 min-w-0 rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500"
+                    />
+                    <button
+                      type="submit"
+                      className="px-3 py-1.5 min-h-[32px] rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-black cursor-pointer"
+                    >
+                      Gửi
+                    </button>
+                  </form>
+                )}
+              </div>
+            </aside>
+          )}
+
+          {/* NGĂN NỘI DUNG TAB MOBILE (< 1024px) */}
+          {!isDesktopLayout && mobileTab !== 'board' && (
+            <div data-testid="bg-side-drawer" className="w-full space-y-3">
+              {mobileTab === 'role' && (
                 <RoleCard
                   publicGame={publicGame}
                   privateView={privateView}
                   isSpectator={isSpectator}
+                  section="all"
+                  selfPlayerId={selfPlayerId}
                   visualStyle="midnight-noir"
                   foilEnabled={gfx.profile.enableFoil}
                   reducedMotion={!gfx.profile.enable3DTilt || vfx.reducedMotion}
@@ -1251,59 +1508,60 @@ export function GameBoard({
                     })
                   }
                 />
-              </div>
+              )}
 
-              <div className={mobileTab === 'role' ? 'hidden lg:block' : 'block'}>
-                <GameLog
-                  publicGame={publicGame}
-                  unsettledRoll={!vfx.isDiceSettled ? publicGame.lastDiceRoll : null}
-                />
+              {mobileTab === 'log' && (
+                <>
+                  <GameLog
+                    publicGame={publicGame}
+                    unsettledRoll={!vfx.isDiceSettled ? publicGame.lastDiceRoll : null}
+                  />
 
-                {/* Emote & Chat nhanh */}
-                <div className="mt-3 rounded-2xl border border-slate-700/80 bg-slate-900/90 p-3 space-y-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {VALID_BOARD_GAME_EMOTES.map((eid) => (
-                      <button
-                        key={eid}
-                        type="button"
-                        data-testid={`bg-emote-${eid}`}
-                        onClick={() => onSendEmote?.(eid)}
-                        className="px-2.5 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-100 cursor-pointer"
+                  <div className="rounded-2xl border border-slate-700/80 bg-slate-900/90 p-3 space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {VALID_BOARD_GAME_EMOTES.map((eid) => (
+                        <button
+                          key={eid}
+                          type="button"
+                          data-testid={`bg-emote-${eid}`}
+                          onClick={() => onSendEmote?.(eid)}
+                          className="px-2.5 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-100 cursor-pointer"
+                        >
+                          {EMOTE_META[eid].icon} {EMOTE_META[eid].label}
+                        </button>
+                      ))}
+                    </div>
+                    {onSendChat && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const trimmed = chatText.trim();
+                          if (!trimmed) return;
+                          onSendChat(trimmed);
+                          setChatText('');
+                        }}
+                        className="flex gap-2"
                       >
-                        {EMOTE_META[eid].icon} {EMOTE_META[eid].label}
-                      </button>
-                    ))}
+                        <input
+                          type="text"
+                          data-testid="bg-chat-input"
+                          value={chatText}
+                          onChange={(e) => setChatText(e.target.value)}
+                          maxLength={120}
+                          placeholder="Nhắn nhanh với bàn..."
+                          className="flex-1 min-w-0 rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white placeholder:text-slate-500"
+                        />
+                        <button
+                          type="submit"
+                          className="px-4 py-2 min-h-[40px] rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-black cursor-pointer"
+                        >
+                          Gửi
+                        </button>
+                      </form>
+                    )}
                   </div>
-                  {onSendChat && (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const trimmed = chatText.trim();
-                        if (!trimmed) return;
-                        onSendChat(trimmed);
-                        setChatText('');
-                      }}
-                      className="flex gap-2"
-                    >
-                      <input
-                        type="text"
-                        data-testid="bg-chat-input"
-                        value={chatText}
-                        onChange={(e) => setChatText(e.target.value)}
-                        maxLength={120}
-                        placeholder="Nhắn nhanh với bàn..."
-                        className="flex-1 min-w-0 rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white placeholder:text-slate-500"
-                      />
-                      <button
-                        type="submit"
-                        className="px-4 py-2 min-h-[40px] rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-black cursor-pointer"
-                      >
-                        Gửi
-                      </button>
-                    </form>
-                  )}
-                </div>
-              </div>
+                </>
+              )}
             </div>
           )}
         </div>

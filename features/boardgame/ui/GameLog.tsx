@@ -14,6 +14,7 @@ import type {
 export interface GameLogProps {
   publicGame: BoardGamePublicGameView;
   unsettledRoll?: BoardGameDiceRollEvent | null;
+  fillHeight?: boolean;
 }
 
 const LOG_STYLE_MAP: Record<string, string> = {
@@ -30,6 +31,7 @@ const LOG_STYLE_MAP: Record<string, string> = {
 export const GameLog = React.memo(function GameLog({
   publicGame,
   unsettledRoll = null,
+  fillHeight = false,
 }: GameLogProps) {
   const recentLogs = [...publicGame.publicLog]
     .reverse()
@@ -43,9 +45,11 @@ export const GameLog = React.memo(function GameLog({
   return (
     <div
       data-testid="bg-game-log"
-      className="rounded-2xl border border-slate-700/70 bg-slate-900/90 p-4 flex flex-col gap-3"
+      className={`rounded-2xl border border-slate-700/70 bg-slate-900/90 flex flex-col ${
+        fillHeight ? 'h-full min-h-0 p-3 gap-2.5' : 'p-4 gap-3'
+      }`}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 shrink-0">
         <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
           📜 Diễn biến Bàn Đấu
         </h3>
@@ -55,11 +59,11 @@ export const GameLog = React.memo(function GameLog({
       </div>
 
       {publicGame.highlights.length > 0 && (
-        <div className="space-y-1.5 border-b border-slate-800 pb-2.5">
-          {[...publicGame.highlights].reverse().slice(0, 3).map((hl, i) => (
+        <div className="space-y-1.5 border-b border-slate-800 pb-2 shrink-0">
+          {[...publicGame.highlights].reverse().slice(0, fillHeight ? 2 : 3).map((hl, i) => (
             <div
               key={`${hl.atMs}-${i}`}
-              className="rounded-xl bg-amber-950/40 border border-amber-500/35 px-3 py-2 text-xs"
+              className="rounded-xl bg-amber-950/40 border border-amber-500/35 px-2.5 py-1.5 text-xs"
             >
               <p className="font-bold text-amber-200">{hl.title}</p>
               <p className="text-slate-200 mt-0.5 leading-snug">{hl.detail}</p>
@@ -68,7 +72,7 @@ export const GameLog = React.memo(function GameLog({
         </div>
       )}
 
-      <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+      <div className={`space-y-2 overflow-y-auto pr-1 ${fillHeight ? 'flex-1 min-h-0' : 'max-h-72'}`}>
         {unsettledRoll && (
           <div
             data-testid="bg-gamelog-pending-roll"

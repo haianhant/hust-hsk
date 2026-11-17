@@ -130,15 +130,15 @@ export function ActionPanel({
     return (
       <section
         data-testid="bg-waiting-turn-banner"
-        className="rounded-2xl border border-slate-700/80 bg-slate-900/95 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2"
+        className="rounded-2xl border border-slate-700/80 bg-slate-900/95 px-3 py-2 flex flex-wrap items-center justify-between gap-2"
       >
-        <p className="text-sm font-bold text-slate-100">
+        <p className="text-xs sm:text-sm font-bold text-slate-100">
           ⏳ Đang chờ lượt của{' '}
           <span className="text-amber-300">
             {activePlayer?.displayName ?? 'người chơi khác'}
           </span>
         </p>
-        <span className="text-xs font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/35 px-2.5 py-1 rounded-xl">
+        <span className="text-[11px] sm:text-xs font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/35 px-2.5 py-0.5 rounded-xl">
           ∞ Không giới hạn thời gian — tự động tới lượt bạn ngay khi xong
         </span>
       </section>
@@ -262,90 +262,84 @@ export function ActionPanel({
     : selfPlayer.equipped[0]?.id ?? '';
 
   const renderTargetSelector = (title: string) => (
-    <div className="space-y-1">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
-          {title}
-        </p>
-        {selectedIsSelf ? (
-          <span className="text-[11px] font-semibold text-emerald-300">
-            💚 Đang chọn Bản thân — các thẻ chỉ định mọi người sẽ nhắm vào bạn
+    <div className="flex flex-wrap items-center gap-1.5">
+      <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300 mr-1">
+        {title}
+      </p>
+      <button
+        type="button"
+        data-testid="bg-target-pill-self"
+        aria-pressed={selectedIsSelf}
+        onClick={() => {
+          onSelectTarget(selfPlayer.playerId);
+          setHealTargetId(selfPlayer.playerId);
+        }}
+        className={`px-2 py-1 min-h-[34px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+          selectedIsSelf
+            ? 'bg-emerald-600/85 border-emerald-300 text-white'
+            : 'bg-slate-800 border-emerald-500/40 text-emerald-200 hover:bg-slate-700'
+        }`}
+      >
+        <span>💚 Bản thân ({selfPlayer.woundsTaken} vết)</span>
+      </button>
+      {aliveOthers.map((p) => {
+        const inRange = attackableTargets.some((t) => t.playerId === p.playerId);
+        const selected = !selectedIsSelf && validOtherTarget?.playerId === p.playerId;
+        return (
+          <button
+            key={p.playerId}
+            type="button"
+            data-testid={`bg-target-pill-other-${p.seatIndex}`}
+            aria-pressed={selected}
+            onClick={() => onSelectTarget(p.playerId)}
+            className={`px-2 py-1 min-h-[34px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              selected
+                ? inRange
+                  ? 'bg-rose-600/85 border-rose-300 text-white'
+                  : 'bg-sky-700/80 border-sky-300 text-white'
+                : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+            }`}
+          >
+            <span>{p.displayName}</span>
+            {inRange ? (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-black/30 text-amber-200">
+                🎯 Tầm đánh
+              </span>
+            ) : selected ? (
+              <span className="text-[10px] px-1 py-0.5 rounded bg-black/30 text-sky-100">
+                🃏 Dùng thẻ
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+      {selectedIsSelf ? (
+        <span className="text-[11px] font-semibold text-emerald-300">
+          💚 Đang chọn Bản thân
+        </span>
+      ) : (
+        selectedIsOutOfRange &&
+        validOtherTarget && (
+          <span className="text-[11px] font-semibold text-sky-300">
+            ({validOtherTarget.displayName} ngoài tầm đánh)
           </span>
-        ) : (
-          selectedIsOutOfRange &&
-          validOtherTarget && (
-            <span className="text-[11px] font-semibold text-sky-300">
-              {validOtherTarget.displayName} ngoài tầm đánh ({hasHandgun ? 'đứng cùng Cụm' : 'đứng khác Cụm'})
-            </span>
-          )
-        )}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          data-testid="bg-target-pill-self"
-          aria-pressed={selectedIsSelf}
-          onClick={() => {
-            onSelectTarget(selfPlayer.playerId);
-            setHealTargetId(selfPlayer.playerId);
-          }}
-          className={`px-2.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-            selectedIsSelf
-              ? 'bg-emerald-600/85 border-emerald-300 text-white'
-              : 'bg-slate-800 border-emerald-500/40 text-emerald-200 hover:bg-slate-700'
-          }`}
-        >
-          <span>💚 Bản thân ({selfPlayer.woundsTaken} vết)</span>
-        </button>
-        {aliveOthers.map((p) => {
-          const inRange = attackableTargets.some((t) => t.playerId === p.playerId);
-          const selected = !selectedIsSelf && validOtherTarget?.playerId === p.playerId;
-          return (
-            <button
-              key={p.playerId}
-              type="button"
-              data-testid={`bg-target-pill-other-${p.seatIndex}`}
-              aria-pressed={selected}
-              onClick={() => onSelectTarget(p.playerId)}
-              className={`px-2.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                selected
-                  ? inRange
-                    ? 'bg-rose-600/85 border-rose-300 text-white'
-                    : 'bg-sky-700/80 border-sky-300 text-white'
-                  : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
-              }`}
-            >
-              <span>{p.displayName}</span>
-              {inRange ? (
-                <span className="text-[11px] px-1.5 py-0.5 rounded bg-black/30 text-amber-200">
-                  🎯 Tầm đánh
-                </span>
-              ) : selected ? (
-                <span className="text-[11px] px-1.5 py-0.5 rounded bg-black/30 text-sky-100">
-                  🃏 Dùng thẻ
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+        )
+      )}
     </div>
   );
 
-  const renderHandCardsSection = () => (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">
-          🃏 Thẻ vừa rút cần giải quyết ({privateView.hand.length}/{BOARD_GAME_MAX_HAND}):
-        </p>
-      </div>
+  const renderHandCardsSection = () => {
+    if (!hasAnyHandCard) return null;
 
-      {!hasAnyHandCard ? (
-        <p className="text-xs text-slate-400">
-          Không còn thẻ chờ giải quyết — Trang bị rút được tự động đeo ngay lên bàn.
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">
+            🃏 Thẻ vừa rút cần giải quyết ({privateView.hand.length}/{BOARD_GAME_MAX_HAND}):
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
           {privateView.hand.map((card, idx) => {
             const isInv = card.deck === 'investigation';
             const isGear = !isInv && !card.isConsumable;
@@ -374,7 +368,7 @@ export function ActionPanel({
             return (
               <div
                 key={`${card.id}-${idx}`}
-                className={`rounded-xl border p-2.5 flex flex-col justify-between gap-2 ${
+                className={`rounded-xl border p-2 flex flex-col justify-between gap-1.5 ${
                   isInv
                     ? 'border-emerald-500/45 bg-emerald-950/35'
                     : card.deck === 'equipment'
@@ -382,7 +376,7 @@ export function ActionPanel({
                       : 'border-rose-500/45 bg-rose-950/35'
                 }`}
               >
-                <div className="flex items-start gap-2.5">
+                <div className="flex items-start gap-2">
                   {handArtSrc && (
                     <div className="shrink-0 space-y-1">
                       <img
@@ -392,7 +386,7 @@ export function ActionPanel({
                         height={900}
                         loading="lazy"
                         decoding="async"
-                        className="h-[72px] w-12 rounded-lg border border-white/20 object-cover shadow"
+                        className="h-14 w-10 rounded-lg border border-white/20 object-cover shadow"
                       />
                       {onZoomCard && (
                         <button
@@ -406,8 +400,8 @@ export function ActionPanel({
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-black text-white">{card.title}</p>
-                    <p className="text-xs text-slate-200 mt-0.5 leading-snug" title={card.summary}>
+                    <p className="text-xs font-black text-white">{card.title}</p>
+                    <p className="text-[11px] text-slate-200 mt-0.5 leading-snug" title={card.summary}>
                       {card.summary}
                     </p>
                   </div>
@@ -554,19 +548,19 @@ export function ActionPanel({
             );
           })}
         </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  };
 
   return (
     <section
       data-testid="bg-action-panel"
-      className="rounded-2xl border border-amber-400/50 bg-slate-900/95 px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-[0_-6px_28px_rgba(15,23,42,0.75)] space-y-2.5"
+      className="rounded-2xl border border-amber-400/50 bg-slate-900/95 px-3 py-2 sm:px-3.5 sm:py-2.5 shadow-[0_-6px_28px_rgba(15,23,42,0.75)] space-y-2"
     >
       {/* Thanh trạng thái lượt của tôi */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs font-black">
+          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs font-black">
             🎯 LƯỢT CỦA BẠN
           </span>
           <span className="text-xs sm:text-sm font-bold text-slate-100">
@@ -577,7 +571,7 @@ export function ActionPanel({
           </span>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {!privateView.revealed &&
             (privateView.roleId === 'lang-tien-phong' ? (
               <span className="px-2.5 py-1 rounded-xl bg-teal-950/60 border border-teal-500/40 text-teal-200 text-[11px] font-bold">
@@ -592,7 +586,7 @@ export function ActionPanel({
                     setConfirmingReveal(false);
                     onAction({ type: 'REVEAL_ROLE' });
                   }}
-                  className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black transition cursor-pointer"
+                  className="px-3 py-1 min-h-[34px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition cursor-pointer"
                 >
                   ✅ Xác nhận Lật Vai Công Khai
                 </button>
@@ -600,7 +594,7 @@ export function ActionPanel({
                   type="button"
                   data-testid="bg-cancel-reveal-btn"
                   onClick={() => setConfirmingReveal(false)}
-                  className="px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs sm:text-sm font-bold transition cursor-pointer"
+                  className="px-2.5 py-1 min-h-[34px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer"
                 >
                   ✕ Hủy
                 </button>
@@ -610,7 +604,7 @@ export function ActionPanel({
                 type="button"
                 data-testid="bg-reveal-role-btn"
                 onClick={() => setConfirmingReveal(true)}
-                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/50 text-amber-200 text-xs sm:text-sm font-bold transition cursor-pointer"
+                className="px-2.5 py-1 min-h-[34px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/50 text-amber-200 text-xs font-bold transition cursor-pointer"
               >
                 🎭 Lật vai
               </button>
@@ -628,7 +622,7 @@ export function ActionPanel({
                   onAction({ type: 'USE_SKILL', targetPlayerId: skillTarget.playerId });
                 }
               }}
-              className={`px-3 py-1.5 min-h-[36px] rounded-xl disabled:opacity-45 text-white text-xs sm:text-sm font-bold transition cursor-pointer ${
+              className={`px-2.5 py-1 min-h-[34px] rounded-xl disabled:opacity-45 text-white text-xs font-bold transition cursor-pointer ${
                 privateView.roleId === 'lang-cuu-ho'
                   ? 'bg-rose-600 hover:bg-rose-500'
                   : 'bg-violet-600 hover:bg-violet-500'
@@ -650,8 +644,8 @@ export function ActionPanel({
 
       {/* PHA 1: TUNG XÚC XẮC DI CHUYỂN */}
       {publicGame.turnPhase === 'ROLL_MOVE' && (
-        <div className="space-y-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="space-y-1.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <p className="text-xs sm:text-sm text-slate-200 font-semibold">
               {rerollPrompt
                 ? `🎲 Vừa tung trùng ô ${currentLoc.name} (${currentLoc.diceLabel}) — bấm ĐỔ LẠI xúc xắc ngay!`
@@ -661,7 +655,7 @@ export function ActionPanel({
               type="button"
               data-testid="bg-roll-dice-btn"
               onClick={() => onAction({ type: 'ROLL_DICE' })}
-              className="w-full sm:w-auto shrink-0 px-5 py-2.5 min-h-[42px] rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-sm sm:text-base font-black shadow-lg transition cursor-pointer"
+              className="w-full sm:w-auto shrink-0 px-4 py-1.5 min-h-[38px] rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-xs sm:text-sm font-black shadow-lg transition cursor-pointer"
             >
               {rerollPrompt
                 ? '🎲 ĐỔ LẠI XÚC XẮC (1d6 + 1d4)'
@@ -678,7 +672,7 @@ export function ActionPanel({
 
       {/* PHA 1B: CHỌN KHU VỰC (TỔNG 7 HOẶC LA BÀN ĐỊNH HƯỚNG) */}
       {publicGame.turnPhase === 'CHOOSE_MOVE' && (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <p className="text-xs sm:text-sm font-bold text-amber-200">
             {isCompassChoice
               ? `🧭 La Bàn Định Hướng! Chọn 1 trong ${allowedMoveList.length} khu vực bên dưới hoặc bấm thẳng lên bàn cờ:`
@@ -687,20 +681,20 @@ export function ActionPanel({
           {canUseSkillNow &&
             roleDesign.targetMode !== 'self' &&
             renderTargetSelector('Chọn mục tiêu cho Kỹ năng (có thể kích hoạt trước khi chọn khu vực):')}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-1.5">
             {allowedMoveList.map((loc) => (
               <button
                 key={loc.id}
                 type="button"
                 data-testid={`bg-choose-dest-${loc.id}`}
                 onClick={() => onAction({ type: 'CHOOSE_DEST', location: loc.id })}
-                className="flex items-center justify-between gap-2 px-3 py-2 min-h-[42px] rounded-xl border border-amber-400/50 bg-amber-950/40 hover:bg-amber-900/55 text-left transition cursor-pointer"
+                className="flex items-center justify-between gap-1.5 px-2.5 py-1.5 min-h-[38px] rounded-xl border border-amber-400/50 bg-amber-950/40 hover:bg-amber-900/55 text-left transition cursor-pointer"
               >
                 <div className="min-w-0">
-                  <p className="text-xs sm:text-sm font-black text-white truncate">
+                  <p className="text-xs font-black text-white truncate">
                     Ô {loc.diceLabel} · {loc.name}
                   </p>
-                  <p className="text-[11px] text-amber-100/90 truncate">{loc.subtitle}</p>
+                  <p className="text-[10px] text-amber-100/90 truncate">{loc.subtitle}</p>
                 </div>
                 <span className="text-xs font-black text-amber-300 shrink-0">→</span>
               </button>
@@ -711,7 +705,7 @@ export function ActionPanel({
 
       {/* PHA 2: HÀNH ĐỘNG KHU VỰC */}
       {publicGame.turnPhase === 'LOCATION_ACTION' && (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <p className="text-xs sm:text-sm font-bold text-cyan-200">
             Bước 2 — Quyền năng {currentLoc.name} (Ô {currentLoc.diceLabel}):{' '}
             <span className="font-normal text-slate-200">{currentLoc.actionSummary}</span>
@@ -795,7 +789,7 @@ export function ActionPanel({
                 type="button"
                 data-testid="bg-draw-investigation-btn"
                 onClick={() => onAction({ type: 'DRAW_CARD', deck: 'investigation' })}
-                className="px-4 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+                className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
               >
                 🔍 Rút 1 Thẻ Khám Phá ({publicGame.deckCounts.investigation})
               </button>
@@ -805,7 +799,7 @@ export function ActionPanel({
                 type="button"
                 data-testid="bg-draw-equipment-btn"
                 onClick={() => onAction({ type: 'DRAW_CARD', deck: 'equipment' })}
-                className="px-4 py-2 min-h-[40px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+                className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
               >
                 🛡️ Rút 1 Thẻ Cung Ứng ({publicGame.deckCounts.equipment})
               </button>
@@ -815,7 +809,7 @@ export function ActionPanel({
                 type="button"
                 data-testid="bg-draw-event-btn"
                 onClick={() => onAction({ type: 'DRAW_CARD', deck: 'event' })}
-                className="px-4 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+                className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
               >
                 ⚡ Rút 1 Thẻ Đột Kích ({publicGame.deckCounts.event})
               </button>
@@ -832,7 +826,7 @@ export function ActionPanel({
                       mode: 'heal',
                     })
                   }
-                  className="px-3.5 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+                  className="px-3 py-1.5 min-h-[36px] rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
                 >
                   💚 Hồi 1 cho {validAnyTarget.displayName}
                 </button>
@@ -849,7 +843,7 @@ export function ActionPanel({
                       });
                     }
                   }}
-                  className="px-3.5 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+                  className="px-3 py-1.5 min-h-[36px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs sm:text-sm font-black transition cursor-pointer"
                 >
                   💥 Gây 2 dmg lên {validOtherTarget?.displayName ?? '?'}
                 </button>
@@ -867,7 +861,7 @@ export function ActionPanel({
                     ...(chosenStealEquipId ? { equipCardId: chosenStealEquipId } : {}),
                   })
                 }
-                className="px-3.5 py-2 min-h-[40px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
+                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs sm:text-sm font-black transition cursor-pointer"
               >
                 🧤 Cướp 1 Trang bị của {validStealTarget.displayName}
               </button>
@@ -876,7 +870,7 @@ export function ActionPanel({
               type="button"
               data-testid="bg-skip-loc-btn"
               onClick={() => onAction({ type: 'SKIP_LOC' })}
-              className="px-3.5 py-2 min-h-[38px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs sm:text-sm font-bold transition cursor-pointer sm:ml-auto"
+              className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs sm:text-sm font-bold transition cursor-pointer sm:ml-auto"
             >
               ⏭️ Bỏ qua khu vực → Pha Hành Động
             </button>
@@ -892,13 +886,13 @@ export function ActionPanel({
 
       {/* PHA 3: GIẢI QUYẾT THẺ VỪA RÚT / TẤN CÔNG / KẾT THÚC LƯỢT */}
       {publicGame.turnPhase === 'MAIN_ACTION' && (
-        <div className="space-y-2.5">
-          {renderTargetSelector('Chọn mục tiêu hành động / tấn công:')}
+        <div className="space-y-1.5">
+          {renderTargetSelector('Mục tiêu:')}
 
           {renderHandCardsSection()}
 
           {/* Hàng nút chính cuối pha: Tấn công hoặc Kết thúc lượt */}
-          <div className="flex flex-wrap items-center gap-2.5 pt-1.5 border-t border-slate-800/80">
+          <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-slate-800/80">
             <button
               type="button"
               data-testid="bg-attack-btn"
@@ -908,7 +902,7 @@ export function ActionPanel({
                   onAction({ type: 'ATTACK', targetPlayerId: validAttackTarget.playerId });
                 }
               }}
-              className="px-4 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs sm:text-sm font-black shadow transition cursor-pointer"
+              className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs sm:text-sm font-black shadow transition cursor-pointer"
             >
               {attacksThisTurn >= 1
                 ? '⚔️ Đã tấn công trong lượt'
@@ -924,7 +918,7 @@ export function ActionPanel({
               data-testid="bg-end-turn-btn"
               disabled={!canEndTurn}
               onClick={() => onAction({ type: 'END_TURN' })}
-              className="px-4 py-2 min-h-[40px] rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-45 text-white text-xs sm:text-sm font-black shadow transition cursor-pointer"
+              className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-45 text-white text-xs sm:text-sm font-black shadow transition cursor-pointer"
             >
               {mustResolveCardFirst
                 ? '🃏 Hãy dùng hết thẻ vừa rút'

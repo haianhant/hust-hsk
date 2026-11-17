@@ -759,7 +759,7 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
       const rawStatus = (statusBar?.textContent || '').replace(/\s+/g, ' ');
       const turnMatch = rawStatus.match(/Lượt\s*#\d+/);
       const roundMatch = rawStatus.match(/Vòng\s*\d+/);
-      const actorMatch = rawStatus.match(/Lượt:\s*(.+?)(?=\s*(?:Mã:|Mở rộng|VFX|Bật|Tắt|🏆|📖|🚪|$))/u);
+      const actorMatch = rawStatus.match(/Lượt:\s*(.+?)(?=\s*(?:Mã:|Mở rộng|◧|⚙️|Cài đặt|VFX|Bật|Tắt|🏆|📖|🚪|$))/u);
       const turnNumStr = turnMatch
         ? turnMatch[0]
         : roundMatch
@@ -852,6 +852,196 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
   if (await pickAndClick('bg-end-turn-btn')) return true;
 
   return false;
+}
+
+async function clickControlViaSettingsIfCollapsed(page, testId, options = {}) {
+  const settingsBtn = page.locator('[data-testid="bg-graphics-settings-btn"]');
+  const target = page.locator(`[data-testid="${testId}"]`).first();
+  const visibleAlready = await target.isVisible().catch(() => false);
+  if (!visibleAlready) {
+    await settingsBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await settingsBtn.click();
+    await page.waitForSelector('[data-testid="bg-graphics-settings-panel"]', { timeout: 5000 });
+    await target.waitFor({ state: 'visible', timeout: 5000 });
+  }
+  await target.click();
+  if (!options.keepOpen) {
+    const stillOpen = await page
+      .locator('[data-testid="bg-graphics-settings-panel"]')
+      .isVisible()
+      .catch(() => false);
+    if (stillOpen) {
+      await settingsBtn.click();
+      await page
+        .locator('[data-testid="bg-graphics-settings-panel"]')
+        .waitFor({ state: 'detached', timeout: 3000 })
+        .catch(() => undefined);
+    }
+  }
+}
+
+async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = {}) {
+  const { saveShots = false } = options;
+  const viewports = [
+    { width: 1440, height: 900, requireZeroScroll: true, shotName: 'tactical-v2-1440x900-role.png' },
+    { width: 1280, height: 800, requireZeroScroll: true, shotName: 'tactical-v2-1280x800.png' },
+    { width: 1920, height: 1080, requireZeroScroll: true, shotName: 'tactical-v2-1920x1080.png' },
+  ];
+  const LOC_IDS = ['radio', 'lobby', 'breaker', 'canteen', 'corridor', 'court'];
+
+  for (const vp of viewports) {
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+    await page.waitForTimeout(160);
+
+    const metrics = await page.evaluate((locIds) => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const header = document.querySelector('[data-testid="bg-v3-status-bar"]');
+      const boardCol = document.querySelector('[data-testid="bg-board-main-column"]');
+      const sideDrawer = document.querySelector('[data-testid="bg-side-drawer"]');
+      const damageTrack = document.querySelector('[data-testid="bg-damage-track"]');
+      const diceTray = document.querySelector('[data-testid="bg-dice-tray"]');
+      const actionBar =
+        document.querySelector('[data-testid="bg-action-panel"]') ||
+        document.querySelector('[data-testid="bg-waiting-turn-banner"]') ||
+        document.querySelector('[data-testid="bg-action-spectator-banner"]');
+      const scrollArea = document.querySelector('[data-testid="bg-board-scroll-area"]');
+
+      const rectOf = (el) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return {
+          top: Math.round(r.top),
+          bottom: Math.round(r.bottom),
+          left: Math.round(r.left),
+          right: Math.round(r.right),
+          width: Math.round(r.width),
+          height: Math.round(r.height),
+        };
+      };
+
+      const locRects = {};
+      for (const id of locIds) {
+        locRects[id] = rectOf(document.querySelector(`[data-testid="bg-loc-${id}"]`));
+      }
+
+      const headerButtons = header
+        ? Array.from(header.querySelectorAll('button')).map((b) => rectOf(b))
+        : [];
+
+      return {
+        vw,
+        vh,
+        docOverflowX: document.documentElement.scrollWidth > vw + 1,
+        headerRect: rectOf(header),
+        headerButtons,
+        boardRect: rectOf(boardCol),
+        sideRect: rectOf(sideDrawer),
+        damageTrackRect: rectOf(damageTrack),
+        diceTrayRect: rectOf(diceTray),
+        actionBarRect: rectOf(actionBar),
+        boardScrollOverflowY: scrollArea
+          ? scrollArea.scrollHeight - scrollArea.clientHeight
+          : null,
+        locRects,
+        hasCollapsedRulesBtnOutsideSettings: Boolean(
+          document.querySelector('[data-testid="bg-board-rules-btn"]'),
+        ),
+        hasDesktopTabs: Boolean(
+          document.querySelector('[data-testid="bg-sidebar-tab-role"]') &&
+            document.querySelector('[data-testid="bg-sidebar-tab-gear"]') &&
+            document.querySelector('[data-testid="bg-sidebar-tab-log"]'),
+        ),
+      };
+    }, LOC_IDS);
+
+    const tag = `[${label} @ ${vp.width}x${vp.height}]`;
+    assert.equal(metrics.docOverflowX, false, `${tag} must have zero horizontal overflow`);
+    assert.ok(metrics.headerRect && metrics.headerRect.height <= 48, `${tag} header must be 1 row (<=48px), got ${metrics.headerRect?.height}`);
+    assert.equal(
+      metrics.hasCollapsedRulesBtnOutsideSettings,
+      false,
+      `${tag} secondary rules button must be collapsed into Settings`,
+    );
+    assert.equal(metrics.hasDesktopTabs, true, `${tag} must render all 3 desktop sidebar tabs`);
+
+    if (metrics.headerButtons.length >= 2) {
+      const top0 = metrics.headerButtons[0].top;
+      for (const hb of metrics.headerButtons) {
+        assert.ok(Math.abs(hb.top - top0) <= 6, `${tag} header buttons wrapped onto multiple lines`);
+      }
+    }
+
+    assert.ok(metrics.boardRect && metrics.sideRect, `${tag} board column and sidebar must be visible`);
+    const totalColWidth = metrics.boardRect.width + metrics.sideRect.width;
+    const boardRatio = metrics.boardRect.width / totalColWidth;
+    assert.ok(
+      boardRatio >= 0.71 && boardRatio <= 0.79,
+      `${tag} board/sidebar split must be ~75/25, got ${(boardRatio * 100).toFixed(1)}% (${metrics.boardRect.width}/${totalColWidth})`,
+    );
+    assert.ok(
+      metrics.boardRect.right <= metrics.sideRect.left + 1,
+      `${tag} board and sidebar must not overlap horizontally`,
+    );
+
+    if (vp.requireZeroScroll) {
+      assert.ok(
+        metrics.damageTrackRect &&
+          metrics.damageTrackRect.top >= 0 &&
+          metrics.damageTrackRect.bottom <= vp.height,
+        `${tag} damage track must fit inside viewport: ${JSON.stringify(metrics.damageTrackRect)}`,
+      );
+      assert.ok(
+        metrics.diceTrayRect &&
+          metrics.diceTrayRect.top >= 0 &&
+          metrics.diceTrayRect.bottom <= vp.height,
+        `${tag} dice tray must fit inside viewport: ${JSON.stringify(metrics.diceTrayRect)}`,
+      );
+      assert.ok(
+        metrics.actionBarRect &&
+          metrics.actionBarRect.top >= 0 &&
+          metrics.actionBarRect.bottom <= vp.height,
+        `${tag} primary action bar must fit inside viewport: ${JSON.stringify(metrics.actionBarRect)}`,
+      );
+      for (const id of LOC_IDS) {
+        const lr = metrics.locRects[id];
+        assert.ok(
+          lr && lr.width > 0 && lr.height > 0 && lr.top >= 0 && lr.bottom <= vp.height,
+          `${tag} location "${id}" must fit cleanly in viewport: ${JSON.stringify(lr)}`,
+        );
+      }
+    }
+
+    if (saveShots && vp.shotName) {
+      await page.screenshot({ path: path.join(SHOT_DIR, vp.shotName) });
+    }
+  }
+
+  // Test switching across 3 desktop sidebar tabs & restoring to default 1280x800
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator('[data-testid="bg-sidebar-tab-gear"]').click();
+  await page.waitForSelector('[data-testid="bg-sidebar-gear-panel"]', { timeout: 3000 });
+  if (saveShots) {
+    await page.locator('[data-testid="bg-graphics-settings-btn"]').click();
+    await page.waitForSelector('[data-testid="bg-graphics-settings-panel"]', { timeout: 3000 });
+    await page.waitForTimeout(100);
+    await page.screenshot({ path: path.join(SHOT_DIR, 'tactical-v2-1440x900-gear-settings.png') });
+    await page.locator('[data-testid="bg-graphics-settings-btn"]').click();
+    await page
+      .locator('[data-testid="bg-graphics-settings-panel"]')
+      .waitFor({ state: 'detached', timeout: 3000 })
+      .catch(() => undefined);
+  }
+  await page.locator('[data-testid="bg-sidebar-tab-log"]').click();
+  await page.waitForSelector('[data-testid="bg-game-log"]', { timeout: 3000 });
+  if (saveShots) {
+    await page.waitForTimeout(100);
+    await page.screenshot({ path: path.join(SHOT_DIR, 'tactical-v2-1440x900-log.png') });
+  }
+  await page.locator('[data-testid="bg-sidebar-tab-role"]').click();
+  await page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 3000 });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(120);
 }
 
 function verifyCommonAudits(items) {
@@ -1078,8 +1268,9 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     await checkMobileOverflowAndTabs('Bàn & Lượt');
     await p4.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-03-gameboard-mobile.png') });
     await p4.page.screenshot({ path: path.join(SHOT_DIR, 'polish-04-gameboard-mobile-390x844.png') });
+    await p4.page.screenshot({ path: path.join(SHOT_DIR, 'tactical-v2-390x844-mobile.png') });
 
-    // Rules modal, sound toggle, emote toast, hand mask & HP leak check on P1 & P4
+    // Rules modal, sound toggle, emote toast, Tactical V2 layout + HP leak check on P1 & P4
     await p1.page.bringToFront();
     await p1.page.waitForSelector('[data-testid="bg-v3-status-bar"]', { timeout: UI_TIMEOUT });
     const timerText = await p1.page.locator('[data-testid="bg-turn-timer"]').innerText();
@@ -1087,7 +1278,8 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       timerText.includes('Suy nghĩ tự do') || timerText.includes('∞'),
       `Default turn timer must show infinite thinking mode, got: ${timerText}`,
     );
-    await p1.page.locator('[data-testid="bg-board-rules-btn"]').click();
+    await verifyDesktopTacticalLayoutV2(p1.page, 'E2E-01-Initial');
+    await clickControlViaSettingsIfCollapsed(p1.page, 'bg-board-rules-btn');
     await p1.page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: UI_TIMEOUT });
     const rulesModalText = await p1.page.locator('[data-testid="boardgame-rules-modal"]').innerText();
     assert.ok(
@@ -1096,8 +1288,8 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     );
     await p1.page.locator('[data-testid="bg-close-rules-btn"]').click();
 
-    await p1.page.locator('[data-testid="bg-sound-toggle-btn"]').click();
-    await p1.page.locator('[data-testid="bg-sound-toggle-btn"]').click();
+    await clickControlViaSettingsIfCollapsed(p1.page, 'bg-sound-toggle-btn', { keepOpen: true });
+    await clickControlViaSettingsIfCollapsed(p1.page, 'bg-sound-toggle-btn');
     await p1.page.locator('[data-testid="bg-emote-wave"]').click();
     await p4.page.waitForSelector('[data-testid="bg-emote-toast"]', { timeout: UI_TIMEOUT });
 
@@ -1240,6 +1432,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     // Drive full 4-player match to FINISHED while explicitly verifying E2E-04 mobile turn execution on P4
     let finished = false;
     let lastBroughtIdx = -1;
+    let p1DesktopActiveChecked = false;
     let p4MobileButtonsChecked = false;
     let p4MobileActionsExecuted = 0;
     const triedActionsPerTurn = new Set();
@@ -1270,6 +1463,13 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
         if (activeIdx !== lastBroughtIdx) {
           await activeUi.page.bringToFront().catch(() => undefined);
           lastBroughtIdx = activeIdx;
+        }
+        if (activeUi === p1 && !p1DesktopActiveChecked) {
+          const hasActionPanel = await p1.page.locator('[data-testid="bg-action-panel"]').count();
+          if (hasActionPanel > 0) {
+            await verifyDesktopTacticalLayoutV2(p1.page, 'E2E-01-ActiveTurn', { saveShots: true });
+            p1DesktopActiveChecked = true;
+          }
         }
         if (activeUi === p4 && !p4MobileButtonsChecked) {
           const btnMetrics = await p4.page.evaluate(() =>
@@ -1353,6 +1553,11 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       }
     }
     assert.equal(finished, true, 'E2E-01 4-player match must reach FINISHED');
+    assert.equal(
+      p1DesktopActiveChecked,
+      true,
+      'E2E-01 desktop player P1 must reach an active turn and pass Desktop Tactical Layout V2 geometry audit',
+    );
     assert.ok(
       p4MobileButtonsChecked && p4MobileActionsExecuted >= 2,
       `E2E-04 mobile player P4 must execute playable actions (${p4MobileActionsExecuted})`,
@@ -2104,7 +2309,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       null,
       { timeout: 3000, polling: 40 },
     );
-    await p1.page.locator('[data-testid="bg-vfx-motion-toggle-btn"]').click();
+    await clickControlViaSettingsIfCollapsed(p1.page, 'bg-vfx-motion-toggle-btn');
     await p1.page.waitForSelector('[data-testid="bg-vfx-stage"][data-reduced-motion="true"]', {
       timeout: 3000,
     });
@@ -2155,7 +2360,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     });
     assert.equal(rmResult.unsettledSeen, 0, 'Reduced Motion on GameBoard must produce zero unsettled dice frames');
     assert.equal(rmResult.settled, 'true', 'Reduced Motion on GameBoard must settle immediately');
-    await p1.page.locator('[data-testid="bg-vfx-motion-toggle-btn"]').click();
+    await clickControlViaSettingsIfCollapsed(p1.page, 'bg-vfx-motion-toggle-btn');
     await p1.page.waitForSelector('[data-testid="bg-vfx-stage"][data-reduced-motion="false"]', {
       timeout: 3000,
     });
