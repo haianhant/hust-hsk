@@ -209,10 +209,14 @@ async function waitForSettledFloor10Perf(page) {
     null,
     { timeout: 20000 },
   );
+  // Allow React's rooftop outdoor group (`isOpenAirRooftop`) & staged load waves (`mountWave === 3`)
+  // to commit cleanly on constrained 2-vCPU CI runners before taking geometry baselines.
+  await page.waitForTimeout(650);
 
   let prev = await page.evaluate(() => ({ ...window.__bkhnLibraryPerf }));
   let stableCount = 0;
-  for (let attempt = 0; attempt < 12; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await page.waitForTimeout(120);
     const cur = await page.evaluate(
       () =>
         new Promise((resolve) => {
@@ -228,7 +232,7 @@ async function waitForSettledFloor10Perf(page) {
       Math.abs(cur.textures - prev.textures) <= 1
     ) {
       stableCount += 1;
-      if (stableCount >= 2) {
+      if (stableCount >= 4) {
         return cur;
       }
     } else {
