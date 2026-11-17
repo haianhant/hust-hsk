@@ -315,6 +315,19 @@ async function setupPlayerContext(chromium, launchOpts, user, shimWsBaseUrl, opt
   await context.addInitScript(
     ({ name, mssv, wsUrl }) => {
       window.__HUST_TEST_MP_WS_URL = wsUrl;
+      if (!window.__hustTestWsHookInstalled && typeof window.WebSocket === 'function') {
+        window.__hustTestWsHookInstalled = true;
+        const OrigWS = window.WebSocket;
+        window.WebSocket = function WrappedTestWebSocket(url, protocols) {
+          const ws = protocols !== undefined ? new OrigWS(url, protocols) : new OrigWS(url);
+          if (typeof url === 'string' && url.includes('/ws/boardgame')) {
+            window.__testBgWs = ws;
+          }
+          return ws;
+        };
+        window.WebSocket.prototype = OrigWS.prototype;
+        Object.assign(window.WebSocket, OrigWS);
+      }
       if (!window.localStorage.getItem('bkhn-identity-v1')) {
         window.localStorage.setItem('bkhn-identity-v1', JSON.stringify({ name, mssv }));
       }
@@ -956,18 +969,35 @@ async function verifyTilePopoverAndKeyboardA11y(page, options = {}) {
   await page.waitForTimeout(100);
 }
 
+async function settleBoardLayoutAnimations(page, minWaitMs = 180) {
+  await page.waitForTimeout(minWaitMs);
+  await page.evaluate(async () => {
+    const deadline = Date.now() + 2600;
+    while (Date.now() < deadline) {
+      const els = Array.from(document.querySelectorAll('[data-pawn-glide]'));
+      const busy = els.some(
+        (el) =>
+          el.classList.contains('mn-pawn-touchdown-ripple') ||
+          (typeof el.getAnimations === 'function' && el.getAnimations().length > 0),
+      );
+      if (!busy) break;
+      await new Promise((r) => setTimeout(r, 60));
+    }
+  });
+}
+
 async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = {}) {
   const { saveShots = false, afterPrefix = null, isSpectator = false } = options;
   const viewports = [
-    { width: 1440, height: 900, requireZeroScroll: true, maxTileHeight: 162, shotName: 'tactical-v2-1440x900-role.png', afterName: 'phase2-after-1440x900.png' },
-    { width: 1280, height: 800, requireZeroScroll: true, maxTileHeight: 142, shotName: 'tactical-v2-1280x800.png', afterName: 'phase2-after-1280x800.png' },
-    { width: 1920, height: 1080, requireZeroScroll: true, maxTileHeight: 185, shotName: 'tactical-v2-1920x1080.png', afterName: 'phase2-after-1920x1080.png' },
+    { width: 1440, height: 900, requireZeroScroll: true, minTileHeight: 135, maxTileHeight: 155, shotName: 'tactical-v2-1440x900-role.png', suffix: '1440x900.png' },
+    { width: 1280, height: 800, requireZeroScroll: true, minTileHeight: 120, maxTileHeight: 135, shotName: 'tactical-v2-1280x800.png', suffix: '1280x800.png' },
+    { width: 1920, height: 1080, requireZeroScroll: true, minTileHeight: 160, maxTileHeight: 185, shotName: 'tactical-v2-1920x1080.png', suffix: '1920x1080.png' },
   ];
   const LOC_IDS = ['radio', 'lobby', 'breaker', 'canteen', 'corridor', 'court'];
 
   for (const vp of viewports) {
     await page.setViewportSize({ width: vp.width, height: vp.height });
-    await page.waitForTimeout(160);
+    await settleBoardLayoutAnimations(page, 180);
 
     const metrics = await page.evaluate((locIds) => {
       const vw = window.innerWidth;
@@ -995,20 +1025,31 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
           height: Math.round(r.height),
         };
       };
+      const fontSizeOf = (el) =>
+        el ? Math.round(parseFloat(window.getComputedStyle(el).fontSize || '0') * 10) / 10 : null;
 
       const locDetails = {};
       for (const id of locIds) {
         const el = document.querySelector(`[data-testid="bg-loc-${id}"]`);
         const diceEl = document.querySelector(`[data-testid="bg-tile-dice-${id}"]`);
         const nameEl = document.querySelector(`[data-testid="bg-tile-name-${id}"]`);
+        const triggerEl = document.querySelector(`[data-testid="bg-tile-rule-trigger-${id}"]`);
         const iconEl = document.querySelector(`[data-testid="bg-tile-action-icon-${id}"]`);
+        const actionLabelEl = document.querySelector(`[data-testid="bg-tile-action-label-${id}"]`);
         const pawnsEl = document.querySelector(`[data-testid="bg-tile-pawns-${id}"]`);
+        const firstPawnText = pawnsEl?.querySelector(':scope > button > span, :scope > span');
         locDetails[id] = {
           rect: rectOf(el),
           diceRect: rectOf(diceEl),
           nameRect: rectOf(nameEl),
           iconRect: rectOf(iconEl),
+          actionLabelRect: rectOf(actionLabelEl),
           pawnsRect: rectOf(pawnsEl),
+          nameFontSize: fontSizeOf(nameEl),
+          diceFontSize: fontSizeOf(diceEl),
+          triggerFontSize: fontSizeOf(triggerEl),
+          pawnTextFontSize: fontSizeOf(firstPawnText),
+          tileOverflowX: el ? el.scrollWidth > el.clientWidth + 1 : false,
           hasStateAttrs: Boolean(
             el &&
               el.hasAttribute('data-self-here') &&
@@ -1109,6 +1150,8 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
           metrics.actionBarRect.bottom <= vp.height,
         `${tag} primary action bar must fit inside viewport: ${JSON.stringify(metrics.actionBarRect)}`,
       );
+      let minTileTop = Infinity;
+      let maxTileBottom = -Infinity;
       for (const id of LOC_IDS) {
         const d = metrics.locDetails[id];
         const lr = d.rect;
@@ -1116,15 +1159,28 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
           lr && lr.width > 0 && lr.height > 0 && lr.top >= 0 && lr.bottom <= vp.height,
           `${tag} location "${id}" must fit cleanly in viewport: ${JSON.stringify(lr)}`,
         );
+        minTileTop = Math.min(minTileTop, lr.top);
+        maxTileBottom = Math.max(maxTileBottom, lr.bottom);
         assert.ok(
-          lr.height <= vp.maxTileHeight,
-          `${tag} compact location "${id}" height (${lr.height}px) must stay <= ${vp.maxTileHeight}px`,
+          lr.height >= vp.minTileHeight && lr.height <= vp.maxTileHeight,
+          `${tag} location "${id}" height (${lr.height}px) must stay within adaptive band [${vp.minTileHeight}, ${vp.maxTileHeight}]`,
         );
+        assert.equal(d.tileOverflowX, false, `${tag} location "${id}" must not overflow horizontally`);
         assert.equal(d.hasStateAttrs, true, `${tag} location "${id}" missing tactical state data-attributes`);
         assert.ok(d.diceRect && d.diceRect.width > 0 && d.diceRect.height > 0, `${tag} location "${id}" dice badge must be visible`);
         assert.ok(d.nameRect && d.nameRect.width > 0 && d.nameRect.height > 0, `${tag} location "${id}" title must be visible`);
         assert.ok(d.iconRect && d.iconRect.width > 0 && d.iconRect.height > 0, `${tag} location "${id}" action icon must be visible`);
+        assert.ok(d.actionLabelRect && d.actionLabelRect.width > 0 && d.actionLabelRect.height > 0, `${tag} location "${id}" short action label must be visible`);
         assert.ok(d.pawnsRect && d.pawnsRect.width > 0 && d.pawnsRect.height > 0, `${tag} location "${id}" pawn tray must be visible`);
+        assert.ok(
+          d.nameFontSize >= 14 && d.nameFontSize <= 16,
+          `${tag} location "${id}" title fontSize (${d.nameFontSize}px) must be 14–16px`,
+        );
+        assert.ok(d.diceFontSize >= 12, `${tag} location "${id}" dice fontSize (${d.diceFontSize}px) must be >= 12px`);
+        assert.ok(d.triggerFontSize >= 12, `${tag} location "${id}" action label fontSize (${d.triggerFontSize}px) must be >= 12px`);
+        if (d.pawnTextFontSize !== null) {
+          assert.ok(d.pawnTextFontSize >= 12, `${tag} location "${id}" pawn fontSize (${d.pawnTextFontSize}px) must be >= 12px`);
+        }
 
         for (const banner of metrics.banners) {
           const br = banner.rect;
@@ -1140,12 +1196,22 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
           );
         }
       }
+      const gapTop = minTileTop - metrics.damageTrackRect.bottom;
+      const gapBottom = metrics.diceTrayRect.top - maxTileBottom;
+      assert.ok(
+        gapTop >= 0 && gapTop <= 48,
+        `${tag} vertical gap between Damage Track and Location Tiles must be balanced (<=48px), got ${gapTop}px`,
+      );
+      assert.ok(
+        gapBottom >= 0 && gapBottom <= 48,
+        `${tag} vertical gap between Location Tiles and Dice Tray must be balanced (<=48px), got ${gapBottom}px`,
+      );
     }
 
     if (saveShots && vp.shotName) {
       await page.screenshot({ path: path.join(SHOT_DIR, vp.shotName) });
-      if (afterPrefix && vp.afterName) {
-        await page.screenshot({ path: path.join(SHOT_DIR, vp.afterName) });
+      if (afterPrefix && vp.suffix) {
+        await page.screenshot({ path: path.join(SHOT_DIR, `${afterPrefix}-${vp.suffix}`) });
       }
     }
   }
@@ -1609,9 +1675,9 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
           if (hasActionPanel > 0) {
             await verifyDesktopTacticalLayoutV2(p1.page, 'E2E-01-ActiveTurn', {
               saveShots: true,
-              afterPrefix: 'phase2-after',
+              afterPrefix: 'phase2_1-after',
             });
-            await verifyTilePopoverAndKeyboardA11y(p1.page, { savePopoverShot: true });
+            await verifyTilePopoverAndKeyboardA11y(p1.page, { savePopoverShot: false });
             p1DesktopActiveChecked = true;
           }
         }
@@ -1931,7 +1997,7 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     assert.equal(specPrivacy.hasHpLeakText, false, '8P spectator view must never leak HP totals');
     assert.equal(specPrivacy.leakedAria.length, 0, `8P tiles aria-labels leaked secret info: ${JSON.stringify(specPrivacy.leakedAria)}`);
     await spec.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-8p-spectator.png') });
-    await spec.page.screenshot({ path: path.join(SHOT_DIR, 'phase2-after-8p-spectator.png') });
+    await spec.page.screenshot({ path: path.join(SHOT_DIR, 'phase2_1-after-8p-spectator.png') });
 
     // Execute 8 turns (1 full round across 8p) verifying active state sync
     const hostTried = new Set();
@@ -1957,6 +2023,108 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     }
     assert.ok(turnsCompleted >= 6, `Expected >= 6 8p peer turns completed, got ${turnsCompleted}`);
     assert.equal(await spec.page.locator('[data-testid="bg-action-panel"]').count(), 0);
+
+    // Synthetic Visual QA: verify 8 pawns AND 4 pawns on the exact same tile render cleanly with zero overflow or overlap
+    if (spec.audit.latestSync && spec.audit.latestSync.publicGame) {
+      const baseSync = spec.audit.latestSync;
+      const sendSynthLocs = async (locAssignments, revDelta) => {
+        const cloned = JSON.parse(JSON.stringify(baseSync));
+        cloned.revision = (baseSync.revision || 1) + revDelta;
+        cloned.publicGame.players = cloned.publicGame.players.map((p, idx) => ({
+          ...p,
+          location: locAssignments[idx] || p.location,
+        }));
+        await spec.page.evaluate((msgText) => {
+          if (window.__testBgWs) {
+            window.__testBgWs.dispatchEvent(new MessageEvent('message', { data: msgText }));
+          }
+        }, JSON.stringify(cloned));
+        await settleBoardLayoutAnimations(spec.page, 620);
+      };
+
+      // Clear any residual turn-9 cut-in banner before crowded-tile screenshot & QA
+      const vfxSkipBtn = spec.page.locator('[data-testid="bg-vfx-skip-btn"]');
+      if (await vfxSkipBtn.isVisible().catch(() => false)) {
+        await vfxSkipBtn.click().catch(() => {});
+        await spec.page.waitForTimeout(150);
+      }
+
+      // Case A: All 8 pawns stacked inside 1 location tile ('radio') across 1280x800, 1440x900, 1920x1080
+      await sendSynthLocs(new Array(8).fill('radio'), 100);
+      for (const vp of [
+        { width: 1440, height: 900, shot: true },
+        { width: 1280, height: 800, shot: false },
+        { width: 1920, height: 1080, shot: false },
+      ]) {
+        await spec.page.setViewportSize({ width: vp.width, height: vp.height });
+        await settleBoardLayoutAnimations(spec.page, 120);
+        const crowdCheck = await spec.page.evaluate(() => {
+          const tile = document.querySelector('[data-testid="bg-loc-radio"]');
+          if (!tile) return { missingTile: true };
+          const tr = tile.getBoundingClientRect();
+          const pawns = Array.from(tile.querySelectorAll('[data-vfx-player]')).map((el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              id: el.getAttribute('data-vfx-player'),
+              left: r.left,
+              right: r.right,
+              top: r.top,
+              bottom: r.bottom,
+              w: r.width,
+              h: r.height,
+            };
+          });
+          let overlappingPairs = 0;
+          for (let i = 0; i < pawns.length; i++) {
+            for (let j = i + 1; j < pawns.length; j++) {
+              const a = pawns[i];
+              const b = pawns[j];
+              const ix = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+              const iy = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+              if (ix > 1 && iy > 1) overlappingPairs += 1;
+            }
+          }
+          const clippedCount = pawns.filter(
+            (p) => p.w <= 0 || p.h <= 0 || p.left < tr.left - 1 || p.right > tr.right + 1 || p.top < tr.top - 1 || p.bottom > tr.bottom + 1,
+          ).length;
+          return {
+            pawnCount: pawns.length,
+            overlappingPairs,
+            clippedCount,
+            tileOverflowX: tile.scrollWidth > tile.clientWidth + 1,
+            tileBottom: Math.round(tr.bottom),
+            vh: window.innerHeight,
+            docOverflowX: document.documentElement.scrollWidth > window.innerWidth + 1,
+          };
+        });
+        assert.equal(crowdCheck.missingTile, undefined);
+        assert.equal(crowdCheck.pawnCount, 8, `Expected all 8 pawns rendered in 'radio' @ ${vp.width}x${vp.height}`);
+        assert.equal(crowdCheck.overlappingPairs, 0, `8 pawns in 1 tile must not overlap @ ${vp.width}x${vp.height}`);
+        assert.equal(crowdCheck.clippedCount, 0, `8 pawns in 1 tile must stay inside tile bounds @ ${vp.width}x${vp.height}: ${JSON.stringify(crowdCheck)}`);
+        assert.equal(crowdCheck.tileOverflowX, false, `Crowded tile must not overflow X @ ${vp.width}x${vp.height}`);
+        assert.equal(crowdCheck.docOverflowX, false, `Document must not overflow X with 8 pawns in 1 tile @ ${vp.width}x${vp.height}`);
+        assert.ok(crowdCheck.tileBottom <= crowdCheck.vh, `Crowded tile bottom must remain in viewport @ ${vp.width}x${vp.height}`);
+        if (vp.shot) {
+          await spec.page.screenshot({ path: path.join(SHOT_DIR, 'phase2_1-after-8p-crowded-tile.png') });
+        }
+      }
+
+      // Case B: 4 pawns on 'radio' + 4 pawns on 'lobby'
+      await sendSynthLocs(['radio', 'radio', 'radio', 'radio', 'lobby', 'lobby', 'lobby', 'lobby'], 101);
+      await spec.page.setViewportSize({ width: 1280, height: 800 });
+      await spec.page.waitForTimeout(120);
+      const fourPerTile = await spec.page.evaluate(() => ({
+        radioCount: document.querySelector('[data-testid="bg-loc-radio"]')?.querySelectorAll('[data-vfx-player]').length ?? 0,
+        lobbyCount: document.querySelector('[data-testid="bg-loc-lobby"]')?.querySelectorAll('[data-vfx-player]').length ?? 0,
+        radioOverflowX: (() => {
+          const t = document.querySelector('[data-testid="bg-loc-radio"]');
+          return t ? t.scrollWidth > t.clientWidth + 1 : true;
+        })(),
+      }));
+      assert.equal(fourPerTile.radioCount, 4);
+      assert.equal(fourPerTile.lobbyCount, 4);
+      assert.equal(fourPerTile.radioOverflowX, false);
+    }
 
     verifyCommonAudits(allAudited);
     return { inviteCode, players: 8, spectatorVerified: true, turnsCompleted };

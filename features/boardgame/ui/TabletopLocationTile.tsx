@@ -165,15 +165,15 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
           loading="eager"
           decoding="async"
           draggable={false}
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-80 brightness-110 contrast-[1.03] transition-transform duration-700 group-hover/tile:scale-[1.04]"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-85 brightness-110 contrast-[1.04] transition-transform duration-700 group-hover/tile:scale-[1.04]"
         />
 
-        {/* LỚP 2: ÁNH ĐÈN ĐIỂM SÁNG ẤM + NỀN CHỮ SẮC NÉT PHẦN TRÊN/DƯỚI */}
+        {/* LỚP 2: ÁNH ĐÈN ĐIỂM SÁNG ẤM + DẢI NỀN CHỮ MỀM ĐỂ PHẦN ARTWORK GIỮA NỔI BẬT */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
           style={{
-            background: `radial-gradient(68% 78% at ${ambience.lampX}% ${ambience.lampY}%, ${ambience.lampHex}44 0%, rgba(2, 6, 23, 0.14) 56%, rgba(2, 6, 23, 0.84) 100%), linear-gradient(180deg, rgba(2, 6, 23, 0.42) 0%, rgba(2, 6, 23, 0.24) 40%, rgba(2, 6, 23, 0.85) 78%, rgba(2, 6, 23, 0.95) 100%)`,
+            background: `radial-gradient(72% 82% at ${ambience.lampX}% ${ambience.lampY}%, ${ambience.lampHex}40 0%, rgba(2, 6, 23, 0.12) 58%, rgba(2, 6, 23, 0.80) 100%), linear-gradient(180deg, rgba(2, 6, 23, 0.44) 0%, rgba(2, 6, 23, 0.14) 36%, rgba(2, 6, 23, 0.22) 66%, rgba(2, 6, 23, 0.90) 100%)`,
           }}
         />
 
@@ -191,50 +191,41 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
         )}
       </div>
 
-      {/* NỘI DUNG TACTICAL COMPACT TRÊN BỀ MẶT TILE */}
-      <div className="relative z-10 h-full p-2 flex flex-col justify-between min-h-[84px] lg:min-h-[88px] xl:min-h-[96px]">
-        {/* HÀNG ĐẦU: GIÁ TRỊ XÚC XẮC + TÊN ĐỊA ĐIỂM + TRẠNG THÁI + ICON HÀNH ĐỘNG/LUẬT */}
-        <div className="flex items-center justify-between gap-1.5 min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <span
-              data-testid={`bg-tile-dice-${locId}`}
-              style={{
-                backgroundColor: meta.accentHex,
-                boxShadow: `0 2px 10px ${meta.accentHex}75`,
-              }}
-              className="px-1.5 py-0.5 rounded-md text-slate-950 text-[11px] font-black whitespace-nowrap shrink-0"
-            >
-              Ô {meta.diceLabel}
-            </span>
-            <h3
-              data-testid={`bg-tile-name-${locId}`}
-              title={meta.name}
-              className="text-xs sm:text-[13px] xl:text-sm font-black tracking-tight text-white truncate drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]"
-            >
-              {meta.name}
-            </h3>
-          </div>
+      {/* NỘI DUNG TACTICAL SCALING TRÊN BỀ MẶT TILE */}
+      <div className="relative z-10 h-full p-2 sm:p-2.5 flex flex-col justify-between min-h-[112px] lg:min-h-[clamp(122px,calc(18.5vh_-_22px),176px)]">
+        {/* CỤM TIÊU ĐỀ + ACTION CHIP GỌN Ở ĐỈNH (CHỪA KHOẢNG ARTWORK SÁNG Ở GIỮA) */}
+        <div className="space-y-1">
+          {/* HÀNG 1: GIÁ TRỊ XÚC XẮC + TÊN ĐỊA ĐIỂM (14–16PX) + BADGE VỊ TRÍ BẢN THÂN */}
+          <div className="flex items-center justify-between gap-1.5 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span
+                data-testid={`bg-tile-dice-${locId}`}
+                style={{
+                  backgroundColor: meta.accentHex,
+                  boxShadow: `0 2px 10px ${meta.accentHex}75`,
+                }}
+                className="px-2 py-0.5 rounded-md text-slate-950 text-xs font-black whitespace-nowrap shrink-0"
+              >
+                Ô {meta.diceLabel}
+              </span>
+              <h3
+                data-testid={`bg-tile-name-${locId}`}
+                title={meta.name}
+                className="text-[14px] xl:text-[15px] 2xl:text-[16px] font-black tracking-tight text-white truncate leading-tight drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]"
+              >
+                {meta.name}
+              </h3>
+            </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            {canChooseMoveHere ? (
-              <span className="px-1.5 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
-                🧭 Chọn đến
-              </span>
-            ) : destinationLit ? (
-              <span className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
-                🎯 Điểm đến
-              </span>
-            ) : null}
             {isSelfHere && (
-              <span className="px-1.5 py-0.5 rounded-md bg-cyan-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
+              <span className="px-1.5 py-0.5 rounded-md bg-cyan-400 text-slate-950 text-xs font-black whitespace-nowrap shrink-0 shadow">
                 📍 Bạn
               </span>
             )}
-            {hasAttackableOccupant && (
-              <span className="px-1.5 py-0.5 rounded-md bg-rose-500/95 text-white text-[10px] font-black whitespace-nowrap shadow">
-                ⚔️ Tầm đánh
-              </span>
-            )}
+          </div>
+
+          {/* HÀNG 2: ICON + TÊN HÀNH ĐỘNG NGẮN GỌN (>= 12PX) + ĐÍCH ĐẾN / TẦM ĐÁNH */}
+          <div className="flex items-center justify-between gap-1.5 min-w-0">
             <button
               type="button"
               data-testid={`bg-tile-rule-trigger-${locId}`}
@@ -259,20 +250,48 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                   e.stopPropagation();
                 }
               }}
-              className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-extrabold whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+              className={`inline-flex items-center gap-1 min-w-0 max-w-full rounded-md border px-1.5 py-0.5 text-xs font-bold whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                 ruleOpen
                   ? 'border-amber-300 bg-slate-900/95 text-amber-200'
-                  : 'border-white/25 bg-slate-950/85 text-slate-100 hover:border-cyan-300/70'
+                  : 'border-white/25 bg-slate-950/80 text-slate-100 hover:border-cyan-300/70'
               }`}
             >
-              <span data-testid={`bg-tile-action-icon-${locId}`} aria-hidden="true">
+              <span data-testid={`bg-tile-action-icon-${locId}`} aria-hidden="true" className="shrink-0">
                 {meta.actionIcon}
               </span>
-              <span className="hidden 2xl:inline">{meta.badgeText}</span>
-              <span aria-hidden="true" className="text-[9px] opacity-80">
+              <span data-testid={`bg-tile-action-label-${locId}`} className="truncate">
+                {meta.badgeText}
+              </span>
+              <span aria-hidden="true" className="opacity-80 shrink-0">
                 ⓘ
               </span>
             </button>
+
+            <div className="flex items-center gap-1 shrink-0">
+              {canChooseMoveHere ? (
+                <span
+                  title="Chọn làm điểm đến"
+                  className="px-1.5 py-0.5 rounded-md bg-amber-400 text-slate-950 text-xs font-black whitespace-nowrap shadow"
+                >
+                  🧭 Chọn ô
+                </span>
+              ) : destinationLit ? (
+                <span
+                  title="Điểm đến vừa tung xúc xắc"
+                  className="px-1.5 py-0.5 rounded-md bg-emerald-400 text-slate-950 text-xs font-black whitespace-nowrap shadow"
+                >
+                  🎯 Đích
+                </span>
+              ) : null}
+              {hasAttackableOccupant && (
+                <span
+                  title="Có mục tiêu trong tầm đánh"
+                  className="px-1.5 py-0.5 rounded-md bg-rose-500/95 text-white text-xs font-black whitespace-nowrap shadow"
+                >
+                  ⚔️ Đánh
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -285,29 +304,35 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
             onMouseEnter={() => setRuleHovered(true)}
             onMouseLeave={() => setRuleHovered(false)}
             onClick={(e) => e.stopPropagation()}
-            className={`absolute left-2 right-2 top-8 z-40 rounded-xl border border-cyan-400/50 bg-slate-950/95 px-2.5 py-2 shadow-2xl ${
+            className={`absolute left-2 right-2 top-14 z-40 rounded-xl border border-cyan-400/50 bg-slate-950/95 px-2.5 py-2 shadow-2xl ${
               enableBackdropBlur ? 'backdrop-blur-md' : ''
             }`}
           >
-            <p className="text-[11px] font-black text-amber-200 flex items-center gap-1">
+            <p className="text-xs font-black text-amber-200 flex items-center gap-1">
               <span>{meta.actionIcon}</span>
               <span>
                 Ô {meta.diceLabel} · {meta.actionTitle}
               </span>
             </p>
-            <p className="mt-0.5 text-[11px] leading-snug text-slate-200">
+            <p className="mt-0.5 text-xs leading-snug text-slate-200">
               {meta.actionDesc}
             </p>
           </div>
         )}
 
-        {/* KHAY QUÂN CỜ ĐẾ NỔI ĐỨNG TRONG KHU VỰC + TRẠNG THÁI CHỌN */}
+        {/* KHAY QUÂN CỜ ĐẾ NỔI ĐỨNG TRONG KHU VỰC (HỖ TRỢ 1–8 QUÂN CÙNG Ô KHÔNG TRÀN) */}
         <div
           data-testid={`bg-tile-pawns-${locId}`}
-          className="mt-1.5 pt-1 border-t border-white/15 min-h-[28px] flex flex-wrap items-center gap-1"
+          className={`mt-auto pt-1.5 border-t border-white/15 min-h-[30px] ${
+            occupants.length >= 4
+              ? 'grid grid-cols-4 gap-1 items-center'
+              : occupants.length === 3
+                ? 'grid grid-cols-3 gap-1 items-center'
+                : 'flex flex-wrap items-center gap-1.5'
+          }`}
         >
           {occupants.length === 0 ? (
-            <span className="text-[10px] text-slate-400/90 italic drop-shadow">
+            <span className="text-xs text-slate-300/85 italic drop-shadow">
               Trống
             </span>
           ) : (
@@ -315,7 +340,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
               const inAttackRange = attackableIds.has(p.playerId);
               const isSelectedTarget = selectedTargetId === p.playerId;
               const isSelfToken = p.playerId === selfPlayerId;
-              const compactChip = occupants.length >= 3;
+              const crowdedMode = occupants.length >= 3;
               return (
                 <button
                   key={p.playerId}
@@ -340,8 +365,10 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                       e.stopPropagation();
                     }
                   }}
-                  className={`flex items-center gap-1 rounded-full pr-2 pl-0.5 py-0.5 border font-bold shadow-md transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
-                    compactChip ? 'text-[11px]' : 'text-xs'
+                  className={`flex items-center border font-bold shadow-md transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                    crowdedMode
+                      ? 'overflow-hidden min-w-0 w-full gap-1 rounded-lg px-1 py-0.5 text-xs'
+                      : 'min-w-0 max-w-full gap-1.5 rounded-full pr-2 pl-0.5 py-0.5 text-xs'
                   } ${enableBackdropBlur ? 'backdrop-blur-sm' : ''} ${
                     isSelectedTarget
                       ? isSelfToken
@@ -355,8 +382,8 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                   }`}
                 >
                   <PlayerPawnToken
-                    size="xs"
-                    elevated
+                    size={crowdedMode ? '2xs' : 'xs'}
+                    elevated={!crowdedMode}
                     displayName={p.displayName}
                     seatIndex={p.seatIndex}
                     alive={p.alive}
@@ -366,19 +393,19 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                     revealedRoleId={p.revealedRoleId}
                   />
                   <span
-                    className={`truncate ${compactChip ? 'max-w-[74px]' : 'max-w-[116px]'} ${
-                      !p.alive ? 'line-through text-slate-400' : ''
-                    }`}
+                    className={`truncate ${
+                      crowdedMode ? 'min-w-0 flex-1 text-left' : 'max-w-[120px]'
+                    } ${!p.alive ? 'line-through text-slate-400' : ''}`}
                   >
                     {p.displayName}
                   </span>
                   {isSelectedTarget && (
-                    <span className="text-[10px] font-black text-white" aria-hidden="true">
+                    <span className="text-xs font-black text-white shrink-0" aria-hidden="true">
                       ✓
                     </span>
                   )}
                   {inAttackRange && (
-                    <span className="text-[10px] text-amber-200" title="Trong tầm đánh" aria-hidden="true">
+                    <span className="text-xs text-amber-200 shrink-0" title="Trong tầm đánh" aria-hidden="true">
                       ⚔️
                     </span>
                   )}

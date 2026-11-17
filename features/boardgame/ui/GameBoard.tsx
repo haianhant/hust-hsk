@@ -784,13 +784,13 @@ export function GameBoard({
           {/* CỘT CHÍNH (75% TRÊN DESKTOP): BÀN CỜ + THANH HÀNH ĐỘNG ĐÁY */}
           <div
             data-testid="bg-board-main-column"
-            className={`w-full min-w-0 flex-col gap-1.5 lg:h-full lg:min-h-0 ${
+            className={`w-full min-w-0 flex-col justify-between gap-2 lg:h-full lg:min-h-0 ${
               isDesktopLayout || mobileTab === 'board' ? 'flex' : 'hidden'
             }`}
           >
             <div
               data-testid="bg-board-scroll-area"
-              className="flex-1 min-h-0 flex flex-col justify-between gap-1.5 lg:overflow-y-auto lg:pr-0.5"
+              className="flex-1 min-h-0 flex flex-col justify-start gap-2 xl:gap-2.5 lg:overflow-y-auto lg:pr-0.5"
             >
               {/* 1. THANG THƯƠNG TÍCH CÔNG KHAI GỌN 0..14 (Damage Track) */}
               <section
@@ -798,10 +798,10 @@ export function GameBoard({
                 className="shrink-0 rounded-2xl border border-slate-700/80 bg-slate-900/90 px-2.5 py-1.5 space-y-1"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-200">
+                  <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-200">
                     🩸 Thang Thương Tích Công Khai (0 → 14)
                   </h2>
-                  <span className="text-[10px] sm:text-[11px] text-slate-400">
+                  <span className="text-xs text-slate-400">
                     Máu tối đa ẩn tới khi lật vai · 🎯 Mốc của bạn · 💀 Ngưỡng gục đã lộ
                   </span>
                 </div>
@@ -871,7 +871,7 @@ export function GameBoard({
                 </div>
               </section>
 
-              {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI TACTICAL COMPACT (6 ĐỊA ĐIỂM TRỌN VẸN TRONG VIEWPORT) */}
+              {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI TACTICAL SCALING (6 ĐỊA ĐIỂM TRỌN VẸN TRONG VIEWPORT) */}
               <section className="grid grid-cols-1 md:grid-cols-3 gap-2 shrink-0">
                 {boardClusters.map((cluster) => (
                   <div
@@ -880,16 +880,16 @@ export function GameBoard({
                   >
                     <div className="flex items-center justify-between gap-2 px-0.5 shrink-0">
                       <span
-                        className={`px-2 py-0.5 rounded-full border text-[10px] sm:text-[11px] font-black whitespace-nowrap shrink-0 ${cluster.badgeClass}`}
+                        className={`px-2 py-0.5 rounded-full border text-xs font-black whitespace-nowrap shrink-0 ${cluster.badgeClass}`}
                       >
                         {cluster.title}
                       </span>
-                      <span className="text-[10px] font-medium text-slate-400 truncate">
+                      <span className="text-xs font-medium text-slate-400 truncate">
                         Cùng cụm đánh chung
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-rows-2 gap-1.5 flex-1 min-h-0">
+                    <div className="grid grid-cols-1 md:grid-rows-[repeat(2,minmax(clamp(122px,calc(18.5vh_-_22px),176px),auto))] gap-1.5 flex-1 min-h-0">
                       {cluster.locations.map((locId) => {
                         const occupants = publicGame.players.filter(
                           (p) => p.location === locId,

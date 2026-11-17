@@ -662,21 +662,25 @@ export const PlayerPawnToken = React.memo(function PlayerPawnToken({
   revealedRoleId?: BoardGameRoleId | null;
   compact?: boolean;
   elevated?: boolean;
-  size?: 'xs' | 'sm' | 'md';
+  size?: '2xs' | 'xs' | 'sm' | 'md';
 }) {
   const ringHex = SEAT_RING_PALETTE[seatIndex % SEAT_RING_PALETTE.length];
   const initial = derivePawnLabel(displayName, seatIndex);
   const resolvedSize = size ?? (compact ? 'sm' : 'md');
   const sizeClass =
-    resolvedSize === 'xs'
-      ? 'w-7 h-7 text-[10px]'
-      : resolvedSize === 'sm'
-        ? 'w-8 h-8 text-[11px]'
-        : 'w-10 h-10 text-xs';
+    resolvedSize === '2xs'
+      ? 'w-5 h-5 text-[10px]'
+      : resolvedSize === 'xs'
+        ? 'w-7 h-7 text-[10px]'
+        : resolvedSize === 'sm'
+          ? 'w-8 h-8 text-[11px]'
+          : 'w-10 h-10 text-xs';
   const dotClass =
-    resolvedSize === 'xs'
-      ? 'w-2.5 h-2.5 -bottom-0.5 -right-0.5 border'
-      : 'w-3.5 h-3.5 -bottom-1 -right-1 border-2';
+    resolvedSize === '2xs'
+      ? 'w-2 h-2 -bottom-0.5 -right-0.5 border'
+      : resolvedSize === 'xs'
+        ? 'w-2.5 h-2.5 -bottom-0.5 -right-0.5 border'
+        : 'w-3.5 h-3.5 -bottom-1 -right-1 border-2';
   const factionBg =
     revealedFaction === 'lantern-guard'
       ? 'bg-emerald-700'
@@ -698,7 +702,13 @@ export const PlayerPawnToken = React.memo(function PlayerPawnToken({
       }}
       className={`relative shrink-0 rounded-full border-2 ${sizeClass} ${factionBg} ${
         !alive ? 'opacity-50 grayscale' : ''
-      } ${isActive ? 'ring-2 ring-amber-300 ring-offset-2 ring-offset-slate-950 scale-105' : ''} flex items-center justify-center font-black text-white select-none transition-transform`}
+      } ${
+        isActive
+          ? resolvedSize === '2xs'
+            ? 'ring-1 ring-amber-300 ring-offset-1 ring-offset-slate-950'
+            : 'ring-2 ring-amber-300 ring-offset-2 ring-offset-slate-950 scale-105'
+          : ''
+      } flex items-center justify-center font-black text-white select-none transition-transform`}
       title={displayName}
     >
       {elevated && (
