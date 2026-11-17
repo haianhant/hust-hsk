@@ -16,6 +16,7 @@ const {
   encodeMoveTelemetry,
   decodeMoveTelemetry,
 } = require('../../shared/contracts/multiplayer.ts');
+const { SPAWN } = require('../../shared/constants/world.ts');
 
 const PORT = Number(process.argv[2] || 8788);
 const BASE_HTTP = `http://127.0.0.1:${PORT}`;
@@ -187,23 +188,25 @@ function connectClient(room = 'hsk-1') {
 
     // 6. Move & authoritative BOUNDS clamping test
     await new Promise((r) => setTimeout(r, 120));
+    const walkTargetX = SPAWN.x - 0.7;
+    const walkTargetZ = SPAWN.z + 0.5;
     const movePromise = wsB.waitFor((m) => m.type === 'move' && m.id === pubA);
-    wsA.send(JSON.stringify({ type: 'move', x: 94.8, z: -5.5, facing: -1.25, state: 'walking' }));
+    wsA.send(JSON.stringify({ type: 'move', x: walkTargetX, z: walkTargetZ, facing: -1.25, state: 'walking' }));
     const move1 = await movePromise;
     assert(
       'Move broadcast works and preserves facing',
-      Math.abs(move1.x - 94.8) < 0.01 && Math.abs(move1.facing - -1.25) < 0.01,
+      Math.abs(move1.x - walkTargetX) < 0.01 && Math.abs(move1.facing - -1.25) < 0.01,
       JSON.stringify(move1),
     );
 
     // Ride East past maxX (168) -> clamped and capped by riding speed
     await new Promise((r) => setTimeout(r, 120));
     const moveClampPromise = wsB.waitFor((m) => m.type === 'move' && m.id === pubA);
-    wsA.send(JSON.stringify({ type: 'move', x: 200, z: -5.5, facing: Math.PI / 2, state: 'riding' }));
+    wsA.send(JSON.stringify({ type: 'move', x: 200, z: walkTargetZ, facing: Math.PI / 2, state: 'riding' }));
     const moveClamp = await moveClampPromise;
     assert(
       'Move beyond maxX (168) is speed-capped and stays <= 168',
-      moveClamp.x <= 168 && moveClamp.x > 94.8 && moveClamp.state === 'riding',
+      moveClamp.x <= 168 && moveClamp.x > walkTargetX && moveClamp.state === 'riding',
       JSON.stringify(moveClamp),
     );
 

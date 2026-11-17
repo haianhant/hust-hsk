@@ -978,8 +978,8 @@ test('(9) Move telemetry envelope, multi-floor library & classroom visibility sy
     resolveUrlFn: () => ({ ok: true, url: 'ws://127.0.0.1:8788/ws', source: 'test-override' }),
   });
 
-  // Prime clientA and clientB local move context at SPAWN (95.5, -6) before welcome
-  clientA.sendMove(95.5, -6, -Math.PI / 2, 'idle', {
+  // Prime clientA and clientB local move context at SPAWN (85.0, -10.4) before welcome
+  clientA.sendMove(world.SPAWN.x, world.SPAWN.z, -Math.PI / 2, 'idle', {
     scene: 'campus',
     libraryFloor: 1,
     seatedSeatId: null,
@@ -1005,7 +1005,7 @@ test('(9) Move telemetry envelope, multi-floor library & classroom visibility sy
   );
   sockA.onopen();
 
-  clientB.sendMove(95.5, -6, 0.5, 'idle', {
+  clientB.sendMove(world.SPAWN.x, world.SPAWN.z, 0.5, 'idle', {
     scene: 'campus',
     libraryFloor: 1,
     seatedSeatId: null,
@@ -1032,16 +1032,16 @@ test('(9) Move telemetry envelope, multi-floor library & classroom visibility sy
   );
   sockB.onopen();
 
-  // Both clients must immediately see each other at (95.5, -6) (NOT -76, 10!) with full appearance
+  // Both clients must immediately see each other at SPAWN (NOT -76, 10!) with full appearance
   const aSeesB = clientA.getRemotePlayer('p-bob');
   const bSeesA = clientB.getRemotePlayer('p-alice');
   assert.ok(aSeesB && bSeesA, 'Both clients must see each other in players map');
-  assert.equal(aSeesB.x, 95.5);
-  assert.equal(aSeesB.z, -6);
+  assert.equal(aSeesB.x, world.SPAWN.x);
+  assert.equal(aSeesB.z, world.SPAWN.z);
   assert.equal(aSeesB.outfit, 'polo-red');
   assert.equal(aSeesB.gender, 'female');
-  assert.equal(bSeesA.x, 95.5);
-  assert.equal(bSeesA.z, -6);
+  assert.equal(bSeesA.x, world.SPAWN.x);
+  assert.equal(bSeesA.z, world.SPAWN.z);
   assert.equal(bSeesA.outfit, 'windbreaker-hust');
 
   // Client A enters Library Floor 4 (-10.8, -18.5)
@@ -1236,11 +1236,11 @@ test('(21) HskRoom synchronizes football actions across players and survives hib
     wsA,
     JSON.stringify({
       type: 'move',
-      x: 95.5,
-      z: -6,
+      x: world.SPAWN.x,
+      z: world.SPAWN.z,
       facing: mpContracts.encodeMoveTelemetry({
-        x: 95.5,
-        z: -6,
+        x: world.SPAWN.x,
+        z: world.SPAWN.z,
         facing: 0,
         scene: 'boardgame',
         seatedSeatId: 'bg-t1-s0',

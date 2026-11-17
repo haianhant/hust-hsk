@@ -24,7 +24,7 @@ import { findNearestLibrarySeat, SEAT_INTERACT_RADIUS } from './seat-interaction
 
 export const TOAST_MS = 2500;
 export const SPEECH_RATES = [0.6, 0.8, 1.0] as const;
-export const MINH_POS = { x: -72, z: -8.5 };
+export const MINH_POS = { x: 84.4, z: -12.2 };
 export const MINH_RADIUS = 2.5;
 
 export type BkhnHook = {

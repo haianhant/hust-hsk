@@ -3044,13 +3044,12 @@ function toRemotePlayer(raw: unknown): RemotePlayer | null {
       mergedAppearance = { ...dec.appearance, ...mergedAppearance };
     }
   } else if (
-    rawX === -76 &&
-    rawZ === 10 &&
+    ((rawX === -76 && rawZ === 10) || (rawX === 95.5 && rawZ === -6)) &&
     Math.abs(rawFacing - -Math.PI / 2) < 1e-4 &&
     mergedAppearance.outfit === undefined
   ) {
-    // Legacy deployed Worker initializes sessions at (-76, 10) before the first move arrives;
-    // map initial spawn to the canonical SPAWN (95.5, -6).
+    // Legacy Worker builds may initialize sessions at (-76, 10) or (95.5, -6) before the first
+    // move arrives; map initial spawn to the canonical SPAWN (85.0, -10.4).
     x = SPAWN.x;
     z = SPAWN.z;
   }

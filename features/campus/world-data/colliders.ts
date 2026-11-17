@@ -348,7 +348,7 @@ export const TREE_TRUNKS: Vec2[] = [
 
 /** Danh sách NPC đứng/ngồi tĩnh trong sân trường (Minh + các nhóm sinh viên trò chuyện/đọc sách) — không đi xuyên qua người khác. */
 export const NPC_CIRCLES: { pos: Vec2; radius: number; name?: string }[] = [
-  { pos: { x: -72, z: -8.5 }, radius: 0.5, name: 'Minh (NPC)' },
+  { pos: { x: 84.4, z: -12.2 }, radius: 0.5, name: 'Minh (NPC)' },
   // Sinh viên đứng chờ tại Nhà chờ Xe buýt Cổng Parabol
   { pos: { x: -86.8, z: 7.2 }, radius: 0.42, name: 'Sinh viên (NPC)' },
   // Nhóm 1: 2 sinh viên đứng trò chuyện tại sân Quảng trường C1 (bên cạnh Đài phun nước lớn)

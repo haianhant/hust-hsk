@@ -117,10 +117,12 @@ import {
 } from '../shared/contracts/boardgame';
 import type { MemoryBoardId } from '../features/social/memory-wall/memory-wall';
 import { EntryScreen, type HandbookTab } from '../features/learning/hsk/EntryScreen';
-import type {
-  LearningPanelType,
-  ReviewSessionState,
-} from '../features/learning/hsk/LearningOverlayModal';
+import type { LearningPanelType, ReviewSessionState } from '../features/learning/hsk/LearningOverlayModal';
+import { CampusWelcomeIntro } from '../features/campus/ui/CampusWelcomeIntro';
+import {
+  hasCompletedCampusIntro,
+  markCampusIntroCompleted,
+} from '../features/campus/ui/welcome-intro-state';
 import { useMultiplayerBridge } from '../features/social/multiplayer';
 import {
   derivePlayerPresence,
@@ -302,6 +304,10 @@ function syncBoardGameClubHookWhenReady(intervalMs = 120, maxAttempts = 120): ()
 export default function HomePage() {
   const [entered, setEntered] = useState(false);
   const [sceneFirstFrameReady, setSceneFirstFrameReady] = useState(false);
+  const [loadWave, setLoadWave] = useState<0 | 1 | 2 | 3>(0);
+  const [loadingPct, setLoadingPct] = useState<number>(22);
+  const [welcomeIntroOpen, setWelcomeIntroOpen] = useState<boolean>(false);
+  const introCheckedRef = useRef<boolean>(false);
   const [zone, setZone] = useState(playerState.zone);
   const [viewMode, setViewMode] = useState<CameraViewMode>(playerState.viewMode);
   const [photoMode, setPhotoMode] = useState<boolean>(false);
@@ -465,16 +471,57 @@ export default function HomePage() {
 
   useEffect(() => {
     if (entered) {
+      if (sceneFirstFrameReady) {
+        setLoadingPct(100);
+        return;
+      }
+      setLoadingPct(22);
+      const t1 = window.setTimeout(() => setLoadingPct((p) => Math.max(p, 54)), 140);
+      const t2 = window.setTimeout(() => setLoadingPct((p) => Math.max(p, 82)), 320);
       const safetyTimer = window.setTimeout(() => setSceneFirstFrameReady(true), 2200);
-      return () => window.clearTimeout(safetyTimer);
+      return () => {
+        window.clearTimeout(t1);
+        window.clearTimeout(t2);
+        window.clearTimeout(safetyTimer);
+      };
     }
     setSceneFirstFrameReady(false);
+    setLoadingPct(22);
     const preloadTimer = window.setTimeout(() => {
       void import('../components/three/CampusScene');
       void import('../features/campus/ui/CampusHud');
     }, 250);
     return () => window.clearTimeout(preloadTimer);
-  }, [entered]);
+  }, [entered, sceneFirstFrameReady]);
+
+  // Intro chào tân sinh viên của Bạn học Minh — chỉ tự động mở đúng 1 lần ở lần vào đầu.
+  useEffect(() => {
+    if (
+      !entered ||
+      !sceneFirstFrameReady ||
+      inClassroom ||
+      inLibraryLobby ||
+      inBoardGameClub ||
+      introCheckedRef.current
+    ) {
+      return;
+    }
+    introCheckedRef.current = true;
+    try {
+      if (!hasCompletedCampusIntro(window.localStorage)) {
+        markCampusIntroCompleted(window.localStorage);
+        setWelcomeIntroOpen(true);
+      }
+    } catch {
+      // Bỏ qua nếu môi trường không cho phép đọc localStorage
+    }
+  }, [entered, sceneFirstFrameReady, inClassroom, inLibraryLobby, inBoardGameClub]);
+
+  useEffect(() => {
+    if (inClassroom || inLibraryLobby || inBoardGameClub || photoMode) {
+      setWelcomeIntroOpen(false);
+    }
+  }, [inClassroom, inLibraryLobby, inBoardGameClub, photoMode]);
 
   const [noVoice, setNoVoice] = useState(false);
   const noVoiceDismissedRef = useRef(false);
@@ -1992,6 +2039,7 @@ export default function HomePage() {
     setLessonsOpen(false);
     setReReviewIds(null);
     setFade(true);
+    window.dispatchEvent(new CustomEvent('bkhn:fast-travel', { detail: { destId } }));
     window.setTimeout(() => {
       const r = hook.fastTravel?.(destId);
       if (r?.ok) {
@@ -2796,10 +2844,11 @@ export default function HomePage() {
               onObjectClick={handleObjectClick}
               onSelectBoardGameSeat={handleSelectBoardGameSeat}
               onFirstFrameReady={() => setSceneFirstFrameReady(true)}
+              onLoadWaveChange={setLoadWave}
             />
           </div>
 
-          {/* Màn chuyển cảnh mượt không nháy trắng khi khởi tạo khung hình 3D đầu tiên */}
+          {/* Màn chuyển cảnh mượt kèm thanh tiến trình thực khi khởi tạo khu vực đầu tiên */}
           <div
             data-testid="campus-loading-overlay"
             aria-hidden={sceneFirstFrameReady}
@@ -2812,11 +2861,25 @@ export default function HomePage() {
                 BK
               </div>
               <p className="text-sm font-extrabold tracking-wide text-amber-200 sm:text-base">
-                Đang khởi tạo khuôn viên 3D ĐHBK Hà Nội...
+                {sceneFirstFrameReady
+                  ? 'Hoàn tất — chào mừng tới ĐHBK Hà Nội!'
+                  : loadWave === 0 && loadingPct < 55
+                    ? 'Đang khởi tạo động cơ 3D...'
+                    : 'Đang dựng Cổng Trần Đại Nghĩa & Tòa C7...'}
               </p>
-              <div className="h-1.5 w-48 overflow-hidden rounded-full bg-white/15">
-                <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-[#B5121B] via-amber-400 to-emerald-400" />
+              <div className="h-2 w-56 overflow-hidden rounded-full bg-white/15">
+                <div
+                  data-testid="campus-loading-bar"
+                  style={{ width: `${loadingPct}%` }}
+                  className="h-full rounded-full bg-gradient-to-r from-[#B5121B] via-amber-400 to-emerald-400 transition-[width] duration-200 ease-out"
+                />
               </div>
+              <p
+                data-testid="campus-loading-pct"
+                className="font-mono text-xs font-semibold tabular-nums text-white/75"
+              >
+                {loadingPct}%
+              </p>
             </div>
           </div>
 
@@ -2917,9 +2980,34 @@ export default function HomePage() {
               onExitClassroom={exitClassroomFade}
               onInteract={handleInteract}
               onSetHelpOpen={setHelpOpen}
+              onReopenWelcomeIntro={() => setWelcomeIntroOpen(true)}
               onShowToast={showToast}
             />
           )}
+
+          {/* Thẻ giới thiệu lần đầu của Bạn học Minh — tự mở duy nhất 1 lần ở lần vào đầu */}
+          <CampusWelcomeIntro
+            open={
+              welcomeIntroOpen &&
+              !photoMode &&
+              !inClassroom &&
+              !inLibraryLobby &&
+              !inBoardGameClub &&
+              panel === null &&
+              !lessonsOpen &&
+              !outfitOpen &&
+              !campusQuestsOpen &&
+              !memoryWallOpen &&
+              !study.studyPanelOpen
+            }
+            playerName={characterProfile.name}
+            onClose={() => {
+              markCampusIntroCompleted(
+                typeof window !== 'undefined' ? window.localStorage : undefined,
+              );
+              setWelcomeIntroOpen(false);
+            }}
+          />
 
           {/* Bảng điều khiển Thang máy & Chuyển tầng Thư viện Tạ Quang Bửu (Tầng 1–10) */}
           {inLibraryLobby && !study.focusPolicy.suspend3DRendering && (

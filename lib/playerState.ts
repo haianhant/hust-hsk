@@ -237,3 +237,17 @@ export function computeLibraryElevation(
 ): { y: number; floor: LibraryFloor } {
   return computeCanonicalLibraryElevation(x, z, currentFloor, currentY);
 }
+
+/**
+ * Giới hạn pixel ratio tối đa cho WebGL renderer (tối đa 2× để màn hình Retina
+ * & điện thoại 390px sắc nét, đồng thời giữ 1× trên trình render phần mềm CI).
+ */
+export function computeTargetRendererDpr(
+  devicePixelRatio: number,
+  isSoftware: boolean,
+): number {
+  if (isSoftware) return 1;
+  const raw = Number(devicePixelRatio);
+  const safeDpr = Number.isFinite(raw) && raw > 0 ? raw : 1;
+  return Math.min(Math.max(1, safeDpr), 2);
+}

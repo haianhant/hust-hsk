@@ -150,13 +150,24 @@ test('(6) nearestZone, nearestRoadPoint, findFreeSpotNear, and getFastTravelDest
     nearestRoadPoint,
     findFreeSpotNear,
     getFastTravelDestination,
+    resolveCollisions,
     resolveBikeCollisions,
+    AVATAR,
     BIKE_RADIUS,
+    NPC_CIRCLES,
     SPAWN,
   } = campusFacade;
 
-  // Default SPAWN is at Cổng Trần Đại Nghĩa (95.5, -6)
-  assert.deepEqual(SPAWN, { x: 95.5, z: -6 });
+  // Default SPAWN is ~7 m inside Cổng Trần Đại Nghĩa (85.0, -10.4), beside Minh (NPC)
+  assert.deepEqual(SPAWN, { x: 85.0, z: -10.4 });
+  const gateDist = Math.abs(92 - SPAWN.x);
+  assert.ok(gateDist >= 5 && gateDist <= 10, `Expected SPAWN 5-10m inside gate, got ${gateDist}m`);
+  assert.equal(resolveCollisions(SPAWN, AVATAR.radius).hit, null);
+  const minhPos = NPC_CIRCLES[0].pos;
+  assert.ok(
+    Math.hypot(SPAWN.x - minhPos.x, SPAWN.z - minhPos.z) <= 2.5,
+    'SPAWN must be within interaction radius of Minh at Cổng Trần Đại Nghĩa',
+  );
   assert.equal(nearestZone(SPAWN), 'Cổng Trần Đại Nghĩa (Cổng B8)');
   assert.equal(nearestZone({ x: -88, z: -6 }), 'Cổng Parabol');
   assert.equal(nearestZone({ x: -60, z: -17 }), 'Nhà C9'); // C9 fast-travel spot in West C-cluster, separated from Tien Lake
@@ -180,8 +191,8 @@ test('(6) nearestZone, nearestRoadPoint, findFreeSpotNear, and getFastTravelDest
   // getFastTravelDestination lookup
   assert.equal(getFastTravelDestination('library')?.name, 'Thư viện Tạ Quang Bửu');
   assert.equal(getFastTravelDestination('spawn')?.desc, 'Cổng Trần Đại Nghĩa');
-  assert.equal(getFastTravelDestination('spawn')?.x, 95.5);
-  assert.equal(getFastTravelDestination('spawn')?.z, -6);
+  assert.equal(getFastTravelDestination('spawn')?.x, 85.0);
+  assert.equal(getFastTravelDestination('spawn')?.z, -10.4);
   assert.equal(getFastTravelDestination('non-existent'), undefined);
 });
 

@@ -191,6 +191,7 @@ export interface CampusHudProps {
   onExitClassroom: () => void;
   onInteract: () => void;
   onSetHelpOpen: (open: boolean) => void;
+  onReopenWelcomeIntro?: () => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -254,15 +255,18 @@ export function CampusHud({
   onExitClassroom,
   onInteract,
   onSetHelpOpen,
+  onReopenWelcomeIntro,
 }: CampusHudProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileFastTravelExpanded, setMobileFastTravelExpanded] = useState(false);
+  const [desktopMoreOpen, setDesktopMoreOpen] = useState(false);
   const hideNav = focusPolicy?.hideNavigationHud ?? false;
   const hideMove = focusPolicy?.hideMovementControls ?? false;
   const isMinimalHud = focusPolicy?.effectiveLevel === 'minimal-hud';
   const hasMobileActiveIndicator = Boolean(
     lofiPlaying || hskMode || (pomodoro && pomodoro.phase !== 'idle'),
   );
+  const hasDesktopMoreBadge = unclaimedQuestCount > 0 || hskMode || lofiPlaying;
 
   return (
     <div className="pointer-events-none absolute inset-0">
@@ -275,6 +279,14 @@ export function CampusHud({
             setMobileFastTravelExpanded(false);
           }}
           className="pointer-events-auto fixed inset-0 z-30 bg-black/20 sm:hidden"
+        />
+      )}
+      {/* Lớp nền chạm ngoài để đóng menu ⋯ Tiện ích trên Desktop */}
+      {desktopMoreOpen && (
+        <div
+          aria-hidden="true"
+          onClick={() => setDesktopMoreOpen(false)}
+          className="pointer-events-auto fixed inset-0 z-30 hidden sm:block"
         />
       )}
 
@@ -290,19 +302,32 @@ export function CampusHud({
                 : zone}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <div className="w-fit rounded-full bg-[#A54432]/90 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm sm:px-4 sm:py-1.5 sm:text-sm">
+          <div className="w-fit rounded-full bg-[#A54432]/90 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm sm:hidden">
             ⭐ {progress?.points ?? 0} điểm
             {progress?.streak && progress.streak.count > 0 ? ` · 🔥 ${progress.streak.count} ngày` : ''}
           </div>
-          {!inBoardGameClub && (
+          {!inBoardGameClub ? (
             <button
-              id="hud-checkin-badge"
+              id="open-handbook"
+              data-testid="hud-checkin-badge"
               type="button"
               onClick={() => onOpenHandbook('lesson')}
-              className="pointer-events-auto hidden w-fit rounded-full border border-amber-300/45 bg-slate-900/80 px-3.5 py-1.5 text-xs font-bold text-amber-200 shadow-md backdrop-blur-sm transition hover:bg-slate-800 sm:inline-flex"
+              className="pointer-events-auto hidden w-fit items-center gap-1.5 rounded-full border border-amber-300/45 bg-slate-900/85 px-3.5 py-1.5 text-xs font-bold text-amber-100 shadow-md backdrop-blur-sm transition hover:bg-slate-800 sm:inline-flex"
             >
-              📍 Check-in {checkedInCount}/{totalLandmarks} tòa
+              <span>📍 Check-in {checkedInCount}/{totalLandmarks} tòa</span>
+              <span className="text-white/40">·</span>
+              <span className="text-amber-300">
+                ⭐ {progress?.points ?? 0}
+                {progress?.streak && progress.streak.count > 0
+                  ? ` · 🔥 ${progress.streak.count} ngày`
+                  : ''}
+              </span>
             </button>
+          ) : (
+            <div className="hidden w-fit rounded-full bg-[#A54432]/90 px-4 py-1.5 text-sm font-bold text-white backdrop-blur-sm sm:block">
+              ⭐ {progress?.points ?? 0} điểm
+              {progress?.streak && progress.streak.count > 0 ? ` · 🔥 ${progress.streak.count} ngày` : ''}
+            </div>
           )}
         </div>
         {/* Đợt 5 multiplayer — phòng + số người THẬT trong phòng; mất
@@ -460,7 +485,7 @@ export function CampusHud({
           {mobileMenuOpen && (
             <div
               data-testid="mobile-hud-menu-drawer"
-              className="mt-2 flex max-h-[calc(100dvh-5rem)] w-[min(88vw,292px)] flex-col gap-1 overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/92 p-2 text-white shadow-2xl backdrop-blur-xl"
+              className="mt-2 flex max-h-[calc(100dvh-5rem)] w-[min(88vw,292px)] flex-col gap-1 overflow-y-auto rounded-2xl border border-white/15 bg-slate-950/95 p-2 text-white shadow-2xl backdrop-blur-xl"
             >
               <div className="px-2.5 py-1 text-[10px] font-bold tracking-wider text-amber-300/90 uppercase">
                 Tiện ích Bách Khoa 3D
@@ -764,6 +789,23 @@ export function CampusHud({
               )}
 
               <div className="border-t border-white/10 pt-1">
+                {!inClassroom && !inLibraryLobby && !inBoardGameClub && onReopenWelcomeIntro && (
+                  <button
+                    type="button"
+                    data-testid="mobile-menu-welcome-intro"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onReopenWelcomeIntro();
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-rose-200 transition hover:bg-white/10 active:bg-white/15"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="text-base leading-none">👋</span>
+                      <span>Xem lại giới thiệu</span>
+                    </span>
+                    <span className="text-white/50">›</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   data-testid="mobile-menu-safe-pos"
@@ -783,8 +825,8 @@ export function CampusHud({
           )}
         </div>
 
-        {/* Cụm nút trên Desktop (sm:flex) */}
-        <div className="pointer-events-auto hidden max-w-[calc(100vw-480px)] flex-wrap justify-end gap-1.5 sm:flex lg:max-w-[calc(100vw-520px)]">
+        {/* Cụm nút trên Desktop (sm:flex) — tinh gọn chỉ giữ 3 nút chính + nút ⋯ Tiện ích */}
+        <div className="pointer-events-auto hidden items-center justify-end gap-1.5 sm:flex">
           {!inBoardGameClub && onOpenStudyPanel && (
             <StudyHudButton
               pomodoro={pomodoro}
@@ -792,32 +834,16 @@ export function CampusHud({
               onReconcileStudyAt={onReconcileStudyAt}
             />
           )}
-          {!inBoardGameClub && onOpenLeaderboard && (
+          {!hideNav && (
             <button
-              id="open-study-leaderboard"
-              data-testid="open-study-leaderboard"
+              id="toggle-outfit"
+              data-testid="hud-outfit-btn"
               type="button"
-              onClick={onOpenLeaderboard}
-              title="Bảng xếp hạng giờ học Bách khoa"
-              className="whitespace-nowrap rounded-full bg-amber-600/90 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-amber-700 sm:text-[13px]"
+              onClick={onToggleOutfit}
+              aria-label="Nhân vật và trang phục"
+              className="whitespace-nowrap rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold tabular-nums text-white shadow-lg backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
             >
-              🏆 Xếp hạng
-            </button>
-          )}
-          {onToggleLofi && (
-            <button
-              id="toggle-lofi"
-              data-testid="toggle-lofi"
-              type="button"
-              onClick={onToggleLofi}
-              aria-label={lofiPlaying ? 'Tắt nhạc Lofi Chill' : 'Bật nhạc Lofi Chill học tập'}
-              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-lg backdrop-blur-sm transition sm:text-[13px] ${
-                lofiPlaying
-                  ? 'bg-amber-600/95 ring-1 ring-amber-300/60 hover:bg-amber-700'
-                  : 'bg-black/50 hover:bg-black/70'
-              }`}
-            >
-              {lofiPlaying ? '🎵 Lofi Chill' : '🎧 Nhạc Lofi'}
+              👕 Trang phục
             </button>
           )}
           {!hideNav && (
@@ -832,7 +858,7 @@ export function CampusHud({
                   ? 'Đang tự động theo giờ thực ngoài đời — bấm để chuyển thủ công'
                   : 'Đang chỉnh giờ thủ công — bấm để xoay vòng hoặc quay về Tự động'
               }
-              className="whitespace-nowrap rounded-full bg-black/50 px-3 py-1.5 text-xs font-semibold tabular-nums text-white backdrop-blur-sm transition hover:bg-black/70 sm:text-[13px]"
+              className="whitespace-nowrap rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold tabular-nums text-white shadow-lg backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
             >
               {timeOfDay === 'day' ? '☀️ Ngày' : timeOfDay === 'sunset' ? '🌇 Hoàng hôn' : '🌙 Đêm'}
               {realClockText ? (
@@ -845,102 +871,251 @@ export function CampusHud({
               ) : null}
             </button>
           )}
-          {!hideNav && (
-            <button
-              id="toggle-outfit"
-              data-testid="hud-outfit-btn"
-              type="button"
-              onClick={onToggleOutfit}
-              aria-label="Nhân vật và trang phục"
-              className="whitespace-nowrap rounded-full bg-black/50 px-3 py-1.5 text-xs font-semibold tabular-nums text-white backdrop-blur-sm transition hover:bg-black/70 sm:text-[13px]"
-            >
-              👕 Nhân vật &amp; trang phục
-            </button>
-          )}
-          {!hideNav && !inBoardGameClub && onOpenCampusQuests && (
-            <button
-              id="open-campus-quests"
-              data-testid="open-campus-quests"
-              type="button"
-              onClick={onOpenCampusQuests}
-              className="relative whitespace-nowrap rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
-            >
-              🎒 Nhiệm vụ SV
-              {unclaimedQuestCount > 0 && (
-                <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-extrabold text-slate-950">
-                  {unclaimedQuestCount}
-                </span>
-              )}
-            </button>
-          )}
-          {!hideNav && !inBoardGameClub && onOpenMemoryWall && (
-            <button
-              id="open-memory-wall"
-              data-testid="open-memory-wall"
-              type="button"
-              onClick={onOpenMemoryWall}
-              className="whitespace-nowrap rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
-            >
-              📌 Lưu bút
-            </button>
-          )}
-          {!hideNav && !inBoardGameClub && onOpenPhotoMode && (
-            <button
-              id="open-photo-mode"
-              data-testid="open-photo-mode"
-              type="button"
-              onClick={onOpenPhotoMode}
-              title="Chụp ảnh & xuất Bưu thiếp Kỷ yếu (Phím P)"
-              className="whitespace-nowrap rounded-full bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
-            >
-              📸 Chụp ảnh
-            </button>
-          )}
-          {!hideNav && onTogglePov && (
-            <button
-              id="toggle-pov"
-              data-testid="toggle-pov"
-              type="button"
-              onClick={onTogglePov}
-              title="Chuyển góc nhìn thứ 3 / thứ 1 (Phím V)"
-              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition sm:text-[13px] ${
-                viewMode === 'pov'
-                  ? 'bg-[#1D4ED8]/90 ring-1 ring-sky-300/70 hover:bg-[#1E40AF]'
-                  : 'bg-black/55 hover:bg-black/75'
-              }`}
-            >
-              {viewMode === 'pov' ? '👁️ Góc nhìn 1' : '🎥 Góc nhìn 3'}
-            </button>
-          )}
           {!inBoardGameClub && (
-            <button
-              id="open-handbook"
-              type="button"
-              onClick={() => onOpenHandbook('lesson')}
-              className="whitespace-nowrap rounded-full bg-black/55 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/75 sm:text-[13px]"
-            >
-              🗺️ Sổ tay
-            </button>
-          )}
-          {!inBoardGameClub && onToggleHskMode && (
-            <button
-              id="toggle-hsk-mode"
-              data-testid="toggle-hsk-mode"
-              type="button"
-              onClick={onToggleHskMode}
-              title={
-                hskMode
-                  ? 'Đang bật Chế độ Học tiếng Trung (HSK) — bấm để tắt về thuần mô phỏng Bách Khoa 3D'
-                  : 'Đang tắt Chế độ HSK — bấm để bật thêm Học tiếng Trung tại Tòa C7 & Từ vựng sân trường'
-              }
-              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold shadow-lg backdrop-blur-sm transition sm:text-[13px] ${
-                hskMode
-                  ? 'bg-[#B5121B]/95 text-white ring-1 ring-amber-300/70 hover:bg-[#8F1418]'
-                  : 'border border-white/20 bg-black/55 text-white/90 hover:bg-black/75'
-              }`}
-            >
-              {hskMode ? '🇨🇳 HSK: Bật' : '🇨🇳 HSK: Tắt'}
-            </button>
+            <div className="relative">
+              <button
+                id="desktop-more-menu-btn"
+                data-testid="desktop-more-menu-btn"
+                type="button"
+                aria-expanded={desktopMoreOpen}
+                onClick={() => setDesktopMoreOpen((v) => !v)}
+                className={`relative flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-md transition sm:text-[13px] ${
+                  desktopMoreOpen
+                    ? 'border-amber-300/60 bg-slate-900/95'
+                    : 'border-white/20 bg-slate-950/75 hover:bg-slate-900/90'
+                }`}
+              >
+                <span>⋯ Tiện ích</span>
+                {unclaimedQuestCount > 0 ? (
+                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-extrabold text-slate-950">
+                    {unclaimedQuestCount}
+                  </span>
+                ) : (
+                  hasDesktopMoreBadge && (
+                    <span className="h-2 w-2 rounded-full bg-amber-400" />
+                  )
+                )}
+              </button>
+
+              {desktopMoreOpen && (
+                <div
+                  data-testid="desktop-hud-more-popover"
+                  className="absolute right-0 top-full z-40 mt-2 flex w-64 flex-col gap-1 rounded-2xl border border-white/15 bg-slate-950/95 p-2 text-white shadow-2xl backdrop-blur-xl"
+                >
+                  <div className="px-2.5 py-1 text-[10px] font-bold tracking-wider text-amber-300/90 uppercase">
+                    Tiện ích Bách Khoa 3D
+                  </div>
+
+                  {onOpenLeaderboard && (
+                    <button
+                      id="open-study-leaderboard"
+                      data-testid="open-study-leaderboard"
+                      type="button"
+                      onClick={() => {
+                        setDesktopMoreOpen(false);
+                        onOpenLeaderboard();
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>🏆</span>
+                        <span>Bảng xếp hạng giờ học</span>
+                      </span>
+                      <span className="text-white/50">›</span>
+                    </button>
+                  )}
+
+                  {onToggleLofi && (
+                    <button
+                      id="toggle-lofi"
+                      data-testid="toggle-lofi"
+                      type="button"
+                      onClick={onToggleLofi}
+                      aria-label={lofiPlaying ? 'Tắt nhạc Lofi Chill' : 'Bật nhạc Lofi Chill học tập'}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>{lofiPlaying ? '🎵' : '🎧'}</span>
+                        <span>Nhạc Lofi Chill</span>
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                          lofiPlaying ? 'bg-amber-500 text-slate-950' : 'bg-white/10 text-white/75'
+                        }`}
+                      >
+                        {lofiPlaying ? 'Đang bật' : 'Tắt'}
+                      </span>
+                    </button>
+                  )}
+
+                  {!hideNav && onOpenCampusQuests && (
+                    <button
+                      id="open-campus-quests"
+                      data-testid="open-campus-quests"
+                      type="button"
+                      onClick={() => {
+                        setDesktopMoreOpen(false);
+                        onOpenCampusQuests();
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>🎒</span>
+                        <span>Nhiệm vụ Sinh viên</span>
+                      </span>
+                      {unclaimedQuestCount > 0 ? (
+                        <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[11px] font-extrabold text-slate-950">
+                          +{unclaimedQuestCount}
+                        </span>
+                      ) : (
+                        <span className="text-white/50">›</span>
+                      )}
+                    </button>
+                  )}
+
+                  {!hideNav && onOpenMemoryWall && (
+                    <button
+                      id="open-memory-wall"
+                      data-testid="open-memory-wall"
+                      type="button"
+                      onClick={() => {
+                        setDesktopMoreOpen(false);
+                        onOpenMemoryWall();
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>📌</span>
+                        <span>Lưu bút Sân trường</span>
+                      </span>
+                      <span className="text-white/50">›</span>
+                    </button>
+                  )}
+
+                  {!hideNav && onOpenPhotoMode && (
+                    <button
+                      id="open-photo-mode"
+                      data-testid="open-photo-mode"
+                      type="button"
+                      onClick={() => {
+                        setDesktopMoreOpen(false);
+                        onOpenPhotoMode();
+                      }}
+                      title="Chụp ảnh & xuất Bưu thiếp Kỷ yếu (Phím P)"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>📸</span>
+                        <span>Chụp ảnh &amp; Bưu thiếp (P)</span>
+                      </span>
+                      <span className="text-white/50">›</span>
+                    </button>
+                  )}
+
+                  {!hideNav && onTogglePov && (
+                    <button
+                      id="toggle-pov"
+                      data-testid="toggle-pov"
+                      type="button"
+                      onClick={() => {
+                        setDesktopMoreOpen(false);
+                        onTogglePov();
+                      }}
+                      title="Chuyển góc nhìn thứ 3 / thứ 1 (Phím V)"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>{viewMode === 'pov' ? '👁️' : '🎥'}</span>
+                        <span>Đổi góc nhìn (V)</span>
+                      </span>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-amber-200">
+                        {viewMode === 'pov' ? 'Thứ 1' : 'Thứ 3'}
+                      </span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    data-testid="desktop-more-handbook"
+                    onClick={() => {
+                      setDesktopMoreOpen(false);
+                      onOpenHandbook('lesson');
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>🗺️</span>
+                      <span>Sổ tay &amp; Check-in</span>
+                    </span>
+                    <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-200">
+                      {checkedInCount}/{totalLandmarks}
+                    </span>
+                  </button>
+
+                  {onToggleHskMode && (
+                    <button
+                      id="toggle-hsk-mode"
+                      data-testid="toggle-hsk-mode"
+                      type="button"
+                      onClick={onToggleHskMode}
+                      title={
+                        hskMode
+                          ? 'Đang bật Chế độ Học tiếng Trung (HSK) — bấm để tắt về thuần mô phỏng Bách Khoa 3D'
+                          : 'Đang tắt Chế độ HSK — bấm để bật thêm Học tiếng Trung tại Tòa C7 & Từ vựng sân trường'
+                      }
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white transition hover:bg-white/10"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>🇨🇳</span>
+                        <span>Chế độ HSK</span>
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                          hskMode ? 'bg-[#B5121B] text-white' : 'bg-white/10 text-white/75'
+                        }`}
+                      >
+                        {hskMode ? 'Bật' : 'Tắt'}
+                      </span>
+                    </button>
+                  )}
+
+                  {!inClassroom && !inLibraryLobby && onReopenWelcomeIntro && (
+                    <button
+                      type="button"
+                      data-testid="desktop-more-welcome-intro"
+                      onClick={() => {
+                        setDesktopMoreOpen(false);
+                        onReopenWelcomeIntro();
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-rose-200 transition hover:bg-white/10"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>👋</span>
+                        <span>Xem lại giới thiệu</span>
+                      </span>
+                      <span className="text-white/50">›</span>
+                    </button>
+                  )}
+
+                  <div className="border-t border-white/10 pt-1">
+                    <button
+                      id="safe-position"
+                      type="button"
+                      onClick={() => {
+                        playerInput.resetToken += 1;
+                        setDesktopMoreOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold text-white/85 transition hover:bg-white/10"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>🛟</span>
+                        <span>Về vị trí an toàn</span>
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {inClassroom && (
             <>
@@ -1056,16 +1231,6 @@ export function CampusHud({
             🚶 Đứng dậy (E)
           </button>
         )}
-        <button
-          id="safe-position"
-          type="button"
-          onClick={() => {
-            playerInput.resetToken += 1;
-          }}
-          className="pointer-events-auto hidden rounded-full bg-black/50 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-white sm:inline-flex"
-        >
-          Về vị trí an toàn
-        </button>
       </div>
 
       {/* Đợt 3 giai đoạn 4 — cụm lái mobile khi đang lái xe: nút ga/phanh
