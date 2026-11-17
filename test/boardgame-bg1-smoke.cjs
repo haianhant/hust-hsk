@@ -213,6 +213,28 @@ async function main() {
     }
     await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-01-exterior.png'), timeout: 120000 });
 
+    const campus3dBefore = await page.evaluate(() => {
+      return new Promise((resolve) => {
+        const deltas = [];
+        let prev = performance.now();
+        const t0 = prev;
+        function tick(now) {
+          deltas.push(now - prev);
+          prev = now;
+          if (now - t0 >= 800 || deltas.length >= 6) {
+            resolve({
+              frames: deltas.length,
+              canvasCount: document.querySelectorAll('canvas').length,
+            });
+            return;
+          }
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      });
+    });
+    assert.ok(campus3dBefore.canvasCount >= 1 && campus3dBefore.frames >= 2, `3D campus must render frames cleanly before entering CLB (got ${JSON.stringify(campus3dBefore)})`);
+
     // Nhấn phím E để bước vào CLB Board Game KTX
     await page.keyboard.press('e');
     await page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 60000 });
@@ -256,6 +278,41 @@ async function main() {
       null,
       { timeout: 120000, polling: 200 },
     );
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('bkhn:pause-3d', { detail: false }));
+    });
+
+    const campus3dAfter = await page.evaluate(() => {
+      return new Promise((resolve) => {
+        const deltas = [];
+        let prev = performance.now();
+        const t0 = prev;
+        function tick(now) {
+          deltas.push(now - prev);
+          prev = now;
+          if (now - t0 >= 800 || deltas.length >= 6) {
+            const audioDiag = window.__hustBgAudioDiag ? window.__hustBgAudioDiag() : null;
+            resolve({
+              frames: deltas.length,
+              canvasCount: document.querySelectorAll('canvas').length,
+              lingeringBoard: document.querySelectorAll('[data-testid="boardgame-2d-board"]').length,
+              lingeringVfxCanvas: document.querySelectorAll('[data-testid="bg-vfx-combat-canvas"]').length,
+              audioActiveVoices: audioDiag ? audioDiag.activeVoices : 0,
+              audioContextState: audioDiag ? audioDiag.contextState : 'uninitialized',
+            });
+            return;
+          }
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      });
+    });
+    assert.equal(campus3dAfter.lingeringBoard, 0, '2D board DOM must be removed on exit');
+    assert.equal(campus3dAfter.lingeringVfxCanvas, 0, '2D combat VFX canvas must be removed on exit');
+    assert.equal(campus3dAfter.audioActiveVoices, 0, 'No lingering board game WebAudio voices after closing');
+    assert.notEqual(campus3dAfter.audioContextState, 'running', 'Board game AudioContext must not stay running after closing');
+    assert.ok(campus3dAfter.canvasCount >= 1 && campus3dAfter.frames >= 2, `3D campus must resume rendering cleanly after closing board game (got ${JSON.stringify(campus3dAfter)})`);
+    console.log('BG1 3D Isolation Audit:', JSON.stringify({ campus3dBefore, campus3dAfter }));
 
     const fatalErrors = errors.filter(
       (e) => !e.includes('WebSocket') && !e.includes('ERR_CONNECTION_REFUSED'),

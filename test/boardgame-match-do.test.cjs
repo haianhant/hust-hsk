@@ -1172,6 +1172,42 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     assert.equal(healthJson.ok, true);
     assert.equal(healthJson.component, 'boardgame');
     assert.ok(healthJson.metrics && typeof healthJson.metrics.counts.MATCH_CREATED === 'number');
+
+    // 5. Starting a match with a disconnected lobby ghost cleans ghost row from roster & directory
+    const ghostCreate = await fetch(`${srv.httpBaseUrl}/api/boardgame/matches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tableId: 'table-2', hostName: 'GhostHost' }),
+    });
+    const ghostMeta = await ghostCreate.json();
+    const gClients = [];
+    for (let i = 0; i < 5; i++) {
+      const c = await openBgClient(srv.wsBaseUrl, { matchId: ghostMeta.matchId });
+      c.send({
+        type: 'BG_JOIN',
+        matchId: ghostMeta.matchId,
+        inviteCode: ghostMeta.inviteCode,
+        displayName: `G_${i}`,
+        preferredSeatIndex: i,
+      });
+      await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
+      await c.nextMsg((m) => m.type === 'BG_STATE_SYNC');
+      gClients.push(c);
+    }
+    // 5th seated player disconnects before match start; seats 1..3 ready up; host starts with 4 players
+    gClients[4].close();
+    await delay(50);
+    for (let i = 1; i < 4; i++) {
+      gClients[i].send({ type: 'BG_SET_READY', ready: true, requestId: `g-rdy-${i}` });
+      await gClients[i].nextMsg((m) => m.type === 'BG_ACTION_ACK' && m.requestId === `g-rdy-${i}`);
+    }
+    gClients[0].send({ type: 'BG_START_MATCH', requestId: 'g-start' });
+    const startedSync = await gClients[0].nextMsg(
+      (m) => m.type === 'BG_STATE_SYNC' && m.status === 'PLAYING',
+    );
+    assert.equal(startedSync.players.length, 4, 'Ghost disconnected lobby row must be pruned on match start');
+    assert.equal(startedSync.publicGame.players.length, 4);
+    gClients.forEach((c, idx) => { if (idx !== 4) c.close(); });
   });
 
   await t.test('(8) Structured observability logs emit full lifecycle without secret leakage', async () => {

@@ -12,6 +12,7 @@ import {
   FactionCrestSvg,
   RolePortraitSvg,
 } from './BoardGameArt';
+import { MIDNIGHT_CHARACTER_ART } from './midnight-noir-tokens';
 
 export interface MatchResultProps {
   publicGame: BoardGamePublicGameView;
@@ -104,7 +105,19 @@ export default function MatchResult({
                     }`}
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
-                      <RolePortraitSvg roleId={r.roleId} faction={r.faction} size={38} />
+                      {MIDNIGHT_CHARACTER_ART[r.roleId] ? (
+                        <img
+                          src={MIDNIGHT_CHARACTER_ART[r.roleId]}
+                          alt={r.roleName}
+                          width={720}
+                          height={1080}
+                          loading="lazy"
+                          decoding="async"
+                          className="h-11 w-8 shrink-0 rounded-lg border border-amber-300/45 object-cover object-top shadow"
+                        />
+                      ) : (
+                        <RolePortraitSvg roleId={r.roleId} faction={r.faction} size={38} />
+                      )}
                       <div className="min-w-0">
                         <div className="truncate font-bold text-slate-100">
                           {r.displayName}

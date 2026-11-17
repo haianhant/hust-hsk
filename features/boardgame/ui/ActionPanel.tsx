@@ -20,6 +20,7 @@ import type {
   BoardGamePrivateGameView,
   BoardGamePublicGameView,
 } from '@/shared/contracts/boardgame';
+import { MIDNIGHT_CARD_ART, type ActionCardZone } from './midnight-noir-tokens';
 import { resolveActionTargets } from './target-selection';
 
 export interface ActionPanelProps {
@@ -30,8 +31,7 @@ export interface ActionPanelProps {
   selectedTargetId: string | null;
   onSelectTarget: (playerId: string | null) => void;
   onAction: (action: BoardGameActionPayload) => void;
-  handMaskLocked: boolean;
-  onToggleHandMask: () => void;
+  onZoomCard?: (cardId: string, zone: ActionCardZone) => void;
 }
 
 export function ActionPanel({
@@ -42,8 +42,7 @@ export function ActionPanel({
   selectedTargetId,
   onSelectTarget,
   onAction,
-  handMaskLocked,
-  onToggleHandMask,
+  onZoomCard,
 }: ActionPanelProps) {
   const [confirmingReveal, setConfirmingReveal] = useState(false);
   const [healTargetId, setHealTargetId] = useState<string | null>(null);
@@ -339,38 +338,12 @@ export function ActionPanel({
         <p className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">
           🃏 Thẻ vừa rút cần giải quyết ({privateView.hand.length}/{BOARD_GAME_MAX_HAND}):
         </p>
-        {hasAnyHandCard && (
-          <button
-            type="button"
-            onClick={onToggleHandMask}
-            className="px-2.5 py-1 min-h-[32px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 cursor-pointer"
-          >
-            {handMaskLocked ? '👁️ Hiện thẻ vừa rút' : '🙈 Che thẻ'}
-          </button>
-        )}
       </div>
 
       {!hasAnyHandCard ? (
         <p className="text-xs text-slate-400">
           Không còn thẻ chờ giải quyết — Trang bị rút được tự động đeo ngay lên bàn.
         </p>
-      ) : handMaskLocked ? (
-        <div
-          data-testid="bg-hand-masked-banner"
-          className="rounded-xl border border-dashed border-amber-400/45 bg-slate-950/85 px-3 py-2 flex flex-wrap items-center justify-between gap-2.5"
-        >
-          <p className="text-xs sm:text-sm font-semibold text-amber-100">
-            🙈 Thẻ vừa rút đang được che để chống nhìn màn hình ({privateView.hand.length} lá).
-          </p>
-          <button
-            type="button"
-            data-testid="bg-unmask-hand-btn"
-            onClick={onToggleHandMask}
-            className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black cursor-pointer"
-          >
-            👁️ Mở xem bài của tôi
-          </button>
-        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           {privateView.hand.map((card, idx) => {
@@ -395,6 +368,9 @@ export function ActionPanel({
               (isOtherSinglePlayer && !validOtherTarget) ||
               (isBlessing && !validOtherTarget);
 
+            const handArtSrc = MIDNIGHT_CARD_ART[card.id] ?? null;
+            const zoomZone: ActionCardZone = isInv ? 'private-investigation' : 'event-resolved';
+
             return (
               <div
                 key={`${card.id}-${idx}`}
@@ -406,11 +382,35 @@ export function ActionPanel({
                       : 'border-rose-500/45 bg-rose-950/35'
                 }`}
               >
-                <div>
-                  <p className="text-xs sm:text-sm font-black text-white">{card.title}</p>
-                  <p className="text-xs text-slate-200 mt-0.5 leading-snug" title={card.summary}>
-                    {card.summary}
-                  </p>
+                <div className="flex items-start gap-2.5">
+                  {handArtSrc && (
+                    <div className="shrink-0 space-y-1">
+                      <img
+                        src={handArtSrc}
+                        alt={card.title}
+                        width={600}
+                        height={900}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-[72px] w-12 rounded-lg border border-white/20 object-cover shadow"
+                      />
+                      {onZoomCard && (
+                        <button
+                          type="button"
+                          onClick={() => onZoomCard(card.id, zoomZone)}
+                          className="block w-full rounded bg-slate-900/90 border border-white/15 py-0.5 text-[10px] font-bold text-slate-200 hover:border-amber-300/70 hover:text-amber-200 cursor-pointer"
+                        >
+                          🔍 Soi
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-black text-white">{card.title}</p>
+                    <p className="text-xs text-slate-200 mt-0.5 leading-snug" title={card.summary}>
+                      {card.summary}
+                    </p>
+                  </div>
                 </div>
 
                 {isFirstAid && (
@@ -883,8 +883,7 @@ export function ActionPanel({
           </div>
 
           {currentLoc.deckHint !== 'power-9' &&
-            ((hasAnyHandCard && !handMaskLocked) ||
-              (canUseSkillNow && roleDesign.targetMode !== 'self')) &&
+            (hasAnyHandCard || (canUseSkillNow && roleDesign.targetMode !== 'self')) &&
             renderTargetSelector('Chọn mục tiêu cho Kỹ năng / Thẻ:')}
 
           {hasAnyHandCard && renderHandCardsSection()}

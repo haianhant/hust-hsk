@@ -10,12 +10,13 @@
 // - Thời gian suy nghĩ vô hạn mặc định, tối ưu responsive desktop & mobile 390×844
 // ---------------------------------------------------------------------------
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   VALID_BOARD_GAME_EMOTES,
   type BoardGameActionPayload,
   type BoardGameChatEmoteServerMessage,
   type BoardGameEmoteId,
+  type BoardGameLocationId,
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
 } from '../network/contracts';
@@ -28,7 +29,6 @@ import {
   DiceD6Svg,
   FACTION_THEME,
   LOCATION_VISUAL_META,
-  LocationSceneSvg,
   PlayerPawnToken,
 } from './BoardGameArt';
 import RoleCard from './RoleCard';
@@ -37,15 +37,22 @@ import GameLog from './GameLog';
 import MatchPostcard from './MatchPostcard';
 import MatchResult from './MatchResult';
 import { toggleSelectedTargetId } from './target-selection';
+import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
+import { TabletopLocationTile } from './TabletopLocationTile';
+import { useSmoothPawnGlide } from './useSmoothPawnGlide';
+import { MidnightCardZoomModal, type MidnightZoomTarget } from './MidnightCardZoomModal';
+import {
+  GRAPHICS_QUALITY_LABELS,
+  GRAPHICS_TIER_LABELS,
+  useBoardGameGraphicsSettings,
+  type BoardGameQualitySetting,
+} from './graphics-settings';
 import {
   isBoardGameSoundMuted,
-  playCardDraw,
   playEmotePop,
-  playRoleReveal,
-  playTrackAdvance,
-  playTurnAlert,
-  playVictoryFanfare,
   setBoardGameSoundMuted,
+  stopAllBoardGameSounds,
+  suspendBoardGameAudio,
 } from './sound';
 
 const EMOTE_META: Record<BoardGameEmoteId, { icon: string; label: string }> = {
@@ -107,45 +114,85 @@ export function GameBoard({
   onLeaveMatch,
 }: GameBoardProps) {
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
-  const [roleCardVisible, setRoleCardVisible] = useState(false);
-  const [handUnmasked, setHandUnmasked] = useState(false);
   const [sideDrawerOpen, setSideDrawerOpen] = useState(true);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [mobileTab, setMobileTab] = useState<'board' | 'role' | 'log'>('board');
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [chatText, setChatText] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [localMuted, setLocalMuted] = useState(() => isBoardGameSoundMuted());
   const [dicePulse, setDicePulse] = useState(false);
   const [seenClueCount, setSeenClueCount] = useState(0);
   const [seenLogCount, setSeenLogCount] = useState(() => publicGame.publicLog.length);
+  const [zoomTarget, setZoomTarget] = useState<MidnightZoomTarget | null>(null);
+  const boardStageRef = useRef<HTMLDivElement>(null);
+
+  const gfx = useBoardGameGraphicsSettings();
+
+  const vfx = useBoardGameVfxQueue({
+    publicGame,
+    privateView,
+    selfPlayerId,
+    isSpectator,
+    containerRef: boardStageRef,
+    graphicsProfile: gfx.profile,
+  });
+
+  useSmoothPawnGlide({
+    containerRef: boardStageRef,
+    players: publicGame.players,
+    matchId: publicGame.matchId,
+    reducedMotion: vfx.reducedMotion,
+    durationMs: gfx.profile.pawnGlideDurationMs,
+  });
 
   const prevTurnRef = useRef<number>(publicGame.turnNumber);
-  const prevActiveRef = useRef<string | null>(publicGame.activePlayerId);
-  const prevRevealIdRef = useRef<string | null>(publicGame.lastRevealEvent?.id ?? null);
-  const prevWinnerRef = useRef<string | null>(publicGame.winnerLabel);
-  const prevLogLenRef = useRef<number>(publicGame.publicLog.length);
-  const prevEmoteCountRef = useRef<number>(recentEmotes.length);
+  const prevEmoteItemRef = useRef<BoardGameChatEmoteServerMessage | null>(
+    recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null,
+  );
   const prevDiceSigRef = useRef<string | null>(null);
 
   const effectiveMuted = propMuted ?? localMuted;
 
   useEffect(() => {
-    setHandUnmasked(false);
-    setRoleCardVisible(false);
+    if (typeof propMuted === 'boolean') {
+      setBoardGameSoundMuted(propMuted);
+    }
+  }, [propMuted]);
+
+  useEffect(() => {
+    return () => {
+      // Dọn & tạm dừng WebAudio khi rời Bóng Đêm KTX về khuôn viên 3D
+      suspendBoardGameAudio();
+    };
+  }, []);
+
+  useEffect(() => {
     setSeenClueCount(0);
     setSeenLogCount(publicGame.publicLog.length);
     setSelectedTargetId(null);
+    setZoomTarget(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicGame.matchId]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setIsDesktopLayout(mq.matches);
+    sync();
+    mq.addEventListener?.('change', sync);
+    return () => mq.removeEventListener?.('change', sync);
+  }, []);
+
   const totalClues = privateView?.privateClues.length ?? 0;
   useEffect(() => {
-    if (roleCardVisible && (sideDrawerOpen || mobileTab === 'role')) {
+    if ((isDesktopLayout && sideDrawerOpen) || mobileTab === 'role') {
       setSeenClueCount((prev) => Math.max(prev, totalClues));
     }
-  }, [roleCardVisible, sideDrawerOpen, mobileTab, totalClues]);
+  }, [isDesktopLayout, sideDrawerOpen, mobileTab, totalClues]);
 
   useEffect(() => {
     if (mobileTab === 'log') {
@@ -168,47 +215,16 @@ export function GameBoard({
       prevTurnRef.current = publicGame.turnNumber;
       setSelectedTargetId(null);
       setLocalError(null);
-      if (
-        publicGame.activePlayerId &&
-        publicGame.activePlayerId === selfPlayerId &&
-        publicGame.activePlayerId !== prevActiveRef.current
-      ) {
-        playTurnAlert();
-      }
-      prevActiveRef.current = publicGame.activePlayerId;
     }
-  }, [publicGame.turnNumber, publicGame.activePlayerId, selfPlayerId]);
+  }, [publicGame.turnNumber]);
 
   useEffect(() => {
-    const revId = publicGame.lastRevealEvent?.id ?? null;
-    if (revId && revId !== prevRevealIdRef.current) {
-      prevRevealIdRef.current = revId;
-      playRoleReveal();
-    }
-  }, [publicGame.lastRevealEvent]);
-
-  useEffect(() => {
-    if (publicGame.winnerLabel && publicGame.winnerLabel !== prevWinnerRef.current) {
-      prevWinnerRef.current = publicGame.winnerLabel;
-      playVictoryFanfare();
-    }
-  }, [publicGame.winnerLabel]);
-
-  useEffect(() => {
-    if (publicGame.publicLog.length > prevLogLenRef.current) {
-      const latest = publicGame.publicLog[publicGame.publicLog.length - 1];
-      prevLogLenRef.current = publicGame.publicLog.length;
-      if (latest?.kind === 'draw') playCardDraw();
-      else if (latest?.kind === 'dice' || latest?.kind === 'move') playTrackAdvance();
-    }
-  }, [publicGame.publicLog]);
-
-  useEffect(() => {
-    if (recentEmotes.length > prevEmoteCountRef.current) {
-      prevEmoteCountRef.current = recentEmotes.length;
+    const latest = recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null;
+    if (latest && latest !== prevEmoteItemRef.current) {
+      prevEmoteItemRef.current = latest;
       playEmotePop();
     }
-  }, [recentEmotes.length]);
+  }, [recentEmotes]);
 
   useEffect(() => {
     const roll = publicGame.lastDiceRoll;
@@ -228,6 +244,10 @@ export function GameBoard({
   const activePlayer = useMemo(
     () => publicGame.players.find((p) => p.playerId === publicGame.activePlayerId) ?? null,
     [publicGame.players, publicGame.activePlayerId],
+  );
+  const boardClusters = useMemo(
+    () => buildBoardClustersView(publicGame.clusterPairs),
+    [publicGame.clusterPairs],
   );
   const isMyTurn =
     !isSpectator &&
@@ -284,26 +304,47 @@ export function GameBoard({
     recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null;
   const displayedError = localError ?? lastError;
 
-  const dispatchAction = async (action: BoardGameActionPayload) => {
-    if (actionBusy) return;
+  const onActionRef = useRef(onAction);
+  onActionRef.current = onAction;
+  const actionBusyRef = useRef(actionBusy);
+  actionBusyRef.current = actionBusy;
+
+  const dispatchAction = useCallback(async (action: BoardGameActionPayload) => {
+    if (actionBusyRef.current) return;
+    actionBusyRef.current = true;
     setActionBusy(true);
     setLocalError(null);
     try {
-      const res = await onAction(action);
+      const res = await onActionRef.current(action);
       if (res && !res.ok && res.reason) {
         setLocalError(res.reason);
       }
     } finally {
+      actionBusyRef.current = false;
       setActionBusy(false);
     }
-  };
+  }, []);
 
-  const handleToggleSoundClick = () => {
+  const handleChooseDestination = useCallback(
+    (dest: BoardGameLocationId) => {
+      void dispatchAction({ type: 'CHOOSE_DEST', location: dest });
+    },
+    [dispatchAction],
+  );
+
+  const handleCloseZoom = useCallback(() => {
+    setZoomTarget(null);
+  }, []);
+
+  const handleToggleSoundClick = useCallback(() => {
     const next = !effectiveMuted;
     setLocalMuted(next);
     setBoardGameSoundMuted(next);
+    if (next) {
+      stopAllBoardGameSounds();
+    }
     onToggleSound?.();
-  };
+  }, [effectiveMuted, onToggleSound]);
 
   return (
     <div
@@ -371,6 +412,39 @@ export function GameBoard({
             >
               {effectiveMuted ? '🔇' : '🔊'}
             </button>
+            <button
+              type="button"
+              data-testid="bg-vfx-motion-toggle-btn"
+              onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
+              title={
+                vfx.reducedMotion
+                  ? 'Đang bật chế độ Giảm chuyển động (nhấn để bật VFX đầy đủ)'
+                  : 'VFX đầy đủ đang bật (nhấn để giảm chuyển động)'
+              }
+              className={`hidden sm:inline-flex items-center px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                vfx.reducedMotion
+                  ? 'bg-slate-900 border-slate-700 text-slate-400'
+                  : 'bg-indigo-950/70 border-indigo-400/50 text-indigo-200 hover:bg-indigo-900/70'
+              }`}
+            >
+              {vfx.reducedMotion ? '⏸️ Tĩnh' : '✨ VFX'}
+            </button>
+            <button
+              type="button"
+              data-testid="bg-graphics-settings-btn"
+              onClick={() => setSettingsPanelOpen((v) => !v)}
+              aria-expanded={settingsPanelOpen}
+              aria-label="Cài đặt đồ họa và trợ năng"
+              title={`Đồ họa: ${GRAPHICS_TIER_LABELS[gfx.profile.tier]} · Cài đặt hiệu ứng & rung`}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                settingsPanelOpen
+                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-100'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-100'
+              }`}
+            >
+              <span>⚙️</span>
+              <span className="hidden xl:inline">{GRAPHICS_TIER_LABELS[gfx.profile.tier]}</span>
+            </button>
             {onOpenLeaderboard && (
               <button
                 type="button"
@@ -400,6 +474,94 @@ export function GameBoard({
           </div>
         </div>
       </header>
+
+      {/* BẢNG CÀI ĐẶT ĐỒ HỌA (HIGH / BALANCED / LOW) & TRỢ NĂNG */}
+      {settingsPanelOpen && (
+        <section
+          data-testid="bg-graphics-settings-panel"
+          aria-label="Tùy chỉnh đồ họa, âm thanh và rung màn hình"
+          className="shrink-0 border-b border-cyan-500/35 bg-slate-900/98 px-3 sm:px-5 py-2.5"
+        >
+          <div className="mx-auto max-w-[1680px] flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-cyan-200 mr-1">
+                Đồ họa ({GRAPHICS_TIER_LABELS[gfx.profile.tier]}):
+              </span>
+              {(['auto', 'high', 'balanced', 'low'] as const satisfies readonly BoardGameQualitySetting[]).map(
+                (q) => {
+                  const active = gfx.prefs.quality === q;
+                  return (
+                    <button
+                      key={q}
+                      type="button"
+                      data-testid={`bg-quality-${q}`}
+                      aria-pressed={active}
+                      onClick={() => gfx.setQuality(q)}
+                      className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                        active
+                          ? 'bg-cyan-500 text-slate-950 border-cyan-300'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
+                      }`}
+                    >
+                      {GRAPHICS_QUALITY_LABELS[q]}
+                    </button>
+                  );
+                },
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                data-testid="bg-shake-toggle-btn"
+                aria-pressed={!gfx.prefs.shakeEnabled}
+                onClick={() => gfx.setShakeEnabled(!gfx.prefs.shakeEnabled)}
+                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  !gfx.prefs.shakeEnabled
+                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                }`}
+              >
+                {gfx.prefs.shakeEnabled ? '📳 Rung mạnh: BẬT' : '🛡️ Tắt rung mạnh'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-reduced-motion-toggle-btn"
+                aria-pressed={vfx.reducedMotion}
+                onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
+                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  vfx.reducedMotion
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                }`}
+              >
+                {vfx.reducedMotion ? '⏸️ Giảm chuyển động: BẬT' : '✨ Chuyển động: ĐẦY ĐỦ'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-panel-mute-toggle-btn"
+                aria-pressed={effectiveMuted}
+                onClick={handleToggleSoundClick}
+                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  effectiveMuted
+                    ? 'bg-rose-500/20 border-rose-400 text-rose-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                }`}
+              >
+                {effectiveMuted ? '🔇 Đang tắt tiếng' : '🔊 Âm thanh: BẬT'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-panel-skip-cinematic-btn"
+                onClick={vfx.skipAllAnimations}
+                className="px-2.5 py-1.5 min-h-[36px] rounded-xl border border-amber-400/60 bg-amber-950/50 hover:bg-amber-900/60 text-xs font-bold text-amber-200 transition cursor-pointer"
+              >
+                ⏭️ Skip Cinematic
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* THANH TAB MOBILE (< lg) — 3 nút gọn vừa khít 390px */}
       <nav
@@ -482,7 +644,6 @@ export function GameBoard({
                   onClick={() => {
                     setSideDrawerOpen(true);
                     setMobileTab('role');
-                    setRoleCardVisible(true);
                   }}
                   className="px-2 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
                 >
@@ -522,8 +683,17 @@ export function GameBoard({
         </div>
       )}
 
-      {/* NỘI DUNG CHÍNH: BÀN CỜ CUỘN ĐỘC LẬP + THANH HÀNH ĐỘNG NEO ĐÁY + NGĂN PHỤ ĐỘC LẬP */}
-      <main className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden px-2.5 sm:px-4 py-2">
+      {/* NỘI DUNG CHÍNH: BÀN CỜ CUỘN ĐỘC LẬP + THANH HÀNH ĐỘNG NEO ĐÁY + NGĂN PHỤ ĐỘC LẬP + LỚP VFX */}
+      <div ref={boardStageRef} className="relative flex-1 min-h-0 flex flex-col">
+        <main
+          className={`flex-1 min-h-0 overflow-y-auto lg:overflow-hidden px-2.5 sm:px-4 py-2 ${
+            vfx.screenShake === 'heavy'
+              ? 'bg-vfx-shake-heavy'
+              : vfx.screenShake === 'light'
+                ? 'bg-vfx-shake-light'
+                : ''
+          }`}
+        >
         <div className="mx-auto max-w-[1680px] lg:h-full flex flex-col lg:flex-row gap-3 items-stretch">
           {/* CỘT CHÍNH: PHẦN BÀN CỜ TRÊN + THANH HÀNH ĐỘNG NEO ĐÁY */}
           <div
@@ -552,9 +722,7 @@ export function GameBoard({
                   {WOUND_NOTCHES.map((notch) => {
                     const occupants = playersByWoundNotch[notch];
                     const isSelfMaxNotch = Boolean(
-                      privateView &&
-                        (roleCardVisible || privateView.revealed) &&
-                        privateView.maxHp === notch,
+                      privateView && privateView.maxHp === notch,
                     );
                     const revealedAtNotch = publicGame.players.filter(
                       (p) => p.revealedMaxHp === notch,
@@ -598,12 +766,14 @@ export function GameBoard({
                             <PlayerPawnToken
                               key={p.playerId}
                               size="xs"
+                              elevated={false}
                               displayName={p.displayName}
                               seatIndex={p.seatIndex}
                               alive={p.alive}
                               isActive={p.playerId === publicGame.activePlayerId}
                               isSelf={p.playerId === selfPlayerId}
                               revealedFaction={p.revealedFaction}
+                              revealedRoleId={p.revealedRoleId}
                             />
                           ))}
                         </div>
@@ -615,7 +785,7 @@ export function GameBoard({
 
               {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI (XÁO NGẪU NHIÊN ĐẦU MỖI VÁN) */}
               <section className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                {buildBoardClustersView(publicGame.clusterPairs).map((cluster) => (
+                {boardClusters.map((cluster) => (
                   <div
                     key={cluster.clusterId}
                     className={`rounded-2xl border p-2.5 space-y-2 ${cluster.ringClass}`}
@@ -633,7 +803,6 @@ export function GameBoard({
 
                     <div className="space-y-2">
                       {cluster.locations.map((locId) => {
-                        const meta = LOCATION_VISUAL_META[locId];
                         const occupants = publicGame.players.filter(
                           (p) => p.location === locId,
                         );
@@ -649,127 +818,23 @@ export function GameBoard({
                           publicGame.lastDiceRoll.resolvedLocation === locId;
 
                         return (
-                          <div
+                          <TabletopLocationTile
                             key={locId}
-                            data-testid={`bg-loc-${locId}`}
-                            onClick={
-                              canChooseMoveHere
-                                ? () => dispatchAction({ type: 'CHOOSE_DEST', location: locId })
-                                : undefined
-                            }
-                            role={canChooseMoveHere ? 'button' : undefined}
-                            tabIndex={canChooseMoveHere ? 0 : undefined}
-                            onKeyDown={
-                              canChooseMoveHere
-                                ? (e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault();
-                                      dispatchAction({ type: 'CHOOSE_DEST', location: locId });
-                                    }
-                                  }
-                                : undefined
-                            }
-                            className={`rounded-xl border p-2.5 bg-gradient-to-br ${meta.bgGradient} transition ${
-                              canChooseMoveHere
-                                ? 'border-amber-400 ring-2 ring-amber-400/60 hover:scale-[1.01] cursor-pointer'
-                                : isSelfHere
-                                  ? 'border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.22)]'
-                                  : rolledDestinationHere
-                                    ? 'border-emerald-400/80'
-                                    : 'border-white/15'
-                            }`}
-                          >
-                            <div className="flex items-start gap-2.5">
-                              <LocationSceneSvg location={locId} size={42} />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center justify-between gap-1.5">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span
-                                      style={{ backgroundColor: meta.accentHex }}
-                                      className="px-2 py-0.5 rounded-md text-slate-950 text-[11px] font-black whitespace-nowrap shrink-0 shadow"
-                                    >
-                                      Ô {meta.diceLabel}
-                                    </span>
-                                    {isSelfHere && (
-                                      <span className="px-2 py-0.5 rounded-md bg-cyan-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
-                                        📍 Bạn ở đây
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-white/10 text-slate-200 whitespace-nowrap truncate">
-                                    {meta.badgeText}
-                                  </span>
-                                </div>
-                                <h3 className="text-sm sm:text-[15px] font-black text-white mt-1 leading-tight">
-                                  {meta.name}
-                                </h3>
-                                <p className="text-xs text-slate-300 mt-0.5 leading-snug">
-                                  {meta.actionDesc}
-                                </p>
-                              </div>
-                            </div>
-
-                            {canChooseMoveHere && (
-                              <div className="mt-2 px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-black text-center">
-                                👆 Bấm để di chuyển tới đây
-                              </div>
-                            )}
-
-                            {/* Quân cờ sinh viên đang đứng ở khu vực này */}
-                            <div className="mt-2 pt-1.5 border-t border-white/10 min-h-[30px] flex flex-wrap items-center gap-1.5">
-                              {occupants.length === 0 ? (
-                                <span className="text-[11px] text-slate-400 italic">
-                                  Trống người
-                                </span>
-                              ) : (
-                                occupants.map((p) => {
-                                  const inAttackRange = attackableIdsOnBoard.has(p.playerId);
-                                  const isSelectedTarget = selectedTargetId === p.playerId;
-                                  const isSelfToken = p.playerId === selfPlayerId;
-                                  return (
-                                    <button
-                                      key={p.playerId}
-                                      type="button"
-                                      data-testid={isSelfToken ? 'bg-loc-pawn-self' : undefined}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedTargetId((prev) =>
-                                          toggleSelectedTargetId(prev, p.playerId, p.alive),
-                                        );
-                                      }}
-                                      className={`flex items-center gap-1.5 rounded-full pr-2 pl-0.5 py-0.5 border text-xs font-bold transition cursor-pointer ${
-                                        isSelectedTarget
-                                          ? isSelfToken
-                                            ? 'bg-emerald-600/85 border-emerald-300 text-white'
-                                            : 'bg-rose-600/85 border-rose-300 text-white'
-                                          : inAttackRange
-                                            ? 'bg-rose-950/60 border-rose-400/65 text-rose-100 hover:border-rose-300'
-                                            : 'bg-slate-900/90 border-white/15 text-slate-100 hover:border-cyan-400/60'
-                                      }`}
-                                    >
-                                      <PlayerPawnToken
-                                        size="xs"
-                                        displayName={p.displayName}
-                                        seatIndex={p.seatIndex}
-                                        alive={p.alive}
-                                        isActive={p.playerId === publicGame.activePlayerId}
-                                        isSelf={p.playerId === selfPlayerId}
-                                        revealedFaction={p.revealedFaction}
-                                      />
-                                      <span className={!p.alive ? 'line-through text-slate-400' : ''}>
-                                        {p.displayName}
-                                      </span>
-                                      {inAttackRange && (
-                                        <span className="text-[10px] text-amber-200" title="Trong tầm đánh">
-                                          ⚔️
-                                        </span>
-                                      )}
-                                    </button>
-                                  );
-                                })
-                              )}
-                            </div>
-                          </div>
+                            locId={locId}
+                            occupants={occupants}
+                            selfPlayerId={selfPlayerId}
+                            activePlayerId={publicGame.activePlayerId}
+                            selectedTargetId={selectedTargetId}
+                            attackableIds={attackableIdsOnBoard}
+                            isSelfHere={isSelfHere}
+                            canChooseMoveHere={canChooseMoveHere}
+                            rolledDestinationHere={rolledDestinationHere}
+                            reducedMotion={vfx.reducedMotion}
+                            enableMist={gfx.profile.enableMistDrift}
+                            enableBackdropBlur={gfx.profile.enableBackdropBlur}
+                            onChooseDestination={handleChooseDestination}
+                            onSelectPlayer={setSelectedTargetId}
+                          />
                         );
                       })}
                     </div>
@@ -913,6 +978,7 @@ export function GameBoard({
                       <button
                         key={deckId}
                         type="button"
+                        data-vfx-deck={deckId}
                         data-testid={`bg-board-draw-${deckId}`}
                         onClick={() => dispatchAction({ type: 'DRAW_CARD', deck: deckId })}
                         className={`rounded-xl border px-2.5 py-1.5 min-h-[42px] flex items-center gap-2 transition cursor-pointer ${activeCls}`}
@@ -922,6 +988,7 @@ export function GameBoard({
                     ) : (
                       <div
                         key={deckId}
+                        data-vfx-deck={deckId}
                         className={`rounded-xl border border-slate-700 bg-slate-950/85 px-2.5 py-1.5 flex items-center gap-2 transition ${
                           isMyTurn && publicGame.turnPhase === 'LOCATION_ACTION'
                             ? 'opacity-55'
@@ -945,17 +1012,9 @@ export function GameBoard({
                   const factionTheme = p.revealedFaction ? FACTION_THEME[p.revealedFaction] : null;
                   const locMeta = LOCATION_VISUAL_META[p.location];
                   return (
-                    <button
+                    <div
                       key={p.playerId}
-                      type="button"
-                      data-testid={isSelfCard ? 'bg-player-strip-self' : undefined}
-                      aria-pressed={selected}
-                      onClick={() =>
-                        setSelectedTargetId((prev) =>
-                          toggleSelectedTargetId(prev, p.playerId, p.alive),
-                        )
-                      }
-                      className={`rounded-xl border px-2.5 py-2 text-left transition cursor-pointer ${
+                      className={`rounded-xl border px-2.5 py-2 flex flex-col justify-between gap-1.5 transition ${
                         !p.alive
                           ? 'opacity-55 border-slate-800 bg-slate-950/60'
                           : selected
@@ -969,66 +1028,111 @@ export function GameBoard({
                                 : 'border-slate-700/80 bg-slate-900/80 hover:border-cyan-400/50'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <PlayerPawnToken
-                          compact
-                          displayName={p.displayName}
-                          seatIndex={p.seatIndex}
-                          alive={p.alive}
-                          isActive={isTurnHolder}
-                          isSelf={p.playerId === selfPlayerId}
-                          revealedFaction={p.revealedFaction}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <p className="text-xs sm:text-sm font-black text-white truncate">
-                              {p.displayName}
+                      <button
+                        type="button"
+                        data-vfx-player-strip={p.playerId}
+                        data-testid={isSelfCard ? 'bg-player-strip-self' : undefined}
+                        aria-pressed={selected}
+                        onClick={() =>
+                          setSelectedTargetId((prev) =>
+                            toggleSelectedTargetId(prev, p.playerId, p.alive),
+                          )
+                        }
+                        className="w-full text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <PlayerPawnToken
+                            compact
+                            elevated
+                            displayName={p.displayName}
+                            seatIndex={p.seatIndex}
+                            alive={p.alive}
+                            isActive={isTurnHolder}
+                            isSelf={isSelfCard}
+                            revealedFaction={p.revealedFaction}
+                            revealedRoleId={p.revealedRoleId}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <p className="text-xs sm:text-sm font-black text-white truncate">
+                                {p.displayName}
+                              </p>
+                              {inAttackRange && (
+                                <span className="text-[10px] font-black text-amber-200 shrink-0">
+                                  ⚔️
+                                </span>
+                              )}
+                            </div>
+                            <p
+                              className={`text-[11px] font-bold truncate ${factionTheme ? factionTheme.textClass : 'text-slate-400'}`}
+                            >
+                              {p.revealedRoleId
+                                ? `${FACTION_LABELS[p.revealedFaction!]} · Max ${p.revealedMaxHp}`
+                                : 'Vai ẩn danh'}
                             </p>
-                            {inAttackRange && (
-                              <span className="text-[10px] font-black text-amber-200 shrink-0">
-                                ⚔️
-                              </span>
-                            )}
                           </div>
-                          <p
-                            className={`text-[11px] font-bold truncate ${factionTheme ? factionTheme.textClass : 'text-slate-400'}`}
-                          >
-                            {p.revealedRoleId
-                              ? `${FACTION_LABELS[p.revealedFaction!]} · Max ${p.revealedMaxHp}`
-                              : 'Vai ẩn danh'}
-                          </p>
                         </div>
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-bold">
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-200">
-                          🩸 {p.woundsTaken} vết
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-200">
-                          Ô {locMeta.diceLabel}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">
-                          🃏 {p.handCount}
-                        </span>
-                        {p.guardianShieldActive && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-200">
-                            🛡️ Khiên
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-bold">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-200">
+                            🩸 {p.woundsTaken} vết
                           </span>
-                        )}
-                      </div>
-                      {p.equipped.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-200">
+                            Ô {locMeta.diceLabel}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">
+                            🃏 {p.handCount}
+                          </span>
+                          {p.guardianShieldActive && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-200">
+                              🛡️ Khiên
+                            </span>
+                          )}
+                        </div>
+                      </button>
+
+                      {(p.equipped.length > 0 || p.revealedRoleId) && (
+                        <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                          {p.revealedRoleId && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setZoomTarget({
+                                  kind: 'role',
+                                  roleId: p.revealedRoleId!,
+                                  revealed: true,
+                                  viewerMode: 'other-player',
+                                  woundsTaken: p.woundsTaken,
+                                  currentHp: p.revealedMaxHp
+                                    ? Math.max(0, p.revealedMaxHp - p.woundsTaken)
+                                    : undefined,
+                                })
+                              }
+                              title={`Phóng lớn thẻ vai đã lộ của ${p.displayName}`}
+                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-amber-950/70 border border-amber-400/45 text-amber-200 hover:bg-amber-900/70 transition cursor-pointer"
+                            >
+                              🔍 Soi vai
+                            </button>
+                          )}
                           {p.equipped.map((eq, i) => (
-                            <span
+                            <button
                               key={`${eq.id}-${i}`}
-                              title={eq.summary}
-                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-sky-950/70 border border-sky-500/40 text-sky-200 truncate max-w-full"
+                              type="button"
+                              onClick={() =>
+                                setZoomTarget({
+                                  kind: 'card',
+                                  cardId: eq.id,
+                                  zone: 'equipped-table',
+                                })
+                              }
+                              title={`${eq.summary} (Bấm để phóng lớn thẻ)`}
+                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-sky-950/70 border border-sky-500/40 text-sky-200 hover:border-sky-300 truncate max-w-full cursor-pointer"
                             >
                               🎒 {eq.title}
-                            </span>
+                            </button>
                           ))}
                         </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </section>
@@ -1044,15 +1148,14 @@ export function GameBoard({
                 selectedTargetId={selectedTargetId}
                 onSelectTarget={setSelectedTargetId}
                 onAction={dispatchAction}
-                handMaskLocked={!roleCardVisible && !handUnmasked}
-                onToggleHandMask={() => {
-                  if (roleCardVisible || handUnmasked) {
-                    setHandUnmasked(false);
-                    setRoleCardVisible(false);
-                  } else {
-                    setHandUnmasked(true);
-                  }
-                }}
+                onZoomCard={(cardId, zone) =>
+                  setZoomTarget({
+                    kind: 'card',
+                    cardId,
+                    zone,
+                    isParticipantInInvestigation: true,
+                  })
+                }
               />
             </div>
           </div>
@@ -1070,9 +1173,28 @@ export function GameBoard({
                   publicGame={publicGame}
                   privateView={privateView}
                   isSpectator={isSpectator}
-                  cardVisible={roleCardVisible}
-                  unreadClueCount={unreadClueCount}
-                  onToggleCardVisible={() => setRoleCardVisible((v) => !v)}
+                  visualStyle="midnight-noir"
+                  foilEnabled={gfx.profile.enableFoil}
+                  reducedMotion={!gfx.profile.enable3DTilt || vfx.reducedMotion}
+                  onZoomRole={() =>
+                    privateView &&
+                    setZoomTarget({
+                      kind: 'role',
+                      roleId: privateView.roleId,
+                      revealed: privateView.revealed,
+                      viewerMode: 'owner-peek',
+                      woundsTaken: privateView.woundsTaken,
+                      currentHp: privateView.hp,
+                    })
+                  }
+                  onZoomCard={(cardId, zone = 'equipped-table') =>
+                    setZoomTarget({
+                      kind: 'card',
+                      cardId,
+                      zone,
+                      isParticipantInInvestigation: true,
+                    })
+                  }
                 />
               </div>
 
@@ -1127,7 +1249,17 @@ export function GameBoard({
             </div>
           )}
         </div>
-      </main>
+        </main>
+
+        <BoardGameVfxStage
+          vfx={vfx}
+          containerRef={boardStageRef}
+          publicGame={publicGame}
+          sourcePlayerId={selfPlayerId}
+          selectedTargetId={selectedTargetId}
+          targetingTone={selectedTargetId && selectedTargetId === selfPlayerId ? 'heal' : 'hostile'}
+        />
+      </div>
 
       {/* MODAL TỔNG KẾT VÁN ĐẤU */}
       {publicGame.winnerLabel && publicGame.finalReveal && (
@@ -1142,9 +1274,22 @@ export function GameBoard({
         />
       )}
 
+      {/* MODAL PHÓNG LỚN THẺ BÀI */}
+      <MidnightCardZoomModal
+        target={zoomTarget}
+        reducedMotion={!gfx.profile.enable3DTilt || vfx.reducedMotion}
+        foilEnabled={gfx.profile.enableFoil}
+        enableBackdropBlur={gfx.profile.enableBackdropBlur}
+        onClose={handleCloseZoom}
+      />
+
       {/* HỘP THOẠI XÁC NHẬN RỜI VÁN */}
       {leaveConfirmOpen && (
-        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+        <div
+          className={`fixed inset-0 z-[55] flex items-center justify-center p-4 ${
+            gfx.profile.enableBackdropBlur ? 'bg-slate-950/75 backdrop-blur-sm' : 'bg-slate-950/90'
+          }`}
+        >
           <div className="w-full max-w-md rounded-2xl border border-rose-500/45 bg-slate-900 p-5 space-y-4 shadow-2xl">
             <h3 className="text-lg font-black text-white">Rời bàn Bóng Đêm KTX?</h3>
             <p className="text-sm text-slate-300 leading-relaxed">

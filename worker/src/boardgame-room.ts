@@ -2074,6 +2074,10 @@ export class BoardGameRoom {
     }
 
     const nowMs = Date.now();
+    // Clean any disconnected or unseated ghost lobby rows before locking PLAYING roster
+    this.sql.exec(
+      'DELETE FROM match_players WHERE is_spectator = 0 AND (connected = 0 OR seat_index IS NULL)',
+    );
     // Mark host ready too cleanly, walk WAITING/READY_CHECK -> STARTING -> PLAYING
     this.sql.exec('UPDATE match_players SET ready = 1 WHERE player_id = ?', player.player_id);
     if (canTransitionBoardGameStatus(match.status, 'STARTING')) {
@@ -2793,6 +2797,9 @@ export class BoardGameRoom {
     }
     if (engineState.firstDeadPlayerId === undefined) engineState.firstDeadPlayerId = null;
     if (typeof engineState.extraTurnPending !== 'boolean') engineState.extraTurnPending = false;
+    if (typeof engineState.logSeq !== 'number') {
+      engineState.logSeq = Array.isArray(engineState.publicLog) ? engineState.publicLog.length : 0;
+    }
     if (engineState.players && typeof engineState.players === 'object') {
       const connById = new Map<string, boolean>();
       if (playerRows) {
@@ -2813,6 +2820,9 @@ export class BoardGameRoom {
         if (typeof ep.attacksThisTurn !== 'number') ep.attacksThisTurn = 0;
         if (ep.lastAttackTargetId === undefined) ep.lastAttackTargetId = null;
         if (typeof ep.charlesKillWon !== 'boolean') ep.charlesKillWon = false;
+        if (typeof ep.clueSeq !== 'number') {
+          ep.clueSeq = Array.isArray(ep.privateClues) ? ep.privateClues.length : 0;
+        }
       }
     }
     return engineState;

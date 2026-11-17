@@ -21,3 +21,154 @@ canvas {
   touch-action: none;
   display: block;
 }
+
+/* ---------------------------------------------------------------------------
+ * HUSTVerse Midnight — Anime Noir TCG Card Shimmer & 3D Flip Utilities
+ * --------------------------------------------------------------------------- */
+@keyframes mn-foil-sweep {
+  0% {
+    background-position: -140% 50%;
+  }
+  100% {
+    background-position: 240% 50%;
+  }
+}
+
+.mn-card-perspective {
+  perspective: 1100px;
+}
+
+.mn-card-flip-stage {
+  transform-style: preserve-3d;
+  transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mn-card-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.mn-card-face-back {
+  transform: rotateY(180deg);
+}
+
+.mn-foil-sweep {
+  background-size: 220% 220%;
+  animation: mn-foil-sweep 4.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-card-flip-stage {
+    transition-duration: 120ms;
+  }
+  .mn-foil-sweep {
+    animation: none;
+  }
+  .bg-vfx-shake-light,
+  .bg-vfx-shake-heavy,
+  .bg-vfx-float-pop,
+  .bg-vfx-cutin-enter,
+  .bg-vfx-dice-roll,
+  .bg-tile-mist-drift {
+    animation: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Bóng Đêm KTX — Combat VFX, Floating Damage, Dice Tumble & Cut-in Animations
+ * --------------------------------------------------------------------------- */
+@keyframes bg-vfx-shake-light {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  25% { transform: translate3d(-4px, 2px, 0); }
+  50% { transform: translate3d(4px, -2px, 0); }
+  75% { transform: translate3d(-2px, 1px, 0); }
+}
+
+@keyframes bg-vfx-shake-heavy {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  15% { transform: translate3d(-7px, 4px, 0); }
+  35% { transform: translate3d(7px, -4px, 0); }
+  55% { transform: translate3d(-5px, -3px, 0); }
+  75% { transform: translate3d(5px, 2px, 0); }
+  90% { transform: translate3d(-2px, 1px, 0); }
+}
+
+@keyframes bg-vfx-float-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -15%) scale(0.55);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, -65%) scale(1.22);
+  }
+  42% {
+    opacity: 1;
+    transform: translate(-50%, -95%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -155%) scale(0.92);
+  }
+}
+
+@keyframes bg-vfx-cutin-enter {
+  0% {
+    opacity: 0;
+    transform: translate3d(-28px, 0, 0) scale(0.96);
+  }
+  16% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  84% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(24px, 0, 0) scale(0.98);
+  }
+}
+
+@keyframes bg-vfx-dice-roll {
+  0% { transform: translateY(-10px) rotate(-18deg) scale(0.85); }
+  35% { transform: translateY(4px) rotate(14deg) scale(1.14); }
+  70% { transform: translateY(-3px) rotate(-6deg) scale(1.06); }
+  100% { transform: translateY(0) rotate(0deg) scale(1); }
+}
+
+.bg-vfx-shake-light {
+  animation: bg-vfx-shake-light 200ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.bg-vfx-shake-heavy {
+  animation: bg-vfx-shake-heavy 280ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.bg-vfx-float-pop {
+  animation: bg-vfx-float-pop 1150ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bg-vfx-cutin-enter {
+  animation: bg-vfx-cutin-enter 1350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bg-vfx-dice-roll {
+  animation: bg-vfx-dice-roll 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes bg-tile-mist-drift {
+  0%, 100% {
+    transform: translate3d(-4%, 0, 0) scaleX(1.04);
+    opacity: 0.38;
+  }
+  50% {
+    transform: translate3d(4%, -3px, 0) scaleX(1.08);
+    opacity: 0.56;
+  }
+}
+
+.bg-tile-mist-drift {
+  animation: bg-tile-mist-drift 8.5s ease-in-out infinite;
+}
