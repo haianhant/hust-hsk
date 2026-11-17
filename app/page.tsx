@@ -389,6 +389,22 @@ export default function HomePage() {
       setIdentityName(saved.name);
       setIdentityMssv(saved.mssv);
     }
+    // Pre-warm kết nối WebSocket ngay trên màn hình chào để khi vào 3D
+    // không bị nghẽn luồng mount & chip HUD cập nhật "online" tức thì.
+    multiplayer.connect(
+      getSessionId(),
+      saved?.name || savedChar.name || 'Sinh viên',
+      saved?.mssv || savedChar.mssv || '20226010',
+      {
+        gender: savedChar.gender,
+        outfit: savedChar.outfit,
+        hairStyle: savedChar.hairStyle,
+        skirt: savedChar.skirt,
+        glasses: savedChar.glasses,
+        backpack: savedChar.backpack,
+      },
+      getReconnectToken(),
+    );
     const urlParams = new URLSearchParams(window.location.search);
     const rawInvite = sanitizeInviteCode(urlParams.get('bgInvite'));
     if (rawInvite) {

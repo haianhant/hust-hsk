@@ -1003,7 +1003,7 @@ test('HUSTVerse Pluggable Modes — gameModes storage, channel formatting & hskM
   );
   // Near C7 check-in pedestal: pure campus check-in label when hskMode=false
   assert.deepEqual(
-    findNearestInteractable({ ...baseInput, pos: { x: 57.6, z: -27.2 }, hskMode: false }),
+    findNearestInteractable({ ...baseInput, pos: { x: 67.6, z: -12.2 }, hskMode: false }),
     {
       id: 'checkin:c7',
       label: 'E — Khám phá & Check-in Tòa C7',

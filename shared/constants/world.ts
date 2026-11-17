@@ -65,7 +65,7 @@ export const CAMPUS_FOOTBALL_PITCH = {
   goalHeight: 2.35,
   kickInteractRadius: 2.35,
   dribbleRadius: 0.95,
-  ballRadius: 0.22,
+  ballRadius: 0.11,
 } as const;
 
 export function clampScalar(v: number, lo: number, hi: number): number {

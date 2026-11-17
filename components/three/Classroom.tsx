@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import { CLASSROOM } from '../../lib/campus';
 import type { TimeOfDay } from '../../lib/playerState';
 import { getSharedBuildingPbrTextures, makeLightShaftTexture, makeWoodGrainTexture } from './materials';
-import { LabelPlane } from './TextPlate';
+import { LabelPlane, wrapVietnameseCanvasContext } from './TextPlate';
 import { TeacherNpc } from './Npc';
 
 export type HomeworkState = 'desk' | 'hand' | 'teacher';
@@ -39,36 +39,48 @@ const DESK_WOOD = '#8A6B48';
 const CHAIR_WOOD = '#6E5638';
 
 function drawBoard(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  ctx.fillStyle = BOARD_GREEN;
-  ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(8, 8, w - 16, h - 16);
-  ctx.fillStyle = '#F5F5F0';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '900 120px Arial, sans-serif';
-  ctx.fillText('数学课', w / 2, h * 0.3);
-  ctx.font = '700 56px Arial, sans-serif';
-  ctx.fillText('数学 shùxué · 黑板 hēibǎn', w / 2, h * 0.52);
-  ctx.font = '700 52px Arial, sans-serif';
-  ctx.fillText('笔记 bǐjì · 作业 zuòyè', w / 2, h * 0.74);
+  const vctx = wrapVietnameseCanvasContext(ctx);
+  vctx.fillStyle = BOARD_GREEN;
+  vctx.fillRect(0, 0, w, h);
+  vctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  vctx.lineWidth = 4;
+  vctx.strokeRect(8, 8, w - 16, h - 16);
+  vctx.textAlign = 'center';
+  vctx.textBaseline = 'middle';
+  vctx.fillStyle = '#F8FAFC';
+  vctx.font = '700 88px "Be Vietnam Pro", "Noto Sans SC", Arial, sans-serif';
+  vctx.fillText('汉语课 · HSK', w / 2, h * 0.25);
+
+  vctx.strokeStyle = 'rgba(253, 230, 138, 0.45)';
+  vctx.lineWidth = 2.5;
+  vctx.beginPath();
+  vctx.moveTo(w * 0.16, h * 0.39);
+  vctx.lineTo(w * 0.84, h * 0.39);
+  vctx.stroke();
+
+  vctx.fillStyle = '#FEF08A';
+  vctx.font = '700 46px "Noto Sans SC", Arial, sans-serif';
+  vctx.fillText('你好 nǐhǎo  ·  汉语 hànyǔ  ·  学习 xuéxí', w / 2, h * 0.52);
+  vctx.fillStyle = '#E2E8F0';
+  vctx.font = '700 40px "Noto Sans SC", Arial, sans-serif';
+  vctx.fillText('黑板 hēibǎn  ·  课文 kèwén  ·  笔记 bǐjì  ·  作业 zuòyè', w / 2, h * 0.77);
 }
 
 function drawRoomSign(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  ctx.fillStyle = '#F2E8D5';
-  ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = '#8A6B48';
-  ctx.lineWidth = 6;
-  ctx.strokeRect(6, 6, w - 12, h - 12);
-  ctx.fillStyle = '#7F1D1D';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '800 32px "Be Vietnam Pro", Arial, sans-serif';
-  ctx.fillText('GIẢNG ĐƯỜNG HÁN NGỮ HSK · TÒA NHÀ C7', w / 2, h * 0.34);
-  ctx.fillStyle = '#3A2E12';
-  ctx.font = '600 26px "Be Vietnam Pro", Arial, sans-serif';
-  ctx.fillText('Đại học Bách Khoa Hà Nội — Học HSK theo từng bài', w / 2, h * 0.72);
+  const vctx = wrapVietnameseCanvasContext(ctx);
+  vctx.fillStyle = '#F2E8D5';
+  vctx.fillRect(0, 0, w, h);
+  vctx.strokeStyle = '#8A6B48';
+  vctx.lineWidth = 6;
+  vctx.strokeRect(6, 6, w - 12, h - 12);
+  vctx.fillStyle = '#7F1D1D';
+  vctx.textAlign = 'center';
+  vctx.textBaseline = 'middle';
+  vctx.font = '700 32px "Be Vietnam Pro", Arial, sans-serif';
+  vctx.fillText('GIẢNG ĐƯỜNG HÁN NGỮ HSK · TÒA NHÀ C7', w / 2, h * 0.34);
+  vctx.fillStyle = '#3A2E12';
+  vctx.font = '600 26px "Be Vietnam Pro", Arial, sans-serif';
+  vctx.fillText('Đại học Bách Khoa Hà Nội — Học HSK theo từng bài', w / 2, h * 0.72);
 }
 
 function Desk({

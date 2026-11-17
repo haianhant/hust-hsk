@@ -1224,6 +1224,8 @@ test('(21) HskRoom synchronizes football actions across players and survives hib
 
   const welcomeA = wsA.sent.find((m) => m.type === 'welcome');
   const welcomeB = wsB.sent.find((m) => m.type === 'welcome');
+  assert.equal(world.CAMPUS_FOOTBALL_PITCH.ballRadius, 0.11);
+  assert.equal(mpContracts.createInitialFootballState(1000).y, 0.11);
   assert.ok(welcomeA?.football && welcomeB?.football, 'Welcome must include football state');
   assert.equal(welcomeA.football.x, world.CAMPUS_FOOTBALL_PITCH.center.x);
   assert.equal(welcomeA.football.z, world.CAMPUS_FOOTBALL_PITCH.center.z);

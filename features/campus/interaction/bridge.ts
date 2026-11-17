@@ -349,7 +349,10 @@ export function findNearestInteractable(
     if (dist(BOARD_GAME_CLUB_DOOR.pos.x, BOARD_GAME_CLUB_DOOR.pos.z) <= BOARD_GAME_CLUB_DOOR.triggerRadius) {
       return { id: 'boardgame-door', label: '🎲 Nhấn E — Vào CLB Board Game' };
     }
-    if (dist(C7_DOOR.pos.x, C7_DOOR.pos.z) <= C7_DOOR.triggerRadius) {
+    if (
+      dist(C7_DOOR.pos.x, C7_DOOR.pos.z) <= C7_DOOR.triggerRadius ||
+      dist(C7_DOOR.westPos.x, C7_DOOR.westPos.z) <= C7_DOOR.westTriggerRadius
+    ) {
       return {
         id: 'c7-door',
         label: hskMode

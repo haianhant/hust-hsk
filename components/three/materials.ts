@@ -90,18 +90,18 @@ export function makeAsphaltTexture(repeatX = 4, repeatY = 1): THREE.CanvasTextur
   ctx.fillStyle = '#8B8C88';
   ctx.fillRect(0, 0, 256, 256);
 
-  // Hai dải rãnh thoát nước sát mép đường (y gần 0 và 256)
-  const edgeGradTop = ctx.createLinearGradient(0, 0, 0, 22);
-  edgeGradTop.addColorStop(0, 'rgba(55, 56, 52, 0.38)');
+  // Hai dải rãnh thoát nước mảnh sát mép đường (không tạo đường sọc đậm cắt tại ngã tư)
+  const edgeGradTop = ctx.createLinearGradient(0, 0, 0, 18);
+  edgeGradTop.addColorStop(0, 'rgba(55, 56, 52, 0.16)');
   edgeGradTop.addColorStop(1, 'rgba(55, 56, 52, 0)');
   ctx.fillStyle = edgeGradTop;
-  ctx.fillRect(0, 0, 256, 22);
+  ctx.fillRect(0, 0, 256, 18);
 
-  const edgeGradBot = ctx.createLinearGradient(0, 234, 0, 256);
+  const edgeGradBot = ctx.createLinearGradient(0, 238, 0, 256);
   edgeGradBot.addColorStop(0, 'rgba(55, 56, 52, 0)');
-  edgeGradBot.addColorStop(1, 'rgba(55, 56, 52, 0.38)');
+  edgeGradBot.addColorStop(1, 'rgba(55, 56, 52, 0.16)');
   ctx.fillStyle = edgeGradBot;
-  ctx.fillRect(0, 234, 256, 22);
+  ctx.fillRect(0, 238, 256, 18);
 
   // Hạt đá nhựa đường
   for (let i = 0; i < 3000; i++) {
@@ -109,11 +109,6 @@ export function makeAsphaltTexture(repeatX = 4, repeatY = 1): THREE.CanvasTextur
     ctx.fillStyle = `rgba(${v}, ${v}, ${v - 3}, ${0.14 + rnd() * 0.16})`;
     ctx.fillRect(rnd() * 256, rnd() * 256, 1.8, 1.8);
   }
-
-  // Vạch phân làn đứt nét mờ ở tim đường (y = 128)
-  ctx.fillStyle = 'rgba(238, 235, 222, 0.55)';
-  ctx.fillRect(24, 124, 96, 8);
-  ctx.fillRect(152, 124, 80, 8);
 
   return configureTexture(new THREE.CanvasTexture(c), repeatX, repeatY, true);
 }

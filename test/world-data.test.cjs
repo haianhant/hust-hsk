@@ -240,10 +240,13 @@ test('(8) hustmap.com Source-of-Truth layout & Scope Boundary invariants', () =>
   assert.equal('h3' in EAST_CAMPUS_BLOCKS, false);
   assert.ok(EAST_CAMPUS_BLOCKS.a15 && EAST_CAMPUS_BLOCKS.a17 && EAST_CAMPUS_BLOCKS.nhaE && EAST_CAMPUS_BLOCKS.nhaT);
 
-  // C7 runs North-South (size.z > size.x) with West-facing HSK entrance (C7_DOOR west of C7_BUILDING.box.minX)
+  // C7 runs North-South (size.z > size.x) with South-facing main entrance facing the inbound lane from Trần Đại Nghĩa Gate (x = 73.5, z > box.maxZ) and secondary West door
   assert.ok(C7_BUILDING.size.z > C7_BUILDING.size.x);
-  assert.ok(C7_DOOR.pos.x < C7_BUILDING.box.minX);
-  assert.equal(C7_DOOR.pos.z, C7_BUILDING.center.z);
+  assert.equal(C7_DOOR.pos.x, C7_BUILDING.center.x);
+  assert.ok(C7_DOOR.pos.z > C7_BUILDING.box.maxZ && C7_DOOR.pos.z < -7.3);
+  assert.ok(C7_DOOR.westPos.x < C7_BUILDING.box.minX);
+  const c7Dest = campusFacade.getFastTravelDestination('c7');
+  assert.ok(c7Dest && c7Dest.x === C7_BUILDING.center.x && c7Dest.z > C7_BUILDING.box.maxZ && c7Dest.z < -7.3);
 
   // C1 Fountain centered on C1 symmetry axis (x = -58)
   assert.equal(C1_FOUNTAIN.center.x, -58);

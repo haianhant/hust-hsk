@@ -174,10 +174,10 @@ export const TDN_DIVIDED_MEDIAN = {
 /** Hàng cây cổ thụ trồng giữa dải phân cách đôi Cổng Trần Đại Nghĩa */
 export const TDN_MEDIAN_TREES: Vec2[] = [
   { x: 62.5, z: -6.0 },
-  { x: 68.5, z: -6.0 },
-  { x: 74.5, z: -6.0 },
-  { x: 80.5, z: -6.0 },
-  { x: 86.5, z: -6.0 },
+  { x: 68.2, z: -6.0 },
+  { x: 76.8, z: -6.0 },
+  { x: 82.0, z: -6.0 },
+  { x: 87.2, z: -6.0 },
 ];
 
 /** Nhà để xe sinh viên D3 - D5 (nằm bên tay trái / phía Nam +Z gần Cổng Trần Đại Nghĩa,
@@ -904,10 +904,12 @@ export const CLASSROOM_DOOR = {
   triggerRadius: 2.5,
 } as const;
 
-/** Cửa chính Giảng đường Hán ngữ HSK tại Tòa C7 (sảnh chính nhánh giữa chữ E hướng Tây -X) */
+/** Cửa chính Giảng đường Hán ngữ HSK tại Tòa C7 (Đại sảnh kính mặt Nam ngay bên phải lối vào từ Cổng Trần Đại Nghĩa) */
 export const C7_DOOR = {
-  pos: { x: 57.8, z: -32.8 },
+  pos: { x: 73.5, z: -12.3 },
   triggerRadius: 3.6,
+  westPos: { x: 57.8, z: -32.8 },
+  westTriggerRadius: 3.2,
 } as const;
 
 export const CLASSROOM = {
