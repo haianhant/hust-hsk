@@ -893,6 +893,14 @@ async function clickControlViaSettingsIfCollapsed(page, testId, options = {}) {
   }
 }
 
+async function ensureSecondaryMenuOpen(page) {
+  const menu = page.locator('[data-testid="bg-secondary-actions-menu"]');
+  if ((await menu.count()) === 0) {
+    await page.locator('[data-testid="bg-secondary-actions-btn"]').click();
+    await menu.waitFor({ state: 'visible', timeout: 3000 });
+  }
+}
+
 async function verifyTilePopoverAndKeyboardA11y(page, options = {}) {
   const { savePopoverShot = false } = options;
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -1055,7 +1063,8 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
               el.hasAttribute('data-self-here') &&
               el.hasAttribute('data-has-attackable') &&
               el.hasAttribute('data-destination-highlighted') &&
-              el.hasAttribute('data-can-choose-dest'),
+              el.hasAttribute('data-can-choose-dest') &&
+              el.hasAttribute('data-location-selected'),
           ),
         };
       }
@@ -1072,6 +1081,16 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
       const headerButtons = header
         ? Array.from(header.querySelectorAll('button')).map((b) => rectOf(b))
         : [];
+      const diceTrayButtons = diceTray
+        ? diceTray.querySelectorAll('button').length
+        : 0;
+      const actionPanelEl = document.querySelector('[data-testid="bg-action-panel"]');
+      const primaryCtaCount = actionPanelEl
+        ? actionPanelEl.querySelectorAll('[data-primary-cta="true"]').length
+        : 0;
+      const hasActionGuidance = Boolean(
+        actionPanelEl?.querySelector('[data-testid="bg-action-guidance"]')?.textContent?.trim(),
+      );
 
       return {
         vw,
@@ -1083,7 +1102,11 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
         sideRect: rectOf(sideDrawer),
         damageTrackRect: rectOf(damageTrack),
         diceTrayRect: rectOf(diceTray),
+        diceTrayButtons,
         actionBarRect: rectOf(actionBar),
+        actionPanelExists: Boolean(actionPanelEl),
+        primaryCtaCount,
+        hasActionGuidance,
         boardScrollOverflowY: scrollArea
           ? scrollArea.scrollHeight - scrollArea.clientHeight
           : null,
@@ -1103,6 +1126,11 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
 
     const tag = `[${label} @ ${vp.width}x${vp.height}]`;
     assert.equal(metrics.docOverflowX, false, `${tag} must have zero horizontal overflow`);
+    assert.equal(metrics.diceTrayButtons, 0, `${tag} Dice Tray must be display-only (zero interactive buttons)`);
+    if (!isSpectator && metrics.actionPanelExists) {
+      assert.equal(metrics.primaryCtaCount, 1, `${tag} Action Panel must expose exactly 1 primary CTA`);
+      assert.equal(metrics.hasActionGuidance, true, `${tag} Action Panel must display concise guidance`);
+    }
     assert.ok(metrics.headerRect && metrics.headerRect.height <= 48, `${tag} header must be 1 row (<=48px), got ${metrics.headerRect?.height}`);
     assert.equal(
       metrics.hasCollapsedRulesBtnOutsideSettings,
@@ -1246,6 +1274,84 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
   }
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.waitForTimeout(120);
+}
+
+async function verifyPhase3ContextualUi(page) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await settleBoardLayoutAnimations(page, 140);
+
+  const measureTilesAndViewport = async () =>
+    page.evaluate(() => {
+      const ids = ['radio', 'lobby', 'breaker', 'canteen', 'corridor', 'court'];
+      const vh = window.innerHeight;
+      const vw = window.innerWidth;
+      const tiles = {};
+      for (const id of ids) {
+        const el = document.querySelector(`[data-testid="bg-loc-${id}"]`);
+        const r = el?.getBoundingClientRect();
+        tiles[id] = r
+          ? {
+              top: Math.round(r.top),
+              bottom: Math.round(r.bottom),
+              left: Math.round(r.left),
+              width: Math.round(r.width),
+              height: Math.round(r.height),
+            }
+          : null;
+      }
+      return {
+        vw,
+        vh,
+        docOverflowX: document.documentElement.scrollWidth > vw + 1,
+        tiles,
+      };
+    });
+
+  const beforeTiles = await measureTilesAndViewport();
+
+  // 1. Select any non-destination location tile by clicking its middle artwork strip
+  const inspectTile = page
+    .locator('[data-testid^="bg-loc-"][data-can-choose-dest="false"]')
+    .first();
+  const box = await inspectTile.boundingBox();
+  assert.ok(box && box.height > 80, 'Inspectable location tile must have Phase 2.1 height');
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.55);
+
+  const locContextBar = page.locator('[data-testid="bg-tactical-context-bar"][data-context-kind="location"]');
+  await locContextBar.waitFor({ state: 'visible', timeout: 3000 });
+  const locCtxSnap = await measureTilesAndViewport();
+  assert.equal(locCtxSnap.docOverflowX, false, 'Location context bar must not overflow 1440x900 horizontally');
+  for (const [id, r] of Object.entries(locCtxSnap.tiles)) {
+    assert.ok(r && r.height >= 135 && r.height <= 155 && r.bottom <= 900, `Location context altered tile ${id} bounds: ${JSON.stringify(r)}`);
+  }
+  await page.screenshot({ path: path.join(SHOT_DIR, 'phase3-after-1440x900-context-location.png') });
+
+  // 2. Select self player strip card -> player context bar without HP leak
+  await page.locator('[data-testid="bg-player-strip-self"]').click();
+  const playerContextBar = page.locator('[data-testid="bg-tactical-context-bar"][data-context-kind="player"]');
+  await playerContextBar.waitFor({ state: 'visible', timeout: 3000 });
+  const playerCtxText = await playerContextBar.innerText();
+  assert.equal(/\b\d+\s*\/\s*\d+\s*HP\b/i.test(playerCtxText), false, `Player context bar leaked HP ratio: ${playerCtxText}`);
+  await page.screenshot({ path: path.join(SHOT_DIR, 'phase3-after-1440x900-context-player.png') });
+
+  // 3. Clear context bar cleanly
+  await page.locator('[data-testid="bg-clear-context-btn"]').click();
+  assert.equal(await page.locator('[data-testid="bg-tactical-context-bar"]').count(), 0, 'Clear button must close tactical context bar');
+
+  // 4. Secondary actions popover opens upward without shifting tiles, closes on Escape
+  await ensureSecondaryMenuOpen(page);
+  const afterMenuSnap = await measureTilesAndViewport();
+  for (const id of Object.keys(beforeTiles.tiles)) {
+    const b = beforeTiles.tiles[id];
+    const a = afterMenuSnap.tiles[id];
+    assert.ok(b && a && Math.abs(b.top - a.top) <= 1 && Math.abs(b.height - a.height) <= 1, `Secondary menu shifted tile ${id}`);
+  }
+  await page.screenshot({ path: path.join(SHOT_DIR, 'phase3-after-1440x900-secondary-menu.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="bg-secondary-actions-menu"]').length === 0, null, { timeout: 2000 });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(100);
 }
 
 function verifyCommonAudits(items) {
@@ -1516,6 +1622,26 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     assert.ok(activePlayer, 'Either P1 or P4 must display ActionPanel');
     await activePlayer.page.bringToFront();
     for (let s = 0; s < 5; s++) {
+      const phaseAudit = await activePlayer.page.evaluate(() => {
+        const panel = document.querySelector('[data-testid="bg-action-panel"]');
+        if (!panel) return null;
+        const atk = panel.querySelector('[data-testid="bg-attack-btn"]');
+        return {
+          primaryCount: panel.querySelectorAll('[data-primary-cta="true"]').length,
+          hasGuidance: Boolean(panel.querySelector('[data-testid="bg-action-guidance"]')?.textContent?.trim()),
+          inMainAction: Boolean(panel.querySelector('[data-testid="bg-end-turn-btn"]')),
+          attackDisabled: Boolean(atk && atk.disabled),
+          attackLockReason: atk?.getAttribute('data-lock-reason') || null,
+          hasLockSummary: Boolean(panel.querySelector('[data-testid="bg-locked-reasons"]')),
+        };
+      });
+      if (phaseAudit) {
+        assert.equal(phaseAudit.primaryCount, 1, `Expected 1 primary CTA at step ${s}, got ${JSON.stringify(phaseAudit)}`);
+        assert.equal(phaseAudit.hasGuidance, true, `Expected action guidance at step ${s}`);
+        if (phaseAudit.inMainAction && phaseAudit.attackDisabled) {
+          assert.ok(phaseAudit.attackLockReason && phaseAudit.hasLockSummary, `Disabled attack must display lock reason: ${JSON.stringify(phaseAudit)}`);
+        }
+      }
       if ((await activePlayer.page.locator('[data-testid="bg-end-turn-btn"]').count()) > 0) break;
       await playFirstValidStepOnPage(activePlayer.page, 0, undefined, {
         skipReveal: true,
@@ -1575,6 +1701,21 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       assert.ok(healBtnText.includes('(Bạn)'), `Heal button must target self after reset, got: ${healBtnText}`);
     }
 
+    assert.equal(
+      await activePlayer.page.locator('[data-testid="bg-reveal-role-btn"]').count(),
+      0,
+      'Secondary reveal button must stay collapsed inside menu by default',
+    );
+    assert.equal(
+      await activePlayer.page.locator('[data-testid="bg-use-skill-btn"]').count(),
+      0,
+      'Secondary skill button must stay collapsed inside menu by default',
+    );
+    await ensureSecondaryMenuOpen(activePlayer.page);
+    if ((await activePlayer.page.locator('[data-testid="bg-skill-locked-reason"]').count()) > 0) {
+      const skillLockText = await activePlayer.page.locator('[data-testid="bg-skill-locked-reason"]').innerText();
+      assert.ok(skillLockText.length > 0, 'Locked skill inside secondary menu must show reason');
+    }
     if ((await activePlayer.page.locator('[data-testid="bg-reveal-role-btn"]').count()) > 0) {
       await activePlayer.page.locator('[data-testid="bg-reveal-role-btn"]').click();
       await activePlayer.page.waitForSelector('[data-testid="bg-confirm-reveal-btn"]', { timeout: UI_TIMEOUT });
@@ -1587,6 +1728,12 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
         'Cancelling reveal must dismiss bg-confirm-reveal-btn immediately',
       );
     }
+    await activePlayer.page.keyboard.press('Escape');
+    await activePlayer.page.waitForFunction(
+      () => document.querySelectorAll('[data-testid="bg-secondary-actions-menu"]').length === 0,
+      null,
+      { timeout: 2000 },
+    );
 
     for (let clr = 0; clr < 4; clr++) {
       const skipBtn = activePlayer.page.locator('[data-testid^="bg-skip-card-"]').first();
@@ -1675,9 +1822,10 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
           if (hasActionPanel > 0) {
             await verifyDesktopTacticalLayoutV2(p1.page, 'E2E-01-ActiveTurn', {
               saveShots: true,
-              afterPrefix: 'phase2_1-after',
+              afterPrefix: 'phase3-after',
             });
             await verifyTilePopoverAndKeyboardA11y(p1.page, { savePopoverShot: false });
+            await verifyPhase3ContextualUi(p1.page);
             p1DesktopActiveChecked = true;
           }
         }
@@ -1997,7 +2145,25 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     assert.equal(specPrivacy.hasHpLeakText, false, '8P spectator view must never leak HP totals');
     assert.equal(specPrivacy.leakedAria.length, 0, `8P tiles aria-labels leaked secret info: ${JSON.stringify(specPrivacy.leakedAria)}`);
     await spec.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-8p-spectator.png') });
-    await spec.page.screenshot({ path: path.join(SHOT_DIR, 'phase2_1-after-8p-spectator.png') });
+    await spec.page.screenshot({ path: path.join(SHOT_DIR, 'phase3-after-8p-spectator.png') });
+
+    // Verify Spectator can inspect a location cleanly via context bar while staying strictly read-only
+    const radioBox = await spec.page.locator('[data-testid="bg-loc-radio"]').boundingBox();
+    assert.ok(radioBox, 'Spectator must see radio tile');
+    await spec.page.mouse.click(radioBox.x + radioBox.width * 0.5, radioBox.y + radioBox.height * 0.55);
+    await spec.page.waitForSelector('[data-testid="bg-tactical-context-bar"][data-context-kind="location"]', { timeout: 3000 });
+    const specCtxAudit = await spec.page.evaluate(() => {
+      const banner = document.querySelector('[data-testid="bg-action-spectator-banner"]');
+      const barText = banner?.textContent || '';
+      const btns = Array.from(banner?.querySelectorAll('button') || []).map((b) =>
+        b.getAttribute('data-testid'),
+      );
+      return { btns, hasHpLeak: /\b\d+\s*\/\s*\d+\s*HP\b/i.test(barText) };
+    });
+    assert.deepEqual(specCtxAudit.btns, ['bg-clear-context-btn'], 'Spectator banner may only expose clear-context button');
+    assert.equal(specCtxAudit.hasHpLeak, false, 'Spectator context bar must not leak HP ratio');
+    await spec.page.locator('[data-testid="bg-clear-context-btn"]').click();
+    assert.equal(await spec.page.locator('[data-testid="bg-tactical-context-bar"]').count(), 0);
 
     // Execute 8 turns (1 full round across 8p) verifying active state sync
     const hostTried = new Set();
@@ -2357,7 +2523,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     let zeroFlickerVerified = false;
     let movedTimelineVerified = false;
     for (let rollAttempt = 0; rollAttempt < 3 && !movedTimelineVerified; rollAttempt++) {
-      if ((await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').count()) === 0) break;
+      if ((await p1.page.locator('[data-testid="bg-roll-dice-btn"]').count()) === 0) break;
 
       await p1.page.evaluate(() => {
         const board = document.querySelector('[data-testid="boardgame-2d-board"]');
@@ -2503,7 +2669,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
         window.__bgRealBoardProbe = state;
       });
 
-      await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').click();
+      await p1.page.locator('[data-testid="bg-roll-dice-btn"]').click();
       await p1.page.waitForFunction(
         () => Boolean(window.__bgRealBoardProbe?.firstUnsettledAt),
         null,
@@ -2603,7 +2769,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     // Finish turn passively -> Check (B): Skip Animation mid-roll on real GameBoard
     await finishP1TurnPassively();
     await advancePeersUntilP1Active({ skipCombat: true });
-    await p1.page.waitForSelector('[data-testid="bg-board-roll-dice-btn"]', { timeout: UI_TIMEOUT });
+    await p1.page.waitForSelector('[data-testid="bg-roll-dice-btn"]', { timeout: UI_TIMEOUT });
     await p1.page
       .locator('[data-testid="bg-vfx-dice-overlay"]')
       .waitFor({ state: 'detached', timeout: 3000 })
@@ -2613,7 +2779,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       null,
       { timeout: 3000, polling: 40 },
     );
-    await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').click();
+    await p1.page.locator('[data-testid="bg-roll-dice-btn"]').click();
     await p1.page.waitForSelector('[data-testid="bg-vfx-dice-overlay"][data-dice-settled="false"]', {
       timeout: 3000,
     });
@@ -2633,7 +2799,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     // Finish turn passively -> Check (C): Reduced Motion on real GameBoard (zero unsettled frames)
     await finishP1TurnPassively();
     await advancePeersUntilP1Active({ skipCombat: true });
-    await p1.page.waitForSelector('[data-testid="bg-board-roll-dice-btn"]', { timeout: UI_TIMEOUT });
+    await p1.page.waitForSelector('[data-testid="bg-roll-dice-btn"]', { timeout: UI_TIMEOUT });
     await p1.page
       .locator('[data-testid="bg-vfx-dice-overlay"]')
       .waitFor({ state: 'detached', timeout: 3000 })
@@ -2678,7 +2844,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       });
       window.__bgRmRollProbe = rmProbe;
     });
-    await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').click();
+    await p1.page.locator('[data-testid="bg-roll-dice-btn"]').click();
     await p1.page.waitForFunction(
       () => Boolean(window.__bgRmRollProbe?.headlineChanged),
       null,
@@ -2703,8 +2869,11 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       .waitFor({ state: 'detached', timeout: 1500 })
       .catch(() => undefined);
 
+    await p1.page.waitForSelector('[data-testid="bg-action-panel"]', { timeout: UI_TIMEOUT });
     for (let s = 0; s < 5; s++) {
+      await ensureSecondaryMenuOpen(p1.page);
       if ((await p1.page.locator('[data-testid="bg-reveal-role-btn"]').count()) > 0) break;
+      await p1.page.keyboard.press('Escape');
       if ((await p1.page.locator('[data-testid="bg-roll-dice-btn"]').count()) > 0) {
         await p1.page.locator('[data-testid="bg-roll-dice-btn"]').click();
       } else if ((await p1.page.locator('[data-testid^="bg-choose-dest-"]').count()) > 0) {
@@ -2712,6 +2881,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       }
       await p1.page.waitForTimeout(180);
     }
+    await ensureSecondaryMenuOpen(p1.page);
     await p1.page.waitForSelector('[data-testid="bg-reveal-role-btn"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-reveal-role-btn"]').click();
     await p1.page.waitForSelector('[data-testid="bg-confirm-reveal-btn"]', { timeout: UI_TIMEOUT });

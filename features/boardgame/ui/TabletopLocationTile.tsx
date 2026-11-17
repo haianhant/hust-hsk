@@ -34,10 +34,12 @@ export interface TabletopLocationTileProps {
   canChooseMoveHere: boolean;
   rolledDestinationHere: boolean;
   isHighlightedDestination?: boolean;
+  isSelectedLocation?: boolean;
   reducedMotion?: boolean;
   enableMist?: boolean;
   enableBackdropBlur?: boolean;
   onChooseDestination?: (locId: BoardGameLocationId) => void;
+  onSelectLocation?: (locId: BoardGameLocationId) => void;
   onSelectPlayer: (updater: (prev: string | null) => string | null) => void;
 }
 
@@ -52,10 +54,12 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
   canChooseMoveHere,
   rolledDestinationHere,
   isHighlightedDestination = false,
+  isSelectedLocation = false,
   reducedMotion = false,
   enableMist = true,
   enableBackdropBlur = true,
   onChooseDestination,
+  onSelectLocation,
   onSelectPlayer,
 }: TabletopLocationTileProps) {
   const meta = LOCATION_VISUAL_META[locId];
@@ -113,7 +117,9 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
             ? 'border-rose-400/90 ring-1 ring-rose-500/60 shadow-[0_8px_20px_rgba(244,63,94,0.24)]'
             : hasSelectedOccupant
               ? 'border-sky-400/80 ring-1 ring-sky-400/40'
-              : 'border-slate-700/65 shadow-[0_6px_16px_rgba(2,6,23,0.65)]';
+              : isSelectedLocation
+                ? 'border-indigo-300 ring-2 ring-indigo-400/75 shadow-[0_8px_22px_rgba(99,102,241,0.28)]'
+                : 'border-slate-700/65 shadow-[0_6px_16px_rgba(2,6,23,0.65)]';
 
   return (
     <div
@@ -124,30 +130,41 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
       data-has-attackable={hasAttackableOccupant ? 'true' : 'false'}
       data-has-selected={hasSelectedOccupant ? 'true' : 'false'}
       data-can-choose-dest={canChooseMoveHere ? 'true' : 'false'}
+      data-location-selected={isSelectedLocation ? 'true' : 'false'}
       onClick={
         canChooseMoveHere && onChooseDestination
           ? () => onChooseDestination(locId)
-          : undefined
+          : onSelectLocation
+            ? () => onSelectLocation(locId)
+            : undefined
       }
       role={canChooseMoveHere ? 'button' : undefined}
-      tabIndex={canChooseMoveHere ? 0 : undefined}
+      tabIndex={canChooseMoveHere || onSelectLocation ? 0 : undefined}
       aria-label={
         canChooseMoveHere
           ? `Di chuyển tới Ô ${meta.diceLabel} ${meta.name} (${meta.actionTitle})`
-          : undefined
+          : onSelectLocation
+            ? `Xem thông tin Ô ${meta.diceLabel} ${meta.name} (${meta.actionTitle})`
+            : undefined
       }
       onKeyDown={
-        canChooseMoveHere && onChooseDestination
+        (canChooseMoveHere && onChooseDestination) || onSelectLocation
           ? (e) => {
               if (e.target !== e.currentTarget) return;
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                onChooseDestination(locId);
+                if (canChooseMoveHere && onChooseDestination) {
+                  onChooseDestination(locId);
+                } else {
+                  onSelectLocation?.(locId);
+                }
               }
             }
           : undefined
       }
       className={`group/tile relative h-full rounded-2xl border bg-slate-950 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+        onSelectLocation && !canChooseMoveHere ? 'cursor-pointer' : ''
+      } ${
         ruleOpen ? 'z-30' : ''
       } ${tileFrameCls}`}
     >

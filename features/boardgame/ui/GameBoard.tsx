@@ -121,6 +121,7 @@ export function GameBoard({
   );
   const [mobileTab, setMobileTab] = useState<'board' | 'role' | 'log'>('board');
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<BoardGameLocationId | null>(null);
   const [chatText, setChatText] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -207,6 +208,7 @@ export function GameBoard({
     setSeenClueCount(0);
     setSeenLogCount(publicGame.publicLog.length);
     setSelectedTargetId(null);
+    setSelectedLocationId(null);
     setZoomTarget(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicGame.matchId]);
@@ -257,6 +259,7 @@ export function GameBoard({
     if (prevTurnRef.current !== publicGame.turnNumber) {
       prevTurnRef.current = publicGame.turnNumber;
       setSelectedTargetId(null);
+      setSelectedLocationId(null);
       setLocalError(null);
     }
   }, [publicGame.turnNumber]);
@@ -364,6 +367,27 @@ export function GameBoard({
     },
     [dispatchAction],
   );
+
+  const handleSelectPlayer = useCallback(
+    (updater: ((prev: string | null) => string | null) | string | null) => {
+      setSelectedTargetId((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        if (next !== null) setSelectedLocationId(null);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleSelectLocation = useCallback((locId: BoardGameLocationId) => {
+    setSelectedTargetId(null);
+    setSelectedLocationId((prev) => (prev === locId ? null : locId));
+  }, []);
+
+  const handleClearContext = useCallback(() => {
+    setSelectedTargetId(null);
+    setSelectedLocationId(null);
+  }, []);
 
   const handleCloseZoom = useCallback(() => {
     setZoomTarget(null);
@@ -920,11 +944,13 @@ export function GameBoard({
                             canChooseMoveHere={canChooseMoveHere}
                             rolledDestinationHere={rolledDestinationHere}
                             isHighlightedDestination={isHighlightedDestination}
+                            isSelectedLocation={selectedLocationId === locId}
                             reducedMotion={vfx.reducedMotion}
                             enableMist={gfx.profile.enableMistDrift}
                             enableBackdropBlur={gfx.profile.enableBackdropBlur}
                             onChooseDestination={handleChooseDestination}
-                            onSelectPlayer={setSelectedTargetId}
+                            onSelectLocation={handleSelectLocation}
+                            onSelectPlayer={handleSelectPlayer}
                           />
                         );
                       })}
@@ -933,7 +959,7 @@ export function GameBoard({
                 ))}
               </section>
 
-              {/* 3. KHAY XÚC XẮC 3D TƯƠNG TÁC (1d6+1d4) & 3 CHỒNG BÀI BẤM RÚT TRỰC TIẾP */}
+              {/* 3. KHAY XÚC XẮC 3D HIỂN THỊ TRẠNG THÁI (1d6+1d4) & BỘ ĐẾM 3 CHỒNG BÀI */}
               <section
                 data-testid="bg-dice-tray"
                 data-turn-active={canRollOnBoard ? 'true' : 'false'}
@@ -950,13 +976,6 @@ export function GameBoard({
                   const diceRollingNow = !vfx.isDiceSettled;
                   const trayDiceStage = vfx.activeDiceRoll ? vfx.diceRollStage : 'settled';
                   const enable3DDice = gfx.profile.tier !== 'low' && !vfx.reducedMotion;
-                  const rerollNeeded =
-                    !diceRollingNow &&
-                    canRollOnBoard &&
-                    Boolean(
-                      publicGame.lastDiceRoll?.rerollRequired &&
-                        publicGame.lastDiceRoll.playerId === selfPlayerId,
-                    );
                   const diceSummary = publicGame.lastDiceRoll ? (
                     <>
                       <MidnightDicePair3D
@@ -1015,15 +1034,6 @@ export function GameBoard({
                           </>
                         )}
                       </div>
-                      {canRollOnBoard && (
-                        <span className="shrink-0 px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
-                          {diceRollingNow
-                            ? '🎲 Đang lăn...'
-                            : rerollNeeded
-                              ? '🔁 Đổ lại ngay!'
-                              : '🎲 Tung Xúc Xắc'}
-                        </span>
-                      )}
                     </>
                   ) : (
                     <>
@@ -1037,88 +1047,57 @@ export function GameBoard({
                       <div className="min-w-0 flex-1 text-left">
                         <p className="text-xs sm:text-sm font-black text-white truncate">
                           {canRollOnBoard
-                            ? '⚡ Lượt của bạn! Tung Xúc Xắc Bóng Đêm (1d6 + 1d4)'
+                            ? '⚡ Lượt của bạn! Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)'
                             : 'Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)'}
                         </p>
                         <p className="text-[11px] text-slate-300 truncate">
                           Tung xúc xắc di chuyển · Tổng 7 chọn bất kỳ · Trùng chỗ được đổ lại
                         </p>
                       </div>
-                      {canRollOnBoard && (
-                        <span className="shrink-0 px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
-                          🎲 Tung Xúc Xắc
-                        </span>
-                      )}
                     </>
                   );
 
-                  return canRollOnBoard ? (
-                    <button
-                      type="button"
-                      data-testid="bg-board-roll-dice-btn"
-                      onClick={() => dispatchAction({ type: 'ROLL_DICE' })}
-                      className="flex items-center gap-2.5 flex-1 min-w-0 rounded-xl border border-emerald-400/80 bg-emerald-950/55 hover:bg-emerald-900/65 px-2.5 py-1.5 shadow-[0_0_20px_rgba(16,185,129,0.28)] transition cursor-pointer"
-                    >
-                      {diceSummary}
-                    </button>
-                  ) : (
+                  return (
                     <div className="flex items-center gap-2.5 flex-1 min-w-0 px-1">
                       {diceSummary}
                     </div>
                   );
                 })()}
 
-                {/* 3 Chồng bài (bấm trực tiếp ở Pha 2 khi đang đứng ở khu vực hợp lệ) */}
+                {/* 3 Chồng bài (chỉ hiển thị số lá còn lại & highlight khi đúng khu vực rút) */}
                 <div className="grid grid-cols-3 gap-1.5 shrink-0">
                   {(
                     [
-                      ['investigation', 'Khám Phá', 'text-emerald-300', 'border-emerald-400 bg-emerald-950/50 hover:bg-emerald-900/60 shadow-[0_0_14px_rgba(16,185,129,0.24)]'],
-                      ['equipment', 'Cung Ứng', 'text-sky-300', 'border-sky-400 bg-sky-950/50 hover:bg-sky-900/60 shadow-[0_0_14px_rgba(56,189,248,0.24)]'],
-                      ['event', 'Đột Kích', 'text-rose-300', 'border-rose-400 bg-rose-950/50 hover:bg-rose-900/60 shadow-[0_0_14px_rgba(244,63,94,0.24)]'],
+                      ['investigation', 'Khám Phá', 'text-emerald-300', 'border-emerald-400/80 bg-emerald-950/50 shadow-[0_0_12px_rgba(16,185,129,0.22)]'],
+                      ['equipment', 'Cung Ứng', 'text-sky-300', 'border-sky-400/80 bg-sky-950/50 shadow-[0_0_12px_rgba(56,189,248,0.22)]'],
+                      ['event', 'Đột Kích', 'text-rose-300', 'border-rose-400/80 bg-rose-950/50 shadow-[0_0_12px_rgba(244,63,94,0.22)]'],
                     ] as const
                   ).map(([deckId, label, cls, activeCls]) => {
-                    const canDrawHere = canDrawDeckOnBoard(deckId);
-                    const deckInner = (
-                      <>
+                    const deckHighlighted = canDrawDeckOnBoard(deckId);
+                    return (
+                      <div
+                        key={deckId}
+                        data-vfx-deck={deckId}
+                        data-deck-active={deckHighlighted ? 'true' : 'false'}
+                        className={`rounded-xl border px-2 py-1 flex items-center gap-1.5 transition ${
+                          deckHighlighted
+                            ? activeCls
+                            : `border-slate-700 bg-slate-950/85 ${
+                                isMyTurn && publicGame.turnPhase === 'LOCATION_ACTION'
+                                  ? 'opacity-55'
+                                  : ''
+                              }`
+                        }`}
+                      >
                         <DeckCardBackSvg deck={deckId} size={24} />
                         <div className="min-w-0 text-left">
-                          <div className="flex items-center gap-1">
-                            <p className={`text-[10px] sm:text-[11px] font-extrabold truncate ${cls}`}>{label}</p>
-                            {canDrawHere && (
-                              <span className="text-[10px] font-black text-amber-200 whitespace-nowrap">
-                                👆 Rút
-                              </span>
-                            )}
-                          </div>
+                          <p className={`text-[10px] sm:text-[11px] font-extrabold truncate ${cls}`}>
+                            {label}
+                          </p>
                           <p className="text-xs font-black text-white">
                             {publicGame.deckCounts[deckId]} lá
                           </p>
                         </div>
-                      </>
-                    );
-
-                    return canDrawHere ? (
-                      <button
-                        key={deckId}
-                        type="button"
-                        data-vfx-deck={deckId}
-                        data-testid={`bg-board-draw-${deckId}`}
-                        onClick={() => dispatchAction({ type: 'DRAW_CARD', deck: deckId })}
-                        className={`rounded-xl border px-2 py-1 min-h-[38px] flex items-center gap-1.5 transition cursor-pointer ${activeCls}`}
-                      >
-                        {deckInner}
-                      </button>
-                    ) : (
-                      <div
-                        key={deckId}
-                        data-vfx-deck={deckId}
-                        className={`rounded-xl border border-slate-700 bg-slate-950/85 px-2 py-1 flex items-center gap-1.5 transition ${
-                          isMyTurn && publicGame.turnPhase === 'LOCATION_ACTION'
-                            ? 'opacity-55'
-                            : ''
-                        }`}
-                      >
-                        {deckInner}
                       </div>
                     );
                   })}
@@ -1157,7 +1136,7 @@ export function GameBoard({
                         data-testid={isSelfCard ? 'bg-player-strip-self' : undefined}
                         aria-pressed={selected}
                         onClick={() =>
-                          setSelectedTargetId((prev) =>
+                          handleSelectPlayer((prev) =>
                             toggleSelectedTargetId(prev, p.playerId, p.alive),
                           )
                         }
@@ -1258,15 +1237,18 @@ export function GameBoard({
               </section>
             </div>
 
-            {/* 5. THANH HÀNH ĐỘNG CHÍNH NEO CỐ ĐỊNH Ở ĐÁY */}
-            <div className="shrink-0 lg:max-h-[40vh] lg:overflow-y-auto">
+            {/* 5. THANH HÀNH ĐỘNG CONTEXTUAL ACTION-FIRST NEO CỐ ĐỊNH Ở ĐÁY */}
+            <div className="relative shrink-0">
               <ActionPanel
                 publicGame={publicGame}
                 privateView={privateView}
                 selfPlayerId={selfPlayerId}
                 isSpectator={isSpectator}
                 selectedTargetId={selectedTargetId}
-                onSelectTarget={setSelectedTargetId}
+                selectedLocationId={selectedLocationId}
+                onSelectTarget={handleSelectPlayer}
+                onSelectLocation={setSelectedLocationId}
+                onClearContext={handleClearContext}
                 onAction={dispatchAction}
                 onZoomCard={(cardId, zone) =>
                   setZoomTarget({
