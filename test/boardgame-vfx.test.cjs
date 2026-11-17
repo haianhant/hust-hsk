@@ -35,6 +35,10 @@ const {
   stopAllBoardGameSounds,
 } = require('../features/boardgame/ui/sound.ts');
 const {
+  computePublicDamageChipState,
+  deriveShortPlayerName,
+} = require('../features/boardgame/ui/DamageTrack.tsx');
+const {
   createInitialGameState,
   getPublicGameView,
   appendPublicLog,
@@ -892,4 +896,62 @@ test('Shared Timeline & Frame-1 Anti-Flicker (8) — Đồng bộ Dice Settled -
   });
   assert.equal(ingested.filter((e) => e.kind === 'DICE_ROLL').length, 1);
   assert.equal(freshTracker.peekPendingDiceRoll(brandNewRollState, false), null);
+});
+
+test('Phase 4 Compact Damage Track (9) — Pure public wound state never infers danger from secret HP, highlights active/near-threshold/eliminated cleanly', () => {
+  assert.equal(deriveShortPlayerName('Sinh viên An', 0), 'An');
+  assert.equal(deriveShortPlayerName('Sinh viên Bình', 1), 'Bình');
+  assert.equal(deriveShortPlayerName('Chu Ban 8P', 2), 'Chu Ban');
+  assert.equal(deriveShortPlayerName('SinhVien_4', 3), 'SV 4');
+  assert.equal(deriveShortPlayerName('Nguyễn Minh Khôi', 4), 'Minh Khôi');
+
+  const base = makePubState();
+  const baseP1 = base.players[0];
+
+  // 1) Nhân vật chưa lật vai (dù bí mật là Allie 8 HP) ở mốc 7 thương tích -> KHÔNG được suy đoán sắp gục
+  const unrevealedSeven = computePublicDamageChipState(
+    { ...baseP1, woundsTaken: 7, revealedMaxHp: null, revealedRoleId: null },
+    'p2',
+  );
+  assert.equal(unrevealedSeven.isNearThreshold, false);
+  assert.equal(unrevealedSeven.isTurnHolder, false);
+  assert.equal(unrevealedSeven.woundBadgeText, '7');
+  assert.equal(unrevealedSeven.woundBadgeText.includes('/'), false);
+  assert.equal(/\bHP\b/i.test(unrevealedSeven.woundBadgeText), false);
+
+  // 2) Nhân vật chưa lật vai chỉ báo cảnh báo công khai ở mốc cao >= 9 trên thang 0..14
+  const unrevealedExtreme = computePublicDamageChipState(
+    { ...baseP1, woundsTaken: 9, revealedMaxHp: null, revealedRoleId: null },
+    'p1',
+  );
+  assert.equal(unrevealedExtreme.isNearThreshold, true);
+  assert.equal(unrevealedExtreme.isTurnHolder, true);
+  assert.equal(unrevealedExtreme.woundBadgeText, '9');
+
+  // 3) Nhân vật ĐÃ lật vai, cách ngưỡng công khai <= 3 vết -> Highlight gần ngưỡng gục & hiện wounds/maxHp (không kèm HP)
+  const revealedDanger = computePublicDamageChipState(
+    { ...baseP1, woundsTaken: 7, revealedMaxHp: 10, revealedRoleId: 'gac-truc-ban', revealedFaction: 'lantern-guard' },
+    'p2',
+  );
+  assert.equal(revealedDanger.isNearThreshold, true);
+  assert.equal(revealedDanger.woundBadgeText, '7/10');
+  assert.equal(/\bHP\b/i.test(revealedDanger.woundBadgeText), false);
+
+  // 4) Nhân vật ĐÃ lật vai nhưng còn > 3 máu (vd 6/14) -> Chưa gần ngưỡng gục
+  const revealedSafe = computePublicDamageChipState(
+    { ...baseP1, woundsTaken: 6, revealedMaxHp: 14, revealedRoleId: 'gac-ky-thuat', revealedFaction: 'lantern-guard' },
+    'p1',
+  );
+  assert.equal(revealedSafe.isNearThreshold, false);
+  assert.equal(revealedSafe.isTurnHolder, true);
+  assert.equal(revealedSafe.woundBadgeText, '6/14');
+
+  // 5) Nhân vật ĐÃ bị loại -> Tắt active/danger, bật eliminated
+  const eliminated = computePublicDamageChipState(
+    { ...baseP1, alive: false, woundsTaken: 10, revealedMaxHp: 10, revealedRoleId: 'gac-truc-ban', revealedFaction: 'lantern-guard' },
+    'p1',
+  );
+  assert.equal(eliminated.isEliminated, true);
+  assert.equal(eliminated.isTurnHolder, false);
+  assert.equal(eliminated.isNearThreshold, false);
 });

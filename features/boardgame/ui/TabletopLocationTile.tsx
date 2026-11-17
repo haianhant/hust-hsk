@@ -209,7 +209,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
       </div>
 
       {/* NỘI DUNG TACTICAL SCALING TRÊN BỀ MẶT TILE */}
-      <div className="relative z-10 h-full p-2 sm:p-2.5 flex flex-col justify-between min-h-[112px] lg:min-h-[clamp(122px,calc(18.5vh_-_22px),176px)]">
+      <div className="relative z-10 h-full p-2 sm:p-2.5 flex flex-col justify-between min-h-[112px] lg:min-h-[clamp(128px,calc(19.2vh_-_22px),182px)]">
         {/* CỤM TIÊU ĐỀ + ACTION CHIP GỌN Ở ĐỈNH (CHỪA KHOẢNG ARTWORK SÁNG Ở GIỮA) */}
         <div className="space-y-1">
           {/* HÀNG 1: GIÁ TRỊ XÚC XẮC + TÊN ĐỊA ĐIỂM (14–16PX) + BADGE VỊ TRÍ BẢN THÂN */}

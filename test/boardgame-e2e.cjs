@@ -1092,6 +1092,28 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
         actionPanelEl?.querySelector('[data-testid="bg-action-guidance"]')?.textContent?.trim(),
       );
 
+      const damageTrackExpanded = damageTrack?.getAttribute('data-expanded') || null;
+      const woundChips = damageTrack
+        ? Array.from(damageTrack.querySelectorAll('[data-testid^="bg-wound-chip-"]'))
+        : [];
+      const chipRects = woundChips.map((el) => el.getBoundingClientRect());
+      let woundChipOverlaps = 0;
+      for (let i = 0; i < chipRects.length; i++) {
+        for (let j = i + 1; j < chipRects.length; j++) {
+          const a = chipRects[i];
+          const b = chipRects[j];
+          const ix = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+          const iy = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+          if (ix > 1 && iy > 1) woundChipOverlaps += 1;
+        }
+      }
+      const turnHolderCount = woundChips.filter(
+        (el) => el.getAttribute('data-turn-holder') === 'true',
+      ).length;
+      const damageTrackOverflowX = damageTrack
+        ? damageTrack.scrollWidth > damageTrack.clientWidth + 1
+        : false;
+
       return {
         vw,
         vh,
@@ -1101,6 +1123,11 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
         boardRect: rectOf(boardCol),
         sideRect: rectOf(sideDrawer),
         damageTrackRect: rectOf(damageTrack),
+        damageTrackExpanded,
+        woundChipCount: woundChips.length,
+        turnHolderCount,
+        damageTrackOverflowX,
+        woundChipOverlaps,
         diceTrayRect: rectOf(diceTray),
         diceTrayButtons,
         actionBarRect: rectOf(actionBar),
@@ -1166,6 +1193,19 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
           metrics.damageTrackRect.bottom <= vp.height,
         `${tag} damage track must fit inside viewport: ${JSON.stringify(metrics.damageTrackRect)}`,
       );
+      assert.equal(
+        metrics.damageTrackExpanded,
+        'false',
+        `${tag} damage track must stay collapsed (compact) by default`,
+      );
+      assert.ok(
+        metrics.damageTrackRect.height <= 56,
+        `${tag} compact damage track height (${metrics.damageTrackRect.height}px) must be <= 56px`,
+      );
+      assert.equal(metrics.damageTrackOverflowX, false, `${tag} damage track must not overflow horizontally`);
+      assert.equal(metrics.woundChipOverlaps, 0, `${tag} damage track player chips must not overlap`);
+      assert.ok(metrics.woundChipCount >= 4, `${tag} expected player wound chips rendered`);
+      assert.equal(metrics.turnHolderCount, 1, `${tag} expected exactly 1 highlighted turn holder in damage track`);
       assert.ok(
         metrics.diceTrayRect &&
           metrics.diceTrayRect.top >= 0 &&
@@ -1349,6 +1389,103 @@ async function verifyPhase3ContextualUi(page) {
   await page.screenshot({ path: path.join(SHOT_DIR, 'phase3-after-1440x900-secondary-menu.png') });
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="bg-secondary-actions-menu"]').length === 0, null, { timeout: 2000 });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(100);
+}
+
+async function verifyPhase4CompactDamageTrack(page) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await settleBoardLayoutAnimations(page, 140);
+
+  const track = page.locator('[data-testid="bg-damage-track"]');
+  const toggleBtn = page.locator('[data-testid="bg-damage-track-toggle"]');
+  const drawer = page.locator('[data-testid="bg-damage-track-drawer"]');
+
+  // 1. Default compact state: collapsed, concise HP secrecy preserved (no secret /MaxHP or HP keyword)
+  assert.equal(await track.getAttribute('data-expanded'), 'false', 'Damage Track must default to compact');
+  assert.equal(await drawer.getAttribute('aria-hidden'), 'true', 'Expanded 0-14 drawer must stay hidden by default');
+  const compactAudit = await page.evaluate(() => {
+    const t = document.querySelector('[data-testid="bg-damage-track"]');
+    const chips = Array.from(document.querySelectorAll('[data-testid^="bg-wound-chip-"]'));
+    return {
+      height: t ? Math.round(t.getBoundingClientRect().height) : 0,
+      hasHpWordLeak: chips.some((c) => /\bHP\b/i.test(c.textContent || '')),
+    };
+  });
+  assert.ok(compactAudit.height <= 56, `Default Damage Track height (${compactAudit.height}px) must stay compact <= 56px`);
+  assert.equal(compactAudit.hasHpWordLeak, false, 'Compact chips must never display HP label');
+
+  // 2. Smoothly expand to view full 0-14 track while keeping all 6 tiles & action panel in viewport
+  await toggleBtn.click();
+  await page.waitForFunction(
+    (minH) => {
+      const t = document.querySelector('[data-testid="bg-damage-track"]');
+      return Boolean(
+        t &&
+          t.getAttribute('data-expanded') === 'true' &&
+          Math.round(t.getBoundingClientRect().height) > minH,
+      );
+    },
+    compactAudit.height + 40,
+    { timeout: 2500, polling: 40 },
+  );
+  assert.equal(await track.getAttribute('data-expanded'), 'true', 'Toggle must expand Damage Track');
+  assert.equal(await drawer.getAttribute('aria-hidden'), 'false', 'Expanded 0-14 drawer must set aria-hidden=false');
+  const expandedCheck = await page.evaluate(() => {
+    const t = document.querySelector('[data-testid="bg-damage-track"]');
+    const grid = document.querySelector('[data-testid="bg-damage-track-grid"]');
+    const action = document.querySelector('[data-testid="bg-action-panel"]');
+    const actionRect = action?.getBoundingClientRect();
+    return {
+      trackHeight: t ? Math.round(t.getBoundingClientRect().height) : 0,
+      notchCount: grid ? grid.children.length : 0,
+      actionBottom: actionRect ? Math.round(actionRect.bottom) : 0,
+      vh: window.innerHeight,
+    };
+  });
+  assert.equal(expandedCheck.notchCount, 15, 'Expanded track must display all 15 notches (0..14)');
+  assert.ok(
+    expandedCheck.trackHeight > compactAudit.height + 20,
+    `Expanded track (${expandedCheck.trackHeight}px vs compact ${compactAudit.height}px) must reveal full 0..14 notches`,
+  );
+  assert.ok(expandedCheck.actionBottom <= expandedCheck.vh, `Expanded Damage Track pushed action bar outside 900vh: ${expandedCheck.actionBottom}`);
+  await page.screenshot({ path: path.join(SHOT_DIR, 'phase4-after-1440x900-expanded.png') });
+
+  // 3. Collapse back smoothly
+  await toggleBtn.click();
+  await page.waitForFunction(
+    () => {
+      const t = document.querySelector('[data-testid="bg-damage-track"]');
+      return Boolean(
+        t &&
+          t.getAttribute('data-expanded') === 'false' &&
+          Math.round(t.getBoundingClientRect().height) <= 56,
+      );
+    },
+    null,
+    { timeout: 2500, polling: 40 },
+  );
+  assert.equal(await track.getAttribute('data-expanded'), 'false', 'Toggle must collapse Damage Track');
+  const recollapsedHeight = await page.evaluate(() =>
+    Math.round(document.querySelector('[data-testid="bg-damage-track"]')?.getBoundingClientRect().height || 0),
+  );
+  assert.ok(recollapsedHeight <= 56, `Collapsed Damage Track height (${recollapsedHeight}px) must restore <= 56px`);
+
+  // 4. Reduced Motion support: zero CSS transition delay/duration during expand/collapse
+  await clickControlViaSettingsIfCollapsed(page, 'bg-vfx-motion-toggle-btn');
+  await page.waitForSelector('[data-testid="bg-vfx-stage"][data-reduced-motion="true"]', { timeout: 3000 });
+  const rmDuration = await page.evaluate(() => {
+    const d = document.querySelector('[data-testid="bg-damage-track-drawer"]');
+    return d ? window.getComputedStyle(d).transitionDuration : '';
+  });
+  assert.equal(rmDuration, '0s', `Reduced Motion drawer transitionDuration must be 0s, got "${rmDuration}"`);
+  await toggleBtn.click();
+  assert.equal(await track.getAttribute('data-expanded'), 'true', 'Reduced Motion expand must update state immediately');
+  await toggleBtn.click();
+  assert.equal(await track.getAttribute('data-expanded'), 'false', 'Reduced Motion collapse must update state immediately');
+  await clickControlViaSettingsIfCollapsed(page, 'bg-vfx-motion-toggle-btn');
+  await page.waitForSelector('[data-testid="bg-vfx-stage"][data-reduced-motion="false"]', { timeout: 3000 });
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.waitForTimeout(100);
@@ -1822,10 +1959,11 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
           if (hasActionPanel > 0) {
             await verifyDesktopTacticalLayoutV2(p1.page, 'E2E-01-ActiveTurn', {
               saveShots: true,
-              afterPrefix: 'phase3-after',
+              afterPrefix: 'phase4-after',
             });
             await verifyTilePopoverAndKeyboardA11y(p1.page, { savePopoverShot: false });
             await verifyPhase3ContextualUi(p1.page);
+            await verifyPhase4CompactDamageTrack(p1.page);
             p1DesktopActiveChecked = true;
           }
         }
@@ -2145,7 +2283,7 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     assert.equal(specPrivacy.hasHpLeakText, false, '8P spectator view must never leak HP totals');
     assert.equal(specPrivacy.leakedAria.length, 0, `8P tiles aria-labels leaked secret info: ${JSON.stringify(specPrivacy.leakedAria)}`);
     await spec.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-8p-spectator.png') });
-    await spec.page.screenshot({ path: path.join(SHOT_DIR, 'phase3-after-8p-spectator.png') });
+    await spec.page.screenshot({ path: path.join(SHOT_DIR, 'phase4-after-8p-spectator.png') });
 
     // Verify Spectator can inspect a location cleanly via context bar while staying strictly read-only
     const radioBox = await spec.page.locator('[data-testid="bg-loc-radio"]').boundingBox();
@@ -2290,6 +2428,91 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
       assert.equal(fourPerTile.radioCount, 4);
       assert.equal(fourPerTile.lobbyCount, 4);
       assert.equal(fourPerTile.radioOverflowX, false);
+
+      // Case C: Compact Damage Track 8P highlights (eliminated, revealed near-threshold, unrevealed secret-safe, turn holder)
+      const stateCloned = JSON.parse(JSON.stringify(baseSync));
+      stateCloned.revision = (baseSync.revision || 1) + 102;
+      stateCloned.publicGame.winnerLabel = null;
+      stateCloned.publicGame.turnPhase = 'ROLL_MOVE';
+      stateCloned.publicGame.activePlayerId = stateCloned.publicGame.players[3].playerId;
+      stateCloned.publicGame.players = stateCloned.publicGame.players.map((p, idx) => {
+        if (idx === 0) {
+          return {
+            ...p,
+            alive: false,
+            woundsTaken: 10,
+            revealedRoleId: 'gac-truc-ban',
+            revealedFaction: 'lantern-guard',
+            revealedMaxHp: 10,
+          };
+        }
+        if (idx === 1) {
+          return {
+            ...p,
+            alive: true,
+            woundsTaken: 11,
+            revealedRoleId: 'gac-ky-thuat',
+            revealedFaction: 'lantern-guard',
+            revealedMaxHp: 14,
+          };
+        }
+        if (idx === 2) {
+          return {
+            ...p,
+            alive: true,
+            woundsTaken: 7,
+            revealedRoleId: null,
+            revealedFaction: null,
+            revealedMaxHp: null,
+          };
+        }
+        return { ...p, alive: true, woundsTaken: idx === 3 ? 4 : 2 };
+      });
+      await spec.page.evaluate((msgText) => {
+        if (window.__testBgWs) {
+          window.__testBgWs.dispatchEvent(new MessageEvent('message', { data: msgText }));
+        }
+      }, JSON.stringify(stateCloned));
+      await settleBoardLayoutAnimations(spec.page, 180);
+      for (const vp of [
+        { width: 1440, height: 900, shot: true },
+        { width: 1280, height: 800, shot: false },
+      ]) {
+        await spec.page.setViewportSize({ width: vp.width, height: vp.height });
+        await spec.page.waitForTimeout(120);
+        const dtCheck = await spec.page.evaluate(() => {
+          const track = document.querySelector('[data-testid="bg-damage-track"]');
+          const chip0 = document.querySelector('[data-testid="bg-wound-chip-0"]');
+          const chip1 = document.querySelector('[data-testid="bg-wound-chip-1"]');
+          const chip2 = document.querySelector('[data-testid="bg-wound-chip-2"]');
+          const chip3 = document.querySelector('[data-testid="bg-wound-chip-3"]');
+          const c0 = document.querySelector('[data-testid="bg-wound-count-0"]')?.textContent || '';
+          const c1 = document.querySelector('[data-testid="bg-wound-count-1"]')?.textContent || '';
+          const c2 = document.querySelector('[data-testid="bg-wound-count-2"]')?.textContent || '';
+          return {
+            height: track ? Math.round(track.getBoundingClientRect().height) : 0,
+            overflowX: track ? track.scrollWidth > track.clientWidth + 1 : true,
+            elimAttr: chip0?.getAttribute('data-eliminated'),
+            near1Attr: chip1?.getAttribute('data-near-threshold'),
+            near2Attr: chip2?.getAttribute('data-near-threshold'),
+            turn3Attr: chip3?.getAttribute('data-turn-holder'),
+            c0,
+            c1,
+            c2,
+          };
+        });
+        assert.ok(dtCheck.height <= 56, `8p Damage Track @ ${vp.width}x${vp.height} height (${dtCheck.height}px) must be <= 56px`);
+        assert.equal(dtCheck.overflowX, false, `8p Damage Track @ ${vp.width}x${vp.height} must not overflow X`);
+        assert.equal(dtCheck.elimAttr, 'true', 'Seat 0 eliminated chip must mark data-eliminated=true');
+        assert.equal(dtCheck.near1Attr, 'true', 'Seat 1 revealed 11/14 must highlight near-threshold');
+        assert.equal(dtCheck.c1, '11/14', `Expected public wound ratio 11/14 on revealed chip, got ${dtCheck.c1}`);
+        assert.equal(dtCheck.near2Attr, 'false', 'Seat 2 unrevealed at 7 wounds must NEVER infer danger from secret maxHp');
+        assert.equal(dtCheck.c2.includes('/'), false, `Unrevealed chip must never expose /MaxHP: ${dtCheck.c2}`);
+        assert.equal(dtCheck.turn3Attr, 'true', 'Seat 3 active turn holder must mark data-turn-holder=true');
+        if (vp.shot) {
+          await spec.page.screenshot({ path: path.join(SHOT_DIR, 'phase4-after-8p-states.png') });
+        }
+      }
     }
 
     verifyCommonAudits(allAudited);
@@ -2903,6 +3126,23 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       roleCardTextC4.includes('Cần lật vai'),
       false,
       'Checkpoint 4: revealed skill status must persist across reload after REVEAL_ROLE',
+    );
+    const chipAfterReconnect = await p1.page.evaluate((pid) => {
+      const track = document.querySelector('[data-testid="bg-damage-track"]');
+      const chip = document.querySelector(`[data-testid^="bg-wound-chip-"][data-player-id="${pid}"]`);
+      const countEl = chip?.querySelector('[data-testid^="bg-wound-count-"]');
+      return {
+        expanded: track?.getAttribute('data-expanded'),
+        height: track ? Math.round(track.getBoundingClientRect().height) : 0,
+        countText: (countEl?.textContent || '').trim(),
+      };
+    }, p1IdBefore);
+    assert.equal(chipAfterReconnect.expanded, 'false', 'Checkpoint 4: Damage Track stays compact after F5 reload');
+    assert.ok(chipAfterReconnect.height <= 56, `Checkpoint 4: Damage Track height <= 56px, got ${chipAfterReconnect.height}`);
+    assert.match(
+      chipAfterReconnect.countText,
+      /^\d+\/(?:8|10|11|12|13|14)$/,
+      `Checkpoint 4: revealed /MaxHp threshold must display on compact chip after F5 reconnect, got "${chipAfterReconnect.countText}"`,
     );
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-reconnect-check.png') });
 

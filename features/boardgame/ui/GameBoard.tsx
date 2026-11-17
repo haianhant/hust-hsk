@@ -39,6 +39,7 @@ import { toggleSelectedTargetId } from './target-selection';
 import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
 import { computeDiceSig } from './vfx-queue';
 import { TabletopLocationTile } from './TabletopLocationTile';
+import { DamageTrack } from './DamageTrack';
 import { useSmoothPawnGlide } from './useSmoothPawnGlide';
 import { MidnightCardZoomModal, type MidnightZoomTarget } from './MidnightCardZoomModal';
 import {
@@ -71,8 +72,6 @@ const PHASE_LABEL: Record<BoardGamePublicGameView['turnPhase'], string> = {
   MAIN_ACTION: 'Pha 3: Dùng bài / Tấn công / Kết thúc lượt',
   ENDED: 'Trận đấu đã kết thúc',
 };
-
-const WOUND_NOTCHES: readonly number[] = Array.from({ length: 15 }, (_, i) => i);
 
 export interface GameBoardProps {
   inviteCode: string | null;
@@ -122,6 +121,7 @@ export function GameBoard({
   const [mobileTab, setMobileTab] = useState<'board' | 'role' | 'log'>('board');
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<BoardGameLocationId | null>(null);
+  const [damageTrackExpanded, setDamageTrackExpanded] = useState(false);
   const [chatText, setChatText] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -209,6 +209,7 @@ export function GameBoard({
     setSeenLogCount(publicGame.publicLog.length);
     setSelectedTargetId(null);
     setSelectedLocationId(null);
+    setDamageTrackExpanded(false);
     setZoomTarget(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicGame.matchId]);
@@ -318,18 +319,6 @@ export function GameBoard({
     }
     return ids;
   }, [isMyTurn, selfPlayer, selfPlayerId, publicGame.players, publicGame.clusterPairs, publicGame.turnPhase]);
-
-  const playersByWoundNotch = useMemo(() => {
-    const buckets: typeof publicGame.players[number][][] = Array.from(
-      { length: 15 },
-      () => [],
-    );
-    for (const p of publicGame.players) {
-      const notch = Math.max(0, Math.min(14, p.woundsTaken));
-      buckets[notch].push(p);
-    }
-    return buckets;
-  }, [publicGame.players]);
 
   const remainingSec =
     typeof turnDeadlineMs === 'number'
@@ -816,84 +805,18 @@ export function GameBoard({
               data-testid="bg-board-scroll-area"
               className="flex-1 min-h-0 flex flex-col justify-start gap-2 xl:gap-2.5 lg:overflow-y-auto lg:pr-0.5"
             >
-              {/* 1. THANG THƯƠNG TÍCH CÔNG KHAI GỌN 0..14 (Damage Track) */}
-              <section
-                data-testid="bg-damage-track"
-                className="shrink-0 rounded-2xl border border-slate-700/80 bg-slate-900/90 px-2.5 py-1.5 space-y-1"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-200">
-                    🩸 Thang Thương Tích Công Khai (0 → 14)
-                  </h2>
-                  <span className="text-xs text-slate-400">
-                    Máu tối đa ẩn tới khi lật vai · 🎯 Mốc của bạn · 💀 Ngưỡng gục đã lộ
-                  </span>
-                </div>
-                <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-[minmax(86px,1.9fr)_repeat(14,minmax(0,1fr))] gap-1">
-                  {WOUND_NOTCHES.map((notch) => {
-                    const occupants = playersByWoundNotch[notch];
-                    const isSelfMaxNotch = Boolean(
-                      privateView && privateView.maxHp === notch,
-                    );
-                    const revealedAtNotch = publicGame.players.filter(
-                      (p) => p.revealedMaxHp === notch,
-                    );
-                    const tone = isSelfMaxNotch
-                      ? 'border-cyan-400/75 bg-cyan-950/35 text-cyan-100'
-                      : notch === 0
-                        ? 'border-emerald-500/40 bg-emerald-950/35 text-emerald-200'
-                        : notch <= 6
-                          ? 'border-slate-700 bg-slate-950/80 text-slate-200'
-                          : notch <= 10
-                            ? 'border-amber-500/45 bg-amber-950/35 text-amber-200'
-                            : 'border-rose-500/55 bg-rose-950/45 text-rose-200';
-                    const cellTitle = [
-                      `Mốc ${notch} vết thương`,
-                      isSelfMaxNotch ? 'Ngưỡng gục của bạn' : null,
-                      revealedAtNotch.length > 0
-                        ? `Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ');
-
-                    return (
-                      <div
-                        key={notch}
-                        title={cellTitle}
-                        className={`min-h-[38px] rounded-lg border px-1 py-1 flex flex-col items-center justify-between gap-1 ${tone}`}
-                      >
-                        <span className="text-[10px] sm:text-[11px] font-black leading-none flex items-center gap-0.5 shrink-0">
-                          <span>{notch === 14 ? '14💀' : notch}</span>
-                          {isSelfMaxNotch && <span title="Mốc tử trận của bạn">🎯</span>}
-                          {!isSelfMaxNotch && revealedAtNotch.length > 0 && notch !== 14 && (
-                            <span title={`Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`}>
-                              💀
-                            </span>
-                          )}
-                        </span>
-                        <div className="min-h-[22px] flex flex-wrap items-center justify-center -space-x-2 gap-y-0.5 pt-0.5">
-                          {occupants.map((p) => (
-                            <div key={p.playerId} className="origin-center scale-[0.78]">
-                              <PlayerPawnToken
-                                size="xs"
-                                elevated={false}
-                                displayName={p.displayName}
-                                seatIndex={p.seatIndex}
-                                alive={p.alive}
-                                isActive={p.playerId === publicGame.activePlayerId}
-                                isSelf={p.playerId === selfPlayerId}
-                                revealedFaction={p.revealedFaction}
-                                revealedRoleId={p.revealedRoleId}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
+              {/* 1. THANG THƯƠNG TÍCH COMPACT (MỞ RỘNG ĐƯỢC SANG 0..14) */}
+              <DamageTrack
+                players={publicGame.players}
+                activePlayerId={publicGame.activePlayerId}
+                selfPlayerId={selfPlayerId}
+                selectedTargetId={selectedTargetId}
+                selfSecretMaxHp={privateView?.maxHp ?? null}
+                expanded={damageTrackExpanded}
+                onToggleExpanded={() => setDamageTrackExpanded((v) => !v)}
+                reducedMotion={vfx.reducedMotion}
+                onSelectPlayer={handleSelectPlayer}
+              />
 
               {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI TACTICAL SCALING (6 ĐỊA ĐIỂM TRỌN VẸN TRONG VIEWPORT) */}
               <section className="grid grid-cols-1 md:grid-cols-3 gap-2 shrink-0">
@@ -913,7 +836,7 @@ export function GameBoard({
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-rows-[repeat(2,minmax(clamp(122px,calc(18.5vh_-_22px),176px),auto))] gap-1.5 flex-1 min-h-0">
+                    <div className="grid grid-cols-1 md:grid-rows-[repeat(2,minmax(clamp(128px,calc(19.2vh_-_22px),182px),auto))] gap-1.5 flex-1 min-h-0">
                       {cluster.locations.map((locId) => {
                         const occupants = publicGame.players.filter(
                           (p) => p.location === locId,
