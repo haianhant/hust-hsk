@@ -270,9 +270,68 @@ async function main() {
     );
     assert.ok(desktopOverflow <= 1, `Desktop horizontal overflow: ${desktopOverflow}px`);
 
-    // Screenshot 1A: VFX Sandbox Demo — Súng Liên Thanh & Vy Radio Tuyệt Kỹ
+    // Screenshot 1A: VFX Sandbox Demo — 3D Dice Roll (1.2-1.5s), Súng Liên Thanh & Vy Radio Tuyệt Kỹ
     await page.locator('[data-testid="proto-section-vfx-sandbox"]').scrollIntoViewIfNeeded();
     await page.waitForSelector('[data-testid="bg-vfx-targeting-line"]', { timeout: 5000 });
+
+    // Demo 0: Tung Xúc Xắc 3D -> chống lộ kết quả sớm -> chốt đúng kết quả server -> Skip -> Reduced Motion
+    await page.locator('[data-testid="proto-vfx-demo-dice-move"]').click();
+    await page.waitForSelector('[data-testid="bg-vfx-dice-overlay"]', { timeout: 3000 });
+    const earlyDiceMeta = await page.evaluate(() => {
+      const ov = document.querySelector('[data-testid="bg-vfx-dice-overlay"]');
+      const d6 = document.querySelector('[data-testid="bg-vfx-dice-overlay"] [data-testid="bg-die-d6-3d"]');
+      const d4 = document.querySelector('[data-testid="bg-vfx-dice-overlay"] [data-testid="bg-die-d4-3d"]');
+      return {
+        settled: ov?.getAttribute('data-dice-settled'),
+        stage: ov?.getAttribute('data-dice-stage'),
+        d6Val: d6?.getAttribute('data-settled-value'),
+        d4Val: d4?.getAttribute('data-settled-value'),
+        text: ov?.textContent || '',
+      };
+    });
+    assert.equal(earlyDiceMeta.settled, 'false', '3D dice must NOT settle immediately under normal motion');
+    assert.equal(earlyDiceMeta.d6Val, 'hidden', '3D D6 must hide settled value while tumbling');
+    assert.equal(earlyDiceMeta.d4Val, 'hidden', '3D D4 must hide settled value while tumbling');
+    assert.equal(earlyDiceMeta.text.includes('5 + 3 = 8'), false, 'Overlay must NOT spoil server sum before dice settle');
+
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="bg-vfx-dice-overlay"]')?.getAttribute('data-dice-settled') === 'true',
+      null,
+      { timeout: 3000, polling: 40 },
+    );
+    const settledDiceMeta = await page.evaluate(() => {
+      const ov = document.querySelector('[data-testid="bg-vfx-dice-overlay"]');
+      const d6 = document.querySelector('[data-testid="bg-vfx-dice-overlay"] [data-testid="bg-die-d6-3d"]');
+      const d4 = document.querySelector('[data-testid="bg-vfx-dice-overlay"] [data-testid="bg-die-d4-3d"]');
+      return {
+        d6Val: d6?.getAttribute('data-settled-value'),
+        d4Val: d4?.getAttribute('data-settled-value'),
+        text: ov?.textContent || '',
+      };
+    });
+    assert.equal(settledDiceMeta.d6Val, '5', 'Settled D6 must lock on authoritative server face 5');
+    assert.equal(settledDiceMeta.d4Val, '3', 'Settled D4 must lock on authoritative server face 3');
+    assert.ok(settledDiceMeta.text.includes('5 + 3 = 8'), 'Settled overlay must show server sum 5 + 3 = 8');
+    await page.screenshot({ path: path.join(SHOT_DIR, 'polish-01-desktop-3d-dice-and-vfx.png') });
+
+    // Bấm tung lại rồi bấm Skip Animation ngay -> phải ẩn overlay lập tức
+    await page.locator('[data-testid="bg-vfx-dice-overlay"]').waitFor({ state: 'detached', timeout: 2500 }).catch(() => undefined);
+    await page.locator('[data-testid="proto-vfx-demo-dice-move"]').click();
+    await page.waitForSelector('[data-testid="bg-skip-vfx-btn"]', { timeout: 2000 });
+    await page.locator('[data-testid="bg-skip-vfx-btn"]').click();
+    await page.locator('[data-testid="bg-vfx-dice-overlay"]').waitFor({ state: 'detached', timeout: 1500 });
+
+    // Bật Reduced Motion -> xúc xắc chốt kết quả ngay lập tức không lag
+    await page.locator('[data-testid="proto-vfx-reduced-toggle"]').click();
+    await page.locator('[data-testid="proto-vfx-demo-dice-move"]').click();
+    await page.waitForSelector('[data-testid="bg-vfx-dice-overlay"]', { timeout: 2000 });
+    assert.equal(
+      await page.locator('[data-testid="bg-vfx-dice-overlay"]').getAttribute('data-dice-settled'),
+      'true',
+      'Reduced Motion must settle 3D dice immediately without spin wait',
+    );
+    await page.locator('[data-testid="bg-skip-vfx-btn"]').click().catch(() => undefined);
+    await page.locator('[data-testid="proto-vfx-reduced-toggle"]').click();
 
     // Demo 1: Đánh thường
     await page.locator('[data-testid="proto-vfx-demo-normal"]').click();
@@ -593,6 +652,19 @@ async function main() {
     await mPage.locator('[data-testid="proto-vfx-demo-vy-radio"]').click();
     await mPage.waitForSelector('[data-testid="bg-vfx-cutin"]', { timeout: 3000 });
     await mPage.screenshot({ path: path.join(SHOT_DIR, 'rc-02-mobile-390x844-balanced.png') });
+    await mPage.locator('[data-testid="bg-skip-vfx-btn"]').click().catch(() => undefined);
+
+    await mPage.locator('[data-testid="proto-vfx-demo-dice-move"]').click();
+    await mPage.waitForSelector('[data-testid="bg-vfx-dice-overlay"]', { timeout: 3000 });
+    await mPage.locator('[data-testid="proto-vfx-arena"]').evaluate((el) =>
+      el.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    await mPage.waitForFunction(
+      () => document.querySelector('[data-testid="bg-vfx-dice-overlay"]')?.getAttribute('data-dice-settled') === 'true',
+      null,
+      { timeout: 3000, polling: 40 },
+    );
+    await mPage.screenshot({ path: path.join(SHOT_DIR, 'polish-02-mobile-390x844-vfx.png') });
     await mPage.locator('[data-testid="bg-skip-vfx-btn"]').click().catch(() => undefined);
 
     await mobileCtx.close();

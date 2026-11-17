@@ -10,6 +10,7 @@
 import type {
   BoardGameDeckId,
   BoardGameFactionId,
+  BoardGameLocationId,
   BoardGamePublicGameView,
   BoardGamePublicLogEntry,
   BoardGamePublicPlayerView,
@@ -62,6 +63,7 @@ export interface DiceRollVisualEvent {
   total: number;
   freeChoice: boolean;
   rerollRequired: boolean;
+  resolvedLocation?: BoardGameLocationId | null;
 }
 
 export interface CardDrawVisualEvent {
@@ -259,7 +261,7 @@ export function extractVisualEventsFromDiff(
       id: `${next.matchId}::dice::${nextDiceSig}`,
       kind: 'DICE_ROLL',
       order: 10,
-      durationMs: scaleDuration(r.kind === 'attack' ? 880 : 950, reduced),
+      durationMs: scaleDuration(r.kind === 'attack' ? 1320 : 1420, reduced),
       diceKind: r.kind,
       actorId: r.playerId,
       actorName: r.displayName,
@@ -268,6 +270,7 @@ export function extractVisualEventsFromDiff(
       total: r.total,
       freeChoice: r.freeChoice,
       rerollRequired: r.rerollRequired,
+      resolvedLocation: r.resolvedLocation ?? null,
     });
   }
 

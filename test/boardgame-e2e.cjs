@@ -1077,6 +1077,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     await p4.page.waitForSelector('[data-testid="bg-loc-corridor"]', { timeout: UI_TIMEOUT });
     await checkMobileOverflowAndTabs('Bàn & Lượt');
     await p4.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-03-gameboard-mobile.png') });
+    await p4.page.screenshot({ path: path.join(SHOT_DIR, 'polish-04-gameboard-mobile-390x844.png') });
 
     // Rules modal, sound toggle, emote toast, hand mask & HP leak check on P1 & P4
     await p1.page.bringToFront();
@@ -1234,6 +1235,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     );
     await p1.page.waitForTimeout(250);
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-02-gameboard-desktop.png') });
+    await p1.page.screenshot({ path: path.join(SHOT_DIR, 'polish-03-gameboard-desktop.png') });
 
     // Drive full 4-player match to FINISHED while explicitly verifying E2E-04 mobile turn execution on P4
     let finished = false;
@@ -1767,8 +1769,13 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       'Checkpoint 3: secret role restored open directly during opponent turn',
     );
 
-    // Advance back to P1 -> reach LOCATION_ACTION/MAIN_ACTION -> REVEAL_ROLE -> Checkpoint 4
+    // Advance back to P1 -> verify Dice Tray turn spotlight + 3D dice overlay -> Checkpoint 4 F5 reload must NOT replay dice VFX
     await advancePeersUntilP1Active();
+    await p1.page.waitForSelector('[data-testid="bg-dice-tray"][data-turn-active="true"]', { timeout: UI_TIMEOUT });
+    if ((await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').count()) > 0) {
+      await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').click();
+      await p1.page.waitForSelector('[data-testid="bg-vfx-dice-overlay"]', { timeout: 5000 }).catch(() => undefined);
+    }
     for (let s = 0; s < 5; s++) {
       if ((await p1.page.locator('[data-testid="bg-reveal-role-btn"]').count()) > 0) break;
       if ((await p1.page.locator('[data-testid="bg-roll-dice-btn"]').count()) > 0) {
@@ -1784,8 +1791,9 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.locator('[data-testid="bg-confirm-reveal-btn"]').click();
     await p1.page.waitForSelector('[data-testid="bg-last-reveal-banner"]', { timeout: UI_TIMEOUT });
 
-    // Checkpoint 4: Reload after voluntary role revelation
+    // Checkpoint 4: Reload after voluntary role revelation — must NOT replay historical DICE_ROLL overlay
     await reloadAndRestoreTo('[data-testid="boardgame-2d-board"]');
+    assert.equal(await p1.page.locator('[data-testid="bg-vfx-dice-overlay"]').count(), 0, 'F5 reload must not replay completed dice roll VFX');
     assert.equal(p1.audit.selfPlayerId, p1IdBefore, 'Checkpoint 4: must preserve exact playerId');
     await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     const roleCardTextC4 = await p1.page.locator('[data-testid="bg-role-card-secret"]').innerText();

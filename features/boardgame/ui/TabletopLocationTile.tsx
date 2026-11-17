@@ -33,6 +33,7 @@ export interface TabletopLocationTileProps {
   isSelfHere: boolean;
   canChooseMoveHere: boolean;
   rolledDestinationHere: boolean;
+  isHighlightedDestination?: boolean;
   reducedMotion?: boolean;
   enableMist?: boolean;
   enableBackdropBlur?: boolean;
@@ -50,6 +51,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
   isSelfHere,
   canChooseMoveHere,
   rolledDestinationHere,
+  isHighlightedDestination = false,
   reducedMotion = false,
   enableMist = true,
   enableBackdropBlur = true,
@@ -59,10 +61,12 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
   const meta = LOCATION_VISUAL_META[locId];
   const ambience = MIDNIGHT_LOCATION_AMBIENCE[locId];
   const artSrc = MIDNIGHT_LOCATION_ART[locId];
+  const destinationLit = isHighlightedDestination || rolledDestinationHere;
 
   return (
     <div
       data-testid={`bg-loc-${locId}`}
+      data-destination-highlighted={destinationLit ? 'true' : 'false'}
       onClick={
         canChooseMoveHere && onChooseDestination
           ? () => onChooseDestination(locId)
@@ -80,17 +84,21 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
             }
           : undefined
       }
-      className={`group/tile relative overflow-hidden rounded-2xl border-2 border-b-4 bg-slate-950 transition-all duration-200 ${
+      className={`group/tile relative overflow-hidden rounded-2xl border bg-slate-950 transition-all duration-200 ${
         canChooseMoveHere
-          ? 'border-amber-400 border-b-amber-500 ring-2 ring-amber-400/65 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(251,191,36,0.3)] cursor-pointer'
-          : isSelfHere
-            ? 'border-cyan-400/90 border-b-cyan-600 shadow-[0_10px_28px_rgba(34,211,238,0.25)]'
-            : rolledDestinationHere
-              ? 'border-emerald-400/80 border-b-emerald-600 shadow-[0_8px_22px_rgba(16,185,129,0.2)]'
-              : 'border-slate-700/85 border-b-slate-800 shadow-[0_8px_20px_rgba(2,6,23,0.7)]'
+          ? 'border-amber-400 border-b-4 border-b-amber-500 ring-2 ring-amber-400/75 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(251,191,36,0.34)] cursor-pointer'
+          : isHighlightedDestination
+            ? `border-emerald-300 ring-2 ring-emerald-400/80 ${
+                reducedMotion ? '' : 'mn-tile-landing-beacon'
+              }`
+            : isSelfHere
+              ? 'border-cyan-400/85 ring-1 ring-cyan-400/35 shadow-[0_10px_26px_rgba(34,211,238,0.22)]'
+              : destinationLit
+                ? 'border-emerald-400/75 shadow-[0_8px_20px_rgba(16,185,129,0.2)]'
+                : 'border-slate-700/60 shadow-[0_8px_20px_rgba(2,6,23,0.68)]'
       }`}
     >
-      {/* LỚP 1: ARTWORK NỀN 16:9 DIORAMA KTX BAN ĐÊM */}
+      {/* LỚP 1: ARTWORK NỀN 16:9 DIORAMA KTX BAN ĐÊM (NÂNG ĐỘ SÁNG RÕ NÉT HƠN) */}
       <img
         src={artSrc}
         alt={meta.name}
@@ -99,15 +107,15 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
         loading="eager"
         decoding="async"
         draggable={false}
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-55 transition-transform duration-700 group-hover/tile:scale-[1.04]"
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-80 brightness-110 contrast-[1.03] transition-transform duration-700 group-hover/tile:scale-[1.04]"
       />
 
-      {/* LỚP 2: ÁNH ĐÈN ĐIỂM & CHIAROSCURO DEPTH SCRIM */}
+      {/* LỚP 2: ÁNH ĐÈN ĐIỂM SÁNG ẤM PHẦN TRÊN + NỀN CHỮ SẮC NÉT PHẦN DƯỚI */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0"
         style={{
-          background: `radial-gradient(65% 75% at ${ambience.lampX}% ${ambience.lampY}%, ${ambience.lampHex}38 0%, rgba(2, 6, 23, 0.45) 55%, rgba(2, 6, 23, 0.92) 100%), linear-gradient(180deg, rgba(2, 6, 23, 0.62) 0%, rgba(2, 6, 23, 0.34) 42%, rgba(2, 6, 23, 0.92) 100%)`,
+          background: `radial-gradient(68% 78% at ${ambience.lampX}% ${ambience.lampY}%, ${ambience.lampHex}44 0%, rgba(2, 6, 23, 0.14) 56%, rgba(2, 6, 23, 0.84) 100%), linear-gradient(180deg, rgba(2, 6, 23, 0.28) 0%, rgba(2, 6, 23, 0.22) 34%, rgba(2, 6, 23, 0.86) 76%, rgba(2, 6, 23, 0.95) 100%)`,
         }}
       />
 
@@ -115,7 +123,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
       {enableMist && (
         <div
           aria-hidden="true"
-          className={`pointer-events-none absolute inset-x-0 bottom-0 h-3/5 opacity-45 ${
+          className={`pointer-events-none absolute inset-x-0 bottom-0 h-1/2 opacity-35 ${
             reducedMotion ? '' : 'bg-tile-mist-drift'
           }`}
           style={{
@@ -124,39 +132,37 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
         />
       )}
 
-      {/* LỚP 4: ĐINH TÁN GÓC TABLETOP */}
-      <span aria-hidden="true" className="pointer-events-none absolute left-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-white/30" />
-      <span aria-hidden="true" className="pointer-events-none absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-white/30" />
-
-      {/* NỘI DUNG CHÍNH TRÊN BỀ MẶT TILE */}
-      <div className="relative z-10 p-2.5 flex flex-col justify-between min-h-[126px]">
+      {/* NỘI DUNG CHÍNH TRÊN BỀ MẶT TILE (GIẢM NHIỄU VIỀN, TĂNG ĐỘ ĐỌC CHỮ) */}
+      <div className="relative z-10 p-2.5 sm:p-3 flex flex-col justify-between min-h-[122px]">
         <div>
-          <div className="flex flex-wrap items-center justify-between gap-1.5">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span
-                style={{
-                  backgroundColor: meta.accentHex,
-                  boxShadow: `0 2px 10px ${meta.accentHex}80`,
-                }}
-                className="px-2 py-0.5 rounded-md text-slate-950 text-[11px] font-black whitespace-nowrap shrink-0 border border-white/30"
-              >
-                Ô {meta.diceLabel}
-              </span>
+          <div className="flex items-center justify-between gap-1.5">
+            <span
+              style={{
+                backgroundColor: meta.accentHex,
+                boxShadow: `0 2px 10px ${meta.accentHex}75`,
+              }}
+              className="px-2 py-0.5 rounded-md text-slate-950 text-[11px] font-black whitespace-nowrap shrink-0"
+            >
+              Ô {meta.diceLabel}
+            </span>
+            <div className="flex items-center gap-1">
+              {isHighlightedDestination && !isSelfHere && (
+                <span className="px-2 py-0.5 rounded-md bg-emerald-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
+                  🎯 Điểm đáp
+                </span>
+              )}
               {isSelfHere && (
                 <span className="px-2 py-0.5 rounded-md bg-cyan-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
                   📍 Bạn ở đây
                 </span>
               )}
             </div>
-            <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-slate-950/85 border border-white/15 text-slate-100 whitespace-nowrap truncate ${enableBackdropBlur ? 'backdrop-blur-sm' : ''}`}>
-              {meta.badgeText}
-            </span>
           </div>
 
-          <h3 className="text-sm sm:text-[15px] font-black text-white mt-1.5 leading-tight drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
+          <h3 className="text-[15px] sm:text-base font-black tracking-tight text-white mt-1.5 leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
             {meta.name}
           </h3>
-          <p className="text-xs text-slate-200/95 mt-0.5 leading-snug drop-shadow-[0_1px_4px_rgba(0,0,0,0.95)]">
+          <p className="text-xs font-medium text-slate-100/95 mt-0.5 leading-snug drop-shadow-[0_1px_5px_rgba(0,0,0,0.95)]">
             {meta.actionDesc}
           </p>
         </div>

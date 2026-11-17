@@ -25,12 +25,11 @@ import { areInSameCluster, getLocationDefinition } from '../domain/rules';
 import {
   buildBoardClustersView,
   DeckCardBackSvg,
-  DiceD4Svg,
-  DiceD6Svg,
   FACTION_THEME,
   LOCATION_VISUAL_META,
   PlayerPawnToken,
 } from './BoardGameArt';
+import { MidnightDicePair3D } from './MidnightDice3D';
 import RoleCard from './RoleCard';
 import ActionPanel from './ActionPanel';
 import GameLog from './GameLog';
@@ -124,7 +123,6 @@ export function GameBoard({
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [localMuted, setLocalMuted] = useState(() => isBoardGameSoundMuted());
-  const [dicePulse, setDicePulse] = useState(false);
   const [seenClueCount, setSeenClueCount] = useState(0);
   const [seenLogCount, setSeenLogCount] = useState(() => publicGame.publicLog.length);
   const [zoomTarget, setZoomTarget] = useState<MidnightZoomTarget | null>(null);
@@ -141,19 +139,27 @@ export function GameBoard({
     graphicsProfile: gfx.profile,
   });
 
+  const diceRollSignature = publicGame.lastDiceRoll
+    ? `${publicGame.turnNumber}:${publicGame.lastDiceRoll.kind}:${publicGame.lastDiceRoll.playerId}:${publicGame.lastDiceRoll.d6}:${publicGame.lastDiceRoll.d4}:${publicGame.lastDiceRoll.resolvedLocation ?? ''}`
+    : '';
+  const diceHoldDelayMs =
+    gfx.profile.tier === 'low' ? 0 : gfx.profile.tier === 'balanced' ? 920 : 1040;
+
   useSmoothPawnGlide({
     containerRef: boardStageRef,
     players: publicGame.players,
     matchId: publicGame.matchId,
     reducedMotion: vfx.reducedMotion,
     durationMs: gfx.profile.pawnGlideDurationMs,
+    diceRollSignature,
+    diceHoldDelayMs,
+    skipGeneration: vfx.skipGeneration,
   });
 
   const prevTurnRef = useRef<number>(publicGame.turnNumber);
   const prevEmoteItemRef = useRef<BoardGameChatEmoteServerMessage | null>(
     recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null,
   );
-  const prevDiceSigRef = useRef<string | null>(null);
 
   const effectiveMuted = propMuted ?? localMuted;
 
@@ -225,17 +231,6 @@ export function GameBoard({
       playEmotePop();
     }
   }, [recentEmotes]);
-
-  useEffect(() => {
-    const roll = publicGame.lastDiceRoll;
-    if (!roll) return;
-    const sig = `${publicGame.turnNumber}-${roll.kind}-${roll.playerId}-${roll.d6}-${roll.d4}`;
-    if (sig === prevDiceSigRef.current) return;
-    prevDiceSigRef.current = sig;
-    setDicePulse(true);
-    const id = window.setTimeout(() => setDicePulse(false), 380);
-    return () => window.clearTimeout(id);
-  }, [publicGame.lastDiceRoll, publicGame.turnNumber]);
 
   const selfPlayer = useMemo(
     () => publicGame.players.find((p) => p.playerId === selfPlayerId) ?? null,
@@ -788,16 +783,16 @@ export function GameBoard({
                 {boardClusters.map((cluster) => (
                   <div
                     key={cluster.clusterId}
-                    className={`rounded-2xl border p-2.5 space-y-2 ${cluster.ringClass}`}
+                    className="rounded-2xl border border-slate-800/90 bg-slate-900/45 p-2.5 space-y-2"
                   >
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 px-0.5">
                       <span
                         className={`px-2.5 py-0.5 rounded-full border text-[11px] font-black whitespace-nowrap shrink-0 ${cluster.badgeClass}`}
                       >
                         {cluster.title}
                       </span>
-                      <span className="text-[11px] font-semibold text-slate-300">
-                        Đánh chung cụm
+                      <span className="text-[11px] font-medium text-slate-400">
+                        Cùng cụm đánh chung
                       </span>
                     </div>
 
@@ -814,8 +809,10 @@ export function GameBoard({
                           (!publicGame.allowedMoveDestinations ||
                             publicGame.allowedMoveDestinations.includes(locId));
                         const rolledDestinationHere =
+                          vfx.isDiceSettled &&
                           publicGame.lastDiceRoll?.kind === 'move' &&
                           publicGame.lastDiceRoll.resolvedLocation === locId;
+                        const isHighlightedDestination = vfx.highlightedLocationId === locId;
 
                         return (
                           <TabletopLocationTile
@@ -829,6 +826,7 @@ export function GameBoard({
                             isSelfHere={isSelfHere}
                             canChooseMoveHere={canChooseMoveHere}
                             rolledDestinationHere={rolledDestinationHere}
+                            isHighlightedDestination={isHighlightedDestination}
                             reducedMotion={vfx.reducedMotion}
                             enableMist={gfx.profile.enableMistDrift}
                             enableBackdropBlur={gfx.profile.enableBackdropBlur}
@@ -842,15 +840,23 @@ export function GameBoard({
                 ))}
               </section>
 
-              {/* 3. KHAY XÚC XẮC TƯƠNG TÁC (1d6+1d4) & 3 CHỒNG BÀI BẤM RÚT TRỰC TIẾP */}
+              {/* 3. KHAY XÚC XẮC 3D TƯƠNG TÁC (1d6+1d4) & 3 CHỒNG BÀI BẤM RÚT TRỰC TIẾP */}
               <section
                 data-testid="bg-dice-tray"
-                className="rounded-2xl border border-slate-700/80 bg-slate-900/90 px-3 py-2 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5"
+                data-turn-active={canRollOnBoard ? 'true' : 'false'}
+                data-dice-settled={String(vfx.isDiceSettled)}
+                className={`rounded-2xl border px-3 py-2 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 transition-all duration-200 ${
+                  canRollOnBoard
+                    ? `border-amber-400/90 bg-gradient-to-r from-emerald-950/75 via-slate-900/95 to-amber-950/35 ring-1 ring-amber-300/40 ${
+                        vfx.reducedMotion ? '' : 'mn-dice-tray-spotlight'
+                      }`
+                    : 'border-slate-700/80 bg-slate-900/90'
+                }`}
               >
                 {(() => {
-                  const diceAnimateCls = dicePulse
-                    ? 'scale-110 -rotate-6 transition-transform duration-200'
-                    : 'transition-transform duration-200';
+                  const diceRollingNow = Boolean(vfx.activeDiceRoll && !vfx.isDiceSettled);
+                  const trayDiceStage = vfx.activeDiceRoll ? vfx.diceRollStage : 'settled';
+                  const enable3DDice = gfx.profile.tier !== 'low' && !vfx.reducedMotion;
                   const rerollNeeded =
                     canRollOnBoard &&
                     Boolean(
@@ -859,71 +865,90 @@ export function GameBoard({
                     );
                   const diceSummary = publicGame.lastDiceRoll ? (
                     <>
-                      <div className={`flex items-center gap-1.5 shrink-0 ${diceAnimateCls}`}>
-                        {publicGame.lastDiceRoll.d6 > 0 && (
-                          <DiceD6Svg value={publicGame.lastDiceRoll.d6} size={36} />
-                        )}
-                        <DiceD4Svg value={publicGame.lastDiceRoll.d4} size={36} />
-                      </div>
+                      <MidnightDicePair3D
+                        d6={publicGame.lastDiceRoll.d6}
+                        d4={publicGame.lastDiceRoll.d4}
+                        stage={trayDiceStage}
+                        size={38}
+                        enable3D={enable3DDice}
+                      />
                       <div className="min-w-0 flex-1 text-left">
-                        <p className="text-xs sm:text-sm font-black text-white truncate">
-                          {publicGame.lastDiceRoll.kind === 'move'
-                            ? `${publicGame.lastDiceRoll.displayName} tung ${publicGame.lastDiceRoll.d6} + ${publicGame.lastDiceRoll.d4} = ${publicGame.lastDiceRoll.total}`
-                            : `${publicGame.lastDiceRoll.displayName} tung đòn đánh (${
-                                publicGame.lastDiceRoll.d6 > 0
-                                  ? `|${publicGame.lastDiceRoll.d6} - ${publicGame.lastDiceRoll.d4}|`
-                                  : `1d4=${publicGame.lastDiceRoll.d4}`
-                              } → gây ${publicGame.lastDiceRoll.damageDealt ?? 0} sát thương)`}
-                        </p>
-                        <p className="text-[11px] sm:text-xs text-cyan-200 font-semibold truncate">
-                          {publicGame.lastDiceRoll.rerollRequired
-                            ? '🔁 Trùng khu vực hiện tại — được quyền ĐỔ LẠI!'
-                            : publicGame.lastDiceRoll.freeChoice
-                              ? publicGame.allowedMoveDestinations &&
-                                publicGame.allowedMoveDestinations.length < 5
-                                ? `🧭 La Bàn! Chọn 1 trong ${publicGame.allowedMoveDestinations.length} khu vực hợp lệ.`
-                                : '✨ Tổng 7! Tự do chọn khu vực bất kỳ.'
-                              : publicGame.lastDiceRoll.resolvedLocation
-                                ? `Điểm đến: ${LOCATION_VISUAL_META[publicGame.lastDiceRoll.resolvedLocation].name}`
-                                : 'Sẵn sàng tung xúc xắc tiếp theo.'}
-                        </p>
-                        {publicGame.lastDiceRoll.kind === 'attack' &&
-                          publicGame.lastDiceRoll.counterRoll && (
-                            <p
-                              data-testid="bg-dice-counter-roll"
-                              className="text-[11px] sm:text-xs text-amber-300 font-bold truncate"
-                            >
-                              🥊 {publicGame.lastDiceRoll.counterRoll.displayName} phản kích (
-                              {publicGame.lastDiceRoll.counterRoll.d6 > 0
-                                ? `|${publicGame.lastDiceRoll.counterRoll.d6} - ${publicGame.lastDiceRoll.counterRoll.d4}|`
-                                : `1d4=${publicGame.lastDiceRoll.counterRoll.d4}`}
-                              ) → trả đòn {publicGame.lastDiceRoll.counterRoll.damageDealt} sát thương!
+                        {diceRollingNow ? (
+                          <>
+                            <p className="text-xs sm:text-sm font-black text-amber-200 truncate">
+                              🎲 {publicGame.lastDiceRoll.displayName} đang tung xúc xắc...
                             </p>
-                          )}
+                            <p className="text-[11px] sm:text-xs text-slate-300 font-semibold truncate">
+                              Chờ xúc xắc dừng trên mặt bàn để chốt kết quả từ server.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs sm:text-sm font-black text-white truncate">
+                              {publicGame.lastDiceRoll.kind === 'move'
+                                ? `${publicGame.lastDiceRoll.displayName} tung ${publicGame.lastDiceRoll.d6} + ${publicGame.lastDiceRoll.d4} = ${publicGame.lastDiceRoll.total}`
+                                : `${publicGame.lastDiceRoll.displayName} tung đòn đánh (${
+                                    publicGame.lastDiceRoll.d6 > 0
+                                      ? `|${publicGame.lastDiceRoll.d6} - ${publicGame.lastDiceRoll.d4}|`
+                                      : `1d4=${publicGame.lastDiceRoll.d4}`
+                                  } → gây ${publicGame.lastDiceRoll.damageDealt ?? 0} sát thương)`}
+                            </p>
+                            <p className="text-[11px] sm:text-xs text-cyan-200 font-semibold truncate">
+                              {publicGame.lastDiceRoll.rerollRequired
+                                ? '🔁 Trùng khu vực hiện tại — được quyền ĐỔ LẠI!'
+                                : publicGame.lastDiceRoll.freeChoice
+                                  ? publicGame.allowedMoveDestinations &&
+                                    publicGame.allowedMoveDestinations.length < 5
+                                    ? `🧭 La Bàn! Chọn 1 trong ${publicGame.allowedMoveDestinations.length} khu vực hợp lệ.`
+                                    : '✨ Tổng 7! Tự do chọn khu vực bất kỳ.'
+                                  : publicGame.lastDiceRoll.resolvedLocation
+                                    ? `Điểm đến: ${LOCATION_VISUAL_META[publicGame.lastDiceRoll.resolvedLocation].name}`
+                                    : 'Sẵn sàng tung xúc xắc tiếp theo.'}
+                            </p>
+                            {publicGame.lastDiceRoll.kind === 'attack' &&
+                              publicGame.lastDiceRoll.counterRoll && (
+                                <p
+                                  data-testid="bg-dice-counter-roll"
+                                  className="text-[11px] sm:text-xs text-amber-300 font-bold truncate"
+                                >
+                                  🥊 {publicGame.lastDiceRoll.counterRoll.displayName} phản kích (
+                                  {publicGame.lastDiceRoll.counterRoll.d6 > 0
+                                    ? `|${publicGame.lastDiceRoll.counterRoll.d6} - ${publicGame.lastDiceRoll.counterRoll.d4}|`
+                                    : `1d4=${publicGame.lastDiceRoll.counterRoll.d4}`}
+                                  ) → trả đòn {publicGame.lastDiceRoll.counterRoll.damageDealt} sát thương!
+                                </p>
+                              )}
+                          </>
+                        )}
                       </div>
                       {canRollOnBoard && (
-                        <span className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-400 text-slate-950 text-xs font-black whitespace-nowrap">
-                          {rerollNeeded ? '🔁 Đổ lại!' : '🎲 Bấm tung'}
+                        <span className="shrink-0 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
+                          {rerollNeeded ? '🔁 Đổ lại ngay!' : '🎲 Tung Xúc Xắc'}
                         </span>
                       )}
                     </>
                   ) : (
                     <>
-                      <div className={`flex items-center gap-1.5 shrink-0 ${diceAnimateCls}`}>
-                        <DiceD6Svg value={6} size={36} />
-                        <DiceD4Svg value={4} size={36} />
-                      </div>
+                      <MidnightDicePair3D
+                        d6={6}
+                        d4={4}
+                        stage={trayDiceStage}
+                        size={38}
+                        enable3D={enable3DDice}
+                      />
                       <div className="min-w-0 flex-1 text-left">
                         <p className="text-xs sm:text-sm font-black text-white truncate">
-                          Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)
+                          {canRollOnBoard
+                            ? '⚡ Lượt của bạn! Tung Xúc Xắc Bóng Đêm (1d6 + 1d4)'
+                            : 'Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)'}
                         </p>
                         <p className="text-[11px] sm:text-xs text-slate-300 truncate">
                           Tung xúc xắc di chuyển · Tổng 7 chọn bất kỳ · Trùng chỗ được đổ lại
                         </p>
                       </div>
                       {canRollOnBoard && (
-                        <span className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-400 text-slate-950 text-xs font-black whitespace-nowrap">
-                          🎲 Bấm tung
+                        <span className="shrink-0 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
+                          🎲 Tung Xúc Xắc
                         </span>
                       )}
                     </>
@@ -934,7 +959,7 @@ export function GameBoard({
                       type="button"
                       data-testid="bg-board-roll-dice-btn"
                       onClick={() => dispatchAction({ type: 'ROLL_DICE' })}
-                      className="flex items-center gap-3 flex-1 min-w-0 rounded-xl border border-emerald-400/75 bg-emerald-950/35 hover:bg-emerald-900/45 px-2.5 py-1.5 shadow-[0_0_16px_rgba(16,185,129,0.2)] transition cursor-pointer"
+                      className="flex items-center gap-3 flex-1 min-w-0 rounded-xl border border-emerald-400/80 bg-emerald-950/55 hover:bg-emerald-900/65 px-3 py-2 shadow-[0_0_20px_rgba(16,185,129,0.28)] transition cursor-pointer"
                     >
                       {diceSummary}
                     </button>

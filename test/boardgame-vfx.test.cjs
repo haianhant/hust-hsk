@@ -13,6 +13,11 @@ const {
   extractVisualEventsFromDiff,
 } = require('../features/boardgame/ui/vfx-queue.ts');
 const {
+  isDiceResultRevealed,
+  resolveDiceRollStage,
+  resolveDiceStageTimings,
+} = require('../features/boardgame/ui/MidnightDice3D.tsx');
+const {
   DEFAULT_GRAPHICS_PREFERENCES,
   detectAutoQualityTier,
   resolveGraphicsProfile,
@@ -647,4 +652,79 @@ test('VFX Queue (6) — Multi-log sau mốc 40 vẫn giữ nguyên chuỗi VFX (
   assert.ok(counterEv, 'Log thứ 2 cùng ms sau mốc 40 phải kích hoạt COUNTER_STRIKE');
   assert.ok(elimEv, 'Log thứ 3 cùng ms sau mốc 40 phải kích hoạt ELIMINATION');
   assert.equal(new Set(emitted.map((e) => e.id)).size, emitted.length);
+});
+
+test('Game Feel P1 (7) — 3D Dice 4 giai đoạn (1.2–1.5s), chống lộ kết quả sớm & Reduced Motion / Reconnect', () => {
+  // 1) Thời lượng DICE_ROLL bình thường nằm trong 1.2–1.5s và lưu đúng kết quả server + điểm đến
+  const prevMove = makePubState({ turnNumber: 4, turnPhase: 'ROLL_MOVE', activePlayerId: 'p1' });
+  const nextMove = makePubState({
+    turnNumber: 4,
+    turnPhase: 'LOCATION_ACTION',
+    activePlayerId: 'p1',
+    players: prevMove.players.map((p) =>
+      p.playerId === 'p1' ? { ...p, location: 'canteen' } : p,
+    ),
+    lastDiceRoll: {
+      kind: 'move',
+      playerId: 'p1',
+      displayName: 'Minh An',
+      d6: 5,
+      d4: 3,
+      total: 8,
+      rerollRequired: false,
+      freeChoice: false,
+      resolvedLocation: 'canteen',
+      targetPlayerId: null,
+      damageDealt: null,
+    },
+  });
+
+  const fullEvents = extractVisualEventsFromDiff(prevMove, nextMove, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+    reducedMotion: false,
+  });
+  const moveDice = fullEvents.find((e) => e.kind === 'DICE_ROLL');
+  assert.ok(moveDice, 'Move roll must emit DICE_ROLL');
+  assert.ok(
+    moveDice.durationMs >= 1200 && moveDice.durationMs <= 1500,
+    `Normal dice roll duration (${moveDice.durationMs}ms) must be within 1200..1500ms`,
+  );
+  assert.equal(moveDice.d6, 5);
+  assert.equal(moveDice.d4, 3);
+  assert.equal(moveDice.total, 8);
+  assert.equal(moveDice.resolvedLocation, 'canteen');
+
+  // 2) Phân kỳ 4 giai đoạn: windup -> tumble -> decelerate -> settled; KHÔNG được lộ trước settled
+  const timings = resolveDiceStageTimings(moveDice.durationMs, false);
+  assert.ok(timings.windupEndMs > 0 && timings.tumbleEndMs > timings.windupEndMs && timings.settleAtMs > timings.tumbleEndMs);
+  const s0 = resolveDiceRollStage(40, moveDice.durationMs, false);
+  const s1 = resolveDiceRollStage(timings.windupEndMs + 40, moveDice.durationMs, false);
+  const s2 = resolveDiceRollStage(timings.tumbleEndMs + 40, moveDice.durationMs, false);
+  const s3 = resolveDiceRollStage(timings.settleAtMs, moveDice.durationMs, false);
+  assert.equal(s0, 'windup');
+  assert.equal(s1, 'tumble');
+  assert.equal(s2, 'decelerate');
+  assert.equal(s3, 'settled');
+  assert.equal(isDiceResultRevealed(s0), false, 'Windup must NOT reveal dice result');
+  assert.equal(isDiceResultRevealed(s1), false, 'Tumble must NOT reveal dice result');
+  assert.equal(isDiceResultRevealed(s2), false, 'Decelerate must NOT reveal dice result');
+  assert.equal(isDiceResultRevealed(s3), true, 'Settled must reveal authoritative server result');
+
+  // 3) Reduced Motion rút gọn dưới 260ms và chốt thẳng settled
+  const reducedEvents = extractVisualEventsFromDiff(prevMove, nextMove, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+    reducedMotion: true,
+  });
+  const fastDice = reducedEvents.find((e) => e.kind === 'DICE_ROLL');
+  assert.ok(fastDice && fastDice.durationMs <= 260);
+  assert.equal(resolveDiceRollStage(0, fastDice.durationMs, true), 'settled');
+
+  // 4) Reconnect / F5 vào giữa lúc đã có lastDiceRoll không bao giờ replay xúc xắc cũ
+  const tracker = new VisualEventTracker();
+  const baselineEvents = tracker.seedBaseline(nextMove, { selfPlayerId: 'p1', isSpectator: false });
+  assert.equal(baselineEvents.length, 0);
+  const dup = tracker.ingestSnapshot(nextMove, { selfPlayerId: 'p1', isSpectator: false });
+  assert.equal(dup.length, 0);
 });

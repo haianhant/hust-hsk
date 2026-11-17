@@ -453,30 +453,79 @@ export function playCardFlip(): void {
   );
 }
 
-/** Tung xúc xắc: các nhịp nảy giảm dần + hợp âm khóa kết quả */
-export function playDiceRoll(freeChoice = false, isAttack = false): void {
+/** Tung xúc xắc 3D: cốc lắc ban đầu + các nhịp nảy giảm dần + hợp âm khóa kết quả lúc dừng */
+export function playDiceRoll(freeChoice = false, isAttack = false, durationMs = 1400): void {
+  const isFast = durationMs <= 360;
+  if (isFast) {
+    playLayeredCue(
+      [
+        {
+          freq: isAttack ? 310 : 440,
+          endFreq: isAttack ? 460 : 660,
+          startOffsetSec: 0.06,
+          durationSec: 0.11,
+          type: 'triangle',
+          gainPeak: 0.04,
+        },
+      ],
+      [
+        { bufferKey: 'diceClick', startOffsetSec: 0, durationSec: 0.042, playbackRate: 1.08, gainPeak: 0.08, filterType: 'bandpass', filterFreq: 1750 },
+        { bufferKey: 'diceClick', startOffsetSec: 0.08, durationSec: 0.04, playbackRate: 1.2, gainPeak: 0.055, filterType: 'bandpass', filterFreq: 1950 },
+      ],
+    );
+    return;
+  }
+
+  const settleSec = Math.max(0.72, Math.min(1.16, (durationMs * 0.77) / 1000));
   playLayeredCue(
     [
+      // Nảy thầm mặt gỗ bàn chơi KTX theo nhịp va chạm
+      { freq: 185, endFreq: 95, startOffsetSec: 0.21, durationSec: 0.045, type: 'triangle', gainPeak: 0.032 },
+      { freq: 215, endFreq: 105, startOffsetSec: 0.42, durationSec: 0.042, type: 'triangle', gainPeak: 0.026 },
+      { freq: 170, endFreq: 88, startOffsetSec: 0.61, durationSec: 0.038, type: 'triangle', gainPeak: 0.022 },
+      // Hợp âm chốt kết quả đúng khoảnh khắc xúc xắc đứng yên (settled)
       {
         freq: isAttack ? 310 : 440,
-        endFreq: isAttack ? 460 : 660,
-        startOffsetSec: 0.16,
-        durationSec: 0.11,
+        endFreq: isAttack ? 465 : 659.25,
+        startOffsetSec: settleSec,
+        durationSec: 0.14,
         type: 'triangle',
-        gainPeak: 0.04,
+        gainPeak: 0.044,
       },
       ...(freeChoice
         ? [
-            { freq: 587.33, startOffsetSec: 0.21, durationSec: 0.15, type: 'sine' as const, gainPeak: 0.048 },
-            { freq: 880, startOffsetSec: 0.26, durationSec: 0.22, type: 'sine' as const, gainPeak: 0.05 },
+            { freq: 587.33, startOffsetSec: settleSec + 0.04, durationSec: 0.16, type: 'sine' as const, gainPeak: 0.05 },
+            { freq: 880, startOffsetSec: settleSec + 0.09, durationSec: 0.24, type: 'sine' as const, gainPeak: 0.054 },
           ]
         : []),
     ],
     [
-      { bufferKey: 'diceClick', startOffsetSec: 0, durationSec: 0.042, playbackRate: 1.05, gainPeak: 0.085, filterType: 'bandpass', filterFreq: 1700 },
-      { bufferKey: 'diceClick', startOffsetSec: 0.055, durationSec: 0.042, playbackRate: 1.24, gainPeak: 0.068, filterType: 'bandpass', filterFreq: 2100 },
-      { bufferKey: 'diceClick', startOffsetSec: 0.11, durationSec: 0.04, playbackRate: 0.92, gainPeak: 0.052, filterType: 'bandpass', filterFreq: 1500 },
-      { bufferKey: 'diceClick', startOffsetSec: 0.165, durationSec: 0.04, playbackRate: 1.15, gainPeak: 0.038, filterType: 'bandpass', filterFreq: 1900 },
+      // Chuẩn bị lắc tay + ma sát mặt bài
+      { bufferKey: 'paper', startOffsetSec: 0.01, durationSec: 0.09, playbackRate: 1.2, gainPeak: 0.04, filterType: 'bandpass', filterFreq: 1400 },
+      // 5 nhịp va chạm tách bạch theo giai đoạn lăn & giảm tốc
+      { bufferKey: 'diceClick', startOffsetSec: 0.19, durationSec: 0.044, playbackRate: 1.02, gainPeak: 0.09, filterType: 'bandpass', filterFreq: 1700 },
+      { bufferKey: 'diceClick', startOffsetSec: 0.36, durationSec: 0.042, playbackRate: 1.24, gainPeak: 0.078, filterType: 'bandpass', filterFreq: 2150 },
+      { bufferKey: 'diceClick', startOffsetSec: 0.52, durationSec: 0.04, playbackRate: 0.94, gainPeak: 0.064, filterType: 'bandpass', filterFreq: 1600 },
+      { bufferKey: 'diceClick', startOffsetSec: 0.7, durationSec: 0.038, playbackRate: 1.15, gainPeak: 0.048, filterType: 'bandpass', filterFreq: 1950 },
+      { bufferKey: 'diceClick', startOffsetSec: 0.88, durationSec: 0.036, playbackRate: 1.05, gainPeak: 0.034, filterType: 'bandpass', filterFreq: 1750 },
+    ],
+  );
+}
+
+/** Chạm nhẹ quân cờ đáp xuống ô địa điểm */
+export function playPawnTouchdown(): void {
+  playLayeredCue(
+    [{ freq: 195, endFreq: 112, startOffsetSec: 0, durationSec: 0.075, type: 'sine', gainPeak: 0.034 }],
+    [
+      {
+        bufferKey: 'diceClick',
+        startOffsetSec: 0,
+        durationSec: 0.038,
+        playbackRate: 0.78,
+        gainPeak: 0.042,
+        filterType: 'lowpass',
+        filterFreq: 1200,
+      },
     ],
   );
 }
@@ -811,7 +860,7 @@ export function playSoundForVisualEvent(
 
   switch (event.kind) {
     case 'DICE_ROLL':
-      playDiceRoll(event.freeChoice, event.diceKind === 'attack');
+      playDiceRoll(event.freeChoice, event.diceKind === 'attack', event.durationMs);
       return true;
 
     case 'CARD_DRAW':

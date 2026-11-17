@@ -67,9 +67,32 @@ canvas {
   .bg-vfx-shake-light,
   .bg-vfx-shake-heavy,
   .bg-vfx-float-pop,
+  .bg-vfx-float-damage,
+  .bg-vfx-float-heal,
+  .bg-vfx-float-counter,
+  .bg-vfx-float-block,
   .bg-vfx-cutin-enter,
   .bg-vfx-dice-roll,
-  .bg-tile-mist-drift {
+  .bg-tile-mist-drift,
+  .mn-dice-tray-spotlight,
+  .mn-tile-landing-beacon,
+  .mn-pawn-touchdown-ripple,
+  .mn-die-hop-windup,
+  .mn-die-hop-tumble,
+  .mn-die-hop-decel,
+  .mn-die-hop-settled,
+  .mn-die-hop-windup-d4,
+  .mn-die-hop-tumble-d4,
+  .mn-die-hop-decel-d4,
+  .mn-die-cube-windup,
+  .mn-die-cube-tumble,
+  .mn-die-cube-decel,
+  .mn-d4-pyramid-windup,
+  .mn-d4-pyramid-tumble,
+  .mn-d4-pyramid-decel,
+  .mn-die-shadow-windup,
+  .mn-die-shadow-tumble,
+  .mn-die-shadow-decel {
     animation: none !important;
   }
 }
@@ -172,3 +195,190 @@ canvas {
 .bg-tile-mist-drift {
   animation: bg-tile-mist-drift 8.5s ease-in-out infinite;
 }
+
+/* ---------------------------------------------------------------------------
+ * Game Feel & 3D Dice Physics (CSS 3D Cube + Tetrahedral Pyramid + Polish)
+ * --------------------------------------------------------------------------- */
+.mn-die-cube {
+  transform-style: preserve-3d;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.mn-die-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+@keyframes mn-die-hop-windup {
+  0% { transform: translate3d(0, 2px, 0) scale(1.04, 0.94); }
+  100% { transform: translate3d(-4px, -7px, 0) scale(0.96, 1.05); }
+}
+
+@keyframes mn-die-hop-tumble {
+  0%   { transform: translate3d(-4px, -14px, 0) scale(1.04); }
+  28%  { transform: translate3d(5px, 2px, 0) scale(1.08, 0.91); }
+  52%  { transform: translate3d(-2px, -18px, 0) scale(1.05); }
+  78%  { transform: translate3d(4px, 1px, 0) scale(1.06, 0.93); }
+  100% { transform: translate3d(0, -10px, 0) scale(1.02); }
+}
+
+@keyframes mn-die-hop-decel {
+  0%   { transform: translate3d(2px, -8px, 0) scale(1.02); }
+  55%  { transform: translate3d(-1px, 2px, 0) scale(1.05, 0.95); }
+  80%  { transform: translate3d(0, -3px, 0) scale(1.01); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes mn-die-hop-settled {
+  0%   { transform: translate3d(0, -5px, 0) scale(1.06, 0.94); }
+  45%  { transform: translate3d(0, 2px, 0) scale(1.08, 0.92); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes mn-die-cube-windup {
+  0%   { transform: rotateX(18deg) rotateY(-24deg) rotateZ(-8deg); }
+  100% { transform: rotateX(-38deg) rotateY(42deg) rotateZ(16deg); }
+}
+
+@keyframes mn-die-cube-tumble {
+  0%   { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+  50%  { transform: rotateX(340deg) rotateY(240deg) rotateZ(110deg); }
+  100% { transform: rotateX(720deg) rotateY(540deg) rotateZ(220deg); }
+}
+
+@keyframes mn-die-cube-decel {
+  0%   { transform: rotateX(210deg) rotateY(150deg) rotateZ(35deg); }
+  65%  { transform: rotateX(35deg) rotateY(-18deg) rotateZ(8deg); }
+  100% { transform: rotateX(-12deg) rotateY(14deg) rotateZ(-4deg); }
+}
+
+@keyframes mn-d4-pyramid-windup {
+  0%   { transform: rotateZ(0deg) rotateX(0deg) scale(1); }
+  100% { transform: rotateZ(-36deg) rotateX(28deg) scale(0.95); }
+}
+
+@keyframes mn-d4-pyramid-tumble {
+  0%   { transform: rotateY(0deg) rotateZ(0deg) rotateX(0deg); }
+  50%  { transform: rotateY(260deg) rotateZ(-220deg) rotateX(140deg); }
+  100% { transform: rotateY(540deg) rotateZ(-460deg) rotateX(300deg); }
+}
+
+@keyframes mn-d4-pyramid-decel {
+  0%   { transform: rotateY(140deg) rotateZ(-120deg); }
+  65%  { transform: rotateY(-16deg) rotateZ(14deg); }
+  100% { transform: rotateY(6deg) rotateZ(-4deg); }
+}
+
+@keyframes mn-die-shadow-tumble {
+  0%, 52%, 100% { transform: scaleX(0.68) scaleY(0.75); opacity: 0.42; }
+  28%, 78% { transform: scaleX(1.06) scaleY(1.08); opacity: 0.78; }
+}
+
+@keyframes mn-die-shadow-decel {
+  0% { transform: scaleX(0.78); opacity: 0.52; }
+  60% { transform: scaleX(1.05); opacity: 0.78; }
+  100% { transform: scaleX(1); opacity: 0.72; }
+}
+
+.mn-die-hop-windup { animation: mn-die-hop-windup 200ms ease-out forwards; }
+.mn-die-hop-tumble { animation: mn-die-hop-tumble 720ms cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+.mn-die-hop-decel  { animation: mn-die-hop-decel 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.mn-die-hop-settled { animation: mn-die-hop-settled 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+.mn-die-hop-windup-d4 { animation: mn-die-hop-windup 200ms 40ms ease-out forwards; }
+.mn-die-hop-tumble-d4 { animation: mn-die-hop-tumble 690ms 45ms cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+.mn-die-hop-decel-d4  { animation: mn-die-hop-decel 290ms 30ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+.mn-die-cube-windup { animation: mn-die-cube-windup 200ms ease-out forwards; }
+.mn-die-cube-tumble { animation: mn-die-cube-tumble 680ms linear infinite; }
+.mn-die-cube-decel  { animation: mn-die-cube-decel 270ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+.mn-d4-pyramid-windup { animation: mn-d4-pyramid-windup 200ms ease-out forwards; }
+.mn-d4-pyramid-tumble { animation: mn-d4-pyramid-tumble 640ms linear infinite; }
+.mn-d4-pyramid-decel  { animation: mn-d4-pyramid-decel 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+.mn-die-shadow-windup  { transform: scaleX(0.92); opacity: 0.65; }
+.mn-die-shadow-tumble  { animation: mn-die-shadow-tumble 720ms ease-in-out infinite; }
+.mn-die-shadow-decel   { animation: mn-die-shadow-decel 280ms ease-out forwards; }
+.mn-die-shadow-settled { transform: scaleX(1.04); opacity: 0.78; transition: transform 180ms ease-out; }
+
+@keyframes mn-dice-tray-spotlight {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.45), 0 0 18px rgba(16, 185, 129, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.85), 0 0 28px rgba(16, 185, 129, 0.5);
+  }
+}
+
+.mn-dice-tray-spotlight {
+  animation: mn-dice-tray-spotlight 1.8s ease-in-out infinite;
+}
+
+@keyframes mn-tile-landing-beacon {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.65), 0 10px 26px rgba(16, 185, 129, 0.32);
+  }
+  55% {
+    box-shadow: 0 0 0 8px rgba(52, 211, 153, 0), 0 14px 32px rgba(16, 185, 129, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0), 0 10px 26px rgba(16, 185, 129, 0.28);
+  }
+}
+
+.mn-tile-landing-beacon {
+  animation: mn-tile-landing-beacon 950ms cubic-bezier(0.22, 1, 0.36, 1) 2;
+}
+
+@keyframes mn-pawn-touchdown-ripple {
+  0% {
+    transform: translate3d(0, 2px, 0) scale(1.08, 0.92);
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.75);
+  }
+  45% {
+    transform: translate3d(0, -3px, 0) scale(0.98, 1.03);
+    box-shadow: 0 0 0 10px rgba(56, 189, 248, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+  }
+}
+
+.mn-pawn-touchdown-ripple {
+  animation: mn-pawn-touchdown-ripple 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes bg-vfx-float-damage {
+  0%   { opacity: 0; transform: translate(-50%, -10%) scale(0.42); }
+  16%  { opacity: 1; transform: translate(-50%, -72%) scale(1.32); }
+  32%  { opacity: 1; transform: translate(-50%, -84%) scale(1.05); }
+  100% { opacity: 0; transform: translate(-50%, -158%) scale(0.92); }
+}
+
+@keyframes bg-vfx-float-heal {
+  0%   { opacity: 0; transform: translate(-50%, 6%) scale(0.7); }
+  22%  { opacity: 1; transform: translate(-50%, -58%) scale(1.14); }
+  100% { opacity: 0; transform: translate(-50%, -148%) scale(1); }
+}
+
+@keyframes bg-vfx-float-counter {
+  0%   { opacity: 0; transform: translate(-50%, -25%) scale(0.5) rotate(-8deg); }
+  18%  { opacity: 1; transform: translate(-50%, -88%) scale(1.24) rotate(2deg); }
+  36%  { opacity: 1; transform: translate(-50%, -96%) scale(1.04) rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%, -166%) scale(0.94); }
+}
+
+@keyframes bg-vfx-float-block {
+  0%   { opacity: 0; transform: translate(-50%, -20%) scale(0.6); }
+  22%  { opacity: 1; transform: translate(-50%, -72%) scale(1.18); }
+  72%  { opacity: 1; transform: translate(-50%, -86%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -128%) scale(0.95); }
+}
+
+.bg-vfx-float-damage  { animation: bg-vfx-float-damage 1150ms cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.bg-vfx-float-heal    { animation: bg-vfx-float-heal 1200ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.bg-vfx-float-counter { animation: bg-vfx-float-counter 1220ms cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.bg-vfx-float-block   { animation: bg-vfx-float-block 1050ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }

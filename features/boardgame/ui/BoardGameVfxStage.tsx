@@ -14,16 +14,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   BoardGameDeckId,
+  BoardGameLocationId,
   BoardGamePrivateGameView,
   BoardGamePublicGameView,
 } from '@/shared/contracts/boardgame';
 import {
-  DiceD4Svg,
-  DiceD6Svg,
   FactionCrestSvg,
   RolePortraitSvg,
 } from './BoardGameArt';
 import type { ResolvedGraphicsProfile } from './graphics-settings';
+import {
+  MidnightDicePair3D,
+  isDiceResultRevealed,
+  resolveDiceStageTimings,
+  type DiceRollStage,
+} from './MidnightDice3D';
 import {
   CARD_BACK_SECRET_TITLES,
   MIDNIGHT_CARD_ART,
@@ -437,6 +442,10 @@ export interface BoardGameVfxState {
   activeCombatCount: number;
   floatingPopups: readonly ActiveFloatingPopup[];
   activeDiceRoll: DiceRollVisualEvent | null;
+  diceRollStage: DiceRollStage;
+  isDiceSettled: boolean;
+  highlightedLocationId: BoardGameLocationId | null;
+  skipGeneration: number;
   activeCardDraw: {
     event: CardDrawVisualEvent;
     revealedFace: boolean;
@@ -488,6 +497,8 @@ export function useBoardGameVfxQueue({
 
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
+  const qualityTierRef = useRef(qualityTier);
+  qualityTierRef.current = qualityTier;
   const dprCapRef = useRef(dprCap);
   dprCapRef.current = dprCap;
   const particleScaleRef = useRef(particleScale);
@@ -498,6 +509,10 @@ export function useBoardGameVfxQueue({
   const [activeCombatCount, setActiveCombatCount] = useState(0);
   const [floatingPopups, setFloatingPopups] = useState<ActiveFloatingPopup[]>([]);
   const [activeDiceRoll, setActiveDiceRoll] = useState<DiceRollVisualEvent | null>(null);
+  const [diceRollStage, setDiceRollStage] = useState<DiceRollStage>('idle');
+  const [highlightedLocationId, setHighlightedLocationId] = useState<BoardGameLocationId | null>(null);
+  const [skipGeneration, setSkipGeneration] = useState(0);
+  const activeDiceIdRef = useRef<string | null>(null);
   const [activeCardDraw, setActiveCardDraw] = useState<{
     event: CardDrawVisualEvent;
     revealedFace: boolean;
@@ -606,7 +621,11 @@ export function useBoardGameVfxQueue({
     }
     setActiveCombatCount(0);
     setFloatingPopups([]);
+    activeDiceIdRef.current = null;
     setActiveDiceRoll(null);
+    setDiceRollStage('idle');
+    setHighlightedLocationId(null);
+    setSkipGeneration((n) => n + 1);
     setActiveCardDraw(null);
     setCutInQueue([]);
     setActiveCutIn(null);
@@ -635,11 +654,56 @@ export function useBoardGameVfxQueue({
       for (const ev of events) {
         switch (ev.kind) {
           case 'DICE_ROLL': {
-            playSoundForVisualEvent(ev);
+            const rawDuration = reducedMotionRef.current
+              ? ev.durationMs
+              : qualityTierRef.current === 'low'
+                ? Math.max(1200, Math.round(ev.durationMs * 0.88))
+                : qualityTierRef.current === 'balanced'
+                  ? Math.max(1240, Math.round(ev.durationMs * 0.92))
+                  : ev.durationMs;
+            const timings = resolveDiceStageTimings(rawDuration, reducedMotionRef.current);
+            activeDiceIdRef.current = ev.id;
+            playSoundForVisualEvent({ ...ev, durationMs: timings.totalMs });
             setActiveDiceRoll(ev);
+
+            if (timings.settleAtMs === 0) {
+              setDiceRollStage('settled');
+              if (ev.diceKind === 'move' && ev.resolvedLocation) {
+                const dest = ev.resolvedLocation;
+                setHighlightedLocationId(dest);
+                scheduleTimeout(() => {
+                  setHighlightedLocationId((cur) => (cur === dest ? null : cur));
+                }, 950);
+              }
+            } else {
+              setDiceRollStage('windup');
+              scheduleTimeout(() => {
+                if (activeDiceIdRef.current === ev.id) setDiceRollStage('tumble');
+              }, timings.windupEndMs);
+              scheduleTimeout(() => {
+                if (activeDiceIdRef.current === ev.id) setDiceRollStage('decelerate');
+              }, timings.tumbleEndMs);
+              scheduleTimeout(() => {
+                if (activeDiceIdRef.current === ev.id) {
+                  setDiceRollStage('settled');
+                  if (ev.diceKind === 'move' && ev.resolvedLocation) {
+                    const dest = ev.resolvedLocation;
+                    setHighlightedLocationId(dest);
+                    scheduleTimeout(() => {
+                      setHighlightedLocationId((cur) => (cur === dest ? null : cur));
+                    }, 1450);
+                  }
+                }
+              }, timings.settleAtMs);
+            }
+
             scheduleTimeout(() => {
+              if (activeDiceIdRef.current === ev.id) {
+                activeDiceIdRef.current = null;
+                setDiceRollStage('idle');
+              }
               setActiveDiceRoll((curr) => (curr?.id === ev.id ? null : curr));
-            }, ev.durationMs);
+            }, timings.totalMs);
             break;
           }
           case 'CARD_DRAW': {
@@ -688,10 +752,23 @@ export function useBoardGameVfxQueue({
             const uid = ev.id;
             const spawnMs = reducedMotionRef.current ? 0 : 90;
             scheduleTimeout(() => {
-              setFloatingPopups((prev) => [
-                ...prev.slice(-10),
-                { uid, event: ev, x: pt.x + jitterX, y: pt.y - 12 },
-              ]);
+              setFloatingPopups((prev) => {
+                const sameTargetCount = prev.filter(
+                  (item) => item.event.targetPlayerId === ev.targetPlayerId,
+                ).length;
+                const variantOffsetY = ev.variant === 'counter' ? -24 : 0;
+                const stackOffsetY = -sameTargetCount * 24;
+                const stackOffsetX = (sameTargetCount % 2 === 1 ? 18 : 0);
+                return [
+                  ...prev.slice(-10),
+                  {
+                    uid,
+                    event: ev,
+                    x: pt.x + jitterX + stackOffsetX,
+                    y: pt.y - 14 + variantOffsetY + stackOffsetY,
+                  },
+                ];
+              });
               scheduleTimeout(() => {
                 setFloatingPopups((prev) => prev.filter((p) => p.uid !== uid));
               }, ev.durationMs);
@@ -763,10 +840,13 @@ export function useBoardGameVfxQueue({
     };
   }, [clearAllTimers]);
 
+  const isDiceSettled = !activeDiceRoll || isDiceResultRevealed(diceRollStage);
+
   const hasActiveEffects =
     activeCombatCount > 0 ||
     floatingPopups.length > 0 ||
     Boolean(activeDiceRoll) ||
+    Boolean(highlightedLocationId) ||
     Boolean(activeCardDraw) ||
     Boolean(activeCutIn) ||
     cutInQueue.length > 0;
@@ -775,6 +855,10 @@ export function useBoardGameVfxQueue({
     activeCombatCount,
     floatingPopups,
     activeDiceRoll,
+    diceRollStage,
+    isDiceSettled,
+    highlightedLocationId,
+    skipGeneration,
     activeCardDraw,
     activeCutIn,
     screenShake,
@@ -902,18 +986,53 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
 
       {/* LỚP 3: FLOATING DAMAGE / HEAL / BLOCK / COUNTER */}
       {vfx.floatingPopups.map((pop) => {
-        const toneCls =
+        const meta =
           pop.event.variant === 'damage'
-            ? 'text-rose-300 drop-shadow-[0_3px_10px_rgba(225,29,72,0.95)]'
+            ? {
+                animCls: 'bg-vfx-float-damage',
+                pillCls:
+                  'border-rose-400/80 bg-gradient-to-b from-rose-950/95 to-slate-950/95 text-rose-200 shadow-[0_6px_18px_rgba(225,29,72,0.55)]',
+                icon: '💥',
+                sizeCls: 'text-xl sm:text-2xl px-2.5 py-0.5',
+              }
             : pop.event.variant === 'heal'
-              ? 'text-emerald-300 drop-shadow-[0_3px_10px_rgba(16,185,129,0.95)]'
+              ? {
+                  animCls: 'bg-vfx-float-heal',
+                  pillCls:
+                    'border-emerald-300/85 bg-gradient-to-b from-emerald-950/95 to-slate-950/95 text-emerald-200 shadow-[0_6px_18px_rgba(16,185,129,0.5)]',
+                  icon: '💚',
+                  sizeCls: 'text-lg sm:text-xl px-2.5 py-0.5',
+                }
               : pop.event.variant === 'block'
-                ? 'text-sky-200 drop-shadow-[0_3px_10px_rgba(56,189,248,0.95)]'
+                ? {
+                    animCls: 'bg-vfx-float-block',
+                    pillCls:
+                      'border-sky-300/85 bg-gradient-to-b from-sky-950/95 to-slate-950/95 text-sky-100 shadow-[0_6px_18px_rgba(56,189,248,0.5)]',
+                    icon: '🛡️',
+                    sizeCls: 'text-base sm:text-lg px-2.5 py-0.5 uppercase tracking-wider',
+                  }
                 : pop.event.variant === 'counter'
-                  ? 'text-purple-200 drop-shadow-[0_3px_10px_rgba(168,85,247,0.95)]'
+                  ? {
+                      animCls: 'bg-vfx-float-counter',
+                      pillCls:
+                        'border-fuchsia-400/90 bg-gradient-to-r from-purple-950/95 via-rose-950/95 to-slate-950/95 text-amber-200 shadow-[0_6px_22px_rgba(168,85,247,0.6)]',
+                      icon: '⚔️',
+                      sizeCls: 'text-base sm:text-lg px-2.5 py-0.5 uppercase tracking-wider',
+                    }
                   : pop.event.variant === 'steal'
-                    ? 'text-amber-300 drop-shadow-[0_3px_10px_rgba(245,158,11,0.95)]'
-                    : 'text-slate-300 drop-shadow-[0_2px_8px_rgba(15,23,42,0.95)]';
+                    ? {
+                        animCls: 'bg-vfx-float-pop',
+                        pillCls:
+                          'border-amber-300/85 bg-amber-950/95 text-amber-200 shadow-[0_6px_18px_rgba(245,158,11,0.5)]',
+                        icon: '🧲',
+                        sizeCls: 'text-base sm:text-lg px-2.5 py-0.5 uppercase tracking-wider',
+                      }
+                    : {
+                        animCls: 'bg-vfx-float-pop',
+                        pillCls: 'border-slate-500/70 bg-slate-950/90 text-slate-300',
+                        icon: '💨',
+                        sizeCls: 'text-base sm:text-lg px-2 py-0.5',
+                      };
         return (
           <div
             key={pop.uid}
@@ -921,48 +1040,66 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
             data-variant={pop.event.variant}
             data-target-player={pop.event.targetPlayerId}
             style={{ left: pop.x, top: pop.y }}
-            className={`pointer-events-none absolute z-20 -translate-x-1/2 font-black tracking-tight text-xl sm:text-2xl ${
-              vfx.reducedMotion ? '' : 'bg-vfx-float-pop'
-            } ${toneCls}`}
+            className={`pointer-events-none absolute z-20 -translate-x-1/2 font-black tracking-tight tabular-nums ${
+              vfx.reducedMotion ? '' : meta.animCls
+            }`}
           >
-            <span className="rounded-lg bg-slate-950/75 px-2 py-0.5 ring-1 ring-white/20">
-              {pop.event.label}
+            <span
+              className={`inline-flex items-center gap-1 rounded-xl border ${meta.sizeCls} ${meta.pillCls}`}
+            >
+              <span aria-hidden="true" className="text-sm sm:text-base leading-none">
+                {meta.icon}
+              </span>
+              <span>{pop.event.label}</span>
             </span>
           </div>
         );
       })}
 
-      {/* LỚP 4A: DICE TUMBLE OVERLAY (DỪNG Ở ĐÚNG KẾT QUẢ SERVER) */}
+      {/* LỚP 4A: XÚC XẮC 3D LĂN -> GIẢM TỐC -> CHỐT ĐÚNG KẾT QUẢ SERVER */}
       {vfx.activeDiceRoll && (
         <div
           data-testid="bg-vfx-dice-overlay"
+          data-dice-stage={vfx.diceRollStage}
+          data-dice-settled={String(vfx.isDiceSettled)}
           className="pointer-events-none absolute inset-x-0 bottom-20 flex justify-center px-3"
         >
           <div
-            className={`flex items-center gap-3 rounded-2xl border px-4 py-2.5 shadow-2xl ${blurCls} ${
-              vfx.activeDiceRoll.freeChoice
-                ? 'border-amber-300/80 bg-amber-950/92 text-amber-100'
-                : vfx.activeDiceRoll.rerollRequired
-                  ? 'border-orange-400/80 bg-orange-950/92 text-orange-100'
-                  : 'border-cyan-400/60 bg-slate-900/95 text-white'
-            } ${vfx.reducedMotion ? '' : 'bg-vfx-dice-roll'}`}
+            className={`flex items-center gap-3.5 rounded-2xl border px-4 py-3 shadow-2xl transition-colors duration-200 ${blurCls} ${
+              !vfx.isDiceSettled
+                ? 'border-indigo-400/70 bg-slate-950/95 text-slate-100'
+                : vfx.activeDiceRoll.freeChoice
+                  ? 'border-amber-300/90 bg-amber-950/95 text-amber-100 shadow-[0_14px_34px_rgba(251,191,36,0.35)]'
+                  : vfx.activeDiceRoll.rerollRequired
+                    ? 'border-orange-400/90 bg-orange-950/95 text-orange-100'
+                    : 'border-emerald-400/80 bg-slate-900/95 text-white shadow-[0_14px_32px_rgba(16,185,129,0.25)]'
+            }`}
           >
-            <div className="flex items-center gap-1.5">
-              {vfx.activeDiceRoll.d6 > 0 && <DiceD6Svg value={vfx.activeDiceRoll.d6} size={40} />}
-              <DiceD4Svg value={vfx.activeDiceRoll.d4} size={40} />
-            </div>
-            <div className="text-left">
+            <MidnightDicePair3D
+              d6={vfx.activeDiceRoll.d6}
+              d4={vfx.activeDiceRoll.d4}
+              stage={vfx.diceRollStage}
+              size={44}
+              enable3D={vfx.qualityTier !== 'low' && !vfx.reducedMotion}
+            />
+            <div className="min-w-0 text-left">
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
                 {vfx.activeDiceRoll.actorName} ·{' '}
                 {vfx.activeDiceRoll.diceKind === 'attack' ? 'Xúc xắc tấn công' : 'Xúc xắc di chuyển'}
               </p>
-              <p className="text-sm font-black">
-                {vfx.activeDiceRoll.diceKind === 'attack'
-                  ? `Kết quả: |${vfx.activeDiceRoll.d6} - ${vfx.activeDiceRoll.d4}| = ${vfx.activeDiceRoll.total}`
-                  : `Tổng: ${vfx.activeDiceRoll.d6} + ${vfx.activeDiceRoll.d4} = ${vfx.activeDiceRoll.total}`}
-                {vfx.activeDiceRoll.freeChoice ? ' ✨ CHỌN TỰ DO!' : ''}
-                {vfx.activeDiceRoll.rerollRequired ? ' 🔁 ĐỔ LẠI!' : ''}
-              </p>
+              {vfx.isDiceSettled ? (
+                <p className="mt-0.5 text-sm sm:text-base font-black text-white">
+                  {vfx.activeDiceRoll.diceKind === 'attack'
+                    ? `Kết quả: |${vfx.activeDiceRoll.d6} - ${vfx.activeDiceRoll.d4}| = ${vfx.activeDiceRoll.total}`
+                    : `Tổng: ${vfx.activeDiceRoll.d6} + ${vfx.activeDiceRoll.d4} = ${vfx.activeDiceRoll.total}`}
+                  {vfx.activeDiceRoll.freeChoice ? ' ✨ CHỌN TỰ DO!' : ''}
+                  {vfx.activeDiceRoll.rerollRequired ? ' 🔁 ĐỔ LẠI!' : ''}
+                </p>
+              ) : (
+                <p className="mt-0.5 text-sm font-black text-amber-200">
+                  🎲 Đang tung xúc xắc...
+                </p>
+              )}
             </div>
           </div>
         </div>

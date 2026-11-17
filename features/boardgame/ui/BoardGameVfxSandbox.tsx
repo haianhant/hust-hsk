@@ -21,10 +21,10 @@ import {
 } from '@/shared/contracts/boardgame';
 import {
   DeckCardBackSvg,
-  DiceD4Svg,
-  DiceD6Svg,
   PlayerPawnToken,
 } from './BoardGameArt';
+import { MidnightDicePair3D } from './MidnightDice3D';
+import { useSmoothPawnGlide } from './useSmoothPawnGlide';
 import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
 import {
   GRAPHICS_QUALITY_LABELS,
@@ -187,6 +187,20 @@ export function BoardGameVfxSandbox() {
     graphicsProfile: gfx.profile,
   });
 
+  const sbDiceSig = game.lastDiceRoll
+    ? `${game.turnNumber}:${game.lastDiceRoll.kind}:${game.lastDiceRoll.playerId}:${game.lastDiceRoll.d6}:${game.lastDiceRoll.d4}:${game.lastDiceRoll.resolvedLocation ?? ''}`
+    : '';
+  useSmoothPawnGlide({
+    containerRef: stageRef,
+    players: game.players,
+    matchId: game.matchId,
+    reducedMotion: vfx.reducedMotion,
+    durationMs: gfx.profile.pawnGlideDurationMs,
+    diceRollSignature: sbDiceSig,
+    diceHoldDelayMs: gfx.profile.tier === 'low' ? 0 : 1020,
+    skipGeneration: vfx.skipGeneration,
+  });
+
   const handleToggleMute = () => {
     const next = !muted;
     setMuted(next);
@@ -207,6 +221,54 @@ export function BoardGameVfxSandbox() {
     });
     setSelectedTargetId('sb-tu');
     setLastDemoLabel('Đã đặt lại sa bàn KTX 4 người');
+  };
+
+  // Demo 0: Tung xúc xắc 3D di chuyển -> Sân Cũ Đêm (8 = 5 + 3) + FLIP đáp quân cờ
+  const triggerMoveDiceRoll = () => {
+    setSelectedTargetId(null);
+    setLastDemoLabel('Minh An tung 1d6+1d4 di chuyển sang Khu Sân Cũ Đêm (Ô 8)');
+    setGame((prev) => {
+      const turn = prev.turnNumber + 1;
+      const now = Date.now();
+      const prevLoc = prev.players.find((p) => p.playerId === 'sb-minh')?.location;
+      const nextLoc = prevLoc === 'canteen' ? 'court' : 'canteen';
+      const d6 = nextLoc === 'court' ? 6 : 5;
+      const d4 = nextLoc === 'court' ? 4 : 3;
+      const total = d6 + d4;
+      return {
+        ...prev,
+        turnNumber: turn,
+        activePlayerId: 'sb-minh',
+        players: prev.players.map((p) =>
+          p.playerId === 'sb-minh' ? { ...p, location: nextLoc } : p,
+        ),
+        lastDiceRoll: {
+          id: nextLogId('dice-move'),
+          round: prev.round,
+          atMs: now,
+          kind: 'move',
+          playerId: 'sb-minh',
+          displayName: 'Minh An',
+          d6,
+          d4,
+          total,
+          rerollRequired: false,
+          freeChoice: false,
+          resolvedLocation: nextLoc,
+        },
+        publicLog: [
+          ...prev.publicLog.slice(-15),
+          {
+            id: nextLogId('move'),
+            round: prev.round,
+            atMs: now,
+            kind: 'move',
+            actorId: 'sb-minh',
+            text: `🎲 Minh An tung ${d6} + ${d4} = ${total} → di chuyển tới ${nextLoc === 'canteen' ? 'Khu Sân Cũ Đêm' : 'Sân Bóng Rổ Đêm'}.`,
+          },
+        ],
+      };
+    });
   };
 
   // Demo 1: Đánh thường (Đường nhắm + SLASH + Xúc xắc |6-3|=3 + -3)
@@ -604,8 +666,16 @@ export function BoardGameVfxSandbox() {
         </div>
       </div>
 
-      {/* Bộ nút kích hoạt 5 kịch bản + nút mở rộng */}
+      {/* Bộ nút kích hoạt 6+ kịch bản */}
       <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          data-testid="proto-vfx-demo-dice-move"
+          onClick={triggerMoveDiceRoll}
+          className="rounded-xl border border-amber-400/70 bg-amber-950/75 px-3 py-2 text-xs font-black text-amber-100 hover:bg-amber-900 cursor-pointer"
+        >
+          🎲 0. Tung Xúc Xắc 3D
+        </button>
         <button
           type="button"
           data-testid="proto-vfx-demo-normal"
@@ -687,6 +757,7 @@ export function BoardGameVfxSandbox() {
                 key={p.playerId}
                 type="button"
                 data-vfx-player={p.playerId}
+                data-pawn-glide={p.playerId}
                 onClick={() => setSelectedTargetId((prev) => (prev === p.playerId ? null : p.playerId))}
                 className={`flex flex-col items-start gap-2 rounded-2xl border p-3 text-left transition cursor-pointer ${
                   !p.alive
@@ -722,6 +793,9 @@ export function BoardGameVfxSandbox() {
                   <span className="rounded bg-slate-800 px-2 py-0.5 text-rose-200">
                     🩸 {p.woundsTaken} vết
                   </span>
+                  <span className="rounded bg-slate-800 px-2 py-0.5 text-cyan-200">
+                    {p.location}
+                  </span>
                   <span className="rounded bg-slate-800 px-2 py-0.5 text-slate-300">
                     {p.revealedRoleId ? 'Đã lộ' : 'Vai ẩn'}
                   </span>
@@ -731,12 +805,28 @@ export function BoardGameVfxSandbox() {
           })}
         </div>
 
-        {/* Khay xúc xắc & 3 chồng bài */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/75 p-3">
-          <div className="flex items-center gap-2">
-            <DiceD6Svg value={game.lastDiceRoll?.d6 || 6} size={32} />
-            <DiceD4Svg value={game.lastDiceRoll?.d4 || 4} size={32} />
-            <span className="text-xs font-bold text-slate-300">Khay Xúc Xắc Server</span>
+        {/* Khay xúc xắc 3D & 3 chồng bài */}
+        <div
+          data-testid="bg-sandbox-dice-tray"
+          data-turn-active="true"
+          data-dice-settled={String(vfx.isDiceSettled)}
+          className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-400/75 bg-gradient-to-r from-emerald-950/60 via-slate-900/90 to-amber-950/35 p-3 ${
+            vfx.reducedMotion ? '' : 'mn-dice-tray-spotlight'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <MidnightDicePair3D
+              d6={game.lastDiceRoll?.d6 ?? 6}
+              d4={game.lastDiceRoll?.d4 ?? 4}
+              stage={vfx.activeDiceRoll ? vfx.diceRollStage : 'settled'}
+              size={34}
+              enable3D={gfx.profile.tier !== 'low' && !vfx.reducedMotion}
+            />
+            <span className="text-xs font-bold text-slate-200">
+              {vfx.activeDiceRoll && !vfx.isDiceSettled
+                ? '🎲 Xúc xắc 3D đang lăn...'
+                : 'Khay Xúc Xắc Server (1d6+1d4)'}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
