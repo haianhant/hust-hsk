@@ -66,7 +66,7 @@ Khi sinh thêm artwork cho các thẻ còn lại:
 Mọi giao diện mới bắt buộc sử dụng 2 hàm lọc thuần trong [`midnight-noir-tokens.ts`](../../features/boardgame/ui/midnight-noir-tokens.ts):
 1. `resolveRoleCardPresentation()`:
    - Chỉ khi `revealed === true` hoặc `viewerMode === 'owner-peek'` mới được trả về `showFront: true`, `roleId`, `faction`, `maxHp`, `portraitSrc`.
-   - Trong trạng thái ẩn (`owner-facedown`, `other-player`, `spectator`), các trường bí mật **bắt buộc bằng `null`** để DOM không rò rỉ đường dẫn ảnh hay danh tính; mặt lưng chỉ giữ số vết thương công khai.
+   - Trong bàn chơi trực tuyến thực tế (mỗi người chơi trên máy riêng), chủ thẻ luôn thấy vai trò (`owner-peek`) và bài trên tay mở sẵn; còn với người chơi khác (`other-player`) và khán giả (`spectator`), các trường bí mật **bắt buộc bằng `null`** để DOM không rò rỉ đường dẫn ảnh hay danh tính (`owner-facedown` chỉ dùng khi lật xem mặt lưng Ấn Ký trong modal zoom/prototype).
 2. `resolveActionCardPresentation()`:
    - Trên chồng bài (`draw-pile`): `showFront: false`, chỉ hiển thị mặt lưng Ấn Ký theo đúng màu chồng bài.
    - Thẻ Điều tra (`private-investigation`): chỉ `isParticipantInInvestigation === true` (người đưa & người nhận) mới thấy mặt trước.

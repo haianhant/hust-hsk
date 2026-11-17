@@ -130,6 +130,7 @@ Lưu bền vững tại `localStorage` key `hustverse:bg-graphics-prefs:v1`, áp
 - [x] Hỗ trợ đầy đủ 3 mức Graphics Quality (`High / Balanced / Low` + `Auto`), `Mute`, `Skip Cinematic`, `Reduced Motion`, và công tắc tắt rung mạnh (`shakeEnabled`).
 - [x] Tối ưu `React.memo`, callback ổn định, cleanup animation/`rAF`/Canvas 2D & `suspendBoardGameAudio()`, không ảnh hưởng 3D campus khi đóng game.
 - [x] Toàn bộ cổng CI (`typecheck`, `test`, `test:boardgame`, `build`, `test:pr10b`, `boardgame-visual-prototype`, `boardgame-e2e`, `boardgame-bg1-smoke`) đều PASS (`exit code 0`).
+- [x] Bỏ chế độ che/úp bài cục bộ chống nhìn lén màn hình cho cả thẻ nhân vật (`RoleCard`) và bài rút trên tay (`ActionPanel` / `CARD_DRAW`) vì mỗi người chơi trên thiết bị riêng, giữ nguyên bảo mật P0 với đối thủ & khán giả trên server.
 - [x] Bảo toàn tuyệt đối logic game và bảo mật P0 (`0 diff` trong `domain/`, `shared/contracts/`, `worker/`).
 - [x] Giữ nguyên trên nhánh `feat/boardgame-visual-prototype` để chờ duyệt (chưa merge `main`, chưa deploy production).
 

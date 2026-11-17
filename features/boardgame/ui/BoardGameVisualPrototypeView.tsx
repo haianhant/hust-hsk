@@ -46,7 +46,7 @@ import {
   type RoleViewerMode,
 } from './midnight-noir-tokens';
 
-type SecrecyScenario = 'owner-peek' | 'owner-facedown' | 'other-player' | 'public-revealed';
+type SecrecyScenario = 'owner-peek' | 'other-player' | 'public-revealed';
 type MobileLayerMode = 'both' | 'new' | 'old';
 
 const DEFAULT_MOCK_APPEARANCE = sanitizeBoardGameAppearance({});
@@ -61,25 +61,17 @@ const SECRECY_SCENARIOS: ReadonlyArray<{
 }> = [
   {
     id: 'owner-peek',
-    label: '👁️ Chủ thẻ soi vai',
-    shortLabel: 'Soi vai',
-    desc: 'Chủ thẻ mở soi riêng tư — hiện đầy đủ chân dung, HP thật & kỹ năng dù chưa lật công khai.',
+    label: '👁️ Góc nhìn của bạn',
+    shortLabel: 'Máy của bạn',
+    desc: 'Trên thiết bị riêng của bạn: thẻ nhân vật & bài trên tay luôn hiển thị mở sẵn đầy đủ.',
     viewerMode: 'owner-peek',
-    revealed: false,
-  },
-  {
-    id: 'owner-facedown',
-    label: '🙈 Chủ thẻ úp bài',
-    shortLabel: 'Úp chống nhìn',
-    desc: 'Úp mặt lưng bảo vệ khi chơi cạnh bạn; chỉ giữ thương tích công khai & nút soi lại.',
-    viewerMode: 'owner-facedown',
     revealed: false,
   },
   {
     id: 'other-player',
     label: '🕵️ Đối thủ / Khán giả',
     shortLabel: 'Ẩn với người khác',
-    desc: 'Khi vai chưa lật: người chơi khác & khán giả tuyệt đối KHÔNG thấy ảnh, tên vai, phe hay HP tối đa.',
+    desc: 'Khi vai chưa lật: người chơi khác trên máy khác & khán giả tuyệt đối KHÔNG thấy ảnh, tên vai, phe hay HP tối đa.',
     viewerMode: 'other-player',
     revealed: false,
   },
@@ -365,10 +357,6 @@ export default function BoardGameVisualPrototypeView() {
     [woundsTaken, scenario.revealed],
   );
 
-  const classicShowsSecretForMinh =
-    scenario.revealed || (scenario.viewerMode === 'owner-peek' && !manualFlipIds['gac-ky-thuat']);
-  const classicShowsSecretForVy =
-    scenario.revealed || (scenario.viewerMode === 'owner-peek' && !manualFlipIds['gac-radio']);
   const classicSpectatorHide = scenario.viewerMode === 'other-player' && !scenario.revealed;
 
   const minhPresentation = resolveRoleCardPresentation({
@@ -561,7 +549,6 @@ export default function BoardGameVisualPrototypeView() {
                 {
                   roleId: 'gac-ky-thuat' as BoardGameRoleId,
                   classicPack: classicMinh,
-                  classicVisible: classicShowsSecretForMinh,
                   heading: 'Minh "Kỹ Thuật" (George · 14 HP · Đội Săn Đêm)',
                   sub: 'Full-art bán thân KTX đêm mưa + Đèn bão ngọc lục bảo & Cờ lê',
                   testKey: 'minh',
@@ -569,7 +556,6 @@ export default function BoardGameVisualPrototypeView() {
                 {
                   roleId: 'gac-radio' as BoardGameRoleId,
                   classicPack: classicVy,
-                  classicVisible: classicShowsSecretForVy,
                   heading: 'Vy "Radio" (Franklin · 12 HP · Đội Săn Đêm)',
                   sub: 'Full-art sân thượng KTX đêm giông + Bộ đàm hồ quang sét cao áp',
                   testKey: 'vy',
@@ -619,10 +605,7 @@ export default function BoardGameVisualPrototypeView() {
                           classicSpectatorHide ? null : char.classicPack.privateView
                         }
                         isSpectator={classicSpectatorHide}
-                        cardVisible={char.classicVisible}
-                        unreadClueCount={1}
                         visualStyle="classic"
-                        onToggleCardVisible={() => toggleFlipKey(char.roleId)}
                       />
                     </div>
 

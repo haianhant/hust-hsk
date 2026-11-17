@@ -125,7 +125,6 @@ export type BoardGameVisualEvent =
 export interface ExtractVisualEventsContext {
   selfPlayerId: string | null;
   isSpectator: boolean;
-  handUnmasked?: boolean;
   privateView?: BoardGamePrivateGameView | null;
   reducedMotion?: boolean;
 }
@@ -293,9 +292,7 @@ export function extractVisualEventsFromDiff(
       const newEq = findNewlyEquippedCard(prevActorPub, actorPub);
       const autoEquipped = Boolean(newEq && log.text.includes('trang bị ngay'));
       const isOwnerViewingHand =
-        Boolean(actorId && actorId === ctx.selfPlayerId) &&
-        !ctx.isSpectator &&
-        Boolean(ctx.handUnmasked);
+        Boolean(actorId && actorId === ctx.selfPlayerId) && !ctx.isSpectator;
       const latestOwnerCard =
         isOwnerViewingHand && ctx.privateView?.hand.length
           ? ctx.privateView.hand[ctx.privateView.hand.length - 1]

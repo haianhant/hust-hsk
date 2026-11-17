@@ -183,7 +183,6 @@ export function BoardGameVfxSandbox() {
     privateView: null,
     selfPlayerId: 'sb-minh',
     isSpectator: false,
-    handUnmasked: true,
     containerRef: stageRef,
     graphicsProfile: gfx.profile,
   });

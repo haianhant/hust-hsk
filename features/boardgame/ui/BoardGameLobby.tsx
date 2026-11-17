@@ -779,7 +779,7 @@ export default function BoardGameLobby({
               </div>
 
               <p className="rounded-xl border border-emerald-400/30 bg-emerald-950/30 p-2.5 text-xs text-emerald-100">
-                🔒 <strong>Bảo mật màn hình:</strong> Khi chia sẻ thiết bị hoặc ngồi cạnh nhau, giữ thẻ vai ở trạng thái <strong>Úp mặt</strong> để che vai trò &amp; bài trên tay; chỉ mở xem khi thao tác riêng tư.
+                🔒 <strong>Bảo mật màn hình:</strong> Khi chơi online trên từng thiết bị riêng, thẻ nhân vật &amp; bài trên tay luôn hiển thị mở cho riêng bạn; đối thủ trên máy khác và khán giả không thể xem cho tới khi lật vai hoặc công bố hợp lệ.
               </p>
             </div>
           </div>

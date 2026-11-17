@@ -114,9 +114,8 @@ export function GameBoard({
   onLeaveMatch,
 }: GameBoardProps) {
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
-  const [roleCardVisible, setRoleCardVisible] = useState(false);
-  const [handUnmasked, setHandUnmasked] = useState(false);
   const [sideDrawerOpen, setSideDrawerOpen] = useState(true);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [mobileTab, setMobileTab] = useState<'board' | 'role' | 'log'>('board');
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [chatText, setChatText] = useState('');
@@ -138,7 +137,6 @@ export function GameBoard({
     privateView,
     selfPlayerId,
     isSpectator,
-    handUnmasked: roleCardVisible || handUnmasked,
     containerRef: boardStageRef,
     graphicsProfile: gfx.profile,
   });
@@ -173,8 +171,6 @@ export function GameBoard({
   }, []);
 
   useEffect(() => {
-    setHandUnmasked(false);
-    setRoleCardVisible(false);
     setSeenClueCount(0);
     setSeenLogCount(publicGame.publicLog.length);
     setSelectedTargetId(null);
@@ -182,12 +178,21 @@ export function GameBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicGame.matchId]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setIsDesktopLayout(mq.matches);
+    sync();
+    mq.addEventListener?.('change', sync);
+    return () => mq.removeEventListener?.('change', sync);
+  }, []);
+
   const totalClues = privateView?.privateClues.length ?? 0;
   useEffect(() => {
-    if (roleCardVisible && (sideDrawerOpen || mobileTab === 'role')) {
+    if ((isDesktopLayout && sideDrawerOpen) || mobileTab === 'role') {
       setSeenClueCount((prev) => Math.max(prev, totalClues));
     }
-  }, [roleCardVisible, sideDrawerOpen, mobileTab, totalClues]);
+  }, [isDesktopLayout, sideDrawerOpen, mobileTab, totalClues]);
 
   useEffect(() => {
     if (mobileTab === 'log') {
@@ -326,10 +331,6 @@ export function GameBoard({
     },
     [dispatchAction],
   );
-
-  const handleToggleRoleCard = useCallback(() => {
-    setRoleCardVisible((v) => !v);
-  }, []);
 
   const handleCloseZoom = useCallback(() => {
     setZoomTarget(null);
@@ -643,7 +644,6 @@ export function GameBoard({
                   onClick={() => {
                     setSideDrawerOpen(true);
                     setMobileTab('role');
-                    setRoleCardVisible(true);
                   }}
                   className="px-2 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
                 >
@@ -722,9 +722,7 @@ export function GameBoard({
                   {WOUND_NOTCHES.map((notch) => {
                     const occupants = playersByWoundNotch[notch];
                     const isSelfMaxNotch = Boolean(
-                      privateView &&
-                        (roleCardVisible || privateView.revealed) &&
-                        privateView.maxHp === notch,
+                      privateView && privateView.maxHp === notch,
                     );
                     const revealedAtNotch = publicGame.players.filter(
                       (p) => p.revealedMaxHp === notch,
@@ -1150,15 +1148,6 @@ export function GameBoard({
                 selectedTargetId={selectedTargetId}
                 onSelectTarget={setSelectedTargetId}
                 onAction={dispatchAction}
-                handMaskLocked={!roleCardVisible && !handUnmasked}
-                onToggleHandMask={() => {
-                  if (roleCardVisible || handUnmasked) {
-                    setHandUnmasked(false);
-                    setRoleCardVisible(false);
-                  } else {
-                    setHandUnmasked(true);
-                  }
-                }}
                 onZoomCard={(cardId, zone) =>
                   setZoomTarget({
                     kind: 'card',
@@ -1184,19 +1173,16 @@ export function GameBoard({
                   publicGame={publicGame}
                   privateView={privateView}
                   isSpectator={isSpectator}
-                  cardVisible={roleCardVisible}
-                  unreadClueCount={unreadClueCount}
                   visualStyle="midnight-noir"
                   foilEnabled={gfx.profile.enableFoil}
                   reducedMotion={!gfx.profile.enable3DTilt || vfx.reducedMotion}
-                  onToggleCardVisible={handleToggleRoleCard}
                   onZoomRole={() =>
                     privateView &&
                     setZoomTarget({
                       kind: 'role',
                       roleId: privateView.roleId,
                       revealed: privateView.revealed,
-                      viewerMode: roleCardVisible ? 'owner-peek' : 'owner-facedown',
+                      viewerMode: 'owner-peek',
                       woundsTaken: privateView.woundsTaken,
                       currentHp: privateView.hp,
                     })

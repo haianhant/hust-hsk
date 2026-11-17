@@ -428,7 +428,6 @@ export interface UseBoardGameVfxQueueOptions {
   privateView: BoardGamePrivateGameView | null;
   selfPlayerId: string | null;
   isSpectator: boolean;
-  handUnmasked: boolean;
   containerRef: React.RefObject<HTMLDivElement>;
   reducedMotionOverride?: boolean | null;
   graphicsProfile?: ResolvedGraphicsProfile;
@@ -460,7 +459,6 @@ export function useBoardGameVfxQueue({
   privateView,
   selfPlayerId,
   isSpectator,
-  handUnmasked,
   containerRef,
   reducedMotionOverride: externalReducedOverride,
   graphicsProfile,
@@ -720,7 +718,6 @@ export function useBoardGameVfxQueue({
     const ctx = {
       selfPlayerId,
       isSpectator,
-      handUnmasked,
       privateView,
       reducedMotion,
     };
@@ -744,7 +741,6 @@ export function useBoardGameVfxQueue({
     privateView,
     selfPlayerId,
     isSpectator,
-    handUnmasked,
     reducedMotion,
     enqueueEvents,
     skipAllAnimations,

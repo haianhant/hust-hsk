@@ -31,8 +31,6 @@ export interface ActionPanelProps {
   selectedTargetId: string | null;
   onSelectTarget: (playerId: string | null) => void;
   onAction: (action: BoardGameActionPayload) => void;
-  handMaskLocked: boolean;
-  onToggleHandMask: () => void;
   onZoomCard?: (cardId: string, zone: ActionCardZone) => void;
 }
 
@@ -44,8 +42,6 @@ export function ActionPanel({
   selectedTargetId,
   onSelectTarget,
   onAction,
-  handMaskLocked,
-  onToggleHandMask,
   onZoomCard,
 }: ActionPanelProps) {
   const [confirmingReveal, setConfirmingReveal] = useState(false);
@@ -342,38 +338,12 @@ export function ActionPanel({
         <p className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">
           🃏 Thẻ vừa rút cần giải quyết ({privateView.hand.length}/{BOARD_GAME_MAX_HAND}):
         </p>
-        {hasAnyHandCard && (
-          <button
-            type="button"
-            onClick={onToggleHandMask}
-            className="px-2.5 py-1 min-h-[32px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 cursor-pointer"
-          >
-            {handMaskLocked ? '👁️ Hiện thẻ vừa rút' : '🙈 Che thẻ'}
-          </button>
-        )}
       </div>
 
       {!hasAnyHandCard ? (
         <p className="text-xs text-slate-400">
           Không còn thẻ chờ giải quyết — Trang bị rút được tự động đeo ngay lên bàn.
         </p>
-      ) : handMaskLocked ? (
-        <div
-          data-testid="bg-hand-masked-banner"
-          className="rounded-xl border border-dashed border-amber-400/45 bg-slate-950/85 px-3 py-2 flex flex-wrap items-center justify-between gap-2.5"
-        >
-          <p className="text-xs sm:text-sm font-semibold text-amber-100">
-            🙈 Thẻ vừa rút đang được che để chống nhìn màn hình ({privateView.hand.length} lá).
-          </p>
-          <button
-            type="button"
-            data-testid="bg-unmask-hand-btn"
-            onClick={onToggleHandMask}
-            className="px-3.5 py-1.5 min-h-[36px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-black cursor-pointer"
-          >
-            👁️ Mở xem bài của tôi
-          </button>
-        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           {privateView.hand.map((card, idx) => {
@@ -913,8 +883,7 @@ export function ActionPanel({
           </div>
 
           {currentLoc.deckHint !== 'power-9' &&
-            ((hasAnyHandCard && !handMaskLocked) ||
-              (canUseSkillNow && roleDesign.targetMode !== 'self')) &&
+            (hasAnyHandCard || (canUseSkillNow && roleDesign.targetMode !== 'self')) &&
             renderTargetSelector('Chọn mục tiêu cho Kỹ năng / Thẻ:')}
 
           {hasAnyHandCard && renderHandCardsSection()}

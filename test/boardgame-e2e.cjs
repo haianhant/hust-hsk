@@ -842,7 +842,6 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
     if (await pickAndClick(p2Order[(stepIndex + i) % p2Order.length])) return true;
   }
 
-  if (!options.skipUnmask && (await pickAndClick('bg-unmask-hand-btn'))) return true;
   if (!options.skipReveal && (await pickAndClick('bg-reveal-role-btn'))) return true;
   if (await pickAndClick('bg-use-skill-btn')) return true;
   const anySkipCard = snap.enabledIds.find((id) => id.startsWith('bg-skip-card-') && isFresh(id));
@@ -1065,12 +1064,10 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     };
 
     await p4.page.locator('button:has-text("Vai bí mật")').click();
-    await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: UI_TIMEOUT });
-    await checkMobileOverflowAndTabs('Vai bí mật');
-    await p4.page.locator('[data-testid="bg-toggle-role-card"]').click();
     await p4.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
-    await p4.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    await p4.page.waitForSelector('[data-testid="bg-role-card-facedown"]', { timeout: UI_TIMEOUT });
+    assert.equal(await p4.page.locator('[data-testid="bg-role-card-facedown"]').count(), 0, 'Role card must render open directly without local facedown mask');
+    assert.equal(await p4.page.locator('[data-testid="bg-toggle-role-card"]').count(), 0, 'Local toggle-role-card mask button must be removed');
+    await checkMobileOverflowAndTabs('Vai bí mật');
 
     await p4.page.locator('button:has-text("Nhật ký")').click();
     await p4.page.waitForSelector('[data-testid="bg-game-log"]', { timeout: UI_TIMEOUT });
@@ -1123,14 +1120,14 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       if ((await activePlayer.page.locator('[data-testid="bg-end-turn-btn"]').count()) > 0) break;
       await playFirstValidStepOnPage(activePlayer.page, 0, undefined, {
         skipReveal: true,
-        skipUnmask: true,
       });
       await activePlayer.page.waitForTimeout(160);
     }
-    if ((await activePlayer.page.locator('[data-testid="bg-hand-masked-banner"]').count()) > 0) {
-      await activePlayer.page.locator('[data-testid="bg-unmask-hand-btn"]').click();
-      await activePlayer.page.waitForSelector('[data-testid^="bg-use-card-"]', { timeout: UI_TIMEOUT });
-    }
+    assert.equal(
+      await activePlayer.page.locator('[data-testid="bg-hand-masked-banner"]').count(),
+      0,
+      'Hand cards must render open directly without masked banner',
+    );
 
     // Verify self-targeting never gets stuck on an opponent after clicking another player pill/card
     const otherPill = activePlayer.page.locator('[data-testid^="bg-target-pill-other-"]').first();
@@ -1213,10 +1210,12 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     }
 
     await p1.page.bringToFront();
-    if ((await p1.page.locator('[data-testid="bg-role-card-facedown"]').count()) > 0) {
-      await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
-    }
     await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
+    assert.equal(
+      await p1.page.locator('[data-testid="bg-role-card-facedown"]').count(),
+      0,
+      'Desktop P1 role card must be open by default',
+    );
     const leakedHpText = await p1.page.evaluate(() => {
       const board = document.querySelector('[data-testid="boardgame-2d-board"]');
       if (!board) return 'MISSING_BOARD';
@@ -1241,7 +1240,6 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     let lastBroughtIdx = -1;
     let p4MobileButtonsChecked = false;
     let p4MobileActionsExecuted = 0;
-    let p4CompletedFirstUnmask = activePlayer === p4;
     const triedActionsPerTurn = new Set();
 
     for (let step = 0; step < 540; step++) {
@@ -1325,37 +1323,22 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
             `Heal card button must display (Bạn) when targeting self, got: ${healSelectOnTurn.btnText}`,
           );
         }
-        let p4MaskedBefore = 0;
         if (activeUi === p4) {
-          p4MaskedBefore = await p4.page
+          const p4MaskedBefore = await p4.page
             .locator('[data-testid="bg-hand-masked-banner"]')
             .count()
             .catch(() => 0);
-          if (p4CompletedFirstUnmask) {
-            assert.equal(
-              p4MaskedBefore,
-              0,
-              'Hand must stay unmasked across turns once opened by player',
-            );
-          }
+          assert.equal(
+            p4MaskedBefore,
+            0,
+            'Mobile hand cards must never show local masked banner',
+          );
         }
         const acted = await playFirstValidStepOnPage(activeUi.page, step, triedActionsPerTurn);
         if (acted && activeUi === p4) {
           p4MobileActionsExecuted += 1;
         }
         await new Promise((r) => setTimeout(r, acted ? 110 : 60));
-        if (activeUi === p4 && !p4CompletedFirstUnmask && p4MaskedBefore > 0 && acted) {
-          const stillInPanelUnmasked = await p4.page
-            .evaluate(
-              () =>
-                Boolean(document.querySelector('[data-testid="bg-action-panel"]')) &&
-                !document.querySelector('[data-testid="bg-hand-masked-banner"]'),
-            )
-            .catch(() => false);
-          if (stillInPanelUnmasked) {
-            p4CompletedFirstUnmask = true;
-          }
-        }
       } else {
         let peerStepped = false;
         for (const peer of peers) {
@@ -1723,8 +1706,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     }
     await p1.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: UI_TIMEOUT });
 
-    // Read secret role name once before checkpoints
-    await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    // Read secret role name once before checkpoints (role card renders open directly without local mask)
     await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     const expectedRoleName = (await p1.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()).trim();
 
@@ -1748,12 +1730,11 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     // Checkpoint 2: Reload during P1's own turn (MOVE_OR_STAY)
     await reloadAndRestoreTo('[data-testid="boardgame-2d-board"]');
     assert.equal(p1.audit.selfPlayerId, p1IdBefore, 'Checkpoint 2: must preserve exact playerId');
-    await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
     await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     assert.equal(
       (await p1.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()).trim(),
       expectedRoleName,
-      'Checkpoint 2: secret role restored on own turn',
+      'Checkpoint 2: secret role restored open directly on own turn',
     );
     // Reloading full Next.js + WebGL campus under SwiftShader can exceed
     // BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS (12s); advance peers back to P1 if turn timed out.
@@ -1779,11 +1760,11 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.waitForSelector('[data-testid="bg-waiting-turn-banner"]', { timeout: UI_TIMEOUT });
     await reloadAndRestoreTo('[data-testid="bg-waiting-turn-banner"]');
     assert.equal(await p1.page.locator('[data-testid="bg-action-panel"]').count(), 0);
-    await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     assert.equal(
       (await p1.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()).trim(),
       expectedRoleName,
-      'Checkpoint 3: secret role restored during opponent turn',
+      'Checkpoint 3: secret role restored open directly during opponent turn',
     );
 
     // Advance back to P1 -> reach LOCATION_ACTION/MAIN_ACTION -> REVEAL_ROLE -> Checkpoint 4
@@ -1806,7 +1787,6 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     // Checkpoint 4: Reload after voluntary role revelation
     await reloadAndRestoreTo('[data-testid="boardgame-2d-board"]');
     assert.equal(p1.audit.selfPlayerId, p1IdBefore, 'Checkpoint 4: must preserve exact playerId');
-    await p1.page.locator('[data-testid="bg-toggle-role-card"]').click();
     await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     const roleCardTextC4 = await p1.page.locator('[data-testid="bg-role-card-secret"]').innerText();
     assert.equal(

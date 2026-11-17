@@ -201,7 +201,6 @@ test('VFX Queue (1) — Event ID duy nhất, thứ tự rõ ràng & Multi-target
   const events = extractVisualEventsFromDiff(prev, next, {
     selfPlayerId: 'p2',
     isSpectator: false,
-    handUnmasked: false,
   });
 
   // Kiểm tra không có ID trùng
@@ -386,6 +385,38 @@ test('VFX Queue (3) — Reconnect Idempotency, Spectator P0 Isolation & Reduced 
   assert.equal(cardEv.showFront, false);
   assert.equal(cardEv.cardId, null);
   assert.equal(cardEv.cardTitle, null);
+  // Kiểm tra chủ sở hữu rút bài kín tự thấy mặt trước (không cần nút mở che bài)
+  const ownerTracker = new VisualEventTracker();
+  ownerTracker.seedBaseline(s0, { selfPlayerId: 'p1', isSpectator: false });
+  const ownerEvents = ownerTracker.ingestSnapshot(s1, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+    privateView: {
+      playerId: 'p1',
+      roleId: 'gac-ky-thuat',
+      roleName: 'Minh "Kỹ Thuật"',
+      faction: 'lantern-guard',
+      hp: 14,
+      maxHp: 14,
+      woundsTaken: 0,
+      skillCooldown: 0,
+      skillUsedOnce: false,
+      revealed: false,
+      secretGoalText: '',
+      protegePlayerId: null,
+      protegeDisplayName: null,
+      avengedProtegeKiller: false,
+      investigatedTargetIds: [],
+      hand: [{ ...eqMeta('inv-01') }],
+      equipped: [],
+      privateClues: [],
+    },
+  });
+  const ownerCardEv = ownerEvents.find((e) => e.kind === 'CARD_DRAW');
+  assert.ok(ownerCardEv, 'Owner draw event must be generated');
+  assert.equal(ownerCardEv.showFront, true, 'Owner must auto-see drawn card front face');
+  assert.equal(ownerCardEv.cardId, 'inv-01');
+
   // Kiểm tra không rò vai thật ở bất kỳ event nào và reducedMotion thu gọn duration
   const serialized = JSON.stringify(specEvents);
   assert.equal(serialized.includes('gac-ky-thuat'), false);
