@@ -27,8 +27,14 @@ function foldAscii(raw: string): string {
 
 /**
  * Rút gọn tên hiển thị gọn gàng cho chip thương tích công khai (giữ nguyên dấu tiếng Việt).
+ * Khi bàn đông (>= 7 người), bật `compact: true` để tránh bị cắt còn 1 ký tự ở viewport 1280×800.
  */
-export function deriveShortPlayerName(displayName: string, seatIndex = 0): string {
+export function deriveShortPlayerName(
+  displayName: string,
+  seatIndex = 0,
+  options?: { compact?: boolean },
+): string {
+  const compact = Boolean(options?.compact);
   const rawParts = displayName
     .trim()
     .replace(/_/g, ' ')
@@ -41,7 +47,28 @@ export function deriveShortPlayerName(displayName: string, seatIndex = 0): strin
     /^sinhvien\d*$/i.test(foldAscii(rawParts[0])) &&
     /^\d+$/.test(rawParts[rawParts.length - 1])
   ) {
-    return `SV ${rawParts[rawParts.length - 1]}`;
+    return compact
+      ? `SV${rawParts[rawParts.length - 1]}`
+      : `SV ${rawParts[rawParts.length - 1]}`;
+  }
+  const singleSvMatch = rawParts.length === 1 ? foldAscii(rawParts[0]).match(/^sinhvien(\d+)$/i) : null;
+  if (singleSvMatch) {
+    return compact ? `SV${singleSvMatch[1]}` : `SV ${singleSvMatch[1]}`;
+  }
+
+  if (compact) {
+    if (
+      rawParts.length >= 2 &&
+      /^(?:reconnect)?peer\d*$/i.test(foldAscii(rawParts[0])) &&
+      /^\d+$/.test(rawParts[rawParts.length - 1])
+    ) {
+      return `P${rawParts[rawParts.length - 1]}`;
+    }
+    const singlePeerMatch =
+      rawParts.length === 1 ? foldAscii(rawParts[0]).match(/^(?:reconnect)?peer(\d+)$/i) : null;
+    if (singlePeerMatch) {
+      return `P${singlePeerMatch[1]}`;
+    }
   }
 
   let parts = [...rawParts];
@@ -53,10 +80,27 @@ export function deriveShortPlayerName(displayName: string, seatIndex = 0): strin
   }
 
   if (parts.length === 0) return `P${seatIndex + 1}`;
-  if (parts.length === 1) return parts[0];
+  if (parts.length === 1) {
+    if (compact && parts[0].length > 6) {
+      return `${parts[0].slice(0, 5)}…`;
+    }
+    return parts[0];
+  }
 
-  const tail2 = `${parts[parts.length - 2]} ${parts[parts.length - 1]}`;
-  return tail2.length <= 10 ? tail2 : parts[parts.length - 1];
+  const last = parts[parts.length - 1];
+  const tail2 = `${parts[parts.length - 2]} ${last}`;
+  if (!compact) {
+    return tail2.length <= 10 ? tail2 : last;
+  }
+
+  if (parts.length === 2) {
+    if (tail2.length <= 6) return tail2;
+    const initialed = `${parts[0][0].toUpperCase()}.${last}`;
+    if (last.length <= 5 && initialed.length <= 6) {
+      return initialed;
+    }
+  }
+  return last.length <= 6 ? last : `${last.slice(0, 5)}…`;
 }
 
 export interface PublicDamageChipState {
@@ -75,6 +119,7 @@ export interface PublicDamageChipState {
 export function computePublicDamageChipState(
   player: BoardGamePublicPlayerView,
   activePlayerId: string | null,
+  options?: { compact?: boolean },
 ): PublicDamageChipState {
   const isEliminated = !player.alive;
   const isTurnHolder = player.alive && player.playerId === activePlayerId;
@@ -89,7 +134,7 @@ export function computePublicDamageChipState(
       : `${player.woundsTaken}`;
 
   return {
-    shortName: deriveShortPlayerName(player.displayName, player.seatIndex),
+    shortName: deriveShortPlayerName(player.displayName, player.seatIndex, options),
     isTurnHolder,
     isEliminated,
     isNearThreshold,
@@ -135,19 +180,29 @@ export const DamageTrack = React.memo(function DamageTrack({
       ? 'transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none'
       : '[transition:grid-template-rows_200ms_ease-out,opacity_160ms_ease-out,visibility_0ms_linear_200ms] motion-reduce:transition-none';
 
+  const isCrowded = players.length >= 7;
+
   return (
     <section
       data-testid="bg-damage-track"
       data-expanded={expanded ? 'true' : 'false'}
-      className="shrink-0 rounded-2xl border border-slate-800/95 bg-slate-900/90 px-2.5 py-1"
+      className={`shrink-0 rounded-2xl border border-slate-800/95 bg-slate-900/90 py-1 ${
+        isCrowded ? 'px-2 min-[1380px]:px-2.5' : 'px-2.5'
+      }`}
     >
       {/* HÀNG COMPACT MẶC ĐỊNH: TIÊU ĐỀ + CHIP NGƯỜI CHƠI + NÚT MỞ RỘNG THANG 0..14 */}
       <div
         data-testid="bg-damage-track-compact"
-        className="flex flex-wrap lg:flex-nowrap items-center gap-1.5"
+        className={`flex flex-wrap lg:flex-nowrap items-center ${
+          isCrowded ? 'gap-1 min-[1380px]:gap-1.5' : 'gap-1.5'
+        }`}
       >
-        <h2 className="order-1 shrink-0 pr-1 text-xs font-extrabold uppercase tracking-wider text-slate-300 whitespace-nowrap select-none">
-          🩸 Thương tích
+        <h2
+          aria-label="Thang thương tích công khai"
+          className="order-1 shrink-0 pr-0.5 text-xs font-extrabold uppercase tracking-wider text-slate-300 whitespace-nowrap select-none"
+        >
+          <span aria-hidden="true">🩸</span>
+          <span className={isCrowded ? 'hidden 2xl:inline' : ''}> Thương tích</span>
         </h2>
 
         <div
@@ -158,7 +213,9 @@ export const DamageTrack = React.memo(function DamageTrack({
           }`}
         >
           {players.map((p) => {
-            const chip = computePublicDamageChipState(p, activePlayerId);
+            const chip = computePublicDamageChipState(p, activePlayerId, {
+              compact: isCrowded,
+            });
             const selected = selectedTargetId === p.playerId;
 
             const chipToneCls = chip.isEliminated
@@ -205,21 +262,30 @@ export const DamageTrack = React.memo(function DamageTrack({
                 onClick={() =>
                   onSelectPlayer((prev) => toggleSelectedTargetId(prev, p.playerId, p.alive))
                 }
-                className={`min-h-[30px] min-w-0 overflow-hidden px-1.5 py-0.5 rounded-xl border flex items-center justify-between gap-1 transition cursor-pointer ${chipToneCls}`}
+                className={`min-h-[30px] min-w-0 overflow-hidden py-0.5 rounded-xl border flex items-center justify-between transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                  isCrowded ? 'px-1 gap-0.5' : 'px-1.5 gap-1'
+                } ${chipToneCls}`}
               >
-                <span className="flex items-center gap-1 min-w-0 flex-1">
-                  <PlayerPawnToken
-                    size="2xs"
-                    elevated={false}
-                    isActive={false}
-                    displayName={p.displayName}
-                    seatIndex={p.seatIndex}
-                    alive={p.alive}
-                    isSelf={p.playerId === selfPlayerId}
-                    revealedFaction={p.revealedFaction}
-                    revealedRoleId={p.revealedRoleId}
-                  />
+                <span
+                  className={`flex items-center min-w-0 flex-1 ${
+                    isCrowded ? 'gap-0.5' : 'gap-1'
+                  }`}
+                >
+                  <span className={isCrowded ? 'shrink-0 -ml-0.5 -mr-1 scale-[0.8]' : 'shrink-0'}>
+                    <PlayerPawnToken
+                      size="2xs"
+                      elevated={false}
+                      isActive={false}
+                      displayName={p.displayName}
+                      seatIndex={p.seatIndex}
+                      alive={p.alive}
+                      isSelf={p.playerId === selfPlayerId}
+                      revealedFaction={p.revealedFaction}
+                      revealedRoleId={p.revealedRoleId}
+                    />
+                  </span>
                   <span
+                    data-testid={`bg-wound-name-${p.seatIndex}`}
                     className={`truncate text-xs ${
                       chip.isEliminated
                         ? 'line-through text-slate-400 font-medium'
@@ -235,7 +301,9 @@ export const DamageTrack = React.memo(function DamageTrack({
                 </span>
                 <span
                   data-testid={`bg-wound-count-${p.seatIndex}`}
-                  className={`shrink-0 rounded px-1 py-0.5 text-xs font-black tabular-nums leading-none ${badgeToneCls}`}
+                  className={`shrink-0 rounded py-0.5 font-black tabular-nums leading-none ${
+                    isCrowded ? 'px-0.5 text-[11px] min-[1380px]:text-xs' : 'px-1 text-xs'
+                  } ${badgeToneCls}`}
                 >
                   {chip.isEliminated ? `💀${p.woundsTaken}` : chip.woundBadgeText}
                 </span>
@@ -250,9 +318,27 @@ export const DamageTrack = React.memo(function DamageTrack({
           aria-expanded={expanded}
           aria-controls="bg-damage-track-drawer"
           onClick={onToggleExpanded}
-          className="order-2 ml-auto lg:order-3 lg:ml-0 shrink-0 min-h-[30px] px-2.5 py-0.5 rounded-xl border border-slate-700 bg-slate-950/90 hover:border-cyan-400/60 hover:text-cyan-100 text-xs font-bold text-slate-200 whitespace-nowrap transition cursor-pointer"
+          className={`order-2 ml-auto lg:order-3 lg:ml-0 shrink-0 min-h-[30px] py-0.5 rounded-xl border border-slate-700 bg-slate-950/90 hover:border-cyan-400/60 hover:text-cyan-100 text-xs font-bold text-slate-200 whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+            isCrowded ? 'px-1.5 min-[1380px]:px-2' : 'px-2.5'
+          }`}
         >
-          {expanded ? 'Thu gọn ▴' : 'Thang 0–14 ▾'}
+          {isCrowded ? (
+            expanded ? (
+              <>
+                <span className="min-[1380px]:hidden">Ẩn ▴</span>
+                <span className="hidden min-[1380px]:inline">Thu gọn ▴</span>
+              </>
+            ) : (
+              <>
+                <span className="min-[1380px]:hidden">0–14 ▾</span>
+                <span className="hidden min-[1380px]:inline">Thang 0–14 ▾</span>
+              </>
+            )
+          ) : expanded ? (
+            'Thu gọn ▴'
+          ) : (
+            'Thang 0–14 ▾'
+          )}
         </button>
       </div>
 
@@ -308,7 +394,7 @@ export const DamageTrack = React.memo(function DamageTrack({
                     title={cellTitle}
                     className={`min-h-[38px] rounded-lg border px-1 py-1 flex flex-col items-center justify-between gap-1 ${tone}`}
                   >
-                    <span className="text-[10px] sm:text-[11px] font-black leading-none flex items-center gap-0.5 shrink-0">
+                    <span className="text-[11px] sm:text-xs font-black leading-none flex items-center gap-0.5 shrink-0">
                       <span>{notch === 14 ? '14💀' : notch}</span>
                       {isSelfMaxNotch && <span title="Mốc tử trận của bạn">🎯</span>}
                       {!isSelfMaxNotch && revealedAtNotch.length > 0 && notch !== 14 && (

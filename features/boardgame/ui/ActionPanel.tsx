@@ -237,7 +237,7 @@ export function ActionPanel({
             data-testid="bg-clear-context-btn"
             aria-label="Đóng thông tin chiến thuật"
             onClick={clearContext}
-            className="shrink-0 px-2 py-0.5 min-h-[32px] min-w-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-200 cursor-pointer"
+            className="shrink-0 px-2 py-0.5 min-h-[32px] min-w-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
           >
             ✕
           </button>
@@ -304,7 +304,7 @@ export function ActionPanel({
             data-testid="bg-clear-context-btn"
             aria-label="Đóng thông tin chiến thuật"
             onClick={clearContext}
-            className="shrink-0 px-2 py-0.5 min-h-[32px] min-w-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-200 cursor-pointer"
+            className="shrink-0 px-2 py-0.5 min-h-[32px] min-w-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
           >
             ✕
           </button>
@@ -371,7 +371,7 @@ export function ActionPanel({
               {activePlayer?.displayName ?? 'người chơi khác'}
             </span>
           </p>
-          <span className="text-[11px] sm:text-xs font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/35 px-2.5 py-0.5 rounded-xl">
+          <span className="text-xs font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/35 px-2.5 py-0.5 rounded-xl">
             ∞ Tự do · Tự động tới lượt bạn ngay khi xong
           </span>
         </div>
@@ -590,7 +590,7 @@ export function ActionPanel({
           onSelectTarget(selfPlayer.playerId);
           setHealTargetId(selfPlayer.playerId);
         }}
-        className={`px-2 py-1 min-h-[34px] min-w-[36px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+        className={`px-2 py-1 min-h-[34px] min-w-[36px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
           selectedIsSelf
             ? 'bg-emerald-600/85 border-emerald-300 text-white'
             : 'bg-slate-800 border-emerald-500/40 text-emerald-200 hover:bg-slate-700'
@@ -609,7 +609,7 @@ export function ActionPanel({
             aria-pressed={selected}
             title={inRange ? `${p.displayName} · Trong tầm đánh` : `${p.displayName} · Ngoài tầm đánh`}
             onClick={() => onSelectTarget(p.playerId)}
-            className={`px-2 py-1 min-h-[34px] min-w-[36px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+            className={`px-2 py-1 min-h-[34px] min-w-[36px] rounded-xl border text-xs font-bold transition cursor-pointer flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
               selected
                 ? inRange
                   ? 'bg-rose-600/90 border-rose-300 text-white'
@@ -690,7 +690,7 @@ export function ActionPanel({
                         <button
                           type="button"
                           onClick={() => onZoomCard(card.id, zoomZone)}
-                          className="block w-full rounded bg-slate-900/90 border border-white/15 py-0.5 text-[10px] font-bold text-slate-200 hover:border-amber-300/70 hover:text-amber-200 cursor-pointer"
+                          className="block w-full rounded bg-slate-900/90 border border-white/15 py-0.5 text-[10px] font-bold text-slate-200 hover:border-amber-300/70 hover:text-amber-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                         >
                           🔍 Soi
                         </button>
@@ -806,7 +806,7 @@ export function ActionPanel({
                         onAction({ type: 'USE_CARD', cardId: card.id });
                       }
                     }}
-                    className={`w-full px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl disabled:opacity-45 border text-xs font-black transition cursor-pointer ${
+                    className={`w-full px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl disabled:opacity-45 border text-xs font-black transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                       isPrimaryCardCta
                         ? 'bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 border-amber-200 text-slate-950 shadow-md'
                         : 'bg-slate-800 hover:bg-slate-700 border-white/15 text-white'
@@ -842,7 +842,7 @@ export function ActionPanel({
                       onClick={() =>
                         onAction({ type: 'USE_CARD', cardId: card.id, skipEffect: true })
                       }
-                      className="w-full px-3 py-1 min-h-[34px] min-w-[44px] rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-slate-300 transition cursor-pointer"
+                      className="w-full px-3 py-1 min-h-[34px] min-w-[44px] rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-slate-300 transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                     >
                       🙈 Không kích hoạt (Giữ kín vai / Hủy thẻ)
                     </button>
@@ -881,7 +881,7 @@ export function ActionPanel({
                   data-testid={`bg-select-deck-${opt.id}`}
                   aria-pressed={chosen}
                   onClick={() => setSelectedAnyDeck(opt.id)}
-                  className={`px-2.5 py-1 min-h-[34px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  className={`px-2.5 py-1 min-h-[34px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                     chosen
                       ? opt.activeCls
                       : 'border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-800'
@@ -899,7 +899,7 @@ export function ActionPanel({
               data-testid={`bg-draw-${activeDeckOpt.id}-btn`}
               data-primary-cta="true"
               onClick={() => onAction({ type: 'DRAW_CARD', deck: activeDeckOpt.id })}
-              className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl bg-gradient-to-r ${activeDeckOpt.ctaCls} text-xs sm:text-sm font-black shadow-lg transition cursor-pointer`}
+              className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl bg-gradient-to-r ${activeDeckOpt.ctaCls} text-xs sm:text-sm font-black shadow-lg transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300`}
             >
               {activeDeckOpt.icon} Rút 1 Thẻ {activeDeckOpt.label} ({publicGame.deckCounts[activeDeckOpt.id]})
             </button>
@@ -907,7 +907,7 @@ export function ActionPanel({
               type="button"
               data-testid="bg-skip-loc-btn"
               onClick={() => onAction({ type: 'SKIP_LOC' })}
-              className="px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer"
+              className="px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
             >
               ⏭️ Bỏ qua
             </button>
@@ -950,7 +950,7 @@ export function ActionPanel({
             data-testid={singleDeckMeta.testId}
             data-primary-cta="true"
             onClick={() => onAction({ type: 'DRAW_CARD', deck: singleDeckMeta.deck })}
-            className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl text-xs sm:text-sm font-black shadow-lg transition cursor-pointer ${singleDeckMeta.cls}`}
+            className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl text-xs sm:text-sm font-black shadow-lg transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${singleDeckMeta.cls}`}
           >
             {singleDeckMeta.label}
           </button>
@@ -958,7 +958,7 @@ export function ActionPanel({
             type="button"
             data-testid="bg-skip-loc-btn"
             onClick={() => onAction({ type: 'SKIP_LOC' })}
-            className="px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer sm:ml-auto"
+            className="px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer sm:ml-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
           >
             ⏭️ Bỏ qua
           </button>
@@ -980,7 +980,7 @@ export function ActionPanel({
                   key={p.playerId}
                   type="button"
                   onClick={() => onSelectTarget(p.playerId)}
-                  className={`px-2 py-1 min-h-[34px] min-w-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  className={`px-2 py-1 min-h-[34px] min-w-[36px] rounded-xl border text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                     selected
                       ? 'bg-violet-600 border-violet-300 text-white'
                       : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
@@ -1006,7 +1006,7 @@ export function ActionPanel({
                   mode: 'heal',
                 })
               }
-              className={`px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl text-xs sm:text-sm font-black transition cursor-pointer ${
+              className={`px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl text-xs sm:text-sm font-black transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                 !damagePreferred
                   ? 'bg-gradient-to-r from-emerald-500 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-slate-950 shadow-lg'
                   : 'bg-slate-800 hover:bg-slate-700 border border-emerald-500/45 text-emerald-200'
@@ -1029,7 +1029,7 @@ export function ActionPanel({
                   });
                 }
               }}
-              className={`px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl disabled:opacity-45 text-xs sm:text-sm font-black transition cursor-pointer ${
+              className={`px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl disabled:opacity-45 text-xs sm:text-sm font-black transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                 damagePreferred
                   ? 'bg-gradient-to-r from-rose-500 to-amber-400 hover:from-rose-400 hover:to-amber-300 text-slate-950 shadow-lg'
                   : 'bg-slate-800 hover:bg-slate-700 border border-rose-500/45 text-rose-200'
@@ -1046,7 +1046,7 @@ export function ActionPanel({
               type="button"
               data-testid="bg-skip-loc-btn"
               onClick={() => onAction({ type: 'SKIP_LOC' })}
-              className="px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer sm:ml-auto"
+              className="px-3 py-1.5 min-h-[36px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer sm:ml-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
             >
               ⏭️ Bỏ qua
             </button>
@@ -1068,7 +1068,7 @@ export function ActionPanel({
                   key={p.playerId}
                   type="button"
                   onClick={() => onSelectTarget(p.playerId)}
-                  className={`px-2 py-1 min-h-[34px] min-w-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  className={`px-2 py-1 min-h-[34px] min-w-[36px] rounded-xl border text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                     selected
                       ? 'bg-sky-600 border-sky-300 text-white'
                       : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
@@ -1111,7 +1111,7 @@ export function ActionPanel({
                 ...(chosenStealEquipId ? { equipCardId: chosenStealEquipId } : {}),
               });
             }}
-            className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl disabled:opacity-45 text-xs sm:text-sm font-black transition cursor-pointer ${
+            className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl disabled:opacity-45 text-xs sm:text-sm font-black transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
               validStealTarget
                 ? 'bg-gradient-to-r from-sky-400 to-cyan-300 hover:from-sky-300 hover:to-cyan-200 text-slate-950 shadow-lg'
                 : 'bg-slate-800 border border-slate-700 text-slate-400'
@@ -1131,7 +1131,7 @@ export function ActionPanel({
             data-testid="bg-skip-loc-btn"
             data-primary-cta={!validStealTarget ? 'true' : undefined}
             onClick={() => onAction({ type: 'SKIP_LOC' })}
-            className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl text-xs font-black transition cursor-pointer sm:ml-auto ${
+            className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl text-xs font-black transition cursor-pointer sm:ml-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
               !validStealTarget
                 ? 'bg-gradient-to-r from-emerald-500 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-slate-950 shadow-lg'
                 : 'bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold'
@@ -1172,7 +1172,7 @@ export function ActionPanel({
             aria-expanded={secondaryOpen}
             aria-haspopup="dialog"
             onClick={() => setSecondaryOpen((v) => !v)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[34px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[34px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
               secondaryOpen
                 ? 'border-cyan-400 bg-cyan-950/75 text-cyan-100'
                 : secondaryActionAvailable
@@ -1182,9 +1182,9 @@ export function ActionPanel({
           >
             <span>🎭 Vai &amp; Kỹ năng</span>
             {canUseSkillNow ? (
-              <span className="text-[11px] font-black text-emerald-300">● Sẵn sàng</span>
+              <span className="text-xs font-black text-emerald-300">● Sẵn sàng</span>
             ) : canManualReveal ? (
-              <span className="text-[11px] font-bold text-amber-300">● Ẩn</span>
+              <span className="text-xs font-bold text-amber-300">● Ẩn</span>
             ) : null}
           </button>
 
@@ -1206,7 +1206,7 @@ export function ActionPanel({
                     setConfirmingReveal(false);
                   }}
                   aria-label="Đóng menu hành động phụ"
-                  className="px-2 py-0.5 min-h-[32px] min-w-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer"
+                  className="px-2 py-0.5 min-h-[32px] min-w-[36px] rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                 >
                   ✕
                 </button>
@@ -1225,7 +1225,7 @@ export function ActionPanel({
                           setSecondaryOpen(false);
                           onAction({ type: 'REVEAL_ROLE' });
                         }}
-                        className="flex-1 px-3 py-1.5 min-h-[34px] min-w-[44px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition cursor-pointer"
+                        className="flex-1 px-3 py-1.5 min-h-[34px] min-w-[44px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                       >
                         ✅ Xác nhận Lật Vai
                       </button>
@@ -1233,7 +1233,7 @@ export function ActionPanel({
                         type="button"
                         data-testid="bg-cancel-reveal-btn"
                         onClick={() => setConfirmingReveal(false)}
-                        className="px-2.5 py-1.5 min-h-[34px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer"
+                        className="px-2.5 py-1.5 min-h-[34px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                       >
                         ✕ Hủy
                       </button>
@@ -1243,7 +1243,7 @@ export function ActionPanel({
                       type="button"
                       data-testid="bg-reveal-role-btn"
                       onClick={() => setConfirmingReveal(true)}
-                      className="w-full px-3 py-1.5 min-h-[34px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/50 text-amber-200 text-xs font-bold transition cursor-pointer"
+                      className="w-full px-3 py-1.5 min-h-[34px] min-w-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-400/50 text-amber-200 text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                     >
                       🎭 Lật vai công khai ({roleDesign.name})
                     </button>
@@ -1274,7 +1274,7 @@ export function ActionPanel({
                           key={p.playerId}
                           type="button"
                           onClick={() => onSelectTarget(p.playerId)}
-                          className={`px-2 py-1 min-h-[32px] min-w-[36px] rounded-lg border text-xs font-bold cursor-pointer ${
+                          className={`px-2 py-1 min-h-[32px] min-w-[36px] rounded-lg border text-xs font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                             chosen
                               ? 'bg-violet-600 border-violet-300 text-white'
                               : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
@@ -1300,7 +1300,7 @@ export function ActionPanel({
                       onAction({ type: 'USE_SKILL', targetPlayerId: skillTarget.playerId });
                     }
                   }}
-                  className={`w-full px-3 py-1.5 min-h-[34px] min-w-[44px] rounded-xl disabled:opacity-45 text-white text-xs font-bold transition cursor-pointer ${
+                  className={`w-full px-3 py-1.5 min-h-[34px] min-w-[44px] rounded-xl disabled:opacity-45 text-white text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                     privateView.roleId === 'lang-cuu-ho'
                       ? 'bg-rose-600 hover:bg-rose-500'
                       : 'bg-violet-600 hover:bg-violet-500'
@@ -1345,7 +1345,7 @@ export function ActionPanel({
             data-testid="bg-roll-dice-btn"
             data-primary-cta="true"
             onClick={() => onAction({ type: 'ROLL_DICE' })}
-            className="w-full sm:w-auto shrink-0 px-4 py-1.5 min-h-[38px] min-w-[44px] rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-xs sm:text-sm font-black shadow-lg transition cursor-pointer"
+            className="w-full sm:w-auto shrink-0 px-4 py-1.5 min-h-[38px] min-w-[44px] rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-xs sm:text-sm font-black shadow-lg transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
           >
             {rerollPrompt
               ? '🎲 ĐỔ LẠI XÚC XẮC (1d6 + 1d4)'
@@ -1366,7 +1366,7 @@ export function ActionPanel({
                 type="button"
                 data-testid={`bg-choose-dest-${loc.id}`}
                 onClick={() => onAction({ type: 'CHOOSE_DEST', location: loc.id })}
-                className={`px-2.5 py-1 min-h-[34px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                className={`px-2.5 py-1 min-h-[34px] min-w-[44px] rounded-xl border text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                   selectedLocationId === loc.id
                     ? 'border-amber-300 bg-amber-950/60 text-amber-100'
                     : 'border-slate-700 bg-slate-800/85 hover:border-amber-400/70 hover:bg-slate-800 text-slate-200'
@@ -1382,7 +1382,7 @@ export function ActionPanel({
               data-testid="bg-primary-choose-dest-btn"
               data-primary-cta="true"
               onClick={() => onAction({ type: 'CHOOSE_DEST', location: chosenMoveLoc.id })}
-              className="w-full sm:w-auto shrink-0 px-3.5 py-1.5 min-h-[38px] min-w-[44px] rounded-xl bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 text-xs sm:text-sm font-black shadow-lg transition cursor-pointer"
+              className="w-full sm:w-auto shrink-0 px-3.5 py-1.5 min-h-[38px] min-w-[44px] rounded-xl bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 text-xs sm:text-sm font-black shadow-lg transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
             >
               🧭 Đi tới Ô {chosenMoveLoc.diceLabel} · {chosenMoveLoc.shortName}
             </button>
@@ -1416,7 +1416,7 @@ export function ActionPanel({
                   onAction({ type: 'ATTACK', targetPlayerId: effectiveAttackTarget.playerId });
                 }
               }}
-              className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl disabled:opacity-45 text-xs sm:text-sm font-black transition cursor-pointer ${
+              className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl disabled:opacity-45 text-xs sm:text-sm font-black transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                 canAttackNow && !hasAnyHandCard
                   ? 'bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-slate-950 shadow-lg'
                   : 'bg-slate-800 border border-slate-700 text-slate-300'
@@ -1438,7 +1438,7 @@ export function ActionPanel({
               data-lock-reason={endTurnLockReason ?? undefined}
               disabled={!canEndTurn}
               onClick={() => onAction({ type: 'END_TURN' })}
-              className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl disabled:opacity-45 text-xs sm:text-sm font-black transition cursor-pointer ${
+              className={`px-3.5 py-1.5 min-h-[36px] min-w-[44px] rounded-xl disabled:opacity-45 text-xs sm:text-sm font-black transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                 !hasAnyHandCard && !canAttackNow && canEndTurn
                   ? 'bg-gradient-to-r from-emerald-500 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-slate-950 shadow-lg'
                   : 'bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200'

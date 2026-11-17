@@ -955,3 +955,29 @@ test('Phase 4 Compact Damage Track (9) — Pure public wound state never infers 
   assert.equal(eliminated.isTurnHolder, false);
   assert.equal(eliminated.isNearThreshold, false);
 });
+
+test('Phase 5 Final Polish (10) — Crowded 8-player compact short names & strict public HP secrecy', () => {
+  // Mặc định (< 7 người) không thay đổi tên chuẩn
+  assert.equal(deriveShortPlayerName('SinhVien_2', 1), 'SV 2');
+  assert.equal(deriveShortPlayerName('Chu Ban 8P', 0), 'Chu Ban');
+
+  // Chế độ bàn đông (>= 7 người): compact ngắn gọn nhưng đủ đọc, không cắt 1 chữ
+  assert.equal(deriveShortPlayerName('SinhVien_2', 1, { compact: true }), 'SV2');
+  assert.equal(deriveShortPlayerName('SinhVien_8', 7, { compact: true }), 'SV8');
+  assert.equal(deriveShortPlayerName('Chu Ban 8P', 0, { compact: true }), 'C.Ban');
+  assert.equal(deriveShortPlayerName('Nguyễn Minh Khôi', 2, { compact: true }), 'Khôi');
+  assert.equal(deriveShortPlayerName('ReconnectPeer_1', 3, { compact: true }), 'P1');
+  assert.equal(deriveShortPlayerName('Lê An', 4, { compact: true }), 'Lê An');
+
+  const base = makePubState();
+  const baseP1 = base.players[0];
+  const crowdedUnrevealed = computePublicDamageChipState(
+    { ...baseP1, displayName: 'SinhVien_7', seatIndex: 6, woundsTaken: 7, revealedMaxHp: null, revealedRoleId: null },
+    'p2',
+    { compact: true },
+  );
+  assert.equal(crowdedUnrevealed.shortName, 'SV7');
+  assert.equal(crowdedUnrevealed.isNearThreshold, false);
+  assert.equal(crowdedUnrevealed.woundBadgeText, '7');
+  assert.equal(crowdedUnrevealed.woundBadgeText.includes('/'), false);
+});

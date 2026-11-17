@@ -215,6 +215,22 @@ export function GameBoard({
   }, [publicGame.matchId]);
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (zoomTarget !== null) return;
+      if (leaveConfirmOpen) {
+        setLeaveConfirmOpen(false);
+      } else if (settingsPanelOpen) {
+        setSettingsPanelOpen(false);
+      } else if (damageTrackExpanded) {
+        setDamageTrackExpanded(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoomTarget, leaveConfirmOpen, settingsPanelOpen, damageTrackExpanded]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     const sync = () => {
       if (window.matchMedia) {
@@ -407,15 +423,15 @@ export function GameBoard({
             <span className="text-xs sm:text-sm font-black tracking-tight text-white whitespace-nowrap shrink-0">
               🌙 Săn Bóng Đêm KTX
             </span>
-            <span className="px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-[11px] sm:text-xs font-bold text-cyan-200 whitespace-nowrap shrink-0">
+            <span className="px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-xs font-bold text-cyan-200 whitespace-nowrap shrink-0">
               Vòng {publicGame.round}
             </span>
-            <span className="hidden md:inline-flex px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-semibold text-amber-200 truncate max-w-[200px] xl:max-w-[300px]">
+            <span className="hidden md:inline-flex px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-xs font-semibold text-amber-200 truncate max-w-[200px] xl:max-w-[300px]">
               {PHASE_LABEL[publicGame.turnPhase]}
             </span>
             <span
               data-testid="bg-turn-timer"
-              className={`px-2 py-0.5 rounded-lg border text-[11px] sm:text-xs font-extrabold whitespace-nowrap shrink-0 ${
+              className={`px-2 py-0.5 rounded-lg border text-xs font-extrabold whitespace-nowrap shrink-0 ${
                 remainingSec === null
                   ? 'bg-emerald-500/15 border-emerald-400/45 text-emerald-200'
                   : remainingSec <= 10
@@ -433,7 +449,7 @@ export function GameBoard({
               )}
             </span>
             {activePlayer && !publicGame.winnerLabel && (
-              <span className="text-[11px] sm:text-xs font-semibold text-slate-300 truncate min-w-0">
+              <span className="text-xs font-semibold text-slate-300 truncate min-w-0">
                 Lượt:{' '}
                 <strong className={isMyTurn ? 'text-amber-300' : 'text-white'}>
                   {activePlayer.displayName}
@@ -444,7 +460,7 @@ export function GameBoard({
 
           <div className="flex flex-nowrap items-center gap-1.5 shrink-0">
             {inviteCode && (
-              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-mono font-bold text-slate-300 whitespace-nowrap">
+              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-xs font-mono font-bold text-slate-300 whitespace-nowrap">
                 Mã: {inviteCode}
               </span>
             )}
@@ -452,7 +468,7 @@ export function GameBoard({
               <button
                 type="button"
                 onClick={() => setSideDrawerOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 min-h-[32px] rounded-xl bg-cyan-950/60 hover:bg-cyan-900/70 border border-cyan-500/45 text-xs font-bold text-cyan-200 whitespace-nowrap transition cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 min-h-[32px] rounded-xl bg-cyan-950/60 hover:bg-cyan-900/70 border border-cyan-500/45 text-xs font-bold text-cyan-200 whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
               >
                 ◧ Sidebar
               </button>
@@ -464,7 +480,7 @@ export function GameBoard({
               aria-expanded={settingsPanelOpen}
               aria-label="Cài đặt đồ họa, luật chơi và trợ năng"
               title={`Cài đặt (${GRAPHICS_TIER_LABELS[gfx.profile.tier]})`}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 min-h-[32px] rounded-xl border text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+              className={`inline-flex items-center gap-1 px-2.5 py-1 min-h-[32px] rounded-xl border text-xs font-bold whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                 settingsPanelOpen
                   ? 'bg-cyan-500/25 border-cyan-400 text-cyan-100'
                   : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-100'
@@ -477,7 +493,7 @@ export function GameBoard({
               type="button"
               data-testid="bg-board-leave-btn"
               onClick={() => setLeaveConfirmOpen(true)}
-              className="inline-flex items-center px-2.5 py-1 min-h-[32px] rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-500/50 text-xs font-bold text-rose-100 whitespace-nowrap transition cursor-pointer"
+              className="inline-flex items-center px-2.5 py-1 min-h-[32px] rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-500/50 text-xs font-bold text-rose-100 whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
             >
               🚪 Rời
             </button>
@@ -506,7 +522,7 @@ export function GameBoard({
                 type="button"
                 onClick={() => setSettingsPanelOpen(false)}
                 aria-label="Đóng bảng cài đặt"
-                className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer"
+                className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
               >
                 ✕
               </button>
@@ -521,7 +537,7 @@ export function GameBoard({
                   setSettingsPanelOpen(false);
                   onOpenRules();
                 }}
-                className="px-2.5 py-1.5 min-h-[34px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-100 transition cursor-pointer"
+                className="px-2.5 py-1.5 min-h-[34px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-100 transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
               >
                 📖 Luật chơi
               </button>
@@ -533,7 +549,7 @@ export function GameBoard({
                     setSettingsPanelOpen(false);
                     onOpenLeaderboard();
                   }}
-                  className="px-2.5 py-1.5 min-h-[34px] rounded-xl bg-amber-950/70 hover:bg-amber-900/75 border border-amber-400/50 text-xs font-bold text-amber-200 transition cursor-pointer"
+                  className="px-2.5 py-1.5 min-h-[34px] rounded-xl bg-amber-950/70 hover:bg-amber-900/75 border border-amber-400/50 text-xs font-bold text-amber-200 transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                 >
                   🏆 Bảng xếp hạng
                 </button>
@@ -543,7 +559,7 @@ export function GameBoard({
                   type="button"
                   data-testid="bg-toggle-drawer-btn"
                   onClick={() => setSideDrawerOpen((v) => !v)}
-                  className="px-2.5 py-1.5 min-h-[34px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-100 transition cursor-pointer"
+                  className="px-2.5 py-1.5 min-h-[34px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-100 transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                 >
                   {sideDrawerOpen ? '◨ Ẩn Sidebar' : '◧ Hiện Sidebar'}
                 </button>
@@ -552,7 +568,7 @@ export function GameBoard({
 
             {/* Chất lượng Đồ họa */}
             <div className="space-y-1.5 border-t border-slate-800 pt-2.5">
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
+              <p className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
                 Chất lượng Đồ họa ({GRAPHICS_TIER_LABELS[gfx.profile.tier]})
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
@@ -566,7 +582,7 @@ export function GameBoard({
                         data-testid={`bg-quality-${q}`}
                         aria-pressed={active}
                         onClick={() => gfx.setQuality(q)}
-                        className={`px-2 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                        className={`px-2 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                           active
                             ? 'bg-cyan-500 text-slate-950 border-cyan-300'
                             : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
@@ -587,7 +603,7 @@ export function GameBoard({
                 data-testid="bg-sound-toggle-btn"
                 aria-pressed={effectiveMuted}
                 onClick={handleToggleSoundClick}
-                className={`px-2.5 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                className={`px-2.5 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                   effectiveMuted
                     ? 'bg-rose-500/20 border-rose-400 text-rose-100'
                     : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
@@ -600,7 +616,7 @@ export function GameBoard({
                 data-testid="bg-vfx-motion-toggle-btn"
                 aria-pressed={vfx.reducedMotion}
                 onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
-                className={`px-2.5 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                className={`px-2.5 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                   vfx.reducedMotion
                     ? 'bg-amber-500/20 border-amber-400 text-amber-100'
                     : 'bg-indigo-950/70 hover:bg-indigo-900/70 border-indigo-400/50 text-indigo-200'
@@ -613,7 +629,7 @@ export function GameBoard({
                 data-testid="bg-shake-toggle-btn"
                 aria-pressed={!gfx.prefs.shakeEnabled}
                 onClick={() => gfx.setShakeEnabled(!gfx.prefs.shakeEnabled)}
-                className={`px-2.5 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                className={`px-2.5 py-1.5 min-h-[34px] rounded-xl border text-xs font-bold transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                   !gfx.prefs.shakeEnabled
                     ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
                     : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
@@ -628,7 +644,7 @@ export function GameBoard({
                   vfx.skipAllAnimations();
                   setSettingsPanelOpen(false);
                 }}
-                className="px-2.5 py-1.5 min-h-[34px] rounded-xl border border-amber-400/60 bg-amber-950/50 hover:bg-amber-900/60 text-xs font-bold text-amber-200 transition cursor-pointer"
+                className="px-2.5 py-1.5 min-h-[34px] rounded-xl border border-amber-400/60 bg-amber-950/50 hover:bg-amber-900/60 text-xs font-bold text-amber-200 transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
               >
                 ⏭️ Skip Animation
               </button>
@@ -736,7 +752,7 @@ export function GameBoard({
                     setDesktopSidebarTab('gear');
                     setMobileTab('role');
                   }}
-                  className="px-2 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-black cursor-pointer"
+                  className="px-2 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                 >
                   Mở đọc
                 </button>
@@ -887,11 +903,9 @@ export function GameBoard({
                 data-testid="bg-dice-tray"
                 data-turn-active={canRollOnBoard ? 'true' : 'false'}
                 data-dice-settled={String(vfx.isDiceSettled)}
-                className={`shrink-0 rounded-2xl border px-2.5 py-1.5 flex flex-col lg:flex-row lg:items-center justify-between gap-2 transition-all duration-200 ${
+                className={`shrink-0 rounded-2xl border px-2.5 py-1.5 flex flex-col lg:flex-row lg:items-center justify-between gap-2 transition-colors duration-200 ${
                   canRollOnBoard
-                    ? `border-amber-400/90 bg-gradient-to-r from-emerald-950/75 via-slate-900/95 to-amber-950/35 ring-1 ring-amber-300/40 ${
-                        vfx.reducedMotion ? '' : 'mn-dice-tray-spotlight'
-                      }`
+                    ? 'border-amber-400/80 bg-gradient-to-r from-emerald-950/65 via-slate-900/95 to-amber-950/30'
                     : 'border-slate-700/80 bg-slate-900/90'
                 }`}
               >
@@ -914,7 +928,7 @@ export function GameBoard({
                             <p className="text-xs sm:text-sm font-black text-amber-200 truncate">
                               🎲 {publicGame.lastDiceRoll.displayName} đang tung xúc xắc...
                             </p>
-                            <p className="text-[11px] text-slate-300 font-semibold truncate">
+                            <p className="text-xs text-slate-300 font-semibold truncate">
                               Chờ xúc xắc dừng trên mặt bàn để chốt kết quả từ server.
                             </p>
                           </>
@@ -929,7 +943,7 @@ export function GameBoard({
                                       : `1d4=${publicGame.lastDiceRoll.d4}`
                                   } → gây ${publicGame.lastDiceRoll.damageDealt ?? 0} sát thương)`}
                             </p>
-                            <p className="text-[11px] text-cyan-200 font-semibold truncate">
+                            <p className="text-xs text-cyan-200 font-semibold truncate">
                               {publicGame.lastDiceRoll.rerollRequired
                                 ? '🔁 Trùng khu vực hiện tại — được quyền ĐỔ LẠI!'
                                 : publicGame.lastDiceRoll.freeChoice
@@ -945,7 +959,7 @@ export function GameBoard({
                               publicGame.lastDiceRoll.counterRoll && (
                                 <p
                                   data-testid="bg-dice-counter-roll"
-                                  className="text-[11px] text-amber-300 font-bold truncate"
+                                  className="text-xs text-amber-300 font-bold truncate"
                                 >
                                   🥊 {publicGame.lastDiceRoll.counterRoll.displayName} phản kích (
                                   {publicGame.lastDiceRoll.counterRoll.d6 > 0
@@ -973,7 +987,7 @@ export function GameBoard({
                             ? '⚡ Lượt của bạn! Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)'
                             : 'Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)'}
                         </p>
-                        <p className="text-[11px] text-slate-300 truncate">
+                        <p className="text-xs text-slate-300 truncate">
                           Tung xúc xắc di chuyển · Tổng 7 chọn bất kỳ · Trùng chỗ được đổ lại
                         </p>
                       </div>
@@ -991,9 +1005,9 @@ export function GameBoard({
                 <div className="grid grid-cols-3 gap-1.5 shrink-0">
                   {(
                     [
-                      ['investigation', 'Khám Phá', 'text-emerald-300', 'border-emerald-400/80 bg-emerald-950/50 shadow-[0_0_12px_rgba(16,185,129,0.22)]'],
-                      ['equipment', 'Cung Ứng', 'text-sky-300', 'border-sky-400/80 bg-sky-950/50 shadow-[0_0_12px_rgba(56,189,248,0.22)]'],
-                      ['event', 'Đột Kích', 'text-rose-300', 'border-rose-400/80 bg-rose-950/50 shadow-[0_0_12px_rgba(244,63,94,0.22)]'],
+                      ['investigation', 'Khám Phá', 'text-emerald-300', 'border-emerald-400/75 bg-emerald-950/45'],
+                      ['equipment', 'Cung Ứng', 'text-sky-300', 'border-sky-400/75 bg-sky-950/45'],
+                      ['event', 'Đột Kích', 'text-rose-300', 'border-rose-400/75 bg-rose-950/45'],
                     ] as const
                   ).map(([deckId, label, cls, activeCls]) => {
                     const deckHighlighted = canDrawDeckOnBoard(deckId);
@@ -1014,10 +1028,10 @@ export function GameBoard({
                       >
                         <DeckCardBackSvg deck={deckId} size={24} />
                         <div className="min-w-0 text-left">
-                          <p className={`text-[10px] sm:text-[11px] font-extrabold truncate ${cls}`}>
+                          <p className={`text-xs font-extrabold truncate leading-tight ${cls}`}>
                             {label}
                           </p>
-                          <p className="text-xs font-black text-white">
+                          <p className="text-xs font-black text-white leading-tight">
                             {publicGame.deckCounts[deckId]} lá
                           </p>
                         </div>
@@ -1027,7 +1041,7 @@ export function GameBoard({
                 </div>
               </section>
 
-              {/* 4. DẢI NGƯỜI CHƠI TACTICAL TINH GỌN (CHI TIẾT ĐỒ NẰM TRONG TAB TRANG BỊ) */}
+              {/* 4. DẢI NGƯỜI CHƠI TACTICAL TINH GỌN (THƯƠNG TÍCH ĐÃ HIỂN THỊ DUY NHẤT Ở DAMAGE TRACK) */}
               <section className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 {publicGame.players.map((p) => {
                   const selected = selectedTargetId === p.playerId;
@@ -1039,13 +1053,14 @@ export function GameBoard({
                   return (
                     <div
                       key={p.playerId}
+                      data-testid={`bg-player-strip-card-${p.seatIndex}`}
                       className={`min-w-0 rounded-xl border px-2 py-1 flex items-center justify-between gap-1.5 transition ${
                         !p.alive
                           ? 'opacity-55 border-slate-800 bg-slate-950/60'
                           : selected
                             ? isSelfCard
-                              ? 'border-emerald-400 bg-emerald-950/40 ring-2 ring-emerald-400/50'
-                              : 'border-rose-400 bg-rose-950/40 ring-2 ring-rose-400/50'
+                              ? 'border-emerald-400 bg-emerald-950/35 ring-1 ring-emerald-400/45'
+                              : 'border-cyan-400 bg-cyan-950/35 ring-1 ring-cyan-400/45'
                             : isTurnHolder
                               ? 'border-amber-400 bg-slate-900'
                               : inAttackRange
@@ -1058,12 +1073,13 @@ export function GameBoard({
                         data-vfx-player-strip={p.playerId}
                         data-testid={isSelfCard ? 'bg-player-strip-self' : undefined}
                         aria-pressed={selected}
+                        title={`${p.displayName} · Ô ${locMeta.diceLabel} ${locMeta.name}`}
                         onClick={() =>
                           handleSelectPlayer((prev) =>
                             toggleSelectedTargetId(prev, p.playerId, p.alive),
                           )
                         }
-                        className="min-w-0 flex-1 text-left cursor-pointer"
+                        className="min-w-0 flex-1 text-left rounded-lg cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
                           <PlayerPawnToken
@@ -1083,13 +1099,18 @@ export function GameBoard({
                                 {p.displayName}
                               </p>
                               {inAttackRange && (
-                                <span className="text-[10px] font-black text-amber-200 shrink-0">
+                                <span
+                                  className="text-xs font-black text-amber-200 shrink-0"
+                                  aria-hidden="true"
+                                >
                                   ⚔️
                                 </span>
                               )}
                             </div>
                             <p
-                              className={`text-[10px] font-semibold truncate ${factionTheme ? factionTheme.textClass : 'text-slate-400'}`}
+                              className={`text-[11px] xl:text-xs font-semibold truncate ${
+                                factionTheme ? factionTheme.textClass : 'text-slate-400'
+                              }`}
                             >
                               {p.revealedRoleId
                                 ? `${FACTION_LABELS[p.revealedFaction!]} · Max ${p.revealedMaxHp}`
@@ -1099,61 +1120,71 @@ export function GameBoard({
                         </div>
                       </button>
 
-                      <div className="flex items-center gap-1 shrink-0 text-[10px] font-bold">
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-200" title={`${p.woundsTaken} vết thương`}>
-                          🩸{p.woundsTaken}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200" title={`${p.handCount} thẻ chờ`}>
-                          🃏{p.handCount}
-                        </span>
-                        {p.guardianShieldActive && (
-                          <span className="px-1 py-0.5 rounded bg-amber-500/25 text-amber-200" title="Đang có Khiên Bảo Vệ">
-                            🛡️
-                          </span>
-                        )}
-                        {p.equipped.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isDesktopLayout) {
-                                setSideDrawerOpen(true);
-                                setDesktopSidebarTab('gear');
-                              } else {
+                      {(p.handCount > 0 ||
+                        p.guardianShieldActive ||
+                        p.equipped.length > 0 ||
+                        Boolean(p.revealedRoleId)) && (
+                        <div className="flex items-center gap-1 shrink-0 text-[11px] font-bold">
+                          {p.handCount > 0 && (
+                            <span
+                              className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200"
+                              title={`${p.handCount} thẻ chờ`}
+                            >
+                              🃏{p.handCount}
+                            </span>
+                          )}
+                          {p.guardianShieldActive && (
+                            <span
+                              className="px-1 py-0.5 rounded bg-amber-500/25 text-amber-200"
+                              title="Đang có Khiên Bảo Vệ"
+                            >
+                              🛡️
+                            </span>
+                          )}
+                          {p.equipped.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isDesktopLayout) {
+                                  setSideDrawerOpen(true);
+                                  setDesktopSidebarTab('gear');
+                                } else {
+                                  setZoomTarget({
+                                    kind: 'card',
+                                    cardId: p.equipped[0].id,
+                                    zone: 'equipped-table',
+                                  });
+                                }
+                              }}
+                              title={`Xem ${p.equipped.length} trang bị của ${p.displayName}`}
+                              className="px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-sky-200 hover:border-sky-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                            >
+                              🎒{p.equipped.length}
+                            </button>
+                          )}
+                          {p.revealedRoleId && (
+                            <button
+                              type="button"
+                              onClick={() =>
                                 setZoomTarget({
-                                  kind: 'card',
-                                  cardId: p.equipped[0].id,
-                                  zone: 'equipped-table',
-                                });
+                                  kind: 'role',
+                                  roleId: p.revealedRoleId!,
+                                  revealed: true,
+                                  viewerMode: 'other-player',
+                                  woundsTaken: p.woundsTaken,
+                                  currentHp: p.revealedMaxHp
+                                    ? Math.max(0, p.revealedMaxHp - p.woundsTaken)
+                                    : undefined,
+                                })
                               }
-                            }}
-                            title={`Xem ${p.equipped.length} trang bị của ${p.displayName}`}
-                            className="px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-sky-200 hover:border-sky-300 cursor-pointer"
-                          >
-                            🎒{p.equipped.length}
-                          </button>
-                        )}
-                        {p.revealedRoleId && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setZoomTarget({
-                                kind: 'role',
-                                roleId: p.revealedRoleId!,
-                                revealed: true,
-                                viewerMode: 'other-player',
-                                woundsTaken: p.woundsTaken,
-                                currentHp: p.revealedMaxHp
-                                  ? Math.max(0, p.revealedMaxHp - p.woundsTaken)
-                                  : undefined,
-                              })
-                            }
-                            title={`Phóng lớn thẻ vai đã lộ của ${p.displayName}`}
-                            className="px-1 py-0.5 rounded bg-amber-950/70 border border-amber-400/45 text-amber-200 hover:bg-amber-900/70 cursor-pointer"
-                          >
-                            🔍
-                          </button>
-                        )}
-                      </div>
+                              title={`Phóng lớn thẻ vai đã lộ của ${p.displayName}`}
+                              className="px-1 py-0.5 rounded bg-amber-950/70 border border-amber-400/45 text-amber-200 hover:bg-amber-900/70 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                            >
+                              🔍
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1202,7 +1233,7 @@ export function GameBoard({
                   aria-selected={desktopSidebarTab === 'role'}
                   data-testid="bg-sidebar-tab-role"
                   onClick={() => setDesktopSidebarTab('role')}
-                  className={`min-h-[34px] rounded-xl px-1.5 text-[11px] xl:text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center justify-center gap-1 ${
+                  className={`min-h-[34px] rounded-xl px-1.5 text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center justify-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                     desktopSidebarTab === 'role'
                       ? 'bg-amber-400 text-slate-950 shadow'
                       : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
@@ -1216,7 +1247,7 @@ export function GameBoard({
                   aria-selected={desktopSidebarTab === 'gear'}
                   data-testid="bg-sidebar-tab-gear"
                   onClick={() => setDesktopSidebarTab('gear')}
-                  className={`min-h-[34px] rounded-xl px-1.5 text-[11px] xl:text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center justify-center gap-1 ${
+                  className={`min-h-[34px] rounded-xl px-1.5 text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center justify-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                     desktopSidebarTab === 'gear'
                       ? 'bg-cyan-400 text-slate-950 shadow'
                       : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
@@ -1243,7 +1274,7 @@ export function GameBoard({
                   aria-selected={desktopSidebarTab === 'log'}
                   data-testid="bg-sidebar-tab-log"
                   onClick={() => setDesktopSidebarTab('log')}
-                  className={`min-h-[34px] rounded-xl px-1.5 text-[11px] xl:text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center justify-center gap-1 ${
+                  className={`min-h-[34px] rounded-xl px-1.5 text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center justify-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                     desktopSidebarTab === 'log'
                       ? 'bg-emerald-400 text-slate-950 shadow'
                       : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
@@ -1340,7 +1371,7 @@ export function GameBoard({
                 {latestEmote && (
                   <div
                     data-testid="bg-emote-toast"
-                    className="rounded-lg bg-slate-800/90 border border-slate-700 px-2 py-1 text-[11px] font-semibold text-amber-100 truncate"
+                    className="rounded-lg bg-slate-800/90 border border-slate-700 px-2 py-1 text-xs font-semibold text-amber-100 truncate"
                   >
                     {latestEmote.emote ? EMOTE_META[latestEmote.emote]?.icon ?? '💬' : '💬'}{' '}
                     <strong>{latestEmote.displayName}:</strong>{' '}
@@ -1356,7 +1387,7 @@ export function GameBoard({
                       title={EMOTE_META[eid].label}
                       aria-label={EMOTE_META[eid].label}
                       onClick={() => onSendEmote?.(eid)}
-                      className="px-1 py-1 min-h-[30px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-100 cursor-pointer flex items-center justify-center"
+                      className="px-1 py-1 min-h-[30px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-100 cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                     >
                       {EMOTE_META[eid].icon}
                     </button>
@@ -1380,11 +1411,11 @@ export function GameBoard({
                       onChange={(e) => setChatText(e.target.value)}
                       maxLength={120}
                       placeholder="Nhắn nhanh với bàn..."
-                      className="flex-1 min-w-0 rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500"
+                      className="flex-1 min-w-0 rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                     />
                     <button
                       type="submit"
-                      className="px-3 py-1.5 min-h-[32px] rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-black cursor-pointer"
+                      className="px-3 py-1.5 min-h-[32px] rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                     >
                       Gửi
                     </button>
@@ -1536,7 +1567,7 @@ export function GameBoard({
               <button
                 type="button"
                 onClick={() => setLeaveConfirmOpen(false)}
-                className="px-4 py-2 min-h-[40px] rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-bold text-slate-200 cursor-pointer"
+                className="px-4 py-2 min-h-[40px] rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-bold text-slate-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
               >
                 Ở lại bàn
               </button>
@@ -1547,7 +1578,7 @@ export function GameBoard({
                   setLeaveConfirmOpen(false);
                   onLeaveMatch();
                 }}
-                className="px-4 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 text-sm font-black text-white cursor-pointer"
+                className="px-4 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 text-sm font-black text-white cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
               >
                 Xác nhận rời bàn
               </button>

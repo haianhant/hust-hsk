@@ -386,16 +386,16 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                     crowdedMode
                       ? 'overflow-hidden min-w-0 w-full gap-1 rounded-lg px-1 py-0.5 text-xs'
                       : 'min-w-0 max-w-full gap-1.5 rounded-full pr-2 pl-0.5 py-0.5 text-xs'
-                  } ${enableBackdropBlur ? 'backdrop-blur-sm' : ''} ${
+                  } ${
                     isSelectedTarget
                       ? isSelfToken
                         ? 'bg-emerald-600/95 border-emerald-200 ring-1 ring-emerald-200 text-white'
                         : 'bg-rose-600/95 border-rose-200 ring-1 ring-rose-200 text-white'
                       : inAttackRange
-                        ? 'bg-rose-950/85 border-rose-400/85 text-rose-100 hover:border-rose-300'
+                        ? 'bg-rose-950/90 border-rose-400/85 text-rose-100 hover:border-rose-300'
                         : isSelfToken
-                          ? 'bg-cyan-950/85 border-cyan-300/75 text-cyan-50 hover:border-cyan-200'
-                          : 'bg-slate-950/85 border-white/25 text-slate-100 hover:border-cyan-400/70'
+                          ? 'bg-cyan-950/90 border-cyan-300/75 text-cyan-50 hover:border-cyan-200'
+                          : 'bg-slate-950/90 border-white/25 text-slate-100 hover:border-cyan-400/70'
                   }`}
                 >
                   <PlayerPawnToken

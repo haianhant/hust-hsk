@@ -139,7 +139,7 @@ export const MidnightCharacterCard = React.memo(function MidnightCharacterCard({
         {/* HEADER (Top Safe Zone ~14%): Huy hiệu Phe + Con dấu Sinh lực HP */}
         <div className="relative z-10 flex items-start justify-between gap-1.5 p-2.5 sm:p-3">
           <div
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wide whitespace-nowrap shrink-0 shadow-lg backdrop-blur-md ${factionToken.badgeClass}`}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wide whitespace-nowrap shrink-0 shadow-lg ${factionToken.badgeClass}`}
           >
             <FactionCrestSvg faction={presentation.faction} size={15} />
             <span>{factionToken.label}</span>
@@ -148,7 +148,7 @@ export const MidnightCharacterCard = React.memo(function MidnightCharacterCard({
           <div className="flex items-center gap-1.5">
             <div
               data-testid={testId ? `${testId}-hp-seal` : undefined}
-              className="flex flex-col items-center rounded-xl border px-2.5 py-1 shadow-xl backdrop-blur-md"
+              className="flex flex-col items-center rounded-xl border px-2.5 py-1 shadow-xl"
               style={{
                 background: factionToken.hpSealBg,
                 borderColor: isCritical ? '#fb7185' : `${factionToken.secondaryHex}cc`,
@@ -217,7 +217,7 @@ export const MidnightCharacterCard = React.memo(function MidnightCharacterCard({
             </div>
           </div>
 
-          <div className="rounded-xl border border-white/15 bg-slate-950/82 p-2.5 backdrop-blur-md">
+          <div className="rounded-xl border border-white/15 bg-slate-950/90 p-2.5">
             <div className="flex items-center justify-between gap-1">
               <span
                 className="text-[10px] font-black uppercase tracking-wider"
@@ -266,7 +266,7 @@ export const MidnightCharacterCard = React.memo(function MidnightCharacterCard({
       <MidnightOrnamentFrameSvg primaryHex="#cbd5e1" secondaryHex="#fbbf24" />
 
       <div className="relative z-10 flex items-center justify-between gap-1.5 p-3">
-        <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/50 bg-slate-950/85 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-200 backdrop-blur-md">
+        <span className="inline-flex items-center gap-1 rounded-full border border-slate-400/50 bg-slate-950/90 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-200">
           🃏 Vai Ẩn Danh
         </span>
         <div className="flex items-center gap-1">
@@ -290,7 +290,7 @@ export const MidnightCharacterCard = React.memo(function MidnightCharacterCard({
       </div>
 
       <div className="relative z-10 mt-auto p-3">
-        <div className="rounded-xl border border-amber-300/35 bg-slate-950/88 p-3 text-center backdrop-blur-md">
+        <div className="rounded-xl border border-amber-300/35 bg-slate-950/92 p-3 text-center">
           <p className="text-xs font-black uppercase tracking-wider text-amber-200">
             Danh Tính Đang Bảo Mật
           </p>
