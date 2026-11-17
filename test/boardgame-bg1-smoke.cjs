@@ -31,6 +31,8 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
   '.woff2': 'font/woff2',
 };
 
@@ -221,7 +223,7 @@ async function main() {
         function tick(now) {
           deltas.push(now - prev);
           prev = now;
-          if (now - t0 >= 800 || deltas.length >= 6) {
+          if ((deltas.length >= 3 && now - t0 >= 600) || deltas.length >= 6 || now - t0 >= 12000) {
             resolve({
               frames: deltas.length,
               canvasCount: document.querySelectorAll('canvas').length,
@@ -311,7 +313,7 @@ async function main() {
         function tick(now) {
           deltas.push(now - prev);
           prev = now;
-          if (now - t0 >= 800 || deltas.length >= 6) {
+          if ((deltas.length >= 3 && now - t0 >= 600) || deltas.length >= 6 || now - t0 >= 12000) {
             const audioDiag = window.__hustBgAudioDiag ? window.__hustBgAudioDiag() : null;
             resolve({
               frames: deltas.length,

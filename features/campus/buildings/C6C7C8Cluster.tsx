@@ -869,14 +869,19 @@ export function C7ComplexBuilding({
         <mesh
           key={`c7-west-crosswalk-${idx}`}
           rotation-x={-Math.PI / 2}
-          position={[-17.3, 0.026, southZ + 0.5 + dz]}
+          position={[-17.3, 0.0245, southZ + 0.5 + dz]}
         >
-          <planeGeometry args={[4.8, 0.11]} />
-          <meshStandardMaterial color="#F1F5F9" roughness={0.85} />
+          <planeGeometry args={[4.6, 0.1]} />
+          <meshStandardMaterial
+            color="#DDE3EA"
+            roughness={0.86}
+            polygonOffset
+            polygonOffsetFactor={-2}
+          />
         </mesh>
       ))}
 
-      {/* ============ 4. SẢNH HỌC HSK HƯỚNG TÂY (-X) Ở NHÁNH GIỮA (z = 0, khớp C7_DOOR = 57.8, -32.8) ============ */}
+      {/* ============ 4. SẢNH PHỤ HƯỚNG TÂY (-X) Ở NHÁNH GIỮA (z = 0, khớp C7_DOOR.westPos = 57.8, -32.8) ============ */}
       <mesh position={[-size.x / 2 - 0.95, 3.65, 0]} castShadow>
         <boxGeometry args={[1.9, 0.34, 5.8]} />
         <meshStandardMaterial color="#E2E8F0" roughness={0.78} />

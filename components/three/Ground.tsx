@@ -14,7 +14,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { B1_FORECOURT_PLAZA, C1, LIBRARY, LOVE_ROAD_TREES, NGA_5_PLAZA, ROADS, TDN_SQUARE, type Vec2 } from '../../lib/campus';
+import {
+  B1_FORECOURT_PLAZA,
+  BUILDING_COLLIDERS,
+  C1,
+  CAMPUS_PARKING_LOTS,
+  LIBRARY,
+  LOVE_ROAD_TREES,
+  NGA_5_PLAZA,
+  ROADS,
+  TDN_SQUARE,
+  type Vec2,
+} from '../../lib/campus';
 import { createAutumnLeafAssets } from '../../features/campus/atmosphere/CampusAtmosphereFX';
 import {
   createSeededRandom,
@@ -29,14 +40,14 @@ import {
 } from './materials';
 
 const GRASS_COLOR = '#86A665';
-const CURB_COLOR = '#D6D3C9'; // bó vỉa bê tông dọc hai mép đường
+const CURB_COLOR = '#C9C6BD'; // bó vỉa bê tông mảnh dọc hai mép đường
 const C1_PLAZA_COLOR = '#DAD6CE'; // quảng trường C1, đá rửa xám sáng
 const LIB_PLAZA_COLOR = '#B86B52'; // sân thư viện, gạch đỏ-nâu đất nung (nhân với map)
 
 const GRASS_Y = 0;
 const PLAZA_Y = 0.015;
 const ROAD_Y = 0.02;
-const JOINT_Y = 0.0215;
+const JOINT_Y = 0.022;
 
 const GRASS_SIZE: [number, number] = [540, 540];
 const GRASS_CENTER: [number, number, number] = [36, GRASS_Y, 16];
@@ -50,6 +61,121 @@ const PLAZAS: Array<{ rect: Rect; color: string; kind: 'c1' | 'lib' | 'tdn' }> =
   { rect: LIBRARY.plaza, color: LIB_PLAZA_COLOR, kind: 'lib' },
   { rect: B1_FORECOURT_PLAZA, color: C1_PLAZA_COLOR, kind: 'c1' },
 ];
+
+const SIDEWALK_STRIPS: ReadonlyArray<{ x: number; z: number; w: number; d: number }> = [
+  { x: -49.5, z: -11.15, w: 10.2, d: 1.4 }, // Bắc Đại lộ C1 -> Ngã 5
+  { x: -6.5, z: -11.15, w: 50.0, d: 1.4 },  // Bắc Đại lộ Đường Tình Yêu (Ngã 5 -> đường x=24)
+  { x: 40.5, z: -11.15, w: 26.0, d: 1.4 },  // Bắc Đại lộ đoạn Thư viện -> C7/D3
+  { x: -62.0, z: -0.9, w: 34.0, d: 1.35 },  // Nam Đại lộ đối diện C9/C1
+  { x: -5.5, z: -0.9, w: 52.0, d: 1.35 },   // Nam Đại lộ trước dải xanh Hồ Tiền
+  { x: 40.5, z: -0.9, w: 25.0, d: 1.35 },   // Nam Đại lộ phía Bắc sân Thư viện
+];
+
+const SUB_WALKWAYS: ReadonlyArray<{ cx: number; cz: number; w: number; d: number; rotY: number }> = [
+  { cx: 95.5, cz: -18, w: 6.0, d: 112, rotY: 0 }, // Phố Trần Đại Nghĩa phía ngoài cổng trường
+  { cx: 128.0, cz: -40, w: 5.2, d: 66, rotY: 0 }, // Phố Tạ Quang Bửu đoạn Bắc (chia đôi Khu KTX Bách Khoa)
+  { cx: 134.5, cz: 15, w: 4.8, d: 42, rotY: 0 }, // Phố Tạ Quang Bửu đoạn Nam (giữa Nhà B1 SoICT & Cụm A1-5/A17)
+  { cx: 120, cz: 58, w: 58, d: 5.2, rotY: 0.62 }, // Phố Lê Thanh Nghị chéo Tây-Nam → Đông-Bắc tách Khu Thể thao & SVĐ
+  { cx: -61.5, cz: -17, w: 7.0, d: 9.0, rotY: 0 }, // Khoảng sân lát đá nối trục C1 vào chân cầu thang đỏ tòa C9
+];
+
+const TIEN_LAKE_PAVED_ZONE: Rect = { minX: -28.1, maxX: 25.5, minZ: 0.6, maxZ: 94.4 };
+
+function distPointToSegment(px: number, pz: number, a: Vec2, b: Vec2): number {
+  const vx = b.x - a.x;
+  const vz = b.z - a.z;
+  const lenSq = vx * vx + vz * vz;
+  if (lenSq < 1e-12) return Math.hypot(px - a.x, pz - a.z);
+  const t = Math.max(0, Math.min(1, ((px - a.x) * vx + (pz - a.z) * vz) / lenSq));
+  return Math.hypot(px - (a.x + vx * t), pz - (a.z + vz * t));
+}
+
+function pointInRotatedRect(
+  x: number,
+  z: number,
+  cx: number,
+  cz: number,
+  w: number,
+  d: number,
+  rotY: number,
+  margin: number,
+): boolean {
+  const dx = x - cx;
+  const dz = z - cz;
+  if (rotY === 0) {
+    return Math.abs(dx) <= w / 2 + margin && Math.abs(dz) <= d / 2 + margin;
+  }
+  const cos = Math.cos(rotY);
+  const sin = Math.sin(rotY);
+  const lx = dx * cos - dz * sin;
+  const lz = dx * sin + dz * cos;
+  return Math.abs(lx) <= w / 2 + margin && Math.abs(lz) <= d / 2 + margin;
+}
+
+/**
+ * Kiểm tra xem một tọa độ `(x, z)` trên mặt đất có nằm trên bề mặt bê tông,
+ * đường nhựa, vỉa hè gạch block, quảng trường, lối dạo hay nền công trình hay không
+ * để loại trừ tuyệt đối cỏ/hoa dại mọc đè lên lối đi.
+ */
+export function isPointOnPavedOrBuiltSurface(x: number, z: number): boolean {
+  for (const road of ROADS) {
+    const half = road.width / 2 + 0.52;
+    for (let i = 0; i < road.points.length - 1; i++) {
+      if (distPointToSegment(x, z, road.points[i], road.points[i + 1]) <= half) {
+        return true;
+      }
+    }
+  }
+  for (const sw of SIDEWALK_STRIPS) {
+    if (Math.abs(x - sw.x) <= sw.w / 2 + 0.42 && Math.abs(z - sw.z) <= sw.d / 2 + 0.42) {
+      return true;
+    }
+  }
+  for (const p of SUB_WALKWAYS) {
+    if (pointInRotatedRect(x, z, p.cx, p.cz, p.w, p.d, p.rotY, 0.42)) {
+      return true;
+    }
+  }
+  for (const pl of PLAZAS) {
+    if (
+      x >= pl.rect.minX - 0.42 &&
+      x <= pl.rect.maxX + 0.42 &&
+      z >= pl.rect.minZ - 0.42 &&
+      z <= pl.rect.maxZ + 0.42
+    ) {
+      return true;
+    }
+  }
+  if (
+    x >= TIEN_LAKE_PAVED_ZONE.minX &&
+    x <= TIEN_LAKE_PAVED_ZONE.maxX &&
+    z >= TIEN_LAKE_PAVED_ZONE.minZ &&
+    z <= TIEN_LAKE_PAVED_ZONE.maxZ
+  ) {
+    return true;
+  }
+  for (const col of BUILDING_COLLIDERS) {
+    if (
+      x >= col.box.minX - 0.38 &&
+      x <= col.box.maxX + 0.38 &&
+      z >= col.box.minZ - 0.38 &&
+      z <= col.box.maxZ + 0.38
+    ) {
+      return true;
+    }
+  }
+  for (const lot of Object.values(CAMPUS_PARKING_LOTS)) {
+    if (
+      x >= lot.box.minX - 0.38 &&
+      x <= lot.box.maxX + 0.38 &&
+      z >= lot.box.minZ - 0.38 &&
+      z <= lot.box.maxZ + 0.38
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 const C1_JOINT_COLOR = '#B2ADA0';
 const C1_JOINT_Y = 0.025;
@@ -168,11 +294,11 @@ function clipOutsideRect(p0: Vec2, p1: Vec2, rect: Rect): Array<[Vec2, Vec2]> {
   return pieces;
 }
 
-type RoadPiece = { a: Vec2; b: Vec2; width: number };
+type RoadPiece = { a: Vec2; b: Vec2; width: number; roadIndex: number };
 
 function buildRoadPieces(): RoadPiece[] {
   const pieces: RoadPiece[] = [];
-  for (const road of ROADS) {
+  ROADS.forEach((road, roadIndex) => {
     const pts = road.points;
     const w = road.width;
     for (let i = 0; i < pts.length - 1; i++) {
@@ -193,9 +319,9 @@ function buildRoadPieces(): RoadPiece[] {
       for (const plaza of PLAZAS) {
         segs = segs.flatMap(([s, e]) => clipOutsideRect(s, e, plaza.rect));
       }
-      for (const [s, e] of segs) pieces.push({ a: s, b: e, width: w });
+      for (const [s, e] of segs) pieces.push({ a: s, b: e, width: w, roadIndex });
     }
-  }
+  });
   return pieces;
 }
 
@@ -415,13 +541,15 @@ function GrassAndFlowerTufts() {
       }
     }
 
-    // 2. Quanh gốc các cây dọc Đường Tình Yêu (trên cỏ y = 0,01)
+    // 2. Quanh hàng cây Đường Tình Yêu (chỉ đặt trên thảm cỏ ngoài vỉa hè/đường đi, y = 0,01)
     for (const tree of LOVE_ROAD_TREES) {
+      const turfZ = tree.z < -6 ? -12.95 : 0.75;
       for (let i = 0; i < 20; i++) {
         const ang = rnd() * Math.PI * 2;
-        const r = 0.72 + rnd() * 0.95;
+        const r = 0.35 + rnd() * 1.45;
         const x = tree.x + Math.cos(ang) * r;
-        const z = tree.z + Math.sin(ang) * r;
+        const z = turfZ + Math.sin(ang) * r;
+        if (isPointOnPavedOrBuiltSurface(x, z)) continue;
         gList.push({
           x,
           y: 0.01,
@@ -444,10 +572,11 @@ function GrassAndFlowerTufts() {
       }
     }
 
-    // 3. Dải thảm cỏ phía tây lối dạo Hồ Tiền (x = -31.2..-28.4, z = -2..78)
-    for (let i = 0; i < 145; i++) {
-      const x = -31.2 + rnd() * 2.8;
-      const z = -2 + rnd() * 80;
+    // 3. Dải thảm cỏ phía tây lối dạo Hồ Tiền (loại trừ hoàn toàn đường nhựa & vỉa hè)
+    for (let i = 0; i < 160; i++) {
+      const x = -32.2 + rnd() * 3.7;
+      const z = 1.0 + rnd() * 77;
+      if (isPointOnPavedOrBuiltSurface(x, z)) continue;
       gList.push({
         x,
         y: 0.01,
@@ -566,18 +695,18 @@ function CampusStreetscapeDetails() {
     const stripeGeo = new THREE.PlaneGeometry(1, 1);
     const zebraMat = new THREE.MeshStandardMaterial({
       map: zebraMap,
-      color: '#F1F5F9',
-      roughness: 0.78,
-      metalness: 0.02,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-    });
-    const lineMat = new THREE.MeshStandardMaterial({
-      color: '#E8ECEF',
+      color: '#E5EAEF',
       roughness: 0.82,
       metalness: 0.02,
       polygonOffset: true,
-      polygonOffsetFactor: -1,
+      polygonOffsetFactor: -2,
+    });
+    const lineMat = new THREE.MeshStandardMaterial({
+      color: '#DCE2E8',
+      roughness: 0.84,
+      metalness: 0.02,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
     });
     const drainMat = new THREE.MeshStandardMaterial({
       map: drainMap,
@@ -603,20 +732,26 @@ function CampusStreetscapeDetails() {
     [assets],
   );
 
-  // Vạch kẻ qua đường trắng ngà tại các giao lộ trọng điểm dọc ROADS
+  // Vạch kẻ qua đường trắng ngà phẳng nét tại các giao lộ trọng điểm dọc ROADS
   const crosswalkStripes = useMemo(() => {
     const list: Array<{ x: number; z: number; w: number; l: number; rotY: number }> = [];
-    const addCrosswalk = (cx: number, cz: number, roadWidth: number, orientation: 'ns' | 'ew') => {
+    const addCrosswalk = (
+      cx: number,
+      cz: number,
+      roadWidth: number,
+      orientation: 'ns' | 'ew',
+      stripeLen = 2.0,
+    ) => {
       const count = Math.max(4, Math.floor((roadWidth - 0.8) / 0.92));
       const span = (count - 1) * 0.92;
       for (let i = 0; i < count; i++) {
         const off = -span / 2 + i * 0.92;
         if (orientation === 'ew') {
           // Băng ngang qua trục Đông-Tây (các vạch xếp theo chiều Z)
-          list.push({ x: cx, z: cz + off, w: 2.35, l: 0.46, rotY: 0 });
+          list.push({ x: cx, z: cz + off, w: stripeLen, l: 0.4, rotY: 0 });
         } else {
           // Băng ngang qua trục Bắc-Nam (các vạch xếp theo chiều X)
-          list.push({ x: cx + off, z: cz, w: 0.46, l: 2.35, rotY: 0 });
+          list.push({ x: cx + off, z: cz, w: 0.4, l: stripeLen, rotY: 0 });
         }
       }
     };
@@ -631,14 +766,13 @@ function CampusStreetscapeDetails() {
     addCrosswalk(18.5, -6, 8.2, 'ew');
     addCrosswalk(29.5, -6, 8.2, 'ew');
     addCrosswalk(24, 1.5, 5.4, 'ns');
-    // 4. Lối rẽ nhánh C7 / D3 & Cổng Trần Đại Nghĩa
+    // 4. Lối rẽ nhánh C7 / D3 & Cổng Trần Đại Nghĩa (không chồng lên cụm vạch C7 & gờ vàng cổng)
     addCrosswalk(51.2, -6, 8.2, 'ew');
-    addCrosswalk(56.2, -13.5, 5.4, 'ns');
     addCrosswalk(56.2, 2.2, 5.2, 'ns');
-    addCrosswalk(91.5, -10.4, 5.0, 'ew');
-    addCrosswalk(91.5, -1.6, 5.0, 'ew');
-    // 5. Lối rẽ vào Sân trước Nhà B1 (SoICT) trên trục Phố B1 / Tạ Quang Bửu (z = -6)
-    addCrosswalk(115.5, -3.2, 5.2, 'ns');
+    addCrosswalk(93.8, -10.4, 5.0, 'ew', 1.75);
+    addCrosswalk(93.8, -1.6, 5.0, 'ew', 1.75);
+    // 5. Lối rẽ vào Sân trước Nhà B1 (SoICT) trên trục Phố B1 / Tạ Quang Bửu (trước quảng trường B1)
+    addCrosswalk(115.5, -4.1, 5.2, 'ns');
     return list;
   }, []);
 
@@ -655,7 +789,7 @@ function CampusStreetscapeDetails() {
     ];
     for (const [x0, x1, z] of ewSpans) {
       for (let x = x0 + 1.4; x <= x1 - 1.4; x += 3.8) {
-        dashes.push({ x, z, w: 1.9, l: 0.14 });
+        dashes.push({ x, z, w: 1.85, l: 0.11 });
       }
     }
     const nsSpans: Array<[number, number, number]> = [
@@ -666,7 +800,7 @@ function CampusStreetscapeDetails() {
     ];
     for (const [x, z0, z1] of nsSpans) {
       for (let z = z0 + 1.4; z <= z1 - 1.4; z += 3.8) {
-        dashes.push({ x, z, w: 0.14, l: 1.85 });
+        dashes.push({ x, z, w: 0.11, l: 1.8 });
       }
     }
     return dashes;
@@ -688,18 +822,6 @@ function CampusStreetscapeDetails() {
   }, []);
 
   // Các dải vỉa hè gạch block dọc các tuyến đường thoáng (y = 0,031)
-  const sidewalks: Array<{ x: number; z: number; w: number; d: number }> = useMemo(
-    () => [
-      { x: -49.5, z: -11.15, w: 10.2, d: 1.4 }, // Bắc Đại lộ C1 -> Ngã 5
-      { x: -6.5, z: -11.15, w: 50.0, d: 1.4 },  // Bắc Đại lộ Đường Tình Yêu (Ngã 5 -> đường x=24)
-      { x: 40.5, z: -11.15, w: 26.0, d: 1.4 },  // Bắc Đại lộ đoạn Thư viện -> C7/D3
-      { x: -62.0, z: -0.9, w: 34.0, d: 1.35 },  // Nam Đại lộ đối diện C9/C1
-      { x: -5.5, z: -0.9, w: 52.0, d: 1.35 },   // Nam Đại lộ trước dải xanh Hồ Tiền
-      { x: 40.5, z: -0.9, w: 25.0, d: 1.35 },   // Nam Đại lộ phía Bắc sân Thư viện
-    ],
-    [],
-  );
-
   useLayoutEffect(() => {
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
@@ -709,7 +831,7 @@ function CampusStreetscapeDetails() {
 
     if (crosswalkRef.current) {
       crosswalkStripes.forEach((st, idx) => {
-        pos.set(st.x, 0.026, st.z);
+        pos.set(st.x, 0.0245, st.z);
         scl.set(st.w, st.l, 1);
         m.compose(pos, q, scl);
         crosswalkRef.current!.setMatrixAt(idx, m);
@@ -719,7 +841,7 @@ function CampusStreetscapeDetails() {
 
     if (centerLineRef.current) {
       centerDashes.forEach((ds, idx) => {
-        pos.set(ds.x, 0.025, ds.z);
+        pos.set(ds.x, 0.024, ds.z);
         scl.set(ds.w, ds.l, 1);
         m.compose(pos, q, scl);
         centerLineRef.current!.setMatrixAt(idx, m);
@@ -730,7 +852,7 @@ function CampusStreetscapeDetails() {
     if (drainRef.current) {
       drains.forEach((dr, idx) => {
         qRotY.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, dr.rotY));
-        pos.set(dr.x, 0.0245, dr.z);
+        pos.set(dr.x, 0.0235, dr.z);
         scl.set(0.68, 0.42, 1);
         m.compose(pos, qRotY, scl);
         drainRef.current!.setMatrixAt(idx, m);
@@ -756,7 +878,7 @@ function CampusStreetscapeDetails() {
         args={[assets.stripeGeo, assets.drainMat, drains.length]}
         receiveShadow
       />
-      {sidewalks.map((sw, idx) => (
+      {SIDEWALK_STRIPS.map((sw, idx) => (
         <mesh
           key={`sidewalk-strip-${idx}`}
           rotation-x={-Math.PI / 2}
@@ -852,19 +974,90 @@ export default function Ground() {
 
   const curbTransforms = useMemo(() => {
     const out: Array<{ x: number; z: number; rotY: number; len: number }> = [];
+    const isCurbPointBlocked = (px: number, pz: number, ownRoadIdx: number): boolean => {
+      for (let rIdx = 0; rIdx < ROADS.length; rIdx++) {
+        if (rIdx === ownRoadIdx) continue;
+        const r = ROADS[rIdx];
+        const half = r.width / 2 + 0.45;
+        for (let k = 0; k < r.points.length - 1; k++) {
+          if (distPointToSegment(px, pz, r.points[k], r.points[k + 1]) <= half) {
+            return true;
+          }
+        }
+      }
+      for (const d of JOINT_DISCS) {
+        if (Math.hypot(px - d.center.x, pz - d.center.z) <= d.radius * 0.85) {
+          return true;
+        }
+      }
+      for (const pl of PLAZAS) {
+        if (
+          px >= pl.rect.minX - 0.3 &&
+          px <= pl.rect.maxX + 0.3 &&
+          pz >= pl.rect.minZ - 0.3 &&
+          pz <= pl.rect.maxZ + 0.3
+        ) {
+          return true;
+        }
+      }
+      for (const sw of SUB_WALKWAYS) {
+        if (pointInRotatedRect(px, pz, sw.cx, sw.cz, sw.w, sw.d, sw.rotY, 0.25)) {
+          return true;
+        }
+      }
+      // Không vẽ bó vỉa xám trùng cạnh trong đã có bó vỉa trắng của dải phân cách Cổng TĐN
+      if (px >= 56.0 && px <= 95.0 && pz >= -8.3 && pz <= -3.7) {
+        return true;
+      }
+      // Chừa mặt tiền bậc tam cấp Đại sảnh Nam Tòa C7
+      if (px >= 68.8 && px <= 78.2 && pz >= -13.4 && pz <= -12.7) {
+        return true;
+      }
+      return false;
+    };
+
+    const step = 0.25;
     for (const seg of ROAD_PIECES) {
       const dx = seg.b.x - seg.a.x;
       const dz = seg.b.z - seg.a.z;
       const len = Math.hypot(dx, dz);
-      if (len <= 2.5) continue;
-      const cx = (seg.a.x + seg.b.x) / 2;
-      const cz = (seg.a.z + seg.b.z) / 2;
+      // Bỏ qua các đoạn chéo ngắn nối nút giao để tránh thanh bó vỉa nhô vào lòng giao lộ
+      if (len < 4.5) continue;
+      const ux = dx / len;
+      const uz = dz / len;
       const rotY = Math.atan2(-dz, dx);
-      const curbOffset = seg.width / 2 + 0.12;
+      const curbOffset = seg.width / 2 + 0.1;
       const nx = -dz / len;
       const nz = dx / len;
-      out.push({ x: cx - nx * curbOffset, z: cz - nz * curbOffset, rotY, len: len - 0.4 });
-      out.push({ x: cx + nx * curbOffset, z: cz + nz * curbOffset, rotY, len: len - 0.4 });
+
+      for (const side of [-1, 1] as const) {
+        const ox = seg.a.x + side * nx * curbOffset;
+        const oz = seg.a.z + side * nz * curbOffset;
+        let runStart: number | null = null;
+        for (let d = 0.2; d <= len - 0.2 + 1e-6; d += step) {
+          const distAlong = Math.min(d, len - 0.2);
+          const px = ox + ux * distAlong;
+          const pz = oz + uz * distAlong;
+          const blocked = isCurbPointBlocked(px, pz, seg.roadIndex);
+          if (!blocked && runStart === null) {
+            runStart = distAlong;
+          } else if (blocked && runStart !== null) {
+            const segLen = distAlong - step - runStart;
+            if (segLen >= 1.5) {
+              const mid = runStart + segLen / 2;
+              out.push({ x: ox + ux * mid, z: oz + uz * mid, rotY, len: segLen });
+            }
+            runStart = null;
+          }
+        }
+        if (runStart !== null) {
+          const segLen = len - 0.2 - runStart;
+          if (segLen >= 1.5) {
+            const mid = runStart + segLen / 2;
+            out.push({ x: ox + ux * mid, z: oz + uz * mid, rotY, len: segLen });
+          }
+        }
+      }
     }
     return out;
   }, []);
@@ -878,10 +1071,10 @@ export default function Ground() {
 
     if (curbInstRef.current) {
       curbTransforms.forEach((cb, idx) => {
-        pos.set(cb.x, ROAD_Y + 0.025, cb.z);
+        pos.set(cb.x, ROAD_Y + 0.008, cb.z);
         eul.set(0, cb.rotY, 0);
         q.setFromEuler(eul);
-        scl.set(cb.len, 0.07, 0.22);
+        scl.set(cb.len, 0.024, 0.14);
         m.compose(pos, q, scl);
         curbInstRef.current!.setMatrixAt(idx, m);
       });
@@ -954,13 +1147,7 @@ export default function Ground() {
       <CampusStreetscapeDetails />
 
       {/* Các tuyến phố bên ngoài rìa Đông (Trần Đại Nghĩa, Tạ Quang Bửu, Lê Thanh Nghị) và sân trước cầu thang C9 (y = 0,012). */}
-      {[
-        { cx: 95.5, cz: -18, w: 6.0, d: 112, rotY: 0 }, // Phố Trần Đại Nghĩa phía ngoài cổng trường
-        { cx: 128.0, cz: -40, w: 5.2, d: 66, rotY: 0 }, // Phố Tạ Quang Bửu đoạn Bắc (chia đôi Khu KTX Bách Khoa)
-        { cx: 134.5, cz: 15, w: 4.8, d: 42, rotY: 0 }, // Phố Tạ Quang Bửu đoạn Nam (giữa Nhà B1 SoICT & Cụm A1-5/A17)
-        { cx: 120, cz: 58, w: 58, d: 5.2, rotY: 0.62 }, // Phố Lê Thanh Nghị chéo Tây-Nam → Đông-Bắc tách Khu Thể thao & SVĐ
-        { cx: -61.5, cz: -17, w: 7.0, d: 9.0, rotY: 0 }, // Khoảng sân lát đá nối trục C1 vào chân cầu thang đỏ tòa C9
-      ].map((p, idx) => (
+      {SUB_WALKWAYS.map((p, idx) => (
         <group key={`sub-walkway-${idx}`} position={[p.cx, 0.012, p.cz]} rotation-y={p.rotY}>
           <mesh rotation-x={-Math.PI / 2} receiveShadow>
             <planeGeometry args={[p.w, p.d]} />
@@ -1041,7 +1228,7 @@ export default function Ground() {
         </group>
       ))}
 
-      {/* Đường đi dọc ROADS: mặt nhựa đường PBR. */}
+      {/* Đường đi dọc ROADS: mặt nhựa đường PBR (chênh 0,0002 m giữa các nhánh giao nhau chống z-fighting). */}
       {ROAD_PIECES.map((seg, i) => {
         const dx = seg.b.x - seg.a.x;
         const dz = seg.b.z - seg.a.z;
@@ -1049,7 +1236,7 @@ export default function Ground() {
         return (
           <mesh
             key={`road-${i}`}
-            position={[(seg.a.x + seg.b.x) / 2, ROAD_Y, (seg.a.z + seg.b.z) / 2]}
+            position={[(seg.a.x + seg.b.x) / 2, ROAD_Y + (i % 6) * 0.0002, (seg.a.z + seg.b.z) / 2]}
             rotation={[-Math.PI / 2, 0, Math.atan2(-dz, dx)]}
             receiveShadow
           >

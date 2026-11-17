@@ -5,8 +5,9 @@
 // khuỷu/gối riêng; chỉ khác variant/màu/phụ kiện — không còn 2 bộ hình học
 // lệch nhau như trước.
 //
-//   Minh — hoodie XANH NAVY + mũ lưỡi trai đỏ + quần kaki + ba lô xám
-//     (khác hẳn người chơi polo đỏ + ba lô đen, không mũ).
+//   Minh (Đợt 2 yeucau6) — đứng đón tân sinh viên 8,4 m phía trong Cổng
+//     Trần Đại Nghĩa, mặc áo phông đỏ HUST in chữ trắng trước ngực + dây đeo
+//     thẻ sinh viên + quần tối + ba lô, xoay mặt hướng về phía người chơi.
 //   Cô giáo — sơ mi trắng (cổ bẻ + 4 khuy + túi ngực + bút + thắt lưng),
 //     quần tối, giày da tối, tóc búi + trâm, kính gọng tròn.
 // Tư thế tĩnh: tay hơi gập khuỷu, không song song cứng; thở nhẹ qua bodyRef.
@@ -20,6 +21,7 @@ import { Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import { HumanFigure, type FigureJoints } from './StudentAvatar';
 import { CANVAS_VN_FONT, wrapVietnameseCanvasContext } from './TextPlate';
+import { MINH_POS } from '../../features/campus/interaction/bridge';
 
 function useNameTexture(name: string): THREE.CanvasTexture {
   const texture = useMemo(() => {
@@ -118,10 +120,13 @@ function NameLabel({ name, y = 1.95 }: { name: string; y?: number }) {
   );
 }
 
-/** NPC bạn đồng hành "Minh" — hoodie xanh navy + mũ lưỡi trai đỏ + quần kaki
- *  + ba lô xám. Khác hẳn người chơi (polo đỏ Bách khoa, ba lô đen, không
- *  mũ) để không đọc thành bản sao từ sau hay từ xa. */
-export function MinhNpc({ position = [-72, -8.5] as [number, number], rotationY = Math.PI / 2 }: {
+/** NPC bạn đồng hành "Minh" — đứng đón tân sinh viên ~8 m phía trong Cổng
+ *  Trần Đại Nghĩa, mặc áo phông đỏ HUST in chữ trắng trước ngực + dây đeo thẻ SV
+ *  + quần tối + ba lô, không đội mũ. */
+export function MinhNpc({
+  position = [MINH_POS.x, MINH_POS.z] as [number, number],
+  rotationY = 0.32,
+}: {
   position?: [number, number];
   rotationY?: number;
 }) {
@@ -131,16 +136,16 @@ export function MinhNpc({ position = [-72, -8.5] as [number, number], rotationY 
         <LayeredFigure>
           {(joints) => (
             <HumanFigure
-              variant="hoodie"
-              shirt="#1F3A5F"
-              shirtDark="#152A45"
-              pants="#8A7B5C"
-              shoe="#33383D"
-              shoeSole="#1A1A1A"
+              variant="tshirt"
+              shirt="#DA1E26"
+              shirtDark="#991B1B"
+              pants="#1E293B"
+              shoe="#F5F5F5"
+              shoeSole="#222222"
               hairStyle="swept"
+              lanyard
               backpack
-              backpackColors={{ pack: '#5A5A52', packLight: '#6E6E66', packZip: '#3A3A36' }}
-              cap="#D22630"
+              backpackColors={{ pack: '#334155', packLight: '#475569', packZip: '#1E293B' }}
               joints={joints}
             />
           )}

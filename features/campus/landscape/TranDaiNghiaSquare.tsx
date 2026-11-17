@@ -966,30 +966,56 @@ export function TranDaiNghiaSquare({ isNight = false }: { isNight?: boolean }) {
       </group>
 
       {/* ============ 6. ĐẠI LỘ ĐÔI 2 NHÁNH 1 CHIỀU & DẢI PHÂN CÁCH CÂY XANH BÓ VỈA TRẮNG ============ */}
-      {/* Vạch giảm tốc màu vàng qua làn đi vào ngay sau cổng & qua cả 2 làn gần điểm nhập làn */}
+      {/* Vạch giảm tốc màu vàng phẳng qua làn đi vào ngay sau cổng & qua cả 2 làn gần điểm nhập làn */}
       {[-2.2, -29.2].map((bx, bIdx) =>
         [-0.36, -0.18, 0, 0.18, 0.36].map((dx, sIdx) => (
           <group key={`tdn-speedbump-${bIdx}-${sIdx}`}>
-            <mesh rotation-x={-Math.PI / 2} position={[bx + dx, 0.026, -4.4]}>
-              <planeGeometry args={[0.09, 4.3]} />
-              <meshStandardMaterial color="#EAB308" roughness={0.82} />
+            <mesh rotation-x={-Math.PI / 2} position={[bx + dx, 0.0245, -4.4]}>
+              <planeGeometry args={[0.08, 4.1]} />
+              <meshStandardMaterial
+                color="#D9A81E"
+                roughness={0.84}
+                polygonOffset
+                polygonOffsetFactor={-2}
+              />
             </mesh>
             {bIdx === 1 && (
-              <mesh rotation-x={-Math.PI / 2} position={[bx + dx, 0.026, 4.4]}>
-                <planeGeometry args={[0.09, 4.3]} />
-                <meshStandardMaterial color="#EAB308" roughness={0.82} />
+              <mesh rotation-x={-Math.PI / 2} position={[bx + dx, 0.0245, 4.4]}>
+                <planeGeometry args={[0.08, 4.1]} />
+                <meshStandardMaterial
+                  color="#D9A81E"
+                  roughness={0.84}
+                  polygonOffset
+                  polygonOffsetFactor={-2}
+                />
               </mesh>
             )}
           </group>
         )),
       )}
 
-      {/* Vạch đứt vàng phân luồng trên nhánh đi vào (z = -10.4 -> dz = -4.4) + nắp cống gang thực tế */}
+      {/* Vạch đứt vàng phân luồng căn đúng tim làn trên nhánh đi vào (z = -10.4 -> dz = -4.4) & nhánh đi ra (dz = +4.4) + nắp cống gang thực tế */}
       {[-7.5, -11.5, -15.5, -19.5, -23.5].map((lx, idx) => (
-        <mesh key={`tdn-inbound-dash-${idx}`} rotation-x={-Math.PI / 2} position={[lx, 0.025, -4.7]}>
-          <planeGeometry args={[1.9, 0.12]} />
-          <meshStandardMaterial color="#D4AF37" roughness={0.85} />
-        </mesh>
+        <group key={`tdn-inbound-dash-${idx}`}>
+          <mesh rotation-x={-Math.PI / 2} position={[lx, 0.0245, -4.4]}>
+            <planeGeometry args={[1.85, 0.11]} />
+            <meshStandardMaterial
+              color="#D4AF37"
+              roughness={0.86}
+              polygonOffset
+              polygonOffsetFactor={-2}
+            />
+          </mesh>
+          <mesh rotation-x={-Math.PI / 2} position={[lx, 0.0245, 4.4]}>
+            <planeGeometry args={[1.85, 0.11]} />
+            <meshStandardMaterial
+              color="#D4AF37"
+              roughness={0.86}
+              polygonOffset
+              polygonOffsetFactor={-2}
+            />
+          </mesh>
+        </group>
       ))}
       {[
         { mx: -9.8, mz: -4.15 },

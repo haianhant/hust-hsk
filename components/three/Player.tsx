@@ -1451,7 +1451,7 @@ export default function Player() {
         const exitDoor =
           classroomOriginRef.current === 'c1'
             ? { x: CLASSROOM_DOOR.pos.x, z: CLASSROOM_DOOR.pos.z + 2.5 }
-            : { x: C7_DOOR.pos.x, z: C7_DOOR.pos.z + 2.2 };
+            : { x: C7_DOOR.pos.x, z: C7_DOOR.pos.z + 1.0 };
         posRef.current = resolveCollisions(exitDoor, AVATAR.radius).pos;
         playerState.pos = { ...posRef.current };
         yawRef.current = 0;
@@ -2533,7 +2533,10 @@ export default function Player() {
     groupRef.current.rotation.y = facingRef.current;
     if (nameplateGroupRef.current) {
       nameplateGroupRef.current.visible =
-        !hideLocalForPov && !playerState.photoMode && viewModeRef.current !== 'top';
+        !hideLocalForPov &&
+        !playerState.photoMode &&
+        !playerState.inClassroom &&
+        viewModeRef.current !== 'top';
       nameplateGroupRef.current.position.set(
         posRef.current.x,
         (ridingRef.current ? 2.05 : isLyingNow ? 1.15 : seatedNow ? 1.62 : 1.95) + groundY + smoothEmoteJumpY * 0.5,

@@ -150,6 +150,7 @@ export interface LocationVisualMeta {
   diceLabel: string;
   accentHex: string;
   bgGradient: string;
+  actionIcon: string;
   actionTitle: string;
   actionDesc: string;
   badgeText: string;
@@ -164,6 +165,7 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '2–3',
     accentHex: '#10b981',
     bgGradient: 'from-emerald-950/90 via-slate-900/95 to-slate-950',
+    actionIcon: '🔍',
     actionTitle: 'Rút Thẻ Khám Phá',
     actionDesc: 'Rút 1 Thẻ Khám Phá (đưa kín 1-đối-1)',
     badgeText: 'Khám Phá',
@@ -176,6 +178,7 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '4–5',
     accentHex: '#f59e0b',
     bgGradient: 'from-amber-950/85 via-slate-900/95 to-slate-950',
+    actionIcon: '🃏',
     actionTitle: 'Tự Chọn 1 Chồng Bài',
     actionDesc: 'Chọn rút 1 thẻ Khám Phá, Cung Ứng hoặc Đột Kích',
     badgeText: 'Tự Chọn',
@@ -188,6 +191,7 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '6',
     accentHex: '#06b6d4',
     bgGradient: 'from-cyan-950/90 via-slate-900/95 to-slate-950',
+    actionIcon: '🛡️',
     actionTitle: 'Rút Thẻ Cung Ứng',
     actionDesc: 'Rút 1 Thẻ Cung Ứng (Trang bị / Hồi sức)',
     badgeText: 'Cung Ứng',
@@ -200,6 +204,7 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '8',
     accentHex: '#f43f5e',
     bgGradient: 'from-rose-950/85 via-slate-900/95 to-slate-950',
+    actionIcon: '⚡',
     actionTitle: 'Rút Thẻ Đột Kích',
     actionDesc: 'Rút 1 Thẻ Đột Kích (Vũ khí / Sự kiện)',
     badgeText: 'Đột Kích',
@@ -212,9 +217,10 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '9',
     accentHex: '#8b5cf6',
     bgGradient: 'from-violet-950/85 via-slate-900/95 to-slate-950',
+    actionIcon: '💥',
     actionTitle: 'Gây 2 ST hoặc Hồi 1 Máu',
     actionDesc: 'Chọn 1 người bất kỳ: Gây 2 sát thương HOẶC Hồi 1 thương tích',
-    badgeText: 'Bẫy / Sơ Cứu',
+    badgeText: '2 ST / Hồi 1',
   },
   court: {
     name: 'Sân Bóng Rổ Đêm',
@@ -224,6 +230,7 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '10',
     accentHex: '#38bdf8',
     bgGradient: 'from-sky-950/90 via-slate-900/95 to-slate-950',
+    actionIcon: '🧤',
     actionTitle: 'Cướp 1 Trang Bị',
     actionDesc: 'Lấy 1 Trang bị đang đeo từ đối thủ bất kỳ',
     badgeText: 'Cướp Đồ',
@@ -655,21 +662,25 @@ export const PlayerPawnToken = React.memo(function PlayerPawnToken({
   revealedRoleId?: BoardGameRoleId | null;
   compact?: boolean;
   elevated?: boolean;
-  size?: 'xs' | 'sm' | 'md';
+  size?: '2xs' | 'xs' | 'sm' | 'md';
 }) {
   const ringHex = SEAT_RING_PALETTE[seatIndex % SEAT_RING_PALETTE.length];
   const initial = derivePawnLabel(displayName, seatIndex);
   const resolvedSize = size ?? (compact ? 'sm' : 'md');
   const sizeClass =
-    resolvedSize === 'xs'
-      ? 'w-7 h-7 text-[10px]'
-      : resolvedSize === 'sm'
-        ? 'w-8 h-8 text-[11px]'
-        : 'w-10 h-10 text-xs';
+    resolvedSize === '2xs'
+      ? 'w-5 h-5 text-[10px]'
+      : resolvedSize === 'xs'
+        ? 'w-7 h-7 text-[10px]'
+        : resolvedSize === 'sm'
+          ? 'w-8 h-8 text-[11px]'
+          : 'w-10 h-10 text-xs';
   const dotClass =
-    resolvedSize === 'xs'
-      ? 'w-2.5 h-2.5 -bottom-0.5 -right-0.5 border'
-      : 'w-3.5 h-3.5 -bottom-1 -right-1 border-2';
+    resolvedSize === '2xs'
+      ? 'w-2 h-2 -bottom-0.5 -right-0.5 border'
+      : resolvedSize === 'xs'
+        ? 'w-2.5 h-2.5 -bottom-0.5 -right-0.5 border'
+        : 'w-3.5 h-3.5 -bottom-1 -right-1 border-2';
   const factionBg =
     revealedFaction === 'lantern-guard'
       ? 'bg-emerald-700'
@@ -691,7 +702,13 @@ export const PlayerPawnToken = React.memo(function PlayerPawnToken({
       }}
       className={`relative shrink-0 rounded-full border-2 ${sizeClass} ${factionBg} ${
         !alive ? 'opacity-50 grayscale' : ''
-      } ${isActive ? 'ring-2 ring-amber-300 ring-offset-2 ring-offset-slate-950 scale-105' : ''} flex items-center justify-center font-black text-white select-none transition-transform`}
+      } ${
+        isActive
+          ? resolvedSize === '2xs'
+            ? 'ring-1 ring-amber-300 ring-offset-1 ring-offset-slate-950'
+            : 'ring-2 ring-amber-300 ring-offset-2 ring-offset-slate-950 scale-105'
+          : ''
+      } flex items-center justify-center font-black text-white select-none transition-transform`}
       title={displayName}
     >
       {elevated && (

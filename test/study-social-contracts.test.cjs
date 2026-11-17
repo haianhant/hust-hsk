@@ -1937,6 +1937,66 @@ test('Cloudflare Durable Object SQLite Study Hours Leaderboard — schema, anti-
   assert.equal(localStats.completedBlocks, 1);
 });
 
+test('yeucau6 Mục 5 — MultiplayerClient reuses pre-warmed OPEN/CONNECTING sockets without stalling and recovers after CONNECT_TIMEOUT_MS', () => {
+  // 1. Socket already OPEN & online -> re-calling connect() reuses socket & syncs appearance immediately
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('rt-0123456789abcdef0123456789abcdef', 'Nguyễn Văn A', '20226001', {
+      gender: 'male',
+      outfit: 'windbreaker-hust',
+    });
+    assert.equal(h.sockets.length, 1);
+    const ws1 = h.sockets[0];
+    assert.equal(h.client.getSnapshot().status, 'connecting');
+
+    // Second connect while CONNECTING updates pending appearance without spawning another socket
+    h.client.connect('rt-0123456789abcdef0123456789abcdef', 'Nguyễn Văn B', '20226002', {
+      gender: 'male',
+      outfit: 'polo-red',
+    });
+    assert.equal(h.sockets.length, 1, 'CONNECTING socket must be reused during pre-warm');
+
+    ws1.serverOpen('pub-a');
+    assert.equal(h.client.getSnapshot().status, 'online');
+    const joinMsg = ws1.sent.find((m) => m.type === 'join');
+    assert.equal(joinMsg?.name, 'Nguyễn Văn B');
+    assert.equal(joinMsg?.outfit, 'polo-red');
+
+    // Re-calling connect when already OPEN & online keeps socket open & sends appearance delta
+    ws1.sent.length = 0;
+    h.client.connect('rt-0123456789abcdef0123456789abcdef', 'Nguyễn Văn C', '20226003', {
+      gender: 'female',
+      outfit: 'sweater-cream',
+    });
+    assert.equal(h.sockets.length, 1, 'OPEN online socket must not be torn down');
+    assert.equal(h.client.getSnapshot().status, 'online');
+    const appMsg = ws1.sent.find((m) => m.type === 'appearance');
+    assert.ok(appMsg, 'Updating profile on already-online socket must send appearance packet');
+    assert.equal(appMsg.name, 'Nguyễn Văn C');
+    assert.equal(appMsg.outfit, 'sweater-cream');
+  }
+
+  // 2. Stalled CONNECTING socket closes & retries after CONNECT_TIMEOUT_MS (4500ms) + RECONNECT_BASE_MS (600ms)
+  {
+    const h = createTestMultiplayerHarness();
+    h.client.connect('rt-fedcba9876543210fedcba9876543210', 'Sinh viên Trễ Mạng', '20226099');
+    assert.equal(h.sockets.length, 1);
+    assert.equal(h.client.getSnapshot().status, 'connecting');
+
+    // Advance past 4500ms connect timeout without welcome
+    h.advanceTime(4600);
+    assert.equal(h.sockets[0].readyState, 3, 'Hung CONNECTING socket must be closed after timeout');
+    assert.equal(h.client.getSnapshot().status, 'offline');
+
+    // Advance past initial backoff (600ms) -> new retry socket opened automatically
+    h.advanceTime(700);
+    assert.equal(h.sockets.length, 2, 'Client must schedule and open a fresh retry socket');
+    assert.equal(h.client.getSnapshot().status, 'connecting');
+    h.sockets[1].serverOpen('pub-retry');
+    assert.equal(h.client.getSnapshot().status, 'online');
+  }
+});
+
 
 
 

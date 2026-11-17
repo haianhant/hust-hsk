@@ -49,7 +49,7 @@ declare global {
   }
 }
 
-const BALL_RADIUS = 0.22;
+const BALL_RADIUS = CAMPUS_FOOTBALL_PITCH.ballRadius;
 const CONFETTI_COUNT = 36;
 const CONFETTI_COLORS = ['#EF4444', '#FACC15', '#22C55E', '#38BDF8', '#F97316'] as const;
 
@@ -1378,7 +1378,7 @@ export default function CampusInteractiveLife({ timeOfDay }: { timeOfDay: TimeOf
         position={[CAMPUS_FOOTBALL_PITCH.center.x, 0.032, CAMPUS_FOOTBALL_PITCH.center.z]}
         rotation-x={-Math.PI / 2}
       >
-        <circleGeometry args={[BALL_RADIUS * 1.1, 16]} />
+        <circleGeometry args={[BALL_RADIUS * 1.18, 16]} />
         <meshBasicMaterial color="#0F172A" transparent opacity={0.34} depthWrite={false} />
       </mesh>
 

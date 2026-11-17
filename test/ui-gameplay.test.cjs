@@ -1003,7 +1003,7 @@ test('HUSTVerse Pluggable Modes — gameModes storage, channel formatting & hskM
   );
   // Near C7 check-in pedestal: pure campus check-in label when hskMode=false
   assert.deepEqual(
-    findNearestInteractable({ ...baseInput, pos: { x: 57.6, z: -27.2 }, hskMode: false }),
+    findNearestInteractable({ ...baseInput, pos: { x: 67.6, z: -12.2 }, hskMode: false }),
     {
       id: 'checkin:c7',
       label: 'E — Khám phá & Check-in Tòa C7',
@@ -1210,6 +1210,39 @@ test('BoardGame Full Asset Library — 10 Roles, 40 Distinct Cards (48 Copies), 
     assertValidWebpAsset(MIDNIGHT_LOCATION_ART[loc.id], `loc:${loc.id}`);
     assert.ok(MIDNIGHT_LOCATION_AMBIENCE[loc.id], `Missing ambience config for ${loc.id}`);
   }
+});
+
+test('yeucau6 Đợt 2 — First-time Welcome Intro persistence & Mobile Renderer DPR clamp', () => {
+  const {
+    CAMPUS_WELCOME_INTRO_STORAGE_KEY,
+    CAMPUS_WELCOME_STEPS,
+    hasCompletedCampusIntro,
+    markCampusIntroCompleted,
+  } = require('../features/campus/ui/welcome-intro-state.ts');
+  const { computeTargetRendererDpr } = require('../lib/playerState.ts');
+
+  assert.equal(CAMPUS_WELCOME_STEPS.length, 3);
+
+  const mem = new Map();
+  const fakeStorage = {
+    getItem(k) {
+      return mem.has(k) ? mem.get(k) : null;
+    },
+    setItem(k, v) {
+      mem.set(k, String(v));
+    },
+  };
+
+  assert.equal(hasCompletedCampusIntro(fakeStorage), false);
+  markCampusIntroCompleted(fakeStorage);
+  assert.equal(mem.get(CAMPUS_WELCOME_INTRO_STORAGE_KEY), '1');
+  assert.equal(hasCompletedCampusIntro(fakeStorage), true);
+
+  assert.equal(computeTargetRendererDpr(1, false), 1);
+  assert.equal(computeTargetRendererDpr(2, false), 2);
+  assert.equal(computeTargetRendererDpr(3, false), 2);
+  assert.equal(computeTargetRendererDpr(0.5, false), 1);
+  assert.equal(computeTargetRendererDpr(3, true), 1);
 });
 
 

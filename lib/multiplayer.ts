@@ -195,9 +195,10 @@ const DEFAULT_WS_URL =
   process.env.NEXT_PUBLIC_HUST_MULTIPLAYER_WS_URL || TRUSTED_PROD_WS_URL;
 
 const HEARTBEAT_MS = 30000;
-const RECONNECT_BASE_MS = 1000;
+const RECONNECT_BASE_MS = 600;
 const RECONNECT_MAX_MS = 15000;
 const MAX_RECONNECTS = 10;
+export const CONNECT_TIMEOUT_MS = 4500;
 export const SEAT_CLAIM_TIMEOUT_MS = 4000;
 const MAX_TERMINATED_REQUEST_HISTORY = 64;
 
@@ -462,6 +463,7 @@ export interface MultiplayerClientOptions {
   clearTimeoutFn?: (id: ReturnType<typeof setTimeout>) => void;
   nowFn?: () => number;
   claimTimeoutMs?: number;
+  connectTimeoutMs?: number;
   resolveUrlFn?: () => ResolveWsUrlResult;
 }
 
@@ -487,7 +489,9 @@ export class MultiplayerClient {
   private appearance: RemoteAppearance = {};
   private reconnects = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private activeWsUrl: string | null = null;
   private intentionalClose = false;
   private listeners = new Set<Listener>();
 
@@ -540,6 +544,7 @@ export class MultiplayerClient {
   private readonly clearTimeoutFn: (id: ReturnType<typeof setTimeout>) => void;
   private readonly nowFn: () => number;
   private readonly claimTimeoutMs: number;
+  private readonly connectTimeoutMs: number;
   private readonly resolveUrlFn: () => ResolveWsUrlResult;
 
   constructor(options?: MultiplayerClientOptions) {
@@ -550,6 +555,7 @@ export class MultiplayerClient {
       options?.clearTimeoutFn ?? ((id) => clearTimeout(id));
     this.nowFn = options?.nowFn ?? (() => Date.now());
     this.claimTimeoutMs = options?.claimTimeoutMs ?? SEAT_CLAIM_TIMEOUT_MS;
+    this.connectTimeoutMs = options?.connectTimeoutMs ?? CONNECT_TIMEOUT_MS;
     this.resolveUrlFn = options?.resolveUrlFn ?? (() => resolveWsUrl());
   }
 
@@ -836,6 +842,13 @@ export class MultiplayerClient {
     return `${prefix}-${sid}-${this.nowFn()}-${this.reqCounter}`;
   }
 
+  private clearConnectTimer() {
+    if (this.connectTimer) {
+      this.clearTimeoutFn(this.connectTimer);
+      this.connectTimer = null;
+    }
+  }
+
   connect(
     sessionId: string,
     name: string,
@@ -845,13 +858,51 @@ export class MultiplayerClient {
   ) {
     const cleanToken = sanitizeReconnectToken(reconnectToken);
     const cleanSessionId = sanitizeReconnectToken(sessionId);
-    this.reconnectToken = cleanToken ?? cleanSessionId ?? sessionId;
-    this.sessionId =
+    const nextReconnectToken = cleanToken ?? cleanSessionId ?? sessionId;
+    const nextSessionId =
       cleanToken && cleanSessionId
         ? cleanSessionId
         : cleanSessionId
           ? derivePublicPlayerId(cleanSessionId)
           : sessionId;
+
+    const resolved = this.resolveUrlFn();
+    if (
+      !this.intentionalClose &&
+      this.ws &&
+      resolved.ok &&
+      resolved.url === this.activeWsUrl &&
+      nextSessionId === this.sessionId &&
+      nextReconnectToken === this.reconnectToken
+    ) {
+      const rs = this.ws.readyState;
+      if (rs === 1 /* WebSocket.OPEN */ && this.status === 'online' && this.selfId) {
+        const changed =
+          this.name !== name ||
+          this.mssv !== mssv ||
+          JSON.stringify(this.appearance) !== JSON.stringify(appearance);
+        this.error = null;
+        if (changed) {
+          this.sendAppearance(name, mssv, appearance);
+        }
+        this.emit();
+        return;
+      }
+      if (rs === 0 /* WebSocket.CONNECTING */) {
+        this.name = name;
+        this.mssv = mssv;
+        this.appearance = { ...appearance };
+        this.error = null;
+        return;
+      }
+    }
+
+    if (this.reconnectTimer) {
+      this.clearTimeoutFn(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectToken = nextReconnectToken;
+    this.sessionId = nextSessionId;
     this.name = name;
     this.mssv = mssv;
     this.appearance = { ...appearance };
@@ -1831,6 +1882,8 @@ export class MultiplayerClient {
   disconnect() {
     this.intentionalClose = true;
     this.connectionGeneration += 1;
+    this.clearConnectTimer();
+    this.activeWsUrl = null;
     if (this.reconnectTimer) {
       this.clearTimeoutFn(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -1979,6 +2032,7 @@ export class MultiplayerClient {
   }
 
   private openSocket() {
+    this.clearConnectTimer();
     if (this.ws) {
       const prevWs = this.ws;
       this.ws = null;
@@ -1993,11 +2047,13 @@ export class MultiplayerClient {
 
     const resolved = this.resolveUrlFn();
     if (!resolved.ok) {
+      this.activeWsUrl = null;
       this.clearLiveStudyRoomState('offline');
       this.setStatus('offline', resolved.reason || 'Địa chỉ máy chủ không hợp lệ.');
       return;
     }
 
+    this.activeWsUrl = resolved.url;
     this.setStatus('connecting');
     let ws: WebSocket;
     try {
@@ -2007,6 +2063,31 @@ export class MultiplayerClient {
       return;
     }
     this.ws = ws;
+
+    const connectTimeoutTimer = this.setTimeoutFn(() => {
+      this.connectTimer = null;
+      if (
+        this.intentionalClose ||
+        this.ws !== ws ||
+        this.connectionGeneration !== socketGen ||
+        this.status !== 'connecting'
+      ) {
+        return;
+      }
+      this.connectionGeneration += 1;
+      this.ws = null;
+      this.stopHeartbeat();
+      try {
+        ws.close();
+      } catch {
+        // ignore
+      }
+      this.clearLiveStudyRoomState('offline');
+      this.setStatus('offline', 'Quá thời gian kết nối — đang thử lại…');
+      this.scheduleReconnect('Quá thời gian kết nối — đang thử lại…');
+    }, this.connectTimeoutMs);
+    (connectTimeoutTimer as { unref?: () => void })?.unref?.();
+    this.connectTimer = connectTimeoutTimer;
 
     ws.onopen = () => {
       if (this.ws !== ws || this.connectionGeneration !== socketGen) return;
@@ -2035,6 +2116,7 @@ export class MultiplayerClient {
       }
       switch (msg.type) {
         case 'welcome': {
+          this.clearConnectTimer();
           const hadAuthenticatedOnThisSocket = this.selfId !== null;
           this.selfId = typeof msg.id === 'string' ? msg.id : null;
           this.roomId = typeof msg.roomId === 'string' ? msg.roomId : null;
@@ -2872,6 +2954,7 @@ export class MultiplayerClient {
 
     ws.onclose = (ev?: { code?: number; reason?: string }) => {
       if (this.ws !== ws || this.connectionGeneration !== socketGen) return;
+      this.clearConnectTimer();
       this.stopHeartbeat();
       if (this.intentionalClose) return;
       if (
@@ -2961,13 +3044,12 @@ function toRemotePlayer(raw: unknown): RemotePlayer | null {
       mergedAppearance = { ...dec.appearance, ...mergedAppearance };
     }
   } else if (
-    rawX === -76 &&
-    rawZ === 10 &&
+    ((rawX === -76 && rawZ === 10) || (rawX === 95.5 && rawZ === -6)) &&
     Math.abs(rawFacing - -Math.PI / 2) < 1e-4 &&
     mergedAppearance.outfit === undefined
   ) {
-    // Legacy deployed Worker initializes sessions at (-76, 10) before the first move arrives;
-    // map initial spawn to the canonical SPAWN (95.5, -6).
+    // Legacy Worker builds may initialize sessions at (-76, 10) or (95.5, -6) before the first
+    // move arrives; map initial spawn to the canonical SPAWN (85.0, -10.4).
     x = SPAWN.x;
     z = SPAWN.z;
   }

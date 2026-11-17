@@ -31,12 +31,9 @@ const HSK_QUICK_PHRASES: readonly { label: string; text: string }[] = [
 
 export default function CampusChat({ hskMode = false }: { hskMode?: boolean }) {
   const activeQuickPhrases = hskMode ? HSK_QUICK_PHRASES : CAMPUS_QUICK_PHRASES;
-  const [chatOpen, setChatOpen] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
-  );
-  const [emotesOpen, setEmotesOpen] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.innerWidth >= 640 : true,
-  );
+  // Thu gọn mặc định ở mọi kích thước màn hình để giao diện lúc mới vào thoáng đãng (Mục 9).
+  const [chatOpen, setChatOpen] = useState<boolean>(false);
+  const [emotesOpen, setEmotesOpen] = useState<boolean>(false);
   const [messages, setMessages] = useState<ChatMessageEntry[]>(
     () => multiplayer.snapshot.messages,
   );
@@ -52,10 +49,7 @@ export default function CampusChat({ hskMode = false }: { hskMode?: boolean }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const initW = window.innerWidth;
-    prevWidthRef.current = initW;
-    if (initW < 768) setChatOpen(false);
-    if (initW < 640) setEmotesOpen(false);
+    prevWidthRef.current = window.innerWidth;
 
     const onResize = () => {
       const nextW = window.innerWidth;
@@ -63,13 +57,9 @@ export default function CampusChat({ hskMode = false }: { hskMode?: boolean }) {
       prevWidthRef.current = nextW;
       if (prevW >= 768 && nextW < 768) {
         setChatOpen(false);
-      } else if (prevW < 768 && nextW >= 768) {
-        setChatOpen(true);
       }
       if (prevW >= 640 && nextW < 640) {
         setEmotesOpen(false);
-      } else if (prevW < 640 && nextW >= 640) {
-        setEmotesOpen(true);
       }
     };
     window.addEventListener('resize', onResize);
@@ -83,14 +73,8 @@ export default function CampusChat({ hskMode = false }: { hskMode?: boolean }) {
       setOnlineCount(Math.max(1, snap.count));
       if (snap.messages.length > lastSeenCountRef.current) {
         const newMsgs = snap.messages.slice(lastSeenCountRef.current);
-        const hasRemotePeerMsg = newMsgs.some((m) => !m.isSelf && !m.isCompanion);
-        if (!chatOpen) {
-          if (hasRemotePeerMsg) {
-            setChatOpen(true);
-            setUnreadCount(0);
-          } else {
-            setUnreadCount((c) => c + newMsgs.length);
-          }
+        if (!chatOpen && newMsgs.length > 0) {
+          setUnreadCount((c) => c + newMsgs.length);
         }
       }
       lastSeenCountRef.current = snap.messages.length;

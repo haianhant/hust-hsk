@@ -22,10 +22,17 @@ export function useMultiplayerBridge(entered: boolean): MultiplayerSnapshot {
 
   useEffect(() => {
     const unsub = multiplayer.subscribe(setMpSnap);
+    // Sync immediately in case `welcome` arrived between initial render state read
+    // and passive effect mount (e.g. while CampusScene blocked the main thread).
+    setMpSnap(multiplayer.snapshot);
     (window as unknown as { __bkhnMp?: () => MultiplayerSnapshot }).__bkhnMp = () =>
       multiplayer.snapshot;
     return unsub;
   }, []);
+
+  useEffect(() => {
+    setMpSnap(multiplayer.snapshot);
+  }, [entered]);
 
   useEffect(() => {
     if (!entered) return;

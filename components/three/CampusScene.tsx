@@ -35,8 +35,14 @@ import {
   makeSunHaloTexture,
 } from './materials';
 import { CampusTreeBatchProvider } from './Trees';
-import { libraryNavigationController } from '../../lib/campus';
-import { playerState, type TimeOfDay } from '../../lib/playerState';
+import { SPAWN, libraryNavigationController } from '../../lib/campus';
+import {
+  computeTargetRendererDpr,
+  playerState,
+  type TimeOfDay,
+} from '../../lib/playerState';
+
+export { computeTargetRendererDpr };
 
 declare global {
   interface Window {
@@ -82,6 +88,7 @@ export interface CampusSceneProps {
   onObjectClick?: (id: string) => void;
   onSelectBoardGameSeat?: (seatId: string) => void;
   onFirstFrameReady?: () => void;
+  onLoadWaveChange?: (wave: 0 | 1 | 2 | 3) => void;
 }
 
 const ATMOSPHERE: Record<
@@ -243,12 +250,17 @@ function isSoftwareWebGLRenderer(gl: THREE.WebGLRenderer): boolean {
 
 function FirstFrameNotifier({
   onReady,
+  onPromoteAllWaves,
+  wavesComplete,
   suspended,
 }: {
   onReady?: () => void;
+  onPromoteAllWaves?: () => void;
+  wavesComplete?: boolean;
   suspended?: boolean;
 }) {
   const notifiedRef = useRef(false);
+  const promotedRef = useRef(false);
 
   useEffect(() => {
     if (suspended && onReady && !notifiedRef.current) {
@@ -261,6 +273,14 @@ function FirstFrameNotifier({
     if (!notifiedRef.current && onReady) {
       notifiedRef.current = true;
       onReady();
+    }
+    if (!wavesComplete && !promotedRef.current && onPromoteAllWaves) {
+      const movedFar =
+        Math.hypot(playerState.pos.x - SPAWN.x, playerState.pos.z - SPAWN.z) > 16;
+      if (movedFar || playerState.viewMode === 'top' || playerState.inLibraryLobby) {
+        promotedRef.current = true;
+        onPromoteAllWaves();
+      }
     }
   });
 
@@ -351,9 +371,8 @@ function AdaptiveDprController() {
   useEffect(() => {
     const isSoft = isSoftwareWebGLRenderer(gl);
     stateRef.current.isSoft = isSoft;
-    const maxDpr = isSoft
-      ? 1
-      : Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 1.75);
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const maxDpr = computeTargetRendererDpr(dpr, isSoft);
     stateRef.current.currentDpr = maxDpr;
     gl.setPixelRatio(maxDpr);
   }, [gl]);
@@ -375,11 +394,13 @@ function AdaptiveDprController() {
     st.frames = 0;
     st.accMs = 0;
 
-    const maxDpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 1.75);
-    if (avgMs > 22.5 && st.currentDpr > 1.0) {
-      st.currentDpr = Math.max(1.0, Number((st.currentDpr - 0.15).toFixed(2)));
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const maxDpr = computeTargetRendererDpr(dpr, false);
+    const minDpr = maxDpr >= 2 && avgMs <= 42 ? 1.35 : 1.0;
+    if (avgMs > 28 && st.currentDpr > minDpr) {
+      st.currentDpr = Math.max(minDpr, Number((st.currentDpr - 0.15).toFixed(2)));
       gl.setPixelRatio(st.currentDpr);
-    } else if (avgMs < 16.8 && st.currentDpr < maxDpr) {
+    } else if (avgMs < 18 && st.currentDpr < maxDpr) {
       st.currentDpr = Math.min(maxDpr, Number((st.currentDpr + 0.1).toFixed(2)));
       gl.setPixelRatio(st.currentDpr);
     }
@@ -719,25 +740,59 @@ export default function CampusScene({
   onObjectClick,
   onSelectBoardGameSeat,
   onFirstFrameReady,
+  onLoadWaveChange,
 }: CampusSceneProps) {
-  const [mountWave, setMountWave] = useState<0 | 1 | 2>(0);
+  const [mountWave, setMountWave] = useState<0 | 1 | 2 | 3>(0);
+  const [firstFrameDone, setFirstFrameDone] = useState(false);
   const [libraryFloor, setLibraryFloor] = useState<number>(() => playerState.libraryFloor);
 
+  const promoteAllWaves = () => {
+    setMountWave(3);
+  };
+
+  const handleFirstFrame = () => {
+    setFirstFrameDone(true);
+    onFirstFrameReady?.();
+  };
+
   useEffect(() => {
-    let waveTimer: number | null = null;
-    let preloadTimer: number | null = null;
-    const rafId = window.requestAnimationFrame(() => {
-      setMountWave(1);
-      waveTimer = window.setTimeout(() => setMountWave(2), 90);
+    onLoadWaveChange?.(mountWave);
+  }, [mountWave, onLoadWaveChange]);
+
+  useEffect(() => {
+    if (!firstFrameDone || mountWave >= 3) return;
+    let raf1 = 0;
+    let raf2 = 0;
+    let timer: number | null = null;
+    const delay = mountWave === 0 ? 180 : 220;
+    raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        timer = window.setTimeout(() => {
+          setMountWave((w) => (w < 3 ? ((w + 1) as 1 | 2 | 3) : w));
+        }, delay);
+      });
     });
-    preloadTimer = window.setTimeout(() => {
+    return () => {
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [firstFrameDone, mountWave]);
+
+  useEffect(() => {
+    const onFastTravel = () => promoteAllWaves();
+    window.addEventListener('bkhn:fast-travel', onFastTravel);
+    const fallbackTimer = window.setTimeout(() => {
+      setMountWave((w) => (w < 3 ? 3 : w));
+    }, 8000);
+    const preloadTimer = window.setTimeout(() => {
       void import('./LibraryLobby');
       void import('./Classroom');
-    }, 1200);
+    }, 900);
     return () => {
-      window.cancelAnimationFrame(rafId);
-      if (waveTimer !== null) window.clearTimeout(waveTimer);
-      if (preloadTimer !== null) window.clearTimeout(preloadTimer);
+      window.removeEventListener('bkhn:fast-travel', onFastTravel);
+      window.clearTimeout(fallbackTimer);
+      window.clearTimeout(preloadTimer);
     };
   }, []);
   useEffect(() => {
@@ -779,16 +834,21 @@ export default function CampusScene({
     <Canvas
       shadows
       frameloop={suspend3D || testPause3D ? 'never' : 'always'}
-      dpr={[1, 1.75]}
+      dpr={[1, 2]}
       gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.06 }}
-      camera={{ fov: 55, near: 0.1, far: 600, position: [-70, 10, 26] }}
+      camera={{ fov: 55, near: 0.1, far: 600, position: [92, 3.2, -10.4] }}
       style={{ width: '100%', height: '100%', touchAction: 'none' }}
     >
       <color attach="background" args={[activeAtm.bg]} />
       <fog attach="fog" args={[activeAtm.fogColor, activeAtm.fogNear, activeAtm.fogFar]} />
-      <FirstFrameNotifier onReady={onFirstFrameReady} suspended={suspend3D || testPause3D} />
+      <FirstFrameNotifier
+        onReady={handleFirstFrame}
+        onPromoteAllWaves={promoteAllWaves}
+        wavesComplete={mountWave >= 3}
+        suspended={suspend3D || testPause3D}
+      />
       <AdaptiveDprController />
-      {mountWave >= 2 && <ProceduralEnvironment timeOfDay={timeOfDay} isIndoor={isIndoor} />}
+      {mountWave >= 3 && <ProceduralEnvironment timeOfDay={timeOfDay} isIndoor={isIndoor} />}
 
       <hemisphereLight args={[activeAtm.hemiSky, activeAtm.hemiGround, activeAtm.hemiIntensity]} />
       <PlayerCenteredSunLight atm={activeAtm} isIndoor={isIndoor} />
@@ -861,13 +921,12 @@ export default function CampusScene({
         <CampusTreeBatchProvider>
           {mountWave >= 1 && <SkyAtmosphereAndNightLights timeOfDay={timeOfDay} />}
           <Ground />
-          <Landmarks timeOfDay={timeOfDay} />
-          {/* Đợt 2 (wave >= 2): Khối nhà phụ, NPC, biển check-in & hiệu ứng để Frame 0 khởi tạo tức thì */}
-          {mountWave >= 2 && <BackgroundBuildings timeOfDay={timeOfDay} />}
-          {/* Đợt 1 (wave >= 1): Toàn bộ khuôn viên C6-C7-C15, KTX, B1, SVĐ */}
-          {mountWave >= 1 && <CampusExpansion timeOfDay={timeOfDay} hskMode={hskMode} />}
-          {mountWave >= 2 && (
+          <Landmarks timeOfDay={timeOfDay} mountWave={mountWave} />
+          <CampusExpansion timeOfDay={timeOfDay} hskMode={hskMode} mountWave={mountWave} />
+          {/* Đợt 3 (wave >= 3): Nhà phụ nền, NPC, biển check-in & hiệu ứng để Frame 0 tại Cổng TĐN khởi tạo tức thì */}
+          {mountWave >= 3 && (
             <>
+              <BackgroundBuildings timeOfDay={timeOfDay} />
               <AmbientLife />
               <CampusCheckinMarkers isNight={timeOfDay === 'night'} hskMode={hskMode} />
               <CampusAtmosphereFX timeOfDay={timeOfDay} />
