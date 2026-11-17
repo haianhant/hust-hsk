@@ -150,6 +150,7 @@ export interface LocationVisualMeta {
   diceLabel: string;
   accentHex: string;
   bgGradient: string;
+  actionIcon: string;
   actionTitle: string;
   actionDesc: string;
   badgeText: string;
@@ -164,6 +165,7 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '2–3',
     accentHex: '#10b981',
     bgGradient: 'from-emerald-950/90 via-slate-900/95 to-slate-950',
+    actionIcon: '🔍',
     actionTitle: 'Rút Thẻ Khám Phá',
     actionDesc: 'Rút 1 Thẻ Khám Phá (đưa kín 1-đối-1)',
     badgeText: 'Khám Phá',
@@ -176,6 +178,7 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '4–5',
     accentHex: '#f59e0b',
     bgGradient: 'from-amber-950/85 via-slate-900/95 to-slate-950',
+    actionIcon: '🃏',
     actionTitle: 'Tự Chọn 1 Chồng Bài',
     actionDesc: 'Chọn rút 1 thẻ Khám Phá, Cung Ứng hoặc Đột Kích',
     badgeText: 'Tự Chọn',
@@ -188,6 +191,7 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '6',
     accentHex: '#06b6d4',
     bgGradient: 'from-cyan-950/90 via-slate-900/95 to-slate-950',
+    actionIcon: '🛡️',
     actionTitle: 'Rút Thẻ Cung Ứng',
     actionDesc: 'Rút 1 Thẻ Cung Ứng (Trang bị / Hồi sức)',
     badgeText: 'Cung Ứng',
@@ -200,6 +204,7 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '8',
     accentHex: '#f43f5e',
     bgGradient: 'from-rose-950/85 via-slate-900/95 to-slate-950',
+    actionIcon: '⚡',
     actionTitle: 'Rút Thẻ Đột Kích',
     actionDesc: 'Rút 1 Thẻ Đột Kích (Vũ khí / Sự kiện)',
     badgeText: 'Đột Kích',
@@ -212,9 +217,10 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '9',
     accentHex: '#8b5cf6',
     bgGradient: 'from-violet-950/85 via-slate-900/95 to-slate-950',
+    actionIcon: '💥',
     actionTitle: 'Gây 2 ST hoặc Hồi 1 Máu',
     actionDesc: 'Chọn 1 người bất kỳ: Gây 2 sát thương HOẶC Hồi 1 thương tích',
-    badgeText: 'Bẫy / Sơ Cứu',
+    badgeText: '2 ST / Hồi 1',
   },
   court: {
     name: 'Sân Bóng Rổ Đêm',
@@ -224,6 +230,7 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     diceLabel: '10',
     accentHex: '#38bdf8',
     bgGradient: 'from-sky-950/90 via-slate-900/95 to-slate-950',
+    actionIcon: '🧤',
     actionTitle: 'Cướp 1 Trang Bị',
     actionDesc: 'Lấy 1 Trang bị đang đeo từ đối thủ bất kỳ',
     badgeText: 'Cướp Đồ',

@@ -1274,15 +1274,15 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
         );
       })()}
 
-      {/* LỚP 5: CINEMATIC CUT-IN OVERLAY (LỘ DIỆN / TUYỆT KỸ / LƯỢT CỦA BẠN / HẠ GỤC / CHIẾN THẮNG) */}
+      {/* LỚP 5: CINEMATIC CUT-IN OVERLAY (NEO MÉP TRÊN CÙNG, KHÔNG CHE CÁC Ô ĐỊA ĐIỂM) */}
       {cutIn && (
         <div
           data-testid="bg-vfx-cutin"
           data-banner-type={cutIn.bannerType}
-          className="pointer-events-none absolute inset-x-0 top-14 sm:top-20 z-30 flex justify-center px-3"
+          className="pointer-events-none absolute inset-x-0 top-1 z-30 flex justify-center px-3"
         >
           <div
-            className={`relative flex w-full max-w-2xl items-center gap-3 sm:gap-4 overflow-hidden rounded-2xl border-2 bg-slate-950/95 px-4 py-3 shadow-2xl ${blurCls} ${
+            className={`relative flex w-full max-w-xl items-center gap-3 overflow-hidden rounded-2xl border-2 bg-slate-950/95 px-3.5 py-2 shadow-2xl ${blurCls} ${
               vfx.reducedMotion ? '' : 'bg-vfx-cutin-enter'
             }`}
             style={{
@@ -1299,10 +1299,10 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
               }}
             />
 
-            {/* Chân dung LỚN khi là vai đã lộ diện / Tuyệt kỹ / Hạ gục */}
+            {/* Chân dung khi là vai đã lộ diện / Tuyệt kỹ / Hạ gục */}
             {cutIn.roleId ? (
               <div
-                className="relative z-10 h-20 w-14 sm:h-24 sm:w-16 shrink-0 overflow-hidden rounded-xl border-2 bg-slate-900 shadow-lg"
+                className="relative z-10 h-14 w-10 shrink-0 overflow-hidden rounded-xl border-2 bg-slate-900 shadow-lg"
                 style={{ borderColor: cutInSecondary }}
               >
                 {cutIn.portraitSrc ? (
@@ -1351,9 +1351,9 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
         </div>
       )}
 
-      {/* LỚP 6: NÚT BỎ QUA HIỆU ỨNG (SKIP ANIMATION — DUY NHẤT CÓ POINTER-EVENTS-AUTO) */}
+      {/* LỚP 6: NÚT BỎ QUA HIỆU ỨNG (GÓC TRÊN PHẢI, KHÔNG CHE CHAT/ACTION/TILE — DUY NHẤT CÓ POINTER-EVENTS-AUTO) */}
       {vfx.hasActiveEffects && (
-        <div className="pointer-events-none absolute top-1.5 right-2 sm:top-auto sm:bottom-3 sm:right-3 z-40">
+        <div className="pointer-events-none absolute top-1.5 right-3 z-40">
           <button
             type="button"
             data-testid="bg-skip-vfx-btn"

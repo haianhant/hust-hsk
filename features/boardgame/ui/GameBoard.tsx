@@ -682,23 +682,37 @@ export function GameBoard({
         </nav>
       )}
 
-      {/* BANNER THÔNG BÁO SỰ KIỆN NỔI BẬT (NẾU CÓ) */}
+      {/* BANNER THÔNG BÁO SỰ KIỆN NỔI BẬT (1 HÀNG GỌN TRÊN DESKTOP — KHÔNG CHE TILE HOẶC CẢN THAO TÁC) */}
       {(displayedError ||
         publicGame.lastInvestigation ||
         publicGame.lastRevealEvent ||
         unreadClueCount > 0 ||
         (latestEmote && (!isDesktopLayout || !sideDrawerOpen))) && (
         <div className="shrink-0 bg-slate-950/90 border-b border-slate-800/80 px-3 py-1">
-          <div className="w-full mx-auto max-w-[1840px] flex flex-wrap items-center gap-1.5">
+          <div
+            className={`w-full mx-auto max-w-[1840px] flex items-center gap-1.5 ${
+              isDesktopLayout ? 'flex-nowrap overflow-x-auto' : 'flex-wrap'
+            }`}
+          >
             {displayedError && (
-              <div className="rounded-lg bg-rose-950/80 border border-rose-500/60 px-2.5 py-1 text-xs font-bold text-rose-100">
-                ⚠️ {displayedError}
+              <div className="shrink-0 rounded-lg bg-rose-950/80 border border-rose-500/60 px-2.5 py-0.5 text-xs font-bold text-rose-100 flex items-center gap-1.5 whitespace-nowrap">
+                <span>⚠️ {displayedError}</span>
+                {localError && (
+                  <button
+                    type="button"
+                    onClick={() => setLocalError(null)}
+                    aria-label="Đóng thông báo lỗi"
+                    className="rounded px-1 text-[10px] text-rose-200 hover:bg-rose-800/70 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             )}
             {unreadClueCount > 0 && (
               <div
                 data-testid="bg-unread-clue-banner"
-                className="rounded-lg bg-amber-950/70 border border-amber-400/60 px-2.5 py-1 text-xs font-bold text-amber-100 flex items-center gap-2"
+                className="shrink-0 rounded-lg bg-amber-950/70 border border-amber-400/60 px-2.5 py-0.5 text-xs font-bold text-amber-100 flex items-center gap-2 whitespace-nowrap"
               >
                 <span>🕵️ Bạn có {unreadClueCount} mật báo thăm dò mới!</span>
                 <button
@@ -718,7 +732,7 @@ export function GameBoard({
             {publicGame.lastInvestigation && (
               <div
                 data-testid="bg-last-investigation-banner"
-                className="rounded-lg bg-emerald-950/60 border border-emerald-500/45 px-2.5 py-1 text-xs font-semibold text-emerald-100"
+                className="shrink-0 rounded-lg bg-emerald-950/60 border border-emerald-500/45 px-2.5 py-0.5 text-xs font-semibold text-emerald-100 whitespace-nowrap"
               >
                 {publicGame.lastInvestigation.publicMessage}
               </div>
@@ -726,7 +740,7 @@ export function GameBoard({
             {publicGame.lastRevealEvent && (
               <div
                 data-testid="bg-last-reveal-banner"
-                className="rounded-lg bg-indigo-950/65 border border-indigo-400/50 px-2.5 py-1 text-xs font-bold text-indigo-100"
+                className="shrink-0 rounded-lg bg-indigo-950/65 border border-indigo-400/50 px-2.5 py-0.5 text-xs font-bold text-indigo-100 whitespace-nowrap"
               >
                 🎭 {publicGame.lastRevealEvent.displayName} đã lộ vai{' '}
                 {publicGame.lastRevealEvent.roleName} (
@@ -736,7 +750,7 @@ export function GameBoard({
             {latestEmote && (!isDesktopLayout || !sideDrawerOpen) && (
               <div
                 data-testid="bg-emote-toast"
-                className="ml-auto rounded-lg bg-slate-800/90 border border-slate-600 px-2.5 py-1 text-xs font-semibold text-amber-100"
+                className="ml-auto shrink-0 rounded-lg bg-slate-800/90 border border-slate-600 px-2.5 py-0.5 text-xs font-semibold text-amber-100 whitespace-nowrap"
               >
                 {latestEmote.emote ? EMOTE_META[latestEmote.emote]?.icon ?? '💬' : '💬'}{' '}
                 <strong>{latestEmote.displayName}:</strong>{' '}
@@ -857,12 +871,12 @@ export function GameBoard({
                 </div>
               </section>
 
-              {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI (6 ĐỊA ĐIỂM TRỌN VẸN TRONG VIEWPORT) */}
-              <section className="grid grid-cols-1 md:grid-cols-3 gap-2 lg:flex-1 lg:min-h-0">
+              {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI TACTICAL COMPACT (6 ĐỊA ĐIỂM TRỌN VẸN TRONG VIEWPORT) */}
+              <section className="grid grid-cols-1 md:grid-cols-3 gap-2 shrink-0">
                 {boardClusters.map((cluster) => (
                   <div
                     key={cluster.clusterId}
-                    className="rounded-2xl border border-slate-800/90 bg-slate-900/55 p-1.5 sm:p-2 flex flex-col gap-1.5 lg:h-full lg:min-h-0"
+                    className="rounded-2xl border border-slate-800/90 bg-slate-900/55 p-1.5 flex flex-col gap-1.5"
                   >
                     <div className="flex items-center justify-between gap-2 px-0.5 shrink-0">
                       <span
@@ -875,7 +889,7 @@ export function GameBoard({
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-rows-2 gap-1.5 lg:flex-1 lg:min-h-0">
+                    <div className="grid grid-cols-1 md:grid-rows-2 gap-1.5 flex-1 min-h-0">
                       {cluster.locations.map((locId) => {
                         const occupants = publicGame.players.filter(
                           (p) => p.location === locId,

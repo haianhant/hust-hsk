@@ -880,12 +880,88 @@ async function clickControlViaSettingsIfCollapsed(page, testId, options = {}) {
   }
 }
 
+async function verifyTilePopoverAndKeyboardA11y(page, options = {}) {
+  const { savePopoverShot = false } = options;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(120);
+
+  // 1. Rules are collapsed by default into tooltip/popover
+  assert.equal(
+    await page.locator('[data-testid^="bg-tile-rule-popover-"]').count(),
+    0,
+    'Tile rule popovers must be hidden by default in compact mode',
+  );
+
+  // 2. Hover trigger opens rule popover cleanly without overlap, moving pointer out hides it
+  const radioTrigger = page.locator('[data-testid="bg-tile-rule-trigger-radio"]');
+  await radioTrigger.hover();
+  const radioPopover = page.locator('[data-testid="bg-tile-rule-popover-radio"]');
+  await radioPopover.waitFor({ state: 'visible', timeout: 3000 });
+  const radioPopText = await radioPopover.innerText();
+  assert.ok(radioPopText.includes('Khám Phá'), `Radio popover must describe draw rule, got: ${radioPopText}`);
+  await page.mouse.move(4, 4);
+  await radioPopover.waitFor({ state: 'detached', timeout: 3000 });
+
+  // 3. Keyboard focus opens rule popover; Escape dismisses it cleanly
+  const corridorTrigger = page.locator('[data-testid="bg-tile-rule-trigger-corridor"]');
+  await corridorTrigger.focus();
+  const corridorPopover = page.locator('[data-testid="bg-tile-rule-popover-corridor"]');
+  await corridorPopover.waitFor({ state: 'visible', timeout: 3000 });
+  assert.ok((await corridorPopover.innerText()).includes('sát thương'), 'Corridor popover must describe trap/heal rule');
+  await page.keyboard.press('Escape');
+  await corridorPopover.waitFor({ state: 'detached', timeout: 3000 });
+
+  // 4. Click pins popover open, click outside closes it
+  const courtTrigger = page.locator('[data-testid="bg-tile-rule-trigger-court"]');
+  await courtTrigger.click();
+  const courtPopover = page.locator('[data-testid="bg-tile-rule-popover-court"]');
+  await courtPopover.waitFor({ state: 'visible', timeout: 3000 });
+  if (savePopoverShot) {
+    await page.waitForTimeout(100);
+    await page.screenshot({ path: path.join(SHOT_DIR, 'phase2-after-1440x900-popover.png') });
+  }
+  await page.locator('[data-testid="bg-damage-track"]').click({ position: { x: 16, y: 12 } });
+  await courtPopover.waitFor({ state: 'detached', timeout: 3000 });
+
+  // 5. Keyboard selection on self pawn inside compact tile + strict 1 self-here tile invariant
+  const selfState = await page.evaluate(() => {
+    const tiles = Array.from(document.querySelectorAll('[data-testid^="bg-loc-"]:not([data-testid="bg-loc-pawn-self"])'));
+    const selfTiles = tiles
+      .filter((t) => t.getAttribute('data-self-here') === 'true')
+      .map((t) => t.getAttribute('data-testid'));
+    const selfPawn = document.querySelector('[data-testid="bg-loc-pawn-self"]');
+    return {
+      selfTiles,
+      initialSelected: selfPawn?.getAttribute('aria-pressed') ?? null,
+    };
+  });
+  assert.equal(selfState.selfTiles.length, 1, `Expected exactly 1 tile with data-self-here="true", got ${JSON.stringify(selfState)}`);
+  const selfPawn = page.locator('[data-testid="bg-loc-pawn-self"]').first();
+  await selfPawn.focus();
+  await page.keyboard.press('Enter');
+  const expectedAfterFirstEnter = selfState.initialSelected === 'true' ? 'false' : 'true';
+  assert.equal(
+    await selfPawn.getAttribute('aria-pressed'),
+    expectedAfterFirstEnter,
+    'Pressing Enter on focused pawn must toggle selection state',
+  );
+  assert.equal(
+    await selfPawn.getAttribute('data-selected'),
+    expectedAfterFirstEnter,
+    'Pawn data-selected must match aria-pressed after keyboard Enter',
+  );
+  // Restore selection state
+  await page.keyboard.press('Enter');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(100);
+}
+
 async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = {}) {
-  const { saveShots = false } = options;
+  const { saveShots = false, afterPrefix = null, isSpectator = false } = options;
   const viewports = [
-    { width: 1440, height: 900, requireZeroScroll: true, shotName: 'tactical-v2-1440x900-role.png' },
-    { width: 1280, height: 800, requireZeroScroll: true, shotName: 'tactical-v2-1280x800.png' },
-    { width: 1920, height: 1080, requireZeroScroll: true, shotName: 'tactical-v2-1920x1080.png' },
+    { width: 1440, height: 900, requireZeroScroll: true, maxTileHeight: 162, shotName: 'tactical-v2-1440x900-role.png', afterName: 'phase2-after-1440x900.png' },
+    { width: 1280, height: 800, requireZeroScroll: true, maxTileHeight: 142, shotName: 'tactical-v2-1280x800.png', afterName: 'phase2-after-1280x800.png' },
+    { width: 1920, height: 1080, requireZeroScroll: true, maxTileHeight: 185, shotName: 'tactical-v2-1920x1080.png', afterName: 'phase2-after-1920x1080.png' },
   ];
   const LOC_IDS = ['radio', 'lobby', 'breaker', 'canteen', 'corridor', 'court'];
 
@@ -920,10 +996,37 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
         };
       };
 
-      const locRects = {};
+      const locDetails = {};
       for (const id of locIds) {
-        locRects[id] = rectOf(document.querySelector(`[data-testid="bg-loc-${id}"]`));
+        const el = document.querySelector(`[data-testid="bg-loc-${id}"]`);
+        const diceEl = document.querySelector(`[data-testid="bg-tile-dice-${id}"]`);
+        const nameEl = document.querySelector(`[data-testid="bg-tile-name-${id}"]`);
+        const iconEl = document.querySelector(`[data-testid="bg-tile-action-icon-${id}"]`);
+        const pawnsEl = document.querySelector(`[data-testid="bg-tile-pawns-${id}"]`);
+        locDetails[id] = {
+          rect: rectOf(el),
+          diceRect: rectOf(diceEl),
+          nameRect: rectOf(nameEl),
+          iconRect: rectOf(iconEl),
+          pawnsRect: rectOf(pawnsEl),
+          hasStateAttrs: Boolean(
+            el &&
+              el.hasAttribute('data-self-here') &&
+              el.hasAttribute('data-has-attackable') &&
+              el.hasAttribute('data-destination-highlighted') &&
+              el.hasAttribute('data-can-choose-dest'),
+          ),
+        };
       }
+
+      const banners = [
+        'bg-unread-clue-banner',
+        'bg-last-investigation-banner',
+        'bg-last-reveal-banner',
+        'bg-emote-toast',
+      ]
+        .map((id) => ({ id, rect: rectOf(document.querySelector(`[data-testid="${id}"]`)) }))
+        .filter((b) => b.rect && b.rect.width > 0 && b.rect.height > 0);
 
       const headerButtons = header
         ? Array.from(header.querySelectorAll('button')).map((b) => rectOf(b))
@@ -943,7 +1046,9 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
         boardScrollOverflowY: scrollArea
           ? scrollArea.scrollHeight - scrollArea.clientHeight
           : null,
-        locRects,
+        locDetails,
+        banners,
+        popoverCount: document.querySelectorAll('[data-testid^="bg-tile-rule-popover-"]').length,
         hasCollapsedRulesBtnOutsideSettings: Boolean(
           document.querySelector('[data-testid="bg-board-rules-btn"]'),
         ),
@@ -964,6 +1069,7 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
       `${tag} secondary rules button must be collapsed into Settings`,
     );
     assert.equal(metrics.hasDesktopTabs, true, `${tag} must render all 3 desktop sidebar tabs`);
+    assert.equal(metrics.popoverCount, 0, `${tag} rule popovers must stay closed unless hovered/focused/clicked`);
 
     if (metrics.headerButtons.length >= 2) {
       const top0 = metrics.headerButtons[0].top;
@@ -1004,16 +1110,43 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
         `${tag} primary action bar must fit inside viewport: ${JSON.stringify(metrics.actionBarRect)}`,
       );
       for (const id of LOC_IDS) {
-        const lr = metrics.locRects[id];
+        const d = metrics.locDetails[id];
+        const lr = d.rect;
         assert.ok(
           lr && lr.width > 0 && lr.height > 0 && lr.top >= 0 && lr.bottom <= vp.height,
           `${tag} location "${id}" must fit cleanly in viewport: ${JSON.stringify(lr)}`,
         );
+        assert.ok(
+          lr.height <= vp.maxTileHeight,
+          `${tag} compact location "${id}" height (${lr.height}px) must stay <= ${vp.maxTileHeight}px`,
+        );
+        assert.equal(d.hasStateAttrs, true, `${tag} location "${id}" missing tactical state data-attributes`);
+        assert.ok(d.diceRect && d.diceRect.width > 0 && d.diceRect.height > 0, `${tag} location "${id}" dice badge must be visible`);
+        assert.ok(d.nameRect && d.nameRect.width > 0 && d.nameRect.height > 0, `${tag} location "${id}" title must be visible`);
+        assert.ok(d.iconRect && d.iconRect.width > 0 && d.iconRect.height > 0, `${tag} location "${id}" action icon must be visible`);
+        assert.ok(d.pawnsRect && d.pawnsRect.width > 0 && d.pawnsRect.height > 0, `${tag} location "${id}" pawn tray must be visible`);
+
+        for (const banner of metrics.banners) {
+          const br = banner.rect;
+          const overlaps =
+            br.left < lr.right - 1 &&
+            br.right > lr.left + 1 &&
+            br.top < lr.bottom - 1 &&
+            br.bottom > lr.top + 1;
+          assert.equal(
+            overlaps,
+            false,
+            `${tag} banner "${banner.id}" (${JSON.stringify(br)}) must not occlude location "${id}" (${JSON.stringify(lr)})`,
+          );
+        }
       }
     }
 
     if (saveShots && vp.shotName) {
       await page.screenshot({ path: path.join(SHOT_DIR, vp.shotName) });
+      if (afterPrefix && vp.afterName) {
+        await page.screenshot({ path: path.join(SHOT_DIR, vp.afterName) });
+      }
     }
   }
 
@@ -1039,7 +1172,12 @@ async function verifyDesktopTacticalLayoutV2(page, label = 'desktop', options = 
     await page.screenshot({ path: path.join(SHOT_DIR, 'tactical-v2-1440x900-log.png') });
   }
   await page.locator('[data-testid="bg-sidebar-tab-role"]').click();
-  await page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 3000 });
+  if (isSpectator) {
+    await page.waitForSelector('[data-testid="bg-spectator-role-placeholder"]', { timeout: 3000 });
+    assert.equal(await page.locator('[data-testid="bg-role-card-secret"]').count(), 0);
+  } else {
+    await page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 3000 });
+  }
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.waitForTimeout(120);
 }
@@ -1269,6 +1407,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     await p4.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-03-gameboard-mobile.png') });
     await p4.page.screenshot({ path: path.join(SHOT_DIR, 'polish-04-gameboard-mobile-390x844.png') });
     await p4.page.screenshot({ path: path.join(SHOT_DIR, 'tactical-v2-390x844-mobile.png') });
+    await p4.page.screenshot({ path: path.join(SHOT_DIR, 'phase2-after-390x844-mobile.png') });
 
     // Rules modal, sound toggle, emote toast, Tactical V2 layout + HP leak check on P1 & P4
     await p1.page.bringToFront();
@@ -1279,6 +1418,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
       `Default turn timer must show infinite thinking mode, got: ${timerText}`,
     );
     await verifyDesktopTacticalLayoutV2(p1.page, 'E2E-01-Initial');
+    await verifyTilePopoverAndKeyboardA11y(p1.page);
     await clickControlViaSettingsIfCollapsed(p1.page, 'bg-board-rules-btn');
     await p1.page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: UI_TIMEOUT });
     const rulesModalText = await p1.page.locator('[data-testid="boardgame-rules-modal"]').innerText();
@@ -1467,7 +1607,11 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
         if (activeUi === p1 && !p1DesktopActiveChecked) {
           const hasActionPanel = await p1.page.locator('[data-testid="bg-action-panel"]').count();
           if (hasActionPanel > 0) {
-            await verifyDesktopTacticalLayoutV2(p1.page, 'E2E-01-ActiveTurn', { saveShots: true });
+            await verifyDesktopTacticalLayoutV2(p1.page, 'E2E-01-ActiveTurn', {
+              saveShots: true,
+              afterPrefix: 'phase2-after',
+            });
+            await verifyTilePopoverAndKeyboardA11y(p1.page, { savePopoverShot: true });
             p1DesktopActiveChecked = true;
           }
         }
@@ -1742,6 +1886,8 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     );
     await host.page.locator('[data-testid="bg-hud-start-btn"]').click();
     await host.page.waitForSelector('[data-testid="boardgame-2d-board"]', { timeout: UI_TIMEOUT });
+    await host.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
+    await verifyDesktopTacticalLayoutV2(host.page, 'E2E-02-8P-Player');
 
     // 9th participant joins ongoing match as Spectator via directory "👁 Xem" button
     const spec = await setupPlayerContext(chromium, launchOpts, specUser, shim.wsBaseUrl, {
@@ -1765,7 +1911,27 @@ async function runE2E02(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await spec.page.waitForSelector('[data-testid="bg-spectator-role-placeholder"]', { timeout: UI_TIMEOUT });
     await spec.page.waitForSelector('[data-testid="bg-action-spectator-banner"]', { timeout: UI_TIMEOUT });
     assert.equal(await spec.page.locator('[data-testid="bg-action-panel"]').count(), 0);
+    await verifyDesktopTacticalLayoutV2(spec.page, 'E2E-02-8P-Spectator', { isSpectator: true });
+    const specPrivacy = await spec.page.evaluate(() => {
+      const boardText = document.querySelector('[data-testid="boardgame-2d-board"]')?.textContent || '';
+      const tiles = Array.from(
+        document.querySelectorAll('[data-testid^="bg-loc-"]:not([data-testid="bg-loc-pawn-self"])'),
+      );
+      const leakedAria = tiles
+        .flatMap((t) => Array.from(t.querySelectorAll('[aria-label]')))
+        .map((el) => el.getAttribute('aria-label') || '')
+        .filter((s) => /Đội Săn Đêm|Hội Bóng Đêm|Kẻ Độc Hành|\b\d+\s*\/\s*\d+\s*HP\b/i.test(s));
+      return {
+        revealedPawns: document.querySelectorAll('[data-pawn-revealed="true"]').length,
+        hasHpLeakText: /\b\d+\s*\/\s*\d+\s*HP\b/i.test(boardText),
+        leakedAria,
+      };
+    });
+    assert.equal(specPrivacy.revealedPawns, 0, '8P spectator view must keep all unrevealed pawns secret at match start');
+    assert.equal(specPrivacy.hasHpLeakText, false, '8P spectator view must never leak HP totals');
+    assert.equal(specPrivacy.leakedAria.length, 0, `8P tiles aria-labels leaked secret info: ${JSON.stringify(specPrivacy.leakedAria)}`);
     await spec.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-8p-spectator.png') });
+    await spec.page.screenshot({ path: path.join(SHOT_DIR, 'phase2-after-8p-spectator.png') });
 
     // Execute 8 turns (1 full round across 8p) verifying active state sync
     const hostTried = new Set();
