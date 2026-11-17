@@ -17,3 +17,25 @@ new_sqlite_classes = ["HskRoom"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["BoardGameRoom"]
+
+[env.staging]
+name = "hust-hsk-rooms-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+[[env.staging.durable_objects.bindings]]
+name = "HSK_ROOM"
+class_name = "HskRoom"
+
+[[env.staging.durable_objects.bindings]]
+name = "BOARD_GAME_ROOM"
+class_name = "BoardGameRoom"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = ["HskRoom"]
+
+[[env.staging.migrations]]
+tag = "v2"
+new_sqlite_classes = ["BoardGameRoom"]

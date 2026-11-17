@@ -14,9 +14,13 @@
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react';
+import { sanitizeBoardGameAppearance } from '../../../shared/contracts/boardgame';
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
 import {
+  BOARD_GAME_PROTOCOL_VERSION,
+  BOARD_GAME_RULESET_VERSION,
   clearStoredBoardGameAuth,
+  getOrCreateStoredBoardGamePlayerKey,
   loadStoredBoardGameAuth,
   parseBoardGameServerMessage,
   resolveBoardGameEndpoints,
@@ -28,17 +32,77 @@ import {
   type BoardGameChatEmoteServerMessage,
   type BoardGameClientMessage,
   type BoardGameEmoteId,
+  type BoardGameLeaderboardEntry,
+  type BoardGameLeaderboardFactionFilter,
+  type BoardGameLeaderboardPeriod,
+  type BoardGameLeaderboardResponse,
   type BoardGameLobbyPlayerView,
   type BoardGameMatchStatus,
   type BoardGameMatchSummary,
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
+  type BoardGameRoleId,
   type BoardGameTableId,
 } from './contracts';
 
 const ACTIVE_MATCH_SESSION_KEY = 'hustverse:bg-active-match:v1';
+const LOCAL_LEADERBOARD_STORAGE_KEY = 'hustverse:bg-local-leaderboard:v1';
 const BG_WS_FENCE_CLOSE_CODE = 4001;
 const RECONNECT_BACKOFF_MS = [600, 1200, 2500, 5000] as const;
+
+interface LocalLeaderboardRecord {
+  playerKey: string;
+  displayName: string;
+  appearance: RemoteAppearance;
+  matchesPlayed: number;
+  wins: number;
+  hunterWins: number;
+  shadowWins: number;
+  wandererWins: number;
+  eliminationsDealt: number;
+  survivalsTotal: number;
+  currentWinStreak: number;
+  bestWinStreak: number;
+  ratingPoints: number;
+  weekKey: string;
+  weeklyMatches: number;
+  weeklyWins: number;
+  weeklyPoints: number;
+  lastRoleId: BoardGameRoleId | null;
+  lastPlayedAtMs: number;
+}
+
+function computeLocalVnWeekKey(nowMs: number): string {
+  const vnDate = new Date(nowMs + 7 * 3600_000);
+  const utcMid = Date.UTC(vnDate.getUTCFullYear(), vnDate.getUTCMonth(), vnDate.getUTCDate());
+  const d = new Date(utcMid);
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = Date.UTC(d.getUTCFullYear(), 0, 1);
+  const weekNo = Math.ceil(((d.getTime() - yearStart) / 86_400_000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+function loadLocalLeaderboardMap(): Record<string, LocalLeaderboardRecord> {
+  if (typeof window === 'undefined' || !window.localStorage) return {};
+  try {
+    const raw = window.localStorage.getItem(LOCAL_LEADERBOARD_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, LocalLeaderboardRecord>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalLeaderboardMap(map: Record<string, LocalLeaderboardRecord>): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(LOCAL_LEADERBOARD_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore storage quota errors
+  }
+}
 
 export type BoardGameConnectionState =
   | 'idle'
@@ -111,6 +175,8 @@ export class BoardGameClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reqCounter = 0;
+  private opSeq = 0;
+  private recordedLocalMatches = new Set<string>();
   private pendingAck = new Map<
     string,
     { resolve: (ok: boolean, reason?: string) => void; timer: ReturnType<typeof setTimeout> }
@@ -218,6 +284,7 @@ export class BoardGameClient {
     preferredSeatIndex?: number | null;
     turnTimeoutMs?: number;
   }): Promise<{ ok: true; matchId: string; inviteCode: string } | { ok: false; error: string }> {
+    const seq = ++this.opSeq;
     const eps = resolveBoardGameEndpoints();
     if (!eps.ok) {
       return { ok: false, error: eps.reason };
@@ -235,6 +302,9 @@ export class BoardGameClient {
             : {}),
         }),
       });
+      if (seq !== this.opSeq) {
+        return { ok: false, error: 'Thao tác đã được thay thế.' };
+      }
       const data = (await res.json()) as {
         ok?: boolean;
         matchId?: string;
@@ -263,6 +333,70 @@ export class BoardGameClient {
     }
   }
 
+  /** Tự động vào phòng chờ đang mở của bàn 1/2 hoặc tạo mới khi vừa ngồi ghế 3D. */
+  async joinOrCreateTableMatch(params: {
+    tableId: BoardGameTableId;
+    displayName: string;
+    appearance?: RemoteAppearance;
+    preferredSeatIndex?: number | null;
+    turnTimeoutMs?: number;
+  }): Promise<
+    { ok: true; matchId: string; inviteCode: string; created: boolean } | { ok: false; error: string }
+  > {
+    const seq = ++this.opSeq;
+    const eps = resolveBoardGameEndpoints();
+    if (!eps.ok) {
+      return { ok: false, error: eps.reason };
+    }
+    const cleanName = sanitizeBoardGameName(params.displayName);
+    try {
+      const res = await fetch(`${eps.httpBaseUrl}/api/boardgame/join-table`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableId: params.tableId,
+          hostName: cleanName,
+          ...(typeof params.turnTimeoutMs === 'number'
+            ? { turnTimeoutMs: params.turnTimeoutMs }
+            : {}),
+        }),
+      });
+      if (seq !== this.opSeq) {
+        return { ok: false, error: 'Thao tác chọn bàn đã bị hủy.' };
+      }
+      const data = (await res.json()) as {
+        ok?: boolean;
+        created?: boolean;
+        matchId?: string;
+        inviteCode?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.ok || !data.matchId || !data.inviteCode) {
+        const errMsg = data.error || 'Không thể kết nối phòng của bàn chơi.';
+        this.emit({ lastError: errMsg });
+        return { ok: false, error: errMsg };
+      }
+      this.connectToMatch({
+        matchId: data.matchId,
+        inviteCode: data.inviteCode,
+        displayName: cleanName,
+        appearance: params.appearance ?? {},
+        asSpectator: false,
+        preferredSeatIndex: params.preferredSeatIndex ?? null,
+      });
+      return {
+        ok: true,
+        matchId: data.matchId,
+        inviteCode: data.inviteCode,
+        created: Boolean(data.created),
+      };
+    } catch {
+      const errMsg = 'Không kết nối được tới máy chủ Board Game.';
+      this.emit({ lastError: errMsg });
+      return { ok: false, error: errMsg };
+    }
+  }
+
   async joinByInviteCode(params: {
     inviteCode: string;
     displayName: string;
@@ -270,6 +404,7 @@ export class BoardGameClient {
     asSpectator?: boolean;
     preferredSeatIndex?: number | null;
   }): Promise<{ ok: true; matchId: string; inviteCode: string } | { ok: false; error: string }> {
+    const seq = ++this.opSeq;
     const cleanCode = sanitizeInviteCode(params.inviteCode);
     if (!cleanCode) {
       const errMsg = 'Mã mời phải gồm 6 ký tự chữ/số hợp lệ (ví dụ: KTX89A).';
@@ -286,6 +421,9 @@ export class BoardGameClient {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inviteCode: cleanCode }),
       });
+      if (seq !== this.opSeq) {
+        return { ok: false, error: 'Thao tác đã được thay thế.' };
+      }
       const data = (await res.json()) as {
         ok?: boolean;
         match?: { matchId?: string; inviteCode?: string };
@@ -324,6 +462,7 @@ export class BoardGameClient {
     asSpectator?: boolean;
     preferredSeatIndex?: number | null;
   }): void {
+    this.opSeq += 1;
     this.clearReconnectTimer();
     this.intentionalClose = false;
     this.reconnectAttempts = 0;
@@ -403,6 +542,7 @@ export class BoardGameClient {
         displayName: ctx.displayName,
         appearance: ctx.appearance,
         asSpectator: ctx.asSpectator,
+        ...(!ctx.asSpectator ? { playerKey: getOrCreateStoredBoardGamePlayerKey() } : {}),
         ...(ctx.preferredSeatIndex !== null && ctx.preferredSeatIndex !== undefined
           ? { preferredSeatIndex: ctx.preferredSeatIndex }
           : {}),
@@ -453,6 +593,16 @@ export class BoardGameClient {
   private handleServerMessage(msg: NonNullable<ReturnType<typeof parseBoardGameServerMessage>>): void {
     switch (msg.type) {
       case 'BG_AUTH_ISSUED': {
+        if (
+          typeof msg.protocolVersion === 'number' &&
+          msg.protocolVersion > BOARD_GAME_PROTOCOL_VERSION
+        ) {
+          this.intentionalClose = true;
+          this.emit({
+            lastError: `Phiên bản giao thức máy chủ (v${msg.protocolVersion}) mới hơn trình khách. Vui lòng tải lại trang.`,
+          });
+          return;
+        }
         saveStoredBoardGameAuth({
           matchId: msg.matchId,
           inviteCode: msg.inviteCode,
@@ -472,6 +622,26 @@ export class BoardGameClient {
         return;
       }
       case 'BG_STATE_SYNC': {
+        if (
+          (typeof msg.protocolVersion === 'number' &&
+            msg.protocolVersion > BOARD_GAME_PROTOCOL_VERSION) ||
+          (msg.publicGame &&
+            typeof msg.publicGame.rulesetVersion === 'number' &&
+            msg.publicGame.rulesetVersion > BOARD_GAME_RULESET_VERSION)
+        ) {
+          this.intentionalClose = true;
+          this.emit({
+            lastError: 'Phiên bản luật chơi trên máy chủ mới hơn trình khách. Vui lòng tải lại trang.',
+          });
+          return;
+        }
+        if (
+          msg.status === 'FINISHED' &&
+          msg.publicGame?.finalReveal &&
+          msg.publicGame.finalReveal.length > 0
+        ) {
+          this.recordLocalMatchFromSync(msg.matchId, msg.players, msg.publicGame, msg.privateView);
+        }
         this.emit({
           connectionState: 'connected',
           matchId: msg.matchId,
@@ -507,10 +677,12 @@ export class BoardGameClient {
             entry.resolve(false, msg.message);
           }
         }
-        if (msg.code === 'MATCH_NOT_FOUND' && this.joinCtx) {
+        if ((msg.code === 'MATCH_NOT_FOUND' || msg.code === 'UNAUTHORIZED') && this.joinCtx) {
           clearStoredBoardGameAuth(this.joinCtx.matchId);
           this.clearActiveMatchRef();
-          this.intentionalClose = true;
+          if (msg.code === 'MATCH_NOT_FOUND') {
+            this.intentionalClose = true;
+          }
         }
         this.emit({ lastError: msg.message });
         return;
@@ -594,6 +766,7 @@ export class BoardGameClient {
   }
 
   leaveMatch(): void {
+    this.opSeq += 1;
     const currentId = this.snap.matchId ?? this.joinCtx?.matchId ?? null;
     this.intentionalClose = true;
     this.clearReconnectTimer();
@@ -613,8 +786,178 @@ export class BoardGameClient {
     });
   }
 
+  requestSync(): void {
+    this.rawSend({ type: 'BG_REQUEST_SYNC', requestId: this.nextRequestId() });
+  }
+
   clearError(): void {
     this.emit({ lastError: null });
+  }
+
+  async fetchLeaderboard(
+    period: BoardGameLeaderboardPeriod = 'alltime',
+    faction: BoardGameLeaderboardFactionFilter = 'all',
+  ): Promise<BoardGameLeaderboardResponse> {
+    const localKey = getOrCreateStoredBoardGamePlayerKey();
+    const eps = resolveBoardGameEndpoints();
+    if (!eps.ok) {
+      return this.buildLocalLeaderboardResponse(period, faction, localKey);
+    }
+    const qs = new URLSearchParams({ period, faction });
+    if (localKey) {
+      qs.set('playerKey', localKey);
+    }
+    try {
+      const res = await fetch(`${eps.httpBaseUrl}/api/boardgame/leaderboard?${qs.toString()}`, {
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const data = (await res.json()) as BoardGameLeaderboardResponse;
+        if (data && data.ok && Array.isArray(data.entries)) {
+          return data;
+        }
+      }
+    } catch {
+      // fallback to local storage leaderboard when worker/network unavailable
+    }
+    return this.buildLocalLeaderboardResponse(period, faction, localKey);
+  }
+
+  private recordLocalMatchFromSync(
+    matchId: string,
+    lobbyPlayers: readonly BoardGameLobbyPlayerView[],
+    publicGame: BoardGamePublicGameView,
+    privateView: BoardGamePrivateGameView | null,
+  ): void {
+    const reveals = publicGame.finalReveal;
+    if (!reveals || reveals.length === 0) return;
+    const dedupKey = `${matchId}:${publicGame.round}:${publicGame.turnNumber}`;
+    if (this.recordedLocalMatches.has(dedupKey)) return;
+    this.recordedLocalMatches.add(dedupKey);
+
+    const nowMs = Date.now();
+    const weekKey = computeLocalVnWeekKey(nowMs);
+    const localSelfKey = getOrCreateStoredBoardGamePlayerKey() || 'bgk_local_self';
+    const selfPlayerId = privateView?.playerId ?? this.snap.playerId;
+    const map = loadLocalLeaderboardMap();
+
+    for (const rec of reveals) {
+      const playerKey =
+        selfPlayerId && rec.playerId === selfPlayerId ? localSelfKey : `local_${rec.playerId}`;
+      const lobbyMatch = lobbyPlayers.find((p) => p.playerId === rec.playerId);
+      const appearance = sanitizeBoardGameAppearance(
+        lobbyMatch?.appearance ?? publicGame.players.find((p) => p.playerId === rec.playerId)?.appearance,
+      );
+      const cleanName = sanitizeBoardGameName(rec.displayName);
+      const pts =
+        5 +
+        (rec.won ? (rec.faction === 'wanderer' ? 30 : 25) : 0) +
+        (rec.alive ? 2 : 0);
+      const hunterInc = rec.won && rec.faction === 'lantern-guard' ? 1 : 0;
+      const shadowInc = rec.won && rec.faction === 'mist-order' ? 1 : 0;
+      const wandererInc = rec.won && rec.faction === 'wanderer' ? 1 : 0;
+
+      const prev = map[playerKey];
+      const nextStreak = rec.won ? (prev?.currentWinStreak ?? 0) + 1 : 0;
+      const nextBest = Math.max(prev?.bestWinStreak ?? 0, nextStreak);
+      const sameWeek = prev?.weekKey === weekKey;
+
+      map[playerKey] = {
+        playerKey,
+        displayName: cleanName,
+        appearance,
+        matchesPlayed: (prev?.matchesPlayed ?? 0) + 1,
+        wins: (prev?.wins ?? 0) + (rec.won ? 1 : 0),
+        hunterWins: (prev?.hunterWins ?? 0) + hunterInc,
+        shadowWins: (prev?.shadowWins ?? 0) + shadowInc,
+        wandererWins: (prev?.wandererWins ?? 0) + wandererInc,
+        eliminationsDealt: prev?.eliminationsDealt ?? 0,
+        survivalsTotal: (prev?.survivalsTotal ?? 0) + (rec.alive ? 1 : 0),
+        currentWinStreak: nextStreak,
+        bestWinStreak: nextBest,
+        ratingPoints: (prev?.ratingPoints ?? 0) + pts,
+        weekKey,
+        weeklyMatches: sameWeek ? (prev?.weeklyMatches ?? 0) + 1 : 1,
+        weeklyWins: (sameWeek ? (prev?.weeklyWins ?? 0) : 0) + (rec.won ? 1 : 0),
+        weeklyPoints: (sameWeek ? (prev?.weeklyPoints ?? 0) : 0) + pts,
+        lastRoleId: rec.roleId,
+        lastPlayedAtMs: nowMs,
+      };
+    }
+
+    saveLocalLeaderboardMap(map);
+  }
+
+  private buildLocalLeaderboardResponse(
+    period: BoardGameLeaderboardPeriod,
+    faction: BoardGameLeaderboardFactionFilter,
+    localSelfKey: string,
+  ): BoardGameLeaderboardResponse {
+    const nowMs = Date.now();
+    const currentWeekKey = computeLocalVnWeekKey(nowMs);
+    const map = loadLocalLeaderboardMap();
+    const filtered = Object.values(map).filter((row) => {
+      if (period === 'weekly' && (row.weekKey !== currentWeekKey || row.weeklyMatches <= 0)) {
+        return false;
+      }
+      if (period === 'alltime' && row.matchesPlayed <= 0) {
+        return false;
+      }
+      if (faction === 'lantern-guard' && row.hunterWins <= 0) return false;
+      if (faction === 'mist-order' && row.shadowWins <= 0) return false;
+      if (faction === 'wanderer' && row.wandererWins <= 0) return false;
+      return true;
+    });
+
+    filtered.sort((a, b) => {
+      if (period === 'weekly') {
+        if (b.weeklyPoints !== a.weeklyPoints) return b.weeklyPoints - a.weeklyPoints;
+        if (b.weeklyWins !== a.weeklyWins) return b.weeklyWins - a.weeklyWins;
+      } else {
+        if (b.ratingPoints !== a.ratingPoints) return b.ratingPoints - a.ratingPoints;
+        if (b.wins !== a.wins) return b.wins - a.wins;
+      }
+      return b.lastPlayedAtMs - a.lastPlayedAtMs;
+    });
+
+    const entries: BoardGameLeaderboardEntry[] = filtered.map((row, idx) => {
+      const ratingPoints = period === 'weekly' ? row.weeklyPoints : row.ratingPoints;
+      const wins = period === 'weekly' ? row.weeklyWins : row.wins;
+      const matchesPlayed = period === 'weekly' ? row.weeklyMatches : row.matchesPlayed;
+      const winRatePct = matchesPlayed > 0 ? Math.round((wins * 100) / matchesPlayed) : 0;
+      const isSelf = Boolean(localSelfKey && row.playerKey === localSelfKey);
+      return {
+        rank: idx + 1,
+        playerKey: row.playerKey,
+        displayName: row.displayName,
+        appearance: row.appearance,
+        ratingPoints,
+        wins,
+        matchesPlayed,
+        winRatePct,
+        hunterWins: row.hunterWins,
+        shadowWins: row.shadowWins,
+        wandererWins: row.wandererWins,
+        eliminationsDealt: row.eliminationsDealt,
+        survivalsTotal: row.survivalsTotal,
+        currentWinStreak: row.currentWinStreak,
+        bestWinStreak: row.bestWinStreak,
+        lastRoleId: row.lastRoleId,
+        lastPlayedAtMs: row.lastPlayedAtMs,
+        ...(isSelf ? { isSelf: true } : {}),
+      };
+    });
+
+    const myEntry = entries.find((e) => e.isSelf) ?? null;
+    return {
+      ok: true,
+      period,
+      faction,
+      updatedAtMs: nowMs,
+      totalPlayers: entries.length,
+      entries: entries.slice(0, 50),
+      myEntry,
+    };
   }
 
   private teardownMatchSocketOnly(): void {

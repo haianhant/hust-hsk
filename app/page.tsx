@@ -65,9 +65,7 @@ import { getEarnedGlobalBadgeIds, GLOBAL_BADGES } from '../lib/learn/badges';
 import type { PassportMainSection } from '../components/learn/CampusPassportHandbook';
 import type { QuestAnswer } from '../components/learn/QuestPanel';
 import CharacterCreatorModal from '../components/ui/CharacterCreatorModal';
-import { LibraryFloorNav } from '../components/ui/LibraryFloorNav';
 import type { HomeworkState } from '../components/three/Classroom';
-import BuildingEdTechModal from '../features/campus/checkin/BuildingEdTechModal';
 import {
   createEmptyPassportState,
   getCampusLandmarkById,
@@ -88,20 +86,13 @@ import {
   getAnyLibrarySeatDefinition,
   getHook,
   isLibraryLobbySeatId,
-  LibraryLobbyModal,
   releaseActiveSeatSafely,
   SPEECH_RATES,
   TOAST_MS,
   validateSeatSelection,
-  type LibraryLobbyTopic,
 } from '../features/campus/interaction';
-import {
-  CampusHud,
-  CampusQuestsModal,
-  PHOTO_FILTERS,
-  PhotoModeOverlay,
-  type PhotoFilterId,
-} from '../features/campus/ui';
+import type { LibraryLobbyModalTopic as LibraryLobbyTopic } from '../features/campus/interaction/LibraryLobbyModal';
+import type { PhotoFilterId } from '../features/campus/ui/PhotoModeOverlay';
 import {
   CAMPUS_LIFE_QUESTS,
   claimCampusQuest,
@@ -113,15 +104,11 @@ import {
   type CampusQuestMetricKey,
   type CampusQuestsState,
 } from '../features/campus/quests/campus-quests';
-import CampusMemoryWallModal from '../features/social/memory-wall/CampusMemoryWallModal';
 import {
-  BoardGameHUD,
-  BoardGameLobby,
-  GameBoard,
   boardGameClient,
   useBoardGameClientSnapshot,
-  type BoardGameSeatOccupant,
-} from '../features/boardgame';
+} from '../features/boardgame/network/client';
+import type { BoardGameSeatOccupant } from '../features/boardgame/world/BoardGameSeats';
 import {
   BOARD_GAME_MIN_PLAYERS,
   sanitizeInviteCode,
@@ -129,36 +116,90 @@ import {
   type BoardGameTableId,
 } from '../shared/contracts/boardgame';
 import type { MemoryBoardId } from '../features/social/memory-wall/memory-wall';
-import {
-  EntryScreen,
-  LearningOverlayModal,
-  LessonPickerCard,
-  type HandbookTab,
-  type LearningPanelType,
-  type ReviewSessionState,
-} from '../features/learning/hsk';
+import { EntryScreen, type HandbookTab } from '../features/learning/hsk/EntryScreen';
+import type {
+  LearningPanelType,
+  ReviewSessionState,
+} from '../features/learning/hsk/LearningOverlayModal';
 import { useMultiplayerBridge } from '../features/social/multiplayer';
 import {
   derivePlayerPresence,
   isSamePublicPresence,
 } from '../features/social/presence/presence';
-import {
-  FocusModeView,
-  StudyLeaderboardModal,
-  StudyPanel,
-  useStudySession,
-} from '../features/study';
+import { useStudySession } from '../features/study/study-session/useStudySession';
 import {
   getSeatDefinition,
   type PlayerStudyPresence,
   type StudyRoomZoneId,
 } from '../shared/contracts/study';
 
-// CampusScene chỉ mount sau khi bấm "Vào trường" — tránh autoplay/WebGL
-// trước khi người dùng tương tác.
+// Lazy-load toàn bộ 3D & HUD/Modal phụ để màn hình khởi tạo đạt FCP/TTI tức thì.
 const CampusScene = dynamic(() => import('../components/three/CampusScene'), {
   ssr: false,
 });
+const CampusHud = dynamic(() => import('../features/campus/ui/CampusHud'), {
+  ssr: false,
+});
+const CampusQuestsModal = dynamic(() => import('../features/campus/ui/CampusQuestsModal'), {
+  ssr: false,
+});
+const PhotoModeOverlay = dynamic(() => import('../features/campus/ui/PhotoModeOverlay'), {
+  ssr: false,
+});
+const BuildingEdTechModal = dynamic(
+  () => import('../features/campus/checkin/BuildingEdTechModal'),
+  { ssr: false },
+);
+const LibraryLobbyModal = dynamic(
+  () => import('../features/campus/interaction/LibraryLobbyModal'),
+  { ssr: false },
+);
+const LibraryFloorNav = dynamic(
+  () => import('../components/ui/LibraryFloorNav').then((m) => m.LibraryFloorNav),
+  { ssr: false },
+);
+const CampusMemoryWallModal = dynamic(
+  () => import('../features/social/memory-wall/CampusMemoryWallModal'),
+  { ssr: false },
+);
+const BoardGameHUD = dynamic(() => import('../features/boardgame/ui/BoardGameHUD'), {
+  ssr: false,
+});
+const BoardGameLobby = dynamic(() => import('../features/boardgame/ui/BoardGameLobby'), {
+  ssr: false,
+});
+const GameBoard = dynamic(() => import('../features/boardgame/ui/GameBoard'), {
+  ssr: false,
+});
+const BoardGameLeaderboardModal = dynamic(
+  () => import('../features/boardgame/ui/BoardGameLeaderboardModal'),
+  { ssr: false },
+);
+const LearningOverlayModal = dynamic(
+  () => import('../features/learning/hsk/LearningOverlayModal'),
+  { ssr: false },
+);
+const LessonPickerCard = dynamic(
+  () => import('../features/learning/hsk/LessonPickerCard'),
+  { ssr: false },
+);
+const FocusModeView = dynamic(() => import('../features/study/focus-mode/FocusModeView'), {
+  ssr: false,
+});
+const StudyPanel = dynamic(() => import('../features/study/ui/StudyPanel'), {
+  ssr: false,
+});
+const StudyLeaderboardModal = dynamic(
+  () => import('../features/study/ui/StudyLeaderboardModal'),
+  { ssr: false },
+);
+
+const PHOTO_FILTER_CSS: Record<PhotoFilterId, string> = {
+  none: 'none',
+  'warm-sunset': 'saturate(1.22) sepia(0.18) contrast(1.06)',
+  'film-vintage': 'contrast(1.1) sepia(0.28) brightness(0.98)',
+  'vivid-bk': 'saturate(1.32) contrast(1.08) brightness(1.03)',
+};
 
 function computeRealWorldTimeOfDay(now: Date = new Date()): {
   timeOfDay: TimeOfDay;
@@ -225,8 +266,42 @@ function countBoardGameTablePlayers(
   return Math.min(8, Math.max(seatSet.size, dirCount));
 }
 
+/**
+ * Polls for the Three.js scene hook until `enterBoardGameClub` is mounted and
+ * moves the 3D player avatar into the Board Game lounge. Returns a cancel callback.
+ */
+function syncBoardGameClubHookWhenReady(intervalMs = 120, maxAttempts = 120): () => void {
+  let cancelled = false;
+  let attempts = 0;
+  let activeTimer: number | null = null;
+  const step = () => {
+    activeTimer = null;
+    if (cancelled) return;
+    const hook = getHook();
+    if (hook?.enterBoardGameClub) {
+      if (!hook.isInBoardGameClub?.()) {
+        hook.enterBoardGameClub();
+      }
+      return;
+    }
+    if (attempts < maxAttempts) {
+      attempts += 1;
+      activeTimer = window.setTimeout(step, intervalMs);
+    }
+  };
+  activeTimer = window.setTimeout(step, intervalMs);
+  return () => {
+    cancelled = true;
+    if (activeTimer !== null) {
+      window.clearTimeout(activeTimer);
+      activeTimer = null;
+    }
+  };
+}
+
 export default function HomePage() {
   const [entered, setEntered] = useState(false);
+  const [sceneFirstFrameReady, setSceneFirstFrameReady] = useState(false);
   const [zone, setZone] = useState(playerState.zone);
   const [viewMode, setViewMode] = useState<CameraViewMode>(playerState.viewMode);
   const [photoMode, setPhotoMode] = useState<boolean>(false);
@@ -260,9 +335,11 @@ export default function HomePage() {
   const [nearestBoardGameSeatId, setNearestBoardGameSeatId] = useState<string | null>(null);
   const [boardGameLobbyOpen, setBoardGameLobbyOpen] = useState(false);
   const [boardGameRulesOpen, setBoardGameRulesOpen] = useState(false);
+  const [boardGameLeaderboardOpen, setBoardGameLeaderboardOpen] = useState(false);
   const [boardGameExitConfirmOpen, setBoardGameExitConfirmOpen] = useState(false);
   const bgSnap = useBoardGameClientSnapshot();
   const bgSessionRestoredRef = useRef(false);
+  const cancelBgHookSyncRef = useRef<(() => void) | null>(null);
   const pendingBgInviteRef = useRef<string | null>(null);
   const [seatedSeatId, setSeatedSeatId] = useState<string | null>(null);
   const [seatedSeatLabel, setSeatedSeatLabel] = useState<string | null>(null);
@@ -356,6 +433,31 @@ export default function HomePage() {
     if (entered && !lofiManuallyPausedRef.current) {
       lofiAudio.start();
     }
+  }, [entered]);
+
+  // Nạp font Google Fonts bất đồng bộ (non-blocking) & preload trước CampusScene/CampusHud khi user đang ở màn hình chào
+  useEffect(() => {
+    if (typeof document !== 'undefined' && !document.querySelector('link[data-bkhn-font]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href =
+        'https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap';
+      link.setAttribute('data-bkhn-font', '1');
+      document.head.appendChild(link);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (entered) {
+      const safetyTimer = window.setTimeout(() => setSceneFirstFrameReady(true), 2200);
+      return () => window.clearTimeout(safetyTimer);
+    }
+    setSceneFirstFrameReady(false);
+    const preloadTimer = window.setTimeout(() => {
+      void import('../components/three/CampusScene');
+      void import('../features/campus/ui/CampusHud');
+    }, 250);
+    return () => window.clearTimeout(preloadTimer);
   }, [entered]);
 
   const [noVoice, setNoVoice] = useState(false);
@@ -929,6 +1031,7 @@ export default function HomePage() {
       campusQuestsOpen ||
       boardGameLobbyOpen ||
       boardGameRulesOpen ||
+      boardGameLeaderboardOpen ||
       boardGameExitConfirmOpen ||
       bgGameActive ||
       study.studyPanelOpen ||
@@ -947,6 +1050,7 @@ export default function HomePage() {
     campusQuestsOpen,
     boardGameLobbyOpen,
     boardGameRulesOpen,
+    boardGameLeaderboardOpen,
     boardGameExitConfirmOpen,
     bgGameActive,
     study.studyPanelOpen,
@@ -1509,10 +1613,9 @@ export default function HomePage() {
   const exitBoardGameClubFade = useCallback(() => {
     setBoardGameLobbyOpen(false);
     setBoardGameRulesOpen(false);
+    setBoardGameLeaderboardOpen(false);
     setBoardGameExitConfirmOpen(false);
-    if (boardGameClient.getSnapshot().matchId) {
-      boardGameClient.leaveMatch();
-    }
+    boardGameClient.leaveMatch();
     setFade(true);
     window.setTimeout(() => {
       getHook()?.exitBoardGameClub?.();
@@ -1523,62 +1626,15 @@ export default function HomePage() {
   }, []);
 
   const handleRequestExitBoardGameClub = useCallback(() => {
-    if (boardGameSeatId || bgSnap.matchId) {
+    const hookState = getHook()?.getBoardGameSeatState?.();
+    const liveSeated = hookState ? Boolean(hookState.seatId) : Boolean(boardGameSeatId);
+    const liveSnap = boardGameClient.getSnapshot();
+    if (liveSeated || liveSnap.matchId) {
       setBoardGameExitConfirmOpen(true);
       return;
     }
     exitBoardGameClubFade();
-  }, [boardGameSeatId, bgSnap.matchId, exitBoardGameClubFade]);
-
-  const handleSelectBoardGameSeat = useCallback(
-    (seatId: string) => {
-      const snap = boardGameClient.getSnapshot();
-      const mpNow = multiplayer.getSnapshot();
-      const takenByBg = snap.players.find(
-        (p) => p.seatId === seatId && p.playerId !== snap.playerId && !p.isSpectator,
-      );
-      const takenByMp = mpNow.players.find(
-        (p) => p.id !== mpNow.selfId && p.scene === 'boardgame' && p.seatedSeatId === seatId,
-      );
-      if (takenByBg || takenByMp) {
-        const who = takenByBg?.displayName ?? takenByMp?.name ?? 'người chơi khác';
-        showToast(`🪑 Ghế này đang có ${who} ngồi — hãy chọn ghế trống khác!`);
-        return;
-      }
-      if (snap.matchId) {
-        if (snap.status === 'PLAYING' || snap.status === 'STARTING') {
-          showToast('Ván đấu đang diễn ra, không thể đổi ghế lúc này.');
-          return;
-        }
-        const parsed = seatIdToTableAndIndex(seatId);
-        if (parsed && (!snap.tableId || parsed.tableId === snap.tableId)) {
-          boardGameClient.selectSeat(parsed.seatIndex);
-        }
-      }
-      const r = getHook()?.sitAtBoardGameSeat?.(seatId);
-      if (r?.ok) {
-        setBoardGameSeatId(r.seatId ?? seatId);
-        showToast(`🪑 Đã ngồi vào ${r.label ?? 'ghế bàn chơi'} (bấm E để đứng dậy)`);
-      }
-    },
-    [showToast],
-  );
-
-  const handleStandUpBoardGameSeat = useCallback(() => {
-    const snap = boardGameClient.getSnapshot();
-    if (snap.matchId) {
-      if (snap.status === 'PLAYING' || snap.status === 'STARTING') {
-        showToast('Không thể đứng dậy rời ghế khi ván đang diễn ra.');
-        return;
-      }
-      boardGameClient.standUp();
-    }
-    const r = getHook()?.standUpBoardGameSeat?.();
-    if (r?.ok) {
-      setBoardGameSeatId(null);
-      showToast('Đã đứng dậy khỏi bàn Board Game.');
-    }
-  }, [showToast]);
+  }, [boardGameSeatId, exitBoardGameClubFade]);
 
   const bgAppearance = useMemo(
     () => ({
@@ -1599,11 +1655,95 @@ export default function HomePage() {
     ],
   );
 
+  const handleSelectBoardGameSeat = useCallback(
+    (seatId: string) => {
+      const snap = boardGameClient.getSnapshot();
+      const mpNow = multiplayer.getSnapshot();
+      const takenByBg = snap.players.find(
+        (p) => p.seatId === seatId && p.playerId !== snap.playerId && !p.isSpectator,
+      );
+      const takenByMp = mpNow.players.find(
+        (p) => p.id !== mpNow.selfId && p.scene === 'boardgame' && p.seatedSeatId === seatId,
+      );
+      if (takenByBg || takenByMp) {
+        const who = takenByBg?.displayName ?? takenByMp?.name ?? 'người chơi khác';
+        showToast(`🪑 Ghế này đang có ${who} ngồi — hãy chọn ghế trống khác!`);
+        return;
+      }
+      if (snap.matchId && (snap.status === 'PLAYING' || snap.status === 'STARTING')) {
+        showToast('Ván đấu đang diễn ra, không thể đổi ghế lúc này.');
+        return;
+      }
+      const r = getHook()?.sitAtBoardGameSeat?.(seatId);
+      if (!r?.ok) return;
+      const effectiveSeatId = r.seatId ?? seatId;
+      setBoardGameSeatId(effectiveSeatId);
+      showToast(`🪑 Đã ngồi vào ${r.label ?? 'ghế bàn chơi'} (bấm E để đứng dậy)`);
+
+      const parsed = seatIdToTableAndIndex(effectiveSeatId);
+      if (!parsed) return;
+
+      const sameTableWaitingMatch = Boolean(
+        snap.matchId &&
+          snap.tableId === parsed.tableId &&
+          !snap.isSpectator &&
+          (snap.status === 'CREATED' || snap.status === 'WAITING' || snap.status === 'READY_CHECK'),
+      );
+      if (sameTableWaitingMatch) {
+        boardGameClient.selectSeat(parsed.seatIndex);
+        return;
+      }
+
+      if (snap.matchId) {
+        boardGameClient.leaveMatch();
+      }
+      void boardGameClient
+        .joinOrCreateTableMatch({
+          tableId: parsed.tableId,
+          displayName: characterProfile.name,
+          appearance: bgAppearance,
+          preferredSeatIndex: parsed.seatIndex,
+        })
+        .then((res) => {
+          if (res.ok) {
+            showToast(
+              res.created
+                ? `🎲 Đã mở phòng chờ ${parsed.tableId === 'table-1' ? 'Bàn 1' : 'Bàn 2'} · Mã mời: ${res.inviteCode}`
+                : `🎲 Đã tự động vào phòng ${res.inviteCode}!`,
+            );
+          }
+        });
+    },
+    [bgAppearance, characterProfile.name, showToast],
+  );
+
+  const handleStandUpBoardGameSeat = useCallback(() => {
+    const snap = boardGameClient.getSnapshot();
+    if (snap.matchId && (snap.status === 'PLAYING' || snap.status === 'STARTING')) {
+      showToast('Không thể đứng dậy rời ghế khi ván đang diễn ra.');
+      return;
+    }
+    boardGameClient.leaveMatch();
+    const r = getHook()?.standUpBoardGameSeat?.();
+    if (r?.ok) {
+      setBoardGameSeatId(null);
+      showToast('Đã đứng dậy khỏi bàn Board Game.');
+    }
+  }, [showToast]);
+
   // Đăng ký kênh danh sách trận trong sảnh CLB Board Game
   useEffect(() => {
     if (!entered || !inBoardGameClub) return;
     return boardGameClient.subscribeDirectory();
   }, [entered, inBoardGameClub]);
+
+  useEffect(
+    () => () => {
+      cancelBgHookSyncRef.current?.();
+      cancelBgHookSyncRef.current = null;
+    },
+    [],
+  );
 
   // Khôi phục tự động nếu người chơi F5 giữa phòng chờ hoặc ván đấu Board Game
   useEffect(() => {
@@ -1615,10 +1755,9 @@ export default function HomePage() {
       bgAppearance,
     );
     if (restoredMatchId) {
-      window.setTimeout(() => {
-        getHook()?.enterBoardGameClub?.();
-        setInBoardGameClub(true);
-      }, 250);
+      setInBoardGameClub(true);
+      cancelBgHookSyncRef.current?.();
+      cancelBgHookSyncRef.current = syncBoardGameClubHookWhenReady(120, 120);
     }
   }, [entered, characterProfile.name, bgAppearance]);
 
@@ -1687,30 +1826,7 @@ export default function HomePage() {
     void handleJoinBoardGameByCode(code, false);
 
     // Đồng bộ Player 3D vào phòng CLB ngay khi Three.js Canvas hoàn tất mount
-    let cancelled = false;
-    let attempts = 0;
-    let activeTimer: number | null = null;
-    const syncPlayerHook = () => {
-      if (cancelled) return;
-      const hook = getHook();
-      if (hook?.enterBoardGameClub) {
-        if (!hook.isInBoardGameClub?.()) {
-          hook.enterBoardGameClub();
-        }
-        return;
-      }
-      if (attempts < 150) {
-        attempts += 1;
-        activeTimer = window.setTimeout(syncPlayerHook, 150);
-      }
-    };
-    activeTimer = window.setTimeout(syncPlayerHook, 150);
-    return () => {
-      cancelled = true;
-      if (activeTimer !== null) {
-        window.clearTimeout(activeTimer);
-      }
-    };
+    return syncBoardGameClubHookWhenReady(150, 150);
   }, [entered, handleJoinBoardGameByCode]);
 
   const handleJoinDirectoryBoardGameMatch = useCallback(
@@ -1863,8 +1979,14 @@ export default function HomePage() {
     window.setTimeout(() => {
       const r = hook.fastTravel?.(destId);
       if (r?.ok) {
-        const dest = FAST_TRAVEL_DESTINATIONS.find((d) => d.id === destId);
-        if (dest) showToast(`Đã tới ${dest.name}.`);
+        if (destId === 'boardgame') {
+          hook.enterBoardGameClub?.();
+          setInBoardGameClub(true);
+          showToast('Đã vào thẳng CLB Board Game KTX!');
+        } else {
+          const dest = FAST_TRAVEL_DESTINATIONS.find((d) => d.id === destId);
+          if (dest) showToast(`Đã tới ${dest.name}.`);
+        }
       } else if (r?.reason === 'busy') {
         showToast('Đang chuyển cảnh — đợi một chút rồi thử lại.');
       } else {
@@ -2541,12 +2663,19 @@ export default function HomePage() {
     [bgSnap.playerId, bgSnap.players],
   );
   const isBgHost = Boolean(bgSnap.playerId && bgSnap.hostPlayerId === bgSnap.playerId);
+  const bgSeatedPlayers = useMemo(
+    () => bgSnap.players.filter((p) => !p.isSpectator && p.seatId && p.connected),
+    [bgSnap.players],
+  );
+  const bgReadyCount = useMemo(
+    () => bgSeatedPlayers.filter((p) => p.isHost || p.ready).length,
+    [bgSeatedPlayers],
+  );
   const canStartBgMatch = useMemo(() => {
     if (!isBgHost || bgSnap.status === 'PLAYING' || bgSnap.status === 'STARTING') return false;
-    const connectedSeated = bgSnap.players.filter((p) => !p.isSpectator && p.seatId && p.connected);
-    if (connectedSeated.length < BOARD_GAME_MIN_PLAYERS) return false;
-    return connectedSeated.every((p) => p.isHost || p.ready);
-  }, [isBgHost, bgSnap.status, bgSnap.players]);
+    if (bgSeatedPlayers.length < BOARD_GAME_MIN_PLAYERS) return false;
+    return bgSeatedPlayers.every((p) => p.isHost || p.ready);
+  }, [isBgHost, bgSnap.status, bgSeatedPlayers]);
 
   const bgStatusLabel =
     bgSnap.status === 'CREATED'
@@ -2590,12 +2719,10 @@ export default function HomePage() {
   const unclaimedQuestCount = CAMPUS_LIFE_QUESTS.filter(
     (q) => isCampusQuestCompleted(campusQuests, q) && !campusQuests.claimedIds.includes(q.id),
   ).length;
-  const activePhotoCssFilter = photoMode
-    ? PHOTO_FILTERS.find((f) => f.id === photoFilter)?.cssFilter ?? 'none'
-    : 'none';
+  const activePhotoCssFilter = photoMode ? PHOTO_FILTER_CSS[photoFilter] ?? 'none' : 'none';
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden">
+    <main className="relative h-dvh w-full overflow-hidden bg-[#0f172a]">
       {study.focusPolicy.suspend3DRendering ? (
         <FocusModeView
           zoneLabel={currentZoneLabel}
@@ -2652,7 +2779,29 @@ export default function HomePage() {
               homework={homework}
               onObjectClick={handleObjectClick}
               onSelectBoardGameSeat={handleSelectBoardGameSeat}
+              onFirstFrameReady={() => setSceneFirstFrameReady(true)}
             />
+          </div>
+
+          {/* Màn chuyển cảnh mượt không nháy trắng khi khởi tạo khung hình 3D đầu tiên */}
+          <div
+            data-testid="campus-loading-overlay"
+            aria-hidden={sceneFirstFrameReady}
+            className={`pointer-events-none fixed inset-0 z-20 flex flex-col items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#13221a] to-[#0f172a] text-white transition-opacity duration-300 ${
+              sceneFirstFrameReady ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            <div className="flex flex-col items-center gap-3 px-6 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/40 bg-[#B5121B] text-xl font-black shadow-lg">
+                BK
+              </div>
+              <p className="text-sm font-extrabold tracking-wide text-amber-200 sm:text-base">
+                Đang khởi tạo khuôn viên 3D ĐHBK Hà Nội...
+              </p>
+              <div className="h-1.5 w-48 overflow-hidden rounded-full bg-white/15">
+                <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-[#B5121B] via-amber-400 to-emerald-400" />
+              </div>
+            </div>
           </div>
 
           {/* Fade chuyển cảnh vào/ra phòng học. */}
@@ -2757,16 +2906,18 @@ export default function HomePage() {
           )}
 
           {/* Bảng điều khiển Thang máy & Chuyển tầng Thư viện Tạ Quang Bửu (Tầng 1–10) */}
-          <LibraryFloorNav
-            visible={inLibraryLobby && !study.focusPolicy.suspend3DRendering}
-            externalModal={libraryExtraModal}
-            onClearExternalModal={() => setLibraryExtraModal(null)}
-          />
+          {inLibraryLobby && !study.focusPolicy.suspend3DRendering && (
+            <LibraryFloorNav
+              visible={true}
+              externalModal={libraryExtraModal}
+              onClearExternalModal={() => setLibraryExtraModal(null)}
+            />
+          )}
         </>
       )}
 
       {/* Bảng Tự học Bách khoa (Pomodoro + Nhiệm vụ tự học + Focus Mode) */}
-      {!study.focusPolicy.suspend3DRendering && (
+      {study.studyPanelOpen && !study.focusPolicy.suspend3DRendering && (
         <StudyPanel
           open={study.studyPanelOpen}
           zoneLabel={currentZoneLabel}
@@ -2807,36 +2958,42 @@ export default function HomePage() {
       )}
 
       {/* Bảng Xếp Hạng Giờ Học Bách Khoa (SQLite Cloud Sync) */}
-      <StudyLeaderboardModal
-        open={leaderboardOpen}
-        session={study.session}
-        onClose={() => setLeaderboardOpen(false)}
-        onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
-      />
+      {leaderboardOpen && (
+        <StudyLeaderboardModal
+          open={leaderboardOpen}
+          session={study.session}
+          onClose={() => setLeaderboardOpen(false)}
+          onOpenStudyPanel={() => study.setStudyPanelOpen(true)}
+        />
+      )}
 
       {/* Bảng Lưu bút Sân trường (Async Memory Wall) */}
-      <CampusMemoryWallModal
-        open={memoryWallOpen && entered}
-        initialBoardId={memoryWallBoardId}
-        characterProfile={characterProfile}
-        onMemoryAction={() => {
-          bumpQuestMetric('memoryActions');
-        }}
-        onClose={() => setMemoryWallOpen(false)}
-      />
+      {memoryWallOpen && entered && (
+        <CampusMemoryWallModal
+          open={memoryWallOpen && entered}
+          initialBoardId={memoryWallBoardId}
+          characterProfile={characterProfile}
+          onMemoryAction={() => {
+            bumpQuestMetric('memoryActions');
+          }}
+          onClose={() => setMemoryWallOpen(false)}
+        />
+      )}
 
       {/* Bảng Hành trình Sinh viên Bách Khoa & Danh hiệu mở khóa */}
-      <CampusQuestsModal
-        open={campusQuestsOpen && entered}
-        questsState={campusQuests}
-        characterProfile={characterProfile}
-        heldDrink={characterProfile.heldDrink ?? 'none'}
-        onClaimQuest={handleClaimCampusQuest}
-        onFastTravel={doFastTravel}
-        onUpdateCosmetics={handleUpdateCosmetics}
-        onSelectDrink={handleSelectDrink}
-        onClose={() => setCampusQuestsOpen(false)}
-      />
+      {campusQuestsOpen && entered && (
+        <CampusQuestsModal
+          open={campusQuestsOpen && entered}
+          questsState={campusQuests}
+          characterProfile={characterProfile}
+          heldDrink={characterProfile.heldDrink ?? 'none'}
+          onClaimQuest={handleClaimCampusQuest}
+          onFastTravel={doFastTravel}
+          onUpdateCosmetics={handleUpdateCosmetics}
+          onSelectDrink={handleSelectDrink}
+          onClose={() => setCampusQuestsOpen(false)}
+        />
+      )}
 
       {/* Cửa sổ 3D Nhân vật & Trang phục HUST mở từ HUD trong sân trường */}
       {outfitOpen && entered && (
@@ -2880,52 +3037,65 @@ export default function HomePage() {
             table2Count={bgTable2Count}
             lobbyOpen={boardGameLobbyOpen}
             rulesOpen={boardGameRulesOpen}
+            leaderboardOpen={boardGameLeaderboardOpen}
             hasActiveMatch={Boolean(boardGameSeatId || bgSnap.matchId)}
             inviteCode={bgSnap.inviteCode}
             matchStatusLabel={bgStatusLabel}
             isSpectator={bgSnap.isSpectator}
-            onToggleLobby={() => setBoardGameLobbyOpen((v) => !v)}
-            onToggleRules={() => setBoardGameRulesOpen((v) => !v)}
-            onStandUpSeat={handleStandUpBoardGameSeat}
-            onRequestExit={handleRequestExitBoardGameClub}
-          />
-          <BoardGameLobby
-            open={boardGameLobbyOpen}
-            rulesOpen={boardGameRulesOpen}
-            exitConfirmOpen={boardGameExitConfirmOpen}
-            currentSeatId={boardGameSeatId}
-            occupants={boardGameOccupants}
-            table1Count={bgTable1Count}
-            table2Count={bgTable2Count}
-            directoryMatches={bgSnap.directoryMatches}
-            activePlayers={bgSnap.players}
-            spectatorCount={bgSnap.spectatorCount}
-            selfPlayerId={bgSnap.playerId}
-            isSpectator={bgSnap.isSpectator}
-            inviteCode={bgSnap.inviteCode}
-            matchStatusLabel={bgStatusLabel}
             isHost={isBgHost}
             localReady={Boolean(selfBgPlayer?.ready)}
-            serverNotice={bgSnap.lastError}
-            supportsOnlineLobby
             canStartMatch={canStartBgMatch}
-            onCloseLobby={() => setBoardGameLobbyOpen(false)}
-            onCloseRules={() => setBoardGameRulesOpen(false)}
-            onCancelExit={() => setBoardGameExitConfirmOpen(false)}
-            onConfirmExit={exitBoardGameClubFade}
-            onSelectSeat={handleSelectBoardGameSeat}
+            seatedPlayerCount={bgSeatedPlayers.length}
+            readyPlayerCount={bgReadyCount}
+            gameActive={bgGameActive}
+            onToggleLobby={() => setBoardGameLobbyOpen((v) => !v)}
+            onToggleRules={() => setBoardGameRulesOpen((v) => !v)}
+            onToggleLeaderboard={() => setBoardGameLeaderboardOpen((v) => !v)}
             onStandUpSeat={handleStandUpBoardGameSeat}
-            onCreateMatch={handleCreateBoardGameMatch}
-            onJoinByCode={handleJoinBoardGameByCode}
-            onJoinDirectoryMatch={handleJoinDirectoryBoardGameMatch}
             onToggleReady={() => boardGameClient.setReady(!selfBgPlayer?.ready)}
             onStartMatch={() => boardGameClient.startMatch()}
-            onLeaveMatch={() => {
-              boardGameClient.leaveMatch();
-              getHook()?.standUpBoardGameSeat?.();
-              setBoardGameSeatId(null);
-            }}
+            onRequestExit={handleRequestExitBoardGameClub}
           />
+          {(boardGameLobbyOpen || boardGameRulesOpen || boardGameExitConfirmOpen) && (
+            <BoardGameLobby
+              open={boardGameLobbyOpen}
+              rulesOpen={boardGameRulesOpen}
+              exitConfirmOpen={boardGameExitConfirmOpen}
+              currentSeatId={boardGameSeatId}
+              occupants={boardGameOccupants}
+              table1Count={bgTable1Count}
+              table2Count={bgTable2Count}
+              directoryMatches={bgSnap.directoryMatches}
+              activePlayers={bgSnap.players}
+              spectatorCount={bgSnap.spectatorCount}
+              selfPlayerId={bgSnap.playerId}
+              isSpectator={bgSnap.isSpectator}
+              inviteCode={bgSnap.inviteCode}
+              matchStatusLabel={bgStatusLabel}
+              isHost={isBgHost}
+              localReady={Boolean(selfBgPlayer?.ready)}
+              serverNotice={bgSnap.lastError}
+              supportsOnlineLobby
+              canStartMatch={canStartBgMatch}
+              onCloseLobby={() => setBoardGameLobbyOpen(false)}
+              onCloseRules={() => setBoardGameRulesOpen(false)}
+              onOpenLeaderboard={() => setBoardGameLeaderboardOpen(true)}
+              onCancelExit={() => setBoardGameExitConfirmOpen(false)}
+              onConfirmExit={exitBoardGameClubFade}
+              onSelectSeat={handleSelectBoardGameSeat}
+              onStandUpSeat={handleStandUpBoardGameSeat}
+              onCreateMatch={handleCreateBoardGameMatch}
+              onJoinByCode={handleJoinBoardGameByCode}
+              onJoinDirectoryMatch={handleJoinDirectoryBoardGameMatch}
+              onToggleReady={() => boardGameClient.setReady(!selfBgPlayer?.ready)}
+              onStartMatch={() => boardGameClient.startMatch()}
+              onLeaveMatch={() => {
+                boardGameClient.leaveMatch();
+                getHook()?.standUpBoardGameSeat?.();
+                setBoardGameSeatId(null);
+              }}
+            />
+          )}
           {bgGameActive && bgSnap.publicGame && (
             <GameBoard
               inviteCode={bgSnap.inviteCode}
@@ -2940,6 +3110,7 @@ export default function HomePage() {
               onSendEmote={(emote) => boardGameClient.sendEmote(emote)}
               onSendChat={(text) => boardGameClient.sendChat(text)}
               onOpenRules={() => setBoardGameRulesOpen(true)}
+              onOpenLeaderboard={() => setBoardGameLeaderboardOpen(true)}
               onPlayAgain={() => {
                 boardGameClient.setReady(true);
                 setBoardGameLobbyOpen(true);
@@ -2951,6 +3122,10 @@ export default function HomePage() {
               }}
             />
           )}
+          <BoardGameLeaderboardModal
+            open={boardGameLeaderboardOpen}
+            onClose={() => setBoardGameLeaderboardOpen(false)}
+          />
         </>
       )}
 
@@ -2975,8 +3150,9 @@ export default function HomePage() {
       )}
 
       {/* Panel học / sổ tay / kết quả (DOM overlay, khóa di chuyển khi mở). */}
-      <LearningOverlayModal
-        panel={panel}
+      {panel !== null && (
+        <LearningOverlayModal
+          panel={panel}
         passport={passport}
         passportSection={passportSection}
         progress={progress}
@@ -3026,7 +3202,8 @@ export default function HomePage() {
         onReviewNow={handleReviewNow}
         onCompleteQuest={completeQuest}
         onStartQuest={(qId) => startQuest(qId, true)}
-      />
+        />
+      )}
     </main>
   );
 }

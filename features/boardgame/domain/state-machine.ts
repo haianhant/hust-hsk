@@ -1,176 +1,185 @@
 // ---------------------------------------------------------------------------
-// features/boardgame/domain/state-machine.ts — Khởi tạo trận đấu
-// AuthoritativeGameState từ danh sách ghế thật 4–8 người chơi.
+// features/boardgame/domain/state-machine.ts — Khởi tạo ván đấu Shadow Hunters
+// chuẩn gốc (4–8 người chơi): 0 bài khởi đầu, xáo 3 Cụm ngẫu nhiên, đủ 48 thẻ & 10 vai.
 // ---------------------------------------------------------------------------
 
-import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
-import { CARDS_BY_ID, listCardIdsByDeck } from './cards';
-import { FACTION_LABELS, ROLES_BY_ID, getRoleDistribution, listRolesForFaction } from './roles';
 import {
-  BOARD_GAME_MAX_TRACK,
-  getMaxRoundsForPlayerCount,
-  nextDeterministicRandom,
+  BOARD_GAME_VALID_LOCATIONS,
+  type BoardGameClusterPair,
+  type BoardGameDeckId,
+  type BoardGameRoleId,
+} from '../../../shared/contracts/boardgame';
+import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
+import { listCardIdsByDeck } from './cards';
+import { appendPublicLog } from './effects';
+import { getRoleDesign, getRoleDistribution, listRolesForFaction } from './roles';
+import {
+  BOARD_GAME_SAFETY_MAX_ROUNDS,
+  LOCATIONS_CATALOG,
   shuffleWithRng,
 } from './rules';
-import type { AuthoritativeGameState, AuthoritativePlayerState, GameCard } from './types';
+import type { AuthoritativeGameState, AuthoritativePlayerState } from './types';
 
-export interface CreateInitialGameInput {
-  matchId: string;
-  seed?: number;
-  nowMs: number;
-  players: ReadonlyArray<{
-    playerId: string;
-    displayName: string;
-    seatIndex: number;
-    appearance?: RemoteAppearance;
-    connected?: boolean;
-  }>;
+export interface CreateGamePlayerInput {
+  playerId: string;
+  displayName: string;
+  seatIndex: number;
+  appearance: RemoteAppearance;
+  connected: boolean;
 }
 
-export function createInitialGameState(input: CreateInitialGameInput): AuthoritativeGameState {
-  if (input.players.length < 4 || input.players.length > 8) {
-    throw new Error(`Số người chơi phải trong khoảng 4–8 (nhận ${input.players.length}).`);
-  }
+export interface CreateGameStateInput {
+  matchId: string;
+  seed: number;
+  nowMs: number;
+  players: readonly CreateGamePlayerInput[];
+}
 
-  const seed = (input.seed ?? Math.floor(Math.random() * 0x7fffffff)) >>> 0 || 1337;
-  const sortedPlayers = input.players
-    .slice()
-    .sort((a, b) => a.seatIndex - b.seatIndex);
+export function createInitialGameState(
+  input: CreateGameStateInput,
+): AuthoritativeGameState {
+  const orderedInputs = [...input.players].sort((a, b) => a.seatIndex - b.seatIndex);
+  let rngState = (input.seed >>> 0) || 135792468;
 
-  const state: AuthoritativeGameState = {
-    matchId: input.matchId,
-    seed,
-    rngState: seed,
-    round: 1,
-    maxRounds: getMaxRoundsForPlayerCount(sortedPlayers.length),
-    signalProgress: 0,
-    mistProgress: 0,
-    maxTrackValue: BOARD_GAME_MAX_TRACK,
-    turnOrder: sortedPlayers.map((p) => p.playerId),
-    activeTurnIdx: 0,
-    turnPhase: 'MOVE',
-    actionUsedThisTurn: false,
-    blackoutLocation: null,
-    blackoutRoundsLeft: 0,
-    lastVisitorByLocation: {
-      lobby: null,
-      canteen: null,
-      radio: null,
-      court: null,
-      corridor: null,
-      breaker: null,
-    },
-    players: [],
-    decks: {
-      clue: [],
-      event: [],
-      tactic: [],
-    },
-    discards: {
-      clue: [],
-      event: [],
-      tactic: [],
-    },
-    publicLog: [],
-    highlights: [],
-    winnerLabel: null,
-    winnerFaction: null,
-    winnerPlayerIds: [],
-    winReason: null,
-    finished: false,
-    seqCounter: 0,
+  const split = getRoleDistribution(orderedInputs.length);
+  const hunters = shuffleWithRng(
+    listRolesForFaction('lantern-guard').map((r) => r.id),
+    rngState,
+  );
+  rngState = hunters.nextState;
+  const shadows = shuffleWithRng(
+    listRolesForFaction('mist-order').map((r) => r.id),
+    rngState,
+  );
+  rngState = shadows.nextState;
+  const wanderers = shuffleWithRng(
+    listRolesForFaction('wanderer').map((r) => r.id),
+    rngState,
+  );
+  rngState = wanderers.nextState;
+
+  const pickedRoleIds: BoardGameRoleId[] = [
+    ...hunters.shuffled.slice(0, split.lanternGuard),
+    ...shadows.shuffled.slice(0, split.mistOrder),
+    ...wanderers.shuffled.slice(0, split.wanderer),
+  ];
+  const shuffledRoles = shuffleWithRng(pickedRoleIds, rngState);
+  rngState = shuffledRoles.nextState;
+
+  const invDeck = shuffleWithRng(listCardIdsByDeck('investigation'), rngState);
+  rngState = invDeck.nextState;
+  const eqDeck = shuffleWithRng(listCardIdsByDeck('equipment'), rngState);
+  rngState = eqDeck.nextState;
+  const evDeck = shuffleWithRng(listCardIdsByDeck('event'), rngState);
+  rngState = evDeck.nextState;
+
+  const decks: Record<BoardGameDeckId, string[]> = {
+    investigation: invDeck.shuffled,
+    equipment: eqDeck.shuffled,
+    event: evDeck.shuffled,
   };
 
-  state.decks.clue = shuffleWithRng(listCardIdsByDeck('clue'), state);
-  state.decks.event = shuffleWithRng(listCardIdsByDeck('event'), state);
-  const tacticPool = [...listCardIdsByDeck('tactic'), ...listCardIdsByDeck('tactic')];
-  state.decks.tactic = shuffleWithRng(tacticPool, state);
+  // Xáo ngẫu nhiên 6 khu vực vào 3 Cụm cặp đôi (Shadow Hunters base setup)
+  const shuffledZones = shuffleWithRng(BOARD_GAME_VALID_LOCATIONS, rngState);
+  rngState = shuffledZones.nextState;
+  const z = shuffledZones.shuffled;
+  const clusterPairs: BoardGameClusterPair[] = [
+    { clusterId: 'north', locationIds: [z[0], z[1]] },
+    { clusterId: 'central', locationIds: [z[2], z[3]] },
+    { clusterId: 'south', locationIds: [z[4], z[5]] },
+  ];
 
-  const split = getRoleDistribution(sortedPlayers.length);
-  const guardRoles = shuffleWithRng(listRolesForFaction('lantern-guard'), state).slice(
-    0,
-    split.lanternGuard,
+  const shuffledStarts = shuffleWithRng(
+    LOCATIONS_CATALOG.map((l) => l.id),
+    rngState,
   );
-  const mistRoles = shuffleWithRng(listRolesForFaction('mist-order'), state).slice(
-    0,
-    split.mistOrder,
-  );
-  const wandererRoles = shuffleWithRng(listRolesForFaction('wanderer'), state).slice(
-    0,
-    split.wanderer,
-  );
+  rngState = shuffledStarts.nextState;
 
-  const assignedRoles = shuffleWithRng([...guardRoles, ...mistRoles, ...wandererRoles], state);
+  const players: Record<string, AuthoritativePlayerState> = {};
+  const turnOrder: string[] = [];
 
-  const authPlayers: AuthoritativePlayerState[] = sortedPlayers.map((p, idx) => {
-    const role = assignedRoles[idx] ?? ROLES_BY_ID['gac-ky-thuat'];
-    const startingCards: GameCard[] = [];
-    for (let k = 0; k < 2; k++) {
-      const cid = state.decks.tactic.shift();
-      if (cid && CARDS_BY_ID[cid]) {
-        startingCards.push(CARDS_BY_ID[cid]);
-      }
-    }
-    return {
-      playerId: p.playerId,
-      displayName: p.displayName,
-      seatIndex: p.seatIndex,
-      appearance: p.appearance ?? {},
+  for (let i = 0; i < orderedInputs.length; i++) {
+    const pIn = orderedInputs[i];
+    const roleId = shuffledRoles.shuffled[i] ?? 'gac-truc-ban';
+    const role = getRoleDesign(roleId);
+
+    players[pIn.playerId] = {
+      playerId: pIn.playerId,
+      displayName: pIn.displayName,
+      seatIndex: pIn.seatIndex,
       roleId: role.id,
       faction: role.faction,
       hp: role.maxHp,
       maxHp: role.maxHp,
-      shield: 0,
-      fragments: 0,
-      location: 'lobby',
-      alive: true,
-      connected: p.connected !== false,
+      woundsTaken: 0,
+      location: shuffledStarts.shuffled[i % shuffledStarts.shuffled.length],
+      // Chuẩn Shadow Hunters: 0 bài trên tay lúc khởi đầu
+      hand: [],
+      equipped: [],
       revealed: false,
-      skillUsed: false,
-      healBlockedNextTurn: false,
-      wardPlayerId: null,
-      shieldedForWardCount: 0,
-      predictedPlayerIds: [],
-      correctPredictions: 0,
-      hand: startingCards,
-      privateNotes: [
-        {
-          id: `init-note-${idx + 1}`,
-          round: 1,
-          atMs: input.nowMs,
-          text: `Vai trò bí mật: ${role.name} (${FACTION_LABELS[role.faction]}). Mục tiêu: ${role.goalSummary}`,
-        },
-      ],
+      alive: true,
+      connected: pIn.connected,
+      skillCooldown: 0,
+      skillUsedOnce: false,
+      guardianShieldActive: false,
+      attacksMade: 0,
+      attacksThisTurn: 0,
+      lastAttackTargetId: null,
+      investigationsCount: 0,
+      consecutiveSameZoneRolls: 0,
+      eliminatedRound: null,
+      eliminatedByPlayerId: null,
+      protegePlayerId: null,
+      avengedProtegeKiller: false,
+      charlesKillWon: false,
+      investigatedTargetIds: [],
+      clueSeq: 0,
+      privateClues: [],
+      appearance: pIn.appearance,
     };
-  });
+    turnOrder.push(pIn.playerId);
+  }
 
-  // Gán ward bí mật cho Bình (Kẻ Lang Thang - Người Bảo Hộ Ngầm)
-  authPlayers.forEach((p) => {
-    if (p.roleId === 'lang-cuu-ho') {
-      const candidates = authPlayers.filter((other) => other.playerId !== p.playerId);
-      const picked =
-        candidates[Math.floor(nextDeterministicRandom(state) * candidates.length)] ?? null;
-      if (picked) {
-        p.wardPlayerId = picked.playerId;
-        p.privateNotes.push({
-          id: `ward-note-${p.playerId}`,
-          round: 1,
-          atMs: input.nowMs,
-          text: `Mục tiêu bảo hộ bí mật của bạn là ${picked.displayName}. Hãy giữ họ sống sót tới cuối ván!`,
-        });
-      }
-    }
-  });
-
-  state.players = authPlayers;
-  state.seqCounter += 1;
-  state.publicLog.push({
-    id: `log-init-${state.seqCounter}`,
+  const state: AuthoritativeGameState = {
+    rulesetVersion: 4,
+    matchId: input.matchId,
+    seed: input.seed,
+    rngState,
     round: 1,
-    atMs: input.nowMs,
-    kind: 'system',
-    text: `Đêm mất điện KTX bắt đầu (${authPlayers.length} sinh viên · tối đa ${state.maxRounds} vòng).`,
-  });
+    maxRounds: BOARD_GAME_SAFETY_MAX_ROUNDS,
+    turnNumber: 1,
+    turnPhase: 'ROLL_MOVE',
+    activePlayerId: turnOrder[0] ?? null,
+    turnOrder,
+    clusterPairs,
+    firstDeadPlayerId: null,
+    extraTurnPending: false,
+    players,
+    decks,
+    discards: {
+      investigation: [],
+      equipment: [],
+      event: [],
+    },
+    lastDiceRoll: null,
+    lastInvestigation: null,
+    lastRevealEvent: null,
+    logSeq: 0,
+    publicLog: [],
+    highlights: [],
+    finished: false,
+    winnerFaction: null,
+    winnerLabel: null,
+    winnerPlayerIds: [],
+    winReason: null,
+    finalReveal: null,
+  };
 
+  appendPublicLog(
+    state,
+    'system',
+    `🌙 Ván Săn Bóng Đêm KTX bắt đầu (${turnOrder.length} SV · ${split.lanternGuard} Săn / ${split.mistOrder} Bóng / ${split.wanderer} Độc hành)! 3 Cụm đã xáo ngẫu nhiên — tung 1d6+1d4 để di chuyển.`,
+    input.nowMs,
+  );
   return state;
 }

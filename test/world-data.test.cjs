@@ -52,7 +52,9 @@ test('(2) pointInLake accurately checks rectangular Tien Lake with margin', () =
 
 test('(3) resolveCollisions preserves all Fast Travel spots, building colliders, and lake push-out', () => {
   const { resolveCollisions, FAST_TRAVEL_DESTINATIONS, AVATAR, BOUNDS } = campusFacade;
-  // All 6 fast travel destinations settle within < 0.15m with zero drift on subsequent frames
+  // All fast travel destinations settle within < 0.15m with zero drift on subsequent frames
+  assert.ok(FAST_TRAVEL_DESTINATIONS.some((d) => d.id === 'dcv'));
+  assert.ok(FAST_TRAVEL_DESTINATIONS.some((d) => d.id === 'nga5'));
   for (const dest of FAST_TRAVEL_DESTINATIONS) {
     const res = resolveCollisions({ x: dest.x, z: dest.z }, AVATAR.radius);
     assert.ok(

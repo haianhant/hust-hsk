@@ -11,6 +11,8 @@
 
 import {
   BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS,
+  BOARD_GAME_PROTOCOL_VERSION,
+  BOARD_GAME_RULESET_VERSION,
   INVITE_CODE_ALPHABET,
   INVITE_CODE_LENGTH,
   sanitizeBoardGameMatchId,
@@ -18,7 +20,15 @@ import {
   sanitizeBoardGameTableId,
   sanitizeInviteCode,
 } from '../../shared/contracts/boardgame';
-import { BG_DIRECTORY_ROOM_NAME, type BoardGameEnv } from './boardgame-room';
+import {
+  BG_DIRECTORY_ROOM_NAME,
+  clampBoardGameTurnTimeoutMs,
+  type BoardGameEnv,
+} from './boardgame-room';
+import {
+  getBoardGameMetricsSnapshot,
+  logBoardGameEvent,
+} from './boardgame-observability';
 
 const ipCreateBuckets = new Map<string, { windowStartMs: number; count: number }>();
 
@@ -90,6 +100,10 @@ export async function handleBoardGameRequest(
   const origin = request.headers.get('Origin');
   const allowedOrigin = resolveAllowedBoardGameOrigin(origin);
   if (!allowedOrigin) {
+    logBoardGameEvent(env, 'ORIGIN_REJECTED', {
+      pathname: url.pathname,
+      reason: 'disallowed-origin',
+    });
     return Response.json(
       { ok: false, error: 'Origin không nằm trong danh sách cho phép.' },
       { status: 403 },
@@ -99,6 +113,21 @@ export async function handleBoardGameRequest(
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers });
+  }
+
+  // GET /api/boardgame/health — Trạng thái vận hành nhẹ, an toàn (zero secret data)
+  if (url.pathname === '/api/boardgame/health' && request.method === 'GET') {
+    return Response.json(
+      {
+        ok: true,
+        component: 'boardgame',
+        env: env.ENVIRONMENT ?? 'production',
+        protocolVersion: BOARD_GAME_PROTOCOL_VERSION,
+        rulesetVersion: BOARD_GAME_RULESET_VERSION,
+        metrics: getBoardGameMetricsSnapshot(),
+      },
+      { status: 200, headers },
+    );
   }
 
   const ns = env.BOARD_GAME_ROOM;
@@ -122,9 +151,18 @@ export async function handleBoardGameRequest(
     return Response.json(data, { status: res.status, headers });
   }
 
+  // GET /api/boardgame/leaderboard — Bảng Xếp Hạng CLB Board Game (tuần & toàn thời gian)
+  if (url.pathname === '/api/boardgame/leaderboard' && request.method === 'GET') {
+    const dirStub = ns.get(ns.idFromName(BG_DIRECTORY_ROOM_NAME));
+    const res = await dirStub.fetch(`https://internal/__dir/leaderboard${url.search}`);
+    const data = await res.json();
+    return Response.json(data, { status: res.status, headers });
+  }
+
   // POST /api/boardgame/matches — Tạo phòng đấu mới + sinh mã mời 6 ký tự duy nhất
   if (url.pathname === '/api/boardgame/matches' && request.method === 'POST') {
     if (!checkIpRateLimit(`create:${clientIp}`, 20)) {
+      logBoardGameEvent(env, 'RATE_LIMITED', { pathname: url.pathname, reason: 'create-match' });
       return Response.json(
         { ok: false, error: 'Tạo phòng quá nhanh, vui lòng thử lại sau ít phút.' },
         { status: 429, headers },
@@ -147,7 +185,7 @@ export async function handleBoardGameRequest(
       typeof body.turnTimeoutMs === 'number'
         ? body.turnTimeoutMs
         : BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
-    const turnTimeoutMs = Math.max(3000, Math.min(120_000, Math.floor(rawTimeout)));
+    const turnTimeoutMs = clampBoardGameTurnTimeoutMs(rawTimeout, env);
 
     const dirStub = ns.get(ns.idFromName(BG_DIRECTORY_ROOM_NAME));
     let createdMatchId = '';
@@ -214,9 +252,192 @@ export async function handleBoardGameRequest(
     );
   }
 
+  // POST /api/boardgame/join-table — Tự động vào phòng chờ đang mở của Bàn 1/2 hoặc tạo phòng mới
+  if (url.pathname === '/api/boardgame/join-table' && request.method === 'POST') {
+    if (!checkIpRateLimit(`join-table:${clientIp}`, 30)) {
+      logBoardGameEvent(env, 'RATE_LIMITED', { pathname: url.pathname, reason: 'join-table' });
+      return Response.json(
+        { ok: false, error: 'Thao tác chọn bàn quá nhanh, vui lòng chờ giây lát.' },
+        { status: 429, headers },
+      );
+    }
+
+    let body: Record<string, unknown> = {};
+    try {
+      const parsed = await request.json();
+      if (parsed && typeof parsed === 'object') {
+        body = parsed as Record<string, unknown>;
+      }
+    } catch {
+      return Response.json({ ok: false, error: 'JSON không hợp lệ.' }, { status: 400, headers });
+    }
+
+    const tableId = sanitizeBoardGameTableId(body.tableId);
+    const hostName = sanitizeBoardGameName(body.hostName);
+    const rawTimeout =
+      typeof body.turnTimeoutMs === 'number'
+        ? body.turnTimeoutMs
+        : BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
+    const turnTimeoutMs = clampBoardGameTurnTimeoutMs(rawTimeout, env);
+    const dirStub = ns.get(ns.idFromName(BG_DIRECTORY_ROOM_NAME));
+
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const candidateMatchId = generateCryptoMatchId();
+      const candidateCode = generateCryptoInviteCode();
+      const regRes = await dirStub.fetch('https://internal/__dir/join-or-register-table', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableId,
+          hostName,
+          matchId: candidateMatchId,
+          inviteCode: candidateCode,
+        }),
+      });
+      if (regRes.status === 409) continue;
+      if (!regRes.ok) {
+        return Response.json(
+          { ok: false, error: 'Không thể ghép phòng vào danh sách CLB.' },
+          { status: 500, headers },
+        );
+      }
+
+      const regData = (await regRes.json()) as {
+        ok?: boolean;
+        created?: boolean;
+        match?: { matchId?: string; inviteCode?: string; updatedAtMs?: number };
+      };
+      const targetMatchId = sanitizeBoardGameMatchId(regData.match?.matchId);
+      const targetInvite = sanitizeInviteCode(regData.match?.inviteCode);
+      if (!targetMatchId || !targetInvite) {
+        continue;
+      }
+
+      const matchStub = ns.get(ns.idFromName(targetMatchId));
+      if (regData.created) {
+        const initRes = await matchStub.fetch('https://internal/__init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            matchId: targetMatchId,
+            inviteCode: targetInvite,
+            tableId,
+            turnTimeoutMs,
+          }),
+        });
+        if (!initRes.ok) {
+          await dirStub
+            .fetch('https://internal/__dir/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                matchId: targetMatchId,
+                status: 'CLOSED',
+                hostName,
+                playerCount: 0,
+                spectatorCount: 0,
+              }),
+            })
+            .catch(() => undefined);
+          return Response.json(
+            { ok: false, error: 'Không thể khởi tạo phòng Durable Object.' },
+            { status: 500, headers },
+          );
+        }
+        return Response.json(
+          {
+            ok: true,
+            created: true,
+            matchId: targetMatchId,
+            inviteCode: targetInvite,
+            tableId,
+          },
+          { status: 201, headers },
+        );
+      }
+
+      // Xác minh DO thực tế vẫn đang mở ở sảnh chờ trước khi trả cho client kết nối
+      let metaRes = await matchStub.fetch('https://internal/__meta');
+      if (
+        !metaRes.ok &&
+        typeof regData.match?.updatedAtMs === 'number' &&
+        Date.now() - regData.match.updatedAtMs < 5000
+      ) {
+        // Phòng vừa được đăng ký song song -> khởi tạo idempotent rồi kiểm tra lại
+        await matchStub
+          .fetch('https://internal/__init', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              matchId: targetMatchId,
+              inviteCode: targetInvite,
+              tableId,
+              turnTimeoutMs,
+            }),
+          })
+          .catch(() => undefined);
+        metaRes = await matchStub.fetch('https://internal/__meta');
+      }
+      if (!metaRes.ok) {
+        await dirStub
+          .fetch('https://internal/__dir/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              matchId: targetMatchId,
+              status: 'CLOSED',
+              hostName,
+              playerCount: 0,
+              spectatorCount: 0,
+            }),
+          })
+          .catch(() => undefined);
+        continue;
+      }
+      const meta = (await metaRes.json().catch(() => ({}))) as { status?: string };
+      if (
+        meta.status !== 'CREATED' &&
+        meta.status !== 'WAITING' &&
+        meta.status !== 'READY_CHECK'
+      ) {
+        await dirStub
+          .fetch('https://internal/__dir/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              matchId: targetMatchId,
+              status: meta.status || 'CLOSED',
+              hostName,
+              playerCount: 0,
+              spectatorCount: 0,
+            }),
+          })
+          .catch(() => undefined);
+        continue;
+      }
+
+      return Response.json(
+        {
+          ok: true,
+          created: false,
+          matchId: targetMatchId,
+          inviteCode: targetInvite,
+          tableId,
+        },
+        { status: 200, headers },
+      );
+    }
+
+    return Response.json(
+      { ok: false, error: 'Không thể ghép hoặc tạo phòng cho bàn này, vui lòng thử lại.' },
+      { status: 503, headers },
+    );
+  }
+
   // POST /api/boardgame/join-by-code — Tra cứu phòng qua mã mời 6 ký tự
   if (url.pathname === '/api/boardgame/join-by-code' && request.method === 'POST') {
     if (!checkIpRateLimit(`lookup:${clientIp}`, 40)) {
+      logBoardGameEvent(env, 'RATE_LIMITED', { pathname: url.pathname, reason: 'join-by-code' });
       return Response.json(
         { ok: false, error: 'Tra cứu mã mời quá nhiều lần, vui lòng chờ giây lát.' },
         { status: 429, headers },

@@ -155,9 +155,13 @@ export function renderMatchPostcardDataUrl(
   ctx.textBaseline = 'middle';
   ctx.fillText('HUSTVerse — CLB Board Game KTX'.normalize('NFC'), 74, 65);
 
-  const safeRound = Math.min(publicGame.round, publicGame.maxRounds);
+  const totalInvestigations = publicGame.players.reduce(
+    (sum, p) => sum + p.investigationsCount,
+    0,
+  );
+  const aliveCount = publicGame.players.filter((p) => p.alive).length;
   const statsText =
-    `Vòng ${safeRound}/${publicGame.maxRounds}  ·  Tín hiệu ${publicGame.signalProgress}/${publicGame.maxTrackValue}  ·  Nhiễu sóng ${publicGame.mistProgress}/${publicGame.maxTrackValue}`.normalize(
+    `Vòng ${publicGame.round}  ·  Điều tra ${totalInvestigations}  ·  Sống sót ${aliveCount}/${publicGame.players.length}`.normalize(
       'NFC',
     );
   ctx.textAlign = 'right';
@@ -203,16 +207,21 @@ export function renderMatchPostcardDataUrl(
   const reveals = (
     publicGame.finalReveal && publicGame.finalReveal.length > 0
       ? publicGame.finalReveal
-      : publicGame.players.map((p) => ({
-          playerId: p.playerId,
-          displayName: p.displayName,
-          roleId: 'gac-ky-thuat' as const,
-          roleName: 'Vai bí mật chưa công bố',
-          faction: (p.revealedFaction ?? 'lantern-guard') as BoardGameFactionId,
-          won: publicGame.winnerPlayerIds.includes(p.playerId),
-          alive: p.alive,
-          hp: p.hp,
-        }))
+      : publicGame.players.map((p) => {
+          const fallbackMax = p.revealedMaxHp ?? 11;
+          return {
+            playerId: p.playerId,
+            displayName: p.displayName,
+            roleId: (p.revealedRoleId ?? 'gac-ky-thuat') as 'gac-ky-thuat',
+            roleName: 'Vai bí mật chưa công bố',
+            faction: (p.revealedFaction ?? 'lantern-guard') as BoardGameFactionId,
+            won: publicGame.winnerPlayerIds.includes(p.playerId),
+            alive: p.alive,
+            hp: Math.max(0, fallbackMax - p.woundsTaken),
+            maxHp: fallbackMax,
+            woundsTaken: p.woundsTaken,
+          };
+        })
   ).slice(0, 8);
 
   const gridTop = 268;
@@ -258,7 +267,12 @@ export function renderMatchPostcardDataUrl(
     ctx.textAlign = 'center';
     ctx.fillText(factionLabel, badgeX + badgeW / 2, y + 24);
 
-    const outcomeLabel = (p.won ? '🏆 Thắng' : p.alive ? 'Sống sót' : 'Đã gục').normalize('NFC');
+    const outcomeLabel = (p.won
+      ? '🏆 Thắng'
+      : p.alive
+        ? 'Sống sót'
+        : 'Đã gục'
+    ).normalize('NFC');
     ctx.fillStyle = p.won ? '#FCD34D' : p.alive ? '#94A3B8' : '#FB7185';
     ctx.font = `700 13px ${CANVAS_VN_FONT}`;
     ctx.textAlign = 'right';

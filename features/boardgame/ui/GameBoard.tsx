@@ -1,36 +1,58 @@
 'use client';
 
 // ---------------------------------------------------------------------------
-// features/boardgame/ui/GameBoard.tsx — Bàn chơi 2D chính của "Bóng Đêm KTX"
-// (6 khu vực KTX, thanh Tín hiệu/Nhiễu sóng, đồng hồ đếm ngược, vai bí mật,
-// điều khiển theo lượt, nhật ký, kết quả & responsive Mobile 390x844).
+// features/boardgame/ui/GameBoard.tsx — Bàn chơi 2D "Bóng Đêm KTX v4"
+// Thiết kế toàn màn hình trực quan kiểu Shadow Hunters:
+// - Thang thương tích công khai 0..14 trên đỉnh bàn
+// - 3 Cụm Khu Vực Đôi (6 ô đánh số 2–3 / 4–5 / 6 / 8 / 9 / 10)
+// - Khay Xúc xắc 1d6+1d4 & 3 Chồng bài
+// - Ngăn phụ thu gọn được (Thẻ vai bí mật + Nhật ký + Chat/Emote)
+// - Thời gian suy nghĩ vô hạn mặc định, tối ưu responsive desktop & mobile 390×844
 // ---------------------------------------------------------------------------
 
-import { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   VALID_BOARD_GAME_EMOTES,
   type BoardGameActionPayload,
   type BoardGameChatEmoteServerMessage,
   type BoardGameEmoteId,
+  type BoardGameLocationId,
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
 } from '../network/contracts';
-import { KTX_LOCATIONS } from '../domain/rules';
 import { FACTION_LABELS } from '../domain/roles';
+import { areInSameCluster, getLocationDefinition } from '../domain/rules';
+import {
+  buildBoardClustersView,
+  DeckCardBackSvg,
+  FACTION_THEME,
+  LOCATION_VISUAL_META,
+  PlayerPawnToken,
+} from './BoardGameArt';
+import { MidnightDicePair3D } from './MidnightDice3D';
 import RoleCard from './RoleCard';
 import ActionPanel from './ActionPanel';
 import GameLog from './GameLog';
 import MatchPostcard from './MatchPostcard';
 import MatchResult from './MatchResult';
+import { toggleSelectedTargetId } from './target-selection';
+import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
+import { computeDiceSig } from './vfx-queue';
+import { TabletopLocationTile } from './TabletopLocationTile';
+import { useSmoothPawnGlide } from './useSmoothPawnGlide';
+import { MidnightCardZoomModal, type MidnightZoomTarget } from './MidnightCardZoomModal';
+import {
+  GRAPHICS_QUALITY_LABELS,
+  GRAPHICS_TIER_LABELS,
+  useBoardGameGraphicsSettings,
+  type BoardGameQualitySetting,
+} from './graphics-settings';
 import {
   isBoardGameSoundMuted,
-  playCardDraw,
   playEmotePop,
-  playRoleReveal,
-  playTrackAdvance,
-  playTurnAlert,
-  playVictoryFanfare,
   setBoardGameSoundMuted,
+  stopAllBoardGameSounds,
+  suspendBoardGameAudio,
 } from './sound';
 
 const EMOTE_META: Record<BoardGameEmoteId, { icon: string; label: string }> = {
@@ -41,6 +63,16 @@ const EMOTE_META: Record<BoardGameEmoteId, { icon: string; label: string }> = {
   sweat: { icon: '😅', label: 'Hồi hộp' },
   laugh: { icon: '😂', label: 'Cười' },
 };
+
+const PHASE_LABEL: Record<BoardGamePublicGameView['turnPhase'], string> = {
+  ROLL_MOVE: 'Pha 1: Tung xúc xắc di chuyển',
+  CHOOSE_MOVE: 'Pha 1: Tổng 7 — Chọn khu vực tự do',
+  LOCATION_ACTION: 'Pha 2: Quyền năng / Rút bài khu vực',
+  MAIN_ACTION: 'Pha 3: Dùng bài / Tấn công / Kết thúc lượt',
+  ENDED: 'Trận đấu đã kết thúc',
+};
+
+const WOUND_NOTCHES: readonly number[] = Array.from({ length: 15 }, (_, i) => i);
 
 export interface GameBoardProps {
   inviteCode: string | null;
@@ -57,11 +89,12 @@ export interface GameBoardProps {
   onSendChat?: (text: string) => void;
   onToggleSound?: () => void;
   onOpenRules: () => void;
+  onOpenLeaderboard?: () => void;
   onPlayAgain?: () => void;
   onLeaveMatch: () => void;
 }
 
-export default function GameBoard({
+export function GameBoard({
   inviteCode,
   publicGame,
   privateView,
@@ -70,195 +103,383 @@ export default function GameBoard({
   turnDeadlineMs,
   recentEmotes,
   lastError,
-  soundMuted = false,
+  soundMuted: propMuted,
   onAction,
   onSendEmote,
   onSendChat,
   onToggleSound,
   onOpenRules,
+  onOpenLeaderboard,
   onPlayAgain,
   onLeaveMatch,
 }: GameBoardProps) {
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
-  const [pendingAction, setPendingAction] = useState(false);
-  const [actionErr, setActionErr] = useState<string | null>(null);
+  const [sideDrawerOpen, setSideDrawerOpen] = useState(true);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [mobileTab, setMobileTab] = useState<'board' | 'role' | 'log'>('board');
+  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  const [chatText, setChatText] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
-  const [chatInput, setChatInput] = useState('');
-  const [internalMuted, setInternalMuted] = useState<boolean>(() => isBoardGameSoundMuted());
-  const [toastEmote, setToastEmote] = useState<BoardGameChatEmoteServerMessage | null>(null);
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
+  const [localMuted, setLocalMuted] = useState(() => isBoardGameSoundMuted());
+  const [seenClueCount, setSeenClueCount] = useState(0);
+  const [seenLogCount, setSeenLogCount] = useState(() => publicGame.publicLog.length);
+  const [zoomTarget, setZoomTarget] = useState<MidnightZoomTarget | null>(null);
+  const boardStageRef = useRef<HTMLDivElement>(null);
 
-  const effectiveMuted = onToggleSound ? soundMuted : internalMuted;
-  const handleToggleSound = () => {
-    const next = !effectiveMuted;
-    setBoardGameSoundMuted(next);
-    setInternalMuted(next);
-    onToggleSound?.();
-  };
+  const gfx = useBoardGameGraphicsSettings();
 
-  const didInitAudioRefs = useRef(false);
-  const prevActiveIdRef = useRef<string | null>(publicGame.activePlayerId);
-  const prevSignalRef = useRef<number>(publicGame.signalProgress);
-  const prevMistRef = useRef<number>(publicGame.mistProgress);
-  const prevHandCountRef = useRef<number>(privateView?.hand.length ?? 0);
-  const prevRevealedCountRef = useRef<number>(
-    publicGame.players.filter((p) => Boolean(p.revealedFaction || p.revealedRoleId)).length,
-  );
-  const prevPhaseRef = useRef<string>(publicGame.turnPhase);
-  const prevEmoteCountRef = useRef<number>(recentEmotes.length);
-
-  useEffect(() => {
-    const handCount = privateView?.hand.length ?? 0;
-    const revealedCount = publicGame.players.filter((p) =>
-      Boolean(p.revealedFaction || p.revealedRoleId),
-    ).length;
-    if (!didInitAudioRefs.current) {
-      didInitAudioRefs.current = true;
-      prevActiveIdRef.current = publicGame.activePlayerId;
-      prevSignalRef.current = publicGame.signalProgress;
-      prevMistRef.current = publicGame.mistProgress;
-      prevHandCountRef.current = handCount;
-      prevRevealedCountRef.current = revealedCount;
-      prevPhaseRef.current = publicGame.turnPhase;
-      return;
-    }
-
-    if (publicGame.turnPhase === 'ENDED' && prevPhaseRef.current !== 'ENDED') {
-      playVictoryFanfare();
-    } else if (
-      publicGame.activePlayerId === selfPlayerId &&
-      prevActiveIdRef.current !== selfPlayerId &&
-      !isSpectator &&
-      publicGame.turnPhase !== 'ENDED'
-    ) {
-      playTurnAlert();
-    }
-
-    if (
-      publicGame.signalProgress > prevSignalRef.current ||
-      publicGame.mistProgress > prevMistRef.current
-    ) {
-      playTrackAdvance();
-    }
-    if (handCount > prevHandCountRef.current) {
-      playCardDraw();
-    }
-    if (revealedCount > prevRevealedCountRef.current) {
-      playRoleReveal();
-    }
-
-    prevActiveIdRef.current = publicGame.activePlayerId;
-    prevSignalRef.current = publicGame.signalProgress;
-    prevMistRef.current = publicGame.mistProgress;
-    prevHandCountRef.current = handCount;
-    prevRevealedCountRef.current = revealedCount;
-    prevPhaseRef.current = publicGame.turnPhase;
-  }, [
-    publicGame.activePlayerId,
-    publicGame.signalProgress,
-    publicGame.mistProgress,
-    publicGame.players,
-    publicGame.turnPhase,
-    privateView?.hand.length,
+  const vfx = useBoardGameVfxQueue({
+    publicGame,
+    privateView,
     selfPlayerId,
     isSpectator,
-  ]);
+    containerRef: boardStageRef,
+    graphicsProfile: gfx.profile,
+  });
+
+  const diceRollSignature = computeDiceSig(publicGame) ?? '';
+
+  useSmoothPawnGlide({
+    containerRef: boardStageRef,
+    players: publicGame.players,
+    matchId: publicGame.matchId,
+    reducedMotion: vfx.reducedMotion,
+    qualityTier: gfx.profile.tier,
+    durationMs: gfx.profile.pawnGlideDurationMs,
+    diceRollSignature,
+    skipGeneration: vfx.skipGeneration,
+  });
+
+  // Giữ nhãn vị trí hiển thị ("📍 Bạn ở đây", badge "Ô ...") ở ô cũ cho tới đúng diceSettleAtMs,
+  // đồng bộ 100% với BoardGameVfxStage và FLIP Pawn Glide.
+  const committedLocationsRef = useRef<{
+    matchId: string;
+    map: Map<string, BoardGameLocationId>;
+  }>({
+    matchId: publicGame.matchId,
+    map: new Map(publicGame.players.map((p) => [p.playerId, p.location])),
+  });
+  const holdCommittedLocationForDice =
+    !vfx.isDiceSettled && vfx.activeDiceRoll?.diceKind === 'move';
+  if (
+    committedLocationsRef.current.matchId !== publicGame.matchId ||
+    !holdCommittedLocationForDice
+  ) {
+    committedLocationsRef.current = {
+      matchId: publicGame.matchId,
+      map: new Map(publicGame.players.map((p) => [p.playerId, p.location])),
+    };
+  }
+  const getCommittedLocation = (
+    p: BoardGamePublicGameView['players'][number],
+  ): BoardGameLocationId =>
+    holdCommittedLocationForDice
+      ? (committedLocationsRef.current.map.get(p.playerId) ?? p.location)
+      : p.location;
+
+  const prevTurnRef = useRef<number>(publicGame.turnNumber);
+  const prevEmoteItemRef = useRef<BoardGameChatEmoteServerMessage | null>(
+    recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null,
+  );
+
+  const effectiveMuted = propMuted ?? localMuted;
 
   useEffect(() => {
-    if (recentEmotes.length <= prevEmoteCountRef.current) {
-      prevEmoteCountRef.current = recentEmotes.length;
-      return;
+    if (typeof propMuted === 'boolean') {
+      setBoardGameSoundMuted(propMuted);
     }
-    prevEmoteCountRef.current = recentEmotes.length;
-    const latest = recentEmotes[recentEmotes.length - 1];
-    if (!latest) return;
-    playEmotePop();
-    setToastEmote(latest);
-    const timer = window.setTimeout(() => {
-      setToastEmote((curr) => (curr === latest ? null : curr));
-    }, 2800);
-    return () => window.clearTimeout(timer);
-  }, [recentEmotes]);
+  }, [propMuted]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 500);
-    return () => window.clearInterval(id);
+    return () => {
+      // Dọn & tạm dừng WebAudio khi rời Bóng Đêm KTX về khuôn viên 3D
+      suspendBoardGameAudio();
+    };
   }, []);
 
-  const secondsLeft =
+  useEffect(() => {
+    setSeenClueCount(0);
+    setSeenLogCount(publicGame.publicLog.length);
+    setSelectedTargetId(null);
+    setZoomTarget(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicGame.matchId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setIsDesktopLayout(mq.matches);
+    sync();
+    mq.addEventListener?.('change', sync);
+    return () => mq.removeEventListener?.('change', sync);
+  }, []);
+
+  const totalClues = privateView?.privateClues.length ?? 0;
+  useEffect(() => {
+    if ((isDesktopLayout && sideDrawerOpen) || mobileTab === 'role') {
+      setSeenClueCount((prev) => Math.max(prev, totalClues));
+    }
+  }, [isDesktopLayout, sideDrawerOpen, mobileTab, totalClues]);
+
+  useEffect(() => {
+    if (mobileTab === 'log') {
+      setSeenLogCount((prev) => Math.max(prev, publicGame.publicLog.length));
+    }
+  }, [mobileTab, publicGame.publicLog.length]);
+
+  const unreadClueCount = isSpectator ? 0 : Math.max(0, totalClues - seenClueCount);
+  const unreadLogCount = Math.max(0, publicGame.publicLog.length - seenLogCount);
+
+  useEffect(() => {
+    if (typeof turnDeadlineMs !== 'number') return;
+    setNowMs(Date.now());
+    const id = window.setInterval(() => setNowMs(Date.now()), 500);
+    return () => window.clearInterval(id);
+  }, [turnDeadlineMs]);
+
+  useEffect(() => {
+    if (prevTurnRef.current !== publicGame.turnNumber) {
+      prevTurnRef.current = publicGame.turnNumber;
+      setSelectedTargetId(null);
+      setLocalError(null);
+    }
+  }, [publicGame.turnNumber]);
+
+  useEffect(() => {
+    const latest = recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null;
+    if (latest && latest !== prevEmoteItemRef.current) {
+      prevEmoteItemRef.current = latest;
+      playEmotePop();
+    }
+  }, [recentEmotes]);
+
+  const selfPlayer = useMemo(
+    () => publicGame.players.find((p) => p.playerId === selfPlayerId) ?? null,
+    [publicGame.players, selfPlayerId],
+  );
+  const committedSelfLocation = selfPlayer ? getCommittedLocation(selfPlayer) : null;
+  const activePlayer = useMemo(
+    () => publicGame.players.find((p) => p.playerId === publicGame.activePlayerId) ?? null,
+    [publicGame.players, publicGame.activePlayerId],
+  );
+  const boardClusters = useMemo(
+    () => buildBoardClustersView(publicGame.clusterPairs),
+    [publicGame.clusterPairs],
+  );
+  const isMyTurn =
+    !isSpectator &&
+    Boolean(selfPlayer?.alive) &&
+    !publicGame.winnerLabel &&
+    publicGame.turnPhase !== 'ENDED' &&
+    publicGame.activePlayerId === selfPlayerId;
+
+  const currentSelfLocDef = selfPlayer ? getLocationDefinition(selfPlayer.location) : null;
+  const canRollOnBoard = isMyTurn && publicGame.turnPhase === 'ROLL_MOVE' && !actionBusy;
+  const canDrawDeckOnBoard = (deckId: 'investigation' | 'equipment' | 'event') =>
+    isMyTurn &&
+    publicGame.turnPhase === 'LOCATION_ACTION' &&
+    !actionBusy &&
+    Boolean(
+      currentSelfLocDef &&
+        (currentSelfLocDef.deckHint === deckId || currentSelfLocDef.deckHint === 'any'),
+    );
+
+  const attackableIdsOnBoard = useMemo(() => {
+    const ids = new Set<string>();
+    if (!isMyTurn || !selfPlayer || publicGame.turnPhase !== 'MAIN_ACTION') return ids;
+    const aliveOthers = publicGame.players.filter(
+      (p) => p.alive && p.playerId !== selfPlayerId,
+    );
+    const hasHandgun = selfPlayer.equipped.some((eq) => eq.id === 'ev-05');
+    for (const p of aliveOthers) {
+      const same = areInSameCluster(selfPlayer.location, p.location, publicGame.clusterPairs);
+      if (hasHandgun ? !same : same) {
+        ids.add(p.playerId);
+      }
+    }
+    return ids;
+  }, [isMyTurn, selfPlayer, selfPlayerId, publicGame.players, publicGame.clusterPairs, publicGame.turnPhase]);
+
+  const playersByWoundNotch = useMemo(() => {
+    const buckets: typeof publicGame.players[number][][] = Array.from(
+      { length: 15 },
+      () => [],
+    );
+    for (const p of publicGame.players) {
+      const notch = Math.max(0, Math.min(14, p.woundsTaken));
+      buckets[notch].push(p);
+    }
+    return buckets;
+  }, [publicGame.players]);
+
+  const remainingSec =
     typeof turnDeadlineMs === 'number'
       ? Math.max(0, Math.ceil((turnDeadlineMs - nowMs) / 1000))
       : null;
 
-  const activePlayer =
-    publicGame.players.find((p) => p.playerId === publicGame.activePlayerId) ?? null;
+  const latestEmote =
+    recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null;
+  const displayedError = localError ?? lastError;
 
-  const signalPct = Math.round((publicGame.signalProgress / publicGame.maxTrackValue) * 100);
-  const mistPct = Math.round((publicGame.mistProgress / publicGame.maxTrackValue) * 100);
+  const onActionRef = useRef(onAction);
+  onActionRef.current = onAction;
+  const actionBusyRef = useRef(actionBusy);
+  actionBusyRef.current = actionBusy;
 
-  const handleDispatchAction = async (action: BoardGameActionPayload) => {
-    if (pendingAction) return;
-    setActionErr(null);
-    setPendingAction(true);
+  const dispatchAction = useCallback(async (action: BoardGameActionPayload) => {
+    if (actionBusyRef.current) return;
+    actionBusyRef.current = true;
+    setActionBusy(true);
+    setLocalError(null);
     try {
-      const res = await onAction(action);
-      if (!res.ok && res.reason) {
-        setActionErr(res.reason);
+      const res = await onActionRef.current(action);
+      if (res && !res.ok && res.reason) {
+        setLocalError(res.reason);
       }
     } finally {
-      setPendingAction(false);
+      actionBusyRef.current = false;
+      setActionBusy(false);
     }
-  };
+  }, []);
 
-  const latestEmotes = recentEmotes.slice(-4).reverse();
+  const handleChooseDestination = useCallback(
+    (dest: BoardGameLocationId) => {
+      void dispatchAction({ type: 'CHOOSE_DEST', location: dest });
+    },
+    [dispatchAction],
+  );
+
+  const handleCloseZoom = useCallback(() => {
+    setZoomTarget(null);
+  }, []);
+
+  const handleToggleSoundClick = useCallback(() => {
+    const next = !effectiveMuted;
+    setLocalMuted(next);
+    setBoardGameSoundMuted(next);
+    if (next) {
+      stopAllBoardGameSounds();
+    }
+    onToggleSound?.();
+  }, [effectiveMuted, onToggleSound]);
 
   return (
     <div
       data-testid="boardgame-2d-board"
-      className="fixed inset-0 z-[45] flex flex-col overflow-x-hidden bg-slate-950/94 text-slate-100 backdrop-blur-md"
+      className="fixed inset-0 z-[44] flex flex-col bg-slate-950 text-slate-100 overflow-x-hidden"
     >
-      {/* Thanh đỉnh: Tên trận, Chỉ số Tín hiệu vs Màn sương, Vòng, Đồng hồ, Nút */}
-      <header className="shrink-0 border-b border-slate-800 bg-slate-950/90 px-3 py-2.5 sm:px-4">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="text-sm font-extrabold text-amber-300">🎲 BÓNG ĐÊM KTX</span>
-            {inviteCode && (
-              <span className="rounded-md bg-slate-800 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-200">
-                #{inviteCode}
-              </span>
-            )}
-            <span className="rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-slate-300 ring-1 ring-slate-700">
-              Vòng {Math.min(publicGame.round, publicGame.maxRounds)}/{publicGame.maxRounds}
+      {/* THANH HEADER TINH GỌN */}
+      <header
+        data-testid="bg-v3-status-bar"
+        className="shrink-0 border-b border-slate-800 bg-slate-900/95 px-3 sm:px-5 py-1.5"
+      >
+        <div className="mx-auto max-w-[1680px] flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <span className="text-sm sm:text-base font-black tracking-tight text-white">
+              🌙 Săn Bóng Đêm KTX
             </span>
-            {secondsLeft !== null && publicGame.turnPhase !== 'ENDED' && (
-              <span
-                data-testid="bg-turn-timer"
-                className={`rounded-md px-2 py-0.5 font-mono text-[11px] font-bold ${
-                  secondsLeft <= 10
-                    ? 'bg-rose-950 text-rose-200 ring-1 ring-rose-500/50'
-                    : 'bg-slate-900 text-emerald-300'
-                }`}
-              >
-                ⏱️ {secondsLeft}s ({activePlayer?.displayName ?? '—'})
+            <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs sm:text-sm font-bold text-cyan-200">
+              Vòng {publicGame.round}
+            </span>
+            <span className="hidden md:inline-flex px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs sm:text-sm font-semibold text-amber-200">
+              {PHASE_LABEL[publicGame.turnPhase]}
+            </span>
+            <span
+              data-testid="bg-turn-timer"
+              className={`px-3 py-1 rounded-lg border text-xs sm:text-sm font-extrabold ${
+                remainingSec === null
+                  ? 'bg-emerald-500/15 border-emerald-400/45 text-emerald-200'
+                  : remainingSec <= 10
+                    ? 'bg-rose-500/20 border-rose-400/60 text-rose-100 animate-pulse'
+                    : 'bg-amber-500/15 border-amber-400/45 text-amber-100'
+              }`}
+            >
+              {remainingSec === null ? '∞ Suy nghĩ tự do' : `⏱️ ${remainingSec}s`}
+            </span>
+            {activePlayer && !publicGame.winnerLabel && (
+              <span className="text-xs sm:text-sm font-semibold text-slate-300">
+                Lượt:{' '}
+                <strong className={isMyTurn ? 'text-amber-300' : 'text-white'}>
+                  {activePlayer.displayName}
+                </strong>
               </span>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {inviteCode && (
+              <span className="hidden xl:inline-flex px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-mono font-bold text-slate-300">
+                Mã: {inviteCode}
+              </span>
+            )}
+            <button
+              type="button"
+              data-testid="bg-toggle-drawer-btn"
+              onClick={() => setSideDrawerOpen((v) => !v)}
+              className="hidden lg:inline-flex items-center px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-100 transition cursor-pointer"
+            >
+              {sideDrawerOpen ? '◨ Mở rộng bàn' : '◧ Mở Thẻ & Nhật ký'}
+            </button>
             <button
               type="button"
               data-testid="bg-sound-toggle-btn"
-              onClick={handleToggleSound}
-              className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
-              title={effectiveMuted ? 'Bật âm thanh bàn chơi' : 'Tắt âm thanh bàn chơi'}
+              onClick={handleToggleSoundClick}
+              className="px-2.5 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-100 transition cursor-pointer"
+              aria-label="Bật/tắt âm thanh"
             >
               {effectiveMuted ? '🔇' : '🔊'}
             </button>
             <button
               type="button"
+              data-testid="bg-vfx-motion-toggle-btn"
+              onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
+              title={
+                vfx.reducedMotion
+                  ? 'Đang bật chế độ Giảm chuyển động (nhấn để bật VFX đầy đủ)'
+                  : 'VFX đầy đủ đang bật (nhấn để giảm chuyển động)'
+              }
+              className={`hidden sm:inline-flex items-center px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                vfx.reducedMotion
+                  ? 'bg-slate-900 border-slate-700 text-slate-400'
+                  : 'bg-indigo-950/70 border-indigo-400/50 text-indigo-200 hover:bg-indigo-900/70'
+              }`}
+            >
+              {vfx.reducedMotion ? '⏸️ Tĩnh' : '✨ VFX'}
+            </button>
+            <button
+              type="button"
+              data-testid="bg-graphics-settings-btn"
+              onClick={() => setSettingsPanelOpen((v) => !v)}
+              aria-expanded={settingsPanelOpen}
+              aria-label="Cài đặt đồ họa và trợ năng"
+              title={`Đồ họa: ${GRAPHICS_TIER_LABELS[gfx.profile.tier]} · Cài đặt hiệu ứng & rung`}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                settingsPanelOpen
+                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-100'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-100'
+              }`}
+            >
+              <span>⚙️</span>
+              <span className="hidden xl:inline">{GRAPHICS_TIER_LABELS[gfx.profile.tier]}</span>
+            </button>
+            {onOpenLeaderboard && (
+              <button
+                type="button"
+                data-testid="bg-board-open-leaderboard-btn"
+                onClick={onOpenLeaderboard}
+                className="px-3 py-1.5 min-h-[36px] rounded-xl bg-amber-950/60 hover:bg-amber-900/70 border border-amber-400/50 text-xs sm:text-sm font-bold text-amber-200 transition cursor-pointer"
+              >
+                🏆 Hạng
+              </button>
+            )}
+            <button
+              type="button"
               data-testid="bg-board-rules-btn"
               onClick={onOpenRules}
-              className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+              className="px-3 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs sm:text-sm font-bold text-slate-100 transition cursor-pointer"
             >
               📖 Luật
             </button>
@@ -266,299 +487,879 @@ export default function GameBoard({
               type="button"
               data-testid="bg-board-leave-btn"
               onClick={() => setLeaveConfirmOpen(true)}
-              className="rounded-lg bg-rose-700/85 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-600"
+              className="px-3 py-1.5 min-h-[36px] rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-500/50 text-xs sm:text-sm font-bold text-rose-100 transition cursor-pointer"
             >
-              🚪 Thoát
+              🚪 Rời
             </button>
-          </div>
-        </div>
-
-        {/* Hai thanh tiến độ Tín hiệu (Đội Gác Đèn) vs Nhiễu sóng (Hội Màn Sương) */}
-        <div className="mx-auto mt-2 grid max-w-7xl grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-1.5">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-amber-200">
-              <span>📡 Tín hiệu Gác Đèn</span>
-              <span data-testid="bg-signal-score">
-                {publicGame.signalProgress}/{publicGame.maxTrackValue}
-              </span>
-            </div>
-            <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-300 transition-[width] duration-300 motion-reduce:transition-none"
-                style={{ width: `${signalPct}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-violet-500/30 bg-violet-950/20 px-3 py-1.5">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-violet-200">
-              <span>🌫️ Nhiễu sóng Màn Sương</span>
-              <span data-testid="bg-mist-score">
-                {publicGame.mistProgress}/{publicGame.maxTrackValue}
-              </span>
-            </div>
-            <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-800">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-400 transition-[width] duration-300 motion-reduce:transition-none"
-                style={{ width: `${mistPct}%` }}
-              />
-            </div>
           </div>
         </div>
       </header>
 
-      {(actionErr || lastError) && (
-        <div className="mx-auto mt-2 w-full max-w-4xl px-3">
-          <div className="rounded-xl border border-rose-500/50 bg-rose-950/75 px-3 py-1.5 text-center text-xs text-rose-100">
-            ⚠️ {actionErr || lastError}
-          </div>
-        </div>
-      )}
-
-      {/* Thông báo biểu cảm / nhắn nhanh nổi phía góc trên phải */}
-      {toastEmote && (
-        <div
-          data-testid="bg-emote-toast"
-          className="pointer-events-none fixed right-3 top-20 z-[52] max-w-xs rounded-xl border border-amber-400/50 bg-slate-900/95 px-3 py-2 text-xs text-amber-100 shadow-xl transition duration-200 motion-reduce:transition-none"
-        >
-          <span className="font-bold text-amber-300">{toastEmote.displayName}: </span>
-          {toastEmote.emote ? `${EMOTE_META[toastEmote.emote]?.icon ?? ''} ` : ''}
-          {toastEmote.text ?? (toastEmote.emote ? EMOTE_META[toastEmote.emote]?.label : '')}
-        </div>
-      )}
-
-      {/* Nội dung chính Responsive: Desktop 3 cột / Mobile tab */}
-      <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 pb-16 lg:grid-cols-12 lg:pb-4">
-        {/* Cột Trái: Vai trò bí mật & Sổ ghi chép */}
+      {/* BẢNG CÀI ĐẶT ĐỒ HỌA (HIGH / BALANCED / LOW) & TRỢ NĂNG */}
+      {settingsPanelOpen && (
         <section
-          className={`lg:col-span-3 ${mobileTab === 'role' ? 'block' : 'hidden lg:block'}`}
+          data-testid="bg-graphics-settings-panel"
+          aria-label="Tùy chỉnh đồ họa, âm thanh và rung màn hình"
+          className="shrink-0 border-b border-cyan-500/35 bg-slate-900/98 px-3 sm:px-5 py-2.5"
         >
-          <RoleCard privateView={privateView} isSpectator={isSpectator} />
-        </section>
-
-        {/* Cột Giữa: Bản đồ 6 Khu Vực KTX & Bảng Lượt */}
-        <section
-          className={`space-y-3 lg:col-span-6 ${mobileTab === 'board' ? 'block' : 'hidden lg:block'}`}
-        >
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            {KTX_LOCATIONS.map((loc) => {
-              const occupants = publicGame.players.filter((p) => p.location === loc.id);
-              const isSelfHere = occupants.some((p) => p.playerId === selfPlayerId);
-              const isBlackout = publicGame.blackoutLocation === loc.id;
-              return (
-                <div
-                  key={loc.id}
-                  data-testid={`bg-loc-${loc.id}`}
-                  className={`flex flex-col justify-between rounded-2xl border p-3 transition motion-reduce:transition-none ${
-                    isBlackout
-                      ? 'border-violet-500/55 bg-violet-950/30'
-                      : isSelfHere
-                        ? 'border-amber-400/60 bg-slate-900/95'
-                        : 'border-slate-800 bg-slate-900/80'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-amber-200">{loc.name}</span>
-                      <div className="flex items-center gap-1">
-                        {isBlackout && (
-                          <span className="rounded bg-violet-900 px-1.5 py-0.5 text-[10px] font-semibold text-violet-100">
-                            ⚡ Mất điện
-                          </span>
-                        )}
-                        {isSelfHere && (
-                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
-                            Bạn ở đây
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <p className="mt-1 text-[11px] leading-snug text-slate-400">{loc.description}</p>
-                  </div>
-
-                  {/* Sinh viên đang có mặt tại khu vực */}
-                  <div className="mt-2.5 flex flex-wrap gap-1.5">
-                    {occupants.length === 0 ? (
-                      <span className="text-[11px] italic text-slate-600">Chưa có ai</span>
-                    ) : (
-                      occupants.map((p) => {
-                        const isActive = p.playerId === publicGame.activePlayerId;
-                        const isMe = p.playerId === selfPlayerId;
-                        return (
-                          <div
-                            key={p.playerId}
-                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] ${
-                              !p.alive
-                                ? 'border-slate-800 bg-slate-950/60 text-slate-500 line-through'
-                                : isActive
-                                  ? 'border-amber-400 bg-amber-950/55 text-amber-100'
-                                  : isMe
-                                    ? 'border-emerald-500/45 bg-emerald-950/35 text-emerald-100'
-                                    : 'border-slate-700 bg-slate-950/75 text-slate-200'
-                            }`}
-                          >
-                            <span className="font-semibold">
-                              {isActive ? '▶ ' : ''}
-                              {p.displayName}
-                            </span>
-                            <span className="text-[10px] text-rose-300">❤️{p.hp}</span>
-                            {p.shield > 0 && (
-                              <span className="text-[10px] text-sky-300">🛡️{p.shield}</span>
-                            )}
-                            {p.revealedFaction && (
-                              <span className="rounded bg-slate-800 px-1 text-[10px] text-amber-300">
-                                {FACTION_LABELS[p.revealedFaction]}
-                              </span>
-                            )}
-                            {!p.connected && (
-                              <span className="text-[10px] text-rose-400">(Mất mạng)</span>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <ActionPanel
-            publicGame={publicGame}
-            privateView={privateView}
-            selfPlayerId={selfPlayerId}
-            isSpectator={isSpectator}
-            pendingAction={pendingAction}
-            onAction={handleDispatchAction}
-          />
-        </section>
-
-        {/* Cột Phải: Nhật ký + Biểu cảm bàn chơi */}
-        <section
-          className={`space-y-3 lg:col-span-3 ${mobileTab === 'log' ? 'block' : 'hidden lg:block'}`}
-        >
-          {(onSendEmote || onSendChat) && !isSpectator && (
-            <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/90 p-3 text-xs">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                💬 Biểu cảm bàn chơi
-              </div>
-              {onSendEmote && (
-                <div className="flex flex-wrap gap-1.5">
-                  {VALID_BOARD_GAME_EMOTES.map((eid) => (
+          <div className="mx-auto max-w-[1680px] flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-cyan-200 mr-1">
+                Đồ họa ({GRAPHICS_TIER_LABELS[gfx.profile.tier]}):
+              </span>
+              {(['auto', 'high', 'balanced', 'low'] as const satisfies readonly BoardGameQualitySetting[]).map(
+                (q) => {
+                  const active = gfx.prefs.quality === q;
+                  return (
                     <button
-                      key={eid}
+                      key={q}
                       type="button"
-                      data-testid={`bg-emote-${eid}`}
-                      onClick={() => onSendEmote(eid)}
-                      className="rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-xs hover:border-amber-400 hover:bg-slate-700"
-                      title={EMOTE_META[eid].label}
+                      data-testid={`bg-quality-${q}`}
+                      aria-pressed={active}
+                      onClick={() => gfx.setQuality(q)}
+                      className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                        active
+                          ? 'bg-cyan-500 text-slate-950 border-cyan-300'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
+                      }`}
                     >
-                      {EMOTE_META[eid].icon}
+                      {GRAPHICS_QUALITY_LABELS[q]}
                     </button>
-                  ))}
-                </div>
-              )}
-              {onSendChat && (
-                <form
-                  className="flex gap-1.5"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const trimmed = chatInput.trim();
-                    if (!trimmed) return;
-                    onSendChat(trimmed);
-                    setChatInput('');
-                  }}
-                >
-                  <input
-                    data-testid="bg-chat-input"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value.slice(0, 80))}
-                    placeholder="Nhắn nhanh với bàn..."
-                    className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-100 outline-none focus:border-amber-400"
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-slate-700 px-2.5 py-1 text-[11px] font-semibold text-slate-100 hover:bg-slate-600"
-                  >
-                    Gửi
-                  </button>
-                </form>
-              )}
-              {latestEmotes.length > 0 && (
-                <div className="space-y-1 border-t border-slate-800 pt-1.5">
-                  {latestEmotes.map((em, idx) => (
-                    <div key={`${em.atMs}-${idx}`} className="text-[11px] text-amber-100">
-                      <strong className="text-amber-300">{em.displayName}:</strong>{' '}
-                      {em.emote ? `${EMOTE_META[em.emote]?.icon ?? ''} ` : ''}
-                      {em.text ?? (em.emote ? EMOTE_META[em.emote]?.label : '')}
-                    </div>
-                  ))}
-                </div>
+                  );
+                },
               )}
             </div>
-          )}
 
-          <GameLog logs={publicGame.publicLog} highlights={publicGame.highlights} />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                data-testid="bg-shake-toggle-btn"
+                aria-pressed={!gfx.prefs.shakeEnabled}
+                onClick={() => gfx.setShakeEnabled(!gfx.prefs.shakeEnabled)}
+                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  !gfx.prefs.shakeEnabled
+                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                }`}
+              >
+                {gfx.prefs.shakeEnabled ? '📳 Rung mạnh: BẬT' : '🛡️ Tắt rung mạnh'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-reduced-motion-toggle-btn"
+                aria-pressed={vfx.reducedMotion}
+                onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
+                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  vfx.reducedMotion
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                }`}
+              >
+                {vfx.reducedMotion ? '⏸️ Giảm chuyển động: BẬT' : '✨ Chuyển động: ĐẦY ĐỦ'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-panel-mute-toggle-btn"
+                aria-pressed={effectiveMuted}
+                onClick={handleToggleSoundClick}
+                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  effectiveMuted
+                    ? 'bg-rose-500/20 border-rose-400 text-rose-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                }`}
+              >
+                {effectiveMuted ? '🔇 Đang tắt tiếng' : '🔊 Âm thanh: BẬT'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-panel-skip-cinematic-btn"
+                onClick={vfx.skipAllAnimations}
+                className="px-2.5 py-1.5 min-h-[36px] rounded-xl border border-amber-400/60 bg-amber-950/50 hover:bg-amber-900/60 text-xs font-bold text-amber-200 transition cursor-pointer"
+              >
+                ⏭️ Skip Cinematic
+              </button>
+            </div>
+          </div>
         </section>
-      </div>
+      )}
 
-      {/* Thanh tab Mobile (dưới cùng trên < lg) */}
-      <nav className="fixed inset-x-0 bottom-0 z-[46] grid grid-cols-3 border-t border-slate-800 bg-slate-950/95 lg:hidden">
+      {/* THANH TAB MOBILE (< lg) — 3 nút gọn vừa khít 390px */}
+      <nav
+        aria-label="Điều hướng bàn cờ di động"
+        className="lg:hidden shrink-0 grid grid-cols-3 gap-1.5 border-b border-slate-800 bg-slate-900/90 px-2.5 py-2"
+      >
         <button
           type="button"
           onClick={() => setMobileTab('board')}
-          className={`py-2.5 text-xs font-semibold ${
-            mobileTab === 'board' ? 'bg-amber-500/15 text-amber-300' : 'text-slate-400'
+          className={`min-h-[40px] rounded-xl px-2 text-xs font-black transition cursor-pointer ${
+            mobileTab === 'board'
+              ? 'bg-cyan-500 text-slate-950'
+              : 'bg-slate-800 text-slate-200 border border-slate-700'
           }`}
         >
-          🗺️ Bàn & Lượt
+          🎲 Bàn & Lượt
         </button>
         <button
           type="button"
           onClick={() => setMobileTab('role')}
-          className={`py-2.5 text-xs font-semibold ${
-            mobileTab === 'role' ? 'bg-amber-500/15 text-amber-300' : 'text-slate-400'
+          className={`min-h-[40px] rounded-xl px-2 text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
+            mobileTab === 'role'
+              ? 'bg-amber-400 text-slate-950'
+              : 'bg-slate-800 text-slate-200 border border-slate-700'
           }`}
         >
-          🎭 Vai bí mật
+          <span>🎭 Vai bí mật</span>
+          {unreadClueCount > 0 && (
+            <span
+              data-testid="bg-mobile-tab-role-badge"
+              className="inline-flex items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black leading-none text-white"
+            >
+              {unreadClueCount}
+            </span>
+          )}
         </button>
         <button
           type="button"
           onClick={() => setMobileTab('log')}
-          className={`py-2.5 text-xs font-semibold ${
-            mobileTab === 'log' ? 'bg-amber-500/15 text-amber-300' : 'text-slate-400'
+          className={`min-h-[40px] rounded-xl px-2 text-xs font-black transition cursor-pointer flex items-center justify-center gap-1 ${
+            mobileTab === 'log'
+              ? 'bg-emerald-400 text-slate-950'
+              : 'bg-slate-800 text-slate-200 border border-slate-700'
           }`}
         >
-          📜 Nhật ký
+          <span>📜 Nhật ký</span>
+          {unreadLogCount > 0 && mobileTab !== 'log' && (
+            <span
+              data-testid="bg-mobile-tab-log-badge"
+              className="inline-flex items-center justify-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-black leading-none text-slate-950"
+            >
+              {unreadLogCount > 9 ? '9+' : unreadLogCount}
+            </span>
+          )}
         </button>
       </nav>
 
-      {/* Tổng kết trận đấu */}
-      {publicGame.turnPhase === 'ENDED' && (
+      {/* BANNER THÔNG BÁO SỰ KIỆN NỔI BẬT (NẾU CÓ) */}
+      {(displayedError ||
+        publicGame.lastInvestigation ||
+        publicGame.lastRevealEvent ||
+        unreadClueCount > 0 ||
+        latestEmote) && (
+        <div className="shrink-0 bg-slate-950/90 border-b border-slate-800/80 px-3 sm:px-5 py-1.5">
+          <div className="mx-auto max-w-[1680px] flex flex-wrap items-center gap-2">
+            {displayedError && (
+              <div className="rounded-xl bg-rose-950/80 border border-rose-500/60 px-3 py-1.5 text-xs sm:text-sm font-bold text-rose-100">
+                ⚠️ {displayedError}
+              </div>
+            )}
+            {unreadClueCount > 0 && (
+              <div
+                data-testid="bg-unread-clue-banner"
+                className="rounded-xl bg-amber-950/70 border border-amber-400/60 px-3 py-1.5 text-xs sm:text-sm font-bold text-amber-100 flex items-center gap-2"
+              >
+                <span>🕵️ Bạn có {unreadClueCount} mật báo thăm dò mới!</span>
+                <button
+                  type="button"
+                  data-testid="bg-open-unread-clues-btn"
+                  onClick={() => {
+                    setSideDrawerOpen(true);
+                    setMobileTab('role');
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black cursor-pointer"
+                >
+                  Mở đọc
+                </button>
+              </div>
+            )}
+            {publicGame.lastInvestigation && (
+              <div
+                data-testid="bg-last-investigation-banner"
+                className="rounded-xl bg-emerald-950/60 border border-emerald-500/45 px-3 py-1.5 text-xs sm:text-sm font-semibold text-emerald-100"
+              >
+                {publicGame.lastInvestigation.publicMessage}
+              </div>
+            )}
+            {publicGame.lastRevealEvent && (
+              <div
+                data-testid="bg-last-reveal-banner"
+                className="rounded-xl bg-indigo-950/65 border border-indigo-400/50 px-3 py-1.5 text-xs sm:text-sm font-bold text-indigo-100"
+              >
+                🎭 {publicGame.lastRevealEvent.displayName} đã lộ vai{' '}
+                {publicGame.lastRevealEvent.roleName} (
+                {FACTION_LABELS[publicGame.lastRevealEvent.faction]})!
+              </div>
+            )}
+            {latestEmote && (
+              <div
+                data-testid="bg-emote-toast"
+                className="ml-auto rounded-xl bg-slate-800/90 border border-slate-600 px-3 py-1.5 text-xs sm:text-sm font-semibold text-amber-100"
+              >
+                {latestEmote.emote ? EMOTE_META[latestEmote.emote]?.icon ?? '💬' : '💬'}{' '}
+                <strong>{latestEmote.displayName}:</strong>{' '}
+                {latestEmote.text || (latestEmote.emote ? EMOTE_META[latestEmote.emote]?.label : '')}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* NỘI DUNG CHÍNH: BÀN CỜ CUỘN ĐỘC LẬP + THANH HÀNH ĐỘNG NEO ĐÁY + NGĂN PHỤ ĐỘC LẬP + LỚP VFX */}
+      <div ref={boardStageRef} className="relative flex-1 min-h-0 flex flex-col">
+        <main
+          className={`flex-1 min-h-0 overflow-y-auto lg:overflow-hidden px-2.5 sm:px-4 py-2 ${
+            vfx.screenShake === 'heavy'
+              ? 'bg-vfx-shake-heavy'
+              : vfx.screenShake === 'light'
+                ? 'bg-vfx-shake-light'
+                : ''
+          }`}
+        >
+        <div className="mx-auto max-w-[1680px] lg:h-full flex flex-col lg:flex-row gap-3 items-stretch">
+          {/* CỘT CHÍNH: PHẦN BÀN CỜ TRÊN + THANH HÀNH ĐỘNG NEO ĐÁY */}
+          <div
+            className={`w-full min-w-0 flex-1 flex flex-col gap-2 lg:h-full lg:min-h-0 ${
+              mobileTab !== 'board' ? 'hidden lg:flex' : 'flex'
+            }`}
+          >
+            <div
+              data-testid="bg-board-scroll-area"
+              className="flex-1 min-h-0 lg:overflow-y-auto lg:pr-1 space-y-2.5"
+            >
+              {/* 1. THANG THƯƠNG TÍCH CÔNG KHAI GỌN 0..14 (Damage Track) */}
+              <section
+                data-testid="bg-damage-track"
+                className="rounded-2xl border border-slate-700/80 bg-slate-900/90 px-3 py-2 space-y-1.5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-[11px] sm:text-xs font-extrabold uppercase tracking-wider text-slate-200">
+                    🩸 Thang Thương Tích Công Khai (0 → 14)
+                  </h2>
+                  <span className="text-[11px] text-slate-400">
+                    Máu tối đa (8–14) giữ bí mật tới khi lật vai · 🎯 Mốc của bạn · 💀 Ngưỡng gục đã lộ
+                  </span>
+                </div>
+                <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-[minmax(92px,2fr)_repeat(14,minmax(0,1fr))] gap-1">
+                  {WOUND_NOTCHES.map((notch) => {
+                    const occupants = playersByWoundNotch[notch];
+                    const isSelfMaxNotch = Boolean(
+                      privateView && privateView.maxHp === notch,
+                    );
+                    const revealedAtNotch = publicGame.players.filter(
+                      (p) => p.revealedMaxHp === notch,
+                    );
+                    const tone = isSelfMaxNotch
+                      ? 'border-cyan-400/75 bg-cyan-950/35 text-cyan-100'
+                      : notch === 0
+                        ? 'border-emerald-500/40 bg-emerald-950/35 text-emerald-200'
+                        : notch <= 6
+                          ? 'border-slate-700 bg-slate-950/80 text-slate-200'
+                          : notch <= 10
+                            ? 'border-amber-500/45 bg-amber-950/35 text-amber-200'
+                            : 'border-rose-500/55 bg-rose-950/45 text-rose-200';
+                    const cellTitle = [
+                      `Mốc ${notch} vết thương`,
+                      isSelfMaxNotch ? 'Ngưỡng gục của bạn' : null,
+                      revealedAtNotch.length > 0
+                        ? `Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ');
+
+                    return (
+                      <div
+                        key={notch}
+                        title={cellTitle}
+                        className={`min-h-[42px] rounded-lg border px-1 py-0.5 flex flex-col items-center justify-between gap-0.5 ${tone}`}
+                      >
+                        <span className="text-[11px] font-black leading-none flex items-center gap-0.5">
+                          <span>{notch === 14 ? '14 💀' : notch}</span>
+                          {isSelfMaxNotch && <span title="Mốc tử trận của bạn">🎯</span>}
+                          {!isSelfMaxNotch && revealedAtNotch.length > 0 && notch !== 14 && (
+                            <span title={`Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`}>
+                              💀
+                            </span>
+                          )}
+                        </span>
+                        <div className="flex flex-wrap items-center justify-center -space-x-1.5 gap-y-0.5">
+                          {occupants.map((p) => (
+                            <PlayerPawnToken
+                              key={p.playerId}
+                              size="xs"
+                              elevated={false}
+                              displayName={p.displayName}
+                              seatIndex={p.seatIndex}
+                              alive={p.alive}
+                              isActive={p.playerId === publicGame.activePlayerId}
+                              isSelf={p.playerId === selfPlayerId}
+                              revealedFaction={p.revealedFaction}
+                              revealedRoleId={p.revealedRoleId}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI (XÁO NGẪU NHIÊN ĐẦU MỖI VÁN) */}
+              <section className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                {boardClusters.map((cluster) => (
+                  <div
+                    key={cluster.clusterId}
+                    className="rounded-2xl border border-slate-800/90 bg-slate-900/45 p-2.5 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2 px-0.5">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full border text-[11px] font-black whitespace-nowrap shrink-0 ${cluster.badgeClass}`}
+                      >
+                        {cluster.title}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-400">
+                        Cùng cụm đánh chung
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {cluster.locations.map((locId) => {
+                        const occupants = publicGame.players.filter(
+                          (p) => p.location === locId,
+                        );
+                        const isSelfHere = committedSelfLocation === locId;
+                        const canChooseMoveHere =
+                          isMyTurn &&
+                          publicGame.turnPhase === 'CHOOSE_MOVE' &&
+                          selfPlayer?.location !== locId &&
+                          (!publicGame.allowedMoveDestinations ||
+                            publicGame.allowedMoveDestinations.includes(locId));
+                        const rolledDestinationHere =
+                          vfx.isDiceSettled &&
+                          publicGame.lastDiceRoll?.kind === 'move' &&
+                          publicGame.lastDiceRoll.resolvedLocation === locId;
+                        const isHighlightedDestination = vfx.highlightedLocationId === locId;
+
+                        return (
+                          <TabletopLocationTile
+                            key={locId}
+                            locId={locId}
+                            occupants={occupants}
+                            selfPlayerId={selfPlayerId}
+                            activePlayerId={publicGame.activePlayerId}
+                            selectedTargetId={selectedTargetId}
+                            attackableIds={attackableIdsOnBoard}
+                            isSelfHere={isSelfHere}
+                            canChooseMoveHere={canChooseMoveHere}
+                            rolledDestinationHere={rolledDestinationHere}
+                            isHighlightedDestination={isHighlightedDestination}
+                            reducedMotion={vfx.reducedMotion}
+                            enableMist={gfx.profile.enableMistDrift}
+                            enableBackdropBlur={gfx.profile.enableBackdropBlur}
+                            onChooseDestination={handleChooseDestination}
+                            onSelectPlayer={setSelectedTargetId}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </section>
+
+              {/* 3. KHAY XÚC XẮC 3D TƯƠNG TÁC (1d6+1d4) & 3 CHỒNG BÀI BẤM RÚT TRỰC TIẾP */}
+              <section
+                data-testid="bg-dice-tray"
+                data-turn-active={canRollOnBoard ? 'true' : 'false'}
+                data-dice-settled={String(vfx.isDiceSettled)}
+                className={`rounded-2xl border px-3 py-2 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 transition-all duration-200 ${
+                  canRollOnBoard
+                    ? `border-amber-400/90 bg-gradient-to-r from-emerald-950/75 via-slate-900/95 to-amber-950/35 ring-1 ring-amber-300/40 ${
+                        vfx.reducedMotion ? '' : 'mn-dice-tray-spotlight'
+                      }`
+                    : 'border-slate-700/80 bg-slate-900/90'
+                }`}
+              >
+                {(() => {
+                  const diceRollingNow = !vfx.isDiceSettled;
+                  const trayDiceStage = vfx.activeDiceRoll ? vfx.diceRollStage : 'settled';
+                  const enable3DDice = gfx.profile.tier !== 'low' && !vfx.reducedMotion;
+                  const rerollNeeded =
+                    !diceRollingNow &&
+                    canRollOnBoard &&
+                    Boolean(
+                      publicGame.lastDiceRoll?.rerollRequired &&
+                        publicGame.lastDiceRoll.playerId === selfPlayerId,
+                    );
+                  const diceSummary = publicGame.lastDiceRoll ? (
+                    <>
+                      <MidnightDicePair3D
+                        d6={publicGame.lastDiceRoll.d6}
+                        d4={publicGame.lastDiceRoll.d4}
+                        stage={trayDiceStage}
+                        size={38}
+                        enable3D={enable3DDice}
+                      />
+                      <div className="min-w-0 flex-1 text-left">
+                        {diceRollingNow ? (
+                          <>
+                            <p className="text-xs sm:text-sm font-black text-amber-200 truncate">
+                              🎲 {publicGame.lastDiceRoll.displayName} đang tung xúc xắc...
+                            </p>
+                            <p className="text-[11px] sm:text-xs text-slate-300 font-semibold truncate">
+                              Chờ xúc xắc dừng trên mặt bàn để chốt kết quả từ server.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs sm:text-sm font-black text-white truncate">
+                              {publicGame.lastDiceRoll.kind === 'move'
+                                ? `${publicGame.lastDiceRoll.displayName} tung ${publicGame.lastDiceRoll.d6} + ${publicGame.lastDiceRoll.d4} = ${publicGame.lastDiceRoll.total}`
+                                : `${publicGame.lastDiceRoll.displayName} tung đòn đánh (${
+                                    publicGame.lastDiceRoll.d6 > 0
+                                      ? `|${publicGame.lastDiceRoll.d6} - ${publicGame.lastDiceRoll.d4}|`
+                                      : `1d4=${publicGame.lastDiceRoll.d4}`
+                                  } → gây ${publicGame.lastDiceRoll.damageDealt ?? 0} sát thương)`}
+                            </p>
+                            <p className="text-[11px] sm:text-xs text-cyan-200 font-semibold truncate">
+                              {publicGame.lastDiceRoll.rerollRequired
+                                ? '🔁 Trùng khu vực hiện tại — được quyền ĐỔ LẠI!'
+                                : publicGame.lastDiceRoll.freeChoice
+                                  ? publicGame.allowedMoveDestinations &&
+                                    publicGame.allowedMoveDestinations.length < 5
+                                    ? `🧭 La Bàn! Chọn 1 trong ${publicGame.allowedMoveDestinations.length} khu vực hợp lệ.`
+                                    : '✨ Tổng 7! Tự do chọn khu vực bất kỳ.'
+                                  : publicGame.lastDiceRoll.resolvedLocation
+                                    ? `Điểm đến: ${LOCATION_VISUAL_META[publicGame.lastDiceRoll.resolvedLocation].name}`
+                                    : 'Sẵn sàng tung xúc xắc tiếp theo.'}
+                            </p>
+                            {publicGame.lastDiceRoll.kind === 'attack' &&
+                              publicGame.lastDiceRoll.counterRoll && (
+                                <p
+                                  data-testid="bg-dice-counter-roll"
+                                  className="text-[11px] sm:text-xs text-amber-300 font-bold truncate"
+                                >
+                                  🥊 {publicGame.lastDiceRoll.counterRoll.displayName} phản kích (
+                                  {publicGame.lastDiceRoll.counterRoll.d6 > 0
+                                    ? `|${publicGame.lastDiceRoll.counterRoll.d6} - ${publicGame.lastDiceRoll.counterRoll.d4}|`
+                                    : `1d4=${publicGame.lastDiceRoll.counterRoll.d4}`}
+                                  ) → trả đòn {publicGame.lastDiceRoll.counterRoll.damageDealt} sát thương!
+                                </p>
+                              )}
+                          </>
+                        )}
+                      </div>
+                      {canRollOnBoard && (
+                        <span className="shrink-0 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
+                          {diceRollingNow
+                            ? '🎲 Đang lăn...'
+                            : rerollNeeded
+                              ? '🔁 Đổ lại ngay!'
+                              : '🎲 Tung Xúc Xắc'}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <MidnightDicePair3D
+                        d6={6}
+                        d4={4}
+                        stage={trayDiceStage}
+                        size={38}
+                        enable3D={enable3DDice}
+                      />
+                      <div className="min-w-0 flex-1 text-left">
+                        <p className="text-xs sm:text-sm font-black text-white truncate">
+                          {canRollOnBoard
+                            ? '⚡ Lượt của bạn! Tung Xúc Xắc Bóng Đêm (1d6 + 1d4)'
+                            : 'Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)'}
+                        </p>
+                        <p className="text-[11px] sm:text-xs text-slate-300 truncate">
+                          Tung xúc xắc di chuyển · Tổng 7 chọn bất kỳ · Trùng chỗ được đổ lại
+                        </p>
+                      </div>
+                      {canRollOnBoard && (
+                        <span className="shrink-0 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
+                          🎲 Tung Xúc Xắc
+                        </span>
+                      )}
+                    </>
+                  );
+
+                  return canRollOnBoard ? (
+                    <button
+                      type="button"
+                      data-testid="bg-board-roll-dice-btn"
+                      onClick={() => dispatchAction({ type: 'ROLL_DICE' })}
+                      className="flex items-center gap-3 flex-1 min-w-0 rounded-xl border border-emerald-400/80 bg-emerald-950/55 hover:bg-emerald-900/65 px-3 py-2 shadow-[0_0_20px_rgba(16,185,129,0.28)] transition cursor-pointer"
+                    >
+                      {diceSummary}
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-3 flex-1 min-w-0 px-1">
+                      {diceSummary}
+                    </div>
+                  );
+                })()}
+
+                {/* 3 Chồng bài (bấm trực tiếp ở Pha 2 khi đang đứng ở khu vực hợp lệ) */}
+                <div className="grid grid-cols-3 gap-2 shrink-0">
+                  {(
+                    [
+                      ['investigation', 'Khám Phá', 'text-emerald-300', 'border-emerald-400 bg-emerald-950/50 hover:bg-emerald-900/60 shadow-[0_0_14px_rgba(16,185,129,0.24)]'],
+                      ['equipment', 'Cung Ứng', 'text-sky-300', 'border-sky-400 bg-sky-950/50 hover:bg-sky-900/60 shadow-[0_0_14px_rgba(56,189,248,0.24)]'],
+                      ['event', 'Đột Kích', 'text-rose-300', 'border-rose-400 bg-rose-950/50 hover:bg-rose-900/60 shadow-[0_0_14px_rgba(244,63,94,0.24)]'],
+                    ] as const
+                  ).map(([deckId, label, cls, activeCls]) => {
+                    const canDrawHere = canDrawDeckOnBoard(deckId);
+                    const deckInner = (
+                      <>
+                        <DeckCardBackSvg deck={deckId} size={28} />
+                        <div className="min-w-0 text-left">
+                          <div className="flex items-center gap-1">
+                            <p className={`text-[11px] font-extrabold truncate ${cls}`}>{label}</p>
+                            {canDrawHere && (
+                              <span className="text-[10px] font-black text-amber-200 whitespace-nowrap">
+                                👆 Rút
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs sm:text-sm font-black text-white">
+                            {publicGame.deckCounts[deckId]} lá
+                          </p>
+                        </div>
+                      </>
+                    );
+
+                    return canDrawHere ? (
+                      <button
+                        key={deckId}
+                        type="button"
+                        data-vfx-deck={deckId}
+                        data-testid={`bg-board-draw-${deckId}`}
+                        onClick={() => dispatchAction({ type: 'DRAW_CARD', deck: deckId })}
+                        className={`rounded-xl border px-2.5 py-1.5 min-h-[42px] flex items-center gap-2 transition cursor-pointer ${activeCls}`}
+                      >
+                        {deckInner}
+                      </button>
+                    ) : (
+                      <div
+                        key={deckId}
+                        data-vfx-deck={deckId}
+                        className={`rounded-xl border border-slate-700 bg-slate-950/85 px-2.5 py-1.5 flex items-center gap-2 transition ${
+                          isMyTurn && publicGame.turnPhase === 'LOCATION_ACTION'
+                            ? 'opacity-55'
+                            : ''
+                        }`}
+                      >
+                        {deckInner}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* 4. DẢI NGƯỜI CHƠI TINH GỌN */}
+              <section className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {publicGame.players.map((p) => {
+                  const selected = selectedTargetId === p.playerId;
+                  const isTurnHolder = p.playerId === publicGame.activePlayerId;
+                  const inAttackRange = attackableIdsOnBoard.has(p.playerId);
+                  const isSelfCard = p.playerId === selfPlayerId;
+                  const factionTheme = p.revealedFaction ? FACTION_THEME[p.revealedFaction] : null;
+                  const locMeta = LOCATION_VISUAL_META[getCommittedLocation(p)];
+                  return (
+                    <div
+                      key={p.playerId}
+                      className={`rounded-xl border px-2.5 py-2 flex flex-col justify-between gap-1.5 transition ${
+                        !p.alive
+                          ? 'opacity-55 border-slate-800 bg-slate-950/60'
+                          : selected
+                            ? isSelfCard
+                              ? 'border-emerald-400 bg-emerald-950/40 ring-2 ring-emerald-400/50'
+                              : 'border-rose-400 bg-rose-950/40 ring-2 ring-rose-400/50'
+                            : isTurnHolder
+                              ? 'border-amber-400 bg-slate-900'
+                              : inAttackRange
+                                ? 'border-rose-500/60 bg-slate-900/90 hover:border-rose-400'
+                                : 'border-slate-700/80 bg-slate-900/80 hover:border-cyan-400/50'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        data-vfx-player-strip={p.playerId}
+                        data-testid={isSelfCard ? 'bg-player-strip-self' : undefined}
+                        aria-pressed={selected}
+                        onClick={() =>
+                          setSelectedTargetId((prev) =>
+                            toggleSelectedTargetId(prev, p.playerId, p.alive),
+                          )
+                        }
+                        className="w-full text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <PlayerPawnToken
+                            compact
+                            elevated
+                            displayName={p.displayName}
+                            seatIndex={p.seatIndex}
+                            alive={p.alive}
+                            isActive={isTurnHolder}
+                            isSelf={isSelfCard}
+                            revealedFaction={p.revealedFaction}
+                            revealedRoleId={p.revealedRoleId}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <p className="text-xs sm:text-sm font-black text-white truncate">
+                                {p.displayName}
+                              </p>
+                              {inAttackRange && (
+                                <span className="text-[10px] font-black text-amber-200 shrink-0">
+                                  ⚔️
+                                </span>
+                              )}
+                            </div>
+                            <p
+                              className={`text-[11px] font-bold truncate ${factionTheme ? factionTheme.textClass : 'text-slate-400'}`}
+                            >
+                              {p.revealedRoleId
+                                ? `${FACTION_LABELS[p.revealedFaction!]} · Max ${p.revealedMaxHp}`
+                                : 'Vai ẩn danh'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-bold">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-200">
+                            🩸 {p.woundsTaken} vết
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-200">
+                            Ô {locMeta.diceLabel}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">
+                            🃏 {p.handCount}
+                          </span>
+                          {p.guardianShieldActive && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-200">
+                              🛡️ Khiên
+                            </span>
+                          )}
+                        </div>
+                      </button>
+
+                      {(p.equipped.length > 0 || p.revealedRoleId) && (
+                        <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                          {p.revealedRoleId && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setZoomTarget({
+                                  kind: 'role',
+                                  roleId: p.revealedRoleId!,
+                                  revealed: true,
+                                  viewerMode: 'other-player',
+                                  woundsTaken: p.woundsTaken,
+                                  currentHp: p.revealedMaxHp
+                                    ? Math.max(0, p.revealedMaxHp - p.woundsTaken)
+                                    : undefined,
+                                })
+                              }
+                              title={`Phóng lớn thẻ vai đã lộ của ${p.displayName}`}
+                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-amber-950/70 border border-amber-400/45 text-amber-200 hover:bg-amber-900/70 transition cursor-pointer"
+                            >
+                              🔍 Soi vai
+                            </button>
+                          )}
+                          {p.equipped.map((eq, i) => (
+                            <button
+                              key={`${eq.id}-${i}`}
+                              type="button"
+                              onClick={() =>
+                                setZoomTarget({
+                                  kind: 'card',
+                                  cardId: eq.id,
+                                  zone: 'equipped-table',
+                                })
+                              }
+                              title={`${eq.summary} (Bấm để phóng lớn thẻ)`}
+                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-md bg-sky-950/70 border border-sky-500/40 text-sky-200 hover:border-sky-300 truncate max-w-full cursor-pointer"
+                            >
+                              🎒 {eq.title}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
+            </div>
+
+            {/* 5. THANH HÀNH ĐỘNG NEO CỐ ĐỊNH Ở ĐÁY TRÊN DESKTOP */}
+            <div className="shrink-0 lg:max-h-[44vh] lg:overflow-y-auto">
+              <ActionPanel
+                publicGame={publicGame}
+                privateView={privateView}
+                selfPlayerId={selfPlayerId}
+                isSpectator={isSpectator}
+                selectedTargetId={selectedTargetId}
+                onSelectTarget={setSelectedTargetId}
+                onAction={dispatchAction}
+                onZoomCard={(cardId, zone) =>
+                  setZoomTarget({
+                    kind: 'card',
+                    cardId,
+                    zone,
+                    isParticipantInInvestigation: true,
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          {/* NGĂN KÉO PHỤ BÊN PHẢI (CUỘN ĐỘC LẬP TRÊN DESKTOP): THẺ VAI + NHẬT KÝ + EMOTE & CHAT */}
+          {(sideDrawerOpen || mobileTab !== 'board') && (
+            <div
+              data-testid="bg-side-drawer"
+              className={`w-full lg:w-[376px] xl:w-[400px] shrink-0 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-1 space-y-3 ${
+                mobileTab === 'board' ? 'hidden lg:block' : 'block'
+              }`}
+            >
+              <div className={mobileTab === 'log' ? 'hidden lg:block' : 'block'}>
+                <RoleCard
+                  publicGame={publicGame}
+                  privateView={privateView}
+                  isSpectator={isSpectator}
+                  visualStyle="midnight-noir"
+                  foilEnabled={gfx.profile.enableFoil}
+                  reducedMotion={!gfx.profile.enable3DTilt || vfx.reducedMotion}
+                  onZoomRole={() =>
+                    privateView &&
+                    setZoomTarget({
+                      kind: 'role',
+                      roleId: privateView.roleId,
+                      revealed: privateView.revealed,
+                      viewerMode: 'owner-peek',
+                      woundsTaken: privateView.woundsTaken,
+                      currentHp: privateView.hp,
+                    })
+                  }
+                  onZoomCard={(cardId, zone = 'equipped-table') =>
+                    setZoomTarget({
+                      kind: 'card',
+                      cardId,
+                      zone,
+                      isParticipantInInvestigation: true,
+                    })
+                  }
+                />
+              </div>
+
+              <div className={mobileTab === 'role' ? 'hidden lg:block' : 'block'}>
+                <GameLog
+                  publicGame={publicGame}
+                  unsettledRoll={!vfx.isDiceSettled ? publicGame.lastDiceRoll : null}
+                />
+
+                {/* Emote & Chat nhanh */}
+                <div className="mt-3 rounded-2xl border border-slate-700/80 bg-slate-900/90 p-3 space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {VALID_BOARD_GAME_EMOTES.map((eid) => (
+                      <button
+                        key={eid}
+                        type="button"
+                        data-testid={`bg-emote-${eid}`}
+                        onClick={() => onSendEmote?.(eid)}
+                        className="px-2.5 py-1.5 min-h-[36px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-100 cursor-pointer"
+                      >
+                        {EMOTE_META[eid].icon} {EMOTE_META[eid].label}
+                      </button>
+                    ))}
+                  </div>
+                  {onSendChat && (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const trimmed = chatText.trim();
+                        if (!trimmed) return;
+                        onSendChat(trimmed);
+                        setChatText('');
+                      }}
+                      className="flex gap-2"
+                    >
+                      <input
+                        type="text"
+                        data-testid="bg-chat-input"
+                        value={chatText}
+                        onChange={(e) => setChatText(e.target.value)}
+                        maxLength={120}
+                        placeholder="Nhắn nhanh với bàn..."
+                        className="flex-1 min-w-0 rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-white placeholder:text-slate-500"
+                      />
+                      <button
+                        type="submit"
+                        className="px-4 py-2 min-h-[40px] rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-black cursor-pointer"
+                      >
+                        Gửi
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        </main>
+
+        <BoardGameVfxStage
+          vfx={vfx}
+          containerRef={boardStageRef}
+          publicGame={publicGame}
+          sourcePlayerId={selfPlayerId}
+          selectedTargetId={selectedTargetId}
+          targetingTone={selectedTargetId && selectedTargetId === selfPlayerId ? 'heal' : 'hostile'}
+        />
+      </div>
+
+      {/* MODAL TỔNG KẾT VÁN ĐẤU */}
+      {publicGame.winnerLabel && publicGame.finalReveal && (
         <MatchResult
           publicGame={publicGame}
           selfPlayerId={selfPlayerId}
           isSpectator={isSpectator}
           postcardSlot={<MatchPostcard publicGame={publicGame} inviteCode={inviteCode} />}
+          onOpenLeaderboard={onOpenLeaderboard}
           onPlayAgain={onPlayAgain}
           onLeaveMatch={onLeaveMatch}
         />
       )}
 
-      {/* Hộp thoại xác nhận rời ván giữa chừng */}
+      {/* MODAL PHÓNG LỚN THẺ BÀI */}
+      <MidnightCardZoomModal
+        target={zoomTarget}
+        reducedMotion={!gfx.profile.enable3DTilt || vfx.reducedMotion}
+        foilEnabled={gfx.profile.enableFoil}
+        enableBackdropBlur={gfx.profile.enableBackdropBlur}
+        onClose={handleCloseZoom}
+      />
+
+      {/* HỘP THOẠI XÁC NHẬN RỜI VÁN */}
       {leaveConfirmOpen && (
-        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-rose-500/45 bg-slate-900 p-4 text-xs text-slate-100 shadow-2xl">
-            <h3 className="text-sm font-bold text-rose-300">Xác nhận rời ván đấu?</h3>
-            <p className="mt-1.5 leading-relaxed text-slate-300">
-              Bạn đang ở trong bàn Bóng Đêm KTX. Nếu thoát, ghế sẽ được giữ tạm trong thời gian
-              ngắn để kết nối lại bằng tab này hoặc rời hẳn phòng.
+        <div
+          className={`fixed inset-0 z-[55] flex items-center justify-center p-4 ${
+            gfx.profile.enableBackdropBlur ? 'bg-slate-950/75 backdrop-blur-sm' : 'bg-slate-950/90'
+          }`}
+        >
+          <div className="w-full max-w-md rounded-2xl border border-rose-500/45 bg-slate-900 p-5 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-black text-white">Rời bàn Bóng Đêm KTX?</h3>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              {publicGame.winnerLabel
+                ? 'Trận đấu đã kết thúc. Bạn muốn quay về khu sinh hoạt KTX?'
+                : 'Nếu rời ván giữa chừng, bạn vẫn có thể vào lại trong thời gian chờ hoặc nhường lượt tự động khi quá hạn mất kết nối.'}
             </p>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setLeaveConfirmOpen(false)}
-                className="rounded-lg bg-slate-800 px-3 py-1.5 font-semibold text-slate-200 hover:bg-slate-700"
+                className="px-4 py-2 min-h-[40px] rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-bold text-slate-200 cursor-pointer"
               >
                 Ở lại bàn
               </button>
@@ -569,9 +1370,9 @@ export default function GameBoard({
                   setLeaveConfirmOpen(false);
                   onLeaveMatch();
                 }}
-                className="rounded-lg bg-rose-600 px-3 py-1.5 font-semibold text-white hover:bg-rose-500"
+                className="px-4 py-2 min-h-[40px] rounded-xl bg-rose-600 hover:bg-rose-500 text-sm font-black text-white cursor-pointer"
               >
-                Rời ván đấu
+                Xác nhận rời bàn
               </button>
             </div>
           </div>
@@ -580,3 +1381,5 @@ export default function GameBoard({
     </div>
   );
 }
+
+export default GameBoard;

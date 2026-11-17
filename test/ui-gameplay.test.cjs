@@ -1011,5 +1011,207 @@ test('HUSTVerse Pluggable Modes — gameModes storage, channel formatting & hskM
   );
 });
 
+test('BoardGame Visual Prototype — Midnight Noir Art Tokens, 2:3 AI Assets & P0 Secrecy', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const {
+    MIDNIGHT_FACTION_TOKENS,
+    MIDNIGHT_DECK_TOKENS,
+    MIDNIGHT_CARD_BACK_ART,
+    PROTOTYPE_CHARACTER_ART,
+    PROTOTYPE_CARD_ART,
+    PROTOTYPE_SAMPLE_CARD_IDS,
+    resolveRoleCardPresentation,
+    resolveActionCardPresentation,
+  } = require('../features/boardgame/ui/midnight-noir-tokens.ts');
+
+  // 1. Kiểm tra đủ 3 hệ màu phe đúng art direction
+  assert.equal(MIDNIGHT_FACTION_TOKENS['lantern-guard'].englishTag, 'EMERALD & GOLD');
+  assert.equal(MIDNIGHT_FACTION_TOKENS['mist-order'].englishTag, 'CRIMSON & VIOLET');
+  assert.equal(MIDNIGHT_FACTION_TOKENS.wanderer.englishTag, 'AMBER & SILVER');
+
+  // 2. Kiểm tra đủ 3 bộ bài mẫu (Điều tra, Trang bị, Đột Kích)
+  assert.deepEqual(Object.keys(MIDNIGHT_DECK_TOKENS).sort(), [
+    'equipment',
+    'event',
+    'investigation',
+  ]);
+  assert.deepEqual([...PROTOTYPE_SAMPLE_CARD_IDS], ['inv-12', 'eq-04', 'ev-01']);
+
+  // 3. Kiểm tra toàn bộ file WebP AI artwork thực sự tồn tại trong public/
+  const publicDir = path.join(__dirname, '..', 'public');
+  const allAssetUrls = [
+    MIDNIGHT_CARD_BACK_ART,
+    PROTOTYPE_CHARACTER_ART['gac-ky-thuat'],
+    PROTOTYPE_CHARACTER_ART['gac-radio'],
+    PROTOTYPE_CARD_ART['inv-12'],
+    PROTOTYPE_CARD_ART['eq-04'],
+    PROTOTYPE_CARD_ART['ev-01'],
+  ];
+  for (const urlPath of allAssetUrls) {
+    assert.ok(urlPath && urlPath.startsWith('/assets/boardgame/prototype/'), `Invalid asset URL: ${urlPath}`);
+    const absPath = path.join(publicDir, urlPath.slice(1));
+    assert.equal(fs.existsSync(absPath), true, `Missing AI artwork file: ${absPath}`);
+    assert.ok(fs.statSync(absPath).size > 10_000, `AI artwork unexpectedly small: ${absPath}`);
+  }
+
+  // 4. Kiểm tra BẢO MẬT P0 Thẻ Nhân Vật: chưa lật với người khác / khán giả / khi úp thẻ KHÔNG lộ dữ liệu mật
+  for (const hiddenMode of ['other-player', 'spectator', 'owner-facedown']) {
+    const hidden = resolveRoleCardPresentation({
+      viewerMode: hiddenMode,
+      revealed: false,
+      roleId: 'gac-ky-thuat',
+      woundsTaken: 3,
+    });
+    assert.equal(hidden.showFront, false, `${hiddenMode} must hide front face`);
+    assert.equal(hidden.roleId, null);
+    assert.equal(hidden.faction, null);
+    assert.equal(hidden.roleName, null);
+    assert.equal(hidden.maxHp, null);
+    assert.equal(hidden.hp, null);
+    assert.equal(hidden.portraitSrc, null);
+    assert.equal(hidden.publicWoundsTaken, 3);
+    assert.equal(hidden.cardBackSrc, MIDNIGHT_CARD_BACK_ART);
+  }
+
+  // Chủ thẻ soi riêng hoặc khi đã Lật Vai Công Khai -> hiện đầy đủ
+  const ownerPeek = resolveRoleCardPresentation({
+    viewerMode: 'owner-peek',
+    revealed: false,
+    roleId: 'gac-radio',
+    woundsTaken: 4,
+  });
+  assert.equal(ownerPeek.showFront, true);
+  assert.equal(ownerPeek.roleId, 'gac-radio');
+  assert.equal(ownerPeek.maxHp, 12);
+  assert.equal(ownerPeek.hp, 8);
+  assert.equal(ownerPeek.portraitSrc, PROTOTYPE_CHARACTER_ART['gac-radio']);
+
+  const publicRevealed = resolveRoleCardPresentation({
+    viewerMode: 'spectator',
+    revealed: true,
+    roleId: 'gac-ky-thuat',
+    woundsTaken: 2,
+  });
+  assert.equal(publicRevealed.showFront, true);
+  assert.equal(publicRevealed.maxHp, 14);
+  assert.equal(publicRevealed.hp, 12);
+  assert.equal(publicRevealed.portraitSrc, PROTOTYPE_CHARACTER_ART['gac-ky-thuat']);
+
+  // 5. Kiểm tra BẢO MẬT Mặt Bài: úp trên chồng bài & bảo mật 1-đối-1 Thẻ Điều Tra
+  const deckPile = resolveActionCardPresentation({
+    cardId: 'eq-04',
+    zone: 'draw-pile',
+  });
+  assert.equal(deckPile.showFront, false);
+  assert.equal(deckPile.title, null);
+  assert.equal(deckPile.artworkSrc, null);
+
+  const secretInvForOutsider = resolveActionCardPresentation({
+    cardId: 'inv-12',
+    zone: 'private-investigation',
+    isParticipantInInvestigation: false,
+  });
+  assert.equal(secretInvForOutsider.showFront, false);
+  assert.equal(secretInvForOutsider.title, null);
+
+  const secretInvForParticipant = resolveActionCardPresentation({
+    cardId: 'inv-12',
+    zone: 'private-investigation',
+    isParticipantInInvestigation: true,
+  });
+  assert.equal(secretInvForParticipant.showFront, true);
+  assert.equal(secretInvForParticipant.artworkSrc, PROTOTYPE_CARD_ART['inv-12']);
+});
+
+test('BoardGame Full Asset Library — 10 Roles, 40 Distinct Cards (48 Copies), 6 KTX Locations & P0 Secrecy', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { ROLES_CATALOG } = require('../features/boardgame/domain/roles.ts');
+  const { CARDS_CATALOG } = require('../features/boardgame/domain/cards.ts');
+  const { LOCATIONS_CATALOG } = require('../features/boardgame/domain/rules.ts');
+  const {
+    MIDNIGHT_CHARACTER_ART,
+    MIDNIGHT_CARD_ART,
+    MIDNIGHT_CARD_STAT_BADGE,
+    MIDNIGHT_LOCATION_ART,
+    MIDNIGHT_LOCATION_AMBIENCE,
+    resolveRoleCardPresentation,
+    resolveActionCardPresentation,
+  } = require('../features/boardgame/ui/midnight-noir-tokens.ts');
+
+  const publicDir = path.join(__dirname, '..', 'public');
+  const assertValidWebpAsset = (urlPath, label) => {
+    assert.ok(urlPath && urlPath.startsWith('/assets/boardgame/'), `Invalid asset URL for ${label}: ${urlPath}`);
+    const absPath = path.join(publicDir, urlPath.slice(1));
+    assert.equal(fs.existsSync(absPath), true, `Missing WebP file for ${label}: ${absPath}`);
+    const buf = fs.readFileSync(absPath);
+    assert.ok(buf.byteLength >= 8_000 && buf.byteLength <= 260_000, `Unexpected WebP size (${buf.byteLength}B) for ${label}`);
+    assert.equal(buf.slice(0, 4).toString('ascii'), 'RIFF', `${label} missing RIFF header`);
+    assert.equal(buf.slice(8, 12).toString('ascii'), 'WEBP', `${label} missing WEBP signature`);
+  };
+
+  // 1. Kiểm tra đủ 10/10 nhân vật
+  assert.equal(ROLES_CATALOG.length, 10);
+  for (const role of ROLES_CATALOG) {
+    assertValidWebpAsset(MIDNIGHT_CHARACTER_ART[role.id], `role:${role.id}`);
+    const hidden = resolveRoleCardPresentation({
+      viewerMode: 'other-player',
+      revealed: false,
+      roleId: role.id,
+      woundsTaken: 2,
+    });
+    assert.equal(hidden.showFront, false);
+    assert.equal(hidden.portraitSrc, null, `Role ${role.id} leaked portrait when hidden`);
+    assert.equal(hidden.maxHp, null, `Role ${role.id} leaked maxHp when hidden`);
+
+    const revealed = resolveRoleCardPresentation({
+      viewerMode: 'other-player',
+      revealed: true,
+      roleId: role.id,
+      woundsTaken: 2,
+    });
+    assert.equal(revealed.showFront, true);
+    assert.equal(revealed.portraitSrc, MIDNIGHT_CHARACTER_ART[role.id]);
+  }
+
+  // 2. Kiểm tra đủ 40 loại thẻ riêng biệt / 48 bản sao
+  assert.equal(CARDS_CATALOG.length, 40);
+  const totalCopies = CARDS_CATALOG.reduce((sum, c) => sum + c.copies, 0);
+  assert.equal(totalCopies, 48);
+  for (const card of CARDS_CATALOG) {
+    assertValidWebpAsset(MIDNIGHT_CARD_ART[card.id], `card:${card.id}`);
+    assert.ok(
+      MIDNIGHT_CARD_STAT_BADGE[card.id] && MIDNIGHT_CARD_STAT_BADGE[card.id].length >= 4,
+      `Missing stat badge for ${card.id}`,
+    );
+
+    const hiddenPile = resolveActionCardPresentation({
+      cardId: card.id,
+      zone: 'draw-pile',
+      isParticipantInInvestigation: false,
+    });
+    assert.equal(hiddenPile.showFront, false);
+    assert.equal(hiddenPile.artworkSrc, null, `Card ${card.id} leaked artwork on draw-pile`);
+
+    const shown = resolveActionCardPresentation({
+      cardId: card.id,
+      zone: card.deck === 'investigation' ? 'private-investigation' : 'equipped-table',
+      isParticipantInInvestigation: true,
+    });
+    assert.equal(shown.showFront, true);
+    assert.equal(shown.artworkSrc, MIDNIGHT_CARD_ART[card.id]);
+    assert.equal(shown.copies, card.copies);
+  }
+
+  // 3. Kiểm tra đủ 6/6 địa điểm KTX
+  assert.equal(LOCATIONS_CATALOG.length, 6);
+  for (const loc of LOCATIONS_CATALOG) {
+    assertValidWebpAsset(MIDNIGHT_LOCATION_ART[loc.id], `loc:${loc.id}`);
+    assert.ok(MIDNIGHT_LOCATION_AMBIENCE[loc.id], `Missing ambience config for ${loc.id}`);
+  }
+});
+
+
 
 

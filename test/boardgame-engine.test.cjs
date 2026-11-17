@@ -1,11 +1,6 @@
 /**
- * test/boardgame-engine.test.cjs — Kiểm thử đơn vị Pure Domain Engine cho
- * "Bóng Đêm KTX — Secrets After Dark" (BG3):
- *  (1) Đủ 9 vai trò nguyên bản, 3 phe, 32 lá bài data-driven, phân bổ chuẩn 4–8 người
- *  (2) Phân tách P0 tuyệt đối: `getPublicGameView` KHÔNG lộ vai chưa lật / tay bài / ghi chú / MSSV;
- *      khán giả nhận `getPrivateGameView === null`
- *  (3) Di chuyển 6 khu vực, điều chỉnh Tín hiệu / Màn sương, Chiến thuật, Kỹ năng, Chiến thắng mỗi phe
- *  (4) Giới hạn số vòng hữu hạn (7 vòng cho 4-5p, 8 vòng cho 6-8p) + timeout auto-turn không bao giờ treo
+ * test/boardgame-engine.test.cjs — Kiểm thử đơn vị Pure Domain Engine v4 cho
+ * "Bóng Đêm KTX v4 — 100% Luật gốc Shadow Hunters" (rulesetVersion = 4).
  */
 
 const test = require('node:test');
@@ -13,166 +8,1077 @@ const assert = require('node:assert/strict');
 require('./register-ts.cjs');
 
 const {
+  BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS,
+  BOARD_GAME_RULESET_VERSION,
+  validateBoardGameActionPayload,
+  validateBoardGameClientMessage,
+} = require('../shared/contracts/boardgame.ts');
+const {
+  BOARD_GAME_MAX_EQUIPPED,
+  BOARD_GAME_MAX_HAND,
   CARDS_CATALOG,
-  KTX_LOCATIONS,
+  DEFAULT_CLUSTER_PAIRS,
+  LOCATIONS_CATALOG,
   ROLES_CATALOG,
+  appendPrivateClue,
+  appendPublicLog,
   applyPlayerGameAction,
   applyTimeoutAutoTurn,
+  areInSameCluster,
+  canPlayerAttackTarget,
   createInitialGameState,
-  evaluateVictoryState,
+  evaluateVictory,
+  getActivePlayer,
+  getPairedLocationInCluster,
   getPrivateGameView,
   getPublicGameView,
   getRoleDistribution,
+  listCardIdsByDeck,
+  resolveLocationForDiceTotal,
 } = require('../features/boardgame/domain/index.ts');
+const {
+  resolveActionTargets,
+  toggleSelectedTargetId,
+} = require('../features/boardgame/ui/target-selection.ts');
 
 function makePlayers(n) {
-  return Array.from({ length: n }, (_, i) => ({
-    playerId: `p_${i + 1}`,
-    displayName: `SV ${i + 1}`,
-    seatIndex: i,
+  return Array.from({ length: n }, (_, idx) => ({
+    playerId: `p_${idx + 1}`,
+    displayName: `SV ${idx + 1}`,
+    seatIndex: idx,
+    appearance: {
+      gender: idx % 2 === 0 ? 'male' : 'female',
+      topStyle: 'jacket',
+      hairColor: '#1f2937',
+      skinTone: '#f1c27d',
+    },
+    connected: true,
   }));
 }
 
-test('BG3 Pure Domain Engine Unit Tests', async (t) => {
-  await t.test('(1) Catalog integrity: 9 roles, 6 locations, 32 cards, 4-8p distribution', () => {
-    assert.equal(ROLES_CATALOG.length, 9);
-    assert.equal(KTX_LOCATIONS.length, 6);
-    assert.equal(CARDS_CATALOG.length, 32);
-    assert.equal(CARDS_CATALOG.filter((c) => c.deck === 'clue').length, 10);
-    assert.equal(CARDS_CATALOG.filter((c) => c.deck === 'event').length, 12);
-    assert.equal(CARDS_CATALOG.filter((c) => c.deck === 'tactic').length, 10);
+function collectObjectKeys(root, out = new Set()) {
+  if (!root || typeof root !== 'object') return out;
+  if (Array.isArray(root)) {
+    for (const item of root) collectObjectKeys(item, out);
+    return out;
+  }
+  for (const [k, v] of Object.entries(root)) {
+    out.add(k);
+    collectObjectKeys(v, out);
+  }
+  return out;
+}
 
-    for (let n = 4; n <= 8; n++) {
-      const split = getRoleDistribution(n);
-      assert.equal(split.lanternGuard + split.mistOrder + split.wanderer, n);
-      const st = createInitialGameState({
-        matchId: `m-${n}`,
-        seed: 100 + n,
-        nowMs: 1_700_000_000_000,
-        players: makePlayers(n),
-      });
-      assert.equal(st.players.length, n);
-      assert.equal(st.maxRounds, n <= 5 ? 7 : 8);
-      for (const p of st.players) {
-        assert.equal(p.hand.length, 2);
-        assert.equal(p.revealed, false);
-      }
-    }
-  });
+function stepSingleTurnThroughRoll(state, nowMs) {
+  const active = getActivePlayer(state);
+  assert.ok(active);
+  for (let i = 0; i < 4 && state.turnPhase === 'ROLL_MOVE'; i++) {
+    const res = applyPlayerGameAction(state, active.playerId, { type: 'ROLL_DICE' }, nowMs + i);
+    assert.equal(res.ok, true);
+  }
+  if (state.turnPhase === 'CHOOSE_MOVE') {
+    const pool = state.allowedMoveDestinations?.length
+      ? state.allowedMoveDestinations
+      : LOCATIONS_CATALOG.filter((l) => l.id !== active.location).map((l) => l.id);
+    const res = applyPlayerGameAction(
+      state,
+      active.playerId,
+      { type: 'CHOOSE_DEST', location: pool[0] },
+      nowMs + 10,
+    );
+    assert.equal(res.ok, true);
+  }
+  assert.equal(state.turnPhase, 'LOCATION_ACTION');
+  return active;
+}
 
-  await t.test('(2) P0 Projection Isolation: publicGame omits secret roles/hands/ward & spectators get null privateView', () => {
-    const st = createInitialGameState({
-      matchId: 'm-sec',
-      seed: 999,
-      nowMs: 1_700_000_000_000,
-      players: makePlayers(6),
+test('V4.1 — Setup Shadow Hunters gốc (4–8 SV): 10 vai, 48 lá (16×3), 0 bài khởi đầu, 7 SV (2-2-3), xáo 3 Cụm', () => {
+  assert.equal(BOARD_GAME_RULESET_VERSION, 4);
+  assert.equal(BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS, 0);
+  assert.equal(ROLES_CATALOG.length, 10);
+  assert.equal(LOCATIONS_CATALOG.length, 6);
+  assert.equal(listCardIdsByDeck('investigation').length, 16);
+  assert.equal(listCardIdsByDeck('equipment').length, 16);
+  assert.equal(listCardIdsByDeck('event').length, 16);
+  assert.ok(CARDS_CATALOG.length >= 40);
+
+  // Ô 4-5 (breaker) là Rút Bất Kỳ; Ô 8 (canteen) là Rút Đột Kích chuẩn Shadow Hunters
+  assert.equal(LOCATIONS_CATALOG.find((l) => l.id === 'breaker').deckHint, 'any');
+  assert.equal(LOCATIONS_CATALOG.find((l) => l.id === 'canteen').deckHint, 'event');
+
+  // Kiểm tra chia phe 7 người đúng 2-2-3
+  assert.deepEqual(getRoleDistribution(7), { lanternGuard: 2, mistOrder: 2, wanderer: 3 });
+
+  const clusterSignatures = new Set();
+  for (let n = 4; n <= 8; n++) {
+    const state = createInitialGameState({
+      matchId: `v4-setup-${n}`,
+      seed: 1000 + n * 41,
+      nowMs: 1_750_000_000_000,
+      players: makePlayers(n),
     });
 
-    const pub = getPublicGameView(st);
-    assert.equal(pub.finalReveal, null);
-    for (const pp of pub.players) {
-      assert.equal(pp.revealedRoleId, null);
-      assert.equal(pp.revealedFaction, null);
-      assert.equal(pp.handCount, 2);
-      assert.equal('hand' in pp, false);
-      assert.equal('privateNotes' in pp, false);
-      assert.equal('wardPlayerId' in pp, false);
+    assert.equal(state.rulesetVersion, 4);
+    assert.equal(state.clusterPairs.length, 3);
+    clusterSignatures.add(
+      state.clusterPairs.map((c) => [...c.locationIds].sort().join('+')).sort().join('|'),
+    );
+
+    const playersList = Object.values(state.players);
+    const split = getRoleDistribution(n);
+    assert.equal(playersList.filter((p) => p.faction === 'lantern-guard').length, split.lanternGuard);
+    assert.equal(playersList.filter((p) => p.faction === 'mist-order').length, split.mistOrder);
+    assert.equal(playersList.filter((p) => p.faction === 'wanderer').length, split.wanderer);
+    assert.equal(new Set(playersList.map((p) => p.roleId)).size, n);
+
+    for (const p of playersList) {
+      assert.equal(p.hand.length, 0, 'Shadow Hunters gốc khởi đầu với 0 bài trên tay');
+      assert.equal(p.woundsTaken, 0);
+      assert.equal(p.revealed, false);
     }
 
-    const pubStr = JSON.stringify(pub);
-    for (const p of st.players) {
-      assert.equal(pubStr.includes(p.roleId), false, `Public view leaked roleId ${p.roleId}`);
-      for (const card of p.hand) {
-        assert.equal(pubStr.includes(card.id), false, `Public view leaked hand card ${card.id}`);
-      }
-    }
+    // P0 Public View Audit trước khi lật vai
+    const pub = getPublicGameView(state);
+    assert.equal(pub.rulesetVersion, 4);
+    assert.equal(pub.clusterPairs.length, 3);
+    const pubKeys = collectObjectKeys(pub);
+    assert.equal(pubKeys.has('hp'), false);
+    assert.equal(pubKeys.has('maxHp'), false);
+    assert.equal(pubKeys.has('protegePlayerId'), false);
+    assert.equal(pubKeys.has('privateClues'), false);
+    assert.equal(pubKeys.has('rngState'), false);
+  }
+  assert.ok(clusterSignatures.size >= 2, '3 Cụm phải được xáo ngẫu nhiên giữa các ván');
+});
 
-    // Khán giả nhận privateView === null
-    assert.equal(getPrivateGameView(st, null), null);
-    assert.equal(getPrivateGameView(st, 'spectator-99'), null);
+test('V4.2 — Xúc xắc 1d6+1d4: đổ lại khi trùng, tổng 7 chọn bất kỳ & La Bàn Định Hướng (eq-05)', () => {
+  assert.equal(resolveLocationForDiceTotal(2), 'radio');
+  assert.equal(resolveLocationForDiceTotal(3), 'radio');
+  assert.equal(resolveLocationForDiceTotal(4), 'breaker');
+  assert.equal(resolveLocationForDiceTotal(5), 'breaker');
+  assert.equal(resolveLocationForDiceTotal(6), 'lobby');
+  assert.equal(resolveLocationForDiceTotal(7), 'choose-any');
+  assert.equal(resolveLocationForDiceTotal(8), 'canteen');
+  assert.equal(resolveLocationForDiceTotal(9), 'corridor');
+  assert.equal(resolveLocationForDiceTotal(10), 'court');
 
-    // Đúng playerId chỉ thấy vai của chính mình
-    const p1Priv = getPrivateGameView(st, 'p_1');
-    assert.ok(p1Priv);
-    assert.equal(p1Priv.roleId, st.players[0].roleId);
-    assert.equal(p1Priv.hand.length, 2);
-  });
-
-  await t.test('(3) Legal turn progression: MOVE -> ADJUST_TRACK -> ATTACK -> END_TURN -> Signal Victory', () => {
-    const st = createInitialGameState({
-      matchId: 'm-play',
-      seed: 42,
-      nowMs: 1_700_000_000_000,
+  let sawReroll = false;
+  let sawFreeChoice = false;
+  for (let seed = 1; seed <= 80 && (!sawReroll || !sawFreeChoice); seed++) {
+    const state = createInitialGameState({
+      matchId: `dice-${seed}`,
+      seed,
+      nowMs: 1_750_000_000_000,
       players: makePlayers(4),
     });
-    const guardPlayer = st.players[0];
-
-    // Sai pha (rút bài trước khi di chuyển) phải bị từ chối
-    const earlyDraw = applyPlayerGameAction(
-      st,
-      guardPlayer.playerId,
-      { type: 'DRAW_CARD', deck: 'clue' },
-      1_700_000_001_000,
-    );
-    assert.equal(earlyDraw.ok, false);
-
-    // Di chuyển tới Phòng Phát Thanh ('radio')
-    const mv = applyPlayerGameAction(
-      st,
-      guardPlayer.playerId,
-      { type: 'MOVE', location: 'radio' },
-      1_700_000_002_000,
-    );
-    assert.equal(mv.ok, true);
-    assert.equal(st.turnPhase, 'DRAW_OR_EXPLORE');
-
-    // Chỉnh Chỉ số Tín hiệu tại Phòng Phát Thanh
-    const adj = applyPlayerGameAction(
-      st,
-      guardPlayer.playerId,
-      { type: 'ADJUST_TRACK', mode: 'signal' },
-      1_700_000_003_000,
-    );
-    assert.equal(adj.ok, true);
-    assert.equal(st.signalProgress, 1);
-    assert.equal(st.turnPhase, 'TACTICAL_ACTION');
-
-    // Kết thúc lượt -> chuyển sang p_2
-    const end = applyPlayerGameAction(
-      st,
-      guardPlayer.playerId,
-      { type: 'END_TURN' },
-      1_700_000_004_000,
-    );
-    assert.equal(end.ok, true);
-    assert.equal(st.turnOrder[st.activeTurnIdx], 'p_2');
-    assert.equal(st.turnPhase, 'MOVE');
-
-    // Khi Signal chạm 6 -> Đội Gác Đèn thắng ngay và lật finalReveal
-    st.signalProgress = 6;
-    const won = evaluateVictoryState(st, 1_700_000_005_000, false);
-    assert.equal(won, true);
-    assert.equal(st.winnerFaction, 'lantern-guard');
-    const pubEnd = getPublicGameView(st);
-    assert.ok(Array.isArray(pubEnd.finalReveal) && pubEnd.finalReveal.length === 4);
-  });
-
-  await t.test('(4) Finite maxRounds guarantee + timeout auto-turn never stalls across full 8p match', () => {
-    const st = createInitialGameState({
-      matchId: 'm-timeout',
-      seed: 2025,
-      nowMs: 1_700_000_000_000,
-      players: makePlayers(8),
-    });
-
-    let steps = 0;
-    while (!st.finished && steps < 250) {
-      steps += 1;
-      applyTimeoutAutoTurn(st, 1_700_000_000_000 + steps * 5000);
+    const active = getActivePlayer(state);
+    const startLoc = active.location;
+    const res = applyPlayerGameAction(state, active.playerId, { type: 'ROLL_DICE' }, 1_750_000_001_000);
+    assert.equal(res.ok, true);
+    if (state.lastDiceRoll.total === 7) {
+      sawFreeChoice = true;
+      assert.equal(state.turnPhase, 'CHOOSE_MOVE');
+      assert.equal(state.allowedMoveDestinations.length, 5);
+    } else if (state.lastDiceRoll.rerollRequired) {
+      sawReroll = true;
+      assert.equal(state.turnPhase, 'ROLL_MOVE');
+    } else {
+      assert.equal(state.turnPhase, 'LOCATION_ACTION');
+      assert.notEqual(active.location, startLoc);
     }
-    assert.equal(st.finished, true, 'Trận đấu chạy toàn bộ qua timeout auto-turn phải kết thúc hữu hạn');
-    assert.ok(st.round <= st.maxRounds + 1);
-    assert.ok(st.winnerLabel);
-    assert.ok(st.winReason);
+  }
+  assert.ok(sawReroll && sawFreeChoice);
+
+  // Kiểm chứng La Bàn Định Hướng (eq-05): tung 2 lần -> cho phép chọn trong allowedMoveDestinations
+  let sawCompassChoice = false;
+  for (let seed = 1; seed <= 25; seed++) {
+    const sComp = createInitialGameState({
+      matchId: `comp-${seed}`,
+      seed,
+      nowMs: 1_750_000_000_000,
+      players: makePlayers(4),
+    });
+    const active = getActivePlayer(sComp);
+    active.equipped.push('eq-05');
+    applyPlayerGameAction(sComp, active.playerId, { type: 'ROLL_DICE' }, 1_750_000_001_000);
+    if (sComp.turnPhase === 'CHOOSE_MOVE') {
+      sawCompassChoice = true;
+      const picked = sComp.allowedMoveDestinations[0];
+      const chRes = applyPlayerGameAction(
+        sComp,
+        active.playerId,
+        { type: 'CHOOSE_DEST', location: picked },
+        1_750_000_002_000,
+      );
+      assert.equal(chRes.ok, true);
+      assert.equal(active.location, picked);
+      break;
+    }
+  }
+  assert.ok(sawCompassChoice, 'La Bàn Định Hướng (eq-05) phải mở CHOOSE_MOVE với các kết quả tung');
+});
+
+test('V4.3 — Rút Trang bị đeo ngay, chặn giữ bài qua lượt, Thẻ Khám Phá (Aid 0→1 ST, Khánh Deceit, Tiên Tri)', () => {
+  const state = createInitialGameState({
+    matchId: 'cards-inv-test',
+    seed: 2025,
+    nowMs: 1_750_000_000_000,
+    players: makePlayers(4),
   });
+  state.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+  const actor = getActivePlayer(state);
+  const target = Object.values(state.players).find((p) => p.playerId !== actor.playerId);
+
+  // Rút Trang bị ở Lobby (Ô 6) tự đeo lên bàn ngay, không nằm kẹt trong hand
+  state.turnPhase = 'LOCATION_ACTION';
+  actor.location = 'lobby';
+  state.decks.equipment.unshift('eq-01');
+  const drawGearRes = applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'DRAW_CARD', deck: 'equipment' },
+    1_750_000_001_000,
+  );
+  assert.equal(drawGearRes.ok, true);
+  assert.ok(actor.equipped.includes('eq-01'));
+  assert.equal(actor.hand.length, 0);
+
+  // Rút bài Dùng 1 lần vào hand -> bị chặn END_TURN & ATTACK cho tới khi giải quyết
+  actor.hand.push('eq-07');
+  assert.equal(
+    applyPlayerGameAction(state, actor.playerId, { type: 'END_TURN' }, 1_750_000_001_100).ok,
+    false,
+  );
+  assert.equal(
+    applyPlayerGameAction(state, actor.playerId, { type: 'USE_CARD', cardId: 'eq-07' }, 1_750_000_001_200).ok,
+    true,
+  );
+  assert.equal(actor.hand.length, 0);
+
+  // Thẻ Aid (inv-07): Đội Săn Đêm đang 0 thương tích nhận thẻ Aid PHẢI nhận 1 ST!
+  target.roleId = 'gac-ky-thuat';
+  target.faction = 'lantern-guard';
+  target.hp = 14;
+  target.woundsTaken = 0;
+  actor.hand.push('inv-07');
+  assert.equal(
+    applyPlayerGameAction(
+      state,
+      actor.playerId,
+      { type: 'INVESTIGATE_CARD', cardId: 'inv-07', targetPlayerId: target.playerId },
+      1_750_000_002_000,
+    ).ok,
+    true,
+  );
+  assert.equal(target.woundsTaken, 1, 'Aid (inv-07) khi target có 0 wounds phải gây 1 thương tích!');
+
+  // P0 privacy
+  const pub = getPublicGameView(state);
+  assert.equal(pub.lastInvestigation.cardId, 'inv-00');
+  assert.equal(JSON.stringify(pub).includes('Tiếp Sức'), false);
+
+  // Khánh "Tin Giả" (Unknown): úp vai né inv-06 (Exorcism), nói dối nhận hồi 1 từ inv-07 (Aid), lộ thật trước inv-12 (Tiên Tri)
+  const khanh = Object.values(state.players).find(
+    (p) => p.playerId !== actor.playerId && p.playerId !== target.playerId,
+  );
+  khanh.roleId = 'suong-tin-gia';
+  khanh.faction = 'mist-order';
+  khanh.maxHp = 11;
+  khanh.revealed = false;
+  khanh.woundsTaken = 3;
+  khanh.hp = 8;
+  actor.hand.push('inv-06', 'inv-07', 'inv-12');
+  applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'INVESTIGATE_CARD', cardId: 'inv-06', targetPlayerId: khanh.playerId },
+    1_750_000_002_100,
+  );
+  assert.equal(khanh.woundsTaken, 3, 'Khánh úp vai phải né được 2 ST của Exorcism');
+
+  applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'INVESTIGATE_CARD', cardId: 'inv-07', targetPlayerId: khanh.playerId },
+    1_750_000_002_200,
+  );
+  assert.equal(khanh.woundsTaken, 2, 'Khánh mất máu giả danh Săn Đêm để hồi 1 thương tích từ Aid');
+
+  applyPlayerGameAction(
+    state,
+    actor.playerId,
+    { type: 'INVESTIGATE_CARD', cardId: 'inv-12', targetPlayerId: khanh.playerId },
+    1_750_000_002_300,
+  );
+  const actorPriv = getPrivateGameView(state, actor.playerId);
+  assert.ok(actorPriv.privateClues.at(-1).detail.includes('Khánh "Tin Giả"'));
+});
+
+test('V4.4 — Tầm đánh Handgun (ev-05), Machine Gun (ev-06), Spear (eq-04), Holy Robe (eq-01), Masamune, Tú, Dũng & 10 vai', () => {
+  const state = createInitialGameState({
+    matchId: 'combat-test',
+    seed: 999,
+    nowMs: 1_750_000_000_000,
+    players: makePlayers(4),
+  });
+  state.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+  const [id1, id2, id3, id4] = state.turnOrder;
+  const p1 = state.players[id1];
+  const p2 = state.players[id2];
+  const p3 = state.players[id3];
+  const p4 = state.players[id4];
+
+  p1.location = 'radio'; // north
+  p2.location = 'breaker'; // north (cùng Cụm)
+  p3.location = 'court'; // south (khác Cụm)
+  p4.location = 'corridor'; // south (khác Cụm)
+
+  assert.equal(areInSameCluster(p1.location, p2.location, state.clusterPairs), true);
+  assert.equal(canPlayerAttackTarget(state, p1, p2), true);
+  assert.equal(canPlayerAttackTarget(state, p1, p3), false);
+
+  // Handgun (ev-05): BẮT BUỘC đánh khác Cụm, KHÔNG đánh được cùng Cụm!
+  p1.equipped = ['ev-05'];
+  assert.equal(canPlayerAttackTarget(state, p1, p3), true);
+  assert.equal(canPlayerAttackTarget(state, p1, p2), false);
+
+  // Machine Gun (ev-06) + Masamune (ev-01) + Spear (eq-04):
+  // Đánh p3 tại Cụm Nam -> bắn cả p3 lẫn p4, bắt buộc đánh khi đeo ev-01
+  state.activePlayerId = p1.playerId;
+  state.turnPhase = 'MAIN_ACTION';
+  p1.roleId = 'gac-ky-thuat';
+  p1.faction = 'lantern-guard';
+  p1.revealed = false; // chưa lật vai -> eq-04 không cộng +2!
+  p1.equipped = ['ev-01', 'ev-05', 'ev-06', 'eq-04'];
+  p3.woundsTaken = 0;
+  p3.hp = 14;
+  p3.maxHp = 14;
+  p4.woundsTaken = 0;
+  p4.hp = 14;
+  p4.maxHp = 14;
+
+  // Masamune bắt buộc phải tấn công trước khi END_TURN
+  assert.equal(
+    applyPlayerGameAction(state, p1.playerId, { type: 'END_TURN' }, 1_750_000_005_000).ok,
+    false,
+  );
+  // Đánh cùng lúc p3 và p4 (Machine Gun + Handgun khác Cụm)
+  const mgRes = applyPlayerGameAction(
+    state,
+    p1.playerId,
+    { type: 'ATTACK', targetPlayerId: p3.playerId },
+    1_750_000_006_000,
+  );
+  assert.equal(mgRes.ok, true);
+  assert.ok(p3.woundsTaken >= 1 && p3.woundsTaken <= 4, 'Spear khi chưa lật vai chỉ gây 1d4');
+  assert.equal(p4.woundsTaken, p3.woundsTaken, 'Machine Gun phải gây cùng lượng sát thương cho p4');
+
+  // Tú (Vampire) + Dũng (Werewolf) counterattack + counterRoll
+  state.activePlayerId = p2.playerId;
+  state.turnPhase = 'MAIN_ACTION';
+  p2.attacksThisTurn = 0;
+  p2.roleId = 'suong-an-danh';
+  p2.faction = 'mist-order';
+  p2.revealed = true;
+  p2.woundsTaken = 4;
+  p2.hp = 9;
+  p2.equipped = ['ev-01'];
+  p2.location = 'radio';
+
+  p3.location = 'breaker';
+  p3.roleId = 'suong-gac-cong';
+  p3.faction = 'mist-order';
+  p3.revealed = true;
+  p3.alive = true;
+  p3.maxHp = 14;
+  p3.hp = 14;
+  p3.woundsTaken = 0;
+  p3.equipped = ['ev-01', 'eq-01']; // Holy Robe giảm 1 dmg nhận & 1 dmg đánh!
+
+  p4.roleId = 'gac-radio';
+  p4.faction = 'lantern-guard';
+
+  const vRes = applyPlayerGameAction(
+    state,
+    p2.playerId,
+    { type: 'ATTACK', targetPlayerId: p3.playerId },
+    1_750_000_007_000,
+  );
+  assert.equal(vRes.ok, true);
+  assert.ok(state.lastDiceRoll.counterRoll, 'Dũng phải ghi nhận counterRoll');
+
+  // Lan "Trực Ban" (Emi 10 HP): Bước Nhảy Tắt ở Pha 1 ROLL_MOVE
+  state.activePlayerId = p1.playerId;
+  state.turnPhase = 'ROLL_MOVE';
+  p1.roleId = 'gac-truc-ban';
+  p1.maxHp = 10;
+  p1.revealed = true;
+  p1.location = 'radio';
+  const expectedPair = getPairedLocationInCluster('radio', state.clusterPairs);
+  const emiRes = applyPlayerGameAction(
+    state,
+    p1.playerId,
+    { type: 'USE_SKILL' },
+    1_750_000_008_000,
+  );
+  assert.equal(emiRes.ok, true);
+  assert.equal(p1.location, expectedPair);
+  assert.equal(state.turnPhase, 'LOCATION_ACTION');
+
+  // Trang "Kiên Cường" (Allie 8 HP): Ý Chí Hồi Sinh
+  p1.roleId = 'lang-quan-sat';
+  p1.skillUsedOnce = false;
+  p1.maxHp = 8;
+  p1.woundsTaken = 6;
+  p1.hp = 2;
+  const allieRes = applyPlayerGameAction(state, p1.playerId, { type: 'USE_SKILL' }, 1_750_000_009_000);
+  assert.equal(allieRes.ok, true);
+  assert.equal(p1.woundsTaken, 0);
+  assert.equal(p1.hp, 8);
+});
+
+function createStateWithRole(playerCount, roleId, matchPrefix) {
+  for (let seed = 1; seed <= 120; seed += 1) {
+    const state = createInitialGameState({
+      matchId: `${matchPrefix}-${seed}`,
+      seed,
+      nowMs: 1_750_000_000_000,
+      players: makePlayers(playerCount),
+    });
+    const found = Object.values(state.players).find((p) => p.roleId === roleId);
+    if (found) return { state, player: found };
+  }
+  throw new Error(`Could not find role ${roleId} for ${playerCount} players`);
+}
+
+test('V4.5 — Điều kiện thắng chuẩn Shadow Hunters: Hải 5 đồ, Bách >= 3 xác & Đánh Đẫm Máu, Đạt chết đầu & Scream, 3 Neutral chết', () => {
+  // 1. Hải "Sưu Tầm" (Bob): đủ 5 Trang bị thắng ngay (không cần đợi vòng 3, không bắt buộc lật vai)
+  const { state: sBob, player: bob } = createStateWithRole(6, 'lang-anh-san', 'win-bob');
+  bob.equipped = ['eq-01', 'eq-02', 'eq-03', 'eq-04', 'eq-05'];
+  const vBob = evaluateVictory(sBob);
+  assert.equal(vBob.finished, true);
+  assert.ok(vBob.winnerPlayerIds.includes(bob.playerId));
+
+  // Bob 4-6p Robbery: lật vai đánh >= 2 dmg (Masamune + Butcher Knife + Chainsaw -> 3..6 ST) cướp đồ THAY VÌ gây ST
+  const { state: sRob, player: robBob } = createStateWithRole(5, 'lang-anh-san', 'bob-rob');
+  sRob.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+  const victim = Object.values(sRob.players).find((p) => p.playerId !== robBob.playerId);
+  robBob.revealed = true;
+  robBob.equipped = ['ev-01', 'ev-02', 'ev-03']; // tối thiểu 1d4+2 >= 3 ST
+  robBob.location = 'radio';
+  victim.location = 'breaker';
+  victim.equipped = ['eq-03'];
+  victim.woundsTaken = 0;
+  victim.hp = victim.maxHp;
+  sRob.activePlayerId = robBob.playerId;
+  sRob.turnPhase = 'MAIN_ACTION';
+  robBob.attacksThisTurn = 0;
+  applyPlayerGameAction(sRob, robBob.playerId, { type: 'ATTACK', targetPlayerId: victim.playerId }, 1_750_000_001_000);
+  assert.equal(victim.woundsTaken, 0, 'Bob 4-6p cướp đồ thì không gây sát thương lên nạn nhân');
+  assert.ok(robBob.equipped.includes('eq-03'));
+
+  // 2. Bách "Cuồng Chiến" (Charles): Đòn Đánh Đẫm Máu + thắng khi kết liễu nạn nhân lúc deadCount >= 3
+  const { state: sCharles, player: charles } = createStateWithRole(7, 'lang-cuu-ho', 'win-charles');
+  sCharles.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+  const deadOnes = Object.values(sCharles.players)
+    .filter((p) => p.playerId !== charles.playerId && p.faction === 'lantern-guard')
+    .slice(0, 1);
+  deadOnes[0].alive = false;
+  deadOnes[0].hp = 0;
+  const secondVictim = Object.values(sCharles.players).find(
+    (p) => p.playerId !== charles.playerId && p.alive && p.faction === 'wanderer',
+  );
+  secondVictim.alive = false;
+  secondVictim.hp = 0;
+  const thirdVictim = Object.values(sCharles.players).find(
+    (p) => p.playerId !== charles.playerId && p.alive && p.faction === 'lantern-guard',
+  );
+  thirdVictim.location = 'breaker';
+  thirdVictim.hp = 1;
+  thirdVictim.woundsTaken = thirdVictim.maxHp - 1;
+  charles.revealed = true;
+  charles.location = 'radio';
+  charles.equipped = ['ev-01'];
+  sCharles.activePlayerId = charles.playerId;
+  sCharles.turnPhase = 'MAIN_ACTION';
+  charles.attacksThisTurn = 0;
+  // Thêm 1 Hunter còn sống để không kích hoạt allHuntersDead trước
+  const extraVictim = Object.values(sCharles.players).find(
+    (p) => p.playerId !== charles.playerId && p.playerId !== thirdVictim.playerId && p.alive,
+  );
+  extraVictim.faction = 'lantern-guard';
+  const charRes = applyPlayerGameAction(
+    sCharles,
+    charles.playerId,
+    { type: 'ATTACK', targetPlayerId: thirdVictim.playerId },
+    1_750_000_002_000,
+  );
+  assert.equal(charRes.ok, true);
+  assert.equal(sCharles.finished, true);
+  assert.ok(sCharles.winnerPlayerIds.includes(charles.playerId));
+
+  // Charles Bloody Feast giữ lượt để chém lần 2
+  const { state: sBf, player: bfCharles } = createStateWithRole(6, 'lang-cuu-ho', 'bf-charles');
+  sBf.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+  const bfTarget = Object.values(sBf.players).find((p) => p.playerId !== bfCharles.playerId);
+  bfCharles.revealed = true;
+  bfCharles.hp = 11;
+  bfCharles.woundsTaken = 0;
+  bfCharles.location = 'radio';
+  bfCharles.equipped = ['ev-01'];
+  bfTarget.location = 'breaker';
+  bfTarget.maxHp = 14;
+  bfTarget.hp = 14;
+  bfTarget.woundsTaken = 0;
+  sBf.activePlayerId = bfCharles.playerId;
+  sBf.turnPhase = 'MAIN_ACTION';
+  bfCharles.attacksThisTurn = 0;
+  applyPlayerGameAction(sBf, bfCharles.playerId, { type: 'ATTACK', targetPlayerId: bfTarget.playerId }, 1_750_000_003_000);
+  assert.equal(sBf.activePlayerId, bfCharles.playerId, 'Sau đòn đánh 1, Bách phải còn lượt để chọn chém bồi');
+  assert.equal(bfCharles.attacksThisTurn, 1);
+  applyPlayerGameAction(sBf, bfCharles.playerId, { type: 'USE_SKILL', targetPlayerId: bfTarget.playerId }, 1_750_000_003_500);
+  assert.ok(bfCharles.woundsTaken >= 2, 'Chém bồi tự nhận 2 thương tích');
+
+  // 3. Đạt "Cảm Tử" (Daniel): không tự lật vai, người đầu tiên chết -> thắng ngay; người khác chết đầu -> tự Scream lộ vai
+  const { state: sDan1, player: dan1 } = createStateWithRole(7, 'lang-tien-phong', 'dan-scream');
+  const firstCasualty = Object.values(sDan1.players).find((p) => p.playerId !== dan1.playerId);
+  sDan1.activePlayerId = firstCasualty.playerId;
+  assert.equal(
+    applyPlayerGameAction(sDan1, firstCasualty.playerId, { type: 'REVEAL_ROLE' }, 1_750_000_004_000).ok,
+    true,
+  );
+  sDan1.activePlayerId = dan1.playerId;
+  assert.equal(
+    applyPlayerGameAction(sDan1, dan1.playerId, { type: 'REVEAL_ROLE' }, 1_750_000_004_100).ok,
+    false,
+    'Đạt không được tự ý lật vai trước khi có người ngã xuống',
+  );
+  // Chết đầu tiên -> thắng tức thì
+  sDan1.turnPhase = 'MAIN_ACTION';
+  dan1.hp = 1;
+  dan1.hand.push('ev-12'); // Banana Peel với 0 đồ tự mất 1 máu -> Đạt chết ĐẦU TIÊN!
+  applyPlayerGameAction(sDan1, dan1.playerId, { type: 'USE_CARD', cardId: 'ev-12' }, 1_750_000_004_200);
+  assert.equal(sDan1.finished, true);
+  assert.ok(sDan1.winnerPlayerIds.includes(dan1.playerId), 'Đạt chết đầu tiên phải thắng tức thì!');
+
+  // 4. Hội Bóng Đêm thắng khi có 3 Kẻ Độc Hành ngã xuống (bàn 7 người)
+  const { state: s7 } = createStateWithRole(7, 'lang-tien-phong', 'shadow-3-neutrals');
+  for (const p of Object.values(s7.players)) {
+    if (p.faction === 'wanderer') {
+      p.alive = false;
+      p.hp = 0;
+    }
+  }
+  const v3n = evaluateVictory(s7);
+  assert.equal(v3n.finished, true);
+  assert.equal(v3n.winnerFaction, 'mist-order');
+
+  // 5. applyTimeoutAutoTurn không làm kẹt bàn
+  const sTimeout = createInitialGameState({
+    matchId: 'timeout-auto',
+    seed: 77,
+    nowMs: 1_750_000_000_000,
+    players: makePlayers(4),
+  });
+  const firstId = sTimeout.activePlayerId;
+  applyTimeoutAutoTurn(sTimeout, 1_750_000_090_000);
+  assert.notEqual(sTimeout.activePlayerId, firstId);
+  assert.equal(sTimeout.turnPhase, 'ROLL_MOVE');
+});
+
+test('V4.6 — Hợp đồng Validate Action & turnTimeoutMs === 0 (Vô hạn)', () => {
+  assert.equal(validateBoardGameActionPayload({ type: 'ROLL_DICE' }).ok, true);
+  assert.equal(validateBoardGameActionPayload({ type: 'CHOOSE_DEST', location: 'court' }).ok, true);
+  assert.equal(validateBoardGameActionPayload({ type: 'SKIP_LOC' }).ok, true);
+  assert.equal(
+    validateBoardGameActionPayload({ type: 'USE_LOC_POWER', targetPlayerId: 'p_1', mode: 'steal', equipCardId: 'eq-01' }).ok,
+    true,
+  );
+  assert.equal(
+    validateBoardGameActionPayload({ type: 'USE_CARD', cardId: 'eq-13', skipEffect: true }).ok,
+    true,
+  );
+  assert.equal(
+    validateBoardGameActionPayload({ type: 'USE_CARD', cardId: 'ev-07', targetLocation: 'toString' }).ok,
+    false,
+  );
+  assert.equal(validateBoardGameActionPayload({ type: 'PLAY_EVENT', cardId: 'ev-07' }).ok, false);
+
+  const startZero = validateBoardGameClientMessage({
+    type: 'BG_START_MATCH',
+    requestId: 's0',
+    turnTimeoutMs: 0,
+  });
+  assert.equal(startZero.ok, true);
+});
+
+test('V4.7 — Hiệu ứng thẻ Cung Ứng / Đột Kích gốc (First Aid mốc 7, Blessing, Talisman, Concealed Knowledge, Dynamite)', () => {
+  const state = createInitialGameState({
+    matchId: 'v4-cards-authentic',
+    seed: 515,
+    nowMs: 1_750_000_000_000,
+    players: makePlayers(4),
+  });
+  const list = Object.values(state.players);
+  const actor = getActivePlayer(state);
+  const enemy = list.find((p) => p.playerId !== actor.playerId);
+  const ally = list.find((p) => p.playerId !== actor.playerId && p.playerId !== enemy.playerId);
+  assert.ok(actor && enemy && ally);
+
+  state.turnPhase = 'MAIN_ACTION';
+  actor.roleId = 'gac-truc-ban';
+  actor.faction = 'lantern-guard';
+  actor.maxHp = 10;
+  actor.woundsTaken = 9;
+  actor.hp = 1;
+
+  // Holy Water (eq-07): tự hồi 2 thương tích (9 -> 7)
+  actor.hand.push('eq-07');
+  assert.equal(
+    applyPlayerGameAction(state, actor.playerId, { type: 'USE_CARD', cardId: 'eq-07' }, 1_750_000_001_000).ok,
+    true,
+  );
+  assert.equal(actor.woundsTaken, 7);
+
+  // First Aid (eq-09): đặt thương tích từ 1 -> đúng mốc 7 (hoặc từ 9 -> 7)
+  actor.woundsTaken = 1;
+  actor.hp = 9;
+  actor.hand.push('eq-09');
+  assert.equal(
+    applyPlayerGameAction(
+      state,
+      actor.playerId,
+      { type: 'USE_CARD', cardId: 'eq-09', targetPlayerId: actor.playerId },
+      1_750_000_002_000,
+    ).ok,
+    true,
+  );
+  assert.equal(actor.woundsTaken, 7);
+
+  // Blessing (eq-08): hồi 1d6 cho người khác
+  enemy.woundsTaken = 6;
+  enemy.hp = enemy.maxHp - 6;
+  actor.hand.push('eq-08');
+  assert.equal(
+    applyPlayerGameAction(
+      state,
+      actor.playerId,
+      { type: 'USE_CARD', cardId: 'eq-08', targetPlayerId: enemy.playerId },
+      1_750_000_003_000,
+    ).ok,
+    true,
+  );
+  assert.ok(enemy.woundsTaken < 6);
+
+  // Talisman (eq-03): miễn 100% sát thương Vampire Bat (ev-07)
+  enemy.equipped.push('eq-03');
+  const enemyWoundsBeforeBat = enemy.woundsTaken;
+  actor.hand.push('ev-07');
+  assert.equal(
+    applyPlayerGameAction(
+      state,
+      actor.playerId,
+      { type: 'USE_CARD', cardId: 'ev-07', targetPlayerId: enemy.playerId },
+      1_750_000_004_000,
+    ).ok,
+    true,
+  );
+  assert.equal(enemy.woundsTaken, enemyWoundsBeforeBat, 'Talisman phải chặn 100% sát thương từ Vampire Bat');
+
+  // Concealed Knowledge (eq-15): đi thêm 1 lượt phụ ngay sau END_TURN
+  actor.hand.push('eq-15');
+  assert.equal(
+    applyPlayerGameAction(state, actor.playerId, { type: 'USE_CARD', cardId: 'eq-15' }, 1_750_000_005_000).ok,
+    true,
+  );
+  assert.equal(state.extraTurnPending, true);
+  assert.equal(
+    applyPlayerGameAction(state, actor.playerId, { type: 'END_TURN' }, 1_750_000_006_000).ok,
+    true,
+  );
+  assert.equal(state.activePlayerId, actor.playerId, 'Sổ Tay Bí Truyền phải giữ nguyên lượt phụ cho người vừa kích hoạt');
+  assert.equal(state.turnPhase, 'ROLL_MOVE');
+
+  // UI target-selection check
+  const pub = getPublicGameView(state);
+  const selfPub = pub.players.find((p) => p.playerId === actor.playerId);
+  const enemyPub = pub.players.find((p) => p.playerId === enemy.playerId);
+  const alivePlayers = pub.players.filter((p) => p.alive);
+  const aliveOthers = alivePlayers.filter((p) => p.playerId !== selfPub.playerId);
+  assert.equal(toggleSelectedTargetId(enemyPub.playerId, selfPub.playerId, true), selfPub.playerId);
+  const resolved = resolveActionTargets({
+    selfPlayer: selfPub,
+    alivePlayers,
+    aliveOthers,
+    attackableTargets: [enemyPub],
+    selectedTargetId: enemyPub.playerId,
+    healTargetId: null,
+  });
+  assert.equal(resolved.validHealCardTarget.playerId, selfPub.playerId);
+});
+
+test('V4.8 — Không trần 3 Trang bị, chặn tự bắn Ô 9 & giải quyết thẻ Pha 2', () => {
+  assert.equal(BOARD_GAME_MAX_HAND, 5);
+  assert.ok(BOARD_GAME_MAX_EQUIPPED >= 99);
+
+  const state = createInitialGameState({
+    matchId: 'v4-pack-a',
+    seed: 909,
+    nowMs: 1_750_100_000_000,
+    players: makePlayers(4),
+  });
+  const list = Object.values(state.players);
+  const actor = getActivePlayer(state);
+  const target = list.find((p) => p.playerId !== actor.playerId);
+
+  actor.roleId = 'gac-truc-ban';
+  actor.faction = 'lantern-guard';
+  target.roleId = 'suong-an-danh';
+  target.faction = 'mist-order';
+
+  state.turnPhase = 'LOCATION_ACTION';
+  actor.location = 'lobby';
+  for (const eqId of ['eq-01', 'eq-02', 'eq-03', 'eq-04', 'eq-05']) {
+    actor.hand.push(eqId);
+    assert.equal(
+      applyPlayerGameAction(state, actor.playerId, { type: 'EQUIP_CARD', cardId: eqId }, 1_750_100_001_000).ok,
+      true,
+    );
+  }
+  assert.equal(actor.equipped.length, 5, 'Đeo 5 trang bị không bị rớt món cũ');
+
+  actor.location = 'corridor';
+  assert.equal(
+    applyPlayerGameAction(
+      state,
+      actor.playerId,
+      { type: 'USE_LOC_POWER', targetPlayerId: actor.playerId, mode: 'damage' },
+      1_750_100_002_000,
+    ).ok,
+    false,
+  );
+  actor.woundsTaken = 2;
+  actor.hp = actor.maxHp - 2;
+  assert.equal(
+    applyPlayerGameAction(
+      state,
+      actor.playerId,
+      { type: 'USE_LOC_POWER', targetPlayerId: actor.playerId, mode: 'heal' },
+      1_750_100_003_000,
+    ).ok,
+    true,
+  );
+  assert.equal(actor.woundsTaken, 1);
+});
+
+test('V4.9 — 5 chi tiết biên: CHOOSE_MOVE Reveal/Skill, inv-01 HP>3, Bách Bloody Feast & Hải Robbery', () => {
+  // 1) Reveal & Skill 1 lần/ván (Kỳ Lân / Trình Sát) trong pha CHOOSE_MOVE
+  const s1 = createInitialGameState({
+    matchId: 'v4-edge-1',
+    seed: 404,
+    nowMs: 1_750_200_000_000,
+    players: makePlayers(4),
+  });
+  const actor1 = getActivePlayer(s1);
+  const enemy1 = Object.values(s1.players).find((p) => p.playerId !== actor1.playerId);
+  actor1.roleId = 'gac-ky-thuat';
+  actor1.faction = 'lantern-guard';
+  actor1.revealed = false;
+  actor1.skillUsedOnce = false;
+  enemy1.roleId = 'suong-an-danh';
+  enemy1.faction = 'mist-order';
+  enemy1.maxHp = 12;
+  enemy1.hp = 12;
+  s1.turnPhase = 'CHOOSE_MOVE';
+  assert.equal(
+    applyPlayerGameAction(s1, actor1.playerId, { type: 'REVEAL_ROLE' }, 1_750_200_001_000).ok,
+    true,
+    'Phải lật vai được ngay trong CHOOSE_MOVE',
+  );
+  assert.equal(actor1.revealed, true);
+  assert.equal(s1.turnPhase, 'CHOOSE_MOVE');
+  assert.equal(
+    applyPlayerGameAction(
+      s1,
+      actor1.playerId,
+      { type: 'USE_SKILL', targetPlayerId: enemy1.playerId },
+      1_750_200_002_000,
+    ).ok,
+    true,
+    'Gác Kỹ Thuật phải kích hoạt Demolition ngay trong CHOOSE_MOVE',
+  );
+  assert.equal(actor1.skillUsedOnce, true);
+
+  // 2) Thẻ Điều tra inv-01 (Phẫn Nộ): ưu tiên chịu 1 sát thương giữ đồ khi HP > 3, chỉ nộp đồ khi HP <= 3
+  s1.turnPhase = 'LOCATION_ACTION';
+  enemy1.equipped = ['eq-04'];
+  enemy1.woundsTaken = 0;
+  enemy1.hp = 12;
+  actor1.hand.push('inv-01');
+  assert.equal(
+    applyPlayerGameAction(
+      s1,
+      actor1.playerId,
+      { type: 'INVESTIGATE_CARD', cardId: 'inv-01', targetPlayerId: enemy1.playerId },
+      1_750_200_003_000,
+    ).ok,
+    true,
+  );
+  assert.equal(enemy1.equipped.length, 1, 'Khi HP > 3 mục tiêu phải giữ lại trang bị');
+  assert.equal(enemy1.woundsTaken, 1, 'Và chịu 1 sát thương thay thế');
+
+  enemy1.woundsTaken = 10;
+  enemy1.hp = 2; // <= 3 HP -> giao nộp trang bị để sống
+  actor1.hand.push('inv-01');
+  assert.equal(
+    applyPlayerGameAction(
+      s1,
+      actor1.playerId,
+      { type: 'INVESTIGATE_CARD', cardId: 'inv-01', targetPlayerId: enemy1.playerId },
+      1_750_200_004_000,
+    ).ok,
+    true,
+  );
+  assert.equal(enemy1.equipped.length, 0, 'Khi HP <= 3 mục tiêu phải giao nộp trang bị');
+  assert.ok(actor1.equipped.includes('eq-04'));
+
+  // 3) Bách (Đòn Đánh Đẫm Máu): khóa đúng mục tiêu vừa đánh và chém lặp nhiều lần khi > 2 HP
+  const s2 = createInitialGameState({
+    matchId: 'v4-edge-charles',
+    seed: 505,
+    nowMs: 1_750_210_000_000,
+    players: makePlayers(4),
+  });
+  s2.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+  const s2List = Object.values(s2.players);
+  const charles = getActivePlayer(s2);
+  const others2 = s2List.filter((p) => p.playerId !== charles.playerId);
+  const tA = others2[0];
+  const tB = others2[1];
+  charles.roleId = 'lang-cuu-ho';
+  charles.faction = 'wanderer';
+  charles.revealed = true;
+  charles.maxHp = 11;
+  charles.hp = 8;
+  charles.woundsTaken = 3;
+  charles.attacksThisTurn = 0;
+  charles.location = 'radio';
+  tA.roleId = 'suong-gac-cong';
+  tA.faction = 'mist-order';
+  tA.maxHp = 14;
+  tA.hp = 14;
+  tA.location = 'radio';
+  tB.location = 'radio';
+  s2.turnPhase = 'MAIN_ACTION';
+  assert.equal(
+    applyPlayerGameAction(s2, charles.playerId, { type: 'ATTACK', targetPlayerId: tA.playerId }, 1_750_210_001_000).ok,
+    true,
+  );
+  assert.equal(charles.lastAttackTargetId, tA.playerId);
+  assert.equal(
+    applyPlayerGameAction(s2, charles.playerId, { type: 'USE_SKILL', targetPlayerId: tB.playerId }, 1_750_210_002_000).ok,
+    false,
+    'Không được chuyển Đòn Đánh Đẫm Máu sang người khác mục tiêu vừa đánh',
+  );
+  assert.equal(
+    applyPlayerGameAction(s2, charles.playerId, { type: 'USE_SKILL', targetPlayerId: tA.playerId }, 1_750_210_003_000).ok,
+    true,
+    'Lần chém bồi 1 thành công (hp giảm còn 6)',
+  );
+  assert.equal(charles.hp, 6);
+  assert.equal(
+    applyPlayerGameAction(s2, charles.playerId, { type: 'USE_SKILL', targetPlayerId: tA.playerId }, 1_750_210_004_000).ok,
+    true,
+    'Lần chém bồi 2 liên tiếp cùng lượt thành công (hp giảm còn 4)',
+  );
+  assert.equal(charles.hp, 4);
+  assert.equal(
+    applyPlayerGameAction(s2, charles.playerId, { type: 'USE_SKILL', targetPlayerId: tA.playerId }, 1_750_210_005_000).ok,
+    true,
+    'Lần chém bồi 3 khi còn 4 HP -> xuống 2 HP thành công',
+  );
+  assert.equal(charles.hp, 2);
+  assert.equal(
+    applyPlayerGameAction(s2, charles.playerId, { type: 'USE_SKILL', targetPlayerId: tA.playerId }, 1_750_210_006_000).ok,
+    false,
+    'Khi chỉ còn <= 2 HP không thể tự sát bằng Đòn Đánh Đẫm Máu',
+  );
+
+  // 4) Hải (Cướp Bóc 5 người): ev-06 Súng Máy KHÔNG kích cướp đồ; eq-06 Chuỗi Hạt Bạc ưu tiên kết liễu lấy nhiều đồ
+  const s3 = createInitialGameState({
+    matchId: 'v4-edge-bob',
+    seed: 606,
+    nowMs: 1_750_220_000_000,
+    players: makePlayers(5),
+  });
+  s3.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+  const s3List = Object.values(s3.players);
+  const bob = getActivePlayer(s3);
+  const victims = s3List.filter((p) => p.playerId !== bob.playerId);
+  bob.roleId = 'lang-anh-san';
+  bob.faction = 'wanderer';
+  bob.revealed = true;
+  bob.attacksThisTurn = 0;
+  bob.location = 'radio';
+  victims.forEach((v) => {
+    v.location = 'radio';
+    v.roleId = 'gac-ky-thuat';
+    v.faction = 'lantern-guard';
+    v.maxHp = 12;
+    v.hp = 12;
+    v.woundsTaken = 0;
+  });
+
+  // Cầm Súng Máy + Masamune + Dao Phay: gây >= 2 ST lên cụm, KHÔNG tráo thành Cướp Bóc 1 món
+  bob.equipped = ['ev-06', 'ev-01', 'ev-02'];
+  victims[0].equipped = ['eq-04'];
+  s3.turnPhase = 'MAIN_ACTION';
+  assert.equal(
+    applyPlayerGameAction(s3, bob.playerId, { type: 'ATTACK', targetPlayerId: victims[0].playerId }, 1_750_220_001_000).ok,
+    true,
+  );
+  assert.ok(victims[0].woundsTaken >= 2, 'Cầm Súng Máy (ev-06) phải gây sát thương thẳng thay vì Cướp Bóc');
+  assert.equal(victims[0].equipped.length, 1, 'Cướp Bóc không kích hoạt khi đánh bằng Súng Máy (ev-06)');
+
+  // Cầm Chuỗi Hạt Bạc + kết liễu mục tiêu >= 2 đồ (1 HP): ưu tiên giết lấy hết đồ thay vì chỉ trộm 1 món
+  const s4 = createInitialGameState({
+    matchId: 'v4-edge-bob-rosary',
+    seed: 707,
+    nowMs: 1_750_230_000_000,
+    players: makePlayers(5),
+  });
+  s4.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+  const bob2 = getActivePlayer(s4);
+  const v2 = Object.values(s4.players).find((p) => p.playerId !== bob2.playerId);
+  bob2.roleId = 'lang-anh-san';
+  bob2.faction = 'wanderer';
+  bob2.revealed = true;
+  bob2.attacksThisTurn = 0;
+  bob2.location = 'radio';
+  bob2.equipped = ['eq-06', 'ev-01', 'ev-02', 'ev-03']; // Silver Rosary + Masamune(1d4) + +1 + +1 >= 3 dmg
+  v2.location = 'radio';
+  v2.roleId = 'suong-gac-cong';
+  v2.faction = 'mist-order';
+  v2.maxHp = 10;
+  v2.hp = 1;
+  v2.woundsTaken = 9;
+  v2.equipped = ['eq-04', 'eq-05'];
+  s4.turnPhase = 'MAIN_ACTION';
+  assert.equal(
+    applyPlayerGameAction(s4, bob2.playerId, { type: 'ATTACK', targetPlayerId: v2.playerId }, 1_750_230_001_000).ok,
+    true,
+  );
+  assert.equal(v2.alive, false, 'Với Silver Rosary + mục tiêu >= 2 đồ sắp chết, Hải phải kết liễu thay vì tha để trộm 1 món');
+  assert.equal(v2.equipped.length, 0);
+  assert.ok(bob2.equipped.includes('eq-04') && bob2.equipped.includes('eq-05'), 'Hải lấy được toàn bộ 2 trang bị nhờ kết liễu');
+});
+
+test('V4.10 — ID log/clue luôn duy nhất sau mốc 40/20 & Hải (Bob 4–6p) tôn trọng Khiên Hộ Mệnh / Áo Choàng Bảo Hộ', () => {
+  // 1) Monotonic logSeq & clueSeq ngăn trùng ID khi quá 40 publicLog / 20 privateClues trong cùng lượt & timestamp
+  const state = createInitialGameState({
+    matchId: 'v4-log-seq-unique',
+    seed: 808,
+    nowMs: 1_750_300_000_000,
+    players: makePlayers(4),
+  });
+  const actor = getActivePlayer(state);
+  const fixedNow = 1_750_300_005_000;
+  for (let i = 0; i < 48; i++) {
+    appendPublicLog(state, 'attack', `Log ${i}`, fixedNow, actor.playerId);
+  }
+  assert.equal(state.publicLog.length, 40);
+  assert.equal(
+    new Set(state.publicLog.map((entry) => entry.id)).size,
+    40,
+    'Sau mốc MAX_PUBLIC_LOG = 40, các log cùng lượt/timestamp vẫn phải có ID duy nhất',
+  );
+
+  for (let i = 0; i < 25; i++) {
+    appendPrivateClue(actor, {
+      cardId: 'inv-01',
+      cardTitle: 'Tin đồn',
+      targetPlayerId: state.turnOrder[1],
+      targetName: 'SV 2',
+      summary: `Manh mối ${i}`,
+      atMs: fixedNow,
+    });
+  }
+  assert.equal(actor.privateClues.length, 20);
+  assert.equal(
+    new Set(actor.privateClues.map((clue) => clue.id)).size,
+    20,
+    'Sau mốc MAX_PRIVATE_CLUES = 20, mọi manh mối cùng timestamp vẫn phải có ID duy nhất',
+  );
+
+  // 2) Hải (Bob 4–6p): Khiên Hộ Mệnh (eq-10) chặn đòn về 0 ST -> KHÔNG được kích Cướp Đồ Thay Đòn
+  const sShield = createInitialGameState({
+    matchId: 'v4-bob-shield',
+    seed: 911,
+    nowMs: 1_750_310_000_000,
+    players: makePlayers(5),
+  });
+  sShield.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+  const bobS = getActivePlayer(sShield);
+  const shieldedVictim = Object.values(sShield.players).find((p) => p.playerId !== bobS.playerId);
+  bobS.roleId = 'lang-anh-san';
+  bobS.faction = 'wanderer';
+  bobS.revealed = true;
+  bobS.attacksThisTurn = 0;
+  bobS.location = 'radio';
+  bobS.equipped = ['ev-01', 'ev-02', 'ev-03']; // 1d4 + 2 => rawDmg luôn >= 3
+  shieldedVictim.location = 'radio';
+  shieldedVictim.guardianShieldActive = true;
+  shieldedVictim.equipped = ['eq-04'];
+  shieldedVictim.woundsTaken = 0;
+  sShield.turnPhase = 'MAIN_ACTION';
+  assert.equal(
+    applyPlayerGameAction(sShield, bobS.playerId, { type: 'ATTACK', targetPlayerId: shieldedVictim.playerId }, 1_750_310_001_000).ok,
+    true,
+  );
+  assert.equal(shieldedVictim.guardianShieldActive, false, 'Khiên Hộ Mệnh tiêu hao để chặn đòn');
+  assert.equal(shieldedVictim.woundsTaken, 0, 'Không nhận sát thương');
+  assert.deepEqual(shieldedVictim.equipped, ['eq-04'], 'Khiên chặn về 0 ST nên Hải không được cướp đồ');
+
+  // 3) Hải (Bob 4–6p): Áo Choàng Bảo Hộ (eq-01) giảm rawDmg=2 còn expectedDealt=1 (<2) -> gây 1 ST, KHÔNG cướp đồ
+  let verifiedHolyRobeGuard = false;
+  for (let seed = 1; seed <= 40; seed++) {
+    const sRobe = createInitialGameState({
+      matchId: `v4-bob-robe-${seed}`,
+      seed,
+      nowMs: 1_750_320_000_000,
+      players: makePlayers(5),
+    });
+    sRobe.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+    const bobR = getActivePlayer(sRobe);
+    const robeVictim = Object.values(sRobe.players).find((p) => p.playerId !== bobR.playerId);
+    bobR.roleId = 'lang-anh-san';
+    bobR.faction = 'wanderer';
+    bobR.revealed = true;
+    bobR.attacksThisTurn = 0;
+    bobR.location = 'radio';
+    bobR.equipped = ['ev-01']; // Masamune 1d4 thuần
+    robeVictim.location = 'radio';
+    robeVictim.roleId = 'gac-ky-thuat';
+    robeVictim.faction = 'lantern-guard';
+    robeVictim.maxHp = 14;
+    robeVictim.hp = 14;
+    robeVictim.woundsTaken = 0;
+    robeVictim.equipped = ['eq-01']; // Holy Robe (-1 dmg)
+    sRobe.turnPhase = 'MAIN_ACTION';
+
+    const atkRes = applyPlayerGameAction(
+      sRobe,
+      bobR.playerId,
+      { type: 'ATTACK', targetPlayerId: robeVictim.playerId },
+      1_750_320_001_000,
+    );
+    assert.equal(atkRes.ok, true);
+    if (sRobe.lastDiceRoll?.d4 === 2) {
+      assert.equal(robeVictim.woundsTaken, 1, 'rawDmg=2 gặp Áo Choàng Bảo Hộ chỉ gây 1 ST thực tế');
+      assert.deepEqual(robeVictim.equipped, ['eq-01'], 'Sát thương thực tế < 2 nên Hải không được cướp Áo Choàng');
+      verifiedHolyRobeGuard = true;
+      break;
+    }
+  }
+  assert.equal(verifiedHolyRobeGuard, true, 'Phải kiểm chứng được trường hợp d4=2 qua Áo Choàng Bảo Hộ');
 });

@@ -7,13 +7,19 @@
 
 import type { ReactNode } from 'react';
 import type { BoardGamePublicGameView } from '../network/contracts';
-import { FACTION_LABELS } from '../domain/roles';
+import {
+  FACTION_THEME,
+  FactionCrestSvg,
+  RolePortraitSvg,
+} from './BoardGameArt';
+import { MIDNIGHT_CHARACTER_ART } from './midnight-noir-tokens';
 
 export interface MatchResultProps {
   publicGame: BoardGamePublicGameView;
   selfPlayerId: string | null;
   isSpectator: boolean;
   postcardSlot?: ReactNode;
+  onOpenLeaderboard?: () => void;
   onPlayAgain?: () => void;
   onLeaveMatch: () => void;
 }
@@ -23,10 +29,16 @@ export default function MatchResult({
   selfPlayerId,
   isSpectator,
   postcardSlot,
+  onOpenLeaderboard,
   onPlayAgain,
   onLeaveMatch,
 }: MatchResultProps) {
   const reveals = publicGame.finalReveal ?? [];
+  const totalInvestigations = publicGame.players.reduce(
+    (sum, p) => sum + p.investigationsCount,
+    0,
+  );
+  const survivorsCount = reveals.filter((r) => r.alive).length;
   const selfWon = Boolean(
     selfPlayerId && publicGame.winnerPlayerIds.includes(selfPlayerId),
   );
@@ -62,13 +74,13 @@ export default function MatchResult({
           <p className="mt-1.5 text-xs text-slate-200">{publicGame.winReason}</p>
           <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-300">
             <span>
-              ⏱️ Vòng: <strong>{Math.min(publicGame.round, publicGame.maxRounds)}/{publicGame.maxRounds}</strong>
+              ⏱️ Vòng: <strong>{publicGame.round}</strong>
             </span>
             <span>
-              📡 Tín hiệu: <strong>{publicGame.signalProgress}/{publicGame.maxTrackValue}</strong>
+              🔎 Lượt điều tra: <strong>{totalInvestigations}</strong>
             </span>
             <span>
-              🌫️ Nhiễu sóng: <strong>{publicGame.mistProgress}/{publicGame.maxTrackValue}</strong>
+              🧍 Sống sót: <strong>{survivorsCount}/{reveals.length}</strong>
             </span>
           </div>
         </div>
@@ -82,23 +94,44 @@ export default function MatchResult({
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {reveals.map((r) => {
                 const isSelf = r.playerId === selfPlayerId;
+                const ft = FACTION_THEME[r.faction];
                 return (
                   <div
                     key={r.playerId}
-                    className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 ${
+                    className={`flex items-center justify-between gap-2.5 rounded-xl border px-2.5 py-2 ${
                       r.won
                         ? 'border-emerald-500/45 bg-emerald-950/25'
                         : 'border-slate-800 bg-slate-950/75'
                     }`}
                   >
-                    <div className="min-w-0">
-                      <div className="truncate font-bold text-slate-100">
-                        {r.displayName}
-                        {isSelf ? ' (Bạn)' : ''}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-slate-300">
-                        {r.roleName} ·{' '}
-                        <span className="text-amber-300">{FACTION_LABELS[r.faction]}</span>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      {MIDNIGHT_CHARACTER_ART[r.roleId] ? (
+                        <img
+                          src={MIDNIGHT_CHARACTER_ART[r.roleId]}
+                          alt={r.roleName}
+                          width={720}
+                          height={1080}
+                          loading="lazy"
+                          decoding="async"
+                          className="h-11 w-8 shrink-0 rounded-lg border border-amber-300/45 object-cover object-top shadow"
+                        />
+                      ) : (
+                        <RolePortraitSvg roleId={r.roleId} faction={r.faction} size={38} />
+                      )}
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-slate-100">
+                          {r.displayName}
+                          {isSelf ? ' (Bạn)' : ''}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-300">
+                          <span className="truncate">{r.roleName}</span>
+                          <span
+                            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${ft.badgeBg}`}
+                          >
+                            <FactionCrestSvg faction={r.faction} size={14} />
+                            {ft.shortLabel}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
@@ -106,7 +139,9 @@ export default function MatchResult({
                         {r.won ? '🏆 Thắng' : '—'}
                       </div>
                       <div className="text-[11px] text-slate-400">
-                        {r.alive ? `❤️ ${r.hp} HP` : '💤 Đã loại'}
+                        {r.alive
+                          ? `❤️ ${r.hp}/${r.maxHp} HP`
+                          : '💤 Đã loại'}
                       </div>
                     </div>
                   </div>
@@ -140,6 +175,16 @@ export default function MatchResult({
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/85 px-4 py-3">
+          {onOpenLeaderboard && (
+            <button
+              type="button"
+              data-testid="bg-result-open-leaderboard-btn"
+              onClick={onOpenLeaderboard}
+              className="rounded-xl border border-amber-400/50 bg-amber-950/50 px-3.5 py-2 text-xs font-bold text-amber-200 hover:bg-amber-900/60"
+            >
+              🏆 Bảng xếp hạng CLB
+            </button>
+          )}
           {!isSpectator && onPlayAgain && (
             <button
               type="button"

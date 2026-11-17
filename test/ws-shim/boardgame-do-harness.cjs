@@ -41,7 +41,10 @@ function attachBgHibernationSupport(ws, matchId, isDirectory) {
 
 function createBoardGameNamespace() {
   const containers = new Map();
-  const env = {};
+  const env = {
+    ENVIRONMENT: 'test',
+    ALLOW_SHORT_TURN_TIMEOUT: '1',
+  };
 
   function getOrCreateContainer(roomName) {
     let entry = containers.get(roomName);

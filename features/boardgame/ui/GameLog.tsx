@@ -1,87 +1,105 @@
 'use client';
 
 // ---------------------------------------------------------------------------
-// features/boardgame/ui/GameLog.tsx — Nhật ký sự kiện công khai & Dấu mốc
-// nổi bật trong suốt ván Bóng Đêm KTX.
+// features/boardgame/ui/GameLog.tsx — Nhật ký Trận Đấu Bóng Đêm KTX v4
+// Hiển thị diễn biến rõ ràng, chữ lớn dễ theo dõi.
 // ---------------------------------------------------------------------------
 
+import React from 'react';
 import type {
-  BoardGameHighlightEntry,
-  BoardGamePublicLogEntry,
-} from '../network/contracts';
-
-const KIND_COLORS: Record<BoardGamePublicLogEntry['kind'], string> = {
-  system: 'text-slate-300 border-slate-700/70',
-  move: 'text-sky-200 border-sky-700/50',
-  draw: 'text-amber-200 border-amber-700/50',
-  tactic: 'text-cyan-200 border-cyan-700/50',
-  skill: 'text-fuchsia-200 border-fuchsia-600/60',
-  attack: 'text-rose-200 border-rose-600/60',
-  probe: 'text-indigo-200 border-indigo-600/50',
-  reveal: 'text-orange-200 border-orange-500/60',
-  track: 'text-emerald-200 border-emerald-500/60',
-  elimination: 'text-rose-300 border-rose-500/80 bg-rose-950/40',
-  timeout: 'text-amber-300 border-amber-600/60',
-  victory: 'text-yellow-200 border-yellow-400/70 bg-amber-950/50',
-};
+  BoardGameDiceRollEvent,
+  BoardGamePublicGameView,
+} from '@/shared/contracts/boardgame';
 
 export interface GameLogProps {
-  logs: readonly BoardGamePublicLogEntry[];
-  highlights: readonly BoardGameHighlightEntry[];
+  publicGame: BoardGamePublicGameView;
+  unsettledRoll?: BoardGameDiceRollEvent | null;
 }
 
-export default function GameLog({ logs, highlights }: GameLogProps) {
+const LOG_STYLE_MAP: Record<string, string> = {
+  victory: 'bg-amber-950/60 border-amber-400/50 text-amber-100 font-bold',
+  elimination: 'bg-rose-950/60 border-rose-500/45 text-rose-100 font-semibold',
+  reveal: 'bg-indigo-950/60 border-indigo-400/45 text-indigo-100 font-semibold',
+  attack: 'bg-orange-950/45 border-orange-500/35 text-orange-100',
+  investigate: 'bg-emerald-950/45 border-emerald-500/35 text-emerald-100',
+  steal: 'bg-sky-950/50 border-sky-400/40 text-sky-100',
+  dice: 'bg-slate-900/90 border-cyan-500/30 text-cyan-100',
+  move: 'bg-slate-900/90 border-slate-700/70 text-slate-200',
+};
+
+export const GameLog = React.memo(function GameLog({
+  publicGame,
+  unsettledRoll = null,
+}: GameLogProps) {
+  const recentLogs = [...publicGame.publicLog]
+    .reverse()
+    .filter((entry) => {
+      if (!unsettledRoll) return true;
+      const rollRelated =
+        entry.kind === 'dice' || entry.kind === 'move' || entry.kind === 'attack';
+      return !(rollRelated && entry.atMs >= unsettledRoll.atMs);
+    });
+
   return (
     <div
       data-testid="bg-game-log"
-      className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/90 p-3.5 text-xs text-slate-200 shadow-lg"
+      className="rounded-2xl border border-slate-700/70 bg-slate-900/90 p-4 flex flex-col gap-3"
     >
-      {highlights.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
-            ✨ Điểm nhấn trận đấu
-          </div>
-          <div className="max-h-28 space-y-1 overflow-y-auto pr-1">
-            {highlights
-              .slice()
-              .reverse()
-              .map((h, i) => (
-                <div
-                  key={`${h.atMs}-${i}`}
-                  className="rounded-lg border border-amber-500/30 bg-amber-950/25 px-2.5 py-1.5 text-[11px]"
-                >
-                  <span className="mr-1.5 font-mono text-[10px] text-amber-400">V{h.round}</span>
-                  <strong className="text-amber-200">{h.title}:</strong>{' '}
-                  <span className="text-slate-300">{h.detail}</span>
-                </div>
-              ))}
-          </div>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+          📜 Diễn biến Bàn Đấu
+        </h3>
+        <span className="text-xs font-semibold text-slate-400">
+          Vòng {publicGame.round} · Lượt #{publicGame.turnNumber}
+        </span>
+      </div>
+
+      {publicGame.highlights.length > 0 && (
+        <div className="space-y-1.5 border-b border-slate-800 pb-2.5">
+          {[...publicGame.highlights].reverse().slice(0, 3).map((hl, i) => (
+            <div
+              key={`${hl.atMs}-${i}`}
+              className="rounded-xl bg-amber-950/40 border border-amber-500/35 px-3 py-2 text-xs"
+            >
+              <p className="font-bold text-amber-200">{hl.title}</p>
+              <p className="text-slate-200 mt-0.5 leading-snug">{hl.detail}</p>
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            📜 Nhật ký công khai ({logs.length})
-          </span>
-        </div>
-        <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
-          {logs
-            .slice()
-            .reverse()
-            .map((entry) => (
-              <div
-                key={entry.id}
-                className={`rounded-lg border px-2.5 py-1.5 text-[11px] leading-snug ${
-                  KIND_COLORS[entry.kind] ?? 'border-slate-800 text-slate-300'
-                }`}
-              >
-                <span className="mr-1.5 font-mono text-[10px] text-slate-400">V{entry.round}</span>
+      <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+        {unsettledRoll && (
+          <div
+            data-testid="bg-gamelog-pending-roll"
+            className="rounded-xl border border-amber-400/50 bg-amber-950/45 px-3 py-2 text-sm leading-snug text-amber-100 font-semibold"
+          >
+            <span className="text-[11px] font-bold text-amber-300 mr-2">
+              [V{publicGame.round}]
+            </span>
+            <span>🎲 {unsettledRoll.displayName} đang tung xúc xắc...</span>
+          </div>
+        )}
+        {recentLogs.length === 0 && !unsettledRoll ? (
+          <p className="text-sm text-slate-400">Chưa có diễn biến nào.</p>
+        ) : (
+          recentLogs.map((entry) => {
+            const cls =
+              LOG_STYLE_MAP[entry.kind] ??
+              'bg-slate-950/70 border-slate-800 text-slate-200';
+            return (
+              <div key={entry.id} className={`rounded-xl border px-3 py-2 text-sm leading-snug ${cls}`}>
+                <span className="text-[11px] font-bold text-slate-400 mr-2">
+                  [V{entry.round}]
+                </span>
                 <span>{entry.text}</span>
               </div>
-            ))}
-        </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
-}
+});
+
+export default GameLog;

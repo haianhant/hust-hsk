@@ -217,6 +217,7 @@ export function CampusHud({
   soundOn,
   speechRate,
   interactLabel,
+  traveling = false,
   helpOpen,
   toast,
   checkedInCount = 0,
@@ -415,7 +416,9 @@ export function CampusHud({
           - Desktop (sm: trở lên): giữ nguyên 100% Minimap + hàng nút chức năng.
           - Điện thoại (< sm): ẩn Minimap góc, gom toàn bộ tùy chọn vào 1 nút Menu 3 gạch (☰) gọn thoáng. */}
       <div className="absolute right-3 top-3 z-40 flex flex-col items-end gap-2 sm:flex-row-reverse sm:items-start">
-        {!inClassroom && !inLibraryLobby && !inBoardGameClub && !hideNav && <Minimap />}
+        {!inClassroom && !inLibraryLobby && !inBoardGameClub && !hideNav && (
+          <Minimap onFastTravel={onFastTravel} traveling={traveling} />
+        )}
 
         {/* Nút Menu 3 gạch (☰) dành riêng cho điện thoại (< sm) */}
         <div className="pointer-events-auto relative flex flex-col items-end sm:hidden">

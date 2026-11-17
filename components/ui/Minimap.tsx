@@ -8,6 +8,7 @@ import {
   C1_FOUNTAIN,
   CAMPUS_MAP_BUILDINGS,
   CAMPUS_MAP_PLAZAS,
+  FAST_TRAVEL_DESTINATIONS,
   LAKE,
   ROADS,
   TDN_DIVIDED_MEDIAN,
@@ -31,6 +32,28 @@ const MAIN_CAMPUS_BOUNDS: AABB = {
 };
 
 type MapScope = 'main' | 'all';
+
+const SHORT_PIN_LABELS: Record<string, string> = {
+  parabol: 'Parabol',
+  c1: 'C1',
+  dcv: 'Cổng ĐCV',
+  c9: 'C9',
+  nga5: 'Ngã 5',
+  c7: 'C7',
+  library: 'Thư viện',
+  lake: 'Hồ Tiền',
+  spawn: 'Cổng TĐN',
+  ktx: 'KTX',
+  boardgame: 'CLB Game',
+  b1: 'B1',
+  stadium: 'SVĐ',
+};
+
+// Vị trí hiển thị ghim trên bản đồ toàn cảnh để tách rõ cụm KTX B8–B9 và CLB Board Game
+const PIN_VISUAL_ANCHORS: Partial<Record<string, { x: number; z: number }>> = {
+  boardgame: { x: 103.5, z: -59.0 },
+  ktx: { x: 124.5, z: -41.5 },
+};
 
 function makeProject(size: number, pad: number, viewport: AABB = BOUNDS) {
   const rangeX = viewport.maxX - viewport.minX;
@@ -402,7 +425,13 @@ function renderCampusMap(
   }
 }
 
-export default function Minimap(_props?: { onFastTravel?: (destId: string) => void }) {
+export default function Minimap({
+  onFastTravel,
+  traveling = false,
+}: {
+  onFastTravel?: (destId: string) => void;
+  traveling?: boolean;
+} = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fullCanvasRef = useRef<HTMLCanvasElement>(null);
   const [fullMapOpen, setFullMapOpen] = useState(false);
@@ -571,19 +600,102 @@ export default function Minimap(_props?: { onFastTravel?: (destId: string) => vo
                       : 'text-white/80 hover:text-white'
                   }`}
                 >
-                  🌐 Toàn trường (+ KTX · B1 · SVĐ)
+                  🌐 Toàn trường (+ KTX · CLB Game · B1 · SVĐ)
                 </button>
               </div>
               <span className="text-[11px] text-white/65">Nhấn phím M để đóng/mở nhanh</span>
             </div>
 
             <div className="flex flex-col items-center justify-center">
-              <canvas
-                ref={fullCanvasRef}
-                width={FULL_SIZE}
-                height={FULL_SIZE}
-                className="h-[340px] w-[340px] shrink-0 rounded-xl border border-white/20 sm:h-[480px] sm:w-[480px]"
-              />
+              {(() => {
+                const viewport = mapScope === 'main' ? MAIN_CAMPUS_BOUNDS : BOUNDS;
+                const project = makeProject(FULL_SIZE, FULL_PAD, viewport);
+                const inScopeDests = FAST_TRAVEL_DESTINATIONS.filter(
+                  (dest) =>
+                    dest.x >= viewport.minX &&
+                    dest.x <= viewport.maxX &&
+                    dest.z >= viewport.minZ &&
+                    dest.z <= viewport.maxZ,
+                );
+                const outOfScopeDests = FAST_TRAVEL_DESTINATIONS.filter(
+                  (dest) => !inScopeDests.includes(dest),
+                );
+                return (
+                  <>
+                    <div className="relative h-[340px] w-[340px] shrink-0 sm:h-[480px] sm:w-[480px]">
+                      <canvas
+                        ref={fullCanvasRef}
+                        width={FULL_SIZE}
+                        height={FULL_SIZE}
+                        className="h-full w-full rounded-xl border border-white/20"
+                      />
+                      {onFastTravel &&
+                        inScopeDests.map((dest) => {
+                          const anchor = PIN_VISUAL_ANCHORS[dest.id] ?? dest;
+                          const leftPct = (project.x(anchor.x) / FULL_SIZE) * 100;
+                          const topPct = (project.y(anchor.z) / FULL_SIZE) * 100;
+                          const isBoardGame = dest.id === 'boardgame';
+                          return (
+                            <button
+                              key={dest.id}
+                              type="button"
+                              data-testid={`map-teleport-pin-${dest.id}`}
+                              disabled={traveling}
+                              title={`⚡ Bấm để dịch chuyển tức thì tới ${dest.name}`}
+                              aria-label={`Dịch chuyển nhanh tới ${dest.name}`}
+                              onClick={() => {
+                                setFullMapOpen(false);
+                                onFastTravel(dest.id);
+                              }}
+                              style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+                              className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-extrabold shadow-lg transition hover:z-10 hover:scale-110 hover:bg-amber-400 hover:text-slate-950 disabled:opacity-50 ${
+                                isBoardGame
+                                  ? 'border-fuchsia-300/95 bg-indigo-950/95 text-amber-200 ring-1 ring-fuchsia-400/50'
+                                  : 'border-amber-300/90 bg-slate-950/90 text-amber-200'
+                              }`}
+                            >
+                              {dest.icon} {SHORT_PIN_LABELS[dest.id] ?? dest.name}
+                            </button>
+                          );
+                        })}
+                    </div>
+
+                    {onFastTravel && (
+                      <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[11px]">
+                        <span className="text-amber-200/90 font-semibold">
+                          ⚡ Bấm trực tiếp vào ghim trên bản đồ để dịch chuyển tức thì
+                        </span>
+                        {outOfScopeDests.length > 0 && (
+                          <div className="flex flex-wrap items-center justify-center gap-1">
+                            {outOfScopeDests.map((dest) => {
+                              const isBoardGame = dest.id === 'boardgame';
+                              return (
+                                <button
+                                  key={dest.id}
+                                  type="button"
+                                  data-testid={`map-quick-teleport-${dest.id}`}
+                                  disabled={traveling}
+                                  onClick={() => {
+                                    setFullMapOpen(false);
+                                    onFastTravel(dest.id);
+                                  }}
+                                  className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition hover:bg-amber-400 hover:text-slate-950 disabled:opacity-50 ${
+                                    isBoardGame
+                                      ? 'border-fuchsia-400/80 bg-indigo-950/85 text-amber-200'
+                                      : 'border-emerald-400/50 bg-emerald-950/75 text-emerald-200 hover:bg-emerald-500'
+                                  }`}
+                                >
+                                  {dest.icon} {SHORT_PIN_LABELS[dest.id] ?? dest.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div className="mt-2.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-white/85">

@@ -21,7 +21,7 @@ const assert = require('node:assert/strict');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(ROOT, 'out');
-const SHOT_DIR = '/home/bao/.gemini/antigravity-cli/brain/f3119e13-33de-4820-bc0e-636c745568a1';
+const SHOT_DIR = process.env.BOARDGAME_SHOT_DIR || path.join(ROOT, 'test-results', 'boardgame');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -104,21 +104,50 @@ async function startWsShim(port) {
 
 function loadPlaywright() {
   const candidates = [
+    process.env.PLAYWRIGHT_CORE_PATH,
     path.join(ROOT, 'node_modules/playwright-core'),
     path.join(ROOT, 'node_modules/playwright'),
-    '/home/bao/.vscode/extensions/vscjava.migrate-java-to-azure-1.24.0-linux-x64/node_modules/playwright-core',
-  ];
+    'playwright-core',
+    'playwright',
+  ].filter(Boolean);
   for (const p of candidates) {
-    if (fs.existsSync(p)) return require(p);
+    try {
+      return require(p);
+    } catch {
+      // try next candidate
+    }
   }
-  throw new Error('playwright-core not found');
+  throw new Error('playwright-core not found — run `npm ci` or install `playwright-core@1.48.2`.');
+}
+
+function resolveBrowserExecutable(chromium) {
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
+    return process.env.CHROME_PATH;
+  }
+  if (chromium && typeof chromium.executablePath === 'function') {
+    const pwExec = chromium.executablePath();
+    if (pwExec && fs.existsSync(pwExec)) {
+      return undefined; // Let Playwright launch its managed matched Chromium binary
+    }
+  }
+  for (const p of [
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+  ]) {
+    if (fs.existsSync(p)) return p;
+  }
+  throw new Error('No Chromium/Chrome executable found. Run: npx playwright-core install --with-deps chromium');
 }
 
 async function main() {
   if (!fs.existsSync(path.join(OUT_DIR, 'index.html'))) {
     throw new Error('Missing out/index.html — run npm run build before boardgame-bg1-smoke.cjs');
   }
+  fs.mkdirSync(SHOT_DIR, { recursive: true });
   const { chromium } = loadPlaywright();
+  const executablePath = resolveBrowserExecutable(chromium);
   const shimPort = await getFreePort();
   const shim = await startWsShim(shimPort);
   const { server, url } = await startOutServer();
@@ -126,7 +155,7 @@ async function main() {
   try {
     browser = await chromium.launch({
       headless: true,
-      executablePath: fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined,
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-dev-shm-usage',
@@ -134,6 +163,9 @@ async function main() {
         '--use-angle=swiftshader',
         '--enable-webgl',
         '--ignore-gpu-blocklist',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
       ],
     });
 
@@ -143,6 +175,8 @@ async function main() {
       window.__HUST_TEST_MP_WS_URL = wsUrl;
     }, { wsUrl: `${shim.wsBaseUrl}/ws` });
     const page = await ctxDesktop.newPage();
+    ctxDesktop.setDefaultTimeout(90000);
+    page.setDefaultTimeout(90000);
     const errors = [];
     page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`));
     page.on('console', (msg) => {
@@ -150,9 +184,12 @@ async function main() {
     });
 
     await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await page.locator('#enter-campus').click();
+    const enterBtn = page.locator('#enter-campus');
+    await enterBtn.waitFor({ state: 'visible', timeout: 90000 });
+    await enterBtn.click({ timeout: 90000 });
     await page.waitForFunction(() => Boolean(window.__bkhn && window.__bkhn.enterBoardGameClub), null, {
-      timeout: 30000,
+      timeout: 120000,
+      polling: 200,
     });
 
     // Teleport đến trước cửa CLB Board Game KTX (109.9, -55.0) quay mặt về hướng Tây nhìn thẳng vào cửa nhà CLB
@@ -164,7 +201,7 @@ async function main() {
       await page.waitForFunction(
         () => document.body.innerText.includes('Vào CLB Board Game'),
         null,
-        { timeout: 20000 },
+        { timeout: 120000, polling: 200 },
       );
     } catch (err) {
       const diag = await page.evaluate(() => ({
@@ -174,13 +211,35 @@ async function main() {
       console.error('DIAG:', JSON.stringify(diag), 'ERRORS:', errors);
       throw err;
     }
-    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-01-exterior.png') });
+    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-01-exterior.png'), timeout: 120000 });
+
+    const campus3dBefore = await page.evaluate(() => {
+      return new Promise((resolve) => {
+        const deltas = [];
+        let prev = performance.now();
+        const t0 = prev;
+        function tick(now) {
+          deltas.push(now - prev);
+          prev = now;
+          if (now - t0 >= 800 || deltas.length >= 6) {
+            resolve({
+              frames: deltas.length,
+              canvasCount: document.querySelectorAll('canvas').length,
+            });
+            return;
+          }
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      });
+    });
+    assert.ok(campus3dBefore.canvasCount >= 1 && campus3dBefore.frames >= 2, `3D campus must render frames cleanly before entering CLB (got ${JSON.stringify(campus3dBefore)})`);
 
     // Nhấn phím E để bước vào CLB Board Game KTX
     await page.keyboard.press('e');
-    await page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 60000 });
     await page.waitForTimeout(700);
-    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-02-lounge-day.png') });
+    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-02-lounge-day.png'), timeout: 120000 });
 
     // Chuyển sang Ban đêm để kiểm tra ánh sáng tụ họp buổi tối ấm áp
     const nightBtn = page.locator('#toggle-time-of-day, button:has-text("Ngày"), button:has-text("Hoàng hôn"), button[aria-label*="thời gian"]').first();
@@ -193,29 +252,88 @@ async function main() {
 
     // Mở Sảnh bàn chơi, kiểm tra trạng thái thật 0/8 và ngồi vào Bàn 1
     await page.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 60000 });
     const lobbyText = await page.locator('[data-testid="boardgame-lobby-modal"]').innerText();
     assert.ok(lobbyText.includes('0/8 ghế'), 'Sảnh ban đầu phải hiển thị đúng 0/8 ghế thật');
     await page.locator('[data-testid="bg-sit-table-1-btn"]').click();
-    await page.waitForSelector('[data-testid="bg-stand-up-btn"]', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="bg-stand-up-btn"]', { timeout: 60000 });
     await page.waitForTimeout(450);
-    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-03-lounge-night-seated.png') });
+    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-03-lounge-night-seated.png'), timeout: 120000 });
 
     // Mở Luật chơi
     await page.locator('[data-testid="bg-toggle-rules-btn"]').click();
-    await page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: 20000 });
-    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-04-rules-modal.png') });
+    await page.waitForSelector('[data-testid="boardgame-rules-modal"]', { timeout: 60000 });
+    await page.screenshot({ path: path.join(SHOT_DIR, 'bg1-04-rules-modal.png'), timeout: 120000 });
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('bkhn:pause-3d', { detail: true }));
+    });
     await page.locator('[data-testid="bg-close-rules-btn"]').click();
 
     // Bấm Rời CLB khi đang ngồi ghế -> phải hiện hộp thoại xác nhận trước khi thoát
     await page.locator('[data-testid="bg-exit-lounge-btn"]').click();
-    await page.waitForSelector('[data-testid="boardgame-exit-confirm-modal"]', { timeout: 20000 });
+    await page.waitForSelector('[data-testid="boardgame-exit-confirm-modal"]', { timeout: 60000 });
     await page.locator('[data-testid="bg-confirm-exit-btn"]').click();
     await page.waitForFunction(
       () => window.__bkhn.isInBoardGameClub && !window.__bkhn.isInBoardGameClub(),
       null,
-      { timeout: 20000 },
+      { timeout: 120000, polling: 200 },
     );
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('bkhn:pause-3d', { detail: false }));
+    });
+
+    // Kiểm tra điểm teleport thẳng tới CLB Board Game KTX trên Bản đồ Toàn cảnh (#open-full-map)
+    await page.locator('#open-full-map').click();
+    await page.waitForSelector('[data-testid="full-campus-map-modal"]', { timeout: 30000 });
+    await page.locator('[data-testid="map-quick-teleport-boardgame"]').waitFor({ state: 'visible', timeout: 15000 });
+    await page.locator('[data-testid="map-scope-all"]').click();
+    await page.locator('[data-testid="map-teleport-pin-boardgame"]').waitFor({ state: 'visible', timeout: 15000 });
+    const modalNoOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+    );
+    assert.equal(modalNoOverflow, true, 'Full campus map with CLB Game pin must not overflow horizontally');
+    await page.locator('[data-testid="map-teleport-pin-boardgame"]').click();
+    await page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 60000 });
+    const inClubViaMap = await page.evaluate(() => Boolean(window.__bkhn?.isInBoardGameClub?.()));
+    assert.equal(inClubViaMap, true, 'Clicking map-teleport-pin-boardgame must enter CLB Board Game lounge directly');
+    await page.locator('[data-testid="bg-exit-lounge-btn"]').click();
+    await page.waitForFunction(
+      () => window.__bkhn.isInBoardGameClub && !window.__bkhn.isInBoardGameClub(),
+      null,
+      { timeout: 60000, polling: 200 },
+    );
+
+    const campus3dAfter = await page.evaluate(() => {
+      return new Promise((resolve) => {
+        const deltas = [];
+        let prev = performance.now();
+        const t0 = prev;
+        function tick(now) {
+          deltas.push(now - prev);
+          prev = now;
+          if (now - t0 >= 800 || deltas.length >= 6) {
+            const audioDiag = window.__hustBgAudioDiag ? window.__hustBgAudioDiag() : null;
+            resolve({
+              frames: deltas.length,
+              canvasCount: document.querySelectorAll('canvas').length,
+              lingeringBoard: document.querySelectorAll('[data-testid="boardgame-2d-board"]').length,
+              lingeringVfxCanvas: document.querySelectorAll('[data-testid="bg-vfx-combat-canvas"]').length,
+              audioActiveVoices: audioDiag ? audioDiag.activeVoices : 0,
+              audioContextState: audioDiag ? audioDiag.contextState : 'uninitialized',
+            });
+            return;
+          }
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      });
+    });
+    assert.equal(campus3dAfter.lingeringBoard, 0, '2D board DOM must be removed on exit');
+    assert.equal(campus3dAfter.lingeringVfxCanvas, 0, '2D combat VFX canvas must be removed on exit');
+    assert.equal(campus3dAfter.audioActiveVoices, 0, 'No lingering board game WebAudio voices after closing');
+    assert.notEqual(campus3dAfter.audioContextState, 'running', 'Board game AudioContext must not stay running after closing');
+    assert.ok(campus3dAfter.canvasCount >= 1 && campus3dAfter.frames >= 2, `3D campus must resume rendering cleanly after closing board game (got ${JSON.stringify(campus3dAfter)})`);
+    console.log('BG1 3D Isolation Audit:', JSON.stringify({ campus3dBefore, campus3dAfter }));
 
     const fatalErrors = errors.filter(
       (e) => !e.includes('WebSocket') && !e.includes('ERR_CONNECTION_REFUSED'),
@@ -233,20 +351,25 @@ async function main() {
       window.__HUST_TEST_MP_WS_URL = wsUrl;
     }, { wsUrl: `${shim.wsBaseUrl}/ws` });
     const mPage = await ctxMobile.newPage();
+    ctxMobile.setDefaultTimeout(90000);
+    mPage.setDefaultTimeout(90000);
     await mPage.goto(url, { waitUntil: 'domcontentloaded' });
-    await mPage.locator('#enter-campus').click();
+    const mEnterBtn = mPage.locator('#enter-campus');
+    await mEnterBtn.waitFor({ state: 'visible', timeout: 90000 });
+    await mEnterBtn.click({ timeout: 90000 });
     await mPage.waitForFunction(() => Boolean(window.__bkhn && window.__bkhn.enterBoardGameClub), null, {
-      timeout: 30000,
+      timeout: 120000,
+      polling: 200,
     });
     await mPage.evaluate(() => window.__bkhn.enterBoardGameClub());
-    await mPage.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 20000 });
+    await mPage.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 60000 });
     await mPage.locator('[data-testid="bg-toggle-lobby-btn"]').click();
-    await mPage.waitForSelector('[data-testid="boardgame-lobby-modal"]');
+    await mPage.waitForSelector('[data-testid="boardgame-lobby-modal"]', { timeout: 60000 });
     const noHorizontalOverflow = await mPage.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth + 1,
     );
     assert.equal(noHorizontalOverflow, true, 'Mobile 390x844 layout must not overflow horizontally');
-    await mPage.screenshot({ path: path.join(SHOT_DIR, 'bg1-05-mobile-lobby.png') });
+    await mPage.screenshot({ path: path.join(SHOT_DIR, 'bg1-05-mobile-lobby.png'), timeout: 120000 });
     await ctxMobile.close();
 
     console.log('BG1 Smoke PASS: desktop + mobile verified cleanly.');

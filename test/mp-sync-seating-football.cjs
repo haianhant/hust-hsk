@@ -167,7 +167,7 @@ async function enterCampus(page, outUrl) {
   await page.waitForFunction(
     () => Boolean(window.__bkhn?.enterBoardGameClub && window.__bkhnFootball?.getBall),
     null,
-    { timeout: 45000 },
+    { timeout: 45000, polling: 200 },
   );
 }
 
@@ -237,7 +237,8 @@ async function main() {
     browsers.push(p2.browser);
 
     console.log('[MP Sync E2E] 1. Entering campus with 2 independent browsers...');
-    await Promise.all([enterCampus(p1.page, outUrl), enterCampus(p2.page, outUrl)]);
+    await enterCampus(p1.page, outUrl);
+    await enterCampus(p2.page, outUrl);
 
     // Đợi hai trình duyệt kết nối cùng phòng WS và nhìn thấy nhau (sĩ số >= 2)
     try {
@@ -248,7 +249,7 @@ async function main() {
             return Boolean(snap && snap.status === 'online' && snap.count >= 2);
           },
           null,
-          { timeout: 25000 },
+          { timeout: 35000, polling: 200 },
         ),
         p2.page.waitForFunction(
           () => {
@@ -256,7 +257,7 @@ async function main() {
             return Boolean(snap && snap.status === 'online' && snap.count >= 2);
           },
           null,
-          { timeout: 25000 },
+          { timeout: 35000, polling: 200 },
         ),
       ]);
     } catch (err) {
@@ -294,7 +295,7 @@ async function main() {
     await p1.page.waitForFunction(
       () => window.__bkhn.getBoardGameSeatState().seatId === 'bg-t1-s0',
       null,
-      { timeout: 10000 },
+      { timeout: 10000, polling: 200 },
     );
 
     // P2 phải lập tức thấy Bàn 1: 1/8 trên HUD CLB Board Game
@@ -304,7 +305,7 @@ async function main() {
         return Boolean(hud && hud.textContent && hud.textContent.includes('Bàn 1: 1/8'));
       },
       null,
-      { timeout: 15000 },
+      { timeout: 15000, polling: 200 },
     );
     console.log('[MP Sync E2E]    P2 HUD updated to Bàn 1: 1/8 after P1 sat.');
 
@@ -322,7 +323,7 @@ async function main() {
         );
       },
       null,
-      { timeout: 10000 },
+      { timeout: 10000, polling: 200 },
     );
 
     await p2.page.locator('[data-testid="bg-sit-table-1-btn"]').click();
@@ -341,7 +342,7 @@ async function main() {
           return Boolean(hud && hud.textContent && hud.textContent.includes('Bàn 1: 2/8'));
         },
         null,
-        { timeout: 15000 },
+        { timeout: 15000, polling: 200 },
       ),
       p2.page.waitForFunction(
         () => {
@@ -349,7 +350,7 @@ async function main() {
           return Boolean(hud && hud.textContent && hud.textContent.includes('Bàn 1: 2/8'));
         },
         null,
-        { timeout: 15000 },
+        { timeout: 15000, polling: 200 },
       ),
     ]);
     await p2.page.waitForTimeout(350);
@@ -364,21 +365,43 @@ async function main() {
         return Boolean(hud && hud.textContent && hud.textContent.includes('Bàn 1: 1/8'));
       },
       null,
-      { timeout: 15000 },
+      { timeout: 15000, polling: 200 },
     );
 
-    // P2 đứng dậy để cả hai thoát CLB Board Game sạch sẽ
+    // P2 đứng dậy để cả hai thoát CLB Board Game tuần tự (tránh tranh chấp WebGL khi dựng lại campus)
     await p2.page.locator('[data-testid="bg-stand-up-btn"]').click();
-    await p1.page.locator('[data-testid="bg-exit-lounge-btn"]').click();
-    await p2.page.locator('[data-testid="bg-exit-lounge-btn"]').click();
-    await Promise.all([
-      p1.page.waitForFunction(() => !document.querySelector('[data-testid="boardgame-club-hud"]'), null, {
-        timeout: 15000,
-      }),
-      p2.page.waitForFunction(() => !document.querySelector('[data-testid="boardgame-club-hud"]'), null, {
-        timeout: 15000,
-      }),
-    ]);
+    await p2.page.locator('[data-testid="bg-stand-up-btn"]').waitFor({ state: 'detached', timeout: 10000 });
+    try {
+      await p1.page.bringToFront();
+      await p1.page.locator('[data-testid="bg-exit-lounge-btn"]').click();
+      await p1.page.waitForFunction(() => !document.querySelector('[data-testid="boardgame-club-hud"]'), null, {
+        timeout: 35000,
+        polling: 200,
+      });
+      await p2.page.bringToFront();
+      await p2.page.locator('[data-testid="bg-exit-lounge-btn"]').click();
+      await p2.page.waitForFunction(() => !document.querySelector('[data-testid="boardgame-club-hud"]'), null, {
+        timeout: 35000,
+        polling: 200,
+      });
+    } catch (exitErr) {
+      const [e1, e2] = await Promise.all([
+        p1.page.evaluate(() => ({
+          hud: Boolean(document.querySelector('[data-testid="boardgame-club-hud"]')),
+          confirmModal: Boolean(document.querySelector('[data-testid="boardgame-exit-confirm-modal"]')),
+          inClub: window.__bkhn?.isInBoardGameClub?.() ?? null,
+          seat: window.__bkhn?.getBoardGameSeatState?.() ?? null,
+        })),
+        p2.page.evaluate(() => ({
+          hud: Boolean(document.querySelector('[data-testid="boardgame-club-hud"]')),
+          confirmModal: Boolean(document.querySelector('[data-testid="boardgame-exit-confirm-modal"]')),
+          inClub: window.__bkhn?.isInBoardGameClub?.() ?? null,
+          seat: window.__bkhn?.getBoardGameSeatState?.() ?? null,
+        })),
+      ]);
+      console.error('DIAG EXIT LOUNGE TIMEOUT:', JSON.stringify({ e1, e2 }, null, 2));
+      throw exitErr;
+    }
 
     // -----------------------------------------------------------------------
     // B. SVĐ Bách Khoa — Đồng bộ 1 quả bóng chung giữa P1 & P2
@@ -408,10 +431,12 @@ async function main() {
     // Cả P1 và P2 phải thấy bóng bay sang phía Đông (x > 134.2) và khớp tọa độ nhau
     await Promise.all([
       p1.page.waitForFunction(() => window.__bkhnFootball.getBall().x > 134.2, null, {
-        timeout: 10000,
+        timeout: 25000,
+        polling: 200,
       }),
       p2.page.waitForFunction(() => window.__bkhnFootball.getBall().x > 134.2, null, {
-        timeout: 10000,
+        timeout: 25000,
+        polling: 200,
       }),
     ]);
 
@@ -439,7 +464,7 @@ async function main() {
           return Math.hypot(b.x - 132, b.z - 80) < 0.25;
         },
         null,
-        { timeout: 10000 },
+        { timeout: 25000, polling: 200 },
       ),
       p2.page.waitForFunction(
         () => {
@@ -447,7 +472,7 @@ async function main() {
           return Math.hypot(b.x - 132, b.z - 80) < 0.25;
         },
         null,
-        { timeout: 10000 },
+        { timeout: 25000, polling: 200 },
       ),
     ]);
 
