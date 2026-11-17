@@ -84,7 +84,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
             }
           : undefined
       }
-      className={`group/tile relative overflow-hidden rounded-2xl border bg-slate-950 transition-all duration-200 ${
+      className={`group/tile relative rounded-2xl border bg-slate-950 transition-all duration-200 ${
         canChooseMoveHere
           ? 'border-amber-400 border-b-4 border-b-amber-500 ring-2 ring-amber-400/75 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(251,191,36,0.34)] cursor-pointer'
           : isHighlightedDestination
@@ -98,39 +98,45 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                 : 'border-slate-700/60 shadow-[0_8px_20px_rgba(2,6,23,0.68)]'
       }`}
     >
-      {/* LỚP 1: ARTWORK NỀN 16:9 DIORAMA KTX BAN ĐÊM (NÂNG ĐỘ SÁNG RÕ NÉT HƠN) */}
-      <img
-        src={artSrc}
-        alt={meta.name}
-        width={960}
-        height={540}
-        loading="eager"
-        decoding="async"
-        draggable={false}
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-80 brightness-110 contrast-[1.03] transition-transform duration-700 group-hover/tile:scale-[1.04]"
-      />
-
-      {/* LỚP 2: ÁNH ĐÈN ĐIỂM SÁNG ẤM PHẦN TRÊN + NỀN CHỮ SẮC NÉT PHẦN DƯỚI */}
+      {/* LỚP NỀN BO TRÒN RIÊNG (giữ artwork/sương gọn góc mà không cắt bóng quân cờ FLIP khi bay sang ô khác) */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: `radial-gradient(68% 78% at ${ambience.lampX}% ${ambience.lampY}%, ${ambience.lampHex}44 0%, rgba(2, 6, 23, 0.14) 56%, rgba(2, 6, 23, 0.84) 100%), linear-gradient(180deg, rgba(2, 6, 23, 0.28) 0%, rgba(2, 6, 23, 0.22) 34%, rgba(2, 6, 23, 0.86) 76%, rgba(2, 6, 23, 0.95) 100%)`,
-        }}
-      />
+        className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
+      >
+        {/* LỚP 1: ARTWORK NỀN 16:9 DIORAMA KTX BAN ĐÊM (NÂNG ĐỘ SÁNG RÕ NÉT HƠN) */}
+        <img
+          src={artSrc}
+          alt={meta.name}
+          width={960}
+          height={540}
+          loading="eager"
+          decoding="async"
+          draggable={false}
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-80 brightness-110 contrast-[1.03] transition-transform duration-700 group-hover/tile:scale-[1.04]"
+        />
 
-      {/* LỚP 3: SƯƠNG ĐÊM NHẸ TRÔI NỔI TRÊN MẶT BÀN */}
-      {enableMist && (
+        {/* LỚP 2: ÁNH ĐÈN ĐIỂM SÁNG ẤM PHẦN TRÊN + NỀN CHỮ SẮC NÉT PHẦN DƯỚI */}
         <div
           aria-hidden="true"
-          className={`pointer-events-none absolute inset-x-0 bottom-0 h-1/2 opacity-35 ${
-            reducedMotion ? '' : 'bg-tile-mist-drift'
-          }`}
+          className="pointer-events-none absolute inset-0"
           style={{
-            background: `radial-gradient(90% 70% at 50% 85%, ${ambience.fogHex}, transparent 75%)`,
+            background: `radial-gradient(68% 78% at ${ambience.lampX}% ${ambience.lampY}%, ${ambience.lampHex}44 0%, rgba(2, 6, 23, 0.14) 56%, rgba(2, 6, 23, 0.84) 100%), linear-gradient(180deg, rgba(2, 6, 23, 0.28) 0%, rgba(2, 6, 23, 0.22) 34%, rgba(2, 6, 23, 0.86) 76%, rgba(2, 6, 23, 0.95) 100%)`,
           }}
         />
-      )}
+
+        {/* LỚP 3: SƯƠNG ĐÊM NHẸ TRÔI NỔI TRÊN MẶT BÀN */}
+        {enableMist && (
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-x-0 bottom-0 h-1/2 opacity-35 ${
+              reducedMotion ? '' : 'bg-tile-mist-drift'
+            }`}
+            style={{
+              background: `radial-gradient(90% 70% at 50% 85%, ${ambience.fogHex}, transparent 75%)`,
+            }}
+          />
+        )}
+      </div>
 
       {/* NỘI DUNG CHÍNH TRÊN BỀ MẶT TILE (GIẢM NHIỄU VIỀN, TĂNG ĐỘ ĐỌC CHỮ) */}
       <div className="relative z-10 p-2.5 sm:p-3 flex flex-col justify-between min-h-[122px]">
@@ -146,7 +152,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
               Ô {meta.diceLabel}
             </span>
             <div className="flex items-center gap-1">
-              {isHighlightedDestination && !isSelfHere && (
+              {isHighlightedDestination && (
                 <span className="px-2 py-0.5 rounded-md bg-emerald-400 text-slate-950 text-[10px] font-black whitespace-nowrap shadow">
                   🎯 Điểm đáp
                 </span>

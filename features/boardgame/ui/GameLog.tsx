@@ -6,10 +6,14 @@
 // ---------------------------------------------------------------------------
 
 import React from 'react';
-import type { BoardGamePublicGameView } from '@/shared/contracts/boardgame';
+import type {
+  BoardGameDiceRollEvent,
+  BoardGamePublicGameView,
+} from '@/shared/contracts/boardgame';
 
 export interface GameLogProps {
   publicGame: BoardGamePublicGameView;
+  unsettledRoll?: BoardGameDiceRollEvent | null;
 }
 
 const LOG_STYLE_MAP: Record<string, string> = {
@@ -23,8 +27,18 @@ const LOG_STYLE_MAP: Record<string, string> = {
   move: 'bg-slate-900/90 border-slate-700/70 text-slate-200',
 };
 
-export const GameLog = React.memo(function GameLog({ publicGame }: GameLogProps) {
-  const recentLogs = [...publicGame.publicLog].reverse();
+export const GameLog = React.memo(function GameLog({
+  publicGame,
+  unsettledRoll = null,
+}: GameLogProps) {
+  const recentLogs = [...publicGame.publicLog]
+    .reverse()
+    .filter((entry) => {
+      if (!unsettledRoll) return true;
+      const rollRelated =
+        entry.kind === 'dice' || entry.kind === 'move' || entry.kind === 'attack';
+      return !(rollRelated && entry.atMs >= unsettledRoll.atMs);
+    });
 
   return (
     <div
@@ -55,7 +69,18 @@ export const GameLog = React.memo(function GameLog({ publicGame }: GameLogProps)
       )}
 
       <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-        {recentLogs.length === 0 ? (
+        {unsettledRoll && (
+          <div
+            data-testid="bg-gamelog-pending-roll"
+            className="rounded-xl border border-amber-400/50 bg-amber-950/45 px-3 py-2 text-sm leading-snug text-amber-100 font-semibold"
+          >
+            <span className="text-[11px] font-bold text-amber-300 mr-2">
+              [V{publicGame.round}]
+            </span>
+            <span>🎲 {unsettledRoll.displayName} đang tung xúc xắc...</span>
+          </div>
+        )}
+        {recentLogs.length === 0 && !unsettledRoll ? (
           <p className="text-sm text-slate-400">Chưa có diễn biến nào.</p>
         ) : (
           recentLogs.map((entry) => {

@@ -26,6 +26,7 @@ import {
 import { MidnightDicePair3D } from './MidnightDice3D';
 import { useSmoothPawnGlide } from './useSmoothPawnGlide';
 import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
+import { computeDiceSig } from './vfx-queue';
 import {
   GRAPHICS_QUALITY_LABELS,
   GRAPHICS_TIER_LABELS,
@@ -187,17 +188,15 @@ export function BoardGameVfxSandbox() {
     graphicsProfile: gfx.profile,
   });
 
-  const sbDiceSig = game.lastDiceRoll
-    ? `${game.turnNumber}:${game.lastDiceRoll.kind}:${game.lastDiceRoll.playerId}:${game.lastDiceRoll.d6}:${game.lastDiceRoll.d4}:${game.lastDiceRoll.resolvedLocation ?? ''}`
-    : '';
+  const sbDiceSig = computeDiceSig(game) ?? '';
   useSmoothPawnGlide({
     containerRef: stageRef,
     players: game.players,
     matchId: game.matchId,
     reducedMotion: vfx.reducedMotion,
+    qualityTier: gfx.profile.tier,
     durationMs: gfx.profile.pawnGlideDurationMs,
     diceRollSignature: sbDiceSig,
-    diceHoldDelayMs: gfx.profile.tier === 'low' ? 0 : 1020,
     skipGeneration: vfx.skipGeneration,
   });
 
@@ -823,7 +822,7 @@ export function BoardGameVfxSandbox() {
               enable3D={gfx.profile.tier !== 'low' && !vfx.reducedMotion}
             />
             <span className="text-xs font-bold text-slate-200">
-              {vfx.activeDiceRoll && !vfx.isDiceSettled
+              {!vfx.isDiceSettled
                 ? '🎲 Xúc xắc 3D đang lăn...'
                 : 'Khay Xúc Xắc Server (1d6+1d4)'}
             </span>

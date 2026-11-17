@@ -553,7 +553,7 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
     }, action);
   }
 
-  async function stepFullTurnIfActive(preferExplore = true) {
+  async function stepFullTurnIfActive(preferExplore = true, skipCombat = false) {
     const clusterOf = (locId, pairs) =>
       (pairs || []).find((c) => Array.isArray(c.locationIds) && c.locationIds.includes(locId))
         ?.clusterId || 'south';
@@ -612,7 +612,7 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
       const self2 = pub2.players.find((p) => p.playerId === st2.auth.playerId);
       const otherAlive = pub2.players.find((p) => p.alive && p.playerId !== st2.auth.playerId);
       let locAct = { type: 'SKIP_LOC' };
-      if (preferExplore && self2) {
+      if (!skipCombat && preferExplore && self2) {
         if (self2.location === 'radio') locAct = { type: 'DRAW_CARD', deck: 'investigation' };
         else if (self2.location === 'lobby') locAct = { type: 'DRAW_CARD', deck: 'equipment' };
         else if (self2.location === 'breaker' || self2.location === 'canteen') locAct = { type: 'DRAW_CARD', deck: 'event' };
@@ -663,7 +663,7 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
       });
 
       let act = { type: 'END_TURN' };
-      if (priv3?.hand && priv3.hand.length > 0) {
+      if (!skipCombat && priv3?.hand && priv3.hand.length > 0) {
         const card = priv3.hand[0];
         if (card.deck === 'investigation' && otherAlive) {
           act = { type: 'INVESTIGATE_CARD', cardId: card.id, targetPlayerId: otherAlive.playerId };
@@ -679,11 +679,11 @@ async function createBrowserWsPeer(context, outUrl, wsBaseUrl, displayName, pref
         } else {
           act = { type: 'USE_CARD', cardId: card.id };
         }
-      } else if (priv3 && !priv3.revealed && priv3.roleId !== 'lang-tien-phong' && pub3.round >= 2) {
+      } else if (!skipCombat && priv3 && !priv3.revealed && priv3.roleId !== 'lang-tien-phong' && pub3.round >= 2) {
         act = { type: 'REVEAL_ROLE' };
-      } else if ((self3?.attacksThisTurn ?? 0) < 1 && reachableEnemies.length > 0) {
+      } else if (!skipCombat && (self3?.attacksThisTurn ?? 0) < 1 && reachableEnemies.length > 0) {
         act = { type: 'ATTACK', targetPlayerId: reachableEnemies[0].playerId };
-      } else if ((self3?.attacksThisTurn ?? 0) < 1 && hasMasamune && reachableAny.length > 0) {
+      } else if (!skipCombat && (self3?.attacksThisTurn ?? 0) < 1 && hasMasamune && reachableAny.length > 0) {
         act = { type: 'ATTACK', targetPlayerId: reachableAny[0].playerId };
       }
 
@@ -1713,18 +1713,47 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     const expectedRoleName = (await p1.page.locator('[data-testid="bg-role-card-secret"] h3').innerText()).trim();
 
     // Helper: advance peers until P1 has ActionPanel
-    const advancePeersUntilP1Active = async () => {
+    const advancePeersUntilP1Active = async ({ skipCombat = false } = {}) => {
       for (let i = 0; i < 40; i++) {
         const isP1Turn = await p1.page
           .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
           .catch(() => false);
         if (isP1Turn) return;
         for (const peer of peers) {
-          await peer.stepFullTurnIfActive(true);
+          await peer.stepFullTurnIfActive(true, skipCombat);
         }
         await new Promise((r) => setTimeout(r, 60));
       }
       throw new Error('Timed out waiting for P1 turn');
+    };
+
+    const finishP1TurnPassively = async () => {
+      for (let step = 0; step < 12; step++) {
+        const ownTurn = await p1.page
+          .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
+          .catch(() => false);
+        if (!ownTurn) break;
+        const chooseDest = p1.page.locator('[data-testid^="bg-choose-dest-"]').first();
+        const skipLoc = p1.page.locator('[data-testid="bg-skip-loc-btn"]');
+        const skipCard = p1.page.locator('[data-testid^="bg-skip-card-"]').first();
+        const useCard = p1.page.locator('[data-testid^="bg-use-card-"]').first();
+        const endTurn = p1.page.locator('[data-testid="bg-end-turn-btn"]');
+        const rollBtn = p1.page.locator('[data-testid="bg-roll-dice-btn"]');
+        if ((await chooseDest.count()) > 0 && (await chooseDest.isEnabled().catch(() => false))) {
+          await chooseDest.click();
+        } else if ((await skipLoc.count()) > 0 && (await skipLoc.isEnabled().catch(() => false))) {
+          await skipLoc.click();
+        } else if ((await skipCard.count()) > 0 && (await skipCard.isEnabled().catch(() => false))) {
+          await skipCard.click();
+        } else if ((await useCard.count()) > 0 && (await useCard.isEnabled().catch(() => false))) {
+          await useCard.click();
+        } else if ((await endTurn.count()) > 0 && (await endTurn.isEnabled().catch(() => false))) {
+          await endTurn.click();
+        } else if ((await rollBtn.count()) > 0 && (await rollBtn.isEnabled().catch(() => false))) {
+          await rollBtn.click();
+        }
+        await p1.page.waitForTimeout(100);
+      }
     };
 
     await advancePeersUntilP1Active();
@@ -1769,13 +1798,372 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       'Checkpoint 3: secret role restored open directly during opponent turn',
     );
 
-    // Advance back to P1 -> verify Dice Tray turn spotlight + 3D dice overlay -> Checkpoint 4 F5 reload must NOT replay dice VFX
-    await advancePeersUntilP1Active();
+    // Direct Real-GameBoard Audit:
+    // (A) Zero Frame-1 Dice Flicker + Shared Timeline (Dice Settled -> Destination Highlight -> Pawn Glide)
+    // (B) Live Skip Animation on GameBoard
+    // (C) Live Reduced Motion on GameBoard
+    // (D) Checkpoint 4 F5 Reconnect idempotency + settled historical tray
+    await advancePeersUntilP1Active({ skipCombat: true });
     await p1.page.waitForSelector('[data-testid="bg-dice-tray"][data-turn-active="true"]', { timeout: UI_TIMEOUT });
-    if ((await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').count()) > 0) {
+    await p1.page
+      .locator('[data-testid="bg-vfx-dice-overlay"]')
+      .waitFor({ state: 'detached', timeout: 3000 })
+      .catch(() => undefined);
+    await p1.page.waitForFunction(
+      () => document.querySelector('[data-testid="bg-dice-tray"]')?.getAttribute('data-dice-settled') === 'true',
+      null,
+      { timeout: 3000, polling: 40 },
+    );
+
+    let zeroFlickerVerified = false;
+    let movedTimelineVerified = false;
+    for (let rollAttempt = 0; rollAttempt < 3 && !movedTimelineVerified; rollAttempt++) {
+      if ((await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').count()) === 0) break;
+
+      await p1.page.evaluate(() => {
+        const board = document.querySelector('[data-testid="boardgame-2d-board"]');
+        const tray = document.querySelector('[data-testid="bg-dice-tray"]');
+        const initialHeadline = tray?.querySelector('p')?.textContent?.trim() || '';
+        const findSelfLocId = () => {
+          const selfPawn = document.querySelector('[data-testid="bg-loc-pawn-self"]');
+          const tile = selfPawn?.closest('[data-testid^="bg-loc-"]');
+          return tile ? tile.getAttribute('data-testid').replace('bg-loc-', '') : null;
+        };
+        const initialLocId = findSelfLocId();
+        const initialTileRect = initialLocId
+          ? document.querySelector(`[data-testid="bg-loc-${initialLocId}"]`)?.getBoundingClientRect()
+          : null;
+        const pRect0 = document.querySelector('[data-testid="bg-loc-pawn-self"]')?.getBoundingClientRect();
+        const state = {
+          initialHeadline,
+          initialLocId,
+          initialPawnRect: pRect0
+            ? {
+                left: pRect0.left,
+                top: pRect0.top,
+                cx: pRect0.left + pRect0.width / 2,
+                cy: pRect0.top + pRect0.height / 2,
+              }
+            : null,
+          initialTileCenter: initialTileRect
+            ? {
+                x: initialTileRect.left + initialTileRect.width / 2,
+                y: initialTileRect.top + initialTileRect.height / 2,
+              }
+            : null,
+          rollStarted: false,
+          firstRollChangeAt: null,
+          firstUnsettledAt: null,
+          firstSettledAt: null,
+          firstDestHighlightAt: null,
+          firstDestHighlightLocId: null,
+          maxPawnDriftWhileUnsettled: 0,
+          pawnSampleWhileUnsettledCount: 0,
+          settledTransitions: [],
+          flickerViolations: [],
+          stopped: false,
+          rafId: 0,
+          observer: null,
+        };
+
+        const sample = (source) => {
+          const now = performance.now();
+          const tr = document.querySelector('[data-testid="bg-dice-tray"]');
+          const ov = document.querySelector('[data-testid="bg-vfx-dice-overlay"]');
+          const traySettled = tr?.getAttribute('data-dice-settled') || null;
+          const headline = tr?.querySelector('p')?.textContent?.trim() || '';
+          const trayText = tr?.textContent || '';
+          const ovSettled = ov?.getAttribute('data-dice-settled') || null;
+          const ovStage = ov?.getAttribute('data-dice-stage') || null;
+          const ovText = ov?.textContent || '';
+          const trayD6 = tr?.querySelector('[data-testid="bg-die-d6-3d"]')?.getAttribute('data-settled-value') || null;
+          const trayD4 = tr?.querySelector('[data-testid="bg-die-d4-3d"]')?.getAttribute('data-settled-value') || null;
+          const ovD6 = ov?.querySelector('[data-testid="bg-die-d6-3d"]')?.getAttribute('data-settled-value') || null;
+          const ovD4 = ov?.querySelector('[data-testid="bg-die-d4-3d"]')?.getAttribute('data-settled-value') || null;
+          const litDestIds = Array.from(
+            document.querySelectorAll('[data-testid^="bg-loc-"][data-destination-highlighted="true"]'),
+          ).map((el) => el.getAttribute('data-testid').replace('bg-loc-', ''));
+
+          const isIdleFallbackHeadline =
+            headline === 'Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)' ||
+            headline.startsWith('⚡ Lượt của bạn!');
+          if (
+            !state.rollStarted &&
+            (traySettled === 'false' ||
+              ov !== null ||
+              (headline !== state.initialHeadline && !isIdleFallbackHeadline))
+          ) {
+            state.rollStarted = true;
+            state.firstRollChangeAt = now;
+            if (traySettled !== 'false') {
+              state.flickerViolations.push(
+                `Frame-1 flicker: headline changed to "${headline}" with data-dice-settled=${traySettled}`,
+              );
+            }
+          }
+          if (!state.rollStarted) return;
+
+          const lastTr = state.settledTransitions[state.settledTransitions.length - 1];
+          if (traySettled && traySettled !== lastTr) {
+            state.settledTransitions.push(traySettled);
+          }
+
+          if (traySettled === 'false' || ovSettled === 'false') {
+            if (state.firstUnsettledAt === null) state.firstUnsettledAt = now;
+            if (state.firstSettledAt !== null) {
+              state.flickerViolations.push(`Oscillated settled true->false (+${Math.round(now - state.firstRollChangeAt)}ms)`);
+            }
+            if (trayD6 && trayD6 !== 'hidden') state.flickerViolations.push(`Tray D6 revealed early: ${trayD6}`);
+            if (trayD4 && trayD4 !== 'hidden') state.flickerViolations.push(`Tray D4 revealed early: ${trayD4}`);
+            if (ov && (ovD6 !== 'hidden' || ovD4 !== 'hidden')) {
+              state.flickerViolations.push(`Overlay dice revealed early (${ovD6}/${ovD4}) stage=${ovStage}`);
+            }
+            if (/=\s*\d+/.test(ovText) || ovText.includes('Tổng:') || ovText.includes('Kết quả:')) {
+              state.flickerViolations.push(`Overlay spoiled sum early: "${ovText}"`);
+            }
+            if (/tung\s+\d+\s*\+\s*\d+\s*=/.test(trayText) || trayText.includes('Điểm đến:') || trayText.includes('ĐỔ LẠI!')) {
+              state.flickerViolations.push(`Tray spoiled result early: "${trayText}"`);
+            }
+            if (litDestIds.length > 0) {
+              state.flickerViolations.push(`Destination highlighted before dice settled: ${litDestIds.join(',')}`);
+            }
+            if (source === 'raf') {
+              const pawnRect = document.querySelector('[data-testid="bg-loc-pawn-self"]')?.getBoundingClientRect();
+              if (pawnRect && state.initialPawnRect) {
+                const drift = Math.hypot(
+                  pawnRect.left + pawnRect.width / 2 - state.initialPawnRect.cx,
+                  pawnRect.top + pawnRect.height / 2 - state.initialPawnRect.cy,
+                );
+                state.pawnSampleWhileUnsettledCount += 1;
+                if (drift > state.maxPawnDriftWhileUnsettled) {
+                  state.maxPawnDriftWhileUnsettled = drift;
+                }
+              }
+            }
+          } else if (state.firstUnsettledAt !== null && traySettled === 'true') {
+            if (state.firstSettledAt === null) state.firstSettledAt = now;
+            if (litDestIds.length > 0 && state.firstDestHighlightAt === null) {
+              state.firstDestHighlightAt = now;
+              state.firstDestHighlightLocId = litDestIds[0];
+            }
+          }
+        };
+
+        state.observer = new MutationObserver(() => sample('mut'));
+        state.observer.observe(board, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          characterData: true,
+        });
+        const tick = () => {
+          sample('raf');
+          if (!state.stopped) state.rafId = requestAnimationFrame(tick);
+        };
+        state.rafId = requestAnimationFrame(tick);
+        window.__bgRealBoardProbe = state;
+      });
+
       await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').click();
-      await p1.page.waitForSelector('[data-testid="bg-vfx-dice-overlay"]', { timeout: 5000 }).catch(() => undefined);
+      await p1.page.waitForFunction(
+        () => Boolean(window.__bgRealBoardProbe?.firstUnsettledAt),
+        null,
+        { timeout: 4000, polling: 20 },
+      );
+      await p1.page.waitForFunction(
+        () =>
+          Boolean(window.__bgRealBoardProbe?.firstSettledAt) &&
+          !document.querySelector('[data-testid="bg-vfx-dice-overlay"]'),
+        null,
+        { timeout: 5000, polling: 40 },
+      );
+      await p1.page.waitForTimeout(750);
+
+      const probe = await p1.page.evaluate(() => {
+        const s = window.__bgRealBoardProbe;
+        s.stopped = true;
+        s.observer?.disconnect();
+        if (s.rafId) cancelAnimationFrame(s.rafId);
+        const selfPawn = document.querySelector('[data-testid="bg-loc-pawn-self"]');
+        const finalTile = selfPawn?.closest('[data-testid^="bg-loc-"]');
+        const finalLocId = finalTile ? finalTile.getAttribute('data-testid').replace('bg-loc-', '') : null;
+        const ftRect = finalTile?.getBoundingClientRect();
+        const fpRect = selfPawn?.getBoundingClientRect();
+        const tray = document.querySelector('[data-testid="bg-dice-tray"]');
+        return {
+          initialLocId: s.initialLocId,
+          finalLocId,
+          rollStarted: s.rollStarted,
+          unsettledDurationMs:
+            s.firstSettledAt !== null && s.firstUnsettledAt !== null
+              ? Math.round(s.firstSettledAt - s.firstUnsettledAt)
+              : 0,
+          firstSettledAt: s.firstSettledAt,
+          firstDestHighlightAt: s.firstDestHighlightAt,
+          firstDestHighlightLocId: s.firstDestHighlightLocId,
+          maxPawnDriftWhileUnsettled: Math.round(s.maxPawnDriftWhileUnsettled),
+          pawnSampleWhileUnsettledCount: s.pawnSampleWhileUnsettledCount,
+          tileDistance:
+            ftRect && s.initialTileCenter
+              ? Math.round(
+                  Math.hypot(
+                    ftRect.left + ftRect.width / 2 - s.initialTileCenter.x,
+                    ftRect.top + ftRect.height / 2 - s.initialTileCenter.y,
+                  ),
+                )
+              : 0,
+          finalDistToDestTile:
+            ftRect && fpRect
+              ? Math.round(
+                  Math.hypot(
+                    fpRect.left + fpRect.width / 2 - (ftRect.left + ftRect.width / 2),
+                    fpRect.top + fpRect.height / 2 - (ftRect.top + ftRect.height / 2),
+                  ),
+                )
+              : 0,
+          settledTransitions: s.settledTransitions,
+          flickerViolations: s.flickerViolations,
+          trayD6After: tray?.querySelector('[data-testid="bg-die-d6-3d"]')?.getAttribute('data-settled-value'),
+        };
+      });
+
+      assert.equal(probe.rollStarted, true, 'Real GameBoard roll must trigger state transition');
+      assert.deepEqual(
+        probe.flickerViolations,
+        [],
+        `Real GameBoard Frame-1 / early reveal violations: ${probe.flickerViolations.join('; ')}`,
+      );
+      assert.ok(
+        probe.unsettledDurationMs >= 750,
+        `Real GameBoard dice tumble duration too short: ${probe.unsettledDurationMs}ms`,
+      );
+      assert.match(probe.trayD6After || '', /^[1-6]$/, 'Settled tray D6 must expose server value');
+      zeroFlickerVerified = true;
+
+      if (probe.finalLocId && probe.initialLocId && probe.finalLocId !== probe.initialLocId) {
+        assert.ok(
+          probe.firstDestHighlightAt !== null && probe.firstDestHighlightAt >= probe.firstSettledAt,
+          `Destination highlight must fire at/after diceSettleAt (settled=${probe.firstSettledAt}, hl=${probe.firstDestHighlightAt})`,
+        );
+        assert.equal(
+          probe.firstDestHighlightLocId,
+          probe.finalLocId,
+          `Destination highlight loc mismatch: ${probe.firstDestHighlightLocId} vs ${probe.finalLocId}`,
+        );
+        if (probe.tileDistance > 70 && probe.pawnSampleWhileUnsettledCount > 0) {
+          assert.ok(
+            probe.maxPawnDriftWhileUnsettled < Math.max(48, probe.tileDistance * 0.4),
+            `Pawn drifted ${probe.maxPawnDriftWhileUnsettled}px during dice roll (tileDistance=${probe.tileDistance}px) — expected hold until diceSettleAtMs`,
+          );
+        }
+        movedTimelineVerified = true;
+      }
     }
+    assert.equal(zeroFlickerVerified, true, 'Real GameBoard zero-flicker roll probe must run');
+
+    // Finish turn passively -> Check (B): Skip Animation mid-roll on real GameBoard
+    await finishP1TurnPassively();
+    await advancePeersUntilP1Active({ skipCombat: true });
+    await p1.page.waitForSelector('[data-testid="bg-board-roll-dice-btn"]', { timeout: UI_TIMEOUT });
+    await p1.page
+      .locator('[data-testid="bg-vfx-dice-overlay"]')
+      .waitFor({ state: 'detached', timeout: 3000 })
+      .catch(() => undefined);
+    await p1.page.waitForFunction(
+      () => document.querySelector('[data-testid="bg-dice-tray"]')?.getAttribute('data-dice-settled') === 'true',
+      null,
+      { timeout: 3000, polling: 40 },
+    );
+    await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-vfx-dice-overlay"][data-dice-settled="false"]', {
+      timeout: 3000,
+    });
+    await p1.page.waitForSelector('[data-testid="bg-skip-vfx-btn"]', { timeout: 2000 });
+    await p1.page.locator('[data-testid="bg-skip-vfx-btn"]').click();
+    await p1.page.locator('[data-testid="bg-vfx-dice-overlay"]').waitFor({ state: 'detached', timeout: 800 });
+    const afterSkipTrayMeta = await p1.page.evaluate(() => {
+      const tr = document.querySelector('[data-testid="bg-dice-tray"]');
+      return {
+        settled: tr?.getAttribute('data-dice-settled'),
+        d6Val: tr?.querySelector('[data-testid="bg-die-d6-3d"]')?.getAttribute('data-settled-value'),
+      };
+    });
+    assert.equal(afterSkipTrayMeta.settled, 'true', 'Skip Animation on GameBoard must settle dice tray immediately');
+    assert.match(afterSkipTrayMeta.d6Val || '', /^[1-6]$/, 'Skip Animation must reveal settled D6 value');
+
+    // Finish turn passively -> Check (C): Reduced Motion on real GameBoard (zero unsettled frames)
+    await finishP1TurnPassively();
+    await advancePeersUntilP1Active({ skipCombat: true });
+    await p1.page.waitForSelector('[data-testid="bg-board-roll-dice-btn"]', { timeout: UI_TIMEOUT });
+    await p1.page
+      .locator('[data-testid="bg-vfx-dice-overlay"]')
+      .waitFor({ state: 'detached', timeout: 3000 })
+      .catch(() => undefined);
+    await p1.page.waitForFunction(
+      () => document.querySelector('[data-testid="bg-dice-tray"]')?.getAttribute('data-dice-settled') === 'true',
+      null,
+      { timeout: 3000, polling: 40 },
+    );
+    await p1.page.locator('[data-testid="bg-vfx-motion-toggle-btn"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-vfx-stage"][data-reduced-motion="true"]', {
+      timeout: 3000,
+    });
+    await p1.page.evaluate(() => {
+      const board = document.querySelector('[data-testid="boardgame-2d-board"]');
+      const tray = document.querySelector('[data-testid="bg-dice-tray"]');
+      const rmProbe = {
+        initialHeadline: tray?.querySelector('p')?.textContent?.trim() || '',
+        headlineChanged: false,
+        unsettledSeen: 0,
+        observer: null,
+      };
+      const checkRm = () => {
+        const tr = document.querySelector('[data-testid="bg-dice-tray"]');
+        const ov = document.querySelector('[data-testid="bg-vfx-dice-overlay"]');
+        const hl = tr?.querySelector('p')?.textContent?.trim() || '';
+        const isIdleFallbackHeadline =
+          hl === 'Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)' || hl.startsWith('⚡ Lượt của bạn!');
+        if ((hl !== rmProbe.initialHeadline && !isIdleFallbackHeadline) || ov) {
+          rmProbe.headlineChanged = true;
+        }
+        if (tr?.getAttribute('data-dice-settled') === 'false' || ov?.getAttribute('data-dice-settled') === 'false') {
+          rmProbe.unsettledSeen += 1;
+        }
+      };
+      rmProbe.observer = new MutationObserver(checkRm);
+      rmProbe.observer.observe(board, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        characterData: true,
+      });
+      window.__bgRmRollProbe = rmProbe;
+    });
+    await p1.page.locator('[data-testid="bg-board-roll-dice-btn"]').click();
+    await p1.page.waitForFunction(
+      () => Boolean(window.__bgRmRollProbe?.headlineChanged),
+      null,
+      { timeout: 4000, polling: 20 },
+    );
+    const rmResult = await p1.page.evaluate(() => {
+      const p = window.__bgRmRollProbe;
+      p.observer?.disconnect();
+      return {
+        unsettledSeen: p.unsettledSeen,
+        settled: document.querySelector('[data-testid="bg-dice-tray"]')?.getAttribute('data-dice-settled'),
+      };
+    });
+    assert.equal(rmResult.unsettledSeen, 0, 'Reduced Motion on GameBoard must produce zero unsettled dice frames');
+    assert.equal(rmResult.settled, 'true', 'Reduced Motion on GameBoard must settle immediately');
+    await p1.page.locator('[data-testid="bg-vfx-motion-toggle-btn"]').click();
+    await p1.page.waitForSelector('[data-testid="bg-vfx-stage"][data-reduced-motion="false"]', {
+      timeout: 3000,
+    });
+    await p1.page
+      .locator('[data-testid="bg-vfx-dice-overlay"]')
+      .waitFor({ state: 'detached', timeout: 1500 })
+      .catch(() => undefined);
+
     for (let s = 0; s < 5; s++) {
       if ((await p1.page.locator('[data-testid="bg-reveal-role-btn"]').count()) > 0) break;
       if ((await p1.page.locator('[data-testid="bg-roll-dice-btn"]').count()) > 0) {
@@ -1791,9 +2179,14 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.locator('[data-testid="bg-confirm-reveal-btn"]').click();
     await p1.page.waitForSelector('[data-testid="bg-last-reveal-banner"]', { timeout: UI_TIMEOUT });
 
-    // Checkpoint 4: Reload after voluntary role revelation — must NOT replay historical DICE_ROLL overlay
+    // Checkpoint 4: Reload after voluntary role revelation — must NOT replay historical DICE_ROLL overlay & tray stays settled
     await reloadAndRestoreTo('[data-testid="boardgame-2d-board"]');
     assert.equal(await p1.page.locator('[data-testid="bg-vfx-dice-overlay"]').count(), 0, 'F5 reload must not replay completed dice roll VFX');
+    assert.equal(
+      await p1.page.locator('[data-testid="bg-dice-tray"]').getAttribute('data-dice-settled'),
+      'true',
+      'F5 reload must keep historical dice tray settled (never stuck masked)',
+    );
     assert.equal(p1.audit.selfPlayerId, p1IdBefore, 'Checkpoint 4: must preserve exact playerId');
     await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: UI_TIMEOUT });
     const roleCardTextC4 = await p1.page.locator('[data-testid="bg-role-card-secret"]').innerText();

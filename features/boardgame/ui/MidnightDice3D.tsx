@@ -15,12 +15,41 @@ import { DiceD4Svg, DiceD6Svg } from './BoardGameArt';
 
 export type DiceRollStage = 'idle' | 'windup' | 'tumble' | 'decelerate' | 'settled';
 
+export type DiceRollQualityTier = 'high' | 'balanced' | 'low';
+
 export interface DiceStageTimings {
   windupEndMs: number;
   tumbleEndMs: number;
   settleAtMs: number;
   totalMs: number;
 }
+
+export interface DiceRollChoreographyInput {
+  diceKind: 'move' | 'attack';
+  qualityTier?: DiceRollQualityTier;
+  pawnGlideDurationMs?: number;
+  reducedMotion?: boolean;
+  hasDestinationMove?: boolean;
+}
+
+export interface DiceRollChoreographyTimeline {
+  windupEndMs: number;
+  tumbleEndMs: number;
+  diceSettleAtMs: number;
+  destHighlightStartMs: number;
+  pawnGlideStartMs: number;
+  pawnGlideDurationMs: number;
+  pawnTouchdownAtMs: number;
+  pawnCushionDurationMs: number;
+  diceOverlayEndMs: number;
+  destHighlightEndMs: number;
+}
+
+const DEFAULT_GLIDE_MS_BY_TIER: Record<DiceRollQualityTier, number> = {
+  high: 520,
+  balanced: 340,
+  low: 0,
+};
 
 /**
  * Chia 4 giai đoạn lăn xúc xắc tất định từ tổng thời lượng (mặc định 1.2–1.5s):
@@ -46,6 +75,108 @@ export function resolveDiceStageTimings(
     tumbleEndMs: Math.round(totalMs * 0.62),
     settleAtMs: Math.round(totalMs * 0.77),
     totalMs,
+  };
+}
+
+/**
+ * Một timeline duy nhất điều phối đồng bộ 3 pha sau mỗi lượt tung xúc xắc:
+ *   Dice Settled (`diceSettleAtMs`) -> Destination Highlight (`destHighlightStartMs`) -> Pawn Glide (`pawnGlideStartMs`).
+ * Mọi UI component (VFX Queue, Sound, Tile Highlight, FLIP Pawn Glide) dùng chung hàm thuần này.
+ */
+export function buildDiceRollTimeline({
+  diceKind,
+  qualityTier = 'high',
+  pawnGlideDurationMs,
+  reducedMotion = false,
+  hasDestinationMove = true,
+}: DiceRollChoreographyInput): DiceRollChoreographyTimeline {
+  if (reducedMotion) {
+    return {
+      windupEndMs: 0,
+      tumbleEndMs: 0,
+      diceSettleAtMs: 0,
+      destHighlightStartMs: 0,
+      pawnGlideStartMs: 0,
+      pawnGlideDurationMs: 0,
+      pawnTouchdownAtMs: 0,
+      pawnCushionDurationMs: 0,
+      diceOverlayEndMs: 240,
+      destHighlightEndMs: hasDestinationMove ? 650 : 0,
+    };
+  }
+
+  const baseDurationByTier =
+    qualityTier === 'low'
+      ? diceKind === 'attack'
+        ? 1200
+        : 1220
+      : qualityTier === 'balanced'
+        ? diceKind === 'attack'
+          ? 1240
+          : 1300
+        : diceKind === 'attack'
+          ? 1320
+          : 1420;
+
+  const stageTimings = resolveDiceStageTimings(baseDurationByTier, false);
+  const glideMs = Math.max(
+    0,
+    Math.round(pawnGlideDurationMs ?? DEFAULT_GLIDE_MS_BY_TIER[qualityTier]),
+  );
+  const highlightLeadMs = glideMs > 0 ? (qualityTier === 'high' ? 85 : 70) : 0;
+  const destHighlightStartMs = stageTimings.settleAtMs;
+  const pawnGlideStartMs = destHighlightStartMs + highlightLeadMs;
+  const pawnTouchdownAtMs = pawnGlideStartMs + glideMs;
+  const pawnCushionDurationMs = glideMs > 0 ? 150 : 0;
+  const destHighlightEndMs = hasDestinationMove
+    ? Math.max(
+        stageTimings.totalMs + 220,
+        pawnTouchdownAtMs + pawnCushionDurationMs + 320,
+      )
+    : 0;
+
+  return {
+    windupEndMs: stageTimings.windupEndMs,
+    tumbleEndMs: stageTimings.tumbleEndMs,
+    diceSettleAtMs: stageTimings.settleAtMs,
+    destHighlightStartMs,
+    pawnGlideStartMs,
+    pawnGlideDurationMs: glideMs,
+    pawnTouchdownAtMs,
+    pawnCushionDurationMs,
+    diceOverlayEndMs: stageTimings.totalMs,
+    destHighlightEndMs,
+  };
+}
+
+/**
+ * Timeline đồng bộ cho di chuyển chọn trực tiếp không qua bước lăn xúc xắc (ví dụ tổng 7 / La Bàn).
+ */
+export function buildDirectMoveTimeline({
+  pawnGlideDurationMs = 520,
+  reducedMotion = false,
+}: {
+  pawnGlideDurationMs?: number;
+  reducedMotion?: boolean;
+}): DiceRollChoreographyTimeline {
+  const glideMs = reducedMotion ? 0 : Math.max(0, Math.round(pawnGlideDurationMs));
+  const pawnGlideStartMs = glideMs > 0 ? 75 : 0;
+  const pawnTouchdownAtMs = pawnGlideStartMs + glideMs;
+  const pawnCushionDurationMs = glideMs > 0 ? 150 : 0;
+
+  return {
+    windupEndMs: 0,
+    tumbleEndMs: 0,
+    diceSettleAtMs: 0,
+    destHighlightStartMs: 0,
+    pawnGlideStartMs,
+    pawnGlideDurationMs: glideMs,
+    pawnTouchdownAtMs,
+    pawnCushionDurationMs,
+    diceOverlayEndMs: 0,
+    destHighlightEndMs: reducedMotion
+      ? 550
+      : Math.max(650, pawnTouchdownAtMs + pawnCushionDurationMs + 280),
   };
 }
 

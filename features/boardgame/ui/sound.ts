@@ -454,8 +454,13 @@ export function playCardFlip(): void {
 }
 
 /** Tung xúc xắc 3D: cốc lắc ban đầu + các nhịp nảy giảm dần + hợp âm khóa kết quả lúc dừng */
-export function playDiceRoll(freeChoice = false, isAttack = false, durationMs = 1400): void {
-  const isFast = durationMs <= 360;
+export function playDiceRoll(
+  freeChoice = false,
+  isAttack = false,
+  durationMs = 1400,
+  settleAtMs?: number,
+): void {
+  const isFast = durationMs <= 360 || (typeof settleAtMs === 'number' && settleAtMs <= 0);
   if (isFast) {
     playLayeredCue(
       [
@@ -476,7 +481,8 @@ export function playDiceRoll(freeChoice = false, isAttack = false, durationMs = 
     return;
   }
 
-  const settleSec = Math.max(0.72, Math.min(1.16, (durationMs * 0.77) / 1000));
+  const rawSettleMs = typeof settleAtMs === 'number' ? settleAtMs : durationMs * 0.77;
+  const settleSec = Math.max(0.72, Math.min(1.18, rawSettleMs / 1000));
   playLayeredCue(
     [
       // Nảy thầm mặt gỗ bàn chơi KTX theo nhịp va chạm
@@ -860,7 +866,12 @@ export function playSoundForVisualEvent(
 
   switch (event.kind) {
     case 'DICE_ROLL':
-      playDiceRoll(event.freeChoice, event.diceKind === 'attack', event.durationMs);
+      playDiceRoll(
+        event.freeChoice,
+        event.diceKind === 'attack',
+        event.durationMs,
+        event.settleAtMs,
+      );
       return true;
 
     case 'CARD_DRAW':

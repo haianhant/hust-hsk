@@ -10,9 +10,13 @@ const assert = require('node:assert/strict');
 
 const {
   VisualEventTracker,
+  buildDiceRollEventFromSnapshot,
+  computeDiceSig,
   extractVisualEventsFromDiff,
 } = require('../features/boardgame/ui/vfx-queue.ts');
 const {
+  buildDiceRollTimeline,
+  buildDirectMoveTimeline,
   isDiceResultRevealed,
   resolveDiceRollStage,
   resolveDiceStageTimings,
@@ -727,4 +731,165 @@ test('Game Feel P1 (7) — 3D Dice 4 giai đoạn (1.2–1.5s), chống lộ k�
   assert.equal(baselineEvents.length, 0);
   const dup = tracker.ingestSnapshot(nextMove, { selfPlayerId: 'p1', isSpectator: false });
   assert.equal(dup.length, 0);
+});
+
+test('Shared Timeline & Frame-1 Anti-Flicker (8) — Đồng bộ Dice Settled -> Highlight -> Pawn Glide & Chống lóe Frame 1', () => {
+  // 1) Timeline đồng bộ chặt chẽ trên mọi quality tier + reducedMotion
+  for (const tier of ['high', 'balanced', 'low']) {
+    const glideDur = tier === 'high' ? 520 : tier === 'balanced' ? 340 : 0;
+    const tl = buildDiceRollTimeline({
+      diceKind: 'move',
+      qualityTier: tier,
+      pawnGlideDurationMs: glideDur,
+      reducedMotion: false,
+      hasDestinationMove: true,
+    });
+    assert.ok(tl.windupEndMs > 0 && tl.windupEndMs < tl.tumbleEndMs);
+    assert.ok(tl.tumbleEndMs < tl.diceSettleAtMs);
+    assert.equal(
+      tl.diceSettleAtMs,
+      tl.destHighlightStartMs,
+      `${tier}: destHighlightStartMs phải khớp đúng diceSettleAtMs`,
+    );
+    assert.ok(
+      tl.pawnGlideStartMs >= tl.destHighlightStartMs,
+      `${tier}: pawnGlideStartMs (${tl.pawnGlideStartMs}) không được chạy trước destHighlightStartMs (${tl.destHighlightStartMs})`,
+    );
+    if (glideDur > 0) {
+      assert.ok(
+        tl.pawnGlideStartMs > tl.destHighlightStartMs,
+        `${tier}: pawnGlideStartMs phải nhường nhịp cho beacon đích sáng trước`,
+      );
+    }
+    assert.equal(tl.pawnTouchdownAtMs, tl.pawnGlideStartMs + tl.pawnGlideDurationMs);
+    assert.ok(
+      tl.destHighlightEndMs > tl.pawnTouchdownAtMs && tl.destHighlightEndMs > tl.diceOverlayEndMs,
+      `${tier}: highlight đích phải giữ sáng qua lúc đáp quân cờ`,
+    );
+  }
+
+  const rmTl = buildDiceRollTimeline({
+    diceKind: 'move',
+    qualityTier: 'high',
+    pawnGlideDurationMs: 520,
+    reducedMotion: true,
+    hasDestinationMove: true,
+  });
+  assert.equal(rmTl.diceSettleAtMs, 0);
+  assert.equal(rmTl.destHighlightStartMs, 0);
+  assert.equal(rmTl.pawnGlideStartMs, 0);
+  assert.equal(rmTl.pawnGlideDurationMs, 0);
+  assert.equal(rmTl.pawnTouchdownAtMs, 0);
+  assert.ok(rmTl.diceOverlayEndMs <= 260);
+
+  const directTl = buildDirectMoveTimeline({ pawnGlideDurationMs: 520, reducedMotion: false });
+  assert.equal(directTl.destHighlightStartMs, 0);
+  assert.ok(directTl.pawnGlideStartMs > 0);
+  assert.equal(directTl.pawnTouchdownAtMs, directTl.pawnGlideStartMs + 520);
+
+  // 2) Chọn ô sau tổng 7 / La Bàn giữ nguyên lastDiceRoll.id không được phát trùng DICE_ROLL
+  const roll7Pub = makePubState({
+    turnNumber: 6,
+    turnPhase: 'CHOOSE_MOVE',
+    lastDiceRoll: {
+      id: 'roll-6-1000',
+      round: 2,
+      atMs: 1000,
+      kind: 'move',
+      playerId: 'p1',
+      displayName: 'Minh An',
+      d6: 4,
+      d4: 3,
+      total: 7,
+      rerollRequired: false,
+      freeChoice: true,
+      resolvedLocation: null,
+    },
+  });
+  const chooseDestPub = {
+    ...roll7Pub,
+    turnPhase: 'LOCATION_ACTION',
+    players: roll7Pub.players.map((p) => (p.playerId === 'p1' ? { ...p, location: 'court' } : p)),
+    lastDiceRoll: {
+      ...roll7Pub.lastDiceRoll,
+      resolvedLocation: 'court',
+    },
+  };
+  assert.equal(computeDiceSig(roll7Pub), computeDiceSig(chooseDestPub));
+  const chooseEvents = extractVisualEventsFromDiff(roll7Pub, chooseDestPub, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  assert.equal(
+    chooseEvents.some((e) => e.kind === 'DICE_ROLL'),
+    false,
+    'CHOOSE_DEST cùng roll id không được kích hoạt lại DICE_ROLL',
+  );
+
+  // 3) peekPendingDiceRoll phát hiện ngay trong render Frame 1 nhưng không đánh dấu sai khi mới mount / F5
+  const freshTracker = new VisualEventTracker();
+  const initialWithOldRoll = makePubState({
+    turnNumber: 3,
+    turnPhase: 'MAIN_ACTION',
+    lastDiceRoll: {
+      id: 'roll-3-900',
+      round: 1,
+      atMs: 900,
+      kind: 'move',
+      playerId: 'p2',
+      displayName: 'Vy Hà',
+      d6: 2,
+      d4: 2,
+      total: 4,
+      rerollRequired: false,
+      freeChoice: false,
+      resolvedLocation: 'canteen',
+    },
+  });
+  assert.equal(
+    freshTracker.peekPendingDiceRoll(initialWithOldRoll, false),
+    null,
+    'Chưa có baseline (mount / F5 reconnect) thì peekPendingDiceRoll phải trả về null',
+  );
+
+  freshTracker.seedBaseline(initialWithOldRoll, { selfPlayerId: 'p1', isSpectator: false });
+  assert.equal(freshTracker.peekPendingDiceRoll(initialWithOldRoll, false), null);
+
+  const brandNewRollState = makePubState({
+    turnNumber: 4,
+    turnPhase: 'LOCATION_ACTION',
+    players: initialWithOldRoll.players.map((p) =>
+      p.playerId === 'p1' ? { ...p, location: 'radio' } : p,
+    ),
+    lastDiceRoll: {
+      id: 'roll-4-2000',
+      round: 2,
+      atMs: 2000,
+      kind: 'move',
+      playerId: 'p1',
+      displayName: 'Minh An',
+      d6: 5,
+      d4: 4,
+      total: 9,
+      rerollRequired: false,
+      freeChoice: false,
+      resolvedLocation: 'radio',
+    },
+  });
+  const pendingEv = freshTracker.peekPendingDiceRoll(brandNewRollState, false);
+  assert.ok(pendingEv, 'Snapshot mới có lastDiceRoll mới phải kích hoạt pending ngay ở Frame 1');
+  assert.equal(pendingEv.d6, 5);
+  assert.equal(pendingEv.d4, 4);
+  assert.equal(isDiceResultRevealed('windup'), false);
+  // Gọi peek lần 2 trước useEffect vẫn trả kết quả thuần túy y hệt
+  const builtSnap = buildDiceRollEventFromSnapshot(brandNewRollState, false);
+  assert.equal(freshTracker.peekPendingDiceRoll(brandNewRollState, false)?.id, builtSnap.id);
+
+  // Sau khi ingestSnapshot hoặc acknowledgeSnapshotDice thì peek phải trở về null
+  const ingested = freshTracker.ingestSnapshot(brandNewRollState, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  assert.equal(ingested.filter((e) => e.kind === 'DICE_ROLL').length, 1);
+  assert.equal(freshTracker.peekPendingDiceRoll(brandNewRollState, false), null);
 });

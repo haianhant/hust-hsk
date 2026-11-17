@@ -9,6 +9,11 @@
 
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { BoardGameLocationId } from '@/shared/contracts/boardgame';
+import {
+  buildDiceRollTimeline,
+  buildDirectMoveTimeline,
+  type DiceRollQualityTier,
+} from './MidnightDice3D';
 import { playPawnTouchdown } from './sound';
 
 export interface PawnGlideTrackable {
@@ -22,18 +27,18 @@ export function useSmoothPawnGlide({
   players,
   matchId,
   reducedMotion,
+  qualityTier = 'high',
   durationMs = 520,
   diceRollSignature = '',
-  diceHoldDelayMs = 960,
   skipGeneration = 0,
 }: {
   containerRef: React.RefObject<HTMLDivElement>;
   players: readonly PawnGlideTrackable[];
   matchId: string;
   reducedMotion: boolean;
+  qualityTier?: DiceRollQualityTier;
   durationMs?: number;
   diceRollSignature?: string;
-  diceHoldDelayMs?: number;
   skipGeneration?: number;
 }) {
   const prevLocRectsRef = useRef<Map<string, DOMRect>>(new Map());
@@ -84,15 +89,24 @@ export function useSmoothPawnGlide({
       Boolean(diceRollSignature) && prevDiceSigRef.current !== diceRollSignature;
     prevDiceSigRef.current = diceRollSignature;
 
+    const timeline = rollChangedThisCommit
+      ? buildDiceRollTimeline({
+          diceKind: 'move',
+          qualityTier,
+          pawnGlideDurationMs: durationMs,
+          reducedMotion,
+          hasDestinationMove: true,
+        })
+      : buildDirectMoveTimeline({
+          pawnGlideDurationMs: durationMs,
+          reducedMotion,
+        });
+
     const nextRects = new Map<string, DOMRect>();
     const nextLocations = new Map<string, BoardGameLocationId>();
-    const effectiveMs = Math.max(0, Math.round(durationMs));
-    const holdDelay =
-      reducedMotion || effectiveMs <= 0
-        ? 0
-        : rollChangedThisCommit
-          ? Math.max(0, Math.round(diceHoldDelayMs))
-          : 90;
+    const holdDelay = timeline.pawnGlideStartMs;
+    const flightMs = timeline.pawnGlideDurationMs;
+    const cushionMs = timeline.pawnCushionDurationMs;
 
     for (const p of players) {
       nextLocations.set(p.playerId, p.location);
@@ -107,7 +121,7 @@ export function useSmoothPawnGlide({
 
       if (
         !reducedMotion &&
-        effectiveMs > 0 &&
+        (flightMs > 0 || holdDelay > 0) &&
         prevLoc &&
         prevLoc !== p.location &&
         prevRect &&
@@ -119,47 +133,99 @@ export function useSmoothPawnGlide({
         const dy = prevRect.top - curRect.top;
         if (Math.hypot(dx, dy) > 4) {
           const prevZ = el.style.zIndex;
-          el.style.zIndex = '25';
-          const cushionMs = 150;
-          const totalMs = holdDelay + effectiveMs + cushionMs;
-          const holdFrac = Math.min(0.75, holdDelay / totalMs);
-          const midFrac = holdFrac + (effectiveMs / totalMs) * 0.48;
-          const touchFrac = Math.min(0.95, (holdDelay + effectiveMs) / totalMs);
+          const tileEl = el.closest<HTMLElement>('[data-testid^="bg-loc-"]');
+          const prevTileZ = tileEl ? tileEl.style.zIndex : '';
+          el.style.zIndex = '40';
+          if (tileEl) {
+            tileEl.style.zIndex = '40';
+          }
 
+          if (flightMs <= 0) {
+            // Mức Low: giữ quân cờ ở ô gốc tới đúng khoảnh khắc diceSettleAtMs rồi chốt dứt điểm
+            const holdAnim = el.animate(
+              [
+                { transform: `translate3d(${dx}px, ${dy}px, 0)`, offset: 0 },
+                { transform: 'translate3d(0, 0, 0)', offset: 1 },
+              ],
+              {
+                duration: holdDelay,
+                easing: 'steps(1, end)',
+                fill: 'none',
+              },
+            );
+            activeAnimsRef.current.add(holdAnim);
+            const cleanupLow = () => {
+              activeAnimsRef.current.delete(holdAnim);
+              el.style.zIndex = prevZ;
+              if (tileEl) tileEl.style.zIndex = prevTileZ;
+            };
+            holdAnim.onfinish = () => {
+              cleanupLow();
+              playPawnTouchdown();
+            };
+            holdAnim.oncancel = cleanupLow;
+            continue;
+          }
+
+          const totalMs = holdDelay + flightMs + cushionMs;
+          const holdFrac = Math.min(0.84, holdDelay / totalMs);
+          const midFrac = holdFrac + (flightMs / totalMs) * 0.48;
+          const touchFrac = Math.min(0.97, (holdDelay + flightMs) / totalMs);
+
+          // QUAN TRỌNG: easing tổng phải là 'linear' để pha giữ chân (holdFrac) không bị trượt sớm;
+          // easing mượt chỉ gắn vào đoạn bay [holdFrac -> touchFrac -> 1].
           const frames: Keyframe[] =
-            holdFrac > 0.01
+            holdFrac > 0.005
               ? [
-                  { transform: `translate3d(${dx}px, ${dy}px, 0) scale(1)`, offset: 0 },
-                  { transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.06)`, offset: holdFrac },
+                  {
+                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1)`,
+                    offset: 0,
+                    easing: 'linear',
+                  },
+                  {
+                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.06)`,
+                    offset: holdFrac,
+                    easing: 'ease-out',
+                  },
                   {
                     transform: `translate3d(${dx * 0.45}px, ${dy * 0.45 - 20}px, 0) scale(1.2)`,
                     offset: midFrac,
+                    easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                   },
                   {
                     transform: 'translate3d(0, 3px, 0) scale(1.07, 0.93)',
                     offset: touchFrac,
+                    easing: 'ease-out',
                   },
                   { transform: 'translate3d(0, 0, 0) scale(1)', offset: 1 },
                 ]
               : [
-                  { transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.05)`, offset: 0 },
+                  {
+                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.05)`,
+                    offset: 0,
+                    easing: 'ease-out',
+                  },
                   {
                     transform: `translate3d(${dx * 0.45}px, ${dy * 0.45 - 18}px, 0) scale(1.18)`,
                     offset: 0.45,
+                    easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                   },
-                  { transform: 'translate3d(0, 3px, 0) scale(1.06, 0.94)', offset: 0.84 },
+                  {
+                    transform: 'translate3d(0, 3px, 0) scale(1.06, 0.94)',
+                    offset: 0.84,
+                    easing: 'ease-out',
+                  },
                   { transform: 'translate3d(0, 0, 0) scale(1)', offset: 1 },
                 ];
 
           const anim = el.animate(frames, {
             duration: totalMs,
-            easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            easing: 'linear',
             fill: 'none',
           });
           activeAnimsRef.current.add(anim);
 
           let rippleTimerId: number | null = null;
-          const touchDelayMs = holdDelay + effectiveMs;
           const touchTimerId = window.setTimeout(() => {
             landTimersRef.current.delete(touchTimerId);
             playPawnTouchdown();
@@ -169,7 +235,7 @@ export function useSmoothPawnGlide({
               el.classList.remove('mn-pawn-touchdown-ripple');
             }, 440);
             landTimersRef.current.add(rippleTimerId);
-          }, touchDelayMs);
+          }, timeline.pawnTouchdownAtMs);
           landTimersRef.current.add(touchTimerId);
 
           const cleanup = () => {
@@ -177,6 +243,7 @@ export function useSmoothPawnGlide({
             window.clearTimeout(touchTimerId);
             landTimersRef.current.delete(touchTimerId);
             el.style.zIndex = prevZ;
+            if (tileEl) tileEl.style.zIndex = prevTileZ;
           };
           anim.onfinish = cleanup;
           anim.oncancel = () => {
@@ -189,5 +256,5 @@ export function useSmoothPawnGlide({
 
     prevLocRectsRef.current = nextRects;
     prevLocationsRef.current = nextLocations;
-  }, [containerRef, players, matchId, reducedMotion, durationMs, diceRollSignature, diceHoldDelayMs]);
+  }, [containerRef, players, matchId, reducedMotion, qualityTier, durationMs, diceRollSignature]);
 }

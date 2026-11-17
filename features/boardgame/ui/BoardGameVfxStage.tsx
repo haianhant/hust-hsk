@@ -25,8 +25,10 @@ import {
 import type { ResolvedGraphicsProfile } from './graphics-settings';
 import {
   MidnightDicePair3D,
+  buildDiceRollTimeline,
+  buildDirectMoveTimeline,
   isDiceResultRevealed,
-  resolveDiceStageTimings,
+  type DiceRollChoreographyTimeline,
   type DiceRollStage,
 } from './MidnightDice3D';
 import {
@@ -444,6 +446,7 @@ export interface BoardGameVfxState {
   activeDiceRoll: DiceRollVisualEvent | null;
   diceRollStage: DiceRollStage;
   isDiceSettled: boolean;
+  activeMoveTimeline: DiceRollChoreographyTimeline | null;
   highlightedLocationId: BoardGameLocationId | null;
   skipGeneration: number;
   activeCardDraw: {
@@ -487,6 +490,9 @@ export function useBoardGameVfxQueue({
     systemReducedMotion;
 
   const qualityTier = graphicsProfile?.tier ?? 'high';
+  const pawnGlideDurationMs =
+    graphicsProfile?.pawnGlideDurationMs ??
+    (qualityTier === 'low' ? 0 : qualityTier === 'balanced' ? 340 : 520);
   const dprCap = graphicsProfile?.dprCap ?? 2;
   const particleScale = graphicsProfile?.particleScale ?? (reducedMotion ? 0.25 : 1);
   const enableScreenShake = graphicsProfile
@@ -499,6 +505,8 @@ export function useBoardGameVfxQueue({
   reducedMotionRef.current = reducedMotion;
   const qualityTierRef = useRef(qualityTier);
   qualityTierRef.current = qualityTier;
+  const pawnGlideDurationMsRef = useRef(pawnGlideDurationMs);
+  pawnGlideDurationMsRef.current = pawnGlideDurationMs;
   const dprCapRef = useRef(dprCap);
   dprCapRef.current = dprCap;
   const particleScaleRef = useRef(particleScale);
@@ -510,9 +518,15 @@ export function useBoardGameVfxQueue({
   const [floatingPopups, setFloatingPopups] = useState<ActiveFloatingPopup[]>([]);
   const [activeDiceRoll, setActiveDiceRoll] = useState<DiceRollVisualEvent | null>(null);
   const [diceRollStage, setDiceRollStage] = useState<DiceRollStage>('idle');
+  const [activeMoveTimeline, setActiveMoveTimeline] =
+    useState<DiceRollChoreographyTimeline | null>(null);
   const [highlightedLocationId, setHighlightedLocationId] = useState<BoardGameLocationId | null>(null);
   const [skipGeneration, setSkipGeneration] = useState(0);
   const activeDiceIdRef = useRef<string | null>(null);
+  const highlightTokenRef = useRef<number>(0);
+  const prevPlayerLocationsRef = useRef<Map<string, BoardGameLocationId>>(new Map());
+  const publicGameRef = useRef(publicGame);
+  publicGameRef.current = publicGame;
   const [activeCardDraw, setActiveCardDraw] = useState<{
     event: CardDrawVisualEvent;
     revealedFace: boolean;
@@ -610,6 +624,7 @@ export function useBoardGameVfxQueue({
   const skipAllAnimations = useCallback(() => {
     clearAllTimers();
     stopAllBoardGameSounds();
+    trackerRef.current.acknowledgeSnapshotDice(publicGameRef.current);
     activeCombatAnimsRef.current = [];
     if (rafRef.current !== null) {
       window.cancelAnimationFrame(rafRef.current);
@@ -622,8 +637,10 @@ export function useBoardGameVfxQueue({
     setActiveCombatCount(0);
     setFloatingPopups([]);
     activeDiceIdRef.current = null;
+    highlightTokenRef.current += 1;
     setActiveDiceRoll(null);
     setDiceRollStage('idle');
+    setActiveMoveTimeline(null);
     setHighlightedLocationId(null);
     setSkipGeneration((n) => n + 1);
     setActiveCardDraw(null);
@@ -654,56 +671,73 @@ export function useBoardGameVfxQueue({
       for (const ev of events) {
         switch (ev.kind) {
           case 'DICE_ROLL': {
-            const rawDuration = reducedMotionRef.current
-              ? ev.durationMs
-              : qualityTierRef.current === 'low'
-                ? Math.max(1200, Math.round(ev.durationMs * 0.88))
-                : qualityTierRef.current === 'balanced'
-                  ? Math.max(1240, Math.round(ev.durationMs * 0.92))
-                  : ev.durationMs;
-            const timings = resolveDiceStageTimings(rawDuration, reducedMotionRef.current);
+            const hasDestinationMove = Boolean(
+              ev.diceKind === 'move' &&
+                ev.resolvedLocation &&
+                !ev.rerollRequired &&
+                !ev.freeChoice,
+            );
+            const timeline = buildDiceRollTimeline({
+              diceKind: ev.diceKind,
+              qualityTier: qualityTierRef.current,
+              pawnGlideDurationMs: pawnGlideDurationMsRef.current,
+              reducedMotion: reducedMotionRef.current,
+              hasDestinationMove,
+            });
             activeDiceIdRef.current = ev.id;
-            playSoundForVisualEvent({ ...ev, durationMs: timings.totalMs });
+            playSoundForVisualEvent({
+              ...ev,
+              durationMs: timeline.diceOverlayEndMs,
+              settleAtMs: timeline.diceSettleAtMs,
+            });
             setActiveDiceRoll(ev);
+            setActiveMoveTimeline(timeline);
 
-            if (timings.settleAtMs === 0) {
-              setDiceRollStage('settled');
-              if (ev.diceKind === 'move' && ev.resolvedLocation) {
-                const dest = ev.resolvedLocation;
-                setHighlightedLocationId(dest);
-                scheduleTimeout(() => {
+            const triggerDestHighlight = () => {
+              if (!hasDestinationMove || !ev.resolvedLocation) return;
+              const dest = ev.resolvedLocation;
+              const hlToken = ++highlightTokenRef.current;
+              setHighlightedLocationId(dest);
+              const holdDuration = Math.max(
+                0,
+                timeline.destHighlightEndMs - timeline.destHighlightStartMs,
+              );
+              scheduleTimeout(() => {
+                if (highlightTokenRef.current === hlToken) {
                   setHighlightedLocationId((cur) => (cur === dest ? null : cur));
-                }, 950);
-              }
+                }
+              }, holdDuration);
+            };
+
+            if (timeline.diceSettleAtMs <= 0) {
+              setDiceRollStage('settled');
+              triggerDestHighlight();
             } else {
+              highlightTokenRef.current += 1;
+              setHighlightedLocationId(null);
               setDiceRollStage('windup');
               scheduleTimeout(() => {
                 if (activeDiceIdRef.current === ev.id) setDiceRollStage('tumble');
-              }, timings.windupEndMs);
+              }, timeline.windupEndMs);
               scheduleTimeout(() => {
                 if (activeDiceIdRef.current === ev.id) setDiceRollStage('decelerate');
-              }, timings.tumbleEndMs);
+              }, timeline.tumbleEndMs);
               scheduleTimeout(() => {
                 if (activeDiceIdRef.current === ev.id) {
                   setDiceRollStage('settled');
-                  if (ev.diceKind === 'move' && ev.resolvedLocation) {
-                    const dest = ev.resolvedLocation;
-                    setHighlightedLocationId(dest);
-                    scheduleTimeout(() => {
-                      setHighlightedLocationId((cur) => (cur === dest ? null : cur));
-                    }, 1450);
-                  }
+                  triggerDestHighlight();
                 }
-              }, timings.settleAtMs);
+              }, timeline.diceSettleAtMs);
             }
 
             scheduleTimeout(() => {
               if (activeDiceIdRef.current === ev.id) {
                 activeDiceIdRef.current = null;
                 setDiceRollStage('idle');
+                setActiveMoveTimeline(null);
               }
               setActiveDiceRoll((curr) => (curr?.id === ev.id ? null : curr));
-            }, timings.totalMs);
+            }, timeline.diceOverlayEndMs);
             break;
           }
           case 'CARD_DRAW': {
@@ -802,6 +836,9 @@ export function useBoardGameVfxQueue({
     if (seenMatchRef.current !== publicGame.matchId) {
       seenMatchRef.current = publicGame.matchId;
       skipAllAnimations();
+      prevPlayerLocationsRef.current = new Map(
+        publicGame.players.map((p) => [p.playerId, p.location]),
+      );
       const opening = tracker.seedBaseline(publicGame, ctx);
       if (opening.length > 0) {
         enqueueEvents(opening);
@@ -813,6 +850,33 @@ export function useBoardGameVfxQueue({
     if (fresh.length > 0) {
       enqueueEvents(fresh);
     }
+
+    // Nếu người chơi di chuyển không qua event DICE_ROLL mới (ví dụ chọn ô sau tổng 7 / La Bàn)
+    // thì kích hoạt highlight đích theo timeline chọn trực tiếp đồng bộ với FLIP pawn glide.
+    if (!fresh.some((e) => e.kind === 'DICE_ROLL')) {
+      const movedPlayer = publicGame.players.find((p) => {
+        const prevLoc = prevPlayerLocationsRef.current.get(p.playerId);
+        return prevLoc !== undefined && prevLoc !== p.location;
+      });
+      if (movedPlayer) {
+        const directTimeline = buildDirectMoveTimeline({
+          pawnGlideDurationMs: pawnGlideDurationMsRef.current,
+          reducedMotion,
+        });
+        const dest = movedPlayer.location;
+        const hlToken = ++highlightTokenRef.current;
+        setHighlightedLocationId(dest);
+        scheduleTimeout(() => {
+          if (highlightTokenRef.current === hlToken) {
+            setHighlightedLocationId((cur) => (cur === dest ? null : cur));
+          }
+        }, directTimeline.destHighlightEndMs);
+      }
+    }
+
+    prevPlayerLocationsRef.current = new Map(
+      publicGame.players.map((p) => [p.playerId, p.location]),
+    );
   }, [
     publicGame,
     privateView,
@@ -820,6 +884,7 @@ export function useBoardGameVfxQueue({
     isSpectator,
     reducedMotion,
     enqueueEvents,
+    scheduleTimeout,
     skipAllAnimations,
   ]);
 
@@ -840,13 +905,32 @@ export function useBoardGameVfxQueue({
     };
   }, [clearAllTimers]);
 
-  const isDiceSettled = !activeDiceRoll || isDiceResultRevealed(diceRollStage);
+  // Suy xuất đồng bộ ngay trong frame render đầu tiên sau snapshot mới:
+  // ngăn GameBoard lóe kết quả server trước khi useEffect khởi tạo animation xúc xắc.
+  const pendingDiceRoll =
+    seenMatchRef.current === publicGame.matchId
+      ? trackerRef.current.peekPendingDiceRoll(publicGame, reducedMotion)
+      : null;
+  const effectiveActiveDiceRoll = pendingDiceRoll ?? activeDiceRoll;
+  const effectiveDiceRollStage: DiceRollStage = pendingDiceRoll
+    ? reducedMotion
+      ? 'settled'
+      : 'windup'
+    : activeDiceRoll
+      ? reducedMotion && !isDiceResultRevealed(diceRollStage)
+        ? 'settled'
+        : diceRollStage
+      : 'idle';
+  const effectiveIsDiceSettled =
+    !effectiveActiveDiceRoll || isDiceResultRevealed(effectiveDiceRollStage);
+  const effectiveHighlightedLocationId =
+    pendingDiceRoll && !reducedMotion ? null : highlightedLocationId;
 
   const hasActiveEffects =
     activeCombatCount > 0 ||
     floatingPopups.length > 0 ||
-    Boolean(activeDiceRoll) ||
-    Boolean(highlightedLocationId) ||
+    Boolean(effectiveActiveDiceRoll) ||
+    Boolean(effectiveHighlightedLocationId) ||
     Boolean(activeCardDraw) ||
     Boolean(activeCutIn) ||
     cutInQueue.length > 0;
@@ -854,10 +938,11 @@ export function useBoardGameVfxQueue({
   return {
     activeCombatCount,
     floatingPopups,
-    activeDiceRoll,
-    diceRollStage,
-    isDiceSettled,
-    highlightedLocationId,
+    activeDiceRoll: effectiveActiveDiceRoll,
+    diceRollStage: effectiveDiceRollStage,
+    isDiceSettled: effectiveIsDiceSettled,
+    activeMoveTimeline,
+    highlightedLocationId: effectiveHighlightedLocationId,
     skipGeneration,
     activeCardDraw,
     activeCutIn,
@@ -932,6 +1017,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
     <div
       data-testid="bg-vfx-stage"
       data-quality-tier={vfx.qualityTier}
+      data-reduced-motion={String(vfx.reducedMotion)}
       className="pointer-events-none absolute inset-0 z-[48] overflow-hidden"
     >
       {/* LỚP 1: SVG ĐƯỜNG NHẮM MỤC TIÊU */}

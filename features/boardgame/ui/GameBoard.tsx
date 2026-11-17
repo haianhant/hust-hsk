@@ -37,6 +37,7 @@ import MatchPostcard from './MatchPostcard';
 import MatchResult from './MatchResult';
 import { toggleSelectedTargetId } from './target-selection';
 import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
+import { computeDiceSig } from './vfx-queue';
 import { TabletopLocationTile } from './TabletopLocationTile';
 import { useSmoothPawnGlide } from './useSmoothPawnGlide';
 import { MidnightCardZoomModal, type MidnightZoomTarget } from './MidnightCardZoomModal';
@@ -139,22 +140,45 @@ export function GameBoard({
     graphicsProfile: gfx.profile,
   });
 
-  const diceRollSignature = publicGame.lastDiceRoll
-    ? `${publicGame.turnNumber}:${publicGame.lastDiceRoll.kind}:${publicGame.lastDiceRoll.playerId}:${publicGame.lastDiceRoll.d6}:${publicGame.lastDiceRoll.d4}:${publicGame.lastDiceRoll.resolvedLocation ?? ''}`
-    : '';
-  const diceHoldDelayMs =
-    gfx.profile.tier === 'low' ? 0 : gfx.profile.tier === 'balanced' ? 920 : 1040;
+  const diceRollSignature = computeDiceSig(publicGame) ?? '';
 
   useSmoothPawnGlide({
     containerRef: boardStageRef,
     players: publicGame.players,
     matchId: publicGame.matchId,
     reducedMotion: vfx.reducedMotion,
+    qualityTier: gfx.profile.tier,
     durationMs: gfx.profile.pawnGlideDurationMs,
     diceRollSignature,
-    diceHoldDelayMs,
     skipGeneration: vfx.skipGeneration,
   });
+
+  // Giữ nhãn vị trí hiển thị ("📍 Bạn ở đây", badge "Ô ...") ở ô cũ cho tới đúng diceSettleAtMs,
+  // đồng bộ 100% với BoardGameVfxStage và FLIP Pawn Glide.
+  const committedLocationsRef = useRef<{
+    matchId: string;
+    map: Map<string, BoardGameLocationId>;
+  }>({
+    matchId: publicGame.matchId,
+    map: new Map(publicGame.players.map((p) => [p.playerId, p.location])),
+  });
+  const holdCommittedLocationForDice =
+    !vfx.isDiceSettled && vfx.activeDiceRoll?.diceKind === 'move';
+  if (
+    committedLocationsRef.current.matchId !== publicGame.matchId ||
+    !holdCommittedLocationForDice
+  ) {
+    committedLocationsRef.current = {
+      matchId: publicGame.matchId,
+      map: new Map(publicGame.players.map((p) => [p.playerId, p.location])),
+    };
+  }
+  const getCommittedLocation = (
+    p: BoardGamePublicGameView['players'][number],
+  ): BoardGameLocationId =>
+    holdCommittedLocationForDice
+      ? (committedLocationsRef.current.map.get(p.playerId) ?? p.location)
+      : p.location;
 
   const prevTurnRef = useRef<number>(publicGame.turnNumber);
   const prevEmoteItemRef = useRef<BoardGameChatEmoteServerMessage | null>(
@@ -236,6 +260,7 @@ export function GameBoard({
     () => publicGame.players.find((p) => p.playerId === selfPlayerId) ?? null,
     [publicGame.players, selfPlayerId],
   );
+  const committedSelfLocation = selfPlayer ? getCommittedLocation(selfPlayer) : null;
   const activePlayer = useMemo(
     () => publicGame.players.find((p) => p.playerId === publicGame.activePlayerId) ?? null,
     [publicGame.players, publicGame.activePlayerId],
@@ -801,11 +826,11 @@ export function GameBoard({
                         const occupants = publicGame.players.filter(
                           (p) => p.location === locId,
                         );
-                        const isSelfHere = selfPlayer?.location === locId;
+                        const isSelfHere = committedSelfLocation === locId;
                         const canChooseMoveHere =
                           isMyTurn &&
                           publicGame.turnPhase === 'CHOOSE_MOVE' &&
-                          !isSelfHere &&
+                          selfPlayer?.location !== locId &&
                           (!publicGame.allowedMoveDestinations ||
                             publicGame.allowedMoveDestinations.includes(locId));
                         const rolledDestinationHere =
@@ -854,10 +879,11 @@ export function GameBoard({
                 }`}
               >
                 {(() => {
-                  const diceRollingNow = Boolean(vfx.activeDiceRoll && !vfx.isDiceSettled);
+                  const diceRollingNow = !vfx.isDiceSettled;
                   const trayDiceStage = vfx.activeDiceRoll ? vfx.diceRollStage : 'settled';
                   const enable3DDice = gfx.profile.tier !== 'low' && !vfx.reducedMotion;
                   const rerollNeeded =
+                    !diceRollingNow &&
                     canRollOnBoard &&
                     Boolean(
                       publicGame.lastDiceRoll?.rerollRequired &&
@@ -923,7 +949,11 @@ export function GameBoard({
                       </div>
                       {canRollOnBoard && (
                         <span className="shrink-0 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950 text-xs font-black whitespace-nowrap shadow-md">
-                          {rerollNeeded ? '🔁 Đổ lại ngay!' : '🎲 Tung Xúc Xắc'}
+                          {diceRollingNow
+                            ? '🎲 Đang lăn...'
+                            : rerollNeeded
+                              ? '🔁 Đổ lại ngay!'
+                              : '🎲 Tung Xúc Xắc'}
                         </span>
                       )}
                     </>
@@ -1035,7 +1065,7 @@ export function GameBoard({
                   const inAttackRange = attackableIdsOnBoard.has(p.playerId);
                   const isSelfCard = p.playerId === selfPlayerId;
                   const factionTheme = p.revealedFaction ? FACTION_THEME[p.revealedFaction] : null;
-                  const locMeta = LOCATION_VISUAL_META[p.location];
+                  const locMeta = LOCATION_VISUAL_META[getCommittedLocation(p)];
                   return (
                     <div
                       key={p.playerId}
@@ -1224,7 +1254,10 @@ export function GameBoard({
               </div>
 
               <div className={mobileTab === 'role' ? 'hidden lg:block' : 'block'}>
-                <GameLog publicGame={publicGame} />
+                <GameLog
+                  publicGame={publicGame}
+                  unsettledRoll={!vfx.isDiceSettled ? publicGame.lastDiceRoll : null}
+                />
 
                 {/* Emote & Chat nhanh */}
                 <div className="mt-3 rounded-2xl border border-slate-700/80 bg-slate-900/90 p-3 space-y-2">

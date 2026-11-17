@@ -55,6 +55,7 @@ export interface DiceRollVisualEvent {
   kind: 'DICE_ROLL';
   order: number;
   durationMs: number;
+  settleAtMs?: number;
   diceKind: 'move' | 'attack';
   actorId: string;
   actorName: string;
@@ -158,10 +159,42 @@ function writeSeenIdsToStorage(matchId: string, ids: readonly string[]): void {
   }
 }
 
-function computeDiceSig(pub: BoardGamePublicGameView): string | null {
+export function computeDiceSig(pub: BoardGamePublicGameView): string | null {
   const r = pub.lastDiceRoll;
   if (!r) return null;
-  return `${pub.turnNumber}:${r.kind}:${r.playerId}:${r.d6}:${r.d4}:${r.total}:${r.resolvedLocation ?? ''}:${r.rerollRequired ? 1 : 0}:${r.damageDealt ?? ''}`;
+  // Dùng r.id để nhận diện đúng lượt tung mới; không phụ thuộc resolvedLocation
+  // nhằm tránh phát trùng xúc xắc khi người chơi chọn đích sau lúc tung tổng 7 / La Bàn.
+  return `${pub.turnNumber}:${r.id ?? ''}:${r.kind}:${r.playerId}:${r.d6}:${r.d4}:${r.total}:${r.rerollRequired ? 1 : 0}:${r.damageDealt ?? ''}`;
+}
+
+export function computeDiceEventId(pub: BoardGamePublicGameView): string | null {
+  const sig = computeDiceSig(pub);
+  if (!sig) return null;
+  return `${pub.matchId}::dice::${sig}`;
+}
+
+export function buildDiceRollEventFromSnapshot(
+  pub: BoardGamePublicGameView,
+  reducedMotion: boolean,
+): DiceRollVisualEvent | null {
+  const r = pub.lastDiceRoll;
+  const id = computeDiceEventId(pub);
+  if (!r || !id) return null;
+  return {
+    id,
+    kind: 'DICE_ROLL',
+    order: 10,
+    durationMs: scaleDuration(r.kind === 'attack' ? 1320 : 1420, reducedMotion),
+    diceKind: r.kind,
+    actorId: r.playerId,
+    actorName: r.displayName,
+    d6: r.d6,
+    d4: r.d4,
+    total: r.total,
+    freeChoice: r.freeChoice,
+    rerollRequired: r.rerollRequired,
+    resolvedLocation: r.resolvedLocation ?? null,
+  };
 }
 
 function detectDeckFromLogText(text: string): BoardGameDeckId {
@@ -256,22 +289,10 @@ export function extractVisualEventsFromDiff(
   const prevDiceSig = computeDiceSig(prev);
   const nextDiceSig = computeDiceSig(next);
   if (next.lastDiceRoll && nextDiceSig && nextDiceSig !== prevDiceSig) {
-    const r = next.lastDiceRoll;
-    events.push({
-      id: `${next.matchId}::dice::${nextDiceSig}`,
-      kind: 'DICE_ROLL',
-      order: 10,
-      durationMs: scaleDuration(r.kind === 'attack' ? 1320 : 1420, reduced),
-      diceKind: r.kind,
-      actorId: r.playerId,
-      actorName: r.displayName,
-      d6: r.d6,
-      d4: r.d4,
-      total: r.total,
-      freeChoice: r.freeChoice,
-      rerollRequired: r.rerollRequired,
-      resolvedLocation: r.resolvedLocation ?? null,
-    });
+    const diceEv = buildDiceRollEventFromSnapshot(next, reduced);
+    if (diceEv) {
+      events.push(diceEv);
+    }
   }
 
   // Theo dõi liệu log đã tạo Combat VFX chưa để tránh trùng hoặc bổ sung hợp lý
@@ -894,6 +915,42 @@ export class VisualEventTracker {
 
   hasEventBeenSeen(id: string): boolean {
     return this.seenIds.has(id);
+  }
+
+  /**
+   * Kiểm tra thuần túy (không mutate state) ngay trong lúc render Frame 1
+   * xem snapshot mới có phát sinh lượt tung xúc xắc chưa chạy hay không.
+   * Trả về `null` khi chưa có baseline (mount / F5 reconnect) hoặc đã thấy ID này.
+   */
+  peekPendingDiceRoll(
+    nextGame: BoardGamePublicGameView,
+    reducedMotion = false,
+  ): DiceRollVisualEvent | null {
+    if (!this.baselineGame || this.matchId !== nextGame.matchId) {
+      return null;
+    }
+    const prevSig = computeDiceSig(this.baselineGame);
+    const nextSig = computeDiceSig(nextGame);
+    if (!nextGame.lastDiceRoll || !nextSig || nextSig === prevSig) {
+      return null;
+    }
+    const ev = buildDiceRollEventFromSnapshot(nextGame, reducedMotion);
+    if (!ev || this.seenIds.has(ev.id)) {
+      return null;
+    }
+    return ev;
+  }
+
+  /**
+   * Đánh dấu event xúc xắc của snapshot hiện tại đã xử lý khi người chơi bấm Skip.
+   */
+  acknowledgeSnapshotDice(publicGame: BoardGamePublicGameView | null): void {
+    if (!publicGame || this.matchId !== publicGame.matchId) return;
+    const evId = computeDiceEventId(publicGame);
+    if (evId && !this.seenIds.has(evId)) {
+      this.markSeen([evId]);
+    }
+    this.baselineGame = publicGame;
   }
 
   /**
