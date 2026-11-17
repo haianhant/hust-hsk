@@ -1979,8 +1979,14 @@ export default function HomePage() {
     window.setTimeout(() => {
       const r = hook.fastTravel?.(destId);
       if (r?.ok) {
-        const dest = FAST_TRAVEL_DESTINATIONS.find((d) => d.id === destId);
-        if (dest) showToast(`Đã tới ${dest.name}.`);
+        if (destId === 'boardgame') {
+          hook.enterBoardGameClub?.();
+          setInBoardGameClub(true);
+          showToast('Đã vào thẳng CLB Board Game KTX!');
+        } else {
+          const dest = FAST_TRAVEL_DESTINATIONS.find((d) => d.id === destId);
+          if (dest) showToast(`Đã tới ${dest.name}.`);
+        }
       } else if (r?.reason === 'busy') {
         showToast('Đang chuyển cảnh — đợi một chút rồi thử lại.');
       } else {

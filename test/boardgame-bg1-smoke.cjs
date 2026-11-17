@@ -282,6 +282,27 @@ async function main() {
       window.dispatchEvent(new CustomEvent('bkhn:pause-3d', { detail: false }));
     });
 
+    // Kiểm tra điểm teleport thẳng tới CLB Board Game KTX trên Bản đồ Toàn cảnh (#open-full-map)
+    await page.locator('#open-full-map').click();
+    await page.waitForSelector('[data-testid="full-campus-map-modal"]', { timeout: 30000 });
+    await page.locator('[data-testid="map-quick-teleport-boardgame"]').waitFor({ state: 'visible', timeout: 15000 });
+    await page.locator('[data-testid="map-scope-all"]').click();
+    await page.locator('[data-testid="map-teleport-pin-boardgame"]').waitFor({ state: 'visible', timeout: 15000 });
+    const modalNoOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+    );
+    assert.equal(modalNoOverflow, true, 'Full campus map with CLB Game pin must not overflow horizontally');
+    await page.locator('[data-testid="map-teleport-pin-boardgame"]').click();
+    await page.waitForSelector('[data-testid="boardgame-club-hud"]', { timeout: 60000 });
+    const inClubViaMap = await page.evaluate(() => Boolean(window.__bkhn?.isInBoardGameClub?.()));
+    assert.equal(inClubViaMap, true, 'Clicking map-teleport-pin-boardgame must enter CLB Board Game lounge directly');
+    await page.locator('[data-testid="bg-exit-lounge-btn"]').click();
+    await page.waitForFunction(
+      () => window.__bkhn.isInBoardGameClub && !window.__bkhn.isInBoardGameClub(),
+      null,
+      { timeout: 60000, polling: 200 },
+    );
+
     const campus3dAfter = await page.evaluate(() => {
       return new Promise((resolve) => {
         const deltas = [];

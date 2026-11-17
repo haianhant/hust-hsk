@@ -152,3 +152,22 @@ test('(5) Telemetry envelope mã hóa & giải mã đúng scene boardgame', () =
   assert.equal(decoded.scene, 'boardgame');
   assert.ok(Math.abs(Math.sin(decoded.facing) - Math.sin(1.25)) < 1e-3);
 });
+
+test('(6) Điểm teleport thẳng tới CLB Board Game KTX an toàn và nằm trong tầm cửa CLB', () => {
+  const bgDest = campus.FAST_TRAVEL_DESTINATIONS.find((d) => d.id === 'boardgame');
+  assert.ok(bgDest, 'FAST_TRAVEL_DESTINATIONS phải có điểm boardgame');
+  const resolved = campus.resolveCollisions({ x: bgDest.x, z: bgDest.z }, world.AVATAR.radius);
+  assert.equal(resolved.hit, null, 'Điểm đứng trả về ngoài cửa CLB không được chạm vật cản');
+  assert.ok(
+    Math.hypot(resolved.pos.x - bgDest.x, resolved.pos.z - bgDest.z) < 1e-6,
+    'Điểm teleport CLB phải đứng yên không trôi',
+  );
+  const dDoor = Math.hypot(
+    bgDest.x - campus.BOARD_GAME_CLUB_DOOR.pos.x,
+    bgDest.z - campus.BOARD_GAME_CLUB_DOOR.pos.z,
+  );
+  assert.ok(
+    dDoor <= campus.BOARD_GAME_CLUB_DOOR.triggerRadius,
+    `Khoảng cách tới cửa CLB (${dDoor.toFixed(2)}m) phải <= triggerRadius (${campus.BOARD_GAME_CLUB_DOOR.triggerRadius}m)`,
+  );
+});

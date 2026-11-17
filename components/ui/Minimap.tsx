@@ -44,8 +44,15 @@ const SHORT_PIN_LABELS: Record<string, string> = {
   lake: 'Hồ Tiền',
   spawn: 'Cổng TĐN',
   ktx: 'KTX',
+  boardgame: 'CLB Game',
   b1: 'B1',
   stadium: 'SVĐ',
+};
+
+// Vị trí hiển thị ghim trên bản đồ toàn cảnh để tách rõ cụm KTX B8–B9 và CLB Board Game
+const PIN_VISUAL_ANCHORS: Partial<Record<string, { x: number; z: number }>> = {
+  boardgame: { x: 103.5, z: -59.0 },
+  ktx: { x: 124.5, z: -41.5 },
 };
 
 function makeProject(size: number, pad: number, viewport: AABB = BOUNDS) {
@@ -593,7 +600,7 @@ export default function Minimap({
                       : 'text-white/80 hover:text-white'
                   }`}
                 >
-                  🌐 Toàn trường (+ KTX · B1 · SVĐ)
+                  🌐 Toàn trường (+ KTX · CLB Game · B1 · SVĐ)
                 </button>
               </div>
               <span className="text-[11px] text-white/65">Nhấn phím M để đóng/mở nhanh</span>
@@ -624,8 +631,10 @@ export default function Minimap({
                       />
                       {onFastTravel &&
                         inScopeDests.map((dest) => {
-                          const leftPct = (project.x(dest.x) / FULL_SIZE) * 100;
-                          const topPct = (project.y(dest.z) / FULL_SIZE) * 100;
+                          const anchor = PIN_VISUAL_ANCHORS[dest.id] ?? dest;
+                          const leftPct = (project.x(anchor.x) / FULL_SIZE) * 100;
+                          const topPct = (project.y(anchor.z) / FULL_SIZE) * 100;
+                          const isBoardGame = dest.id === 'boardgame';
                           return (
                             <button
                               key={dest.id}
@@ -639,7 +648,11 @@ export default function Minimap({
                                 onFastTravel(dest.id);
                               }}
                               style={{ left: `${leftPct}%`, top: `${topPct}%` }}
-                              className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-amber-300/90 bg-slate-950/90 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-200 shadow-lg transition hover:z-10 hover:scale-110 hover:bg-amber-400 hover:text-slate-950 disabled:opacity-50"
+                              className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-extrabold shadow-lg transition hover:z-10 hover:scale-110 hover:bg-amber-400 hover:text-slate-950 disabled:opacity-50 ${
+                                isBoardGame
+                                  ? 'border-fuchsia-300/95 bg-indigo-950/95 text-amber-200 ring-1 ring-fuchsia-400/50'
+                                  : 'border-amber-300/90 bg-slate-950/90 text-amber-200'
+                              }`}
                             >
                               {dest.icon} {SHORT_PIN_LABELS[dest.id] ?? dest.name}
                             </button>
@@ -654,21 +667,28 @@ export default function Minimap({
                         </span>
                         {outOfScopeDests.length > 0 && (
                           <div className="flex flex-wrap items-center justify-center gap-1">
-                            {outOfScopeDests.map((dest) => (
-                              <button
-                                key={dest.id}
-                                type="button"
-                                data-testid={`map-quick-teleport-${dest.id}`}
-                                disabled={traveling}
-                                onClick={() => {
-                                  setFullMapOpen(false);
-                                  onFastTravel(dest.id);
-                                }}
-                                className="rounded-full border border-emerald-400/50 bg-emerald-950/75 px-2 py-0.5 text-[10px] font-bold text-emerald-200 transition hover:bg-emerald-500 hover:text-slate-950 disabled:opacity-50"
-                              >
-                                {dest.icon} {SHORT_PIN_LABELS[dest.id] ?? dest.name}
-                              </button>
-                            ))}
+                            {outOfScopeDests.map((dest) => {
+                              const isBoardGame = dest.id === 'boardgame';
+                              return (
+                                <button
+                                  key={dest.id}
+                                  type="button"
+                                  data-testid={`map-quick-teleport-${dest.id}`}
+                                  disabled={traveling}
+                                  onClick={() => {
+                                    setFullMapOpen(false);
+                                    onFastTravel(dest.id);
+                                  }}
+                                  className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition hover:bg-amber-400 hover:text-slate-950 disabled:opacity-50 ${
+                                    isBoardGame
+                                      ? 'border-fuchsia-400/80 bg-indigo-950/85 text-amber-200'
+                                      : 'border-emerald-400/50 bg-emerald-950/75 text-emerald-200 hover:bg-emerald-500'
+                                  }`}
+                                >
+                                  {dest.icon} {SHORT_PIN_LABELS[dest.id] ?? dest.name}
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
