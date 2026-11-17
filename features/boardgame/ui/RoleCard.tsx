@@ -33,12 +33,13 @@ export interface RoleCardProps {
   unreadClueCount?: number;
   visualStyle?: 'classic' | 'midnight-noir';
   reducedMotion?: boolean;
+  foilEnabled?: boolean;
   onToggleCardVisible: () => void;
   onZoomRole?: () => void;
   onZoomCard?: (cardId: string, zone?: ActionCardZone) => void;
 }
 
-export function RoleCard({
+export const RoleCard = React.memo(function RoleCard({
   publicGame,
   privateView,
   isSpectator,
@@ -46,6 +47,7 @@ export function RoleCard({
   unreadClueCount = 0,
   visualStyle = 'midnight-noir',
   reducedMotion = false,
+  foilEnabled = true,
   onToggleCardVisible,
   onZoomRole,
   onZoomCard,
@@ -252,6 +254,7 @@ export function RoleCard({
                 revealed={false}
                 viewerMode="owner-facedown"
                 woundsTaken={privateView.woundsTaken}
+                foilEnabled={foilEnabled}
                 reducedMotion={reducedMotion}
                 onFlipToggle={onToggleCardVisible}
                 onZoom={onZoomRole}
@@ -321,6 +324,7 @@ export function RoleCard({
                 woundsTaken={privateView.woundsTaken}
                 currentHp={privateView.hp}
                 priority
+                foilEnabled={foilEnabled}
                 reducedMotion={reducedMotion}
                 showGoalFooter={false}
                 onFlipToggle={onToggleCardVisible}
@@ -382,6 +386,6 @@ export function RoleCard({
       )}
     </aside>
   );
-}
+});
 
 export default RoleCard;

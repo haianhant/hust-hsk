@@ -34,7 +34,7 @@ const DECK_ICON_GLYPH = {
   event: '⚡',
 } as const;
 
-export function MidnightActionCard({
+export const MidnightActionCard = React.memo(function MidnightActionCard({
   cardId,
   zone,
   isParticipantInInvestigation = true,
@@ -242,4 +242,4 @@ export function MidnightActionCard({
       backFace={backFace}
     />
   );
-}
+});

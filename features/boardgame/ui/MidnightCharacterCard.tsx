@@ -38,7 +38,7 @@ export interface MidnightCharacterCardProps {
   testId?: string;
 }
 
-export function MidnightCharacterCard({
+export const MidnightCharacterCard = React.memo(function MidnightCharacterCard({
   roleId,
   revealed,
   viewerMode,
@@ -322,4 +322,4 @@ export function MidnightCharacterCard({
       backFace={backFace}
     />
   );
-}
+});

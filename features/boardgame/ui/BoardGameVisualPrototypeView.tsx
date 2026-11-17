@@ -35,6 +35,7 @@ import { BoardGameVfxSandbox } from './BoardGameVfxSandbox';
 import { RoleCard } from './RoleCard';
 import { TabletopLocationTile } from './TabletopLocationTile';
 import { useSmoothPawnGlide } from './useSmoothPawnGlide';
+import { useBoardGameGraphicsSettings } from './graphics-settings';
 import {
   MIDNIGHT_DECK_TOKENS,
   MIDNIGHT_FACTION_TOKENS,
@@ -282,6 +283,7 @@ export default function BoardGameVisualPrototypeView() {
   const [selectedDemoPlayerId, setSelectedDemoPlayerId] = useState<string | null>('demo-p3');
   const [zoomTarget, setZoomTarget] = useState<MidnightZoomTarget | null>(null);
   const tabletopMapRef = useRef<HTMLDivElement>(null);
+  const gfx = useBoardGameGraphicsSettings();
 
   const demoTabletopPlayers = useMemo<BoardGamePublicPlayerView[]>(
     () =>
@@ -313,7 +315,8 @@ export default function BoardGameVisualPrototypeView() {
     containerRef: tabletopMapRef,
     players: demoTabletopPlayers,
     matchId: 'proto-tabletop-demo',
-    reducedMotion: false,
+    reducedMotion: gfx.profile.reducedMotion,
+    durationMs: gfx.profile.pawnGlideDurationMs,
   });
 
   const filteredRoles = useMemo(
@@ -1122,6 +1125,9 @@ export default function BoardGameVisualPrototypeView() {
                       isSelfHere={demoTabletopPlayers[0]?.location === locId}
                       canChooseMoveHere={locId === 'court'}
                       rolledDestinationHere={locId === 'radio'}
+                      reducedMotion={gfx.profile.reducedMotion}
+                      enableMist={gfx.profile.enableMistDrift}
+                      enableBackdropBlur={gfx.profile.enableBackdropBlur}
                       onSelectPlayer={setSelectedDemoPlayerId}
                     />
                   ))}
@@ -1132,7 +1138,13 @@ export default function BoardGameVisualPrototypeView() {
         </section>
       </main>
 
-      <MidnightCardZoomModal target={zoomTarget} onClose={() => setZoomTarget(null)} />
+      <MidnightCardZoomModal
+        target={zoomTarget}
+        reducedMotion={!gfx.profile.enable3DTilt || gfx.profile.reducedMotion}
+        foilEnabled={foilEnabled && gfx.profile.enableFoil}
+        enableBackdropBlur={gfx.profile.enableBackdropBlur}
+        onClose={() => setZoomTarget(null)}
+      />
     </div>
   );
 }

@@ -11,7 +11,7 @@
 // - Cinematic Cut-ins (LƯỢT CỦA BẠN / LỘ DIỆN / TUYỆT KỸ / HẠ GỤC / CHIẾN THẮNG)
 // ---------------------------------------------------------------------------
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   BoardGameDeckId,
   BoardGamePrivateGameView,
@@ -23,6 +23,7 @@ import {
   FactionCrestSvg,
   RolePortraitSvg,
 } from './BoardGameArt';
+import type { ResolvedGraphicsProfile } from './graphics-settings';
 import {
   CARD_BACK_SECRET_TITLES,
   MIDNIGHT_CARD_ART,
@@ -31,14 +32,9 @@ import {
   MIDNIGHT_FACTION_TOKENS,
 } from './midnight-noir-tokens';
 import {
-  playBlockClang,
-  playCardDraw,
-  playCutInWhoosh,
-  playExplosionImpact,
-  playGunfireBurst,
-  playHealShimmer,
-  playLightningStrike,
-  playSlashHit,
+  playCardFlip,
+  playSoundForVisualEvent,
+  stopAllBoardGameSounds,
 } from './sound';
 import {
   VisualEventTracker,
@@ -148,6 +144,7 @@ function drawCombatAnimation(
   anim: ActiveCombatAnim,
   nowMs: number,
   reducedMotion: boolean,
+  particleScale = 1,
 ): boolean {
   const elapsed = nowMs - anim.startedAt;
   const p = Math.max(0, Math.min(1, elapsed / Math.max(120, anim.durationMs)));
@@ -191,10 +188,11 @@ function drawCombatAnimation(
           ctx.stroke();
         }
 
-        // Tàn lửa văng tại điểm chém
-        if (!reducedMotion) {
-          for (let k = 0; k < 8; k++) {
-            const ang = (Math.PI * 2 * k) / 8 + p * 1.4;
+        // Tàn lửa văng tại điểm chém (điều chỉnh số hạt theo mức đồ họa High/Balanced/Low)
+        const sparkCount = reducedMotion || particleScale <= 0 ? 0 : Math.max(2, Math.round(8 * particleScale));
+        if (sparkCount > 0) {
+          for (let k = 0; k < sparkCount; k++) {
+            const ang = (Math.PI * 2 * k) / sparkCount + p * 1.4;
             const dist = p * (isCursed ? 56 : 42);
             ctx.fillStyle = k % 2 === 0 ? primary : secondary;
             ctx.beginPath();
@@ -361,9 +359,10 @@ function drawCombatAnimation(
         ctx.arc(tgt.x, tgt.y, 14 + p * 36, 0, Math.PI * 2);
         ctx.stroke();
 
-        if (!reducedMotion) {
-          for (let i = 0; i < 6; i++) {
-            const ox = (i - 2.5) * 11;
+        const healSparkCount = reducedMotion || particleScale <= 0 ? 0 : Math.max(2, Math.round(6 * particleScale));
+        if (healSparkCount > 0) {
+          for (let i = 0; i < healSparkCount; i++) {
+            const ox = (i - (healSparkCount - 1) / 2) * 11;
             const oy = -p * 42 - (i % 2) * 12;
             ctx.fillStyle = i % 2 === 0 ? '#6ee7b7' : '#fef08a';
             ctx.beginPath();
@@ -432,6 +431,7 @@ export interface UseBoardGameVfxQueueOptions {
   handUnmasked: boolean;
   containerRef: React.RefObject<HTMLDivElement>;
   reducedMotionOverride?: boolean | null;
+  graphicsProfile?: ResolvedGraphicsProfile;
 }
 
 export interface BoardGameVfxState {
@@ -445,6 +445,9 @@ export interface BoardGameVfxState {
   activeCutIn: CinematicCutInVisualEvent | null;
   screenShake: ScreenShakeLevel;
   reducedMotion: boolean;
+  enableBackdropBlur: boolean;
+  enableFoil: boolean;
+  qualityTier: 'high' | 'balanced' | 'low';
   hasActiveEffects: boolean;
   combatLayerRef: React.RefObject<HTMLCanvasElement>;
   skipAllAnimations: () => void;
@@ -460,6 +463,7 @@ export function useBoardGameVfxQueue({
   handUnmasked,
   containerRef,
   reducedMotionOverride: externalReducedOverride,
+  graphicsProfile,
 }: UseBoardGameVfxQueueOptions): BoardGameVfxState {
   const trackerRef = useRef<VisualEventTracker>(new VisualEventTracker());
   const seenMatchRef = useRef<string>('');
@@ -469,7 +473,29 @@ export function useBoardGameVfxQueue({
 
   const [systemReducedMotion, setSystemReducedMotion] = useState(false);
   const [localReducedOverride, setLocalReducedOverride] = useState<boolean | null>(null);
-  const reducedMotion = externalReducedOverride ?? localReducedOverride ?? systemReducedMotion;
+  const reducedMotion =
+    externalReducedOverride ??
+    graphicsProfile?.reducedMotion ??
+    localReducedOverride ??
+    systemReducedMotion;
+
+  const qualityTier = graphicsProfile?.tier ?? 'high';
+  const dprCap = graphicsProfile?.dprCap ?? 2;
+  const particleScale = graphicsProfile?.particleScale ?? (reducedMotion ? 0.25 : 1);
+  const enableScreenShake = graphicsProfile
+    ? graphicsProfile.enableScreenShake
+    : !reducedMotion;
+  const enableBackdropBlur = graphicsProfile?.enableBackdropBlur ?? true;
+  const enableFoil = graphicsProfile?.enableFoil ?? !reducedMotion;
+
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
+  const dprCapRef = useRef(dprCap);
+  dprCapRef.current = dprCap;
+  const particleScaleRef = useRef(particleScale);
+  particleScaleRef.current = particleScale;
+  const enableScreenShakeRef = useRef(enableScreenShake);
+  enableScreenShakeRef.current = enableScreenShake;
 
   const [activeCombatCount, setActiveCombatCount] = useState(0);
   const [floatingPopups, setFloatingPopups] = useState<ActiveFloatingPopup[]>([]);
@@ -485,6 +511,12 @@ export function useBoardGameVfxQueue({
   const timeoutsRef = useRef<Set<number>>(new Set());
   const playersSnapshotRef = useRef(publicGame.players);
   playersSnapshotRef.current = publicGame.players;
+
+  useEffect(() => {
+    if (!enableScreenShake) {
+      setScreenShake('none');
+    }
+  }, [enableScreenShake]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
@@ -525,12 +557,14 @@ export function useBoardGameVfxQueue({
         return;
       }
 
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const dpr = Math.min(dprCapRef.current, window.devicePixelRatio || 1);
       const cw = container.clientWidth || 720;
       const ch = container.clientHeight || 480;
-      if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) {
-        canvas.width = Math.round(cw * dpr);
-        canvas.height = Math.round(ch * dpr);
+      const targetW = Math.max(1, Math.round(cw * dpr));
+      const targetH = Math.max(1, Math.round(ch * dpr));
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
       }
 
       const ctx = canvas.getContext('2d');
@@ -541,7 +575,7 @@ export function useBoardGameVfxQueue({
         const now = performance.now();
         const remaining: ActiveCombatAnim[] = [];
         for (const a of anims) {
-          if (drawCombatAnimation(ctx, a, now, reducedMotion)) {
+          if (drawCombatAnimation(ctx, a, now, reducedMotionRef.current, particleScaleRef.current)) {
             remaining.push(a);
           }
         }
@@ -558,10 +592,11 @@ export function useBoardGameVfxQueue({
       }
     };
     rafRef.current = window.requestAnimationFrame(step);
-  }, [containerRef, reducedMotion]);
+  }, [containerRef]);
 
   const skipAllAnimations = useCallback(() => {
     clearAllTimers();
+    stopAllBoardGameSounds();
     activeCombatAnimsRef.current = [];
     if (rafRef.current !== null) {
       window.cancelAnimationFrame(rafRef.current);
@@ -580,15 +615,13 @@ export function useBoardGameVfxQueue({
     setScreenShake('none');
   }, [clearAllTimers]);
 
-  // Cut-in queue pump: phát lần lượt từng banner điện ảnh
+  // Cut-in queue pump: phát lần lượt từng banner điện ảnh đồng bộ âm thanh theo event.id
   useEffect(() => {
     if (activeCutIn || cutInQueue.length === 0) return;
     const [nextBanner, ...rest] = cutInQueue;
     setActiveCutIn(nextBanner);
     setCutInQueue(rest);
-    if (nextBanner.bannerType !== 'YOUR_TURN') {
-      playCutInWhoosh();
-    }
+    playSoundForVisualEvent(nextBanner);
     scheduleTimeout(() => {
       setActiveCutIn((curr) => (curr?.id === nextBanner.id ? null : curr));
     }, nextBanner.durationMs);
@@ -604,6 +637,7 @@ export function useBoardGameVfxQueue({
       for (const ev of events) {
         switch (ev.kind) {
           case 'DICE_ROLL': {
+            playSoundForVisualEvent(ev);
             setActiveDiceRoll(ev);
             scheduleTimeout(() => {
               setActiveDiceRoll((curr) => (curr?.id === ev.id ? null : curr));
@@ -611,10 +645,11 @@ export function useBoardGameVfxQueue({
             break;
           }
           case 'CARD_DRAW': {
-            playCardDraw();
+            playSoundForVisualEvent(ev);
             setActiveCardDraw({ event: ev, revealedFace: false });
             if (ev.showFront) {
               scheduleTimeout(() => {
+                playCardFlip();
                 setActiveCardDraw((curr) =>
                   curr?.event.id === ev.id ? { ...curr, revealedFace: true } : curr,
                 );
@@ -641,25 +676,19 @@ export function useBoardGameVfxQueue({
             setActiveCombatCount(activeCombatAnimsRef.current.length);
             ensureCanvasLoop();
 
-            if (!reducedMotion && ev.shake !== 'none') {
+            if (enableScreenShakeRef.current && ev.shake !== 'none') {
               setScreenShake(ev.shake);
               scheduleTimeout(() => setScreenShake('none'), ev.shake === 'heavy' ? 290 : 210);
             }
 
-            // Âm thanh đồng bộ theo chiêu
-            if (ev.effect === 'LIGHTNING_STRIKE') playLightningStrike();
-            else if (ev.effect === 'MACHINE_GUN_BARRAGE' || ev.effect === 'HANDGUN_SHOT') playGunfireBurst();
-            else if (ev.effect === 'EXPLOSION') playExplosionImpact();
-            else if (ev.effect === 'SHIELD_GUARD') playBlockClang();
-            else if (ev.effect === 'HEAL_AURA') playHealShimmer();
-            else playSlashHit();
+            playSoundForVisualEvent(ev);
             break;
           }
           case 'FLOATING_TEXT': {
             const pt = resolvePlayerAnchor(container, ev.targetPlayerId, players);
             const jitterX = ((ev.targetPlayerId.charCodeAt(ev.targetPlayerId.length - 1) || 0) % 3 - 1) * 8;
             const uid = ev.id;
-            const spawnMs = reducedMotion ? 0 : 90;
+            const spawnMs = reducedMotionRef.current ? 0 : 90;
             scheduleTimeout(() => {
               setFloatingPopups((prev) => [
                 ...prev.slice(-10),
@@ -682,7 +711,7 @@ export function useBoardGameVfxQueue({
         setCutInQueue((prev) => [...prev.slice(-6), ...newCutIns]);
       }
     },
-    [containerRef, ensureCanvasLoop, reducedMotion, scheduleTimeout],
+    [containerRef, ensureCanvasLoop, scheduleTimeout],
   );
 
   // Phát hiện delta từ mỗi bản publicGame mới
@@ -722,10 +751,18 @@ export function useBoardGameVfxQueue({
   ]);
 
   useEffect(() => {
+    const canvas = combatLayerRef.current;
     return () => {
       clearAllTimers();
+      activeCombatAnimsRef.current = [];
       if (rafRef.current !== null) {
         window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      // Giải phóng bộ nhớ đệm GPU của Canvas 2D khi rời bàn chơi
+      if (canvas) {
+        canvas.width = 0;
+        canvas.height = 0;
       }
     };
   }, [clearAllTimers]);
@@ -746,6 +783,9 @@ export function useBoardGameVfxQueue({
     activeCutIn,
     screenShake,
     reducedMotion,
+    enableBackdropBlur,
+    enableFoil,
+    qualityTier,
     hasActiveEffects,
     combatLayerRef,
     skipAllAnimations,
@@ -763,7 +803,7 @@ export interface BoardGameVfxStageProps {
   targetingTone?: 'hostile' | 'heal';
 }
 
-export function BoardGameVfxStage({
+export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
   vfx,
   containerRef,
   publicGame,
@@ -772,6 +812,13 @@ export function BoardGameVfxStage({
   targetingTone = 'hostile',
 }: BoardGameVfxStageProps) {
   const [targetLine, setTargetLine] = useState<{ from: Point2D; to: Point2D } | null>(null);
+  const playersRef = useRef(publicGame.players);
+  playersRef.current = publicGame.players;
+
+  const playersLocationSig = useMemo(
+    () => publicGame.players.map((p) => `${p.playerId}:${p.location}:${p.alive ? 1 : 0}`).join('|'),
+    [publicGame.players],
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -780,14 +827,14 @@ export function BoardGameVfxStage({
       return;
     }
     const updateLine = () => {
-      const from = resolvePlayerAnchor(container, sourcePlayerId, publicGame.players);
-      const to = resolvePlayerAnchor(container, selectedTargetId, publicGame.players);
+      const from = resolvePlayerAnchor(container, sourcePlayerId, playersRef.current);
+      const to = resolvePlayerAnchor(container, selectedTargetId, playersRef.current);
       setTargetLine({ from, to });
     };
     updateLine();
     window.addEventListener('resize', updateLine);
     return () => window.removeEventListener('resize', updateLine);
-  }, [containerRef, selectedTargetId, sourcePlayerId, publicGame]);
+  }, [containerRef, selectedTargetId, sourcePlayerId, playersLocationSig]);
 
   const cutIn = vfx.activeCutIn;
   const cutInTheme = cutIn?.faction ? MIDNIGHT_FACTION_TOKENS[cutIn.faction] : null;
@@ -799,10 +846,12 @@ export function BoardGameVfxStage({
         ? '#f43f5e'
         : '#38bdf8');
   const cutInSecondary = cutInTheme?.secondaryHex ?? '#fde68a';
+  const blurCls = vfx.enableBackdropBlur ? 'backdrop-blur-md' : '';
 
   return (
     <div
       data-testid="bg-vfx-stage"
+      data-quality-tier={vfx.qualityTier}
       className="pointer-events-none absolute inset-0 z-[48] overflow-hidden"
     >
       {/* LỚP 1: SVG ĐƯỜNG NHẮM MỤC TIÊU */}
@@ -894,12 +943,12 @@ export function BoardGameVfxStage({
           className="pointer-events-none absolute inset-x-0 bottom-20 flex justify-center px-3"
         >
           <div
-            className={`flex items-center gap-3 rounded-2xl border px-4 py-2.5 shadow-2xl backdrop-blur-md ${
+            className={`flex items-center gap-3 rounded-2xl border px-4 py-2.5 shadow-2xl ${blurCls} ${
               vfx.activeDiceRoll.freeChoice
-                ? 'border-amber-300/80 bg-amber-950/85 text-amber-100'
+                ? 'border-amber-300/80 bg-amber-950/92 text-amber-100'
                 : vfx.activeDiceRoll.rerollRequired
-                  ? 'border-orange-400/80 bg-orange-950/85 text-orange-100'
-                  : 'border-cyan-400/60 bg-slate-900/90 text-white'
+                  ? 'border-orange-400/80 bg-orange-950/92 text-orange-100'
+                  : 'border-cyan-400/60 bg-slate-900/95 text-white'
             } ${vfx.reducedMotion ? '' : 'bg-vfx-dice-roll'}`}
           >
             <div className="flex items-center gap-1.5">
@@ -1014,7 +1063,7 @@ export function BoardGameVfxStage({
           className="pointer-events-none absolute inset-x-0 top-14 sm:top-20 z-30 flex justify-center px-3"
         >
           <div
-            className={`relative flex w-full max-w-2xl items-center gap-3 sm:gap-4 overflow-hidden rounded-2xl border-2 bg-slate-950/92 px-4 py-3 shadow-2xl backdrop-blur-md ${
+            className={`relative flex w-full max-w-2xl items-center gap-3 sm:gap-4 overflow-hidden rounded-2xl border-2 bg-slate-950/95 px-4 py-3 shadow-2xl ${blurCls} ${
               vfx.reducedMotion ? '' : 'bg-vfx-cutin-enter'
             }`}
             style={{
@@ -1098,4 +1147,4 @@ export function BoardGameVfxStage({
       )}
     </div>
   );
-}
+});

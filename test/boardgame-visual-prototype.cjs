@@ -100,6 +100,59 @@ function resolveBrowserExecutable(chromium) {
   throw new Error('No Chromium/Chrome executable found.');
 }
 
+async function measureVfxBurstPerformance(page, durationMs = 950) {
+  const recPromise = page.evaluate((ms) => {
+    return new Promise((resolve) => {
+      const deltas = [];
+      let prev = performance.now();
+      const start = prev;
+      function step(now) {
+        deltas.push(now - prev);
+        prev = now;
+        if (now - start >= ms) {
+          const valid = deltas.slice(1);
+          const sorted = [...valid].sort((a, b) => a - b);
+          const sum = valid.reduce((acc, v) => acc + v, 0);
+          const avg = valid.length > 0 ? sum / valid.length : 16.67;
+          const p50 = sorted.length > 0 ? sorted[Math.floor(sorted.length * 0.5)] : avg;
+          const p95 = sorted.length > 0 ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))] : avg;
+          const max = sorted.length > 0 ? sorted[sorted.length - 1] : avg;
+          const mem = performance.memory && typeof performance.memory.usedJSHeapSize === 'number'
+            ? Number((performance.memory.usedJSHeapSize / 1048576).toFixed(2))
+            : null;
+          resolve({
+            frames: valid.length,
+            durationMs: Math.round(now - start),
+            avgFrameMs: Number(avg.toFixed(2)),
+            p50FrameMs: Number(p50.toFixed(2)),
+            p95FrameMs: Number(p95.toFixed(2)),
+            maxFrameMs: Number(max.toFixed(2)),
+            measuredFps: Number((1000 / Math.max(0.5, avg)).toFixed(1)),
+            jsHeapUsedMB: mem,
+          });
+          return;
+        }
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  }, durationMs);
+
+  await page.locator('[data-testid="proto-vfx-demo-machinegun"]').click();
+  await page.waitForTimeout(160);
+  await page.locator('[data-testid="proto-vfx-demo-vy-radio"]').click();
+  await page.waitForTimeout(180);
+  await page.locator('[data-testid="proto-vfx-demo-masamune"]').click();
+
+  const metrics = await recPromise;
+  const skipBtn = page.locator('[data-testid="bg-skip-vfx-btn"]');
+  if (await skipBtn.isVisible().catch(() => false)) {
+    await skipBtn.click().catch(() => undefined);
+  }
+  await page.waitForTimeout(80);
+  return metrics;
+}
+
 async function main() {
   assert.equal(fs.existsSync(OUT_DIR), true, 'Run `npm run build` before running prototype visual test');
   fs.mkdirSync(SHOT_DIR, { recursive: true });
@@ -113,6 +166,12 @@ async function main() {
   });
 
   const errors = [];
+  const perfBenchmark = {
+    environment: 'Headless Chromium (SwiftShader software rendering, Linux)',
+    measuredAtIso: new Date().toISOString(),
+    desktop: {},
+    mobile: {},
+  };
   try {
     // -------------------- 1. DESKTOP (1440x900) --------------------
     const desktopCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -261,6 +320,46 @@ async function main() {
     await page.waitForSelector('[data-testid="bg-vfx-card-draw"]', { timeout: 3000 });
     await page.waitForSelector('[data-testid="bg-vfx-cutin"]', { timeout: 3000 });
     await page.locator('[data-testid="bg-skip-vfx-btn"]').click();
+
+    // RC QA: Kiểm thử 3 mức Quality (High / Balanced / Low), tắt Shake mạnh & Mute/Audio diag
+    await page.locator('[data-testid="proto-quality-high"]').click();
+    assert.equal(await page.locator('[data-testid="proto-vfx-arena"]').getAttribute('data-active-tier'), 'high');
+    perfBenchmark.desktop.high = await measureVfxBurstPerformance(page, 950);
+
+    await page.locator('[data-testid="proto-quality-balanced"]').click();
+    assert.equal(await page.locator('[data-testid="proto-vfx-arena"]').getAttribute('data-active-tier'), 'balanced');
+    perfBenchmark.desktop.balanced = await measureVfxBurstPerformance(page, 950);
+
+    await page.locator('[data-testid="proto-quality-low"]').click();
+    assert.equal(await page.locator('[data-testid="proto-vfx-arena"]').getAttribute('data-active-tier'), 'low');
+    perfBenchmark.desktop.low = await measureVfxBurstPerformance(page, 950);
+
+    // Quay về High + bật Shake OFF -> xác nhận không gắn class bg-vfx-shake-*
+    await page.locator('[data-testid="proto-quality-high"]').click();
+    await page.locator('[data-testid="proto-shake-toggle"]').click();
+    assert.equal(await page.locator('[data-testid="proto-vfx-arena"]').getAttribute('data-shake-enabled'), 'false');
+    await page.locator('[data-testid="proto-vfx-demo-machinegun"]').click();
+    await page.waitForTimeout(80);
+    const hasShakeClass = await page.evaluate(() => {
+      const cls = document.querySelector('[data-testid="proto-vfx-arena"]')?.className || '';
+      return cls.includes('bg-vfx-shake-heavy') || cls.includes('bg-vfx-shake-light');
+    });
+    assert.equal(hasShakeClass, false, 'Shake OFF must never attach bg-vfx-shake-* class');
+
+    // Test Mute + Skip synchronization với window.__hustBgAudioDiag
+    await page.locator('[data-testid="proto-sound-toggle"]').click();
+    const audioDiag = await page.evaluate(() => window.__hustBgAudioDiag?.() ?? null);
+    assert.ok(audioDiag, 'Expected window.__hustBgAudioDiag to be exposed');
+    assert.equal(audioDiag.muted, true, 'Mute button must sync sound engine state');
+    assert.equal(audioDiag.activeVoices, 0, 'Mute must stop all active WebAudio voices');
+    await page.locator('[data-testid="proto-vfx-demo-vy-radio"]').click();
+    await page.waitForSelector('[data-testid="bg-vfx-cutin"]', { timeout: 3000 });
+    await page.screenshot({ path: path.join(SHOT_DIR, 'rc-01-desktop-vfx-quality-controls.png') });
+    await page.locator('[data-testid="bg-skip-vfx-btn"]').click();
+    // Khôi phục mặc định Auto + Shake BẬT + Sound BẬT
+    await page.locator('[data-testid="proto-shake-toggle"]').click();
+    await page.locator('[data-testid="proto-sound-toggle"]').click();
+    await page.locator('[data-testid="proto-quality-auto"]').click();
 
     // Screenshot 1: So sánh Cũ vs Mới (Minh)
     await page.locator('[data-testid="proto-compare-minh"]').scrollIntoViewIfNeeded();
@@ -478,27 +577,43 @@ async function main() {
     await mPage.locator('[data-testid="proto-section-tabletop-6-ktx"]').scrollIntoViewIfNeeded();
     await mPage.waitForTimeout(300);
     await mPage.screenshot({ path: path.join(SHOT_DIR, 'phase2-05-mobile-ktx-tiles-and-cards.png') });
+
+    // RC Mobile (390x844): Tự động nhận Balanced tier, tắt mist/blur tốn GPU & đo FPS thực tế
+    await mPage.locator('[data-testid="proto-vfx-arena"]').evaluate((el) =>
+      el.scrollIntoView({ block: 'center', behavior: 'instant' }),
+    );
+    const mobileQualityMeta = await mPage.evaluate(() => ({
+      activeTier: document.querySelector('[data-testid="proto-vfx-arena"]')?.getAttribute('data-active-tier'),
+      mistElements: document.querySelectorAll('[data-testid="proto-tabletop-map"] .bg-tile-mist-drift').length,
+    }));
+    assert.equal(mobileQualityMeta.activeTier, 'balanced', 'Mobile 390x844 Auto tier must resolve to balanced');
+    assert.equal(mobileQualityMeta.mistElements, 0, 'Mobile Balanced tier must disable fog drift animation layer');
+    perfBenchmark.mobile.balanced = await measureVfxBurstPerformance(mPage, 950);
+    perfBenchmark.mobile.autoDetectedTier = mobileQualityMeta.activeTier;
+    await mPage.locator('[data-testid="proto-vfx-demo-vy-radio"]').click();
+    await mPage.waitForSelector('[data-testid="bg-vfx-cutin"]', { timeout: 3000 });
+    await mPage.screenshot({ path: path.join(SHOT_DIR, 'rc-02-mobile-390x844-balanced.png') });
+    await mPage.locator('[data-testid="bg-skip-vfx-btn"]').click().catch(() => undefined);
+
     await mobileCtx.close();
 
     assert.deepEqual(errors, [], `Unexpected browser errors:\n${errors.join('\n')}`);
-    console.log(
-      JSON.stringify(
-        {
-          ok: true,
-          shotDir: SHOT_DIR,
-          desktopOverflow,
-          mobileOverflow,
-          eagerImagesCount: eagerImgs.length,
-          lazyImagesCount: lazyImgs.length,
-          rosterCount,
-          libraryCardsCount,
-          perfAudit,
-          ratios: ratioAudit.map((r) => ({ id: r.id, size: `${Math.round(r.width)}x${Math.round(r.height)}`, ratio: +r.ratio.toFixed(3) })),
-        },
-        null,
-        2,
-      ),
-    );
+    const perfOutPath = path.join(SHOT_DIR, 'rc-perf-report.json');
+    const summaryPayload = {
+      ok: true,
+      shotDir: SHOT_DIR,
+      desktopOverflow,
+      mobileOverflow,
+      eagerImagesCount: eagerImgs.length,
+      lazyImagesCount: lazyImgs.length,
+      rosterCount,
+      libraryCardsCount,
+      perfAudit,
+      perfBenchmark,
+      ratios: ratioAudit.map((r) => ({ id: r.id, size: `${Math.round(r.width)}x${Math.round(r.height)}`, ratio: +r.ratio.toFixed(3) })),
+    };
+    fs.writeFileSync(perfOutPath, JSON.stringify(summaryPayload, null, 2));
+    console.log(JSON.stringify(summaryPayload, null, 2));
   } finally {
     if (errors.length > 0) {
       console.error('Collected browser errors:', errors);

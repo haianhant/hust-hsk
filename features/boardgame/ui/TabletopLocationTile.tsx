@@ -34,11 +34,13 @@ export interface TabletopLocationTileProps {
   canChooseMoveHere: boolean;
   rolledDestinationHere: boolean;
   reducedMotion?: boolean;
+  enableMist?: boolean;
+  enableBackdropBlur?: boolean;
   onChooseDestination?: (locId: BoardGameLocationId) => void;
   onSelectPlayer: (updater: (prev: string | null) => string | null) => void;
 }
 
-export function TabletopLocationTile({
+export const TabletopLocationTile = React.memo(function TabletopLocationTile({
   locId,
   occupants,
   selfPlayerId,
@@ -49,6 +51,8 @@ export function TabletopLocationTile({
   canChooseMoveHere,
   rolledDestinationHere,
   reducedMotion = false,
+  enableMist = true,
+  enableBackdropBlur = true,
   onChooseDestination,
   onSelectPlayer,
 }: TabletopLocationTileProps) {
@@ -108,15 +112,17 @@ export function TabletopLocationTile({
       />
 
       {/* LỚP 3: SƯƠNG ĐÊM NHẸ TRÔI NỔI TRÊN MẶT BÀN */}
-      <div
-        aria-hidden="true"
-        className={`pointer-events-none absolute inset-x-0 bottom-0 h-3/5 opacity-45 ${
-          reducedMotion ? '' : 'bg-tile-mist-drift'
-        }`}
-        style={{
-          background: `radial-gradient(90% 70% at 50% 85%, ${ambience.fogHex}, transparent 75%)`,
-        }}
-      />
+      {enableMist && (
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-x-0 bottom-0 h-3/5 opacity-45 ${
+            reducedMotion ? '' : 'bg-tile-mist-drift'
+          }`}
+          style={{
+            background: `radial-gradient(90% 70% at 50% 85%, ${ambience.fogHex}, transparent 75%)`,
+          }}
+        />
+      )}
 
       {/* LỚP 4: ĐINH TÁN GÓC TABLETOP */}
       <span aria-hidden="true" className="pointer-events-none absolute left-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-white/30" />
@@ -142,7 +148,7 @@ export function TabletopLocationTile({
                 </span>
               )}
             </div>
-            <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-slate-950/75 border border-white/15 text-slate-100 whitespace-nowrap truncate backdrop-blur-sm">
+            <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-slate-950/85 border border-white/15 text-slate-100 whitespace-nowrap truncate ${enableBackdropBlur ? 'backdrop-blur-sm' : ''}`}>
               {meta.badgeText}
             </span>
           </div>
@@ -185,7 +191,7 @@ export function TabletopLocationTile({
                       toggleSelectedTargetId(prev, p.playerId, p.alive),
                     );
                   }}
-                  className={`flex items-center gap-1.5 rounded-full pr-2.5 pl-1 py-0.5 border text-xs font-bold shadow-md backdrop-blur-sm transition cursor-pointer ${
+                  className={`flex items-center gap-1.5 rounded-full pr-2.5 pl-1 py-0.5 border text-xs font-bold shadow-md transition cursor-pointer ${enableBackdropBlur ? 'backdrop-blur-sm' : ''} ${
                     isSelectedTarget
                       ? isSelfToken
                         ? 'bg-emerald-600/90 border-emerald-200 text-white'
@@ -222,5 +228,5 @@ export function TabletopLocationTile({
       </div>
     </div>
   );
-}
+});
 export default TabletopLocationTile;

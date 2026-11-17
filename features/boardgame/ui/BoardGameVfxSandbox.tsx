@@ -11,7 +11,7 @@
 // - Lượt Của Bạn / Hạ Gục / Chiến Thắng + Skip Animation + Giảm chuyển động
 // ---------------------------------------------------------------------------
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getCardById, toCardPublicMeta } from '@/features/boardgame/domain/cards';
 import { DEFAULT_CLUSTER_PAIRS } from '@/features/boardgame/domain/rules';
 import {
@@ -26,6 +26,17 @@ import {
   PlayerPawnToken,
 } from './BoardGameArt';
 import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
+import {
+  GRAPHICS_QUALITY_LABELS,
+  GRAPHICS_TIER_LABELS,
+  useBoardGameGraphicsSettings,
+  type BoardGameQualitySetting,
+} from './graphics-settings';
+import {
+  isBoardGameSoundMuted,
+  setBoardGameSoundMuted,
+  suspendBoardGameAudio,
+} from './sound';
 
 const BASE_APPEARANCE = sanitizeBoardGameAppearance({});
 
@@ -156,8 +167,16 @@ export function BoardGameVfxSandbox() {
   const seqRef = useRef<number>(1);
   const [game, setGame] = useState<BoardGamePublicGameView>(() => createSandboxInitialGame());
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>('sb-tu');
-  const [reducedMotionToggle, setReducedMotionToggle] = useState<boolean>(false);
+  const [muted, setMuted] = useState<boolean>(() => isBoardGameSoundMuted());
   const [lastDemoLabel, setLastDemoLabel] = useState<string>('Sẵn sàng — chọn 1 hiệu ứng để xem trực tiếp');
+
+  const gfx = useBoardGameGraphicsSettings();
+
+  useEffect(() => {
+    return () => {
+      suspendBoardGameAudio();
+    };
+  }, []);
 
   const vfx = useBoardGameVfxQueue({
     publicGame: game,
@@ -166,8 +185,14 @@ export function BoardGameVfxSandbox() {
     isSpectator: false,
     handUnmasked: true,
     containerRef: stageRef,
-    reducedMotionOverride: reducedMotionToggle,
+    graphicsProfile: gfx.profile,
   });
+
+  const handleToggleMute = () => {
+    const next = !muted;
+    setMuted(next);
+    setBoardGameSoundMuted(next);
+  };
 
   const nextLogId = (prefix: string) => {
     const n = seqRef.current++;
@@ -507,17 +532,67 @@ export function BoardGameVfxSandbox() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-950/90 p-1">
+            {(['auto', 'high', 'balanced', 'low'] as const satisfies readonly BoardGameQualitySetting[]).map(
+              (q) => {
+                const active = gfx.prefs.quality === q;
+                return (
+                  <button
+                    key={q}
+                    type="button"
+                    data-testid={`proto-quality-${q}`}
+                    aria-pressed={active}
+                    onClick={() => gfx.setQuality(q)}
+                    className={`rounded-lg px-2 py-1 text-[11px] font-bold transition cursor-pointer ${
+                      active
+                        ? 'bg-cyan-400 text-slate-950'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    {GRAPHICS_QUALITY_LABELS[q]}
+                  </button>
+                );
+              },
+            )}
+            <span className="px-2 text-[10px] font-extrabold text-cyan-300">
+              Tier: {GRAPHICS_TIER_LABELS[gfx.profile.tier]}
+            </span>
+          </div>
+          <button
+            type="button"
+            data-testid="proto-shake-toggle"
+            onClick={() => gfx.setShakeEnabled(!gfx.prefs.shakeEnabled)}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+              !gfx.prefs.shakeEnabled
+                ? 'border-emerald-400/70 bg-emerald-950/70 text-emerald-200'
+                : 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            {gfx.prefs.shakeEnabled ? '📳 Rung mạnh: BẬT' : '🛡️ Rung mạnh: TẮT'}
+          </button>
+          <button
+            type="button"
+            data-testid="proto-sound-toggle"
+            onClick={handleToggleMute}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+              muted
+                ? 'border-rose-400/70 bg-rose-950/70 text-rose-200'
+                : 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            {muted ? '🔇 Âm: TẮT' : '🔊 Âm: BẬT'}
+          </button>
           <button
             type="button"
             data-testid="proto-vfx-reduced-toggle"
-            onClick={() => setReducedMotionToggle((v) => !v)}
+            onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
             className={`rounded-xl border px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
-              reducedMotionToggle
+              vfx.reducedMotion
                 ? 'border-amber-400/70 bg-amber-950/70 text-amber-200'
                 : 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
             }`}
           >
-            {reducedMotionToggle ? '⏸️ Reduced Motion: BẬT' : '✨ Reduced Motion: TẮT'}
+            {vfx.reducedMotion ? '⏸️ Reduced Motion: BẬT' : '✨ Reduced Motion: TẮT'}
           </button>
           <button
             type="button"
@@ -593,6 +668,9 @@ export function BoardGameVfxSandbox() {
       <div
         ref={stageRef}
         data-testid="proto-vfx-arena"
+        data-active-tier={gfx.profile.tier}
+        data-shake-enabled={String(gfx.profile.enableScreenShake)}
+        data-reduced-motion={String(vfx.reducedMotion)}
         className={`relative min-h-[340px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/95 p-3 sm:p-5 space-y-4 ${
           vfx.screenShake === 'heavy'
             ? 'bg-vfx-shake-heavy'

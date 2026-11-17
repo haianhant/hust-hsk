@@ -634,7 +634,7 @@ function derivePawnLabel(displayName: string, seatIndex: number): string {
   return lastAscii.slice(0, 2) || `P${seatIndex + 1}`;
 }
 
-export function PlayerPawnToken({
+export const PlayerPawnToken = React.memo(function PlayerPawnToken({
   displayName,
   seatIndex,
   alive,
@@ -726,7 +726,7 @@ export function PlayerPawnToken({
       )}
     </div>
   );
-}
+});
 
 /**
  * Khung viền góc khắc kim loại Anime Noir (tái sử dụng cho Thẻ Nhân vật & Thẻ Bài 2:3).

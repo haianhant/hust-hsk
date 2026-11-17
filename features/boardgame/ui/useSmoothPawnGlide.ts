@@ -7,7 +7,7 @@
 // hay làm trễ server; hỗ trợ prefers-reduced-motion.
 // ---------------------------------------------------------------------------
 
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { BoardGameLocationId } from '@/shared/contracts/boardgame';
 
 export interface PawnGlideTrackable {
@@ -21,15 +21,35 @@ export function useSmoothPawnGlide({
   players,
   matchId,
   reducedMotion,
+  durationMs = 520,
 }: {
   containerRef: React.RefObject<HTMLDivElement>;
   players: readonly PawnGlideTrackable[];
   matchId: string;
   reducedMotion: boolean;
+  durationMs?: number;
 }) {
   const prevLocRectsRef = useRef<Map<string, DOMRect>>(new Map());
   const prevLocationsRef = useRef<Map<string, BoardGameLocationId>>(new Map());
   const prevMatchIdRef = useRef<string>(matchId);
+  const activeAnimsRef = useRef<Set<Animation>>(new Set());
+
+  const cancelAllGlides = () => {
+    activeAnimsRef.current.forEach((anim) => {
+      try {
+        anim.cancel();
+      } catch {
+        // ignore finished animations
+      }
+    });
+    activeAnimsRef.current.clear();
+  };
+
+  useEffect(() => {
+    return () => {
+      cancelAllGlides();
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const root = containerRef.current;
@@ -37,12 +57,14 @@ export function useSmoothPawnGlide({
 
     if (prevMatchIdRef.current !== matchId) {
       prevMatchIdRef.current = matchId;
+      cancelAllGlides();
       prevLocRectsRef.current.clear();
       prevLocationsRef.current.clear();
     }
 
     const nextRects = new Map<string, DOMRect>();
     const nextLocations = new Map<string, BoardGameLocationId>();
+    const effectiveMs = Math.max(0, Math.round(durationMs));
 
     for (const p of players) {
       nextLocations.set(p.playerId, p.location);
@@ -57,6 +79,7 @@ export function useSmoothPawnGlide({
 
       if (
         !reducedMotion &&
+        effectiveMs > 0 &&
         prevLoc &&
         prevLoc !== p.location &&
         prevRect &&
@@ -79,22 +102,23 @@ export function useSmoothPawnGlide({
               { transform: 'translate3d(0, 0, 0) scale(1)' },
             ],
             {
-              duration: 520,
+              duration: effectiveMs,
               easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
               fill: 'none',
             },
           );
-          anim.onfinish = () => {
+          activeAnimsRef.current.add(anim);
+          const cleanup = () => {
+            activeAnimsRef.current.delete(anim);
             el.style.zIndex = prevZ;
           };
-          anim.oncancel = () => {
-            el.style.zIndex = prevZ;
-          };
+          anim.onfinish = cleanup;
+          anim.oncancel = cleanup;
         }
       }
     }
 
     prevLocRectsRef.current = nextRects;
     prevLocationsRef.current = nextLocations;
-  }, [containerRef, players, matchId, reducedMotion]);
+  }, [containerRef, players, matchId, reducedMotion, durationMs]);
 }

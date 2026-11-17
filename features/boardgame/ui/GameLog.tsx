@@ -23,7 +23,7 @@ const LOG_STYLE_MAP: Record<string, string> = {
   move: 'bg-slate-900/90 border-slate-700/70 text-slate-200',
 };
 
-export function GameLog({ publicGame }: GameLogProps) {
+export const GameLog = React.memo(function GameLog({ publicGame }: GameLogProps) {
   const recentLogs = [...publicGame.publicLog].reverse();
 
   return (
@@ -75,6 +75,6 @@ export function GameLog({ publicGame }: GameLogProps) {
       </div>
     </div>
   );
-}
+});
 
 export default GameLog;

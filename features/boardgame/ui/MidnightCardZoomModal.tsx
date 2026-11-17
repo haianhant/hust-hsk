@@ -40,12 +40,16 @@ export type MidnightZoomTarget =
 export interface MidnightCardZoomModalProps {
   target: MidnightZoomTarget | null;
   reducedMotion?: boolean;
+  foilEnabled?: boolean;
+  enableBackdropBlur?: boolean;
   onClose: () => void;
 }
 
-export function MidnightCardZoomModal({
+export const MidnightCardZoomModal = React.memo(function MidnightCardZoomModal({
   target,
   reducedMotion = false,
+  foilEnabled = true,
+  enableBackdropBlur = true,
   onClose,
 }: MidnightCardZoomModalProps) {
   const [previewBack, setPreviewBack] = useState(false);
@@ -103,7 +107,7 @@ export function MidnightCardZoomModal({
       aria-modal="true"
       aria-label="Phóng lớn chi tiết thẻ bài"
       onClick={onClose}
-      className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-slate-950/85 p-3 sm:p-6 backdrop-blur-md"
+      className={`fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto p-3 sm:p-6 ${enableBackdropBlur ? 'bg-slate-950/85 backdrop-blur-md' : 'bg-slate-950/95'}`}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -130,6 +134,7 @@ export function MidnightCardZoomModal({
               woundsTaken={target.woundsTaken}
               currentHp={target.currentHp}
               priority
+              foilEnabled={foilEnabled}
               reducedMotion={reducedMotion}
               onFlipToggle={canInspectFront ? () => setPreviewBack((v) => !v) : undefined}
             />
@@ -140,6 +145,7 @@ export function MidnightCardZoomModal({
               zone={previewBack || !canInspectFront ? 'draw-pile' : target.zone}
               isParticipantInInvestigation={target.isParticipantInInvestigation}
               priority
+              foilEnabled={foilEnabled}
               reducedMotion={reducedMotion}
               onFlipToggle={canInspectFront ? () => setPreviewBack((v) => !v) : undefined}
             />
@@ -253,5 +259,5 @@ export function MidnightCardZoomModal({
       </div>
     </div>
   );
-}
+});
 export default MidnightCardZoomModal;

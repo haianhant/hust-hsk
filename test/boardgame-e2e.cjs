@@ -1287,6 +1287,17 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
             assert.ok(m.h >= 32 && m.w >= 32, `Mobile action button ${m.id} hit box < 32px: ${m.w}x${m.h}`);
             assert.ok(m.left >= -1 && m.right <= 391, `Mobile action button ${m.id} off-screen: ${m.right}`);
           }
+          // RC Mobile Check: Auto quality resolves to balanced & settings panel does not overflow 390x844
+          const mobTier = await p4.page.locator('[data-testid="bg-vfx-stage"]').getAttribute('data-quality-tier');
+          assert.equal(mobTier, 'balanced', 'Mobile 390x844 Auto quality tier must resolve to balanced');
+          await p4.page.locator('[data-testid="bg-graphics-settings-btn"]').click();
+          await p4.page.waitForSelector('[data-testid="bg-graphics-settings-panel"]', { timeout: 3000 });
+          const panelOverflow = await p4.page.evaluate(
+            () => document.documentElement.scrollWidth - window.innerWidth,
+          );
+          assert.ok(panelOverflow <= 1, `Mobile settings panel overflowed horizontally: ${panelOverflow}px`);
+          await p4.page.locator('[data-testid="bg-graphics-settings-btn"]').click();
+          await p4.page.locator('[data-testid="bg-graphics-settings-panel"]').waitFor({ state: 'detached', timeout: 3000 });
           p4MobileButtonsChecked = true;
         }
         const healSelectOnTurn = await activeUi.page
@@ -1448,6 +1459,19 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     );
     await setPage3DPaused(p1.page, false);
     await p1.page.waitForTimeout(350);
+    const exitIsolation = await p1.page.evaluate(() => {
+      const diag = window.__hustBgAudioDiag ? window.__hustBgAudioDiag() : null;
+      return {
+        lingeringBoard: document.querySelectorAll('[data-testid="boardgame-2d-board"]').length,
+        lingeringVfxCanvas: document.querySelectorAll('[data-testid="bg-vfx-combat-canvas"]').length,
+        activeVoices: diag ? diag.activeVoices : 0,
+        contextState: diag ? diag.contextState : 'uninitialized',
+      };
+    });
+    assert.equal(exitIsolation.lingeringBoard, 0, 'No boardgame-2d-board may linger after exiting match');
+    assert.equal(exitIsolation.lingeringVfxCanvas, 0, 'No VFX canvas may linger after exiting match');
+    assert.equal(exitIsolation.activeVoices, 0, 'Boardgame WebAudio active voices must be 0 after exiting match');
+    assert.notEqual(exitIsolation.contextState, 'running', 'Boardgame AudioContext must be suspended when returning to 3D');
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg4-05-exit-ktx.png'), timeout: 120000 });
     assert.equal(p1.audit.pageErrors.length, 0, `P1 exit page errors: ${p1.audit.pageErrors.join('; ')}`);
     return {

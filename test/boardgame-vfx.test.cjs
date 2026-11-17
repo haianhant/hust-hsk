@@ -12,6 +12,19 @@ const {
   VisualEventTracker,
   extractVisualEventsFromDiff,
 } = require('../features/boardgame/ui/vfx-queue.ts');
+const {
+  DEFAULT_GRAPHICS_PREFERENCES,
+  detectAutoQualityTier,
+  resolveGraphicsProfile,
+} = require('../features/boardgame/ui/graphics-settings.ts');
+const {
+  getBoardGameAudioDiagnostics,
+  isBoardGameSoundMuted,
+  playSoundForVisualEvent,
+  resetBoardGameAudioForTests,
+  setBoardGameSoundMuted,
+  stopAllBoardGameSounds,
+} = require('../features/boardgame/ui/sound.ts');
 const { DEFAULT_CLUSTER_PAIRS } = require('../features/boardgame/domain/rules.ts');
 const { getCardById, toCardPublicMeta } = require('../features/boardgame/domain/cards.ts');
 const { PROTOTYPE_CHARACTER_ART } = require('../features/boardgame/ui/midnight-noir-tokens.ts');
@@ -377,4 +390,154 @@ test('VFX Queue (3) — Reconnect Idempotency, Spectator P0 Isolation & Reduced 
   const serialized = JSON.stringify(specEvents);
   assert.equal(serialized.includes('gac-ky-thuat'), false);
   assert.ok(cardEv.durationMs <= 260, 'reducedMotion must clamp animation duration');
+});
+
+test('Graphics Quality (4) — Tự động điều chỉnh High / Balanced / Low & tắt Rung mạnh', () => {
+  const desktopEnv = {
+    viewportWidth: 1440,
+    hardwareConcurrency: 8,
+    deviceMemory: 8,
+    coarsePointer: false,
+    prefersReducedMotion: false,
+  };
+  const mobileEnv = {
+    viewportWidth: 390,
+    hardwareConcurrency: 6,
+    deviceMemory: 4,
+    coarsePointer: true,
+    prefersReducedMotion: false,
+  };
+  const lowEnv = {
+    viewportWidth: 390,
+    hardwareConcurrency: 2,
+    deviceMemory: 2,
+    coarsePointer: true,
+    prefersReducedMotion: false,
+  };
+
+  assert.equal(detectAutoQualityTier(desktopEnv), 'high');
+  assert.equal(detectAutoQualityTier(mobileEnv), 'balanced');
+  assert.equal(detectAutoQualityTier(lowEnv), 'low');
+  assert.equal(
+    detectAutoQualityTier({ ...desktopEnv, prefersReducedMotion: true }),
+    'low',
+  );
+
+  const deskHigh = resolveGraphicsProfile(DEFAULT_GRAPHICS_PREFERENCES, desktopEnv);
+  assert.equal(deskHigh.tier, 'high');
+  assert.equal(deskHigh.particleScale, 1);
+  assert.equal(deskHigh.enableBackdropBlur, true);
+  assert.equal(deskHigh.enableMistDrift, true);
+  assert.equal(deskHigh.enableScreenShake, true);
+
+  const mobBalanced = resolveGraphicsProfile(DEFAULT_GRAPHICS_PREFERENCES, mobileEnv);
+  assert.equal(mobBalanced.tier, 'balanced');
+  assert.equal(mobBalanced.dprCap, 1.5);
+  assert.equal(mobBalanced.particleScale, 0.55);
+  assert.equal(mobBalanced.enableBackdropBlur, false, 'Mobile Balanced must disable costly backdrop-blur');
+  assert.equal(mobBalanced.enableMistDrift, false);
+  assert.equal(mobBalanced.enable3DTilt, false);
+
+  const lowTier = resolveGraphicsProfile({ quality: 'low', reducedMotionOverride: null, shakeEnabled: true }, desktopEnv);
+  assert.equal(lowTier.tier, 'low');
+  assert.equal(lowTier.particleScale, 0);
+  assert.equal(lowTier.enableFoil, false);
+  assert.equal(lowTier.enableScreenShake, false);
+  assert.equal(lowTier.pawnGlideDurationMs, 0);
+
+  // Người chơi tắt rung riêng dù vẫn để High VFX
+  const noShakeHigh = resolveGraphicsProfile(
+    { quality: 'high', reducedMotionOverride: false, shakeEnabled: false },
+    desktopEnv,
+  );
+  assert.equal(noShakeHigh.tier, 'high');
+  assert.equal(noShakeHigh.particleScale, 1);
+  assert.equal(noShakeHigh.enableScreenShake, false, 'shakeEnabled=false must suppress screen shake even on High');
+});
+
+test('Audio Event Queue Sync (5) — Dedupe ID khi Reconnect, Cooldown gộp đa đòn & Mute/Stop', () => {
+  setBoardGameSoundMuted(false);
+  resetBoardGameAudioForTests();
+
+  const diceEv = {
+    id: 'm1::dice::1',
+    kind: 'DICE_ROLL',
+    order: 10,
+    durationMs: 900,
+    diceKind: 'attack',
+    actorId: 'p1',
+    actorName: 'Minh An',
+    d6: 5,
+    d4: 2,
+    total: 3,
+    freeChoice: false,
+    rerollRequired: false,
+  };
+  const slashEv1 = {
+    id: 'm1::combat::slash-1',
+    kind: 'COMBAT_VFX',
+    order: 30,
+    durationMs: 520,
+    effect: 'SLASH',
+    sourcePlayerId: 'p1',
+    targetPlayerIds: ['p2'],
+    shake: 'light',
+  };
+  const slashEv2 = {
+    id: 'm1::combat::slash-2',
+    kind: 'COMBAT_VFX',
+    order: 31,
+    durationMs: 520,
+    effect: 'SLASH',
+    sourcePlayerId: 'p1',
+    targetPlayerIds: ['p3'],
+    shake: 'light',
+  };
+  const floatEv = {
+    id: 'm1::float::1',
+    kind: 'FLOATING_TEXT',
+    order: 35,
+    durationMs: 900,
+    targetPlayerId: 'p2',
+    label: '-3',
+    variant: 'damage',
+  };
+
+  assert.equal(playSoundForVisualEvent(diceEv, 1000), true, 'First DICE_ROLL must fire');
+  assert.equal(playSoundForVisualEvent(diceEv, 1500), false, 'Duplicate event ID must never replay');
+  assert.equal(playSoundForVisualEvent(slashEv1, 1005), true, 'Different category SLASH at same tick must fire');
+  assert.equal(playSoundForVisualEvent(slashEv2, 1020), false, 'Simultaneous same-category SLASH within cooldown must coalesce');
+  assert.equal(playSoundForVisualEvent(floatEv, 1025), false, 'FLOATING_TEXT must not spam duplicate sounds');
+
+  let diag = getBoardGameAudioDiagnostics();
+  assert.equal(diag.totalTriggeredCount, 2);
+  assert.equal(diag.dedupedCount, 1);
+  assert.equal(diag.coalescedCount, 1);
+
+  // Sau cooldown (> 80ms) vẫn đánh được slashEv3 mới
+  const slashEv3 = { ...slashEv2, id: 'm1::combat::slash-3' };
+  assert.equal(playSoundForVisualEvent(slashEv3, 1120), true);
+
+  // Stop & Mute chặn toàn bộ cue sau đó
+  stopAllBoardGameSounds();
+  setBoardGameSoundMuted(true);
+  assert.equal(isBoardGameSoundMuted(), true);
+  assert.equal(playSoundForVisualEvent({ ...diceEv, id: 'm1::dice::2' }, 2000), false);
+  diag = getBoardGameAudioDiagnostics();
+  assert.equal(diag.muted, true);
+  assert.ok(diag.stopCount >= 2);
+
+  // Reconnect baseline qua VisualEventTracker phải phát 0 âm thanh
+  setBoardGameSoundMuted(false);
+  resetBoardGameAudioForTests();
+  const reconnectTracker = new VisualEventTracker();
+  const reconnectedEvents = reconnectTracker.seedBaseline(
+    makePubState({ turnNumber: 9, activePlayerId: 'p3' }),
+    { selfPlayerId: 'p1', isSpectator: false },
+  );
+  let reconnectTriggered = 0;
+  for (const ev of reconnectedEvents) {
+    if (playSoundForVisualEvent(ev, 3000)) reconnectTriggered += 1;
+  }
+  assert.equal(reconnectTriggered, 0, 'F5 Reconnect mid-game must trigger 0 sounds');
 });

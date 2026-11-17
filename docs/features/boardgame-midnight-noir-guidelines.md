@@ -99,3 +99,11 @@ Mọi giao diện mới bắt buộc sử dụng 2 hàm lọc thuần trong [`mi
 2. **Tương tác, Di chuyển Quân cờ & Phóng lớn Thẻ:**
    - **Phóng lớn & Lật Soi ([`MidnightCardZoomModal.tsx`](../../features/boardgame/ui/MidnightCardZoomModal.tsx)):** Xem chi tiết 2 mặt ở kích thước lớn, chỉ cho phép lật xem mặt trước khi hợp lệ theo luật P0.
    - **Quân cờ đế nổi & Di chuyển mượt ([`BoardGameArt.tsx`](../../features/boardgame/ui/BoardGameArt.tsx), [`useSmoothPawnGlide.ts`](../../features/boardgame/ui/useSmoothPawnGlide.ts)):** Quân cờ chỉ hiện chân dung khi `revealedRoleId !== null`, sử dụng kỹ thuật FLIP Web Animations API để trượt parabol `520ms` giữa các ô địa điểm mà không chặn thao tác server.
+
+---
+
+## 8. Âm thanh Đa lớp, Đồ họa 3 Mức & Release Candidate (Giai đoạn 4 / RC)
+
+- **Âm thanh WebAudio Đa lớp & Đồng bộ Queue:** [`sound.ts`](../../features/boardgame/ui/sound.ts) kết hợp sample PCM thủ tục ngắn với bộ lọc `BiquadFilter` và compressor master bus, đồng bộ duy nhất qua `playSoundForVisualEvent` (khử trùng `event.id` khi reconnect, gộp cooldown đa mục tiêu và gọi `suspendBoardGameAudio()` khi thoát về khuôn viên 3D).
+- **Cấu hình Đồ họa & Trợ năng:** [`graphics-settings.ts`](../../features/boardgame/ui/graphics-settings.ts) cung cấp 3 mức **`High / Balanced / Low`** (tự hạ `Balanced` trên Mobile `390×844` / `Low` khi thiết bị yếu hoặc bật Reduced Motion), cùng công tắc **`Mute`**, **`Skip Cinematic`**, **`Reduced Motion`** và **`Tắt hiệu ứng rung mạnh`**.
+- **Báo cáo Hiệu năng, Kiểm thử & Checklist phát hành (`READY_FOR_APPROVAL`):** Xem chi tiết tại [`boardgame-visual-overhaul-rc.md`](./boardgame-visual-overhaul-rc.md).

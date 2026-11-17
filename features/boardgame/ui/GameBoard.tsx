@@ -10,12 +10,13 @@
 // - Thời gian suy nghĩ vô hạn mặc định, tối ưu responsive desktop & mobile 390×844
 // ---------------------------------------------------------------------------
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   VALID_BOARD_GAME_EMOTES,
   type BoardGameActionPayload,
   type BoardGameChatEmoteServerMessage,
   type BoardGameEmoteId,
+  type BoardGameLocationId,
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
 } from '../network/contracts';
@@ -41,13 +42,17 @@ import { TabletopLocationTile } from './TabletopLocationTile';
 import { useSmoothPawnGlide } from './useSmoothPawnGlide';
 import { MidnightCardZoomModal, type MidnightZoomTarget } from './MidnightCardZoomModal';
 import {
+  GRAPHICS_QUALITY_LABELS,
+  GRAPHICS_TIER_LABELS,
+  useBoardGameGraphicsSettings,
+  type BoardGameQualitySetting,
+} from './graphics-settings';
+import {
   isBoardGameSoundMuted,
   playEmotePop,
-  playRoleReveal,
-  playTrackAdvance,
-  playTurnAlert,
-  playVictoryFanfare,
   setBoardGameSoundMuted,
+  stopAllBoardGameSounds,
+  suspendBoardGameAudio,
 } from './sound';
 
 const EMOTE_META: Record<BoardGameEmoteId, { icon: string; label: string }> = {
@@ -118,12 +123,15 @@ export function GameBoard({
   const [actionBusy, setActionBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [localMuted, setLocalMuted] = useState(() => isBoardGameSoundMuted());
   const [dicePulse, setDicePulse] = useState(false);
   const [seenClueCount, setSeenClueCount] = useState(0);
   const [seenLogCount, setSeenLogCount] = useState(() => publicGame.publicLog.length);
   const [zoomTarget, setZoomTarget] = useState<MidnightZoomTarget | null>(null);
   const boardStageRef = useRef<HTMLDivElement>(null);
+
+  const gfx = useBoardGameGraphicsSettings();
 
   const vfx = useBoardGameVfxQueue({
     publicGame,
@@ -132,6 +140,7 @@ export function GameBoard({
     isSpectator,
     handUnmasked: roleCardVisible || handUnmasked,
     containerRef: boardStageRef,
+    graphicsProfile: gfx.profile,
   });
 
   useSmoothPawnGlide({
@@ -139,17 +148,29 @@ export function GameBoard({
     players: publicGame.players,
     matchId: publicGame.matchId,
     reducedMotion: vfx.reducedMotion,
+    durationMs: gfx.profile.pawnGlideDurationMs,
   });
 
   const prevTurnRef = useRef<number>(publicGame.turnNumber);
-  const prevActiveRef = useRef<string | null>(publicGame.activePlayerId);
-  const prevRevealIdRef = useRef<string | null>(publicGame.lastRevealEvent?.id ?? null);
-  const prevWinnerRef = useRef<string | null>(publicGame.winnerLabel);
-  const prevLogLenRef = useRef<number>(publicGame.publicLog.length);
-  const prevEmoteCountRef = useRef<number>(recentEmotes.length);
+  const prevEmoteItemRef = useRef<BoardGameChatEmoteServerMessage | null>(
+    recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null,
+  );
   const prevDiceSigRef = useRef<string | null>(null);
 
   const effectiveMuted = propMuted ?? localMuted;
+
+  useEffect(() => {
+    if (typeof propMuted === 'boolean') {
+      setBoardGameSoundMuted(propMuted);
+    }
+  }, [propMuted]);
+
+  useEffect(() => {
+    return () => {
+      // Dọn & tạm dừng WebAudio khi rời Bóng Đêm KTX về khuôn viên 3D
+      suspendBoardGameAudio();
+    };
+  }, []);
 
   useEffect(() => {
     setHandUnmasked(false);
@@ -189,46 +210,16 @@ export function GameBoard({
       prevTurnRef.current = publicGame.turnNumber;
       setSelectedTargetId(null);
       setLocalError(null);
-      if (
-        publicGame.activePlayerId &&
-        publicGame.activePlayerId === selfPlayerId &&
-        publicGame.activePlayerId !== prevActiveRef.current
-      ) {
-        playTurnAlert();
-      }
-      prevActiveRef.current = publicGame.activePlayerId;
     }
-  }, [publicGame.turnNumber, publicGame.activePlayerId, selfPlayerId]);
+  }, [publicGame.turnNumber]);
 
   useEffect(() => {
-    const revId = publicGame.lastRevealEvent?.id ?? null;
-    if (revId && revId !== prevRevealIdRef.current) {
-      prevRevealIdRef.current = revId;
-      playRoleReveal();
-    }
-  }, [publicGame.lastRevealEvent]);
-
-  useEffect(() => {
-    if (publicGame.winnerLabel && publicGame.winnerLabel !== prevWinnerRef.current) {
-      prevWinnerRef.current = publicGame.winnerLabel;
-      playVictoryFanfare();
-    }
-  }, [publicGame.winnerLabel]);
-
-  useEffect(() => {
-    if (publicGame.publicLog.length > prevLogLenRef.current) {
-      const latest = publicGame.publicLog[publicGame.publicLog.length - 1];
-      prevLogLenRef.current = publicGame.publicLog.length;
-      if (latest?.kind === 'dice' || latest?.kind === 'move') playTrackAdvance();
-    }
-  }, [publicGame.publicLog]);
-
-  useEffect(() => {
-    if (recentEmotes.length > prevEmoteCountRef.current) {
-      prevEmoteCountRef.current = recentEmotes.length;
+    const latest = recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null;
+    if (latest && latest !== prevEmoteItemRef.current) {
+      prevEmoteItemRef.current = latest;
       playEmotePop();
     }
-  }, [recentEmotes.length]);
+  }, [recentEmotes]);
 
   useEffect(() => {
     const roll = publicGame.lastDiceRoll;
@@ -248,6 +239,10 @@ export function GameBoard({
   const activePlayer = useMemo(
     () => publicGame.players.find((p) => p.playerId === publicGame.activePlayerId) ?? null,
     [publicGame.players, publicGame.activePlayerId],
+  );
+  const boardClusters = useMemo(
+    () => buildBoardClustersView(publicGame.clusterPairs),
+    [publicGame.clusterPairs],
   );
   const isMyTurn =
     !isSpectator &&
@@ -304,26 +299,51 @@ export function GameBoard({
     recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null;
   const displayedError = localError ?? lastError;
 
-  const dispatchAction = async (action: BoardGameActionPayload) => {
-    if (actionBusy) return;
+  const onActionRef = useRef(onAction);
+  onActionRef.current = onAction;
+  const actionBusyRef = useRef(actionBusy);
+  actionBusyRef.current = actionBusy;
+
+  const dispatchAction = useCallback(async (action: BoardGameActionPayload) => {
+    if (actionBusyRef.current) return;
+    actionBusyRef.current = true;
     setActionBusy(true);
     setLocalError(null);
     try {
-      const res = await onAction(action);
+      const res = await onActionRef.current(action);
       if (res && !res.ok && res.reason) {
         setLocalError(res.reason);
       }
     } finally {
+      actionBusyRef.current = false;
       setActionBusy(false);
     }
-  };
+  }, []);
 
-  const handleToggleSoundClick = () => {
+  const handleChooseDestination = useCallback(
+    (dest: BoardGameLocationId) => {
+      void dispatchAction({ type: 'CHOOSE_DEST', location: dest });
+    },
+    [dispatchAction],
+  );
+
+  const handleToggleRoleCard = useCallback(() => {
+    setRoleCardVisible((v) => !v);
+  }, []);
+
+  const handleCloseZoom = useCallback(() => {
+    setZoomTarget(null);
+  }, []);
+
+  const handleToggleSoundClick = useCallback(() => {
     const next = !effectiveMuted;
     setLocalMuted(next);
     setBoardGameSoundMuted(next);
+    if (next) {
+      stopAllBoardGameSounds();
+    }
     onToggleSound?.();
-  };
+  }, [effectiveMuted, onToggleSound]);
 
   return (
     <div
@@ -394,7 +414,7 @@ export function GameBoard({
             <button
               type="button"
               data-testid="bg-vfx-motion-toggle-btn"
-              onClick={() => vfx.setReducedMotionOverride(!vfx.reducedMotion)}
+              onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
               title={
                 vfx.reducedMotion
                   ? 'Đang bật chế độ Giảm chuyển động (nhấn để bật VFX đầy đủ)'
@@ -407,6 +427,22 @@ export function GameBoard({
               }`}
             >
               {vfx.reducedMotion ? '⏸️ Tĩnh' : '✨ VFX'}
+            </button>
+            <button
+              type="button"
+              data-testid="bg-graphics-settings-btn"
+              onClick={() => setSettingsPanelOpen((v) => !v)}
+              aria-expanded={settingsPanelOpen}
+              aria-label="Cài đặt đồ họa và trợ năng"
+              title={`Đồ họa: ${GRAPHICS_TIER_LABELS[gfx.profile.tier]} · Cài đặt hiệu ứng & rung`}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                settingsPanelOpen
+                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-100'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-100'
+              }`}
+            >
+              <span>⚙️</span>
+              <span className="hidden xl:inline">{GRAPHICS_TIER_LABELS[gfx.profile.tier]}</span>
             </button>
             {onOpenLeaderboard && (
               <button
@@ -437,6 +473,94 @@ export function GameBoard({
           </div>
         </div>
       </header>
+
+      {/* BẢNG CÀI ĐẶT ĐỒ HỌA (HIGH / BALANCED / LOW) & TRỢ NĂNG */}
+      {settingsPanelOpen && (
+        <section
+          data-testid="bg-graphics-settings-panel"
+          aria-label="Tùy chỉnh đồ họa, âm thanh và rung màn hình"
+          className="shrink-0 border-b border-cyan-500/35 bg-slate-900/98 px-3 sm:px-5 py-2.5"
+        >
+          <div className="mx-auto max-w-[1680px] flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-cyan-200 mr-1">
+                Đồ họa ({GRAPHICS_TIER_LABELS[gfx.profile.tier]}):
+              </span>
+              {(['auto', 'high', 'balanced', 'low'] as const satisfies readonly BoardGameQualitySetting[]).map(
+                (q) => {
+                  const active = gfx.prefs.quality === q;
+                  return (
+                    <button
+                      key={q}
+                      type="button"
+                      data-testid={`bg-quality-${q}`}
+                      aria-pressed={active}
+                      onClick={() => gfx.setQuality(q)}
+                      className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                        active
+                          ? 'bg-cyan-500 text-slate-950 border-cyan-300'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600'
+                      }`}
+                    >
+                      {GRAPHICS_QUALITY_LABELS[q]}
+                    </button>
+                  );
+                },
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                data-testid="bg-shake-toggle-btn"
+                aria-pressed={!gfx.prefs.shakeEnabled}
+                onClick={() => gfx.setShakeEnabled(!gfx.prefs.shakeEnabled)}
+                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  !gfx.prefs.shakeEnabled
+                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                }`}
+              >
+                {gfx.prefs.shakeEnabled ? '📳 Rung mạnh: BẬT' : '🛡️ Tắt rung mạnh'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-reduced-motion-toggle-btn"
+                aria-pressed={vfx.reducedMotion}
+                onClick={() => gfx.setReducedMotionOverride(!vfx.reducedMotion)}
+                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  vfx.reducedMotion
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                }`}
+              >
+                {vfx.reducedMotion ? '⏸️ Giảm chuyển động: BẬT' : '✨ Chuyển động: ĐẦY ĐỦ'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-panel-mute-toggle-btn"
+                aria-pressed={effectiveMuted}
+                onClick={handleToggleSoundClick}
+                className={`px-2.5 py-1.5 min-h-[36px] rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  effectiveMuted
+                    ? 'bg-rose-500/20 border-rose-400 text-rose-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-200'
+                }`}
+              >
+                {effectiveMuted ? '🔇 Đang tắt tiếng' : '🔊 Âm thanh: BẬT'}
+              </button>
+              <button
+                type="button"
+                data-testid="bg-panel-skip-cinematic-btn"
+                onClick={vfx.skipAllAnimations}
+                className="px-2.5 py-1.5 min-h-[36px] rounded-xl border border-amber-400/60 bg-amber-950/50 hover:bg-amber-900/60 text-xs font-bold text-amber-200 transition cursor-pointer"
+              >
+                ⏭️ Skip Cinematic
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* THANH TAB MOBILE (< lg) — 3 nút gọn vừa khít 390px */}
       <nav
@@ -663,7 +787,7 @@ export function GameBoard({
 
               {/* 2. BÀN CỜ 3 CỤM KHU VỰC ĐÔI (XÁO NGẪU NHIÊN ĐẦU MỖI VÁN) */}
               <section className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                {buildBoardClustersView(publicGame.clusterPairs).map((cluster) => (
+                {boardClusters.map((cluster) => (
                   <div
                     key={cluster.clusterId}
                     className={`rounded-2xl border p-2.5 space-y-2 ${cluster.ringClass}`}
@@ -708,9 +832,9 @@ export function GameBoard({
                             canChooseMoveHere={canChooseMoveHere}
                             rolledDestinationHere={rolledDestinationHere}
                             reducedMotion={vfx.reducedMotion}
-                            onChooseDestination={(dest) =>
-                              dispatchAction({ type: 'CHOOSE_DEST', location: dest })
-                            }
+                            enableMist={gfx.profile.enableMistDrift}
+                            enableBackdropBlur={gfx.profile.enableBackdropBlur}
+                            onChooseDestination={handleChooseDestination}
                             onSelectPlayer={setSelectedTargetId}
                           />
                         );
@@ -1063,8 +1187,9 @@ export function GameBoard({
                   cardVisible={roleCardVisible}
                   unreadClueCount={unreadClueCount}
                   visualStyle="midnight-noir"
-                  reducedMotion={vfx.reducedMotion}
-                  onToggleCardVisible={() => setRoleCardVisible((v) => !v)}
+                  foilEnabled={gfx.profile.enableFoil}
+                  reducedMotion={!gfx.profile.enable3DTilt || vfx.reducedMotion}
+                  onToggleCardVisible={handleToggleRoleCard}
                   onZoomRole={() =>
                     privateView &&
                     setZoomTarget({
@@ -1166,13 +1291,19 @@ export function GameBoard({
       {/* MODAL PHÓNG LỚN THẺ BÀI */}
       <MidnightCardZoomModal
         target={zoomTarget}
-        reducedMotion={vfx.reducedMotion}
-        onClose={() => setZoomTarget(null)}
+        reducedMotion={!gfx.profile.enable3DTilt || vfx.reducedMotion}
+        foilEnabled={gfx.profile.enableFoil}
+        enableBackdropBlur={gfx.profile.enableBackdropBlur}
+        onClose={handleCloseZoom}
       />
 
       {/* HỘP THOẠI XÁC NHẬN RỜI VÁN */}
       {leaveConfirmOpen && (
-        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+        <div
+          className={`fixed inset-0 z-[55] flex items-center justify-center p-4 ${
+            gfx.profile.enableBackdropBlur ? 'bg-slate-950/75 backdrop-blur-sm' : 'bg-slate-950/90'
+          }`}
+        >
           <div className="w-full max-w-md rounded-2xl border border-rose-500/45 bg-slate-900 p-5 space-y-4 shadow-2xl">
             <h3 className="text-lg font-black text-white">Rời bàn Bóng Đêm KTX?</h3>
             <p className="text-sm text-slate-300 leading-relaxed">
