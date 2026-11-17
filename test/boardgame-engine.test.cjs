@@ -20,6 +20,8 @@ const {
   DEFAULT_CLUSTER_PAIRS,
   LOCATIONS_CATALOG,
   ROLES_CATALOG,
+  appendPrivateClue,
+  appendPublicLog,
   applyPlayerGameAction,
   applyTimeoutAutoTurn,
   areInSameCluster,
@@ -969,4 +971,114 @@ test('V4.9 — 5 chi tiết biên: CHOOSE_MOVE Reveal/Skill, inv-01 HP>3, Bách 
   assert.equal(v2.alive, false, 'Với Silver Rosary + mục tiêu >= 2 đồ sắp chết, Hải phải kết liễu thay vì tha để trộm 1 món');
   assert.equal(v2.equipped.length, 0);
   assert.ok(bob2.equipped.includes('eq-04') && bob2.equipped.includes('eq-05'), 'Hải lấy được toàn bộ 2 trang bị nhờ kết liễu');
+});
+
+test('V4.10 — ID log/clue luôn duy nhất sau mốc 40/20 & Hải (Bob 4–6p) tôn trọng Khiên Hộ Mệnh / Áo Choàng Bảo Hộ', () => {
+  // 1) Monotonic logSeq & clueSeq ngăn trùng ID khi quá 40 publicLog / 20 privateClues trong cùng lượt & timestamp
+  const state = createInitialGameState({
+    matchId: 'v4-log-seq-unique',
+    seed: 808,
+    nowMs: 1_750_300_000_000,
+    players: makePlayers(4),
+  });
+  const actor = getActivePlayer(state);
+  const fixedNow = 1_750_300_005_000;
+  for (let i = 0; i < 48; i++) {
+    appendPublicLog(state, 'attack', `Log ${i}`, fixedNow, actor.playerId);
+  }
+  assert.equal(state.publicLog.length, 40);
+  assert.equal(
+    new Set(state.publicLog.map((entry) => entry.id)).size,
+    40,
+    'Sau mốc MAX_PUBLIC_LOG = 40, các log cùng lượt/timestamp vẫn phải có ID duy nhất',
+  );
+
+  for (let i = 0; i < 25; i++) {
+    appendPrivateClue(actor, {
+      cardId: 'inv-01',
+      cardTitle: 'Tin đồn',
+      targetPlayerId: state.turnOrder[1],
+      targetName: 'SV 2',
+      summary: `Manh mối ${i}`,
+      atMs: fixedNow,
+    });
+  }
+  assert.equal(actor.privateClues.length, 20);
+  assert.equal(
+    new Set(actor.privateClues.map((clue) => clue.id)).size,
+    20,
+    'Sau mốc MAX_PRIVATE_CLUES = 20, mọi manh mối cùng timestamp vẫn phải có ID duy nhất',
+  );
+
+  // 2) Hải (Bob 4–6p): Khiên Hộ Mệnh (eq-10) chặn đòn về 0 ST -> KHÔNG được kích Cướp Đồ Thay Đòn
+  const sShield = createInitialGameState({
+    matchId: 'v4-bob-shield',
+    seed: 911,
+    nowMs: 1_750_310_000_000,
+    players: makePlayers(5),
+  });
+  sShield.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+  const bobS = getActivePlayer(sShield);
+  const shieldedVictim = Object.values(sShield.players).find((p) => p.playerId !== bobS.playerId);
+  bobS.roleId = 'lang-anh-san';
+  bobS.faction = 'wanderer';
+  bobS.revealed = true;
+  bobS.attacksThisTurn = 0;
+  bobS.location = 'radio';
+  bobS.equipped = ['ev-01', 'ev-02', 'ev-03']; // 1d4 + 2 => rawDmg luôn >= 3
+  shieldedVictim.location = 'radio';
+  shieldedVictim.guardianShieldActive = true;
+  shieldedVictim.equipped = ['eq-04'];
+  shieldedVictim.woundsTaken = 0;
+  sShield.turnPhase = 'MAIN_ACTION';
+  assert.equal(
+    applyPlayerGameAction(sShield, bobS.playerId, { type: 'ATTACK', targetPlayerId: shieldedVictim.playerId }, 1_750_310_001_000).ok,
+    true,
+  );
+  assert.equal(shieldedVictim.guardianShieldActive, false, 'Khiên Hộ Mệnh tiêu hao để chặn đòn');
+  assert.equal(shieldedVictim.woundsTaken, 0, 'Không nhận sát thương');
+  assert.deepEqual(shieldedVictim.equipped, ['eq-04'], 'Khiên chặn về 0 ST nên Hải không được cướp đồ');
+
+  // 3) Hải (Bob 4–6p): Áo Choàng Bảo Hộ (eq-01) giảm rawDmg=2 còn expectedDealt=1 (<2) -> gây 1 ST, KHÔNG cướp đồ
+  let verifiedHolyRobeGuard = false;
+  for (let seed = 1; seed <= 40; seed++) {
+    const sRobe = createInitialGameState({
+      matchId: `v4-bob-robe-${seed}`,
+      seed,
+      nowMs: 1_750_320_000_000,
+      players: makePlayers(5),
+    });
+    sRobe.clusterPairs = [...DEFAULT_CLUSTER_PAIRS];
+    const bobR = getActivePlayer(sRobe);
+    const robeVictim = Object.values(sRobe.players).find((p) => p.playerId !== bobR.playerId);
+    bobR.roleId = 'lang-anh-san';
+    bobR.faction = 'wanderer';
+    bobR.revealed = true;
+    bobR.attacksThisTurn = 0;
+    bobR.location = 'radio';
+    bobR.equipped = ['ev-01']; // Masamune 1d4 thuần
+    robeVictim.location = 'radio';
+    robeVictim.roleId = 'gac-ky-thuat';
+    robeVictim.faction = 'lantern-guard';
+    robeVictim.maxHp = 14;
+    robeVictim.hp = 14;
+    robeVictim.woundsTaken = 0;
+    robeVictim.equipped = ['eq-01']; // Holy Robe (-1 dmg)
+    sRobe.turnPhase = 'MAIN_ACTION';
+
+    const atkRes = applyPlayerGameAction(
+      sRobe,
+      bobR.playerId,
+      { type: 'ATTACK', targetPlayerId: robeVictim.playerId },
+      1_750_320_001_000,
+    );
+    assert.equal(atkRes.ok, true);
+    if (sRobe.lastDiceRoll?.d4 === 2) {
+      assert.equal(robeVictim.woundsTaken, 1, 'rawDmg=2 gặp Áo Choàng Bảo Hộ chỉ gây 1 ST thực tế');
+      assert.deepEqual(robeVictim.equipped, ['eq-01'], 'Sát thương thực tế < 2 nên Hải không được cướp Áo Choàng');
+      verifiedHolyRobeGuard = true;
+      break;
+    }
+  }
+  assert.equal(verifiedHolyRobeGuard, true, 'Phải kiểm chứng được trường hợp d4=2 qua Áo Choàng Bảo Hộ');
 });

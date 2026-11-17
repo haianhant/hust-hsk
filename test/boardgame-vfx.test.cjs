@@ -25,6 +25,11 @@ const {
   setBoardGameSoundMuted,
   stopAllBoardGameSounds,
 } = require('../features/boardgame/ui/sound.ts');
+const {
+  createInitialGameState,
+  getPublicGameView,
+  appendPublicLog,
+} = require('../features/boardgame/domain/index.ts');
 const { DEFAULT_CLUSTER_PAIRS } = require('../features/boardgame/domain/rules.ts');
 const { getCardById, toCardPublicMeta } = require('../features/boardgame/domain/cards.ts');
 const { PROTOTYPE_CHARACTER_ART } = require('../features/boardgame/ui/midnight-noir-tokens.ts');
@@ -571,4 +576,75 @@ test('Audio Event Queue Sync (5) — Dedupe ID khi Reconnect, Cooldown gộp đa
     if (playSoundForVisualEvent(ev, 3000)) reconnectTriggered += 1;
   }
   assert.equal(reconnectTriggered, 0, 'F5 Reconnect mid-game must trigger 0 sounds');
+});
+
+test('VFX Queue (6) — Multi-log sau mốc 40 vẫn giữ nguyên chuỗi VFX (không rơi event vì trùng log.id)', () => {
+  const players = Array.from({ length: 4 }, (_, idx) => ({
+    playerId: `p_${idx + 1}`,
+    displayName: `SV ${idx + 1}`,
+    seatIndex: idx,
+    appearance: {
+      gender: 'male',
+      topStyle: 'jacket',
+      hairColor: '#1f2937',
+      skinTone: '#f1c27d',
+    },
+    connected: true,
+  }));
+  const authState = createInitialGameState({
+    matchId: 'vfx-cap40-match',
+    seed: 1234,
+    nowMs: 1_750_400_000_000,
+    players,
+  });
+  for (let i = 0; i < 42; i++) {
+    appendPublicLog(authState, 'system', `Warmup ${i}`, 1_750_400_001_000 + i);
+  }
+  assert.equal(authState.publicLog.length, 40);
+
+  const tracker = new VisualEventTracker();
+  tracker.seedBaseline(getPublicGameView(authState), {
+    selfPlayerId: 'p_1',
+    isSpectator: false,
+  });
+
+  // Cùng turnNumber và sameTs phát sinh đồng thời 3 log liên tiếp sau mốc 40
+  const sameTs = 1_750_400_100_000;
+  authState.players.p_2.woundsTaken += 3;
+  authState.players.p_1.woundsTaken += 1;
+  authState.players.p_2.alive = false;
+  authState.players.p_2.revealed = true;
+  appendPublicLog(
+    authState,
+    'attack',
+    '⚔️ SV 1 tấn công SV 2 (|5 - 2|=3, tổng 3) → gây 3 sát thương!',
+    sameTs,
+    'p_1',
+  );
+  appendPublicLog(
+    authState,
+    'skill',
+    '🥊 Dũng "Gác Cổng" (SV 2) phản kích tức thì (|3 - 2|, tổng 1) → SV 1 chịu 1 sát thương!',
+    sameTs,
+    'p_2',
+  );
+  appendPublicLog(
+    authState,
+    'elimination',
+    '💀 SV 2 đã gục ngã và lộ vai!',
+    sameTs,
+    'p_2',
+  );
+
+  const emitted = tracker.ingestSnapshot(getPublicGameView(authState), {
+    selfPlayerId: 'p_1',
+    isSpectator: false,
+  });
+  const slashEv = emitted.find((e) => e.kind === 'COMBAT_VFX' && e.effect === 'SLASH');
+  const counterEv = emitted.find((e) => e.kind === 'COMBAT_VFX' && e.effect === 'COUNTER_STRIKE');
+  const elimEv = emitted.find((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'ELIMINATION');
+  assert.ok(slashEv, 'Đòn đánh chính sau mốc 40 phải kích hoạt SLASH');
+  assert.ok(counterEv, 'Log thứ 2 cùng ms sau mốc 40 phải kích hoạt COUNTER_STRIKE');
+  assert.ok(elimEv, 'Log thứ 3 cùng ms sau mốc 40 phải kích hoạt ELIMINATION');
+  assert.equal(new Set(emitted.map((e) => e.id)).size, emitted.length);
 });

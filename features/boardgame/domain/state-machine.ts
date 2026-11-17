@@ -133,6 +133,7 @@ export function createInitialGameState(
       avengedProtegeKiller: false,
       charlesKillWon: false,
       investigatedTargetIds: [],
+      clueSeq: 0,
       privateClues: [],
       appearance: pIn.appearance,
     };
@@ -163,6 +164,7 @@ export function createInitialGameState(
     lastDiceRoll: null,
     lastInvestigation: null,
     lastRevealEvent: null,
+    logSeq: 0,
     publicLog: [],
     highlights: [],
     finished: false,

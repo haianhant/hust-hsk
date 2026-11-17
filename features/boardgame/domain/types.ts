@@ -133,6 +133,7 @@ export interface AuthoritativePlayerState {
   avengedProtegeKiller: boolean;
   charlesKillWon: boolean;
   investigatedTargetIds: string[];
+  clueSeq?: number;
   privateClues: BoardGamePrivateClueEntry[];
   appearance: RemoteAppearance;
 }
@@ -158,6 +159,7 @@ export interface AuthoritativeGameState {
   lastDiceRoll: BoardGameDiceRollEvent | null;
   lastInvestigation: BoardGameInvestigationOutcome | null;
   lastRevealEvent: BoardGameRevealEvent | null;
+  logSeq?: number;
   publicLog: BoardGamePublicLogEntry[];
   highlights: BoardGameHighlightEntry[];
   finished: boolean;

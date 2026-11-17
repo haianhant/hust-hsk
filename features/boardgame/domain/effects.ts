@@ -48,8 +48,13 @@ export function appendPublicLog(
   nowMs: number,
   actorId?: string | null,
 ): void {
+  const nextSeq =
+    (typeof state.logSeq === 'number' && Number.isFinite(state.logSeq)
+      ? state.logSeq
+      : state.publicLog.length) + 1;
+  state.logSeq = nextSeq;
   const entry: BoardGamePublicLogEntry = {
-    id: `log-${state.turnNumber}-${state.publicLog.length + 1}-${nowMs}`,
+    id: `log-${state.turnNumber}-${nextSeq}-${nowMs}`,
     round: state.round,
     atMs: nowMs,
     kind,
@@ -84,9 +89,14 @@ export function appendPrivateClue(
   player: AuthoritativePlayerState,
   clue: Omit<BoardGamePrivateClueEntry, 'id'>,
 ): void {
+  const nextClueSeq =
+    (typeof player.clueSeq === 'number' && Number.isFinite(player.clueSeq)
+      ? player.clueSeq
+      : player.privateClues.length) + 1;
+  player.clueSeq = nextClueSeq;
   player.privateClues.push({
     ...clue,
-    id: `clue-${player.privateClues.length + 1}-${clue.atMs}`,
+    id: `clue-${nextClueSeq}-${clue.atMs}`,
   });
   if (player.privateClues.length > MAX_PRIVATE_CLUES) {
     player.privateClues.splice(0, player.privateClues.length - MAX_PRIVATE_CLUES);
@@ -1604,8 +1614,9 @@ export function resolveAttack(
       victim.equipped.length >= 2 &&
       expectedDealt >= victim.hp;
 
-    // Hải "Sưu Tầm" (Bob 4–6 người): gây >= 2 ST có thể cướp 1 Trang bị THAY VÌ gây sát thương
-    // (theo FAQ gốc: Súng Liên Thanh ev-06 không kích hoạt cướp hàng loạt; nếu Chuỗi Hạt eq-06 đủ sức kết liễu để hốt >=2 đồ thì đánh kết liễu).
+    // Hải "Sưu Tầm" (Bob 4–6 người): gây >= 2 ST thực tế có thể cướp 1 Trang bị THAY VÌ gây sát thương
+    // (theo FAQ gốc: Súng Liên Thanh ev-06 không kích hoạt cướp hàng loạt; nếu Chuỗi Hạt eq-06 đủ sức kết liễu để hốt >=2 đồ thì đánh kết liễu;
+    // Khiên Hộ Mệnh eq-10 / Áo Choàng Bảo Hộ eq-01 làm sát thương thực tế < 2 thì không kích hoạt cướp).
     const bobStealInstead =
       !hasMachineGun &&
       !wouldKillForMultiLoot &&
@@ -1613,7 +1624,7 @@ export function resolveAttack(
       actor.alive &&
       actor.revealed &&
       actor.roleId === 'lang-anh-san' &&
-      rawDmg >= 2 &&
+      expectedDealt >= 2 &&
       victim.equipped.length > 0;
 
     if (bobStealInstead) {
