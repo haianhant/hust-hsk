@@ -76,6 +76,8 @@ canvas {
   .bg-vfx-reveal-push,
   .bg-vfx-reveal-impact-glow,
   .bg-vfx-impact-flash,
+  .bg-vfx-card-flight,
+  .bg-vfx-card-draw-ring,
   .bg-vfx-dice-roll,
   .bg-tile-mist-drift,
   .mn-dice-tray-spotlight,
@@ -431,4 +433,34 @@ canvas {
 
 .bg-vfx-impact-flash {
   animation: bg-vfx-impact-flash 310ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Deck-to-center 3D card flight & aura pulse */
+@keyframes bg-vfx-card-flight {
+  0% {
+    opacity: 0.45;
+    transform: translate3d(var(--card-from-x, 140px), var(--card-from-y, 90px), 0) scale(0.36) rotate(-14deg);
+  }
+  58% {
+    opacity: 1;
+    transform: translate3d(0, -8px, 0) scale(1.07) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes bg-vfx-card-draw-ring {
+  0%   { opacity: 0.88; transform: scale(0.74); }
+  55%  { opacity: 0.72; transform: scale(1.16); }
+  100% { opacity: 0; transform: scale(1.42); }
+}
+
+.bg-vfx-card-flight {
+  animation: bg-vfx-card-flight 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.bg-vfx-card-draw-ring {
+  animation: bg-vfx-card-draw-ring 780ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }

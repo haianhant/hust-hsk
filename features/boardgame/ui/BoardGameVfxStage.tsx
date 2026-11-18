@@ -71,6 +71,7 @@ interface ActiveCombatAnim {
   startedAt: number;
   durationMs: number;
   factionReveal?: BoardGameFactionId | null;
+  deckThemeBurst?: BoardGameDeckId | null;
 }
 
 interface ActiveFloatingPopup {
@@ -333,6 +334,95 @@ function drawImpactHitStopStarburst(
   ctx.restore();
 }
 
+function drawDeckThemeBurst(
+  ctx: CanvasRenderingContext2D,
+  anim: ActiveCombatAnim,
+  p: number,
+  reducedMotion: boolean,
+  particleScale: number,
+): void {
+  const deck = anim.deckThemeBurst ?? 'investigation';
+  const fade = Math.sin(p * Math.PI);
+  const center = anim.targets[0] ?? anim.source;
+  const origin = anim.source;
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, fade));
+
+  // Vệt bay ánh sáng từ vị trí Deck lên trung tâm
+  const trailColor =
+    deck === 'investigation' ? '#34d399' : deck === 'equipment' ? '#38bdf8' : '#f43f5e';
+  const accentColor =
+    deck === 'investigation' ? '#a7f3d0' : deck === 'equipment' ? '#e2e8f0' : '#fbbf24';
+
+  if (p < 0.65 && !reducedMotion) {
+    const flightP = Math.min(1, p / 0.48);
+    const curX = origin.x + (center.x - origin.x) * flightP;
+    const curY = origin.y + (center.y - origin.y) * flightP;
+    const trailGrad = ctx.createLinearGradient(origin.x, origin.y, curX, curY);
+    trailGrad.addColorStop(0, 'rgba(255,255,255,0)');
+    trailGrad.addColorStop(1, trailColor);
+    ctx.strokeStyle = trailGrad;
+    ctx.lineWidth = 4.5 * (1 - flightP * 0.35);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(origin.x, origin.y);
+    ctx.lineTo(curX, curY);
+    ctx.stroke();
+  }
+
+  // Hiệu ứng đặc trưng từng bộ bài tại trung tâm khi lá bài đáp/lật
+  const bloomP = Math.max(0, Math.min(1, (p - 0.18) / 0.82));
+  if (bloomP > 0) {
+    if (deck === 'investigation') {
+      // Khám Phá: vòng radar sonar lục bảo + tia quét la bàn
+      ctx.strokeStyle = trailColor;
+      ctx.lineWidth = 2.6 * (1 - bloomP * 0.5);
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, 44 + bloomP * 76, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = accentColor;
+      ctx.lineWidth = 2 * (1 - bloomP * 0.6);
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, 68 + bloomP * 44, bloomP * 2.2, bloomP * 2.2 + Math.PI * 1.45);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else if (deck === 'equipment') {
+      // Cung Ứng: khung lục giác thép thiên thanh + tia rèn kim loại
+      const r = 56 + bloomP * 64;
+      ctx.strokeStyle = trailColor;
+      ctx.lineWidth = 3 * (1 - bloomP * 0.5);
+      ctx.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const ang = (Math.PI / 3) * k - Math.PI / 2 + bloomP * 0.35;
+        const hx = center.x + Math.cos(ang) * r;
+        const hy = center.y + Math.sin(ang) * r;
+        if (k === 0) ctx.moveTo(hx, hy);
+        else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    } else {
+      // Đột Kích: tia xung kích đỏ rực + cảnh báo hổ phách
+      const rays = reducedMotion || particleScale <= 0 ? 4 : Math.max(6, Math.round(10 * particleScale));
+      for (let i = 0; i < rays; i++) {
+        const ang = (Math.PI * 2 * i) / rays + 0.25;
+        const r1 = 52 + bloomP * 24;
+        const r2 = 84 + bloomP * 68;
+        ctx.strokeStyle = i % 2 === 0 ? trailColor : accentColor;
+        ctx.lineWidth = 2.8 * (1 - bloomP * 0.6);
+        ctx.beginPath();
+        ctx.moveTo(center.x + Math.cos(ang) * r1, center.y + Math.sin(ang) * r1);
+        ctx.lineTo(center.x + Math.cos(ang) * r2, center.y + Math.sin(ang) * r2);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+}
+
 function drawCombatAnimation(
   ctx: CanvasRenderingContext2D,
   anim: ActiveCombatAnim,
@@ -346,6 +436,11 @@ function drawCombatAnimation(
 
   if (anim.factionReveal) {
     drawFactionRevealBurst(ctx, anim, p, reducedMotion, particleScale);
+    return true;
+  }
+
+  if (anim.deckThemeBurst) {
+    drawDeckThemeBurst(ctx, anim, p, reducedMotion, particleScale);
     return true;
   }
 
@@ -773,6 +868,7 @@ export interface BoardGameVfxState {
   activeCardDraw: {
     event: CardDrawVisualEvent;
     revealedFace: boolean;
+    fromDelta?: Point2D;
   } | null;
   activeCutIn: CinematicCutInVisualEvent | null;
   revealPhase: RoleRevealPhase;
@@ -853,6 +949,7 @@ export function useBoardGameVfxQueue({
   const [activeCardDraw, setActiveCardDraw] = useState<{
     event: CardDrawVisualEvent;
     revealedFace: boolean;
+    fromDelta?: Point2D;
   } | null>(null);
   const [cutInQueue, setCutInQueue] = useState<CinematicCutInVisualEvent[]>([]);
   const [activeCutIn, setActiveCutIn] = useState<CinematicCutInVisualEvent | null>(null);
@@ -1142,14 +1239,42 @@ export function useBoardGameVfxQueue({
           }
           case 'CARD_DRAW': {
             playSoundForVisualEvent(ev);
-            setActiveCardDraw({ event: ev, revealedFace: false });
+            const deckOrigin = resolveDeckAnchor(container, ev.deck);
+            const cw = container?.clientWidth || 720;
+            const ch = container?.clientHeight || 480;
+            const fromDelta = {
+              x: Math.round(deckOrigin.x - cw * 0.5),
+              y: Math.round(deckOrigin.y - ch * 0.5),
+            };
+            setActiveCardDraw({ event: ev, revealedFace: false, fromDelta });
+            activeCombatAnimsRef.current.push({
+              uid: `${ev.id}::deck-burst`,
+              event: {
+                id: `${ev.id}::deck-burst`,
+                kind: 'COMBAT_VFX',
+                order: ev.order,
+                durationMs: Math.min(820, ev.durationMs),
+                effect: 'HEAL_AURA',
+                sourcePlayerId: ev.actorId,
+                targetPlayerIds: [],
+                shake: 'none',
+              },
+              source: deckOrigin,
+              targets: [{ x: cw * 0.5, y: ch * 0.5 }],
+              startedAt: performance.now(),
+              durationMs: Math.min(820, ev.durationMs),
+              deckThemeBurst: ev.deck,
+            });
+            setActiveCombatCount(activeCombatAnimsRef.current.length);
+            ensureCanvasLoop();
+
             if (ev.showFront) {
               scheduleTimeout(() => {
                 playCardFlip();
                 setActiveCardDraw((curr) =>
                   curr?.event.id === ev.id ? { ...curr, revealedFace: true } : curr,
                 );
-              }, Math.min(240, Math.round(ev.durationMs * 0.28)));
+              }, Math.min(260, Math.round(ev.durationMs * 0.3)));
             }
             scheduleTimeout(() => {
               setActiveCardDraw((curr) => (curr?.event.id === ev.id ? null : curr));
@@ -1687,78 +1812,117 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
 
       {/* LỚP 4B: CARD DRAW / 3D FLIP OVERLAY (TÔN TRỌNG BẢO MẬT MẶT BÀI) */}
       {vfx.activeCardDraw && (() => {
-        const { event, revealedFace } = vfx.activeCardDraw;
+        const { event, revealedFace, fromDelta } = vfx.activeCardDraw;
         const deckTok = MIDNIGHT_DECK_TOKENS[event.deck];
         const canFlipFront = event.showFront && revealedFace;
         const artSrc = event.cardId ? MIDNIGHT_CARD_ART[event.cardId] ?? null : null;
+        const ringAccent =
+          event.deck === 'investigation'
+            ? '#34d399'
+            : event.deck === 'equipment'
+              ? '#38bdf8'
+              : '#f43f5e';
+        const flightStyle =
+          !vfx.reducedMotion && fromDelta
+            ? ({
+                '--card-from-x': `${fromDelta.x}px`,
+                '--card-from-y': `${fromDelta.y}px`,
+              } as React.CSSProperties)
+            : undefined;
         return (
           <div
             data-testid="bg-vfx-card-draw"
+            data-deck={event.deck}
             data-show-front={String(event.showFront)}
             className="pointer-events-none absolute inset-0 flex items-center justify-center p-4"
           >
-            <div className="mn-card-perspective w-36 sm:w-44 aspect-[2/3]">
-              <div
-                className="mn-card-flip-stage relative h-full w-full rounded-2xl shadow-2xl"
-                style={{ transform: canFlipFront ? 'rotateY(0deg)' : 'rotateY(180deg)' }}
-              >
-                {/* Mặt trước (chỉ mở nếu server/chủ sở hữu cho phép thấy) */}
+            <div
+              className={`relative ${vfx.reducedMotion ? '' : 'bg-vfx-card-flight'}`}
+              style={flightStyle}
+            >
+              {!vfx.reducedMotion && (
                 <div
-                  className="mn-card-face absolute inset-0 overflow-hidden rounded-2xl p-[2px]"
-                  style={{ background: deckTok.frameGradientCss }}
+                  aria-hidden="true"
+                  className="bg-vfx-card-draw-ring pointer-events-none absolute -inset-3 rounded-3xl border-2"
+                  style={{
+                    borderColor: ringAccent,
+                    boxShadow: `0 0 28px ${ringAccent}88`,
+                  }}
+                />
+              )}
+              <div className="mn-card-perspective relative z-10 w-36 sm:w-44 aspect-[2/3]">
+                <div
+                  className="mn-card-flip-stage relative h-full w-full rounded-2xl shadow-2xl"
+                  style={{ transform: canFlipFront ? 'rotateY(0deg)' : 'rotateY(180deg)' }}
                 >
-                  <div className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-[14px] bg-slate-950 p-2.5">
-                    {artSrc && (
-                      <img
-                        src={artSrc}
-                        alt={event.cardTitle ?? deckTok.label}
-                        className="absolute inset-0 h-full w-full object-cover opacity-85"
-                      />
-                    )}
-                    <div
-                      aria-hidden="true"
-                      className="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-transparent to-slate-950/95"
-                    />
-                    <span className={`relative z-10 w-fit rounded-full border px-2 py-0.5 text-[9px] font-black ${deckTok.badgeClass}`}>
-                      {deckTok.label}
-                    </span>
-                    <div className="relative z-10 mt-auto">
-                      {event.autoEquipped && (
-                        <p className="text-[9px] font-extrabold uppercase text-amber-300">
-                          ⚡ Trang bị ngay
-                        </p>
+                  {/* Mặt trước (chỉ mở nếu server/chủ sở hữu cho phép thấy) */}
+                  <div
+                    className="mn-card-face absolute inset-0 overflow-hidden rounded-2xl p-[2px]"
+                    style={{ background: deckTok.frameGradientCss }}
+                  >
+                    <div className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-[14px] bg-slate-950 p-2.5">
+                      {artSrc && (
+                        <img
+                          src={artSrc}
+                          alt={event.cardTitle ?? deckTok.label}
+                          className="absolute inset-0 h-full w-full object-cover opacity-85"
+                        />
                       )}
-                      <p className="text-xs font-black text-white leading-tight">
-                        {event.cardTitle ?? deckTok.label}
-                      </p>
+                      {vfx.enableFoil && (
+                        <div
+                          aria-hidden="true"
+                          className="mn-foil-sweep pointer-events-none absolute inset-0 opacity-25"
+                          style={{
+                            backgroundImage:
+                              'linear-gradient(115deg, transparent 22%, rgba(255,255,255,0.52) 48%, transparent 74%)',
+                          }}
+                        />
+                      )}
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-transparent to-slate-950/95"
+                      />
+                      <span className={`relative z-10 w-fit rounded-full border px-2 py-0.5 text-[9px] font-black ${deckTok.badgeClass}`}>
+                        {deckTok.label}
+                      </span>
+                      <div className="relative z-10 mt-auto">
+                        {event.autoEquipped && (
+                          <p className="text-[9px] font-extrabold uppercase text-amber-300">
+                            ⚡ Trang bị ngay
+                          </p>
+                        )}
+                        <p className="text-xs font-black text-white leading-tight">
+                          {event.cardTitle ?? deckTok.label}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Mặt lưng kín (dùng cho bài chưa lật / người ngoài nhìn) */}
-                <div
-                  className="mn-card-face mn-card-face-back absolute inset-0 overflow-hidden rounded-2xl p-[2px]"
-                  style={{ background: deckTok.frameGradientCss }}
-                >
-                  <div className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-[14px] bg-slate-950 p-2.5">
-                    <img
-                      src={MIDNIGHT_CARD_BACK_ART}
-                      alt="Mặt lưng thẻ rút"
-                      className="absolute inset-0 h-full w-full object-cover opacity-85"
-                    />
-                    <div
-                      aria-hidden="true"
-                      className="absolute inset-0 opacity-75"
-                      style={{ background: deckTok.backGradientCss }}
-                    />
-                    <span className={`relative z-10 w-fit rounded-full border px-2 py-0.5 text-[9px] font-black ${deckTok.badgeClass}`}>
-                      {deckTok.label}
-                    </span>
-                    <div className="relative z-10 mt-auto rounded-lg bg-slate-950/90 p-2 text-center border border-white/15">
-                      <p className="text-[10px] font-black text-white">
-                        {CARD_BACK_SECRET_TITLES[event.deck]}
-                      </p>
-                      <p className="text-[9px] text-slate-300">{event.actorName} vừa rút</p>
+                  {/* Mặt lưng kín (dùng cho bài chưa lật / người ngoài nhìn) */}
+                  <div
+                    className="mn-card-face mn-card-face-back absolute inset-0 overflow-hidden rounded-2xl p-[2px]"
+                    style={{ background: deckTok.frameGradientCss }}
+                  >
+                    <div className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-[14px] bg-slate-950 p-2.5">
+                      <img
+                        src={MIDNIGHT_CARD_BACK_ART}
+                        alt="Mặt lưng thẻ rút"
+                        className="absolute inset-0 h-full w-full object-cover opacity-85"
+                      />
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-0 opacity-75"
+                        style={{ background: deckTok.backGradientCss }}
+                      />
+                      <span className={`relative z-10 w-fit rounded-full border px-2 py-0.5 text-[9px] font-black ${deckTok.badgeClass}`}>
+                        {deckTok.label}
+                      </span>
+                      <div className="relative z-10 mt-auto rounded-lg bg-slate-950/90 p-2 text-center border border-white/15">
+                        <p className="text-[10px] font-black text-white">
+                          {CARD_BACK_SECRET_TITLES[event.deck]}
+                        </p>
+                        <p className="text-[9px] text-slate-300">{event.actorName} vừa rút</p>
+                      </div>
                     </div>
                   </div>
                 </div>

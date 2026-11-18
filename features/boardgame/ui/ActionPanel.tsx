@@ -25,6 +25,7 @@ import type {
   BoardGamePublicGameView,
 } from '@/shared/contracts/boardgame';
 import { MIDNIGHT_CARD_ART, type ActionCardZone } from './midnight-noir-tokens';
+import { playCardPlay } from './sound';
 import { resolveActionTargets } from './target-selection';
 
 const LOCATION_ROLL_PROB_LABEL: Record<BoardGameLocationId, string> = {
@@ -666,15 +667,29 @@ export function ActionPanel({
             return (
               <div
                 key={`${card.id}-${idx}`}
-                className={`rounded-xl border p-2 flex flex-col justify-between gap-1.5 ${
+                className={`group relative overflow-hidden rounded-xl border p-2 flex flex-col justify-between gap-1.5 transition-all duration-150 ${
+                  disabled
+                    ? ''
+                    : 'hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-6px_rgba(251,191,36,0.28)]'
+                } ${
                   isInv
-                    ? 'border-emerald-500/45 bg-emerald-950/35'
+                    ? 'border-emerald-500/45 bg-emerald-950/35 hover:border-emerald-300/80'
                     : card.deck === 'equipment'
-                      ? 'border-sky-500/45 bg-sky-950/35'
-                      : 'border-rose-500/45 bg-rose-950/35'
+                      ? 'border-sky-500/45 bg-sky-950/35 hover:border-sky-300/80'
+                      : 'border-rose-500/45 bg-rose-950/35 hover:border-rose-300/80'
                 }`}
               >
-                <div className="flex items-start gap-2">
+                {!disabled && (
+                  <div
+                    aria-hidden="true"
+                    className="mn-foil-sweep pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-20"
+                    style={{
+                      backgroundImage:
+                        'linear-gradient(115deg, transparent 20%, rgba(255,255,255,0.45) 48%, transparent 72%)',
+                    }}
+                  />
+                )}
+                <div className="relative z-10 flex items-start gap-2">
                   {handArtSrc && (
                     <div className="shrink-0 space-y-1">
                       <img
@@ -764,6 +779,7 @@ export function ActionPanel({
                     data-lock-reason={disabled ? 'Chưa có mục tiêu hợp lệ' : undefined}
                     disabled={disabled}
                     onClick={() => {
+                      playCardPlay(card.deck);
                       if (isInv && validOtherTarget) {
                         onAction({
                           type: 'INVESTIGATE_CARD',

@@ -453,6 +453,29 @@ export function playCardFlip(): void {
   );
 }
 
+/** Đánh / Trang bị / Đưa thẻ kín: tiếng vuốt bài + xác nhận từng bộ bài */
+export function playCardPlay(deck?: BoardGameDeckId): void {
+  const accentFreq = deck === 'event' ? 620 : deck === 'equipment' ? 760 : 540;
+  playLayeredCue(
+    [
+      { freq: accentFreq, endFreq: accentFreq * 1.28, startOffsetSec: 0, durationSec: 0.08, type: 'triangle', gainPeak: 0.044 },
+      { freq: accentFreq * 1.5, startOffsetSec: 0.04, durationSec: 0.11, type: 'sine', gainPeak: 0.03 },
+    ],
+    [
+      {
+        bufferKey: 'paper',
+        startOffsetSec: 0,
+        durationSec: 0.085,
+        playbackRate: 1.25,
+        gainPeak: 0.068,
+        filterType: 'bandpass',
+        filterFreq: 1950,
+        filterEndFreq: 3400,
+      },
+    ],
+  );
+}
+
 /** Tung xúc xắc 3D: cốc lắc ban đầu + các nhịp nảy giảm dần + hợp âm khóa kết quả lúc dừng */
 export function playDiceRoll(
   freeChoice = false,
