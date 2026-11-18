@@ -199,7 +199,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
         playerKey: `bgk_do_test_${i}_abcd12`,
       });
       const auth = await c.nextMsg((m) => m.type === 'BG_AUTH_ISSUED');
-      players.push({ c, auth, playerId: auth.playerId });
+      players.push({ c, auth, playerId: auth.playerId, sentAtMs: [Date.now()] });
     }
 
     const spectator = await openBgClient(srv.wsBaseUrl, { matchId });
@@ -367,6 +367,20 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
         }
       }
 
+      const nowSendMs = Date.now();
+      while (actorEntry.sentAtMs.length > 0 && nowSendMs - actorEntry.sentAtMs[0] >= 2100) {
+        actorEntry.sentAtMs.shift();
+      }
+      if (actorEntry.sentAtMs.length >= 18) {
+        const waitWindowMs = Math.max(60, 2100 - (nowSendMs - actorEntry.sentAtMs[0]));
+        await delay(waitWindowMs);
+        const refreshedNowMs = Date.now();
+        while (actorEntry.sentAtMs.length > 0 && refreshedNowMs - actorEntry.sentAtMs[0] >= 2100) {
+          actorEntry.sentAtMs.shift();
+        }
+      }
+      actorEntry.sentAtMs.push(Date.now());
+
       actionSeq += 1;
       const reqId = `v4-act-${actionSeq}`;
       const lenBefore = actorEntry.c.inbox.length;
@@ -389,7 +403,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
         ),
         spectator.nextMsg((m) => m.type === 'BG_STATE_SYNC' && m.revision >= ack.revision),
       ]);
-      await delay(20);
+      await delay(35);
     }
 
     const finalSync = players[0].c.getLatestSync();
@@ -614,7 +628,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
       curSync.publicGame.turnPhase === 'CHOOSE_MOVE'
     ) {
       stepSeq += 1;
-      await delay(20);
+      await delay(40);
       const act =
         curSync.publicGame.turnPhase === 'CHOOSE_MOVE'
           ? {
@@ -642,7 +656,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     assert.equal(curSync.publicGame.turnPhase, 'LOCATION_ACTION');
 
     // 2. LOCATION_ACTION -> MAIN_ACTION: timer VẪN giữ nguyên
-    await delay(25);
+    await delay(40);
     actor.c.send({
       type: 'BG_GAME_ACTION',
       requestId: 'tm-loc-skip',
@@ -655,7 +669,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     assert.equal(s2.turnDeadlineMs, initialDeadline, 'SKIP_LOC phải giữ nguyên turnDeadlineMs');
 
     // 3. Free REVEAL_ROLE trong MAIN_ACTION: vẫn cùng lượt nên KHÔNG reset timer!
-    await delay(25);
+    await delay(40);
     actor.c.send({
       type: 'BG_GAME_ACTION',
       requestId: 'tm-rev',
@@ -667,7 +681,7 @@ test('GV3.3 DO Authoritative Match v3 & Section 19 Resilience Suite', async (t) 
     assert.equal(s3.turnDeadlineMs, initialDeadline, 'REVEAL_ROLE không được gia hạn đồng hồ lượt');
 
     // 4. END_TURN chuyển sang người kế -> lúc này turnDeadlineMs MỚI được làm mới!
-    await delay(25);
+    await delay(40);
     actor.c.send({
       type: 'BG_GAME_ACTION',
       requestId: 'tm-end',
