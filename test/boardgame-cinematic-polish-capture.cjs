@@ -1233,16 +1233,16 @@ async function runPolishCapture() {
         if (act.type === 'REVEAL_ROLE') {
           if (!flags.p1RevealFlipShot) {
             await p1Page
-              .waitForSelector('[data-testid="bg-vfx-reveal-spotlight"][data-reveal-phase="impact"], [data-testid="bg-vfx-reveal-spotlight"][data-reveal-phase="reveal"]', {
+              .waitForSelector('[data-testid="bg-vfx-reveal-spotlight"][data-reveal-phase="faction-reveal"], [data-testid="bg-vfx-reveal-spotlight"][data-reveal-phase="impact"]', {
                 timeout: 1800,
               })
               .catch(() => undefined);
-            await p1Page.waitForTimeout(260);
-            await captureShot(p1Page, timeline, '12-role-reveal-3d-flip-impact.png', 'Lật vai Pha Reveal/Impact: Card 3D xoay mở chân dung + Huy hiệu & hạt theo phe', t0Ms);
+            await p1Page.waitForTimeout(120);
+            await captureShot(p1Page, timeline, '12-role-reveal-3d-flip-impact.png', 'Lật vai Pha Faction-Reveal/Impact: Card 3D xoay mở chân dung + Huy hiệu & hạt theo phe', t0Ms);
             flags.p1RevealFlipShot = true;
-            await p1Page.waitForTimeout(750);
+            await p1Page.waitForTimeout(650);
           } else {
-            await p1Page.waitForTimeout(1400);
+            await p1Page.waitForTimeout(1300);
           }
           await setHighlightActive(false);
         } else if (act.type === 'ATTACK') {

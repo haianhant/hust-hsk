@@ -1110,25 +1110,33 @@ test('Dice Roll Regression (11) — ROLL_DICE -> SKIP_LOC -> END_TURN increments
   );
 });
 
-test('AAA Polish (12) — Cinematic Role Reveal 4 phases (1.2-1.8s) & Reduced Motion collapse', () => {
-  const normal = resolveRoleRevealTimeline(1560, false);
-  assert.ok(normal.totalMs >= 1200 && normal.totalMs <= 1800, 'Role reveal duration must stay within 1.2-1.8s');
+test('AAA Polish (12) — Cinematic Role Reveal 5 phases (1.2-1.6s), Quality Tiers & Reduced Motion', () => {
+  const high = resolveRoleRevealTimeline(1480, false, 'high');
+  assert.ok(high.totalMs >= 1200 && high.totalMs <= 1600, 'Role reveal duration must stay within 1.2-1.6s');
   assert.ok(
-    normal.anticipationEndMs > 0 &&
-      normal.anticipationEndMs < normal.revealEndMs &&
-      normal.revealEndMs < normal.impactEndMs &&
-      normal.impactEndMs < normal.totalMs,
-    'Role reveal must strictly follow anticipation -> reveal -> impact -> settle',
+    high.anticipationEndMs > 0 &&
+      high.anticipationEndMs < high.cardFlipEndMs &&
+      high.cardFlipEndMs < high.factionRevealEndMs &&
+      high.factionRevealEndMs < high.impactEndMs &&
+      high.impactEndMs < high.totalMs,
+    'Role reveal must strictly follow anticipation -> card-flip -> faction-reveal -> impact -> settle',
   );
+  assert.equal(high.revealEndMs, high.factionRevealEndMs);
 
-  const clampedLow = resolveRoleRevealTimeline(900, false);
+  const balanced = resolveRoleRevealTimeline(1480, false, 'balanced');
+  assert.ok(balanced.totalMs >= 1200 && balanced.totalMs <= 1440);
+  const low = resolveRoleRevealTimeline(1480, false, 'low');
+  assert.ok(low.totalMs >= 1200 && low.totalMs <= 1320);
+
+  const clampedLow = resolveRoleRevealTimeline(900, false, 'high');
   assert.equal(clampedLow.totalMs, 1200);
-  const clampedHigh = resolveRoleRevealTimeline(2400, false);
-  assert.equal(clampedHigh.totalMs, 1800);
+  const clampedHigh = resolveRoleRevealTimeline(2400, false, 'high');
+  assert.equal(clampedHigh.totalMs, 1600);
 
-  const reduced = resolveRoleRevealTimeline(1560, true);
+  const reduced = resolveRoleRevealTimeline(1480, true, 'high');
   assert.equal(reduced.anticipationEndMs, 0);
-  assert.equal(reduced.revealEndMs, 0);
+  assert.equal(reduced.cardFlipEndMs, 0);
+  assert.equal(reduced.factionRevealEndMs, 0);
   assert.equal(reduced.impactEndMs, 0);
   assert.ok(reduced.totalMs <= 260, 'Reduced Motion must clamp Role Reveal to <= 260ms');
 });
@@ -1267,4 +1275,114 @@ test('AAA Polish (15) — Reconnect idempotency after Victory & Signature Skill 
   trackerAfterReconnect.seedBaseline(victorySnap, { selfPlayerId: 'p1', isSpectator: false });
   const replay = trackerAfterReconnect.ingestSnapshot(victorySnap, { selfPlayerId: 'p1', isSpectator: false });
   assert.equal(replay.length, 0, 'Reconnect after victory must not replay any VFX');
+});
+
+test('Cinematic V2 Phase 1 (16) — Multiplayer Role Reveal sync, strict pre-reveal privacy & F5 idempotency', () => {
+  const prevPub = makePubState({ turnNumber: 4, activePlayerId: 'p2' });
+
+  // 1) Pre-reveal tampering / malformed log when revealed === false must NEVER leak roleId or trigger ROLE_REVEAL
+  const unrevealedWithMalformedLog = {
+    ...prevPub,
+    publicLog: [
+      {
+        id: 'log-unrevealed-tamper',
+        round: 2,
+        atMs: 4100,
+        kind: 'reveal',
+        actorId: 'p2',
+        text: 'Fake reveal log before server commit',
+      },
+    ],
+  };
+  for (const viewer of [
+    { selfPlayerId: 'p1', isSpectator: false },
+    { selfPlayerId: 'p3', isSpectator: false },
+    { selfPlayerId: null, isSpectator: true },
+  ]) {
+    const blocked = extractVisualEventsFromDiff(prevPub, unrevealedWithMalformedLog, viewer);
+    assert.equal(
+      blocked.some((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'ROLE_REVEAL'),
+      false,
+      'Must NEVER emit ROLE_REVEAL while player.revealed is still false',
+    );
+  }
+
+  // 2) Server publicly commits p2 reveal (`revealedFaction`, `revealedRoleId`) -> visible to ALL players & spectators
+  const afterServerReveal = {
+    ...prevPub,
+    players: prevPub.players.map((p) =>
+      p.playerId === 'p2'
+        ? {
+            ...p,
+            revealedFaction: 'mist-order',
+            revealedRoleId: 'suong-gac-cong',
+          }
+        : p,
+    ),
+    lastRevealEvent: {
+      id: 'rev-evt-p2',
+      playerId: 'p2',
+      displayName: 'Bình',
+      roleId: 'suong-gac-cong',
+      roleName: 'Dũng "Gác Cổng"',
+      faction: 'mist-order',
+    },
+    publicLog: [
+      {
+        id: 'log-reveal-p2',
+        round: 2,
+        atMs: 4200,
+        kind: 'reveal',
+        actorId: 'p2',
+        text: '🎭 Bình đã lộ vai Dũng "Gác Cổng" (Hội Bóng Đêm)!',
+      },
+    ],
+  };
+
+  for (const viewer of [
+    { selfPlayerId: 'p1', isSpectator: false },
+    { selfPlayerId: 'p2', isSpectator: false },
+    { selfPlayerId: 'p3', isSpectator: false },
+    { selfPlayerId: null, isSpectator: true },
+  ]) {
+    const tracker = new VisualEventTracker();
+    tracker.seedBaseline(prevPub, viewer);
+    const events = tracker.ingestSnapshot(afterServerReveal, viewer);
+    const reveals = events.filter((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'ROLE_REVEAL');
+    assert.equal(reveals.length, 1, `Viewer ${viewer.selfPlayerId ?? 'spectator'} must see exactly 1 ROLE_REVEAL`);
+    assert.equal(reveals[0].roleId, 'suong-gac-cong');
+    assert.equal(reveals[0].faction, 'mist-order');
+    assert.ok(reveals[0].portraitSrc && reveals[0].portraitSrc.includes('role-dung-gac-cong.webp'));
+    assert.ok(reveals[0].durationMs >= 1200 && reveals[0].durationMs <= 1600);
+
+    // 3) Reconnect / F5 baseline seed with already-revealed state must NOT replay ROLE_REVEAL
+    const reconnectTracker = new VisualEventTracker();
+    reconnectTracker.seedBaseline(afterServerReveal, viewer);
+    const replayEvents = reconnectTracker.ingestSnapshot(afterServerReveal, viewer);
+    assert.equal(
+      replayEvents.some((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'ROLE_REVEAL'),
+      false,
+      'Reconnect/F5 must never replay completed ROLE_REVEAL',
+    );
+  }
+
+  // 4) State-diff reveal fallback works cleanly even without log/lastRevealEvent
+  const stateDiffTracker = new VisualEventTracker();
+  stateDiffTracker.seedBaseline(prevPub, { selfPlayerId: 'p3', isSpectator: false });
+  const stateOnlyReveal = {
+    ...prevPub,
+    players: prevPub.players.map((p) =>
+      p.playerId === 'p4'
+        ? { ...p, revealedFaction: 'lantern-guard', revealedRoleId: 'gac-radio' }
+        : p,
+    ),
+  };
+  const fallbackEvents = stateDiffTracker.ingestSnapshot(stateOnlyReveal, {
+    selfPlayerId: 'p3',
+    isSpectator: false,
+  });
+  const fbRev = fallbackEvents.find((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'ROLE_REVEAL');
+  assert.ok(fbRev, 'State transition alone must emit ROLE_REVEAL for other connected clients');
+  assert.equal(fbRev.roleId, 'gac-radio');
+  assert.equal(fbRev.faction, 'lantern-guard');
 });

@@ -771,7 +771,7 @@ export function playStealSnatch(): void {
   );
 }
 
-/** Lộ diện nhân vật — có pha dẫn anticipation, tiếng lật thẻ & hợp âm đặc trưng từng phe công khai */
+/** Lộ diện nhân vật (1.48s 5-pha) — anticipation, lật thẻ 3D, lộ phe & impact theo phe công khai */
 export function playRoleReveal(faction?: BoardGameFactionId | null): void {
   const isMist = faction === 'mist-order';
   const isWanderer = faction === 'wanderer';
@@ -782,48 +782,49 @@ export function playRoleReveal(faction?: BoardGameFactionId | null): void {
 
   playLayeredCue(
     [
-      // 1) Anticipation (0..260ms): rung tụ năng lượng
+      // 1) Anticipation (0..260ms): rung tụ năng lượng trước khi lật bài
       {
         freq: isMist ? 130 : 185,
         endFreq: root,
         startOffsetSec: 0,
-        durationSec: 0.25,
+        durationSec: 0.26,
         type: 'triangle',
-        gainPeak: 0.036,
+        gainPeak: 0.038,
       },
-      // 2) Reveal flip + Impact (tại ~280ms–650ms)
+      // 2) Card Flip -> Faction Reveal chord (0.42s..0.85s)
       {
         freq: root,
-        startOffsetSec: 0.28,
-        durationSec: 0.18,
+        startOffsetSec: 0.42,
+        durationSec: 0.2,
         type: isMist ? 'sawtooth' : 'triangle',
-        gainPeak: 0.05,
+        gainPeak: 0.052,
         filterType: 'lowpass',
         filterFreq: isMist ? 1600 : 2800,
       },
-      { freq: third, startOffsetSec: 0.34, durationSec: 0.22, type: 'triangle', gainPeak: 0.056 },
-      { freq: fifth, startOffsetSec: 0.4, durationSec: 0.28, type: 'sine', gainPeak: 0.064 },
-      { freq: peakNote, startOffsetSec: 0.47, durationSec: 0.34, type: 'sine', gainPeak: 0.044 },
+      { freq: third, startOffsetSec: 0.5, durationSec: 0.24, type: 'triangle', gainPeak: 0.058 },
+      { freq: fifth, startOffsetSec: 0.62, durationSec: 0.3, type: 'sine', gainPeak: 0.064 },
+      // 3) Impact climax (~0.70s..1.05s)
+      { freq: peakNote, startOffsetSec: 0.72, durationSec: 0.36, type: 'sine', gainPeak: 0.048 },
       ...(isMist
-        ? [{ freq: 92, endFreq: 55, startOffsetSec: 0.32, durationSec: 0.36, type: 'sine' as const, gainPeak: 0.056 }]
+        ? [{ freq: 92, endFreq: 52, startOffsetSec: 0.68, durationSec: 0.38, type: 'sine' as const, gainPeak: 0.058 }]
         : []),
     ],
     [
       {
         bufferKey: 'paper',
-        startOffsetSec: 0.22,
-        durationSec: 0.11,
+        startOffsetSec: 0.26,
+        durationSec: 0.12,
         playbackRate: 1.28,
-        gainPeak: 0.068,
+        gainPeak: 0.072,
         filterType: 'highpass',
         filterFreq: 1950,
       },
       {
         bufferKey: isMist ? 'blade' : 'arcCrackle',
-        startOffsetSec: 0.34,
-        durationSec: 0.16,
+        startOffsetSec: 0.68,
+        durationSec: 0.18,
         playbackRate: isMist ? 0.92 : 1.15,
-        gainPeak: 0.045,
+        gainPeak: 0.048,
         filterType: 'bandpass',
         filterFreq: isMist ? 1400 : 2600,
       },

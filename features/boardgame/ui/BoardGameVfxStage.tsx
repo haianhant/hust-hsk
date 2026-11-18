@@ -1149,6 +1149,7 @@ export function useBoardGameVfxQueue({
   } | null>(null);
   const [cutInQueue, setCutInQueue] = useState<CinematicCutInVisualEvent[]>([]);
   const [activeCutIn, setActiveCutIn] = useState<CinematicCutInVisualEvent | null>(null);
+  const activeCutInIdRef = useRef<string | null>(null);
   const [revealPhase, setRevealPhase] = useState<RoleRevealPhase>('settle');
   const [screenShake, setScreenShake] = useState<ScreenShakeLevel>('none');
 
@@ -1262,6 +1263,7 @@ export function useBoardGameVfxQueue({
     setHighlightedLocationId(null);
     setSkipGeneration((n) => n + 1);
     setActiveCardDraw(null);
+    activeCutInIdRef.current = null;
     setCutInQueue([]);
     setActiveCutIn(null);
     setRevealPhase('settle');
@@ -1272,51 +1274,73 @@ export function useBoardGameVfxQueue({
   useEffect(() => {
     if (activeCutIn || cutInQueue.length === 0) return;
     const [nextBanner, ...rest] = cutInQueue;
+    activeCutInIdRef.current = nextBanner.id;
     setActiveCutIn(nextBanner);
     setCutInQueue(rest);
     playSoundForVisualEvent(nextBanner);
 
+    let closeAfterMs = nextBanner.durationMs;
+
     if (nextBanner.bannerType === 'ROLE_REVEAL') {
-      const revTl = resolveRoleRevealTimeline(nextBanner.durationMs, reducedMotionRef.current);
+      const revTl = resolveRoleRevealTimeline(
+        nextBanner.durationMs,
+        reducedMotionRef.current,
+        qualityTierRef.current,
+      );
+      closeAfterMs = revTl.totalMs;
+
       if (revTl.anticipationEndMs <= 0) {
         setRevealPhase('settle');
       } else {
         setRevealPhase('anticipation');
         scheduleTimeout(() => {
-          setRevealPhase('reveal');
+          if (activeCutInIdRef.current !== nextBanner.id) return;
+          setRevealPhase('card-flip');
         }, revTl.anticipationEndMs);
         scheduleTimeout(() => {
+          if (activeCutInIdRef.current !== nextBanner.id) return;
+          setRevealPhase('faction-reveal');
+          if (particleScaleRef.current > 0) {
+            const burstUid = `${nextBanner.id}::faction-burst`;
+            const container = containerRef.current;
+            const players = playersSnapshotRef.current;
+            const pawnAnchor = resolvePlayerAnchor(container, nextBanner.actorId, players);
+            const cw = container?.clientWidth || 720;
+            activeCombatAnimsRef.current = [
+              ...activeCombatAnimsRef.current.filter((a) => a.uid !== burstUid),
+              {
+                uid: burstUid,
+                event: {
+                  id: burstUid,
+                  kind: 'COMBAT_VFX',
+                  order: 31,
+                  durationMs: 740,
+                  effect: 'HEAL_AURA',
+                  sourcePlayerId: nextBanner.actorId,
+                  targetPlayerIds: [],
+                  shake: 'none',
+                },
+                source: { x: cw * 0.5, y: 92 },
+                targets: [pawnAnchor],
+                startedAt: performance.now(),
+                durationMs: 740,
+                factionReveal: nextBanner.faction ?? 'lantern-guard',
+              },
+            ];
+            setActiveCombatCount(activeCombatAnimsRef.current.length);
+            ensureCanvasLoop();
+          }
+        }, revTl.cardFlipEndMs);
+        scheduleTimeout(() => {
+          if (activeCutInIdRef.current !== nextBanner.id) return;
           setRevealPhase('impact');
-          const container = containerRef.current;
-          const players = playersSnapshotRef.current;
-          const pawnAnchor = resolvePlayerAnchor(container, nextBanner.actorId, players);
-          const cw = container?.clientWidth || 720;
-          activeCombatAnimsRef.current.push({
-            uid: `${nextBanner.id}::faction-burst`,
-            event: {
-              id: `${nextBanner.id}::faction-burst`,
-              kind: 'COMBAT_VFX',
-              order: 31,
-              durationMs: 760,
-              effect: 'HEAL_AURA',
-              sourcePlayerId: nextBanner.actorId,
-              targetPlayerIds: [],
-              shake: 'none',
-            },
-            source: { x: cw * 0.5, y: 92 },
-            targets: [pawnAnchor],
-            startedAt: performance.now(),
-            durationMs: 760,
-            factionReveal: nextBanner.faction ?? 'lantern-guard',
-          });
-          setActiveCombatCount(activeCombatAnimsRef.current.length);
-          ensureCanvasLoop();
           if (enableScreenShakeRef.current && nextBanner.faction === 'mist-order') {
             setScreenShake('light');
-            scheduleTimeout(() => setScreenShake('none'), 210);
+            scheduleTimeout(() => setScreenShake('none'), 200);
           }
-        }, revTl.revealEndMs);
+        }, revTl.factionRevealEndMs);
         scheduleTimeout(() => {
+          if (activeCutInIdRef.current !== nextBanner.id) return;
           setRevealPhase('settle');
         }, revTl.impactEndMs);
       }
@@ -1354,8 +1378,11 @@ export function useBoardGameVfxQueue({
     }
 
     scheduleTimeout(() => {
+      if (activeCutInIdRef.current === nextBanner.id) {
+        activeCutInIdRef.current = null;
+      }
       setActiveCutIn((curr) => (curr?.id === nextBanner.id ? null : curr));
-    }, nextBanner.durationMs);
+    }, closeAfterMs);
   }, [activeCutIn, containerRef, cutInQueue, ensureCanvasLoop, scheduleTimeout]);
 
   const enqueueEvents = useCallback(
@@ -2059,7 +2086,9 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
             data-testid="bg-vfx-card-draw"
             data-deck={event.deck}
             data-show-front={String(event.showFront)}
-            className="pointer-events-none absolute inset-0 flex items-center justify-center p-4"
+            className={`pointer-events-none absolute inset-0 flex items-center justify-center p-4 ${
+              vfx.activeCutIn ? 'pt-40 sm:pt-44' : ''
+            }`}
           >
             <div
               className={`relative ${vfx.reducedMotion ? '' : 'bg-vfx-card-flight'}`}
@@ -2157,11 +2186,17 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
         );
       })()}
 
-      {/* LỚP 5: CINEMATIC CUT-IN & ROLE REVEAL SPOTLIGHT OVERLAY */}
+      {/* LỚP 5: CINEMATIC CUT-IN & 5-STAGE ROLE REVEAL SPOTLIGHT OVERLAY */}
       {cutIn && isRoleRevealCutIn && (() => {
         const revealPhase = vfx.reducedMotion ? 'settle' : vfx.revealPhase;
         const showPortraitFace = vfx.reducedMotion || revealPhase !== 'anticipation';
-        const showImpactBurst = !vfx.reducedMotion && (revealPhase === 'impact' || revealPhase === 'settle');
+        const showFactionIdentity =
+          vfx.reducedMotion ||
+          revealPhase === 'faction-reveal' ||
+          revealPhase === 'impact' ||
+          revealPhase === 'settle';
+        const showImpactBurst =
+          !vfx.reducedMotion && (revealPhase === 'impact' || revealPhase === 'settle');
         const spotX = revealAnchor ? `${Math.round(revealAnchor.x)}px` : '50%';
         const spotY = revealAnchor ? `${Math.round(revealAnchor.y)}px` : '45%';
         const factionMotionAccent =
@@ -2212,11 +2247,15 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                 {/* Vệt chéo ánh sáng đặc trưng phe Anime Noir */}
                 <div
                   aria-hidden="true"
-                  className={`pointer-events-none absolute inset-0 overflow-hidden rounded-2xl`}
+                  className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
                 >
                   <div
                     className={`absolute inset-y-0 -left-12 w-56 ${factionMotionAccent} transition-opacity duration-300 ${
-                      revealPhase === 'anticipation' ? 'opacity-15' : 'opacity-35'
+                      revealPhase === 'anticipation'
+                        ? 'opacity-15'
+                        : showFactionIdentity
+                          ? 'opacity-40'
+                          : 'opacity-25'
                     }`}
                     style={{
                       background: `linear-gradient(135deg, ${cutInAccent}, ${cutInSecondary}, transparent)`,
@@ -2224,7 +2263,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                   />
                 </div>
 
-                {/* Hào quang tác động khi thẻ bài vừa lật mặt */}
+                {/* Hào quang tác động khi sang pha impact */}
                 {showImpactBurst && (
                   <div
                     aria-hidden="true"
@@ -2236,16 +2275,19 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                   />
                 )}
 
-                {/* Thẻ bài lật 3D (mặt lưng huy hiệu -> phóng lớn chân dung vai trò) */}
-                <div className="mn-card-perspective relative z-10 w-24 sm:w-28 aspect-[2/3] shrink-0">
+                {/* Thẻ bài lật 3D (mặt lưng huy hiệu -> lật portrait -> lộ huy hiệu phe) */}
+                <div
+                  data-testid="bg-vfx-reveal-card"
+                  className="mn-card-perspective relative z-10 w-24 sm:w-28 aspect-[2/3] shrink-0"
+                >
                   <div
                     className="mn-card-flip-stage relative h-full w-full rounded-xl shadow-2xl"
                     style={{
-                      transform: showPortraitFace ? 'rotateY(0deg) scale(1.04)' : 'rotateY(180deg) scale(0.95)',
-                      transitionDuration: vfx.reducedMotion ? '120ms' : '420ms',
+                      transform: showPortraitFace ? 'rotateY(0deg) scale(1.04)' : 'rotateY(180deg) scale(0.94)',
+                      transitionDuration: vfx.reducedMotion ? '120ms' : '360ms',
                     }}
                   >
-                    {/* Mặt trước: Chân dung nhân vật phóng lớn + biểu tượng phe */}
+                    {/* Mặt trước: Chân dung nhân vật phóng lớn + foil + biểu tượng phe */}
                     <div
                       className="mn-card-face absolute inset-0 overflow-hidden rounded-xl border-2 bg-slate-900 shadow-lg"
                       style={{
@@ -2268,12 +2310,26 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                           <FactionCrestSvg faction={cutIn.faction} size={56} />
                         </div>
                       )}
+                      {vfx.enableFoil && showPortraitFace && (
+                        <div
+                          aria-hidden="true"
+                          className="mn-foil-sweep pointer-events-none absolute inset-0 opacity-30"
+                          style={{
+                            backgroundImage:
+                              'linear-gradient(115deg, transparent 22%, rgba(255,255,255,0.52) 48%, transparent 74%)',
+                          }}
+                        />
+                      )}
                       <div
                         aria-hidden="true"
                         className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-slate-950/95 via-slate-950/60 to-transparent"
                       />
-                      {cutIn.faction && (
-                        <div className="absolute right-1.5 bottom-1.5 rounded-full bg-slate-950/85 p-1 border border-white/20 shadow">
+                      {cutIn.faction && showFactionIdentity && (
+                        <div
+                          className={`absolute right-1.5 bottom-1.5 rounded-full bg-slate-950/85 p-1 border border-white/20 shadow ${
+                            vfx.reducedMotion ? '' : 'bg-vfx-faction-crest-pop'
+                          }`}
+                        >
                           <FactionCrestSvg faction={cutIn.faction} size={22} />
                         </div>
                       )}
@@ -2306,14 +2362,25 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                 {/* Nội dung vai trò & phe nổi bật */}
                 <div className="relative z-10 min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <FactionCrestSvg faction={cutIn.faction} size={30} />
+                    <div
+                      data-testid="bg-vfx-reveal-crest"
+                      className={
+                        showFactionIdentity
+                          ? vfx.reducedMotion
+                            ? 'shrink-0'
+                            : 'bg-vfx-faction-crest-pop shrink-0'
+                          : 'shrink-0 opacity-35 transition-opacity duration-200'
+                      }
+                    >
+                      <FactionCrestSvg faction={cutIn.faction} size={30} />
+                    </div>
                     <span
                       className="rounded-md px-2.5 py-0.5 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-950"
                       style={{ backgroundColor: cutInSecondary }}
                     >
                       {cutIn.title}
                     </span>
-                    {cutIn.skillName && showPortraitFace && (
+                    {cutIn.skillName && showFactionIdentity && (
                       <span className="text-xs sm:text-sm font-black uppercase tracking-wide text-white">
                         ✦ {cutIn.skillName}
                       </span>
@@ -2322,7 +2389,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                   <p className="mt-1.5 truncate text-base sm:text-xl font-black text-white">
                     {cutIn.subtitle}
                   </p>
-                  {cutIn.roleName && showPortraitFace && (
+                  {cutIn.roleName && showFactionIdentity && (
                     <p className="mt-0.5 text-xs sm:text-sm font-bold" style={{ color: cutInSecondary }}>
                       {cutIn.roleName}
                       {cutInTheme ? ` · ${cutInTheme.label}` : ''}

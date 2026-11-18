@@ -50,10 +50,18 @@ export type CinematicBannerType =
 
 export type ScreenShakeLevel = 'none' | 'light' | 'heavy';
 
-export type RoleRevealPhase = 'anticipation' | 'reveal' | 'impact' | 'settle';
+export type RoleRevealPhase =
+  | 'anticipation'
+  | 'card-flip'
+  | 'faction-reveal'
+  | 'impact'
+  | 'settle';
 
 export interface RoleRevealTimeline {
   anticipationEndMs: number;
+  cardFlipEndMs: number;
+  factionRevealEndMs: number;
+  /** Alias cho factionRevealEndMs để tương thích ngược */
   revealEndMs: number;
   impactEndMs: number;
   totalMs: number;
@@ -280,28 +288,44 @@ function scaleDuration(baseMs: number, reducedMotion: boolean): number {
 }
 
 /**
- * Chia 4 giai đoạn Cinematic Role Reveal (1.2–1.8s, mặc định 1560ms):
- *   anticipation -> reveal (3D card flip) -> impact (spotlight + faction particles) -> settle.
- * Rút gọn tức thì khi bật Reduced Motion (`<= 260ms`).
+ * Chia 5 giai đoạn Cinematic Role Reveal (1.2–1.6s, mặc định 1480ms):
+ *   anticipation -> card-flip -> faction-reveal -> impact -> settle.
+ * Điều chỉnh nhẹ theo chất lượng đồ họa (`high`/`balanced`/`low`) và rút gọn `<= 260ms`
+ * khi bật Reduced Motion.
  */
 export function resolveRoleRevealTimeline(
   durationMs: number,
   reducedMotion: boolean,
+  qualityTier: 'high' | 'balanced' | 'low' = 'high',
 ): RoleRevealTimeline {
   const safeTotal = Math.max(180, Math.round(durationMs));
   if (reducedMotion || safeTotal <= 350) {
     return {
       anticipationEndMs: 0,
+      cardFlipEndMs: 0,
+      factionRevealEndMs: 0,
       revealEndMs: 0,
       impactEndMs: 0,
       totalMs: Math.min(260, safeTotal),
     };
   }
-  const totalMs = Math.max(1200, Math.min(1800, safeTotal));
+  const clamped = Math.max(1200, Math.min(1600, safeTotal));
+  const totalMs =
+    qualityTier === 'low'
+      ? Math.min(clamped, 1320)
+      : qualityTier === 'balanced'
+        ? Math.min(clamped, 1440)
+        : clamped;
+  const anticipationEndMs = Math.round(totalMs * 0.2);
+  const cardFlipEndMs = Math.round(totalMs * 0.46);
+  const factionRevealEndMs = Math.round(totalMs * 0.68);
+  const impactEndMs = Math.round(totalMs * 0.85);
   return {
-    anticipationEndMs: Math.round(totalMs * 0.22),
-    revealEndMs: Math.round(totalMs * 0.54),
-    impactEndMs: Math.round(totalMs * 0.78),
+    anticipationEndMs,
+    cardFlipEndMs,
+    factionRevealEndMs,
+    revealEndMs: factionRevealEndMs,
+    impactEndMs,
     totalMs,
   };
 }
@@ -445,14 +469,20 @@ export function extractVisualEventsFromDiff(
     }
 
     // 2B. Lộ diện (voluntary hoặc từ hiệu ứng như Tiếng Hét, Gương, Advent, Chocolate) (order: 30)
-    if (log.kind === 'reveal' && actorId && actorPub?.revealedRoleId) {
+    // Chỉ kích hoạt khi server đã công khai cả role & faction trên public view (P0 safety)
+    if (
+      log.kind === 'reveal' &&
+      actorId &&
+      actorPub?.revealedRoleId &&
+      actorPub.revealedFaction
+    ) {
       const roleDesign = getRoleDesign(actorPub.revealedRoleId);
       revealedActorIdsThisTick.add(actorId);
       events.push({
         id: `${next.matchId}::reveal::${log.id}`,
         kind: 'CINEMATIC_CUTIN',
         order: 30,
-        durationMs: scaleDuration(1680, reduced),
+        durationMs: scaleDuration(1480, reduced),
         bannerType: 'ROLE_REVEAL',
         title: 'LỘ DIỆN',
         subtitle: `${actorPub.displayName} lật vai ${roleDesign.name}!`,
@@ -909,12 +939,13 @@ export function extractVisualEventsFromDiff(
   ) {
     const rev = next.lastRevealEvent;
     const pubP = nextById.get(rev.playerId);
-    if (pubP?.revealedRoleId) {
+    if (pubP?.revealedRoleId && pubP.revealedFaction) {
+      revealedActorIdsThisTick.add(rev.playerId);
       events.push({
         id: `${next.matchId}::reveal-evt::${rev.id}`,
         kind: 'CINEMATIC_CUTIN',
         order: 30,
-        durationMs: scaleDuration(1680, reduced),
+        durationMs: scaleDuration(1480, reduced),
         bannerType: 'ROLE_REVEAL',
         title: 'LỘ DIỆN',
         subtitle: `${rev.displayName} lật vai ${rev.roleName}!`,
@@ -928,10 +959,34 @@ export function extractVisualEventsFromDiff(
     }
   }
 
-  // 3. FLOATING_TEXT từ delta thương tích thực tế của từng mục tiêu (order: 50)
+  // 3. FLOATING_TEXT & state-diff Reveal fallback (order: 30 / 50)
   for (const np of next.players) {
     const pp = prevById.get(np.playerId);
     if (!pp) continue;
+    if (
+      !pp.revealedRoleId &&
+      np.revealedRoleId &&
+      np.revealedFaction &&
+      !revealedActorIdsThisTick.has(np.playerId)
+    ) {
+      revealedActorIdsThisTick.add(np.playerId);
+      const roleDesign = getRoleDesign(np.revealedRoleId);
+      events.push({
+        id: `${next.matchId}::reveal-state::${np.playerId}`,
+        kind: 'CINEMATIC_CUTIN',
+        order: 30,
+        durationMs: scaleDuration(1480, reduced),
+        bannerType: 'ROLE_REVEAL',
+        title: 'LỘ DIỆN',
+        subtitle: `${np.displayName} lật vai ${roleDesign.name}!`,
+        faction: np.revealedFaction,
+        roleId: np.revealedRoleId,
+        roleName: roleDesign.name,
+        portraitSrc: getRevealPortrait(np.revealedRoleId),
+        skillName: roleDesign.skillName,
+        actorId: np.playerId,
+      });
+    }
     const delta = woundDeltas.get(np.playerId) ?? 0;
 
     if (delta > 0) {
