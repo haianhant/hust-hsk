@@ -75,6 +75,9 @@ canvas {
   .bg-vfx-reveal-vignette,
   .bg-vfx-reveal-push,
   .bg-vfx-reveal-impact-glow,
+  .bg-vfx-reveal-flash-sweep,
+  .bg-vfx-reveal-shockwave,
+  .bg-vfx-reveal-text-lock,
   .bg-vfx-faction-crest-pop,
   .bg-vfx-impact-flash,
   .bg-vfx-card-flight,
@@ -415,19 +418,19 @@ canvas {
 
 /* Cinematic Role Reveal 5-stage animations (anticipation -> card-flip -> faction-reveal -> impact -> settle) */
 @keyframes bg-vfx-reveal-vignette {
-  0%   { opacity: 0; }
-  14%  { opacity: 1; }
-  85%  { opacity: 1; }
+  0%   { opacity: 0.82; }
+  12%  { opacity: 1; }
+  86%  { opacity: 1; }
   100% { opacity: 0; }
 }
 
 @keyframes bg-vfx-reveal-push {
-  0%   { opacity: 0; transform: translate3d(0, -14px, 0) scale(0.92); }
-  20%  { opacity: 1; transform: translate3d(0, 0, 0) scale(0.99); }
-  46%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1.015); }
-  68%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1.045); }
-  85%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1.01); }
-  100% { opacity: 0; transform: translate3d(0, -8px, 0) scale(0.97); }
+  0%   { opacity: 0.92; transform: translate3d(0, -22px, 0) scale(0.88); }
+  24%  { opacity: 1; transform: translate3d(0, 0, 0) scale(0.97); }
+  44%  { opacity: 1; transform: translate3d(0, 2px, 0) scale(1.015); }
+  64%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1.055); }
+  86%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  100% { opacity: 0; transform: translate3d(0, -10px, 0) scale(0.975); }
 }
 
 @keyframes bg-vfx-faction-crest-pop {
@@ -442,12 +445,29 @@ canvas {
   100% { opacity: 0; transform: scale(1.42); }
 }
 
+@keyframes bg-vfx-reveal-flash-sweep {
+  0%   { opacity: 0; transform: translateX(-110%) skewX(-18deg); }
+  35%  { opacity: 0.85; }
+  100% { opacity: 0; transform: translateX(180%) skewX(-18deg); }
+}
+
+@keyframes bg-vfx-reveal-shockwave {
+  0%   { opacity: 0.95; transform: scale(0.88); }
+  100% { opacity: 0; transform: scale(1.22); }
+}
+
+@keyframes bg-vfx-reveal-text-lock {
+  0%   { opacity: 0.88; transform: translate3d(-10px, 4px, 0) scale(0.95); }
+  60%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1.03); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
 .bg-vfx-reveal-vignette {
-  animation: bg-vfx-reveal-vignette 1480ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bg-vfx-reveal-vignette 1720ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-reveal-push {
-  animation: bg-vfx-reveal-push 1480ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bg-vfx-reveal-push 1720ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-faction-crest-pop {
@@ -456,6 +476,18 @@ canvas {
 
 .bg-vfx-reveal-impact-glow {
   animation: bg-vfx-reveal-impact-glow 480ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bg-vfx-reveal-flash-sweep {
+  animation: bg-vfx-reveal-flash-sweep 520ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bg-vfx-reveal-shockwave {
+  animation: bg-vfx-reveal-shockwave 520ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bg-vfx-reveal-text-lock {
+  animation: bg-vfx-reveal-text-lock 340ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* Combat Impact Flash ring during 75ms Hit-Stop -> Recovery */

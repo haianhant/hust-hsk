@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T15:16:38.284Z",
+  "generatedAt": "2026-11-18T16:42:26.947Z",
   "target": "Bóng Đêm KTX — AAA Cinematic & Game Feel Polish (Desktop 1920x1080)",
   "environmentNote": "Linux container CPU rasterizer (--use-gl=angle --use-angle=swiftshader) — no hardware GPU present",
   "beforeBaseline": {
@@ -655,10 +655,10 @@
     "afterGameplayFull": {
       "path": "artifacts/boardgame-cinematic-polish/after-gameplay-full.mp4",
       "mimeType": "video/mp4;codecs=avc1,opus",
-      "sizeBytes": 5778073,
+      "sizeBytes": 6423967,
       "width": 1920,
       "height": 1080,
-      "durationSec": 126.08,
+      "durationSec": 143.24,
       "hasVideoTrack": true,
       "hasAudioTrack": true,
       "playbackVerified": true
@@ -666,10 +666,10 @@
     "afterCinematicHighlights": {
       "path": "artifacts/boardgame-cinematic-polish/after-cinematic-highlights.mp4",
       "mimeType": "video/mp4;codecs=avc1,opus",
-      "sizeBytes": 3992918,
+      "sizeBytes": 3632097,
       "width": 1920,
       "height": 1080,
-      "durationSec": 87.19,
+      "durationSec": 71.14,
       "hasVideoTrack": true,
       "hasAudioTrack": true,
       "playbackVerified": true,
@@ -678,545 +678,901 @@
           "label": "Mở màn trận đấu & tung D6+D4 clack spark",
           "startTs": "00:00.000",
           "startMs": 0,
-          "endTs": "00:06.144",
-          "endMs": 6144
+          "endTs": "00:07.359",
+          "endMs": 7359
         },
         {
           "label": "Sequence 3: Thẻ bay từ deck lên trung tâm, lật 3D & Soi thẻ",
-          "startTs": "00:06.310",
-          "startMs": 6310,
-          "endTs": "00:14.161",
-          "endMs": 14161
+          "startTs": "00:07.529",
+          "startMs": 7529,
+          "endTs": "00:15.902",
+          "endMs": 15902
         },
         {
           "label": "Sequence 5A: Lật vai Cinematic (Tối nền, Spotlight, 3D Flip & Hạt theo phe)",
-          "startTs": "00:15.243",
-          "startMs": 15243,
-          "endTs": "00:19.080",
-          "endMs": 19080
+          "startTs": "00:17.110",
+          "startMs": 17110,
+          "endTs": "00:21.255",
+          "endMs": 21255
         },
         {
           "label": "Sequence 4: Target Lock -> Attack Travel -> 75ms Hit-Stop Flash -> Damage",
-          "startTs": "00:19.248",
-          "startMs": 19248,
-          "endTs": "00:26.052",
-          "endMs": 26052
+          "startTs": "00:21.426",
+          "startMs": 21426,
+          "endTs": "00:29.148",
+          "endMs": 29148
         },
         {
           "label": "Sequence 6A: Multiplayer Emote, Compact Damage Track & Sidebar",
-          "startTs": "00:26.217",
-          "startMs": 26217,
-          "endTs": "00:29.671",
-          "endMs": 29671
+          "startTs": "00:29.314",
+          "startMs": 29314,
+          "endTs": "00:33.254",
+          "endMs": 33254
         },
         {
           "label": "Peer Reveal: Dũng Gác Cổng lộ vai chuẩn bị Phản kích",
-          "startTs": "00:36.213",
-          "startMs": 36213,
-          "endTs": "00:39.301",
-          "endMs": 39301
+          "startTs": "00:47.286",
+          "startMs": 47286,
+          "endTs": "00:50.655",
+          "endMs": 50655
         },
         {
           "label": "Sequence 1&2: Xúc xắc D6+D4 va chạm, vòng khóa & quân cờ nhảy FLIP",
-          "startTs": "00:48.404",
-          "startMs": 48404,
-          "endTs": "00:49.812",
-          "endMs": 49812
+          "startTs": "00:51.404",
+          "startMs": 51404,
+          "endTs": "00:52.850",
+          "endMs": 52850
         },
         {
           "label": "Sequence 5B: Tuyệt kỹ Signature Canvas Aura + Cut-In",
-          "startTs": "00:51.753",
-          "startMs": 51753,
-          "endTs": "00:55.632",
-          "endMs": 55632
+          "startTs": "00:56.130",
+          "startMs": 56130,
+          "endTs": "00:59.886",
+          "endMs": 59886
         },
         {
           "label": "Sequence 4: Target Lock -> Attack Travel -> 75ms Hit-Stop Flash -> Damage",
-          "startTs": "00:55.806",
-          "startMs": 55806,
-          "endTs": "01:00.109",
-          "endMs": 60109
+          "startTs": "01:00.060",
+          "startMs": 60060,
+          "endTs": "01:04.572",
+          "endMs": 64572
         },
         {
           "label": "Sequence 1&2: Xúc xắc D6+D4 va chạm, vòng khóa & quân cờ nhảy FLIP",
-          "startTs": "01:10.168",
-          "startMs": 70168,
-          "endTs": "01:11.766",
-          "endMs": 71766
-        },
-        {
-          "label": "Sequence 1&2: Xúc xắc D6+D4 va chạm, vòng khóa & quân cờ nhảy FLIP",
-          "startTs": "01:11.937",
-          "startMs": 71937,
-          "endTs": "01:13.318",
-          "endMs": 73318
+          "startTs": "01:19.140",
+          "startMs": 79140,
+          "endTs": "01:21.031",
+          "endMs": 81031
         },
         {
           "label": "Sequence 4: Target Lock -> Attack Travel -> 75ms Hit-Stop Flash -> Damage",
-          "startTs": "01:16.889",
-          "startMs": 76889,
-          "endTs": "01:21.245",
-          "endMs": 81245
+          "startTs": "01:24.774",
+          "startMs": 84774,
+          "endTs": "01:29.291",
+          "endMs": 89291
+        },
+        {
+          "label": "Sequence 1&2: Xúc xắc D6+D4 va chạm, vòng khóa & quân cờ nhảy FLIP",
+          "startTs": "01:38.360",
+          "startMs": 98360,
+          "endTs": "01:39.786",
+          "endMs": 99786
+        },
+        {
+          "label": "Sequence 4: Target Lock -> Attack Travel -> 75ms Hit-Stop Flash -> Damage",
+          "startTs": "01:41.285",
+          "startMs": 101285,
+          "endTs": "01:45.605",
+          "endMs": 105605
+        },
+        {
+          "label": "Sequence 1&2: Xúc xắc D6+D4 va chạm, vòng khóa & quân cờ nhảy FLIP",
+          "startTs": "01:53.655",
+          "startMs": 113655,
+          "endTs": "01:55.126",
+          "endMs": 115126
+        },
+        {
+          "label": "Sequence 4: Target Lock -> Attack Travel -> 75ms Hit-Stop Flash -> Damage",
+          "startTs": "01:56.642",
+          "startMs": 116642,
+          "endTs": "02:01.144",
+          "endMs": 121144
+        },
+        {
+          "label": "Sequence 1&2: Xúc xắc D6+D4 va chạm, vòng khóa & quân cờ nhảy FLIP",
+          "startTs": "02:06.002",
+          "startMs": 126002,
+          "endTs": "02:07.893",
+          "endMs": 127893
+        },
+        {
+          "label": "Sequence 4: Target Lock -> Attack Travel -> 75ms Hit-Stop Flash -> Damage",
+          "startTs": "02:10.494",
+          "startMs": 130494,
+          "endTs": "02:15.193",
+          "endMs": 135193
         },
         {
           "label": "Sequence 6B: Pháo hoa chiến thắng & Màn hình tổng kết theo phe",
-          "startTs": "01:26.826",
-          "startMs": 86826,
-          "endTs": "02:06.004",
-          "endMs": 126004
+          "startTs": "02:21.259",
+          "startMs": 141259,
+          "endTs": "02:23.118",
+          "endMs": 143118
         }
       ]
     }
   },
   "performance": {
     "unrecordedLivePlay": {
-      "sampleDurationSec": 61.04,
-      "framesCount": 1592,
-      "fpsMean": 26.08,
+      "sampleDurationSec": 61.72,
+      "framesCount": 1311,
+      "fpsMean": 21.24,
       "fpsMinPerSec": 1,
-      "fpsMaxPerSec": 30,
-      "p50FrameMs": 33.3,
+      "fpsMaxPerSec": 26,
+      "p50FrameMs": 50,
       "p95FrameMs": 50.1,
       "p99FrameMs": 66.7,
-      "frameDropsOver25ms": 1572,
-      "frameDropsOver33ms": 644,
-      "frameDropsOver50ms": 92
+      "frameDropsOver25ms": 1308,
+      "frameDropsOver33ms": 935,
+      "frameDropsOver50ms": 175
     },
     "duringRecording": {
-      "sampleDurationSec": 126.17,
-      "framesCount": 1180,
-      "fpsMean": 9.35,
-      "fpsMinPerSec": 3,
-      "fpsMaxPerSec": 15,
-      "p50FrameMs": 99.9,
-      "p95FrameMs": 200,
-      "p99FrameMs": 400,
-      "frameDropsOver25ms": 1131,
-      "frameDropsOver33ms": 1131,
-      "frameDropsOver50ms": 1121
+      "sampleDurationSec": 143.28,
+      "framesCount": 1085,
+      "fpsMean": 7.57,
+      "fpsMinPerSec": 1,
+      "fpsMaxPerSec": 13,
+      "p50FrameMs": 100,
+      "p95FrameMs": 316.6,
+      "p99FrameMs": 499.9,
+      "frameDropsOver25ms": 1003,
+      "frameDropsOver33ms": 1003,
+      "frameDropsOver50ms": 1003
     }
   },
   "animationDurations": {
     "diceRolls": [
       {
-        "startMs": 1287.6000000000931,
+        "startMs": 1460,
         "stage": "windup",
-        "settleMs": 1096.1000000000931,
+        "settleMs": 1095.300000000745,
         "endMs": null,
-        "durationMs": 1421
+        "durationMs": 1422
       },
       {
-        "startMs": 21270.700000000186,
+        "startMs": 23553,
         "stage": "windup",
-        "settleMs": 1017.8999999999069,
+        "settleMs": 1015.8000000007451,
+        "endMs": null,
+        "durationMs": 1319
+      },
+      {
+        "startMs": 33472.09999999963,
+        "stage": "windup",
+        "settleMs": 1096.300000000745,
+        "endMs": null,
+        "durationMs": 1423
+      },
+      {
+        "startMs": 35881.300000000745,
+        "stage": "windup",
+        "settleMs": 1019.6999999992549,
         "endMs": null,
         "durationMs": 1322
       },
       {
-        "startMs": 29877.100000000093,
+        "startMs": 39309,
         "stage": "windup",
-        "settleMs": 1095.1000000000931,
+        "settleMs": 1095.9000000003725,
         "endMs": null,
-        "durationMs": 2708
+        "durationMs": 1422
       },
       {
-        "startMs": 33811.799999999814,
+        "startMs": 41400.59999999963,
+        "stage": "windup",
+        "settleMs": 1018.2000000011176,
+        "endMs": null,
+        "durationMs": 1321
+      },
+      {
+        "startMs": 44828.40000000037,
+        "stage": "windup",
+        "settleMs": 1095.5,
+        "endMs": null,
+        "durationMs": 1423
+      },
+      {
+        "startMs": 51834.59999999963,
+        "stage": "windup",
+        "settleMs": 1095.7000000011176,
+        "endMs": null,
+        "durationMs": 1450
+      },
+      {
+        "startMs": 61234.300000000745,
+        "stage": "windup",
+        "settleMs": 1018,
+        "endMs": null,
+        "durationMs": 1328
+      },
+      {
+        "startMs": 65671.80000000075,
+        "stage": "windup",
+        "settleMs": 1095.699999999255,
+        "endMs": null,
+        "durationMs": 2725
+      },
+      {
+        "startMs": 71099.80000000075,
+        "stage": "windup",
+        "settleMs": 1096.3999999985099,
+        "endMs": null,
+        "durationMs": 2571
+      },
+      {
+        "startMs": 76247.19999999925,
         "stage": "windup",
         "settleMs": 1094.9000000003725,
         "endMs": null,
         "durationMs": 1422
       },
       {
-        "startMs": 39511.10000000009,
+        "startMs": 80010.80000000075,
         "stage": "windup",
-        "settleMs": 1017.6000000000931,
+        "settleMs": 1096.699999999255,
+        "endMs": null,
+        "durationMs": 1422
+      },
+      {
+        "startMs": 85949.5,
+        "stage": "windup",
+        "settleMs": 1017.8000000007451,
         "endMs": null,
         "durationMs": 1321
       },
       {
-        "startMs": 42927.5,
+        "startMs": 89523.30000000075,
         "stage": "windup",
-        "settleMs": 1095.7999999998137,
+        "settleMs": 1096.0999999996275,
+        "endMs": null,
+        "durationMs": 1423
+      },
+      {
+        "startMs": 91692.09999999963,
+        "stage": "windup",
+        "settleMs": 1096.2000000011176,
         "endMs": null,
         "durationMs": 1422
       },
       {
-        "startMs": 45034,
+        "startMs": 93773.19999999925,
         "stage": "windup",
-        "settleMs": 1018.1000000000931,
+        "settleMs": 1095.4000000003725,
         "endMs": null,
-        "durationMs": 1322
+        "durationMs": 1423
       },
       {
-        "startMs": 48790.200000000186,
-        "stage": "windup",
-        "settleMs": 1094.8999999999069,
-        "endMs": null,
-        "durationMs": 1422
-      },
-      {
-        "startMs": 56774.5,
+        "startMs": 95305.19999999925,
         "stage": "windup",
         "settleMs": 1017.5,
         "endMs": null,
         "durationMs": 1322
       },
       {
-        "startMs": 61214.60000000009,
+        "startMs": 98766.80000000075,
         "stage": "windup",
-        "settleMs": 1096.2999999998137,
+        "settleMs": 1096.8999999985099,
+        "endMs": null,
+        "durationMs": 1462
+      },
+      {
+        "startMs": 102265.40000000037,
+        "stage": "windup",
+        "settleMs": 1015.7999999988824,
+        "endMs": null,
+        "durationMs": 1320
+      },
+      {
+        "startMs": 105831.59999999963,
+        "stage": "windup",
+        "settleMs": 1095.5,
+        "endMs": null,
+        "durationMs": 2573
+      },
+      {
+        "startMs": 109481,
+        "stage": "windup",
+        "settleMs": 1095.199999999255,
         "endMs": null,
         "durationMs": 1422
       },
       {
-        "startMs": 64964.89999999991,
+        "startMs": 111603.5,
         "stage": "windup",
-        "settleMs": 1095.3000000002794,
+        "settleMs": 1102.300000000745,
         "endMs": null,
-        "durationMs": 1422
+        "durationMs": 1423
       },
       {
-        "startMs": 70744.5,
-        "stage": "windup",
-        "settleMs": 1095.1000000000931,
-        "endMs": null,
-        "durationMs": 1422
-      },
-      {
-        "startMs": 72295.1000000001,
-        "stage": "windup",
-        "settleMs": 1096.5,
-        "endMs": null,
-        "durationMs": 1422
-      },
-      {
-        "startMs": 77832.1000000001,
-        "stage": "windup",
-        "settleMs": 1017.5,
-        "endMs": null,
-        "durationMs": 1321
-      },
-      {
-        "startMs": 81479.8999999999,
-        "stage": "windup",
-        "settleMs": 1096.1000000000931,
-        "endMs": null,
-        "durationMs": 2559
-      },
-      {
-        "startMs": 85066.3999999999,
+        "startMs": 114103.80000000075,
         "stage": "windup",
         "settleMs": 1095,
         "endMs": null,
-        "durationMs": 1742
+        "durationMs": 1471
+      },
+      {
+        "startMs": 117798.59999999963,
+        "stage": "windup",
+        "settleMs": 1018.5,
+        "endMs": null,
+        "durationMs": 1322
+      },
+      {
+        "startMs": 121391.09999999963,
+        "stage": "windup",
+        "settleMs": 1095.2000000011176,
+        "endMs": null,
+        "durationMs": 1424
+      },
+      {
+        "startMs": 123560.59999999963,
+        "stage": "windup",
+        "settleMs": 1095.5,
+        "endMs": null,
+        "durationMs": 1423
+      },
+      {
+        "startMs": 126868.59999999963,
+        "stage": "windup",
+        "settleMs": 1095.7000000011176,
+        "endMs": null,
+        "durationMs": 1482
+      },
+      {
+        "startMs": 131849.80000000075,
+        "stage": "windup",
+        "settleMs": 1017.3999999985099,
+        "endMs": null,
+        "durationMs": 1321
+      },
+      {
+        "startMs": 135437.19999999925,
+        "stage": "windup",
+        "settleMs": 1095.5,
+        "endMs": null,
+        "durationMs": 2599
+      },
+      {
+        "startMs": 138692.90000000037,
+        "stage": "windup",
+        "settleMs": 1017.4000000003725,
+        "endMs": null,
+        "durationMs": 1322
       }
     ],
     "locationHighlights": [
       {
         "locTestId": "bg-loc-breaker",
-        "startMs": 2383.7000000001863,
-        "durationMs": 18887
+        "startMs": 2555.300000000745,
+        "durationMs": 20998
       },
       {
-        "locTestId": "bg-loc-breaker",
-        "startMs": 30972.200000000186,
-        "durationMs": 191
+        "locTestId": "bg-loc-lobby",
+        "startMs": 34568.40000000037,
+        "durationMs": 1313
       },
       {
-        "locTestId": "bg-loc-corridor",
-        "startMs": 32258.299999999814,
-        "durationMs": 1554
+        "locTestId": "bg-loc-court",
+        "startMs": 40404.90000000037,
+        "durationMs": 996
       },
       {
         "locTestId": "bg-loc-canteen",
-        "startMs": 34906.700000000186,
-        "durationMs": 4604
-      },
-      {
-        "locTestId": "bg-loc-breaker",
-        "startMs": 44023.299999999814,
-        "durationMs": 1011
+        "startMs": 45923.90000000037,
+        "durationMs": 5911
       },
       {
         "locTestId": "bg-loc-lobby",
-        "startMs": 49885.10000000009,
-        "durationMs": 6889
-      },
-      {
-        "locTestId": "bg-loc-radio",
-        "startMs": 62496.799999999814,
-        "durationMs": 2468
-      },
-      {
-        "locTestId": "bg-loc-radio",
-        "startMs": 66256.29999999981,
-        "durationMs": 4488
+        "startMs": 52930.300000000745,
+        "durationMs": 8304
       },
       {
         "locTestId": "bg-loc-lobby",
-        "startMs": 71839.6000000001,
-        "durationMs": 456
-      },
-      {
-        "locTestId": "bg-loc-radio",
-        "startMs": 73687.70000000019,
-        "durationMs": 4144
-      },
-      {
-        "locTestId": "bg-loc-radio",
-        "startMs": 82576,
-        "durationMs": 41
+        "startMs": 66767.5,
+        "durationMs": 207
       },
       {
         "locTestId": "bg-loc-breaker",
-        "startMs": 83712.8999999999,
-        "durationMs": 1354
+        "startMs": 68072.40000000037,
+        "durationMs": 3027
+      },
+      {
+        "locTestId": "bg-loc-court",
+        "startMs": 72196.19999999925,
+        "durationMs": 52
+      },
+      {
+        "locTestId": "bg-loc-canteen",
+        "startMs": 73344.09999999963,
+        "durationMs": 2903
+      },
+      {
+        "locTestId": "bg-loc-radio",
+        "startMs": 77407.69999999925,
+        "durationMs": 2603
+      },
+      {
+        "locTestId": "bg-loc-radio",
+        "startMs": 81332.19999999925,
+        "durationMs": 4617
+      },
+      {
+        "locTestId": "bg-loc-lobby",
+        "startMs": 90619.40000000037,
+        "durationMs": 1073
+      },
+      {
+        "locTestId": "bg-loc-corridor",
+        "startMs": 92788.30000000075,
+        "durationMs": 985
+      },
+      {
+        "locTestId": "bg-loc-lobby",
+        "startMs": 94868.59999999963,
+        "durationMs": 437
+      },
+      {
+        "locTestId": "bg-loc-canteen",
+        "startMs": 99863.69999999925,
+        "durationMs": 2402
+      },
+      {
+        "locTestId": "bg-loc-lobby",
+        "startMs": 106927.09999999963,
+        "durationMs": 55
+      },
+      {
+        "locTestId": "bg-loc-canteen",
+        "startMs": 108079.59999999963,
+        "durationMs": 1401
+      },
+      {
+        "locTestId": "bg-loc-court",
+        "startMs": 110576.19999999925,
+        "durationMs": 1027
+      },
+      {
+        "locTestId": "bg-loc-breaker",
+        "startMs": 112705.80000000075,
+        "durationMs": 1398
+      },
+      {
+        "locTestId": "bg-loc-lobby",
+        "startMs": 115198.80000000075,
+        "durationMs": 2600
+      },
+      {
+        "locTestId": "bg-loc-canteen",
+        "startMs": 122486.30000000075,
+        "durationMs": 1074
+      },
+      {
+        "locTestId": "bg-loc-canteen",
+        "startMs": 124656.09999999963,
+        "durationMs": 2213
+      },
+      {
+        "locTestId": "bg-loc-breaker",
+        "startMs": 127964.30000000075,
+        "durationMs": 3886
+      },
+      {
+        "locTestId": "bg-loc-canteen",
+        "startMs": 136532.69999999925,
+        "durationMs": 81
+      },
+      {
+        "locTestId": "bg-loc-lobby",
+        "startMs": 137711,
+        "durationMs": 982
       }
     ],
     "cardDraws": [
       {
         "showFront": true,
         "deck": "investigation",
-        "startMs": 6684.100000000093,
-        "durationMs": 868
+        "startMs": 8003.0999999996275,
+        "durationMs": 849
+      },
+      {
+        "showFront": false,
+        "deck": "equipment",
+        "startMs": 34762.300000000745,
+        "durationMs": 875
       },
       {
         "showFront": false,
         "deck": "event",
-        "startMs": 35106.299999999814,
-        "durationMs": 879
-      },
-      {
-        "showFront": true,
-        "deck": "event",
-        "startMs": 44232.5,
-        "durationMs": 1149
+        "startMs": 46139.59999999963,
+        "durationMs": 878
       },
       {
         "showFront": true,
         "deck": "equipment",
-        "startMs": 50184.39999999991,
-        "durationMs": 1148
+        "startMs": 53270.699999999255,
+        "durationMs": 866
+      },
+      {
+        "showFront": true,
+        "deck": "event",
+        "startMs": 68266.69999999925,
+        "durationMs": 1149
+      },
+      {
+        "showFront": false,
+        "deck": "event",
+        "startMs": 73446,
+        "durationMs": 878
       },
       {
         "showFront": false,
         "deck": "investigation",
-        "startMs": 63240.5,
-        "durationMs": 879
-      },
-      {
-        "showFront": false,
-        "deck": "investigation",
-        "startMs": 67010.79999999981,
+        "startMs": 77863.80000000075,
         "durationMs": 880
       },
       {
         "showFront": true,
         "deck": "investigation",
-        "startMs": 74849.6000000001,
-        "durationMs": 878
+        "startMs": 82699,
+        "durationMs": 863
+      },
+      {
+        "showFront": true,
+        "deck": "event",
+        "startMs": 100252.09999999963,
+        "durationMs": 1130
       },
       {
         "showFront": false,
         "deck": "event",
-        "startMs": 83773.6000000001,
-        "durationMs": 882
+        "startMs": 108191.19999999925,
+        "durationMs": 876
+      },
+      {
+        "showFront": true,
+        "deck": "event",
+        "startMs": 112801.59999999963,
+        "durationMs": 1149
+      },
+      {
+        "showFront": true,
+        "deck": "equipment",
+        "startMs": 115607.80000000075,
+        "durationMs": 1129
+      },
+      {
+        "showFront": true,
+        "deck": "event",
+        "startMs": 122593.30000000075,
+        "durationMs": 1149
+      },
+      {
+        "showFront": false,
+        "deck": "event",
+        "startMs": 124745.19999999925,
+        "durationMs": 874
+      },
+      {
+        "showFront": true,
+        "deck": "investigation",
+        "startMs": 128380.90000000037,
+        "durationMs": 864
       }
     ],
     "cardZooms": [
       {
-        "startMs": 9622.799999999814,
-        "durationMs": 4213
+        "startMs": 11283.099999999627,
+        "durationMs": 4295
       }
     ],
     "impactFlashes": [
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 14757
+        "atMs": 23882
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 14904
+        "atMs": 24092
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 14950
+        "atMs": 36210
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 21598
+        "atMs": 36370
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 21712
+        "atMs": 41728
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 21793
+        "atMs": 41903
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 36140
+        "atMs": 42003
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 36240
+        "atMs": 47291
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 36392
+        "atMs": 47474
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 39839
+        "atMs": 55080
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 45361
+        "atMs": 55283
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 45486
+        "atMs": 56878
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 45636
+        "atMs": 57026
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 52479
+        "atMs": 57141
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 52514
+        "atMs": 61562
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 52753
+        "atMs": 74056
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 57103
+        "atMs": 74158
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 57302
+        "atMs": 74249
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 68054
+        "atMs": 78520
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 68160
+        "atMs": 78554
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 68249
+        "atMs": 78714
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 78161
+        "atMs": 84269
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 78194
+        "atMs": 84303
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 78401
-      },
-      {
-        "isCounter": true,
-        "hitStopMs": 75,
-        "atMs": 78417
+        "atMs": 84463
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 78433
-      },
-      {
-        "isCounter": true,
-        "hitStopMs": 75,
-        "atMs": 78433
-      },
-      {
-        "isCounter": true,
-        "hitStopMs": 75,
-        "atMs": 78651
+        "atMs": 86277
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 87091
+        "atMs": 86472
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 87237
+        "atMs": 93199
       },
       {
         "isCounter": false,
         "hitStopMs": 75,
-        "atMs": 87363
+        "atMs": 93388
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 93465
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 95633
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 95827
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 102594
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 102867
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 108892
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 108909
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 109067
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 109154
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 118126
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 118161
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 118400
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 125467
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 125619
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 125731
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 129995
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 130029
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 130190
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 132178
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 132212
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 132372
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 139022
+      },
+      {
+        "isCounter": false,
+        "hitStopMs": 75,
+        "atMs": 139206
       }
     ],
     "roleReveals": [
       {
         "faction": "lantern-guard",
-        "startMs": 16568.299999999814,
-        "durationMs": 1478
+        "startMs": 18466.099999999627,
+        "durationMs": 1710
       },
       {
         "faction": "mist-order",
-        "startMs": 36401.700000000186,
-        "durationMs": 1475
+        "startMs": 47495.699999999255,
+        "durationMs": 1704
       },
       {
         "faction": "lantern-guard",
-        "startMs": 56787.39999999991,
-        "durationMs": 1476
+        "startMs": 69036.09999999963,
+        "durationMs": 1719
       },
       {
         "faction": "mist-order",
-        "startMs": 68178.5,
-        "durationMs": 1468
+        "startMs": 74182.19999999925,
+        "durationMs": 1707
       },
       {
         "faction": "lantern-guard",
-        "startMs": 86805,
-        "durationMs": 1466
+        "startMs": 117818.5,
+        "durationMs": 1715
+      },
+      {
+        "faction": "lantern-guard",
+        "startMs": 138747.19999999925,
+        "durationMs": 1690
       }
     ],
     "floatingPopups": [
       {
         "variant": "damage",
         "durationMs": 1200
+      },
+      {
+        "variant": "miss",
+        "durationMs": 1051
       },
       {
         "variant": "damage",
@@ -1228,7 +1584,23 @@
       },
       {
         "variant": "damage",
-        "durationMs": 1200
+        "durationMs": 1201
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1202
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1202
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1202
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1201
       },
       {
         "variant": "miss",
@@ -1240,110 +1612,168 @@
       },
       {
         "variant": "damage",
+        "durationMs": 1200
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1200
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1201
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1200
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1201
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1202
+      },
+      {
+        "variant": "damage",
         "durationMs": 1199
       },
       {
         "variant": "damage",
-        "durationMs": 1200
-      },
-      {
-        "variant": "damage",
-        "durationMs": 1200
-      },
-      {
-        "variant": "damage",
-        "durationMs": 1200
-      },
-      {
-        "variant": "damage",
-        "durationMs": 1200
-      },
-      {
-        "variant": "counter",
-        "durationMs": 1151
+        "durationMs": 1199
       },
       {
         "variant": "steal",
-        "durationMs": 1099
+        "durationMs": 1100
       },
       {
         "variant": "damage",
         "durationMs": 1200
+      },
+      {
+        "variant": "heal",
+        "durationMs": 1150
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1201
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1201
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1199
+      },
+      {
+        "variant": "steal",
+        "durationMs": 1098
+      },
+      {
+        "variant": "heal",
+        "durationMs": 1148
+      },
+      {
+        "variant": "damage",
+        "durationMs": 1199
       }
     ],
     "cutIns": [
       {
         "bannerType": "YOUR_TURN",
-        "startMs": 6.5,
-        "durationMs": 723
+        "startMs": 9,
+        "durationMs": 345
       },
       {
         "bannerType": "ROLE_REVEAL",
-        "startMs": 16568.299999999814,
-        "durationMs": 1478
+        "startMs": 18466.099999999627,
+        "durationMs": 1710
       },
       {
         "bannerType": "ROLE_REVEAL",
-        "startMs": 36401.700000000186,
-        "durationMs": 1475
+        "startMs": 47495.699999999255,
+        "durationMs": 1704
       },
       {
         "bannerType": "YOUR_TURN",
-        "startMs": 45053.60000000009,
-        "durationMs": 1142
+        "startMs": 50879.90000000037,
+        "durationMs": 1130
       },
       {
         "bannerType": "ULTIMATE_SKILL",
-        "startMs": 52149,
-        "durationMs": 1351
+        "startMs": 56553.90000000037,
+        "durationMs": 1353
       },
       {
         "bannerType": "ROLE_REVEAL",
-        "startMs": 56787.39999999991,
-        "durationMs": 1476
-      },
-      {
-        "bannerType": "ELIMINATION",
-        "startMs": 58264.799999999814,
-        "durationMs": 1451
+        "startMs": 69036.09999999963,
+        "durationMs": 1719
       },
       {
         "bannerType": "ROLE_REVEAL",
-        "startMs": 68178.5,
-        "durationMs": 1468
+        "startMs": 74182.19999999925,
+        "durationMs": 1707
       },
       {
         "bannerType": "YOUR_TURN",
-        "startMs": 69678.79999999981,
-        "durationMs": 1141
+        "startMs": 78632,
+        "durationMs": 1150
+      },
+      {
+        "bannerType": "YOUR_TURN",
+        "startMs": 95312.30000000075,
+        "durationMs": 1152
+      },
+      {
+        "bannerType": "YOUR_TURN",
+        "startMs": 113142.09999999963,
+        "durationMs": 1149
       },
       {
         "bannerType": "ROLE_REVEAL",
-        "startMs": 86805,
-        "durationMs": 1466
+        "startMs": 117818.5,
+        "durationMs": 1715
       },
       {
         "bannerType": "ELIMINATION",
-        "startMs": 88273,
-        "durationMs": 1451
+        "startMs": 119534.80000000075,
+        "durationMs": 1449
       },
       {
-        "bannerType": "VICTORY",
-        "startMs": 89726.29999999981,
-        "durationMs": 1699
+        "bannerType": "YOUR_TURN",
+        "startMs": 125490.40000000037,
+        "durationMs": 1150
+      },
+      {
+        "bannerType": "ROLE_REVEAL",
+        "startMs": 138747.19999999925,
+        "durationMs": 1690
+      },
+      {
+        "bannerType": "ULTIMATE_SKILL",
+        "startMs": 140438.59999999963,
+        "durationMs": 1180
+      },
+      {
+        "bannerType": "ELIMINATION",
+        "startMs": 141620.80000000075,
+        "durationMs": 1452
       }
     ]
   },
-  "waapiPawnGlidesCount": 10,
+  "waapiPawnGlidesCount": 21,
   "waapiSampleDurationsMs": [
     1848,
     1848,
     1848,
     1848,
     1848,
+    1848,
+    1848,
     745,
     745,
-    745,
+    1848,
     1848,
     1848
   ],
@@ -1369,17 +1799,17 @@
     ],
     "synthesizedStats": {
       "contextsCreated": 2,
-      "oscillatorsCreated": 1656,
-      "buffersStarted": 156
+      "oscillatorsCreated": 2022,
+      "buffersStarted": 295
     }
   },
   "networkAndIntegrity": {
-    "wsFramesObservedOnP1": 277,
+    "wsFramesObservedOnP1": 251,
     "wsReconnectProbes": [
       {
-        "reconnectLatencyMs": 646,
+        "reconnectLatencyMs": 653,
         "turnNumber": 6,
-        "revision": 32
+        "revision": 33
       }
     ],
     "endTurnDuplicateDiceCheckPassed": false,
@@ -1392,7 +1822,7 @@
     "pageErrors": []
   },
   "evidenceChecklist": {
-    "screenshotsCount": 16,
+    "screenshotsCount": 15,
     "flags": {
       "diceRollingShot": true,
       "diceSettledShot": true,
@@ -1403,7 +1833,7 @@
       "cardZoomBackShot": true,
       "targetingLineShot": true,
       "attackHitStopShot": true,
-      "counterAttackShot": true,
+      "counterAttackShot": false,
       "p1Revealed": true,
       "p1RevealAnticipationShot": true,
       "p1RevealFlipShot": true,
@@ -1426,224 +1856,271 @@
       "detail": "Bắt đầu quay bản Polished AAA tại 1920x1080 (P1=gac-radio)"
     },
     {
-      "tMs": 917,
-      "timestamp": "00:00.917",
+      "tMs": 1063,
+      "timestamp": "00:01.063",
       "kind": "SCREENSHOT",
       "detail": "Cut-in chuyển lượt tới P1",
       "screenshot": "14-turn-transition-your-turn.png"
     },
     {
-      "tMs": 1081,
-      "timestamp": "00:01.081",
+      "tMs": 1232,
+      "timestamp": "00:01.232",
       "kind": "P1_ROLL_DICE",
       "detail": "P1 tung D6+D4 (Lượt #1)"
     },
     {
-      "tMs": 2478,
-      "timestamp": "00:02.478",
+      "tMs": 3115,
+      "timestamp": "00:03.115",
       "kind": "SCREENSHOT",
       "detail": "Xúc xắc 3D lăn & tia va chạm D6-D4",
       "screenshot": "01-dice-tumble-clack-spark.png"
     },
     {
-      "tMs": 3374,
-      "timestamp": "00:03.374",
+      "tMs": 4513,
+      "timestamp": "00:04.513",
       "kind": "SCREENSHOT",
       "detail": "Xúc xắc 3D chốt kết quả với vòng khóa Settle Ring",
       "screenshot": "02-dice-settled-ring.png"
     },
     {
-      "tMs": 4267,
-      "timestamp": "00:04.267",
+      "tMs": 5383,
+      "timestamp": "00:05.383",
       "kind": "SCREENSHOT",
       "detail": "Highlight ô đích theo tổng D6+D4",
       "screenshot": "03-location-destination-highlight.png"
     },
     {
-      "tMs": 5320,
-      "timestamp": "00:05.320",
+      "tMs": 6534,
+      "timestamp": "00:06.534",
       "kind": "SCREENSHOT",
       "detail": "Quân cờ nhảy parabol & touchdown ripple",
       "screenshot": "04-pawn-glide-arc-touchdown.png"
     },
     {
-      "tMs": 6470,
-      "timestamp": "00:06.470",
+      "tMs": 7690,
+      "timestamp": "00:07.690",
       "kind": "P1_DRAW_CARD",
       "detail": "P1 rút thẻ tại địa điểm"
     },
     {
-      "tMs": 8399,
-      "timestamp": "00:08.399",
+      "tMs": 10029,
+      "timestamp": "00:10.029",
       "kind": "SCREENSHOT",
       "detail": "Rút bài bay từ Deck lên tâm + vầng hào quang theo bộ bài",
       "screenshot": "05-card-draw-flight-flip.png"
     },
     {
-      "tMs": 10997,
-      "timestamp": "00:10.997",
+      "tMs": 12789,
+      "timestamp": "00:12.789",
       "kind": "SCREENSHOT",
       "detail": "Modal Card Zoom mặt trước",
       "screenshot": "06-card-zoom-modal-front.png"
     },
     {
-      "tMs": 12919,
-      "timestamp": "00:12.919",
+      "tMs": 14930,
+      "timestamp": "00:14.930",
       "kind": "SCREENSHOT",
       "detail": "Card Zoom lật 3D mặt lưng Ấn Ký",
       "screenshot": "07-card-zoom-modal-back.png"
     },
     {
-      "tMs": 16494,
-      "timestamp": "00:16.494",
+      "tMs": 18375,
+      "timestamp": "00:18.375",
       "kind": "P1_REVEAL_ROLE",
       "detail": "P1 (Vy \"Radio\") lật vai công khai"
     },
     {
-      "tMs": 17821,
-      "timestamp": "00:17.821",
+      "tMs": 20001,
+      "timestamp": "00:20.001",
       "kind": "SCREENSHOT",
       "detail": "Lật vai Pha Anticipation: Tối bàn + Spotlight nhân vật + Mặt lưng 3D",
       "screenshot": "11-role-reveal-spotlight-anticipation.png"
     },
     {
-      "tMs": 21037,
-      "timestamp": "00:21.037",
+      "tMs": 23287,
+      "timestamp": "00:23.287",
       "kind": "SCREENSHOT",
       "detail": "Đường ngắm SVG mục tiêu",
       "screenshot": "08-attack-targeting-line.png"
     },
     {
-      "tMs": 21037,
-      "timestamp": "00:21.037",
+      "tMs": 23287,
+      "timestamp": "00:23.287",
       "kind": "P1_ATTACK",
       "detail": "P1 tấn công đối thủ trong cụm"
     },
     {
-      "tMs": 22988,
-      "timestamp": "00:22.988",
+      "tMs": 26088,
+      "timestamp": "00:26.088",
       "kind": "SCREENSHOT",
       "detail": "Khoảnh khắc Hit-Stop 75ms, Impact Flash & Floating Damage",
       "screenshot": "09-combat-hitstop-impact-flash.png"
     },
     {
-      "tMs": 28236,
-      "timestamp": "00:28.236",
+      "tMs": 31741,
+      "timestamp": "00:31.741",
       "kind": "SCREENSHOT",
       "detail": "Emote, Thang thương tích mở rộng & Tab Trang bị",
       "screenshot": "15-multiplayer-emote-damage-track.png"
     },
     {
-      "tMs": 36373,
-      "timestamp": "00:36.373",
-      "kind": "PEER_REVEAL_DUNG",
-      "detail": "Sinh viên Chi (Dũng Gác Cổng) lật vai công khai"
+      "tMs": 35859,
+      "timestamp": "00:35.859",
+      "kind": "PEER_ATTACK",
+      "detail": "Sinh viên Bình tấn công Sinh viên Chi"
     },
     {
-      "tMs": 38645,
-      "timestamp": "00:38.645",
+      "tMs": 41369,
+      "timestamp": "00:41.369",
+      "kind": "PEER_ATTACK",
+      "detail": "Sinh viên Chi tấn công Sinh viên Dung"
+    },
+    {
+      "tMs": 47447,
+      "timestamp": "00:47.447",
+      "kind": "PEER_REVEAL_DUNG",
+      "detail": "Sinh viên Dung (Dũng Gác Cổng) lật vai công khai"
+    },
+    {
+      "tMs": 50003,
+      "timestamp": "00:50.003",
       "kind": "SCREENSHOT",
       "detail": "Lật vai Pha Faction-Reveal/Impact: Card 3D xoay mở chân dung + Huy hiệu & hạt theo phe",
       "screenshot": "12-role-reveal-3d-flip-impact.png"
     },
     {
-      "tMs": 39470,
-      "timestamp": "00:39.470",
-      "kind": "PEER_ATTACK",
-      "detail": "Sinh viên Chi tấn công Sinh viên An"
-    },
-    {
-      "tMs": 45001,
-      "timestamp": "00:45.001",
-      "kind": "PEER_ATTACK",
-      "detail": "Sinh viên Dung tấn công Sinh viên An"
-    },
-    {
-      "tMs": 48565,
-      "timestamp": "00:48.565",
+      "tMs": 51564,
+      "timestamp": "00:51.564",
       "kind": "P1_ROLL_DICE",
       "detail": "P1 tung D6+D4 (Lượt #5)"
     },
     {
-      "tMs": 49976,
-      "timestamp": "00:49.976",
+      "tMs": 53016,
+      "timestamp": "00:53.016",
       "kind": "P1_DRAW_CARD",
       "detail": "P1 rút thẻ tại địa điểm"
     },
     {
-      "tMs": 52089,
-      "timestamp": "00:52.089",
+      "tMs": 56476,
+      "timestamp": "00:56.476",
       "kind": "P1_USE_SKILL",
       "detail": "P1 kích hoạt kỹ năng đặc biệt nhân vật"
     },
     {
-      "tMs": 54028,
-      "timestamp": "00:54.028",
+      "tMs": 58283,
+      "timestamp": "00:58.283",
       "kind": "SCREENSHOT",
       "detail": "Kỹ năng đặc trưng + Canvas Aura & Cut-in không che bàn",
       "screenshot": "13-signature-skill-cutin-vfx.png"
     },
     {
-      "tMs": 56554,
-      "timestamp": "00:56.554",
+      "tMs": 60776,
+      "timestamp": "01:00.776",
       "kind": "P1_ATTACK",
       "detail": "P1 tấn công đối thủ trong cụm"
     },
     {
-      "tMs": 60272,
-      "timestamp": "01:00.272",
+      "tMs": 64737,
+      "timestamp": "01:04.737",
       "kind": "WS_RECONNECT_TEST",
       "detail": "Kiểm tra ngắt và tự nối lại WebSocket giữa trận"
     },
     {
-      "tMs": 70329,
-      "timestamp": "01:10.329",
+      "tMs": 79301,
+      "timestamp": "01:19.301",
       "kind": "P1_ROLL_DICE",
-      "detail": "P1 tung D6+D4 (Lượt #8)"
+      "detail": "P1 tung D6+D4 (Lượt #9)"
     },
     {
-      "tMs": 72098,
-      "timestamp": "01:12.098",
-      "kind": "P1_ROLL_DICE",
-      "detail": "P1 tung D6+D4 (Lượt #8)"
-    },
-    {
-      "tMs": 74577,
-      "timestamp": "01:14.577",
+      "tMs": 82216,
+      "timestamp": "01:22.216",
       "kind": "P1_DRAW_CARD",
       "detail": "P1 rút thẻ tại địa điểm"
     },
     {
-      "tMs": 77624,
-      "timestamp": "01:17.624",
+      "tMs": 85759,
+      "timestamp": "01:25.759",
       "kind": "P1_ATTACK",
       "detail": "P1 tấn công đối thủ trong cụm"
     },
     {
-      "tMs": 80387,
-      "timestamp": "01:20.387",
-      "kind": "SCREENSHOT",
-      "detail": "Parry Shield + Vuốt Phản Kích & COUNTER popup",
-      "screenshot": "10-counterattack-parry-riposte.png"
+      "tMs": 95256,
+      "timestamp": "01:35.256",
+      "kind": "PEER_ATTACK",
+      "detail": "Sinh viên Dung tấn công Sinh viên Bình"
     },
     {
-      "tMs": 90087,
-      "timestamp": "01:30.087",
+      "tMs": 98522,
+      "timestamp": "01:38.522",
+      "kind": "P1_ROLL_DICE",
+      "detail": "P1 tung D6+D4 (Lượt #13)"
+    },
+    {
+      "tMs": 99953,
+      "timestamp": "01:39.953",
+      "kind": "P1_DRAW_CARD",
+      "detail": "P1 rút thẻ tại địa điểm"
+    },
+    {
+      "tMs": 102064,
+      "timestamp": "01:42.064",
+      "kind": "P1_ATTACK",
+      "detail": "P1 tấn công đối thủ trong cụm"
+    },
+    {
+      "tMs": 113816,
+      "timestamp": "01:53.816",
+      "kind": "P1_ROLL_DICE",
+      "detail": "P1 tung D6+D4 (Lượt #17)"
+    },
+    {
+      "tMs": 115292,
+      "timestamp": "01:55.292",
+      "kind": "P1_DRAW_CARD",
+      "detail": "P1 rút thẻ tại địa điểm"
+    },
+    {
+      "tMs": 117490,
+      "timestamp": "01:57.490",
+      "kind": "P1_ATTACK",
+      "detail": "P1 tấn công đối thủ trong cụm"
+    },
+    {
+      "tMs": 126163,
+      "timestamp": "02:06.163",
+      "kind": "P1_ROLL_DICE",
+      "detail": "P1 tung D6+D4 (Lượt #20)"
+    },
+    {
+      "tMs": 128057,
+      "timestamp": "02:08.057",
+      "kind": "P1_DRAW_CARD",
+      "detail": "P1 rút thẻ tại địa điểm"
+    },
+    {
+      "tMs": 131583,
+      "timestamp": "02:11.583",
+      "kind": "P1_ATTACK",
+      "detail": "P1 tấn công đối thủ trong cụm"
+    },
+    {
+      "tMs": 138155,
+      "timestamp": "02:18.155",
+      "kind": "PEER_ATTACK",
+      "detail": "Sinh viên Chi tấn công Sinh viên An"
+    },
+    {
+      "tMs": 143116,
+      "timestamp": "02:23.116",
       "kind": "SCREENSHOT",
       "detail": "Màn hình Tổng kết trận đấu theo phe thắng & MatchPostcard",
       "screenshot": "16-victory-fireworks-and-match-result.png"
     },
     {
-      "tMs": 90087,
-      "timestamp": "01:30.087",
-      "kind": "POST_MATCH_REVIEW_HOLD",
-      "detail": "Giữ tổng kết 35.9s để đạt video >= 2 phút"
-    },
-    {
-      "tMs": 126165,
-      "timestamp": "02:06.165",
+      "tMs": 143278,
+      "timestamp": "02:23.278",
       "kind": "CAPTURE_STOP",
-      "detail": "Hoàn tất ghi hình sau 126.2s"
+      "detail": "Hoàn tất ghi hình sau 143.3s"
     }
   ]
 }

@@ -288,7 +288,7 @@ function scaleDuration(baseMs: number, reducedMotion: boolean): number {
 }
 
 /**
- * Chia 5 giai đoạn Cinematic Role Reveal (1.2–1.6s, mặc định 1480ms):
+ * Chia 5 giai đoạn Cinematic Role Reveal (1.2–1.8s, mặc định 1720ms):
  *   anticipation -> card-flip -> faction-reveal -> impact -> settle.
  * Điều chỉnh nhẹ theo chất lượng đồ họa (`high`/`balanced`/`low`) và rút gọn `<= 260ms`
  * khi bật Reduced Motion.
@@ -309,17 +309,17 @@ export function resolveRoleRevealTimeline(
       totalMs: Math.min(260, safeTotal),
     };
   }
-  const clamped = Math.max(1200, Math.min(1600, safeTotal));
+  const clamped = Math.max(1200, Math.min(1800, safeTotal));
   const totalMs =
     qualityTier === 'low'
-      ? Math.min(clamped, 1320)
+      ? Math.min(clamped, 1440)
       : qualityTier === 'balanced'
-        ? Math.min(clamped, 1440)
+        ? Math.min(clamped, 1620)
         : clamped;
-  const anticipationEndMs = Math.round(totalMs * 0.2);
-  const cardFlipEndMs = Math.round(totalMs * 0.46);
-  const factionRevealEndMs = Math.round(totalMs * 0.68);
-  const impactEndMs = Math.round(totalMs * 0.85);
+  const anticipationEndMs = Math.round(totalMs * 0.24);
+  const cardFlipEndMs = Math.round(totalMs * 0.44);
+  const factionRevealEndMs = Math.round(totalMs * 0.64);
+  const impactEndMs = Math.round(totalMs * 0.86);
   return {
     anticipationEndMs,
     cardFlipEndMs,
@@ -482,7 +482,7 @@ export function extractVisualEventsFromDiff(
         id: `${next.matchId}::reveal::${log.id}`,
         kind: 'CINEMATIC_CUTIN',
         order: 30,
-        durationMs: scaleDuration(1480, reduced),
+        durationMs: scaleDuration(1720, reduced),
         bannerType: 'ROLE_REVEAL',
         title: 'LỘ DIỆN',
         subtitle: `${actorPub.displayName} lật vai ${roleDesign.name}!`,
@@ -945,7 +945,7 @@ export function extractVisualEventsFromDiff(
         id: `${next.matchId}::reveal-evt::${rev.id}`,
         kind: 'CINEMATIC_CUTIN',
         order: 30,
-        durationMs: scaleDuration(1480, reduced),
+        durationMs: scaleDuration(1720, reduced),
         bannerType: 'ROLE_REVEAL',
         title: 'LỘ DIỆN',
         subtitle: `${rev.displayName} lật vai ${rev.roleName}!`,
@@ -975,7 +975,7 @@ export function extractVisualEventsFromDiff(
         id: `${next.matchId}::reveal-state::${np.playerId}`,
         kind: 'CINEMATIC_CUTIN',
         order: 30,
-        durationMs: scaleDuration(1480, reduced),
+        durationMs: scaleDuration(1720, reduced),
         bannerType: 'ROLE_REVEAL',
         title: 'LỘ DIỆN',
         subtitle: `${np.displayName} lật vai ${roleDesign.name}!`,

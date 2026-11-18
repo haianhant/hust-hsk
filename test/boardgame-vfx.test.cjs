@@ -1110,9 +1110,9 @@ test('Dice Roll Regression (11) — ROLL_DICE -> SKIP_LOC -> END_TURN increments
   );
 });
 
-test('AAA Polish (12) — Cinematic Role Reveal 5 phases (1.2-1.6s), Quality Tiers & Reduced Motion', () => {
-  const high = resolveRoleRevealTimeline(1480, false, 'high');
-  assert.ok(high.totalMs >= 1200 && high.totalMs <= 1600, 'Role reveal duration must stay within 1.2-1.6s');
+test('AAA Polish (12) — Cinematic Role Reveal 5 phases (1.2-1.8s), Quality Tiers & Reduced Motion', () => {
+  const high = resolveRoleRevealTimeline(1720, false, 'high');
+  assert.ok(high.totalMs >= 1200 && high.totalMs <= 1800, 'Role reveal duration must stay within 1.2-1.8s');
   assert.ok(
     high.anticipationEndMs > 0 &&
       high.anticipationEndMs < high.cardFlipEndMs &&
@@ -1123,17 +1123,17 @@ test('AAA Polish (12) — Cinematic Role Reveal 5 phases (1.2-1.6s), Quality Tie
   );
   assert.equal(high.revealEndMs, high.factionRevealEndMs);
 
-  const balanced = resolveRoleRevealTimeline(1480, false, 'balanced');
-  assert.ok(balanced.totalMs >= 1200 && balanced.totalMs <= 1440);
-  const low = resolveRoleRevealTimeline(1480, false, 'low');
-  assert.ok(low.totalMs >= 1200 && low.totalMs <= 1320);
+  const balanced = resolveRoleRevealTimeline(1720, false, 'balanced');
+  assert.ok(balanced.totalMs >= 1200 && balanced.totalMs <= 1620);
+  const low = resolveRoleRevealTimeline(1720, false, 'low');
+  assert.ok(low.totalMs >= 1200 && low.totalMs <= 1440);
 
   const clampedLow = resolveRoleRevealTimeline(900, false, 'high');
   assert.equal(clampedLow.totalMs, 1200);
   const clampedHigh = resolveRoleRevealTimeline(2400, false, 'high');
-  assert.equal(clampedHigh.totalMs, 1600);
+  assert.equal(clampedHigh.totalMs, 1800);
 
-  const reduced = resolveRoleRevealTimeline(1480, true, 'high');
+  const reduced = resolveRoleRevealTimeline(1720, true, 'high');
   assert.equal(reduced.anticipationEndMs, 0);
   assert.equal(reduced.cardFlipEndMs, 0);
   assert.equal(reduced.factionRevealEndMs, 0);
@@ -1353,7 +1353,7 @@ test('Cinematic V2 Phase 1 (16) — Multiplayer Role Reveal sync, strict pre-rev
     assert.equal(reveals[0].roleId, 'suong-gac-cong');
     assert.equal(reveals[0].faction, 'mist-order');
     assert.ok(reveals[0].portraitSrc && reveals[0].portraitSrc.includes('role-dung-gac-cong.webp'));
-    assert.ok(reveals[0].durationMs >= 1200 && reveals[0].durationMs <= 1600);
+    assert.ok(reveals[0].durationMs >= 1200 && reveals[0].durationMs <= 1800);
 
     // 3) Reconnect / F5 baseline seed with already-revealed state must NOT replay ROLE_REVEAL
     const reconnectTracker = new VisualEventTracker();

@@ -177,83 +177,154 @@ function drawFactionRevealBurst(
     faction === 'mist-order' ? '#f43f5e' : faction === 'wanderer' ? '#fbbf24' : '#34d399';
   const secondary =
     faction === 'mist-order' ? '#a855f7' : faction === 'wanderer' ? '#cbd5e1' : '#fde047';
-  const count = reducedMotion || particleScale <= 0 ? 4 : Math.max(8, Math.round(18 * particleScale));
+  const count =
+    reducedMotion || particleScale <= 0 ? 4 : Math.max(10, Math.round(22 * particleScale));
 
   for (const pt of [anim.source, ...anim.targets]) {
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, fade));
 
     if (faction === 'lantern-guard') {
-      // Đội Săn Đêm: Tia sáng vàng-lục bảo rọi xuống + vòng hào quang quét lên
-      const grad = ctx.createRadialGradient(pt.x, pt.y, 4, pt.x, pt.y, 68 * p + 22);
-      grad.addColorStop(0, 'rgba(253, 224, 71, 0.55)');
-      grad.addColorStop(0.55, 'rgba(16, 185, 129, 0.28)');
+      // Đội Săn Đêm: Cột sáng rọi vàng-lục bảo từ trên cao + 2 vòng radar & tinh tú bay lên
+      const coneTopY = pt.y - 95;
+      const coneBottomY = pt.y + 45;
+      const coneGrad = ctx.createLinearGradient(pt.x, coneTopY, pt.x, coneBottomY);
+      coneGrad.addColorStop(0, 'rgba(253, 224, 71, 0)');
+      coneGrad.addColorStop(0.35, 'rgba(253, 224, 71, 0.24)');
+      coneGrad.addColorStop(0.8, 'rgba(52, 211, 153, 0.22)');
+      coneGrad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+      ctx.fillStyle = coneGrad;
+      ctx.beginPath();
+      ctx.moveTo(pt.x - 16, coneTopY);
+      ctx.lineTo(pt.x + 16, coneTopY);
+      ctx.lineTo(pt.x + 62 + p * 18, coneBottomY);
+      ctx.lineTo(pt.x - 62 - p * 18, coneBottomY);
+      ctx.closePath();
+      ctx.fill();
+
+      const grad = ctx.createRadialGradient(pt.x, pt.y, 4, pt.x, pt.y, 76 * p + 24);
+      grad.addColorStop(0, 'rgba(253, 224, 71, 0.6)');
+      grad.addColorStop(0.55, 'rgba(16, 185, 129, 0.3)');
       grad.addColorStop(1, 'rgba(16, 185, 129, 0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 68 * p + 22, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, 76 * p + 24, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.strokeStyle = secondary;
-      ctx.lineWidth = 3 * (1 - p * 0.6);
+      ctx.lineWidth = 3 * (1 - p * 0.55);
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 18 + p * 64, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, 18 + p * 66, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = primary;
+      ctx.lineWidth = 2 * (1 - p * 0.6);
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 8 + p * 84, 0, Math.PI * 2);
       ctx.stroke();
 
       for (let i = 0; i < count; i++) {
-        const ang = (Math.PI * 2 * i) / count + p * 0.9;
-        const r = 14 + p * 56;
+        const ang = (Math.PI * 2 * i) / count + p * 0.95;
+        const r = 14 + p * 60;
+        const px = pt.x + Math.cos(ang) * r;
+        const py = pt.y + Math.sin(ang) * r - p * 30;
         ctx.fillStyle = i % 2 === 0 ? primary : secondary;
-        ctx.beginPath();
-        ctx.arc(pt.x + Math.cos(ang) * r, pt.y + Math.sin(ang) * r - p * 26, 2.8, 0, Math.PI * 2);
-        ctx.fill();
+        if (i % 3 === 0) {
+          // 4-point star sparkle
+          const s = 4.2 * (1 - p * 0.35);
+          ctx.beginPath();
+          ctx.moveTo(px, py - s);
+          ctx.lineTo(px + s * 0.35, py - s * 0.35);
+          ctx.lineTo(px + s, py);
+          ctx.lineTo(px + s * 0.35, py + s * 0.35);
+          ctx.lineTo(px, py + s);
+          ctx.lineTo(px - s * 0.35, py + s * 0.35);
+          ctx.lineTo(px - s, py);
+          ctx.lineTo(px - s * 0.35, py - s * 0.35);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.arc(px, py, 2.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     } else if (faction === 'mist-order') {
-      // Hội Bóng Đêm: Xoáy sương tím-đỏ thẫm tụ xoáy & mảnh bóng tối
-      const grad = ctx.createRadialGradient(pt.x, pt.y, 4, pt.x, pt.y, 76 * p + 20);
-      grad.addColorStop(0, 'rgba(244, 63, 94, 0.5)');
-      grad.addColorStop(0.55, 'rgba(168, 85, 247, 0.3)');
+      // Hội Bóng Đêm: Xoáy sương đỏ thẫm-tím sâu + 2 cung xoay ngược chiều & mảnh bóng tối
+      const grad = ctx.createRadialGradient(pt.x, pt.y, 4, pt.x, pt.y, 88 * p + 24);
+      grad.addColorStop(0, 'rgba(244, 63, 94, 0.56)');
+      grad.addColorStop(0.55, 'rgba(168, 85, 247, 0.34)');
       grad.addColorStop(1, 'rgba(15, 23, 42, 0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 76 * p + 20, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, 88 * p + 24, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.strokeStyle = primary;
       ctx.lineWidth = 3.2;
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 20 + p * 68, p * 2, p * 2 + Math.PI * 1.45);
+      ctx.arc(pt.x, pt.y, 20 + p * 70, p * 2.2, p * 2.2 + Math.PI * 1.45);
+      ctx.stroke();
+
+      ctx.strokeStyle = secondary;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 12 + p * 54, -p * 2.6, -p * 2.6 + Math.PI * 1.3);
       ctx.stroke();
 
       for (let i = 0; i < count; i++) {
-        const ang = (Math.PI * 2 * i) / count - p * 3.1;
-        const r = (1 - p * 0.35) * 62;
+        const ang = (Math.PI * 2 * i) / count - p * 3.2;
+        const r = (1 - p * 0.3) * 68;
         ctx.fillStyle = i % 2 === 0 ? primary : secondary;
         ctx.beginPath();
         ctx.moveTo(pt.x + Math.cos(ang) * r, pt.y + Math.sin(ang) * r);
-        ctx.lineTo(pt.x + Math.cos(ang + 0.16) * (r + 12), pt.y + Math.sin(ang + 0.16) * (r + 12));
-        ctx.lineTo(pt.x + Math.cos(ang - 0.16) * (r + 7), pt.y + Math.sin(ang - 0.16) * (r + 7));
+        ctx.lineTo(pt.x + Math.cos(ang + 0.16) * (r + 14), pt.y + Math.sin(ang + 0.16) * (r + 14));
+        ctx.lineTo(pt.x + Math.cos(ang - 0.16) * (r + 8), pt.y + Math.sin(ang - 0.16) * (r + 8));
         ctx.closePath();
         ctx.fill();
       }
     } else {
-      // Kẻ Độc Hành: Nhật thực hổ phách-bạc & tia lửa đa hướng
+      // Kẻ Độc Hành: Nhật thực hổ phách-bạc + 8 tia la bàn & hạt kim cương đa hướng
+      ctx.fillStyle = 'rgba(2, 6, 23, 0.55)';
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 14 + p * 26, 0, Math.PI * 2);
+      ctx.fill();
+
       ctx.strokeStyle = primary;
-      ctx.lineWidth = 3.5;
+      ctx.lineWidth = 3.6;
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 22 + p * 54, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, 18 + p * 44, 0, Math.PI * 2);
       ctx.stroke();
+
       ctx.strokeStyle = secondary;
-      ctx.lineWidth = 1.8;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 12 + p * 74, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, 12 + p * 76, 0, Math.PI * 2);
       ctx.stroke();
+
+      for (let rIdx = 0; rIdx < 8; rIdx++) {
+        const rayAng = (Math.PI / 4) * rIdx + p * 0.35;
+        const innerR = 22 + p * 22;
+        const outerR = innerR + (rIdx % 2 === 0 ? 34 : 22);
+        ctx.strokeStyle = rIdx % 2 === 0 ? primary : secondary;
+        ctx.lineWidth = rIdx % 2 === 0 ? 2.4 : 1.5;
+        ctx.beginPath();
+        ctx.moveTo(pt.x + Math.cos(rayAng) * innerR, pt.y + Math.sin(rayAng) * innerR);
+        ctx.lineTo(pt.x + Math.cos(rayAng) * outerR, pt.y + Math.sin(rayAng) * outerR);
+        ctx.stroke();
+      }
 
       for (let i = 0; i < count; i++) {
         const ang = (Math.PI * 2 * i) / count;
-        const r = 10 + p * 72;
+        const r = 12 + p * 76;
+        const dx = pt.x + Math.cos(ang) * r;
+        const dy = pt.y + Math.sin(ang) * r;
+        ctx.save();
+        ctx.translate(dx, dy);
+        ctx.rotate(ang + Math.PI / 4);
         ctx.fillStyle = i % 2 === 0 ? primary : secondary;
-        ctx.fillRect(pt.x + Math.cos(ang) * r - 2, pt.y + Math.sin(ang) * r - 2, 4, 4);
+        ctx.fillRect(-2.5, -2.5, 5, 5);
+        ctx.restore();
       }
     }
     ctx.restore();
@@ -1314,16 +1385,16 @@ export function useBoardGameVfxQueue({
                   id: burstUid,
                   kind: 'COMBAT_VFX',
                   order: 31,
-                  durationMs: 740,
+                  durationMs: 960,
                   effect: 'HEAL_AURA',
                   sourcePlayerId: nextBanner.actorId,
                   targetPlayerIds: [],
                   shake: 'none',
                 },
-                source: { x: cw * 0.5, y: 92 },
+                source: { x: cw * 0.5, y: 128 },
                 targets: [pawnAnchor],
                 startedAt: performance.now(),
-                durationMs: 740,
+                durationMs: 960,
                 factionReveal: nextBanner.faction ?? 'lantern-guard',
               },
             ];
@@ -1334,9 +1405,9 @@ export function useBoardGameVfxQueue({
         scheduleTimeout(() => {
           if (activeCutInIdRef.current !== nextBanner.id) return;
           setRevealPhase('impact');
-          if (enableScreenShakeRef.current && nextBanner.faction === 'mist-order') {
+          if (enableScreenShakeRef.current) {
             setScreenShake('light');
-            scheduleTimeout(() => setScreenShake('none'), 200);
+            scheduleTimeout(() => setScreenShake('none'), 180);
           }
         }, revTl.factionRevealEndMs);
         scheduleTimeout(() => {
@@ -2087,7 +2158,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
             data-deck={event.deck}
             data-show-front={String(event.showFront)}
             className={`pointer-events-none absolute inset-0 flex items-center justify-center p-4 ${
-              vfx.activeCutIn ? 'pt-40 sm:pt-44' : ''
+              vfx.activeCutIn ? 'pt-44 sm:pt-52' : ''
             }`}
           >
             <div
@@ -2189,6 +2260,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
       {/* LỚP 5: CINEMATIC CUT-IN & 5-STAGE ROLE REVEAL SPOTLIGHT OVERLAY */}
       {cutIn && isRoleRevealCutIn && (() => {
         const revealPhase = vfx.reducedMotion ? 'settle' : vfx.revealPhase;
+        const isAnticipation = !vfx.reducedMotion && revealPhase === 'anticipation';
         const showPortraitFace = vfx.reducedMotion || revealPhase !== 'anticipation';
         const showFactionIdentity =
           vfx.reducedMotion ||
@@ -2196,19 +2268,42 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
           revealPhase === 'impact' ||
           revealPhase === 'settle';
         const showImpactBurst =
-          !vfx.reducedMotion && (revealPhase === 'impact' || revealPhase === 'settle');
+          !vfx.reducedMotion &&
+          (revealPhase === 'faction-reveal' || revealPhase === 'impact' || revealPhase === 'settle');
         const spotX = revealAnchor ? `${Math.round(revealAnchor.x)}px` : '50%';
         const spotY = revealAnchor ? `${Math.round(revealAnchor.y)}px` : '45%';
+        const actorDisplayName = cutIn.subtitle.split(' lật vai ')[0] || 'Người chơi';
+        const factionMotifLabel =
+          cutIn.faction === 'mist-order'
+            ? '🌒 ẤN KÝ HUYẾT NGUYỆT · HỘI BÓNG ĐÊM'
+            : cutIn.faction === 'wanderer'
+              ? '🧭 NHẬT THỰC ĐỘC HÀNH · KẺ ĐỘC HÀNH'
+              : '🔦 ÁNH ĐÈN TUẦN TRA · ĐỘI SĂN ĐÊM';
         const factionMotionAccent =
           cutIn.faction === 'mist-order'
             ? '-skew-x-12 rotate-2'
             : cutIn.faction === 'wanderer'
               ? 'skew-x-6'
               : '-skew-x-6';
+        const cardStageTransform = !showPortraitFace
+          ? 'rotateY(180deg) rotateZ(-3deg) scale(0.92)'
+          : !vfx.reducedMotion &&
+              vfx.qualityTier !== 'low' &&
+              (revealPhase === 'card-flip' ||
+                revealPhase === 'faction-reveal' ||
+                revealPhase === 'impact')
+            ? 'rotateY(0deg) rotateX(5deg) rotateZ(-1.5deg) scale(1.08)'
+            : 'rotateY(0deg) rotateX(0deg) rotateZ(0deg) scale(1.03)';
+        const portraitParallaxCls =
+          !vfx.reducedMotion && showPortraitFace
+            ? revealPhase === 'card-flip'
+              ? 'scale-110 translate-y-0.5'
+              : 'scale-105 -translate-y-0.5'
+            : '';
 
         return (
           <>
-            {/* Darkened theatrical backdrop + spotlight on actor token & reveal center */}
+            {/* Darkened theatrical backdrop + vignette + focused spotlight on stage & actor token */}
             <div
               data-testid="bg-vfx-reveal-spotlight"
               data-reveal-phase={revealPhase}
@@ -2219,8 +2314,9 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
               }`}
               style={{
                 background: [
-                  `radial-gradient(circle 190px at ${spotX} ${spotY}, ${cutInAccent}2e 0%, rgba(2,6,23,0.12) 48%, rgba(2,6,23,0.74) 100%)`,
-                  `radial-gradient(ellipse 340px 210px at 50% 96px, ${cutInAccent}38 0%, transparent 72%)`,
+                  `radial-gradient(ellipse 520px 270px at 50% 136px, ${cutInAccent}52 0%, ${cutInSecondary}22 34%, rgba(2,6,23,0.64) 66%, rgba(2,6,23,0.90) 100%)`,
+                  `radial-gradient(circle 165px at ${spotX} ${spotY}, ${cutInSecondary}44 0%, ${cutInAccent}24 45%, transparent 76%)`,
+                  'radial-gradient(circle at 50% 50%, rgba(2,6,23,0.28) 0%, rgba(2,6,23,0.62) 58%, rgba(2,6,23,0.92) 100%)',
                 ].join(', '),
               }}
             />
@@ -2230,170 +2326,242 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
               data-banner-type={cutIn.bannerType}
               data-reveal-phase={revealPhase}
               data-faction={cutIn.faction ?? 'unknown'}
-              className="pointer-events-none absolute inset-x-0 top-2 sm:top-4 z-30 flex justify-center px-3"
+              className="pointer-events-none absolute inset-x-0 top-3 sm:top-5 z-30 flex justify-center px-3"
             >
               <div
-                className={`relative flex w-full max-w-2xl items-center gap-4 overflow-visible rounded-2xl border-2 bg-slate-950/95 px-4 py-3 shadow-2xl ${blurCls} ${
+                className={`relative flex w-full max-w-3xl items-center gap-5 overflow-visible rounded-2xl border-2 bg-slate-950/95 px-5 py-3.5 sm:py-4 shadow-2xl ${blurCls} ${
                   vfx.reducedMotion ? '' : 'bg-vfx-reveal-push'
                 }`}
                 style={{
-                  borderColor: cutInAccent,
+                  borderColor:
+                    revealPhase === 'faction-reveal' || revealPhase === 'impact'
+                      ? cutInSecondary
+                      : cutInAccent,
                   boxShadow:
-                    revealPhase === 'impact'
-                      ? `0 24px 70px -8px ${cutInAccent}cc, 0 0 36px ${cutInSecondary}66`
-                      : `0 20px 55px -10px ${cutInAccent}99`,
+                    revealPhase === 'faction-reveal' || revealPhase === 'impact'
+                      ? `0 28px 80px -8px ${cutInAccent}dd, 0 0 44px ${cutInSecondary}77`
+                      : `0 22px 60px -10px ${cutInAccent}a6`,
                 }}
               >
-                {/* Vệt chéo ánh sáng đặc trưng phe Anime Noir */}
+                {/* Vệt sáng chéo, ấn ký phe & tia flash lướt qua khi mở bài */}
                 <div
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
                 >
                   <div
-                    className={`absolute inset-y-0 -left-12 w-56 ${factionMotionAccent} transition-opacity duration-300 ${
-                      revealPhase === 'anticipation'
+                    className={`absolute inset-y-0 -left-14 w-64 ${factionMotionAccent} transition-opacity duration-300 ${
+                      isAnticipation
                         ? 'opacity-15'
                         : showFactionIdentity
-                          ? 'opacity-40'
-                          : 'opacity-25'
+                          ? 'opacity-45'
+                          : 'opacity-28'
                     }`}
                     style={{
                       background: `linear-gradient(135deg, ${cutInAccent}, ${cutInSecondary}, transparent)`,
                     }}
                   />
+                  {cutIn.faction && (
+                    <div
+                      data-testid="bg-vfx-reveal-faction-sigil"
+                      className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 transition-all duration-300 ${
+                        showFactionIdentity ? 'opacity-25 scale-105' : 'opacity-10 scale-95'
+                      }`}
+                    >
+                      <FactionCrestSvg faction={cutIn.faction} size={116} />
+                    </div>
+                  )}
+                  {showPortraitFace && !vfx.reducedMotion && (
+                    <div
+                      className="bg-vfx-reveal-flash-sweep pointer-events-none absolute inset-y-0 left-0 w-36"
+                      style={{
+                        background: `linear-gradient(90deg, transparent, ${cutInSecondary}66, transparent)`,
+                      }}
+                    />
+                  )}
                 </div>
 
-                {/* Hào quang tác động khi sang pha impact */}
+                {/* Hào quang & sóng xung kích khi sang pha impact */}
                 {showImpactBurst && (
-                  <div
-                    aria-hidden="true"
-                    className="bg-vfx-reveal-impact-glow pointer-events-none absolute -inset-2 rounded-3xl border-2"
-                    style={{
-                      borderColor: cutInSecondary,
-                      boxShadow: `0 0 34px ${cutInAccent}aa`,
-                    }}
-                  />
-                )}
-
-                {/* Thẻ bài lật 3D (mặt lưng huy hiệu -> lật portrait -> lộ huy hiệu phe) */}
-                <div
-                  data-testid="bg-vfx-reveal-card"
-                  className="mn-card-perspective relative z-10 w-24 sm:w-28 aspect-[2/3] shrink-0"
-                >
-                  <div
-                    className="mn-card-flip-stage relative h-full w-full rounded-xl shadow-2xl"
-                    style={{
-                      transform: showPortraitFace ? 'rotateY(0deg) scale(1.04)' : 'rotateY(180deg) scale(0.94)',
-                      transitionDuration: vfx.reducedMotion ? '120ms' : '360ms',
-                    }}
-                  >
-                    {/* Mặt trước: Chân dung nhân vật phóng lớn + foil + biểu tượng phe */}
+                  <>
                     <div
-                      className="mn-card-face absolute inset-0 overflow-hidden rounded-xl border-2 bg-slate-900 shadow-lg"
+                      aria-hidden="true"
+                      className="bg-vfx-reveal-impact-glow pointer-events-none absolute -inset-2.5 rounded-3xl border-2"
                       style={{
                         borderColor: cutInSecondary,
-                        boxShadow: `0 0 24px ${cutInAccent}88`,
+                        boxShadow: `0 0 38px ${cutInAccent}bb`,
+                      }}
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="bg-vfx-reveal-shockwave pointer-events-none absolute -inset-4 rounded-[28px] border"
+                      style={{ borderColor: `${cutInSecondary}cc` }}
+                    />
+                  </>
+                )}
+
+                {/* Thẻ chân dung phóng lớn +20% trồi khung với 3D flip, parallax & hào quang chiều sâu */}
+                <div className="relative z-10 shrink-0 -my-1 sm:-my-2">
+                  <div
+                    data-testid="bg-vfx-reveal-card-halo"
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute -inset-4 rounded-2xl transition-opacity duration-300 ${
+                      isAnticipation ? 'opacity-40' : showImpactBurst ? 'opacity-95' : 'opacity-75'
+                    }`}
+                    style={{
+                      background: `radial-gradient(circle, ${cutInSecondary}66 0%, ${cutInAccent}44 52%, transparent 78%)`,
+                    }}
+                  />
+                  <div
+                    data-testid="bg-vfx-reveal-card"
+                    className="mn-card-perspective relative w-28 sm:w-[134px] aspect-[2/3]"
+                  >
+                    <div
+                      className="mn-card-flip-stage relative h-full w-full rounded-xl shadow-2xl"
+                      style={{
+                        transform: cardStageTransform,
+                        transitionDuration: vfx.reducedMotion ? '120ms' : '380ms',
                       }}
                     >
-                      {cutIn.portraitSrc ? (
-                        <img
-                          src={cutIn.portraitSrc}
-                          alt={cutIn.roleName ?? cutIn.title}
-                          className="h-full w-full object-cover object-top"
-                        />
-                      ) : cutIn.roleId ? (
-                        <div className="flex h-full w-full items-center justify-center bg-slate-900">
-                          <RolePortraitSvg roleId={cutIn.roleId} faction={cutIn.faction} size={86} />
-                        </div>
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-slate-900">
-                          <FactionCrestSvg faction={cutIn.faction} size={56} />
-                        </div>
-                      )}
-                      {vfx.enableFoil && showPortraitFace && (
+                      {/* Mặt trước: Chân dung nhân vật phóng lớn + foil + biểu tượng phe */}
+                      <div
+                        className="mn-card-face absolute inset-0 overflow-hidden rounded-xl border-2 bg-slate-900 shadow-xl"
+                        style={{
+                          borderColor: cutInSecondary,
+                          boxShadow: `0 20px 44px -8px rgba(2,6,23,0.95), 0 0 32px ${cutInAccent}aa, inset 0 1px 0 rgba(255,255,255,0.35)`,
+                        }}
+                      >
+                        {cutIn.portraitSrc ? (
+                          <img
+                            src={cutIn.portraitSrc}
+                            alt={cutIn.roleName ?? cutIn.title}
+                            className={`h-full w-full object-cover object-top transition-transform duration-500 ease-out ${portraitParallaxCls}`}
+                          />
+                        ) : cutIn.roleId ? (
+                          <div className="flex h-full w-full items-center justify-center bg-slate-900">
+                            <RolePortraitSvg roleId={cutIn.roleId} faction={cutIn.faction} size={98} />
+                          </div>
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-slate-900">
+                            <FactionCrestSvg faction={cutIn.faction} size={64} />
+                          </div>
+                        )}
+                        {vfx.enableFoil && showPortraitFace && (
+                          <div
+                            aria-hidden="true"
+                            className="mn-foil-sweep pointer-events-none absolute inset-0 opacity-35"
+                            style={{
+                              backgroundImage:
+                                'linear-gradient(115deg, transparent 22%, rgba(255,255,255,0.58) 48%, transparent 74%)',
+                            }}
+                          />
+                        )}
                         <div
                           aria-hidden="true"
-                          className="mn-foil-sweep pointer-events-none absolute inset-0 opacity-30"
-                          style={{
-                            backgroundImage:
-                              'linear-gradient(115deg, transparent 22%, rgba(255,255,255,0.52) 48%, transparent 74%)',
-                          }}
+                          className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-slate-950/95 via-slate-950/60 to-transparent"
                         />
-                      )}
-                      <div
-                        aria-hidden="true"
-                        className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-slate-950/95 via-slate-950/60 to-transparent"
-                      />
-                      {cutIn.faction && showFactionIdentity && (
-                        <div
-                          className={`absolute right-1.5 bottom-1.5 rounded-full bg-slate-950/85 p-1 border border-white/20 shadow ${
-                            vfx.reducedMotion ? '' : 'bg-vfx-faction-crest-pop'
-                          }`}
-                        >
-                          <FactionCrestSvg faction={cutIn.faction} size={22} />
-                        </div>
-                      )}
-                    </div>
+                        {cutIn.faction && showFactionIdentity && (
+                          <div
+                            className={`absolute right-1.5 bottom-1.5 rounded-full bg-slate-950/90 p-1.5 border border-white/25 shadow-lg ${
+                              vfx.reducedMotion ? '' : 'bg-vfx-faction-crest-pop'
+                            }`}
+                          >
+                            <FactionCrestSvg faction={cutIn.faction} size={24} />
+                          </div>
+                        )}
+                      </div>
 
-                    {/* Mặt lưng bí mật khi anticipation */}
-                    <div
-                      className="mn-card-face mn-card-face-back absolute inset-0 overflow-hidden rounded-xl border-2 bg-slate-950 shadow-lg"
-                      style={{ borderColor: cutInAccent }}
-                    >
-                      <img
-                        src={MIDNIGHT_CARD_BACK_ART}
-                        alt="Lật vai trò"
-                        className="h-full w-full object-cover opacity-80"
-                      />
+                      {/* Mặt lưng bí mật khi anticipation */}
                       <div
-                        aria-hidden="true"
-                        className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/35 to-slate-950/80"
-                      />
-                      <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-2 text-center">
-                        <FactionCrestSvg faction={cutIn.faction} size={42} />
-                        <span className="mt-1.5 text-[9px] font-black uppercase tracking-widest text-amber-200">
-                          LỘ DIỆN
-                        </span>
+                        className="mn-card-face mn-card-face-back absolute inset-0 overflow-hidden rounded-xl border-2 bg-slate-950 shadow-lg"
+                        style={{
+                          borderColor: cutInAccent,
+                          boxShadow: `0 16px 34px -8px rgba(2,6,23,0.95), 0 0 22px ${cutInAccent}88`,
+                        }}
+                      >
+                        <img
+                          src={MIDNIGHT_CARD_BACK_ART}
+                          alt="Lật vai trò"
+                          className="absolute inset-0 h-full w-full object-cover opacity-80"
+                        />
+                        <div
+                          aria-hidden="true"
+                          className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/35 to-slate-950/80"
+                        />
+                        <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-2 text-center">
+                          <FactionCrestSvg faction={cutIn.faction} size={46} />
+                          <span className="mt-1.5 text-[10px] font-black uppercase tracking-widest text-amber-200">
+                            LỘ DIỆN
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Nội dung vai trò & phe nổi bật */}
+                {/* Nội dung: nhịp Anticipation hồi hộp -> Lock-in vai trò & bản sắc phe */}
                 <div className="relative z-10 min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div
-                      data-testid="bg-vfx-reveal-crest"
-                      className={
-                        showFactionIdentity
-                          ? vfx.reducedMotion
-                            ? 'shrink-0'
-                            : 'bg-vfx-faction-crest-pop shrink-0'
-                          : 'shrink-0 opacity-35 transition-opacity duration-200'
-                      }
-                    >
-                      <FactionCrestSvg faction={cutIn.faction} size={30} />
+                  {isAnticipation ? (
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className="rounded-md px-2.5 py-0.5 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-950 shadow"
+                          style={{ backgroundColor: cutInSecondary }}
+                        >
+                          ⚡ TÍN HIỆU LỘ DIỆN
+                        </span>
+                      </div>
+                      <p className="truncate text-base sm:text-2xl font-black text-white">
+                        {actorDisplayName} đang mở ấn ký danh tính...
+                      </p>
+                      <p className="text-xs sm:text-sm font-semibold text-slate-300">
+                        Mặt nạ đêm khuya tại KTX sắp được tháo bỏ
+                      </p>
                     </div>
-                    <span
-                      className="rounded-md px-2.5 py-0.5 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-950"
-                      style={{ backgroundColor: cutInSecondary }}
-                    >
-                      {cutIn.title}
-                    </span>
-                    {cutIn.skillName && showFactionIdentity && (
-                      <span className="text-xs sm:text-sm font-black uppercase tracking-wide text-white">
-                        ✦ {cutIn.skillName}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1.5 truncate text-base sm:text-xl font-black text-white">
-                    {cutIn.subtitle}
-                  </p>
-                  {cutIn.roleName && showFactionIdentity && (
-                    <p className="mt-0.5 text-xs sm:text-sm font-bold" style={{ color: cutInSecondary }}>
-                      {cutIn.roleName}
-                      {cutInTheme ? ` · ${cutInTheme.label}` : ''}
-                    </p>
+                  ) : (
+                    <div className={vfx.reducedMotion ? '' : 'bg-vfx-reveal-text-lock'}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div
+                          data-testid="bg-vfx-reveal-crest"
+                          className={
+                            showFactionIdentity
+                              ? vfx.reducedMotion
+                                ? 'shrink-0'
+                                : 'bg-vfx-faction-crest-pop shrink-0'
+                              : 'shrink-0 opacity-35 transition-opacity duration-200'
+                          }
+                        >
+                          <FactionCrestSvg faction={cutIn.faction} size={34} />
+                        </div>
+                        <span
+                          className="rounded-md px-2.5 py-0.5 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-950"
+                          style={{ backgroundColor: cutInSecondary }}
+                        >
+                          {cutIn.title}
+                        </span>
+                        {showFactionIdentity && (
+                          <span
+                            className="rounded-md border px-2 py-0.5 text-[10px] sm:text-xs font-extrabold tracking-wide bg-slate-900/80"
+                            style={{ borderColor: `${cutInAccent}99`, color: cutInSecondary }}
+                          >
+                            {factionMotifLabel}
+                          </span>
+                        )}
+                        {cutIn.skillName && showFactionIdentity && (
+                          <span className="text-xs sm:text-sm font-black uppercase tracking-wide text-white">
+                            ✦ {cutIn.skillName}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1.5 truncate text-lg sm:text-2xl font-black text-white drop-shadow">
+                        {cutIn.subtitle}
+                      </p>
+                      {cutIn.roleName && showFactionIdentity && (
+                        <p className="mt-0.5 text-xs sm:text-sm font-extrabold" style={{ color: cutInSecondary }}>
+                          {cutIn.roleName}
+                          {cutInTheme ? ` · ${cutInTheme.label}` : ''}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
