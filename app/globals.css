@@ -83,6 +83,8 @@ canvas {
   .mn-dice-tray-spotlight,
   .mn-tile-landing-beacon,
   .mn-pawn-touchdown-ripple,
+  .mn-die-clack-spark,
+  .mn-die-settle-ring,
   .mn-die-hop-windup,
   .mn-die-hop-tumble,
   .mn-die-hop-decel,
@@ -230,10 +232,31 @@ canvas {
 }
 
 @keyframes mn-die-hop-decel {
-  0%   { transform: translate3d(2px, -8px, 0) scale(1.02); }
-  55%  { transform: translate3d(-1px, 2px, 0) scale(1.05, 0.95); }
-  80%  { transform: translate3d(0, -3px, 0) scale(1.01); }
+  0%   { transform: translate3d(2px, -9px, 0) scale(1.03); }
+  36%  { transform: translate3d(-1px, 2px, 0) scale(1.07, 0.92); }
+  64%  { transform: translate3d(1px, -4px, 0) scale(1.02); }
+  84%  { transform: translate3d(0, 1px, 0) scale(1.04, 0.96); }
   100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes mn-die-clack-spark {
+  0%, 100% { opacity: 0.15; transform: scale(0.55) rotate(0deg); }
+  26% { opacity: 1; transform: scale(1.2) rotate(35deg); }
+  52% { opacity: 0.2; transform: scale(0.6) rotate(70deg); }
+  76% { opacity: 0.92; transform: scale(1.1) rotate(110deg); }
+}
+
+@keyframes mn-die-settle-ring {
+  0%   { opacity: 0.88; transform: scale(0.78); }
+  100% { opacity: 0; transform: scale(1.52); }
+}
+
+.mn-die-clack-spark {
+  animation: mn-die-clack-spark 640ms ease-in-out infinite;
+}
+
+.mn-die-settle-ring {
+  animation: mn-die-settle-ring 460ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes mn-die-hop-settled {

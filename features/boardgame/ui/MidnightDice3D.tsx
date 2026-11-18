@@ -343,6 +343,12 @@ export function MidnightDieD6_3D({
         aria-hidden="true"
         className={`pointer-events-none absolute bottom-0 h-2 w-[82%] rounded-full bg-black/70 blur-[2px] ${shadowClass}`}
       />
+      {stage === 'settled' && enable3D && (
+        <span
+          aria-hidden="true"
+          className="mn-die-settle-ring pointer-events-none absolute inset-0 rounded-xl border-2 border-emerald-300/80"
+        />
+      )}
 
       {enable3D ? (
         <div
@@ -449,6 +455,12 @@ export function MidnightDieD4_3D({
         aria-hidden="true"
         className={`pointer-events-none absolute bottom-0 h-2 w-[84%] rounded-full bg-black/75 blur-[2px] ${shadowClass}`}
       />
+      {stage === 'settled' && enable3D && (
+        <span
+          aria-hidden="true"
+          className="mn-die-settle-ring pointer-events-none absolute inset-0 rounded-xl border-2 border-amber-300/85"
+        />
+      )}
 
       {enable3D ? (
         <div
@@ -559,8 +571,15 @@ export const MidnightDicePair3D = React.memo(function MidnightDicePair3D({
   enable3D?: boolean;
 }) {
   return (
-    <div className="inline-flex items-center gap-2 shrink-0">
+    <div className="relative inline-flex items-center gap-2 shrink-0">
       {d6 > 0 && <MidnightDieD6_3D value={d6} stage={stage} size={size} enable3D={enable3D} />}
+      {d6 > 0 && stage === 'tumble' && enable3D && (
+        <span
+          data-testid="bg-dice-clack-spark"
+          aria-hidden="true"
+          className="mn-die-clack-spark pointer-events-none absolute left-1/2 top-1/2 z-20 -ml-2 -mt-2 h-4 w-4 rounded-full bg-gradient-to-br from-white via-amber-300 to-amber-500 shadow-[0_0_12px_rgba(251,191,36,0.95)]"
+        />
+      )}
       <MidnightDieD4_3D value={d4} stage={stage} size={size} enable3D={enable3D} />
     </div>
   );

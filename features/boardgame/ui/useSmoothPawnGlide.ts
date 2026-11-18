@@ -179,43 +179,58 @@ export function useSmoothPawnGlide({
               ? [
                   {
                     transform: `translate3d(${dx}px, ${dy}px, 0) scale(1)`,
+                    filter: 'drop-shadow(0 2px 4px rgba(2,6,23,0.45))',
                     offset: 0,
                     easing: 'linear',
                   },
                   {
-                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.06)`,
+                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.07)`,
+                    filter: 'drop-shadow(0 6px 8px rgba(56,189,248,0.42))',
                     offset: holdFrac,
                     easing: 'ease-out',
                   },
                   {
-                    transform: `translate3d(${dx * 0.45}px, ${dy * 0.45 - 20}px, 0) scale(1.2)`,
+                    transform: `translate3d(${dx * 0.45}px, ${dy * 0.45 - 26}px, 0) scale(1.22)`,
+                    filter: 'drop-shadow(0 16px 14px rgba(2,6,23,0.72))',
                     offset: midFrac,
                     easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                   },
                   {
-                    transform: 'translate3d(0, 3px, 0) scale(1.07, 0.93)',
+                    transform: 'translate3d(0, 3px, 0) scale(1.08, 0.92)',
+                    filter: 'drop-shadow(0 3px 5px rgba(56,189,248,0.5))',
                     offset: touchFrac,
                     easing: 'ease-out',
                   },
-                  { transform: 'translate3d(0, 0, 0) scale(1)', offset: 1 },
+                  {
+                    transform: 'translate3d(0, 0, 0) scale(1)',
+                    filter: 'drop-shadow(0 2px 4px rgba(2,6,23,0.45))',
+                    offset: 1,
+                  },
                 ]
               : [
                   {
-                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.05)`,
+                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.06)`,
+                    filter: 'drop-shadow(0 5px 8px rgba(56,189,248,0.4))',
                     offset: 0,
                     easing: 'ease-out',
                   },
                   {
-                    transform: `translate3d(${dx * 0.45}px, ${dy * 0.45 - 18}px, 0) scale(1.18)`,
-                    offset: 0.45,
+                    transform: `translate3d(${dx * 0.45}px, ${dy * 0.45 - 24}px, 0) scale(1.2)`,
+                    filter: 'drop-shadow(0 16px 14px rgba(2,6,23,0.72))',
+                    offset: 0.46,
                     easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                   },
                   {
-                    transform: 'translate3d(0, 3px, 0) scale(1.06, 0.94)',
+                    transform: 'translate3d(0, 3px, 0) scale(1.07, 0.93)',
+                    filter: 'drop-shadow(0 3px 5px rgba(56,189,248,0.5))',
                     offset: 0.84,
                     easing: 'ease-out',
                   },
-                  { transform: 'translate3d(0, 0, 0) scale(1)', offset: 1 },
+                  {
+                    transform: 'translate3d(0, 0, 0) scale(1)',
+                    filter: 'drop-shadow(0 2px 4px rgba(2,6,23,0.45))',
+                    offset: 1,
+                  },
                 ];
 
           const anim = el.animate(frames, {
