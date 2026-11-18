@@ -436,11 +436,11 @@ canvas {
 }
 
 .bg-vfx-reveal-vignette {
-  animation: bg-vfx-reveal-vignette 1560ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bg-vfx-reveal-vignette 1680ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-reveal-push {
-  animation: bg-vfx-reveal-push 1560ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bg-vfx-reveal-push 1680ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-reveal-impact-glow {
@@ -455,7 +455,7 @@ canvas {
 }
 
 .bg-vfx-impact-flash {
-  animation: bg-vfx-impact-flash 310ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: bg-vfx-impact-flash 360ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Deck-to-center 3D card flight & aura pulse */

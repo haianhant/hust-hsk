@@ -13,6 +13,8 @@ const {
   buildDiceRollEventFromSnapshot,
   computeDiceSig,
   extractVisualEventsFromDiff,
+  resolveCombatSequenceTimings,
+  resolveRoleRevealTimeline,
 } = require('../features/boardgame/ui/vfx-queue.ts');
 const {
   buildDiceRollTimeline,
@@ -1106,4 +1108,163 @@ test('Dice Roll Regression (11) — ROLL_DICE -> SKIP_LOC -> END_TURN increments
     true,
     'Vẫn phải phát banner LƯỢT CỦA BẠN cho người chơi p2 khi qua lượt mới',
   );
+});
+
+test('AAA Polish (12) — Cinematic Role Reveal 4 phases (1.2-1.8s) & Reduced Motion collapse', () => {
+  const normal = resolveRoleRevealTimeline(1560, false);
+  assert.ok(normal.totalMs >= 1200 && normal.totalMs <= 1800, 'Role reveal duration must stay within 1.2-1.8s');
+  assert.ok(
+    normal.anticipationEndMs > 0 &&
+      normal.anticipationEndMs < normal.revealEndMs &&
+      normal.revealEndMs < normal.impactEndMs &&
+      normal.impactEndMs < normal.totalMs,
+    'Role reveal must strictly follow anticipation -> reveal -> impact -> settle',
+  );
+
+  const clampedLow = resolveRoleRevealTimeline(900, false);
+  assert.equal(clampedLow.totalMs, 1200);
+  const clampedHigh = resolveRoleRevealTimeline(2400, false);
+  assert.equal(clampedHigh.totalMs, 1800);
+
+  const reduced = resolveRoleRevealTimeline(1560, true);
+  assert.equal(reduced.anticipationEndMs, 0);
+  assert.equal(reduced.revealEndMs, 0);
+  assert.equal(reduced.impactEndMs, 0);
+  assert.ok(reduced.totalMs <= 260, 'Reduced Motion must clamp Role Reveal to <= 260ms');
+});
+
+test('AAA Polish (13) — Combat 5 phases + 75ms Hit-Stop (60-100ms) for strikes vs 0ms for heal/shield', () => {
+  for (const eff of ['SLASH', 'MASAMUNE_SLASH', 'SPEAR_THRUST', 'HANDGUN_SHOT', 'MACHINE_GUN_BARRAGE', 'LIGHTNING_STRIKE', 'EXPLOSION', 'COUNTER_STRIKE']) {
+    const t = resolveCombatSequenceTimings(680, eff, false);
+    assert.ok(t.targetLockEndMs > 0 && t.targetLockEndMs < t.travelEndMs);
+    assert.equal(t.hitStopStartMs, t.travelEndMs);
+    assert.ok(t.hitStopDurationMs >= 60 && t.hitStopDurationMs <= 100, `${eff} hitStopDurationMs must be 60-100ms`);
+    assert.equal(t.hitStopDurationMs, 75);
+    assert.equal(t.hitStopEndMs, t.hitStopStartMs + t.hitStopDurationMs);
+    assert.ok(t.damagePopAtMs >= t.hitStopStartMs && t.damagePopAtMs <= t.hitStopEndMs);
+    assert.ok(t.hitStopEndMs < t.recoveryEndMs);
+  }
+
+  for (const eff of ['HEAL_AURA', 'SHIELD_GUARD', 'STEAL_TETHER']) {
+    const t = resolveCombatSequenceTimings(680, eff, false);
+    assert.equal(t.hitStopDurationMs, 0);
+  }
+
+  const reduced = resolveCombatSequenceTimings(680, 'COUNTER_STRIKE', true);
+  assert.equal(reduced.hitStopDurationMs, 0);
+  assert.equal(reduced.targetLockEndMs, 0);
+  assert.ok(reduced.recoveryEndMs <= 260);
+});
+
+test('AAA Polish (14) — Character Signature Skill VFX with strict P0 secret role isolation', () => {
+  const base = makePubState({ turnNumber: 5 });
+
+  // Unrevealed shadow triggers passive/skill without revealedRoleId -> must NEVER emit portrait cut-in or roleId on COMBAT_VFX
+  const afterSecretCounter = {
+    ...base,
+    publicLog: [
+      {
+        id: 'log-secret-counter',
+        round: 2,
+        atMs: 5000,
+        kind: 'skill',
+        actorId: 'p4',
+        text: '🛡️ Dung kích hoạt phản kích gây 1 sát thương lên Minh An!',
+      },
+    ],
+  };
+  const secretEvents = extractVisualEventsFromDiff(base, afterSecretCounter, {
+    selfPlayerId: 'p1',
+    isSpectator: true,
+  });
+  const counterFxSecret = secretEvents.find((e) => e.kind === 'COMBAT_VFX' && e.effect === 'COUNTER_STRIKE');
+  assert.ok(counterFxSecret);
+  assert.equal(counterFxSecret.roleId ?? null, null, 'Unrevealed actor must not leak roleId on COUNTER_STRIKE');
+  assert.equal(
+    secretEvents.some((e) => e.kind === 'CINEMATIC_CUTIN' && e.roleId),
+    false,
+    'Spectator must not receive portrait Cut-In for unrevealed character',
+  );
+
+  // Revealed gac-truc-ban, lang-quan-sat, suong-an-danh, lang-anh-san emit bespoke roleId on COMBAT_VFX
+  const revealedPrev = makePubState({
+    turnNumber: 6,
+    players: base.players.map((p) => {
+      if (p.playerId === 'p1') return { ...p, revealed: true, revealedFaction: 'lantern-guard', revealedRoleId: 'gac-truc-ban' };
+      if (p.playerId === 'p2') return { ...p, revealed: true, revealedFaction: 'wanderer', revealedRoleId: 'lang-quan-sat' };
+      if (p.playerId === 'p3') return { ...p, revealed: true, revealedFaction: 'mist-order', revealedRoleId: 'suong-an-danh' };
+      return { ...p, revealed: true, revealedFaction: 'wanderer', revealedRoleId: 'lang-anh-san' };
+    }),
+  });
+  const revealedNext = {
+    ...revealedPrev,
+    publicLog: [
+      {
+        id: 'log-truc-ban',
+        round: 3,
+        atMs: 6000,
+        kind: 'skill',
+        actorId: 'p1',
+        text: '⚡ Minh An dùng Bước Nhảy Tắt dịch chuyển tức thì!',
+      },
+      {
+        id: 'log-quan-sat',
+        round: 3,
+        atMs: 6001,
+        kind: 'skill',
+        actorId: 'p2',
+        text: '💚 Bình kích hoạt Ý Chí Hồi Sinh hồi thương tích!',
+      },
+      {
+        id: 'log-an-danh',
+        round: 3,
+        atMs: 6002,
+        kind: 'skill',
+        actorId: 'p3',
+        text: '🌒 Chi dùng Hấp Thụ Đêm Khuya hút sinh lực!',
+      },
+      {
+        id: 'log-anh-san',
+        round: 3,
+        atMs: 6003,
+        kind: 'skill',
+        actorId: 'p4',
+        text: '🧲 Dung dùng Cướp Đồ Thay Đòn từ Minh An!',
+      },
+    ],
+  };
+  const sigEvents = extractVisualEventsFromDiff(revealedPrev, revealedNext, {
+    selfPlayerId: 'p1',
+    isSpectator: true,
+  });
+  for (const rid of ['gac-truc-ban', 'lang-quan-sat', 'suong-an-danh', 'lang-anh-san']) {
+    assert.ok(
+      sigEvents.some((e) => e.kind === 'COMBAT_VFX' && e.roleId === rid),
+      `Expected signature COMBAT_VFX with roleId=${rid}`,
+    );
+    assert.ok(
+      sigEvents.some((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'ULTIMATE_SKILL' && e.roleId === rid),
+      `Expected ULTIMATE_SKILL banner for revealed ${rid}`,
+    );
+  }
+});
+
+test('AAA Polish (15) — Reconnect idempotency after Victory & Signature Skill batch', () => {
+  const tracker = new VisualEventTracker();
+  const base = makePubState({ turnNumber: 8 });
+  const victorySnap = {
+    ...base,
+    winnerFaction: 'mist-order',
+    winnerLabel: 'Hội Sương Mù chiến thắng',
+    winReason: 'Tất cả Vệ Đèn đã bị hạ gục.',
+  };
+  tracker.seedBaseline(base, { selfPlayerId: 'p1', isSpectator: false });
+  const firstPass = tracker.ingestSnapshot(victorySnap, { selfPlayerId: 'p1', isSpectator: false });
+  assert.equal(firstPass.some((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'VICTORY'), true);
+
+  // Simulate F5 / WebSocket reconnect ingesting the exact same victory snapshot
+  const trackerAfterReconnect = new VisualEventTracker();
+  trackerAfterReconnect.seedBaseline(victorySnap, { selfPlayerId: 'p1', isSpectator: false });
+  const replay = trackerAfterReconnect.ingestSnapshot(victorySnap, { selfPlayerId: 'p1', isSpectator: false });
+  assert.equal(replay.length, 0, 'Reconnect after victory must not replay any VFX');
 });

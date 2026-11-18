@@ -2242,6 +2242,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                     className="mn-card-flip-stage relative h-full w-full rounded-xl shadow-2xl"
                     style={{
                       transform: showPortraitFace ? 'rotateY(0deg) scale(1.04)' : 'rotateY(180deg) scale(0.95)',
+                      transitionDuration: vfx.reducedMotion ? '120ms' : '420ms',
                     }}
                   >
                     {/* Mặt trước: Chân dung nhân vật phóng lớn + biểu tượng phe */}

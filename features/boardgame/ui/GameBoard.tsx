@@ -460,7 +460,10 @@ export function GameBoard({
 
           <div className="flex flex-nowrap items-center gap-1.5 shrink-0">
             {inviteCode && (
-              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-xs font-mono font-bold text-slate-300 whitespace-nowrap">
+              <span
+                data-testid="bg-board-invite-code"
+                className="hidden sm:inline-flex px-2 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-xs font-mono font-bold text-slate-300 whitespace-nowrap"
+              >
                 Mã: {inviteCode}
               </span>
             )}
