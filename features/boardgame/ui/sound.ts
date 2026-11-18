@@ -14,6 +14,7 @@
 import type {
   BoardGameDeckId,
   BoardGameFactionId,
+  BoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
 import type { BoardGameVisualEvent } from './vfx-queue';
 
@@ -858,14 +859,45 @@ export function playEmotePop(): void {
   ]);
 }
 
-export function playVictoryFanfare(): void {
+export function playSignatureSkillCue(roleId?: BoardGameRoleId | null): void {
+  const isLightning = roleId === 'gac-radio' || roleId === 'gac-ky-thuat';
+  const isShadow = roleId === 'suong-an-danh' || roleId === 'suong-tin-gia';
+  const base = isLightning ? 340 : isShadow ? 220 : 415;
+  playLayeredCue(
+    [
+      { freq: base, endFreq: base * 1.48, startOffsetSec: 0, durationSec: 0.14, type: 'triangle', gainPeak: 0.05 },
+      { freq: base * 1.5, endFreq: base * 2.05, startOffsetSec: 0.07, durationSec: 0.18, type: 'sine', gainPeak: 0.048 },
+    ],
+    [
+      {
+        bufferKey: isLightning ? 'arcCrackle' : 'blade',
+        startOffsetSec: 0.02,
+        durationSec: 0.16,
+        playbackRate: isShadow ? 0.85 : 1.15,
+        gainPeak: 0.056,
+        filterType: 'bandpass',
+        filterFreq: isShadow ? 1300 : 2300,
+      },
+    ],
+  );
+}
+
+export function playVictoryFanfare(faction?: BoardGameFactionId | null): void {
+  const isMist = faction === 'mist-order';
+  const isWanderer = faction === 'wanderer';
+  const notes = isMist
+    ? [293.66, 349.23, 440, 587.33, 880] // D-minor triumphant climax
+    : isWanderer
+      ? [329.63, 440, 493.88, 659.25, 987.77] // E/A bright sus hero fanfare
+      : [261.63, 523.25, 659.25, 783.99, 1046.5]; // Warm major victory chord
+
   playLayeredCue([
-    { freq: 261.63, startOffsetSec: 0, durationSec: 0.42, type: 'triangle', gainPeak: 0.045 },
-    { freq: 523.25, startOffsetSec: 0, durationSec: 0.15, type: 'triangle', gainPeak: 0.055 },
-    { freq: 659.25, startOffsetSec: 0.11, durationSec: 0.15, type: 'triangle', gainPeak: 0.055 },
-    { freq: 783.99, startOffsetSec: 0.22, durationSec: 0.18, type: 'triangle', gainPeak: 0.06 },
-    { freq: 1046.5, startOffsetSec: 0.34, durationSec: 0.42, type: 'sine', gainPeak: 0.065 },
-    { freq: 1318.5, startOffsetSec: 0.36, durationSec: 0.38, type: 'sine', gainPeak: 0.034 },
+    { freq: notes[0], startOffsetSec: 0, durationSec: 0.45, type: 'triangle', gainPeak: 0.046 },
+    { freq: notes[1], startOffsetSec: 0, durationSec: 0.16, type: 'triangle', gainPeak: 0.055 },
+    { freq: notes[2], startOffsetSec: 0.11, durationSec: 0.16, type: 'triangle', gainPeak: 0.056 },
+    { freq: notes[3], startOffsetSec: 0.22, durationSec: 0.2, type: 'triangle', gainPeak: 0.062 },
+    { freq: notes[4], startOffsetSec: 0.34, durationSec: 0.46, type: 'sine', gainPeak: 0.068 },
+    { freq: notes[4] * 1.25, startOffsetSec: 0.36, durationSec: 0.42, type: 'sine', gainPeak: 0.036 },
   ]);
 }
 
@@ -1018,7 +1050,10 @@ export function playSoundForVisualEvent(
           playRoleReveal(event.faction);
           return true;
         case 'VICTORY':
-          playVictoryFanfare();
+          playVictoryFanfare(event.faction);
+          return true;
+        case 'ULTIMATE_SKILL':
+          playSignatureSkillCue(event.roleId);
           return true;
         case 'ELIMINATION':
           playEliminationBell();

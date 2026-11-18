@@ -18,6 +18,7 @@ import type {
   BoardGameLocationId,
   BoardGamePrivateGameView,
   BoardGamePublicGameView,
+  BoardGameRoleId,
 } from '@/shared/contracts/boardgame';
 import {
   FactionCrestSvg,
@@ -72,6 +73,7 @@ interface ActiveCombatAnim {
   durationMs: number;
   factionReveal?: BoardGameFactionId | null;
   deckThemeBurst?: BoardGameDeckId | null;
+  victoryFactionBurst?: BoardGameFactionId | null;
 }
 
 interface ActiveFloatingPopup {
@@ -293,7 +295,6 @@ function drawTargetLockReticle(
   ctx.stroke();
   ctx.restore();
 }
-
 function drawImpactHitStopStarburst(
   ctx: CanvasRenderingContext2D,
   pt: Point2D,
@@ -333,7 +334,6 @@ function drawImpactHitStopStarburst(
   }
   ctx.restore();
 }
-
 function drawDeckThemeBurst(
   ctx: CanvasRenderingContext2D,
   anim: ActiveCombatAnim,
@@ -423,6 +423,184 @@ function drawDeckThemeBurst(
   ctx.restore();
 }
 
+function drawRoleSignatureAura(
+  ctx: CanvasRenderingContext2D,
+  roleId: BoardGameRoleId,
+  source: Point2D,
+  targets: Point2D[],
+  p: number,
+  reducedMotion: boolean,
+  particleScale: number,
+): void {
+  const fade = Math.max(0, Math.min(1, Math.sin(p * Math.PI) * 1.15));
+  if (fade <= 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = fade;
+
+  switch (roleId) {
+    case 'gac-radio': {
+      // Sóng cao áp tần số kép + vòng cộng hưởng xanh ngọc từ người phát tới mục tiêu
+      for (let w = 0; w < 2; w++) {
+        const ringR = 16 + ((p + w * 0.35) % 1) * 58;
+        ctx.strokeStyle = w === 0 ? '#34d399' : '#fef08a';
+        ctx.lineWidth = 2.4 * fade;
+        ctx.beginPath();
+        ctx.arc(source.x, source.y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'gac-ky-thuat': {
+      // Mạng lưới mạch điện vỡ vây (4 góc vuông cam-vàng) quanh các mục tiêu
+      for (const tgt of targets) {
+        const r = 22 + p * 34;
+        ctx.strokeStyle = '#fb923c';
+        ctx.lineWidth = 2.6;
+        for (let k = 0; k < 4; k++) {
+          const ang = (Math.PI / 2) * k + p * 0.4;
+          const cx = tgt.x + Math.cos(ang) * r;
+          const cy = tgt.y + Math.sin(ang) * r;
+          ctx.beginPath();
+          ctx.moveTo(cx - 5, cy);
+          ctx.lineTo(cx + 5, cy);
+          ctx.moveTo(cx, cy - 5);
+          ctx.lineTo(cx, cy + 5);
+          ctx.stroke();
+        }
+      }
+      break;
+    }
+    case 'gac-truc-ban': {
+      // Ấn lệnh Bước Nhảy Tắt: la bàn vàng xoay quanh nguồn
+      ctx.save();
+      ctx.translate(source.x, source.y);
+      ctx.rotate(p * Math.PI);
+      const r = 24 + p * 22;
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(0, -r);
+      ctx.lineTo(r * 0.72, 0);
+      ctx.lineTo(0, r);
+      ctx.lineTo(-r * 0.72, 0);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+      break;
+    }
+    case 'suong-gac-cong': {
+      // Xích sắt hộ vệ gác cổng lóe sáng quanh người phản kích
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([7, 5]);
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, 26 + p * 22, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      break;
+    }
+    case 'suong-an-danh':
+    case 'suong-tin-gia': {
+      // Nhật thực sương mù tím-đỏ
+      const grad = ctx.createRadialGradient(source.x, source.y, 6, source.x, source.y, 44 + p * 28);
+      grad.addColorStop(0, 'rgba(168, 85, 247, 0.35)');
+      grad.addColorStop(0.7, 'rgba(225, 29, 72, 0.25)');
+      grad.addColorStop(1, 'rgba(225, 29, 72, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, 44 + p * 28, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'lang-cuu-ho': {
+      // Dấu thập huyết y tế xoay nhẹ
+      for (const tgt of targets) {
+        ctx.strokeStyle = '#fb7185';
+        ctx.lineWidth = 3;
+        const arm = 14 + p * 18;
+        ctx.beginPath();
+        ctx.moveTo(tgt.x - arm, tgt.y);
+        ctx.lineTo(tgt.x + arm, tgt.y);
+        ctx.moveTo(tgt.x, tgt.y - arm);
+        ctx.lineTo(tgt.x, tgt.y + arm);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'lang-quan-sat': {
+      // Vòng kính trinh sát lục bảo
+      ctx.strokeStyle = '#6ee7b7';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, 20 + p * 28, -Math.PI * 0.2, Math.PI * 1.5);
+      ctx.stroke();
+      break;
+    }
+    case 'lang-anh-san':
+    case 'lang-tien-phong': {
+      const rayCount = reducedMotion || particleScale <= 0 ? 4 : Math.max(4, Math.round(8 * particleScale));
+      for (let i = 0; i < rayCount; i++) {
+        const ang = (Math.PI * 2 * i) / rayCount + p * 0.6;
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(source.x + Math.cos(ang) * 18, source.y + Math.sin(ang) * 18);
+        ctx.lineTo(source.x + Math.cos(ang) * (34 + p * 28), source.y + Math.sin(ang) * (34 + p * 28));
+        ctx.stroke();
+      }
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function drawVictoryFireworks(
+  ctx: CanvasRenderingContext2D,
+  anim: ActiveCombatAnim,
+  p: number,
+  reducedMotion: boolean,
+  particleScale: number,
+): void {
+  const faction = anim.victoryFactionBurst ?? 'lantern-guard';
+  const primary =
+    faction === 'mist-order' ? '#fb7185' : faction === 'wanderer' ? '#34d399' : '#fbbf24';
+  const secondary =
+    faction === 'mist-order' ? '#c084fc' : faction === 'wanderer' ? '#fde68a' : '#34d399';
+  const count = reducedMotion || particleScale <= 0 ? 6 : Math.max(10, Math.round(20 * particleScale));
+
+  anim.targets.forEach((pt, idx) => {
+    const delay = idx * 0.14;
+    const localP = Math.max(0, Math.min(1, (p - delay) / Math.max(0.3, 1 - delay)));
+    if (localP <= 0) return;
+    const fade = Math.sin(localP * Math.PI);
+
+    ctx.save();
+    ctx.globalAlpha = fade * 0.9;
+    ctx.strokeStyle = idx % 2 === 0 ? primary : secondary;
+    ctx.lineWidth = 2.4 * fade;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 18 + localP * 86, 0, Math.PI * 2);
+    ctx.stroke();
+
+    for (let k = 0; k < count; k++) {
+      const ang = (Math.PI * 2 * k) / count + idx * 0.35;
+      const dist = localP * (78 + (k % 3) * 20);
+      ctx.fillStyle = k % 2 === 0 ? primary : '#ffffff';
+      ctx.beginPath();
+      ctx.arc(
+        pt.x + Math.cos(ang) * dist,
+        pt.y + Math.sin(ang) * dist + localP * 18,
+        (2.8 - localP * 1.1) * fade,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
+    ctx.restore();
+  });
+}
+
 function drawCombatAnimation(
   ctx: CanvasRenderingContext2D,
   anim: ActiveCombatAnim,
@@ -441,6 +619,11 @@ function drawCombatAnimation(
 
   if (anim.deckThemeBurst) {
     drawDeckThemeBurst(ctx, anim, p, reducedMotion, particleScale);
+    return true;
+  }
+
+  if (anim.victoryFactionBurst) {
+    drawVictoryFireworks(ctx, anim, p, reducedMotion, particleScale);
     return true;
   }
 
@@ -842,6 +1025,19 @@ function drawCombatAnimation(
   }
 
   ctx.restore();
+
+  if (anim.event.roleId) {
+    drawRoleSignatureAura(
+      ctx,
+      anim.event.roleId,
+      source,
+      targets,
+      p,
+      reducedMotion,
+      particleScale,
+    );
+  }
+
   return true;
 }
 
@@ -1124,6 +1320,35 @@ export function useBoardGameVfxQueue({
           setRevealPhase('settle');
         }, revTl.impactEndMs);
       }
+    } else if (nextBanner.bannerType === 'VICTORY') {
+      setRevealPhase('settle');
+      const container = containerRef.current;
+      const cw = container?.clientWidth || 720;
+      const ch = container?.clientHeight || 480;
+      activeCombatAnimsRef.current.push({
+        uid: `${nextBanner.id}::victory-fireworks`,
+        event: {
+          id: `${nextBanner.id}::victory-fireworks`,
+          kind: 'COMBAT_VFX',
+          order: 63,
+          durationMs: nextBanner.durationMs,
+          effect: 'HEAL_AURA',
+          sourcePlayerId: null,
+          targetPlayerIds: [],
+          shake: 'none',
+        },
+        source: { x: cw * 0.5, y: ch * 0.35 },
+        targets: [
+          { x: cw * 0.25, y: ch * 0.28 },
+          { x: cw * 0.5, y: ch * 0.22 },
+          { x: cw * 0.75, y: ch * 0.3 },
+        ],
+        startedAt: performance.now(),
+        durationMs: nextBanner.durationMs,
+        victoryFactionBurst: nextBanner.faction ?? 'lantern-guard',
+      });
+      setActiveCombatCount(activeCombatAnimsRef.current.length);
+      ensureCanvasLoop();
     } else {
       setRevealPhase('settle');
     }
@@ -2113,6 +2338,8 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
         <div
           data-testid="bg-vfx-cutin"
           data-banner-type={cutIn.bannerType}
+          data-role-id={cutIn.roleId ?? undefined}
+          data-faction={cutIn.faction ?? undefined}
           className="pointer-events-none absolute inset-x-0 top-1 z-30 flex justify-center px-3"
         >
           <div

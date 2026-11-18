@@ -42,37 +42,58 @@ export default function MatchResult({
   const selfWon = Boolean(
     selfPlayerId && publicGame.winnerPlayerIds.includes(selfPlayerId),
   );
+  const resolvedWinFaction =
+    publicGame.winnerFaction === 'lantern-guard' ||
+    publicGame.winnerFaction === 'mist-order' ||
+    publicGame.winnerFaction === 'wanderer'
+      ? publicGame.winnerFaction
+      : publicGame.winnerFaction === 'wanderer-solo'
+        ? 'wanderer'
+        : null;
+  const winFactionTheme = resolvedWinFaction ? FACTION_THEME[resolvedWinFaction] : null;
+  const headerGradientClass =
+    resolvedWinFaction === 'mist-order'
+      ? 'from-rose-950/75 via-slate-900 to-purple-950/70'
+      : resolvedWinFaction === 'wanderer'
+        ? 'from-emerald-950/70 via-slate-900 to-amber-950/60'
+        : 'from-amber-950/70 via-slate-900 to-emerald-950/60';
 
   return (
     <div
       data-testid="bg-match-result-modal"
+      data-winner-faction={resolvedWinFaction ?? 'none'}
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-md"
     >
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-amber-400/50 bg-slate-900 text-slate-100 shadow-2xl">
-        <div className="border-b border-slate-800 bg-gradient-to-r from-amber-950/60 via-slate-900 to-violet-950/60 px-5 py-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <div className="text-xs font-bold uppercase tracking-widest text-amber-300">
-                🎲 Tổng kết ván đấu · Bóng Đêm KTX
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-amber-400/50 bg-slate-900 text-slate-100 shadow-[0_24px_72px_-12px_rgba(251,191,36,0.35)]">
+        <div className={`relative overflow-hidden border-b border-slate-800 bg-gradient-to-r ${headerGradientClass} px-5 py-4`}>
+          <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="shrink-0 rounded-xl border border-amber-300/40 bg-slate-950/75 p-1.5 shadow-lg">
+                <FactionCrestSvg faction={resolvedWinFaction} size={42} />
               </div>
-              <h2 className="mt-1 text-lg font-extrabold text-amber-100 sm:text-xl">
-                🏆 {publicGame.winnerLabel ?? 'Kết thúc ván đấu'}
-              </h2>
+              <div>
+                <div className="text-xs font-bold uppercase tracking-widest text-amber-300">
+                  🎲 Tổng kết ván đấu · Bóng Đêm KTX{winFactionTheme ? ` · ${winFactionTheme.shortLabel}` : ''}
+                </div>
+                <h2 className="mt-1 text-lg font-extrabold text-amber-100 sm:text-xl">
+                  🏆 {publicGame.winnerLabel ?? 'Kết thúc ván đấu'}
+                </h2>
+              </div>
             </div>
             {!isSpectator && (
               <span
-                className={`rounded-xl px-3 py-1 text-xs font-bold ${
+                className={`rounded-xl border px-3.5 py-1.5 text-xs font-black tracking-wide shadow ${
                   selfWon
-                    ? 'bg-emerald-500 text-slate-950'
-                    : 'bg-slate-800 text-slate-300'
+                    ? 'border-emerald-300/70 bg-gradient-to-r from-emerald-400 to-amber-300 text-slate-950'
+                    : 'border-rose-500/45 bg-rose-950/70 text-rose-200'
                 }`}
               >
-                {selfWon ? '✨ Bạn giành chiến thắng!' : 'Hẹn phục thù ván sau'}
+                {selfWon ? '👑 CHIẾN THẮNG!' : '⚔️ THẤT BẠI — PHỤC THÙ VÁN SAU'}
               </span>
             )}
           </div>
-          <p className="mt-1.5 text-xs text-slate-200">{publicGame.winReason}</p>
-          <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-300">
+          <p className="relative z-10 mt-2 text-xs text-slate-200">{publicGame.winReason}</p>
+          <div className="relative z-10 mt-2 flex flex-wrap gap-3 text-[11px] text-slate-300">
             <span>
               ⏱️ Vòng: <strong>{publicGame.round}</strong>
             </span>

@@ -111,6 +111,7 @@ export interface CombatVfxVisualEvent {
   sourcePlayerId: string | null;
   targetPlayerIds: string[];
   shake: ScreenShakeLevel;
+  roleId?: BoardGameRoleId | null;
 }
 
 export interface FloatingTextVisualEvent {
@@ -507,6 +508,7 @@ export function extractVisualEventsFromDiff(
             sourcePlayerId: dungId,
             targetPlayerIds: attackerId && attackerId !== dungId ? [attackerId] : [dungId],
             shake: log.text.includes('không gây sát thương') ? 'none' : 'light',
+            roleId: actorPub?.revealedRoleId ?? null,
           });
           events.push({
             id: `${next.matchId}::counter-txt::${log.id}`,
@@ -557,6 +559,7 @@ export function extractVisualEventsFromDiff(
               sourcePlayerId: actorId,
               targetPlayerIds: skillTargets,
               shake: 'heavy',
+              roleId: 'gac-radio',
             });
           }
         } else if (actorPub.revealedRoleId === 'gac-ky-thuat' && log.text.includes('Đòn Phá Vây')) {
@@ -586,6 +589,7 @@ export function extractVisualEventsFromDiff(
               sourcePlayerId: actorId,
               targetPlayerIds: skillTargets,
               shake: 'heavy',
+              roleId: 'gac-ky-thuat',
             });
           }
         } else if (actorPub.revealedRoleId === 'lang-quan-sat' && log.text.includes('Ý Chí Hồi Sinh')) {
@@ -603,6 +607,17 @@ export function extractVisualEventsFromDiff(
             portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
             skillName: 'Ý CHÍ HỒI SINH',
             actorId,
+          });
+          events.push({
+            id: `${next.matchId}::sig-fx::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(720, reduced),
+            effect: 'HEAL_AURA',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [actorId],
+            shake: 'none',
+            roleId: 'lang-quan-sat',
           });
         } else if (actorPub.revealedRoleId === 'lang-cuu-ho' && log.text.includes('Đòn Đánh Đẫm Máu')) {
           events.push({
@@ -631,6 +646,7 @@ export function extractVisualEventsFromDiff(
               sourcePlayerId: actorId,
               targetPlayerIds: skillTargets,
               shake: 'light',
+              roleId: 'lang-cuu-ho',
             });
           }
         } else if (actorPub.revealedRoleId === 'gac-truc-ban' && log.text.includes('Bước Nhảy Tắt')) {
@@ -648,6 +664,86 @@ export function extractVisualEventsFromDiff(
             portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
             skillName: 'BƯỚC NHẢY TẮT',
             actorId,
+          });
+          events.push({
+            id: `${next.matchId}::sig-fx::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(680, reduced),
+            effect: 'SHIELD_GUARD',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [actorId],
+            shake: 'none',
+            roleId: 'gac-truc-ban',
+          });
+        } else if (actorPub.revealedRoleId === 'suong-an-danh') {
+          events.push({
+            id: `${next.matchId}::ult::${log.id}`,
+            kind: 'CINEMATIC_CUTIN',
+            order: 32,
+            durationMs: scaleDuration(1180, reduced),
+            bannerType: 'ULTIMATE_SKILL',
+            title: 'TUYỆT KỸ',
+            subtitle: `${actorPub.displayName} · ${roleDesign.skillName}`,
+            faction: actorPub.revealedFaction,
+            roleId: actorPub.revealedRoleId,
+            roleName: roleDesign.name,
+            portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
+            skillName: roleDesign.skillName.toUpperCase(),
+            actorId,
+          });
+          events.push({
+            id: `${next.matchId}::sig-fx::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(700, reduced),
+            effect: 'HEAL_AURA',
+            sourcePlayerId: actorId,
+            targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
+            shake: 'none',
+            roleId: 'suong-an-danh',
+          });
+        } else if (actorPub.revealedRoleId === 'lang-anh-san') {
+          events.push({
+            id: `${next.matchId}::ult::${log.id}`,
+            kind: 'CINEMATIC_CUTIN',
+            order: 32,
+            durationMs: scaleDuration(1180, reduced),
+            bannerType: 'ULTIMATE_SKILL',
+            title: 'TUYỆT KỸ',
+            subtitle: `${actorPub.displayName} · ${roleDesign.skillName}`,
+            faction: actorPub.revealedFaction,
+            roleId: actorPub.revealedRoleId,
+            roleName: roleDesign.name,
+            portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
+            skillName: roleDesign.skillName.toUpperCase(),
+            actorId,
+          });
+          events.push({
+            id: `${next.matchId}::sig-fx::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(700, reduced),
+            effect: 'STEAL_TETHER',
+            sourcePlayerId: actorId,
+            targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
+            shake: 'none',
+            roleId: 'lang-anh-san',
+          });
+        } else if (
+          actorPub.revealedRoleId === 'suong-tin-gia' ||
+          actorPub.revealedRoleId === 'lang-tien-phong'
+        ) {
+          events.push({
+            id: `${next.matchId}::sig-fx::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(680, reduced),
+            effect: actorPub.revealedRoleId === 'lang-tien-phong' ? 'EXPLOSION' : 'SHIELD_GUARD',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [actorId],
+            shake: 'none',
+            roleId: actorPub.revealedRoleId,
           });
         }
       }
