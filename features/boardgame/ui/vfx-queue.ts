@@ -50,6 +50,15 @@ export type CinematicBannerType =
 
 export type ScreenShakeLevel = 'none' | 'light' | 'heavy';
 
+export type RoleRevealPhase = 'anticipation' | 'reveal' | 'impact' | 'settle';
+
+export interface RoleRevealTimeline {
+  anticipationEndMs: number;
+  revealEndMs: number;
+  impactEndMs: number;
+  totalMs: number;
+}
+
 export interface DiceRollVisualEvent {
   id: string;
   kind: 'DICE_ROLL';
@@ -258,6 +267,33 @@ function scaleDuration(baseMs: number, reducedMotion: boolean): number {
 }
 
 /**
+ * Chia 4 giai đoạn Cinematic Role Reveal (1.2–1.8s, mặc định 1560ms):
+ *   anticipation -> reveal (3D card flip) -> impact (spotlight + faction particles) -> settle.
+ * Rút gọn tức thì khi bật Reduced Motion (`<= 260ms`).
+ */
+export function resolveRoleRevealTimeline(
+  durationMs: number,
+  reducedMotion: boolean,
+): RoleRevealTimeline {
+  const safeTotal = Math.max(180, Math.round(durationMs));
+  if (reducedMotion || safeTotal <= 350) {
+    return {
+      anticipationEndMs: 0,
+      revealEndMs: 0,
+      impactEndMs: 0,
+      totalMs: Math.min(260, safeTotal),
+    };
+  }
+  const totalMs = Math.max(1200, Math.min(1800, safeTotal));
+  return {
+    anticipationEndMs: Math.round(totalMs * 0.22),
+    revealEndMs: Math.round(totalMs * 0.54),
+    impactEndMs: Math.round(totalMs * 0.78),
+    totalMs,
+  };
+}
+
+/**
  * Suy xuất danh sách hiệu ứng có ID duy nhất và thứ tự rõ ràng từ 2 ảnh chụp liên tiếp
  * của state trên server (`prev` -> `next`), tôn trọng tuyệt đối bảo mật vai ẩn & bài kín.
  */
@@ -362,7 +398,7 @@ export function extractVisualEventsFromDiff(
         id: `${next.matchId}::reveal::${log.id}`,
         kind: 'CINEMATIC_CUTIN',
         order: 30,
-        durationMs: scaleDuration(1450, reduced),
+        durationMs: scaleDuration(1560, reduced),
         bannerType: 'ROLE_REVEAL',
         title: 'LỘ DIỆN',
         subtitle: `${actorPub.displayName} lật vai ${roleDesign.name}!`,
@@ -729,7 +765,7 @@ export function extractVisualEventsFromDiff(
         id: `${next.matchId}::reveal-evt::${rev.id}`,
         kind: 'CINEMATIC_CUTIN',
         order: 30,
-        durationMs: scaleDuration(1450, reduced),
+        durationMs: scaleDuration(1560, reduced),
         bannerType: 'ROLE_REVEAL',
         title: 'LỘ DIỆN',
         subtitle: `${rev.displayName} lật vai ${rev.roleName}!`,
