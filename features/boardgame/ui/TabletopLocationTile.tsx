@@ -345,7 +345,9 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
               ? 'grid grid-cols-4 gap-1 items-center'
               : occupants.length === 3
                 ? 'grid grid-cols-3 gap-1 items-center'
-                : 'flex flex-wrap items-center gap-1.5'
+                : occupants.length === 2
+                  ? 'grid grid-cols-2 gap-1 items-center'
+                  : 'flex flex-wrap items-center gap-1.5'
           }`}
         >
           {occupants.length === 0 ? (
@@ -357,7 +359,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
               const inAttackRange = attackableIds.has(p.playerId);
               const isSelectedTarget = selectedTargetId === p.playerId;
               const isSelfToken = p.playerId === selfPlayerId;
-              const crowdedMode = occupants.length >= 3;
+              const crowdedMode = occupants.length >= 2;
               return (
                 <button
                   key={p.playerId}
