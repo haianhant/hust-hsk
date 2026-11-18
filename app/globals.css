@@ -75,6 +75,7 @@ canvas {
   .bg-vfx-reveal-vignette,
   .bg-vfx-reveal-push,
   .bg-vfx-reveal-impact-glow,
+  .bg-vfx-impact-flash,
   .bg-vfx-dice-roll,
   .bg-tile-mist-drift,
   .mn-dice-tray-spotlight,
@@ -419,4 +420,15 @@ canvas {
 
 .bg-vfx-reveal-impact-glow {
   animation: bg-vfx-reveal-impact-glow 560ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Combat Impact Flash ring during 75ms Hit-Stop -> Recovery */
+@keyframes bg-vfx-impact-flash {
+  0%   { opacity: 0.96; transform: translate(-50%, -50%) scale(0.45); }
+  38%  { opacity: 1; transform: translate(-50%, -50%) scale(1.18); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.75); }
+}
+
+.bg-vfx-impact-flash {
+  animation: bg-vfx-impact-flash 310ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

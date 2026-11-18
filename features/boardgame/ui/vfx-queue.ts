@@ -59,6 +59,18 @@ export interface RoleRevealTimeline {
   totalMs: number;
 }
 
+export type CombatSequencePhase = 'target-lock' | 'travel' | 'hit-stop' | 'damage' | 'recovery';
+
+export interface CombatSequenceTimings {
+  targetLockEndMs: number;
+  travelEndMs: number;
+  hitStopStartMs: number;
+  hitStopEndMs: number;
+  hitStopDurationMs: number;
+  damagePopAtMs: number;
+  recoveryEndMs: number;
+}
+
 export interface DiceRollVisualEvent {
   id: string;
   kind: 'DICE_ROLL';
@@ -294,6 +306,47 @@ export function resolveRoleRevealTimeline(
 }
 
 /**
+ * Chia chuỗi 5 pha Combat Impact & Counterattack:
+ *   Target Lock -> Attack Travel -> Impact + 75ms Hit-Stop (60–100ms) -> Damage -> Recovery.
+ */
+export function resolveCombatSequenceTimings(
+  durationMs: number,
+  effect: CombatVfxEffectKind,
+  reducedMotion: boolean,
+): CombatSequenceTimings {
+  const safeTotal = Math.max(120, Math.round(durationMs));
+  if (reducedMotion || safeTotal <= 320) {
+    return {
+      targetLockEndMs: 0,
+      travelEndMs: 0,
+      hitStopStartMs: 0,
+      hitStopEndMs: 0,
+      hitStopDurationMs: 0,
+      damagePopAtMs: 0,
+      recoveryEndMs: Math.min(260, safeTotal),
+    };
+  }
+  const recoveryEndMs = Math.max(520, safeTotal);
+  const targetLockEndMs = Math.round(recoveryEndMs * 0.18);
+  const travelEndMs = Math.round(recoveryEndMs * 0.44);
+  const isNonOffensive =
+    effect === 'HEAL_AURA' || effect === 'SHIELD_GUARD' || effect === 'STEAL_TETHER';
+  const hitStopDurationMs = isNonOffensive ? 0 : 75;
+  const hitStopStartMs = travelEndMs;
+  const hitStopEndMs = Math.min(recoveryEndMs - 90, travelEndMs + hitStopDurationMs);
+  const damagePopAtMs = Math.round(hitStopStartMs + Math.max(24, hitStopDurationMs * 0.45));
+  return {
+    targetLockEndMs,
+    travelEndMs,
+    hitStopStartMs,
+    hitStopEndMs,
+    hitStopDurationMs,
+    damagePopAtMs,
+    recoveryEndMs,
+  };
+}
+
+/**
  * Suy xuất danh sách hiệu ứng có ID duy nhất và thứ tự rõ ràng từ 2 ảnh chụp liên tiếp
  * của state trên server (`prev` -> `next`), tôn trọng tuyệt đối bảo mật vai ẩn & bài kín.
  */
@@ -449,7 +502,7 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::counter-fx::${log.id}`,
             kind: 'COMBAT_VFX',
             order: 45,
-            durationMs: scaleDuration(700, reduced),
+            durationMs: scaleDuration(740, reduced),
             effect: 'COUNTER_STRIKE',
             sourcePlayerId: dungId,
             targetPlayerIds: attackerId && attackerId !== dungId ? [attackerId] : [dungId],
@@ -645,7 +698,7 @@ export function extractVisualEventsFromDiff(
           id: `${next.matchId}::atk::${log.id}`,
           kind: 'COMBAT_VFX',
           order: 40,
-          durationMs: scaleDuration(effect === 'MACHINE_GUN_BARRAGE' ? 850 : 640, reduced),
+          durationMs: scaleDuration(effect === 'MACHINE_GUN_BARRAGE' ? 860 : 680, reduced),
           effect,
           sourcePlayerId: actorId,
           targetPlayerIds: targetsForFx,

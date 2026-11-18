@@ -46,6 +46,7 @@ import {
 } from './sound';
 import {
   VisualEventTracker,
+  resolveCombatSequenceTimings,
   resolveRoleRevealTimeline,
   type BoardGameVisualEvent,
   type CardDrawVisualEvent,
@@ -77,6 +78,16 @@ interface ActiveFloatingPopup {
   event: FloatingTextVisualEvent;
   x: number;
   y: number;
+}
+
+interface ActiveImpactFlash {
+  uid: string;
+  x: number;
+  y: number;
+  color: string;
+  secondaryColor: string;
+  isCounter: boolean;
+  hitStopMs: number;
 }
 
 function getRelativeCenter(container: HTMLElement, el: Element): Point2D | null {
@@ -246,6 +257,82 @@ function drawFactionRevealBurst(
   }
 }
 
+function drawTargetLockReticle(
+  ctx: CanvasRenderingContext2D,
+  pt: Point2D,
+  lockP: number,
+  color: string,
+  isCounter = false,
+): void {
+  const clamped = Math.max(0, Math.min(1, lockP));
+  const radius = 34 - clamped * 14;
+  const rot = (1 - clamped) * (isCounter ? -0.9 : 0.75);
+  ctx.save();
+  ctx.translate(pt.x, pt.y);
+  ctx.rotate(rot);
+  ctx.globalAlpha = 0.4 + clamped * 0.58;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = isCounter ? 2.8 : 2.4;
+
+  // 4 góc khóa mục tiêu
+  const bracketLen = 9;
+  for (let k = 0; k < 4; k++) {
+    ctx.save();
+    ctx.rotate((Math.PI / 2) * k);
+    ctx.beginPath();
+    ctx.moveTo(radius - bracketLen, -radius);
+    ctx.lineTo(radius, -radius);
+    ctx.lineTo(radius, -radius + bracketLen);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.beginPath();
+  ctx.arc(0, 0, Math.max(4, radius * 0.35), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawImpactHitStopStarburst(
+  ctx: CanvasRenderingContext2D,
+  pt: Point2D,
+  color: string,
+  secondaryColor: string,
+  scale: number,
+  isCounter = false,
+): void {
+  ctx.save();
+  ctx.translate(pt.x, pt.y);
+  if (isCounter) ctx.rotate(Math.PI / 4);
+
+  const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, 38 * scale);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.35, secondaryColor);
+  grad.addColorStop(0.75, color);
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, 38 * scale, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Cross-slash starburst spikes during 75ms Hit-Stop
+  ctx.fillStyle = '#ffffff';
+  const arms = isCounter ? 6 : 4;
+  for (let i = 0; i < arms; i++) {
+    ctx.save();
+    ctx.rotate((Math.PI * 2 * i) / arms);
+    ctx.beginPath();
+    ctx.moveTo(0, -42 * scale);
+    ctx.lineTo(4.5 * scale, 0);
+    ctx.lineTo(0, 42 * scale);
+    ctx.lineTo(-4.5 * scale, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function drawCombatAnimation(
   ctx: CanvasRenderingContext2D,
   anim: ActiveCombatAnim,
@@ -253,8 +340,8 @@ function drawCombatAnimation(
   reducedMotion: boolean,
   particleScale = 1,
 ): boolean {
-  const elapsed = nowMs - anim.startedAt;
-  const p = Math.max(0, Math.min(1, elapsed / Math.max(120, anim.durationMs)));
+  const rawElapsed = Math.max(0, nowMs - anim.startedAt);
+  const p = Math.max(0, Math.min(1, rawElapsed / Math.max(120, anim.durationMs)));
   if (p >= 1) return false;
 
   if (anim.factionReveal) {
@@ -262,8 +349,28 @@ function drawCombatAnimation(
     return true;
   }
 
-  const fade = 1 - p * p;
   const { event: { effect }, source, targets } = anim;
+  const timings = resolveCombatSequenceTimings(anim.durationMs, effect, reducedMotion);
+  const inTargetLock = timings.targetLockEndMs > 0 && rawElapsed < timings.targetLockEndMs;
+  const lockP =
+    timings.targetLockEndMs > 0 ? Math.min(1, rawElapsed / timings.targetLockEndMs) : 1;
+  const inHitStop =
+    timings.hitStopDurationMs > 0 &&
+    rawElapsed >= timings.hitStopStartMs &&
+    rawElapsed < timings.hitStopEndMs;
+  const travelSpan = Math.max(1, timings.travelEndMs - timings.targetLockEndMs);
+  const travelP =
+    rawElapsed < timings.targetLockEndMs
+      ? 0
+      : rawElapsed >= timings.hitStopStartMs
+        ? 1
+        : Math.max(0, Math.min(1, (rawElapsed - timings.targetLockEndMs) / travelSpan));
+  const postImpactSpan = Math.max(100, timings.recoveryEndMs - timings.hitStopEndMs);
+  const postImpactP =
+    rawElapsed <= timings.hitStopEndMs
+      ? 0
+      : Math.max(0, Math.min(1, (rawElapsed - timings.hitStopEndMs) / postImpactSpan));
+  const fade = inHitStop ? 1 : 1 - postImpactP * postImpactP;
 
   ctx.save();
 
@@ -274,41 +381,69 @@ function drawCombatAnimation(
       const primary = isCursed ? '#fb7185' : '#fde047';
       const secondary = isCursed ? '#a855f7' : '#ffffff';
       for (const tgt of targets) {
-        const radius = (isCursed ? 48 : 40) * (0.75 + p * 0.35);
-        ctx.globalAlpha = fade;
-        // Nhát chém chính
-        ctx.strokeStyle = primary;
-        ctx.lineWidth = isCursed ? 7 : 5;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.arc(tgt.x, tgt.y, radius, -Math.PI * 0.78, -Math.PI * 0.12 + p * 0.35);
-        ctx.stroke();
-
-        ctx.strokeStyle = secondary;
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        ctx.arc(tgt.x, tgt.y, radius * 0.92, -Math.PI * 0.72, -Math.PI * 0.18 + p * 0.3);
-        ctx.stroke();
-
-        // Nhát chéo X cho Masamune
-        if (isCursed) {
-          ctx.strokeStyle = '#e11d48';
-          ctx.lineWidth = 5;
+        if (inTargetLock) {
+          drawTargetLockReticle(ctx, tgt, lockP, primary, false);
+          continue;
+        }
+        // Subtle attack travel dash streak before impact
+        if (travelP < 1 || inHitStop) {
+          const streakStart = Math.max(0, travelP - 0.45);
+          ctx.save();
+          ctx.globalAlpha = 0.72;
+          ctx.strokeStyle = primary;
+          ctx.lineWidth = isCursed ? 4 : 3;
+          ctx.lineCap = 'round';
           ctx.beginPath();
-          ctx.moveTo(tgt.x - 32, tgt.y - 28);
-          ctx.lineTo(tgt.x + 32, tgt.y + 28);
+          ctx.moveTo(
+            source.x + (tgt.x - source.x) * streakStart,
+            source.y + (tgt.y - source.y) * streakStart,
+          );
+          ctx.lineTo(
+            source.x + (tgt.x - source.x) * travelP,
+            source.y + (tgt.y - source.y) * travelP,
+          );
           ctx.stroke();
+          ctx.restore();
         }
 
-        // Tàn lửa văng tại điểm chém (điều chỉnh số hạt theo mức đồ họa High/Balanced/Low)
-        const sparkCount = reducedMotion || particleScale <= 0 ? 0 : Math.max(2, Math.round(8 * particleScale));
-        if (sparkCount > 0) {
-          for (let k = 0; k < sparkCount; k++) {
-            const ang = (Math.PI * 2 * k) / sparkCount + p * 1.4;
-            const dist = p * (isCursed ? 56 : 42);
-            ctx.fillStyle = k % 2 === 0 ? primary : secondary;
+        if (travelP >= 0.35) {
+          const swingP = Math.min(1, (travelP - 0.35) / 0.65);
+          const radius = (isCursed ? 50 : 42) * (0.78 + postImpactP * 0.35);
+          ctx.globalAlpha = fade;
+          ctx.strokeStyle = primary;
+          ctx.lineWidth = isCursed ? 7.5 : 5.5;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, radius, -Math.PI * 0.82, -Math.PI * 0.82 + swingP * Math.PI * 0.92 + postImpactP * 0.25);
+          ctx.stroke();
+
+          ctx.strokeStyle = secondary;
+          ctx.lineWidth = 2.6;
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, radius * 0.9, -Math.PI * 0.76, -Math.PI * 0.76 + swingP * Math.PI * 0.85 + postImpactP * 0.2);
+          ctx.stroke();
+
+          if (isCursed) {
+            ctx.strokeStyle = '#e11d48';
+            ctx.lineWidth = 5;
             ctx.beginPath();
-            ctx.arc(tgt.x + Math.cos(ang) * dist, tgt.y + Math.sin(ang) * dist, 2.5 * fade, 0, Math.PI * 2);
+            ctx.moveTo(tgt.x - 32 * swingP, tgt.y - 28 * swingP);
+            ctx.lineTo(tgt.x + 32 * swingP, tgt.y + 28 * swingP);
+            ctx.stroke();
+          }
+        }
+
+        if (inHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, primary, secondary, isCursed ? 1.18 : 1, false);
+        } else if (postImpactP > 0) {
+          const sparkCount = reducedMotion || particleScale <= 0 ? 0 : Math.max(2, Math.round(9 * particleScale));
+          for (let k = 0; k < sparkCount; k++) {
+            const ang = (Math.PI * 2 * k) / sparkCount + postImpactP * 1.4;
+            const dist = postImpactP * (isCursed ? 62 : 48);
+            ctx.fillStyle = k % 2 === 0 ? primary : secondary;
+            ctx.globalAlpha = fade;
+            ctx.beginPath();
+            ctx.arc(tgt.x + Math.cos(ang) * dist, tgt.y + Math.sin(ang) * dist, 2.7 * fade, 0, Math.PI * 2);
             ctx.fill();
           }
         }
@@ -318,25 +453,31 @@ function drawCombatAnimation(
 
     case 'SPEAR_THRUST': {
       for (const tgt of targets) {
-        const curX = source.x + (tgt.x - source.x) * Math.min(1, p * 1.6);
-        const curY = source.y + (tgt.y - source.y) * Math.min(1, p * 1.6);
+        if (inTargetLock) {
+          drawTargetLockReticle(ctx, tgt, lockP, '#38bdf8', false);
+          continue;
+        }
+        const curX = source.x + (tgt.x - source.x) * travelP;
+        const curY = source.y + (tgt.y - source.y) * travelP;
         ctx.globalAlpha = fade;
         const grad = ctx.createLinearGradient(source.x, source.y, curX, curY);
         grad.addColorStop(0, 'rgba(56, 189, 248, 0)');
         grad.addColorStop(0.6, '#38bdf8');
         grad.addColorStop(1, '#fef08a');
         ctx.strokeStyle = grad;
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 6.5;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(source.x, source.y);
         ctx.lineTo(curX, curY);
         ctx.stroke();
 
-        if (p > 0.35) {
-          const shockR = 16 + (p - 0.35) * 58;
+        if (inHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, '#38bdf8', '#fef08a', 1.1, false);
+        } else if (postImpactP > 0) {
+          const shockR = 16 + postImpactP * 62;
           ctx.strokeStyle = '#fde047';
-          ctx.lineWidth = 2.6 * fade;
+          ctx.lineWidth = 2.8 * fade;
           ctx.beginPath();
           ctx.arc(tgt.x, tgt.y, shockR, 0, Math.PI * 2);
           ctx.stroke();
@@ -349,35 +490,39 @@ function drawCombatAnimation(
     case 'MACHINE_GUN_BARRAGE': {
       const burstCount = effect === 'MACHINE_GUN_BARRAGE' ? 3 : 2;
       targets.forEach((tgt, tIdx) => {
+        if (inTargetLock) {
+          drawTargetLockReticle(ctx, tgt, lockP, '#fbbf24', false);
+          return;
+        }
         const delay = effect === 'MACHINE_GUN_BARRAGE' ? tIdx * 0.08 : 0;
-        const localP = Math.max(0, Math.min(1, (p - delay) / Math.max(0.25, 1 - delay)));
-        if (localP <= 0) return;
-        const localFade = 1 - localP * localP;
-        ctx.globalAlpha = localFade;
+        const localTravel = Math.max(0, Math.min(1, (travelP - delay) / Math.max(0.25, 1 - delay)));
+        ctx.globalAlpha = fade;
 
-        for (let b = 0; b < burstCount; b++) {
-          const offsetAngle = (b - 1) * 8;
-          const tail = Math.max(0, localP - 0.35);
-          const head = Math.min(1, localP * 1.45);
-          const sx = source.x + (tgt.x - source.x) * tail;
-          const sy = source.y + (tgt.y - source.y) * tail + offsetAngle;
-          const ex = source.x + (tgt.x - source.x) * head;
-          const ey = source.y + (tgt.y - source.y) * head + offsetAngle;
+        if (localTravel > 0) {
+          for (let b = 0; b < burstCount; b++) {
+            const offsetAngle = (b - 1) * 7;
+            const tail = Math.max(0, localTravel - 0.38);
+            const sx = source.x + (tgt.x - source.x) * tail;
+            const sy = source.y + (tgt.y - source.y) * tail + offsetAngle;
+            const ex = source.x + (tgt.x - source.x) * localTravel;
+            const ey = source.y + (tgt.y - source.y) * localTravel + offsetAngle;
 
-          ctx.strokeStyle = b % 2 === 0 ? '#fbbf24' : '#fb7185';
-          ctx.lineWidth = 3.2;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(ex, ey);
-          ctx.stroke();
+            ctx.strokeStyle = b % 2 === 0 ? '#fbbf24' : '#fb7185';
+            ctx.lineWidth = 3.4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+          }
         }
 
-        // Tia lửa chạm mục tiêu
-        if (localP > 0.45) {
-          const impactR = (localP - 0.45) * 72;
+        if (inHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, '#fb7185', '#fde047', 1.05, false);
+        } else if (postImpactP > 0) {
+          const impactR = 12 + postImpactP * 58;
           ctx.strokeStyle = '#fde047';
-          ctx.lineWidth = 2.4 * localFade;
+          ctx.lineWidth = 2.6 * fade;
           ctx.beginPath();
           ctx.arc(tgt.x, tgt.y, impactR, 0, Math.PI * 2);
           ctx.stroke();
@@ -388,38 +533,55 @@ function drawCombatAnimation(
 
     case 'LIGHTNING_STRIKE': {
       targets.forEach((tgt, idx) => {
+        if (inTargetLock) {
+          drawTargetLockReticle(ctx, tgt, lockP, '#34d399', false);
+          return;
+        }
         ctx.globalAlpha = fade;
         const skyOrigin: Point2D = { x: tgt.x + (idx % 2 === 0 ? -24 : 24), y: Math.max(0, tgt.y - 220) };
-        const boltPts = buildLightningPoints(skyOrigin, tgt, Math.floor(nowMs / 45) + idx * 97, 8);
+        const endPt: Point2D = {
+          x: skyOrigin.x + (tgt.x - skyOrigin.x) * travelP,
+          y: skyOrigin.y + (tgt.y - skyOrigin.y) * travelP,
+        };
+        const boltPts = buildLightningPoints(skyOrigin, endPt, Math.floor((inHitStop ? timings.hitStopStartMs : nowMs) / 45) + idx * 97, 8);
 
-        // Hào quang xanh ngọc + vàng sét Vy Radio
         ctx.strokeStyle = '#34d399';
-        ctx.lineWidth = 9 * fade;
+        ctx.lineWidth = (inHitStop ? 11 : 9) * fade;
         ctx.lineJoin = 'round';
         ctx.beginPath();
         boltPts.forEach((pt, j) => (j === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
         ctx.stroke();
 
         ctx.strokeStyle = '#fef9c3';
-        ctx.lineWidth = 3 * fade;
+        ctx.lineWidth = (inHitStop ? 4.2 : 3) * fade;
         ctx.beginPath();
         boltPts.forEach((pt, j) => (j === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
         ctx.stroke();
 
-        // Quầng nổ mặt đất
-        ctx.strokeStyle = '#fde047';
-        ctx.lineWidth = 3 * fade;
-        ctx.beginPath();
-        ctx.arc(tgt.x, tgt.y, 18 + p * 46, 0, Math.PI * 2);
-        ctx.stroke();
+        if (inHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, '#34d399', '#fef08a', 1.15, false);
+        } else if (postImpactP > 0) {
+          ctx.strokeStyle = '#fde047';
+          ctx.lineWidth = 3 * fade;
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, 18 + postImpactP * 50, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       });
       break;
     }
 
     case 'EXPLOSION': {
       for (const tgt of targets) {
-        const coreR = 12 + p * 56;
-        ctx.globalAlpha = fade * 0.72;
+        if (inTargetLock) {
+          drawTargetLockReticle(ctx, tgt, lockP, '#f97316', false);
+          continue;
+        }
+        if (inHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, '#f97316', '#fef08a', 1.25, false);
+        }
+        const coreR = 14 + (inHitStop ? 0.25 : postImpactP) * 60;
+        ctx.globalAlpha = fade * 0.78;
         const rad = ctx.createRadialGradient(tgt.x, tgt.y, 2, tgt.x, tgt.y, coreR);
         rad.addColorStop(0, '#fef08a');
         rad.addColorStop(0.45, '#f97316');
@@ -434,30 +596,83 @@ function drawCombatAnimation(
         ctx.strokeStyle = '#fbbf24';
         ctx.lineWidth = 3 * fade;
         ctx.beginPath();
-        ctx.arc(tgt.x, tgt.y, 16 + p * 68, 0, Math.PI * 2);
+        ctx.arc(tgt.x, tgt.y, 16 + postImpactP * 72, 0, Math.PI * 2);
         ctx.stroke();
       }
       break;
     }
 
     case 'COUNTER_STRIKE': {
+      // Phản kích đặc trưng: Lục giác Đỡ Đòn (cyan-violet) trên nguồn -> Đôi vuốt phản công -> Hit-Stop 75ms
+      const parryAlpha = Math.max(0, 1 - postImpactP * 1.15);
+      if (parryAlpha > 0) {
+        ctx.save();
+        ctx.globalAlpha = parryAlpha;
+        const shieldR = 22 + lockP * 10;
+        ctx.strokeStyle = '#38bdf8';
+        ctx.fillStyle = 'rgba(192, 132, 252, 0.18)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let k = 0; k < 6; k++) {
+          const ang = (Math.PI / 3) * k + (1 - lockP) * 0.4;
+          const sx = source.x + Math.cos(ang) * shieldR;
+          const sy = source.y + Math.sin(ang) * shieldR;
+          if (k === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
       for (const tgt of targets) {
-        const curX = source.x + (tgt.x - source.x) * Math.min(1, p * 1.35);
-        const curY = source.y + (tgt.y - source.y) * Math.min(1, p * 1.35);
+        if (inTargetLock) {
+          drawTargetLockReticle(ctx, tgt, lockP, '#c084fc', true);
+          continue;
+        }
+        // Đôi vuốt phản kích cong (#c084fc & #f43f5e) lao ngược từ nguồn về kẻ tấn công
+        const dx = tgt.x - source.x;
+        const dy = tgt.y - source.y;
+        const len = Math.max(1, Math.hypot(dx, dy));
+        const nx = (-dy / len) * 26;
+        const ny = (dx / len) * 26;
+        const curX = source.x + dx * travelP;
+        const curY = source.y + dy * travelP;
+        const midX = (source.x + curX) * 0.5;
+        const midY = (source.y + curY) * 0.5;
+
         ctx.globalAlpha = fade;
         ctx.strokeStyle = '#c084fc';
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 4.6;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(source.x, source.y);
-        ctx.lineTo(curX, curY);
+        ctx.quadraticCurveTo(midX + nx, midY + ny, curX, curY);
         ctx.stroke();
 
         ctx.strokeStyle = '#f43f5e';
-        ctx.lineWidth = 3.2;
+        ctx.lineWidth = 3.6;
         ctx.beginPath();
-        ctx.arc(tgt.x, tgt.y, 14 + p * 34, 0, Math.PI * 2);
+        ctx.moveTo(source.x, source.y);
+        ctx.quadraticCurveTo(midX - nx, midY - ny, curX, curY);
         ctx.stroke();
+
+        if (inHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, '#c084fc', '#f43f5e', 1.18, true);
+        } else if (postImpactP > 0) {
+          ctx.strokeStyle = '#f43f5e';
+          ctx.lineWidth = 3.4 * fade;
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, 16 + postImpactP * 44, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.strokeStyle = '#c084fc';
+          ctx.lineWidth = 2.2 * fade;
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, 8 + postImpactP * 56, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
       break;
     }
@@ -548,6 +763,7 @@ export interface UseBoardGameVfxQueueOptions {
 export interface BoardGameVfxState {
   activeCombatCount: number;
   floatingPopups: readonly ActiveFloatingPopup[];
+  impactFlashes: readonly ActiveImpactFlash[];
   activeDiceRoll: DiceRollVisualEvent | null;
   diceRollStage: DiceRollStage;
   isDiceSettled: boolean;
@@ -622,6 +838,7 @@ export function useBoardGameVfxQueue({
 
   const [activeCombatCount, setActiveCombatCount] = useState(0);
   const [floatingPopups, setFloatingPopups] = useState<ActiveFloatingPopup[]>([]);
+  const [impactFlashes, setImpactFlashes] = useState<ActiveImpactFlash[]>([]);
   const [activeDiceRoll, setActiveDiceRoll] = useState<DiceRollVisualEvent | null>(null);
   const [diceRollStage, setDiceRollStage] = useState<DiceRollStage>('idle');
   const [activeMoveTimeline, setActiveMoveTimeline] =
@@ -743,6 +960,7 @@ export function useBoardGameVfxQueue({
     }
     setActiveCombatCount(0);
     setFloatingPopups([]);
+    setImpactFlashes([]);
     activeDiceIdRef.current = null;
     highlightTokenRef.current += 1;
     setActiveDiceRoll(null);
@@ -824,6 +1042,31 @@ export function useBoardGameVfxQueue({
       const container = containerRef.current;
       const players = playersSnapshotRef.current;
       const newCutIns: CinematicCutInVisualEvent[] = [];
+      const isReduced = reducedMotionRef.current;
+      const primaryOffensive =
+        events.find(
+          (e): e is CombatVfxVisualEvent =>
+            e.kind === 'COMBAT_VFX' &&
+            e.effect !== 'HEAL_AURA' &&
+            e.effect !== 'SHIELD_GUARD' &&
+            e.effect !== 'STEAL_TETHER' &&
+            e.effect !== 'COUNTER_STRIKE',
+        ) ?? null;
+      const counterEvt =
+        events.find(
+          (e): e is CombatVfxVisualEvent =>
+            e.kind === 'COMBAT_VFX' && e.effect === 'COUNTER_STRIKE',
+        ) ?? null;
+      const batchAttackTimings = primaryOffensive
+        ? resolveCombatSequenceTimings(primaryOffensive.durationMs, primaryOffensive.effect, isReduced)
+        : null;
+      const batchCounterTimings = counterEvt
+        ? resolveCombatSequenceTimings(counterEvt.durationMs, counterEvt.effect, isReduced)
+        : null;
+      const counterDelayMs =
+        !isReduced && primaryOffensive && counterEvt
+          ? Math.max(170, Math.min(240, batchAttackTimings?.travelEndMs ?? 200))
+          : 0;
 
       for (const ev of events) {
         switch (ev.kind) {
@@ -918,30 +1161,84 @@ export function useBoardGameVfxQueue({
             const targets = (ev.targetPlayerIds.length > 0 ? ev.targetPlayerIds : [ev.sourcePlayerId ?? '']).map(
               (tid) => resolvePlayerAnchor(container, tid, players),
             );
-            activeCombatAnimsRef.current.push({
-              uid: ev.id,
-              event: ev,
-              source,
-              targets,
-              startedAt: performance.now(),
-              durationMs: ev.durationMs,
-            });
-            setActiveCombatCount(activeCombatAnimsRef.current.length);
-            ensureCanvasLoop();
+            const seqTimings = resolveCombatSequenceTimings(
+              ev.durationMs,
+              ev.effect,
+              reducedMotionRef.current,
+            );
+            const startDelayMs =
+              ev.effect === 'COUNTER_STRIKE' ? counterDelayMs : 0;
 
-            if (enableScreenShakeRef.current && ev.shake !== 'none') {
-              setScreenShake(ev.shake);
-              scheduleTimeout(() => setScreenShake('none'), ev.shake === 'heavy' ? 290 : 210);
+            const launchCombatFx = () => {
+              activeCombatAnimsRef.current.push({
+                uid: ev.id,
+                event: ev,
+                source,
+                targets,
+                startedAt: performance.now(),
+                durationMs: ev.durationMs,
+              });
+              setActiveCombatCount(activeCombatAnimsRef.current.length);
+              ensureCanvasLoop();
+              playSoundForVisualEvent(ev);
+
+              if (seqTimings.hitStopDurationMs > 0 && !reducedMotionRef.current) {
+                const isCounter = ev.effect === 'COUNTER_STRIKE';
+                const flashColor = isCounter
+                  ? '#c084fc'
+                  : ev.effect === 'LIGHTNING_STRIKE'
+                    ? '#34d399'
+                    : ev.effect === 'SPEAR_THRUST'
+                      ? '#38bdf8'
+                      : '#fbbf24';
+                const flashSecondary = isCounter ? '#f43f5e' : '#fef08a';
+                scheduleTimeout(() => {
+                  const created = targets.map((pt, idx) => ({
+                    uid: `${ev.id}::flash::${idx}`,
+                    x: pt.x,
+                    y: pt.y,
+                    color: flashColor,
+                    secondaryColor: flashSecondary,
+                    isCounter,
+                    hitStopMs: seqTimings.hitStopDurationMs,
+                  }));
+                  setImpactFlashes((prev) => [...prev.slice(-6), ...created]);
+                  scheduleTimeout(() => {
+                    const createdIds = new Set(created.map((f) => f.uid));
+                    setImpactFlashes((prev) => prev.filter((f) => !createdIds.has(f.uid)));
+                  }, 320);
+                }, seqTimings.travelEndMs);
+              }
+
+              if (enableScreenShakeRef.current && ev.shake !== 'none') {
+                const shakeDelay = reducedMotionRef.current
+                  ? 0
+                  : Math.max(0, seqTimings.travelEndMs - 16);
+                scheduleTimeout(() => {
+                  setScreenShake(ev.shake);
+                  scheduleTimeout(() => setScreenShake('none'), ev.shake === 'heavy' ? 290 : 210);
+                }, shakeDelay);
+              }
+            };
+
+            if (startDelayMs > 0) {
+              scheduleTimeout(launchCombatFx, startDelayMs);
+            } else {
+              launchCombatFx();
             }
-
-            playSoundForVisualEvent(ev);
             break;
           }
           case 'FLOATING_TEXT': {
             const pt = resolvePlayerAnchor(container, ev.targetPlayerId, players);
             const jitterX = ((ev.targetPlayerId.charCodeAt(ev.targetPlayerId.length - 1) || 0) % 3 - 1) * 8;
             const uid = ev.id;
-            const spawnMs = reducedMotionRef.current ? 0 : 90;
+            const spawnMs = reducedMotionRef.current
+              ? 0
+              : ev.variant === 'counter'
+                ? counterDelayMs + (batchCounterTimings?.damagePopAtMs ?? 240)
+                : (ev.variant === 'damage' || ev.variant === 'miss') && batchAttackTimings
+                  ? batchAttackTimings.damagePopAtMs
+                  : 90;
             scheduleTimeout(() => {
               setFloatingPopups((prev) => {
                 const sameTargetCount = prev.filter(
@@ -1086,6 +1383,7 @@ export function useBoardGameVfxQueue({
   const hasActiveEffects =
     activeCombatCount > 0 ||
     floatingPopups.length > 0 ||
+    impactFlashes.length > 0 ||
     Boolean(effectiveActiveDiceRoll) ||
     Boolean(effectiveHighlightedLocationId) ||
     Boolean(activeCardDraw) ||
@@ -1095,6 +1393,7 @@ export function useBoardGameVfxQueue({
   return {
     activeCombatCount,
     floatingPopups,
+    impactFlashes,
     activeDiceRoll: effectiveActiveDiceRoll,
     diceRollStage: effectiveDiceRollStage,
     isDiceSettled: effectiveIsDiceSettled,
@@ -1244,6 +1543,26 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
         data-testid="bg-vfx-combat-canvas"
         className="pointer-events-none absolute inset-0 h-full w-full"
       />
+
+      {/* LỚP 2B: IMPACT FLASH RINGS (75ms HIT-STOP IMPACT) */}
+      {vfx.impactFlashes.map((flash) => (
+        <div
+          key={flash.uid}
+          data-testid="bg-vfx-impact-flash"
+          data-counter={String(flash.isCounter)}
+          data-hit-stop-ms={flash.hitStopMs}
+          style={{
+            left: flash.x,
+            top: flash.y,
+            borderColor: flash.color,
+            background: `radial-gradient(circle, ${flash.secondaryColor}88 0%, ${flash.color}33 48%, transparent 74%)`,
+            boxShadow: `0 0 28px ${flash.color}cc`,
+          }}
+          className={`pointer-events-none absolute z-[19] h-20 w-20 rounded-full border-2 ${
+            vfx.reducedMotion ? '-translate-x-1/2 -translate-y-1/2 opacity-80' : 'bg-vfx-impact-flash'
+          }`}
+        />
+      ))}
 
       {/* LỚP 3: FLOATING DAMAGE / HEAL / BLOCK / COUNTER */}
       {vfx.floatingPopups.map((pop) => {

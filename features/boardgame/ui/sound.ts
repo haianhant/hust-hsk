@@ -640,24 +640,46 @@ export function playLightningStrike(): void {
   );
 }
 
-/** Phản kích tức thì (Parry clang + Riposte удар) */
+/** Phản kích tức thì (Parry metallic clang at 0ms -> Riposte energy whip + thud at 95ms) */
 export function playCounterStrike(): void {
   playLayeredCue(
     [
-      { freq: 980, endFreq: 760, startOffsetSec: 0, durationSec: 0.085, type: 'triangle', gainPeak: 0.055 },
-      { freq: 1490, startOffsetSec: 0.01, durationSec: 0.11, type: 'sine', gainPeak: 0.042 },
-      { freq: 620, endFreq: 160, startOffsetSec: 0.075, durationSec: 0.11, type: 'sawtooth', gainPeak: 0.05, filterType: 'lowpass', filterFreq: 2200 },
-      { freq: 170, endFreq: 65, startOffsetSec: 0.085, durationSec: 0.11, type: 'triangle', gainPeak: 0.06 },
+      // Stage 1: Parry steel guard clang (0ms)
+      { freq: 1140, endFreq: 880, startOffsetSec: 0, durationSec: 0.085, type: 'triangle', gainPeak: 0.062 },
+      { freq: 1780, endFreq: 1420, startOffsetSec: 0.008, durationSec: 0.11, type: 'sine', gainPeak: 0.048 },
+      // Stage 2: Riposte claw whip + chest thud (95ms)
+      {
+        freq: 620,
+        endFreq: 145,
+        startOffsetSec: 0.095,
+        durationSec: 0.14,
+        type: 'sawtooth',
+        gainPeak: 0.056,
+        filterType: 'lowpass',
+        filterFreq: 2400,
+        filterEndFreq: 420,
+      },
+      { freq: 165, endFreq: 55, startOffsetSec: 0.105, durationSec: 0.13, type: 'triangle', gainPeak: 0.068 },
     ],
     [
       {
-        bufferKey: 'blade',
-        startOffsetSec: 0.06,
-        durationSec: 0.12,
-        playbackRate: 1.22,
-        gainPeak: 0.065,
+        bufferKey: 'diceClick',
+        startOffsetSec: 0,
+        durationSec: 0.032,
+        playbackRate: 1.55,
+        gainPeak: 0.042,
         filterType: 'highpass',
-        filterFreq: 2000,
+        filterFreq: 2800,
+      },
+      {
+        bufferKey: 'blade',
+        startOffsetSec: 0.09,
+        durationSec: 0.13,
+        playbackRate: 1.28,
+        gainPeak: 0.072,
+        filterType: 'bandpass',
+        filterFreq: 2600,
+        filterEndFreq: 800,
       },
     ],
   );
