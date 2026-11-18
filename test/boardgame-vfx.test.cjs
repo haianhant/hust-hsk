@@ -981,3 +981,129 @@ test('Phase 5 Final Polish (10) — Crowded 8-player compact short names & stric
   assert.equal(crowdedUnrevealed.woundBadgeText, '7');
   assert.equal(crowdedUnrevealed.woundBadgeText.includes('/'), false);
 });
+
+test('Dice Roll Regression (11) — ROLL_DICE -> SKIP_LOC -> END_TURN increments turnNumber without re-spinning previous lastDiceRoll', () => {
+  const tracker = new VisualEventTracker();
+
+  const turn1Start = makePubState({
+    turnNumber: 1,
+    turnPhase: 'ROLL_MOVE',
+    activePlayerId: 'p1',
+    lastDiceRoll: null,
+    publicLog: [],
+  });
+  tracker.seedBaseline(turn1Start, { selfPlayerId: 'p1', isSpectator: false });
+
+  // 1) Người chơi p1 tung xúc xắc di chuyển (turnNumber = 1)
+  const afterRoll = makePubState({
+    turnNumber: 1,
+    turnPhase: 'LOCATION_ACTION',
+    activePlayerId: 'p1',
+    players: turn1Start.players.map((p) =>
+      p.playerId === 'p1' ? { ...p, location: 'lobby' } : p,
+    ),
+    lastDiceRoll: {
+      id: 'roll-1-1500',
+      round: 1,
+      atMs: 1500,
+      kind: 'move',
+      playerId: 'p1',
+      displayName: 'Minh An',
+      d6: 4,
+      d4: 2,
+      total: 6,
+      rerollRequired: false,
+      freeChoice: false,
+      resolvedLocation: 'lobby',
+      targetPlayerId: null,
+      damageDealt: null,
+    },
+    publicLog: [
+      {
+        id: 'log-1-roll',
+        round: 1,
+        atMs: 1500,
+        kind: 'move',
+        actorId: 'p1',
+        text: '🚶 Minh An tung 4 + 2 = 6 → di chuyển tới Ô 6 (Sảnh Tầng 1).',
+      },
+    ],
+  });
+
+  const pendingOnRoll = tracker.peekPendingDiceRoll(afterRoll, false);
+  assert.ok(pendingOnRoll, 'Cú tung xúc xắc mới ở Lượt 1 phải kích hoạt pending DICE_ROLL ở Frame 1');
+  assert.equal(pendingOnRoll.kind, 'DICE_ROLL');
+
+  const rollEvents = tracker.ingestSnapshot(afterRoll, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  assert.equal(rollEvents.filter((e) => e.kind === 'DICE_ROLL').length, 1);
+
+  // 2) Người chơi p1 bỏ qua hành động khu vực sang Pha 3 (turnNumber vẫn là 1, cùng lastDiceRoll)
+  const afterSkipLoc = {
+    ...afterRoll,
+    turnPhase: 'MAIN_ACTION',
+    publicLog: [
+      ...afterRoll.publicLog,
+      {
+        id: 'log-1-skip',
+        round: 1,
+        atMs: 1600,
+        kind: 'system',
+        actorId: 'p1',
+        text: '⏭️ Minh An bỏ qua hành động khu vực để vào pha Chiến đấu.',
+      },
+    ],
+  };
+  assert.equal(tracker.peekPendingDiceRoll(afterSkipLoc, false), null);
+  const skipEvents = tracker.ingestSnapshot(afterSkipLoc, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  assert.equal(skipEvents.filter((e) => e.kind === 'DICE_ROLL').length, 0);
+
+  // 3) Người chơi p1 bấm Kết thúc lượt (END_TURN): server tăng turnNumber -> 2, giữ nguyên lastDiceRoll cũ
+  const afterEndTurn = {
+    ...afterSkipLoc,
+    turnNumber: 2,
+    turnPhase: 'ROLL_MOVE',
+    activePlayerId: 'p2',
+    publicLog: [
+      ...afterSkipLoc.publicLog,
+      {
+        id: 'log-1-end',
+        round: 1,
+        atMs: 1700,
+        kind: 'system',
+        actorId: 'p1',
+        text: '✔️ Minh An kết thúc lượt.',
+      },
+    ],
+  };
+
+  assert.equal(
+    computeDiceSig(afterEndTurn),
+    computeDiceSig(afterRoll),
+    'computeDiceSig phải bất biến qua END_TURN dù turnNumber tăng từ 1 -> 2',
+  );
+  assert.equal(
+    tracker.peekPendingDiceRoll(afterEndTurn, false),
+    null,
+    'Sau END_TURN tuyệt đối KHÔNG được kích hoạt windup xúc xắc ở Frame 1',
+  );
+  const endTurnEvents = tracker.ingestSnapshot(afterEndTurn, {
+    selfPlayerId: 'p2',
+    isSpectator: false,
+  });
+  assert.equal(
+    endTurnEvents.filter((e) => e.kind === 'DICE_ROLL').length,
+    0,
+    'Sau END_TURN không được phát trùng DICE_ROLL',
+  );
+  assert.equal(
+    endTurnEvents.some((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'YOUR_TURN'),
+    true,
+    'Vẫn phải phát banner LƯỢT CỦA BẠN cho người chơi p2 khi qua lượt mới',
+  );
+});

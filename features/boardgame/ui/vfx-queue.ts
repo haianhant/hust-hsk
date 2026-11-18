@@ -162,9 +162,14 @@ function writeSeenIdsToStorage(matchId: string, ids: readonly string[]): void {
 export function computeDiceSig(pub: BoardGamePublicGameView): string | null {
   const r = pub.lastDiceRoll;
   if (!r) return null;
-  // Dùng r.id để nhận diện đúng lượt tung mới; không phụ thuộc resolvedLocation
-  // nhằm tránh phát trùng xúc xắc khi người chơi chọn đích sau lúc tung tổng 7 / La Bàn.
-  return `${pub.turnNumber}:${r.id ?? ''}:${r.kind}:${r.playerId}:${r.d6}:${r.d4}:${r.total}:${r.rerollRequired ? 1 : 0}:${r.damageDealt ?? ''}`;
+  // Dùng định danh của chính cú tung (r.id / r.atMs); KHÔNG phụ thuộc pub.turnNumber hay resolvedLocation
+  // để tránh xoay lại xúc xắc cũ khi END_TURN tăng turnNumber hoặc khi chọn đích sau tổng 7 / La Bàn.
+  const rollIdentity = r.id
+    ? r.id
+    : typeof r.atMs === 'number'
+      ? `at-${r.atMs}`
+      : `turn-${pub.turnNumber}`;
+  return `${rollIdentity}:${r.kind}:${r.playerId}:${r.d6}:${r.d4}:${r.total}:${r.rerollRequired ? 1 : 0}:${r.damageDealt ?? ''}`;
 }
 
 export function computeDiceEventId(pub: BoardGamePublicGameView): string | null {

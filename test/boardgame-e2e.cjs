@@ -2067,7 +2067,50 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
     }
     const endTurnBtn = activePlayer.page.locator('[data-testid="bg-end-turn-btn"]');
     if ((await endTurnBtn.count()) > 0 && (await endTurnBtn.isEnabled().catch(() => false))) {
+      await activePlayer.page.waitForFunction(
+        () => document.querySelector('[data-testid="bg-dice-tray"]')?.getAttribute('data-dice-settled') === 'true',
+        null,
+        { timeout: 5000 },
+      );
+      const prevTurnNum = activePlayer.audit.latestSync?.publicGame?.turnNumber ?? null;
       await endTurnBtn.click();
+      await activePlayer.page.waitForSelector('[data-testid="bg-waiting-turn-banner"]', { timeout: UI_TIMEOUT });
+      if (prevTurnNum !== null) {
+        await activePlayer.page.waitForFunction(
+          (prevTurn) => (window.__testBgLastTurnNum ?? 0) >= prevTurn || document.querySelectorAll('[data-testid="bg-action-panel"]').length === 0,
+          prevTurnNum,
+          { timeout: 3000 },
+        ).catch(() => undefined);
+      }
+      for (const checkPage of [activePlayer.page, p1.page]) {
+        const assertNoPhantomDice = async (phaseLabel) => {
+          const diceState = await checkPage.evaluate(() => ({
+            settled: document.querySelector('[data-testid="bg-dice-tray"]')?.getAttribute('data-dice-settled') || null,
+            overlayCount: document.querySelectorAll('[data-testid="bg-vfx-dice-overlay"]').length,
+            d6Stage: document.querySelector('[data-testid="bg-dice-tray"] [data-testid="bg-die-d6-3d"]')?.getAttribute('data-die-stage') || null,
+          }));
+          assert.equal(
+            diceState.settled,
+            'true',
+            `${phaseLabel}: END_TURN must NOT replay dice animation (${JSON.stringify(diceState)})`,
+          );
+          assert.equal(
+            diceState.overlayCount,
+            0,
+            `${phaseLabel}: END_TURN must NOT spawn floating dice overlay`,
+          );
+          if (diceState.d6Stage) {
+            assert.equal(
+              diceState.d6Stage,
+              'settled',
+              `${phaseLabel}: END_TURN die stage must remain settled (${diceState.d6Stage})`,
+            );
+          }
+        };
+        await assertNoPhantomDice('END_TURN-immediate');
+        await checkPage.waitForTimeout(180);
+        await assertNoPhantomDice('END_TURN-after-180ms');
+      }
     } else if ((await activePlayer.page.locator('[data-testid="bg-attack-btn"]').count()) > 0) {
       await activePlayer.page.locator('[data-testid="bg-attack-btn"]').click();
     }
