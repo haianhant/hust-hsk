@@ -15,8 +15,10 @@ import {
 import type {
   BoardGameLobbyPlayerView,
   BoardGameMatchSummary,
+  BoardGameRulesetId,
 } from '../network/contracts';
 import { CARDS_CATALOG } from '../domain/cards';
+import { DEFAULT_RULESET_DEFINITIONS } from '../domain/registry';
 import {
   FACTION_LABELS,
   ROLES_CATALOG,
@@ -40,6 +42,7 @@ export interface BoardGameLobbyProps {
   isSpectator?: boolean;
   inviteCode?: string | null;
   matchStatusLabel?: string | null;
+  rulesetId?: BoardGameRulesetId;
   isHost?: boolean;
   localReady?: boolean;
   serverNotice?: string | null;
@@ -55,6 +58,7 @@ export interface BoardGameLobbyProps {
   onCreateMatch?: (tableId: BoardGameTableId) => void;
   onJoinByCode?: (code: string, asSpectator?: boolean) => void;
   onJoinDirectoryMatch?: (matchId: string, inviteCode: string, asSpectator: boolean) => void;
+  onSelectRuleset?: (rulesetId: BoardGameRulesetId) => void;
   onToggleReady?: () => void;
   onStartMatch?: () => void;
   onLeaveMatch?: () => void;
@@ -75,6 +79,7 @@ export default function BoardGameLobby({
   isSpectator = false,
   inviteCode = null,
   matchStatusLabel = null,
+  rulesetId = 'classic',
   isHost = false,
   localReady = false,
   serverNotice = null,
@@ -90,6 +95,7 @@ export default function BoardGameLobby({
   onCreateMatch,
   onJoinByCode,
   onJoinDirectoryMatch,
+  onSelectRuleset,
   onToggleReady,
   onStartMatch,
   onLeaveMatch,
@@ -319,6 +325,67 @@ export default function BoardGameLobby({
                       </div>
                     </div>
 
+                    {/* Bộ luật & Kho nhân vật (Ruleset Selector — Server Authoritative) */}
+                    <div
+                      data-testid="bg-lobby-ruleset-panel"
+                      className="rounded-lg border border-slate-700/80 bg-slate-900/75 p-2.5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-1.5">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                          Bộ luật & Kho tướng
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          {isHost
+                            ? 'Trưởng bàn chọn bộ luật (khóa tại server khi bắt đầu)'
+                            : 'Đồng bộ từ trưởng bàn'}
+                        </span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                        {DEFAULT_RULESET_DEFINITIONS.map((rs) => {
+                          const selected = rulesetId === rs.id;
+                          const playable = rs.enabledInProduction && rs.availability === 'available';
+                          const interactive = isHost && playable && Boolean(onSelectRuleset);
+                          return (
+                            <button
+                              key={rs.id}
+                              type="button"
+                              data-testid={`bg-ruleset-opt-${rs.id}`}
+                              disabled={!playable || !isHost}
+                              title={rs.description}
+                              onClick={() => {
+                                if (interactive && onSelectRuleset) {
+                                  onSelectRuleset(rs.id);
+                                }
+                              }}
+                              className={`flex flex-col items-start rounded-lg border px-2 py-1.5 text-left transition ${
+                                selected
+                                  ? 'border-amber-400/80 bg-amber-950/45 text-amber-100'
+                                  : playable
+                                    ? 'border-slate-700 bg-slate-950/60 text-slate-200 hover:border-amber-400/50'
+                                    : 'cursor-not-allowed border-slate-800 bg-slate-950/40 text-slate-500 opacity-70'
+                              }`}
+                            >
+                              <div className="flex w-full items-center justify-between gap-1">
+                                <span className="text-[11px] font-bold">{rs.shortLabel}</span>
+                                <span
+                                  className={`rounded px-1 py-0.5 text-[9px] font-semibold uppercase ${
+                                    playable
+                                      ? 'bg-emerald-500/20 text-emerald-300'
+                                      : 'bg-slate-800 text-slate-400'
+                                  }`}
+                                >
+                                  {playable ? 'Available' : 'Coming Soon'}
+                                </span>
+                              </div>
+                              <span className="mt-0.5 text-[10px] text-slate-400">
+                                {rs.expectedCharacterCount} tướng
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     {/* Danh sách thành viên đang ngồi bàn */}
                     <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                       {activePlayers.map((p) => {
@@ -407,6 +474,27 @@ export default function BoardGameLobby({
                         <p className="text-xs text-slate-300">
                           Tạo phòng tại <strong>{selectedTable === 'table-1' ? 'Bàn 1 (Tây)' : 'Bàn 2 (Đông)'}</strong> để nhận mã mời 6 ký tự.
                         </p>
+                        <div
+                          data-testid="bg-lobby-ruleset-preview"
+                          className="flex flex-wrap gap-1 text-[10px]"
+                        >
+                          {DEFAULT_RULESET_DEFINITIONS.map((rs) => {
+                            const playable = rs.enabledInProduction && rs.availability === 'available';
+                            return (
+                              <span
+                                key={rs.id}
+                                title={rs.description}
+                                className={`rounded border px-1.5 py-0.5 font-medium ${
+                                  playable
+                                    ? 'border-emerald-400/50 bg-emerald-950/40 text-emerald-200'
+                                    : 'border-slate-800 bg-slate-900/70 text-slate-500'
+                                }`}
+                              >
+                                {rs.shortLabel} · {playable ? 'Available' : 'Coming Soon'}
+                              </span>
+                            );
+                          })}
+                        </div>
                         <button
                           type="button"
                           data-testid="bg-create-match-btn"

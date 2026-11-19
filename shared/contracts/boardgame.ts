@@ -28,6 +28,25 @@ export type BoardGameMatchStatus =
 
 export const BOARD_GAME_RULESET_VERSION = 4 as const;
 export const BOARD_GAME_PROTOCOL_VERSION = 1 as const;
+export const BOARD_GAME_CATALOG_VERSION = '2026.11-p1' as const;
+
+export type BoardGameRulesetId =
+  | 'classic'
+  | 'expansion-1'
+  | 'expansion-2'
+  | 'full-expansion';
+
+export type BoardGameRulesetAvailability = 'available' | 'coming-soon' | 'disabled';
+
+export const BOARD_GAME_DEFAULT_RULESET_ID: BoardGameRulesetId = 'classic';
+
+export const BOARD_GAME_VALID_RULESETS: readonly BoardGameRulesetId[] = [
+  'classic',
+  'expansion-1',
+  'expansion-2',
+  'full-expansion',
+];
+
 export const BOARD_GAME_MIN_PLAYERS = 4;
 export const BOARD_GAME_MAX_PLAYERS = 8;
 export const BOARD_GAME_TABLE_SEAT_COUNT = 8;
@@ -210,6 +229,7 @@ export interface BoardGameMatchSummary {
   tableId: BoardGameTableId;
   hostName: string;
   status: BoardGameMatchStatus;
+  rulesetId?: BoardGameRulesetId;
   playerCount: number;
   maxPlayers: number;
   spectatorCount: number;
@@ -326,6 +346,8 @@ export interface BoardGameRevealRecord {
 
 export interface BoardGamePublicGameView {
   rulesetVersion: 4;
+  rulesetId?: BoardGameRulesetId;
+  catalogVersion?: string;
   matchId: string;
   round: number;
   maxRounds: number;
@@ -409,6 +431,8 @@ export interface BoardGameStateSyncMessage {
   inviteCode: string;
   tableId: BoardGameTableId;
   status: BoardGameMatchStatus;
+  rulesetId?: BoardGameRulesetId;
+  catalogVersion?: string;
   revision: number;
   hostPlayerId: string;
   players: readonly BoardGameLobbyPlayerView[];
@@ -449,6 +473,8 @@ export interface BoardGameErrorMessage {
     | 'SPECTATOR_READ_ONLY'
     | 'STALE_REVISION'
     | 'INVALID_ACTION'
+    | 'INVALID_RULESET'
+    | 'RULESET_UNAVAILABLE'
     | 'NOT_YOUR_TURN'
     | 'RATE_LIMITED'
     | 'MATCH_NOT_FOUND';
@@ -510,10 +536,17 @@ export interface BoardGameClientSetReadyMessage {
   requestId?: string;
 }
 
+export interface BoardGameClientSetRulesetMessage {
+  type: 'BG_SET_RULESET';
+  rulesetId: BoardGameRulesetId;
+  requestId?: string;
+}
+
 export interface BoardGameClientStartMatchMessage {
   type: 'BG_START_MATCH';
   requestId?: string;
   turnTimeoutMs?: number;
+  rulesetId?: BoardGameRulesetId;
 }
 
 export interface BoardGameClientGameActionMessage {
@@ -554,6 +587,7 @@ export type BoardGameClientMessage =
   | BoardGameClientSelectSeatMessage
   | BoardGameClientStandUpMessage
   | BoardGameClientSetReadyMessage
+  | BoardGameClientSetRulesetMessage
   | BoardGameClientStartMatchMessage
   | BoardGameClientGameActionMessage
   | BoardGameClientLeaveMessage
@@ -655,6 +689,17 @@ export function sanitizeBoardGameName(raw: unknown): string {
 
 export function sanitizeBoardGameTableId(raw: unknown): BoardGameTableId {
   return raw === 'table-2' ? 'table-2' : 'table-1';
+}
+
+export function isValidBoardGameRulesetId(raw: unknown): raw is BoardGameRulesetId {
+  return (
+    typeof raw === 'string' &&
+    (BOARD_GAME_VALID_RULESETS as readonly string[]).includes(raw)
+  );
+}
+
+export function sanitizeBoardGameRulesetId(raw: unknown): BoardGameRulesetId {
+  return isValidBoardGameRulesetId(raw) ? raw : BOARD_GAME_DEFAULT_RULESET_ID;
 }
 
 export function sanitizeBoardGameMatchId(raw: unknown): string | null {
@@ -991,7 +1036,8 @@ const CLIENT_MSG_ALLOWED_KEYS: Record<BoardGameClientMessage['type'], ReadonlySe
   BG_SELECT_SEAT: new Set(['type', 'seatIndex', 'requestId']),
   BG_STAND_UP: new Set(['type', 'requestId']),
   BG_SET_READY: new Set(['type', 'ready', 'requestId']),
-  BG_START_MATCH: new Set(['type', 'requestId', 'turnTimeoutMs']),
+  BG_SET_RULESET: new Set(['type', 'rulesetId', 'requestId']),
+  BG_START_MATCH: new Set(['type', 'requestId', 'turnTimeoutMs', 'rulesetId']),
   BG_GAME_ACTION: new Set(['type', 'requestId', 'expectedRevision', 'action']),
   BG_LEAVE: new Set(['type', 'requestId']),
   BG_CHAT_EMOTE: new Set(['type', 'emote', 'text', 'requestId']),
@@ -1175,6 +1221,25 @@ export function validateBoardGameClientMessage(
         },
       };
     }
+    case 'BG_SET_RULESET': {
+      if (!isValidBoardGameRulesetId(raw.rulesetId)) {
+        return {
+          ok: false,
+          code: 'INVALID_RULESET',
+          error: 'Bộ luật (rulesetId) không hợp lệ.',
+          requestId: reqId,
+        };
+      }
+      return {
+        ok: true,
+        requestId: reqId,
+        message: {
+          type: 'BG_SET_RULESET',
+          rulesetId: raw.rulesetId,
+          ...(reqId ? { requestId: reqId } : {}),
+        },
+      };
+    }
     case 'BG_START_MATCH': {
       const validTimeout =
         raw.turnTimeoutMs === 0 ||
@@ -1187,6 +1252,14 @@ export function validateBoardGameClientMessage(
           ok: false,
           code: 'INVALID_ACTION',
           error: 'Thời lượng lượt turnTimeoutMs không hợp lệ.',
+          requestId: reqId,
+        };
+      }
+      if (raw.rulesetId !== undefined && !isValidBoardGameRulesetId(raw.rulesetId)) {
+        return {
+          ok: false,
+          code: 'INVALID_RULESET',
+          error: 'Bộ luật (rulesetId) không hợp lệ.',
           requestId: reqId,
         };
       }

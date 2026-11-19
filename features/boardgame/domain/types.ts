@@ -18,6 +18,7 @@ import type {
   BoardGameRevealEvent,
   BoardGameRevealRecord,
   BoardGameRoleId,
+  BoardGameRulesetId,
   BoardGameTurnPhase,
   BoardGameZoneClusterId,
 } from '../../../shared/contracts/boardgame';
@@ -140,6 +141,8 @@ export interface AuthoritativePlayerState {
 
 export interface AuthoritativeGameState {
   rulesetVersion: 4;
+  rulesetId?: BoardGameRulesetId;
+  catalogVersion?: string;
   matchId: string;
   seed: number;
   rngState: number;

@@ -17,6 +17,7 @@ import { useSyncExternalStore } from 'react';
 import { sanitizeBoardGameAppearance } from '../../../shared/contracts/boardgame';
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
 import {
+  BOARD_GAME_DEFAULT_RULESET_ID,
   BOARD_GAME_PROTOCOL_VERSION,
   BOARD_GAME_RULESET_VERSION,
   clearStoredBoardGameAuth,
@@ -25,6 +26,7 @@ import {
   parseBoardGameServerMessage,
   resolveBoardGameEndpoints,
   sanitizeBoardGameName,
+  sanitizeBoardGameRulesetId,
   sanitizeInviteCode,
   sanitizeMatchSummary,
   saveStoredBoardGameAuth,
@@ -42,6 +44,7 @@ import {
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
   type BoardGameRoleId,
+  type BoardGameRulesetId,
   type BoardGameTableId,
 } from './contracts';
 
@@ -118,6 +121,8 @@ export interface BoardGameClientSnapshot {
   inviteCode: string | null;
   tableId: BoardGameTableId | null;
   status: BoardGameMatchStatus | null;
+  rulesetId: BoardGameRulesetId;
+  catalogVersion: string | null;
   revision: number;
   playerId: string | null;
   isSpectator: boolean;
@@ -139,6 +144,8 @@ const EMPTY_SNAPSHOT: BoardGameClientSnapshot = {
   inviteCode: null,
   tableId: null,
   status: null,
+  rulesetId: BOARD_GAME_DEFAULT_RULESET_ID,
+  catalogVersion: null,
   revision: 0,
   playerId: null,
   isSpectator: false,
@@ -283,6 +290,7 @@ export class BoardGameClient {
     appearance?: RemoteAppearance;
     preferredSeatIndex?: number | null;
     turnTimeoutMs?: number;
+    rulesetId?: BoardGameRulesetId;
   }): Promise<{ ok: true; matchId: string; inviteCode: string } | { ok: false; error: string }> {
     const seq = ++this.opSeq;
     const eps = resolveBoardGameEndpoints();
@@ -297,6 +305,7 @@ export class BoardGameClient {
         body: JSON.stringify({
           tableId: params.tableId,
           hostName: cleanName,
+          ...(params.rulesetId ? { rulesetId: params.rulesetId } : {}),
           ...(typeof params.turnTimeoutMs === 'number'
             ? { turnTimeoutMs: params.turnTimeoutMs }
             : {}),
@@ -648,6 +657,8 @@ export class BoardGameClient {
           inviteCode: msg.inviteCode,
           tableId: msg.tableId,
           status: msg.status,
+          rulesetId: sanitizeBoardGameRulesetId(msg.rulesetId ?? msg.publicGame?.rulesetId),
+          catalogVersion: msg.catalogVersion ?? msg.publicGame?.catalogVersion ?? null,
           revision: msg.revision,
           hostPlayerId: msg.hostPlayerId,
           players: msg.players,
@@ -721,6 +732,10 @@ export class BoardGameClient {
 
   setReady(ready: boolean): void {
     this.rawSend({ type: 'BG_SET_READY', ready, requestId: this.nextRequestId() });
+  }
+
+  setRuleset(rulesetId: BoardGameRulesetId): void {
+    this.rawSend({ type: 'BG_SET_RULESET', rulesetId, requestId: this.nextRequestId() });
   }
 
   startMatch(turnTimeoutMs?: number): void {

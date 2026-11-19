@@ -10,7 +10,10 @@
 // ---------------------------------------------------------------------------
 
 import {
+  BOARD_GAME_CATALOG_VERSION,
+  BOARD_GAME_DEFAULT_RULESET_ID,
   BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS,
+  BOARD_GAME_MIN_PLAYERS,
   BOARD_GAME_PROTOCOL_VERSION,
   BOARD_GAME_RULESET_VERSION,
   INVITE_CODE_ALPHABET,
@@ -20,6 +23,7 @@ import {
   sanitizeBoardGameTableId,
   sanitizeInviteCode,
 } from '../../shared/contracts/boardgame';
+import { DEFAULT_RULESET_REGISTRY } from '../../features/boardgame/domain';
 import {
   BG_DIRECTORY_ROOM_NAME,
   clampBoardGameTurnTimeoutMs,
@@ -124,6 +128,8 @@ export async function handleBoardGameRequest(
         env: env.ENVIRONMENT ?? 'production',
         protocolVersion: BOARD_GAME_PROTOCOL_VERSION,
         rulesetVersion: BOARD_GAME_RULESET_VERSION,
+        defaultRulesetId: BOARD_GAME_DEFAULT_RULESET_ID,
+        catalogVersion: BOARD_GAME_CATALOG_VERSION,
         metrics: getBoardGameMetricsSnapshot(),
       },
       { status: 200, headers },
@@ -181,6 +187,19 @@ export async function handleBoardGameRequest(
 
     const tableId = sanitizeBoardGameTableId(body.tableId);
     const hostName = sanitizeBoardGameName(body.hostName);
+    const requestedRuleset =
+      body.rulesetId === undefined ? BOARD_GAME_DEFAULT_RULESET_ID : body.rulesetId;
+    const rulesetCheck = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
+      requestedRuleset,
+      BOARD_GAME_MIN_PLAYERS,
+    );
+    if (!rulesetCheck.ok) {
+      return Response.json(
+        { ok: false, code: rulesetCheck.code, error: rulesetCheck.error },
+        { status: 400, headers },
+      );
+    }
+    const rulesetId = rulesetCheck.ruleset.id;
     const rawTimeout =
       typeof body.turnTimeoutMs === 'number'
         ? body.turnTimeoutMs
@@ -202,6 +221,7 @@ export async function handleBoardGameRequest(
           inviteCode: candidateCode,
           tableId,
           hostName,
+          rulesetId,
         }),
       });
       if (regRes.status === 409) continue;
@@ -231,6 +251,7 @@ export async function handleBoardGameRequest(
         matchId: createdMatchId,
         inviteCode: createdInvite,
         tableId,
+        rulesetId,
         turnTimeoutMs,
       }),
     });
@@ -247,6 +268,7 @@ export async function handleBoardGameRequest(
         matchId: createdMatchId,
         inviteCode: createdInvite,
         tableId,
+        rulesetId,
       },
       { status: 201, headers },
     );
@@ -274,6 +296,19 @@ export async function handleBoardGameRequest(
 
     const tableId = sanitizeBoardGameTableId(body.tableId);
     const hostName = sanitizeBoardGameName(body.hostName);
+    const requestedRuleset =
+      body.rulesetId === undefined ? BOARD_GAME_DEFAULT_RULESET_ID : body.rulesetId;
+    const rulesetCheck = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
+      requestedRuleset,
+      BOARD_GAME_MIN_PLAYERS,
+    );
+    if (!rulesetCheck.ok) {
+      return Response.json(
+        { ok: false, code: rulesetCheck.code, error: rulesetCheck.error },
+        { status: 400, headers },
+      );
+    }
+    const rulesetId = rulesetCheck.ruleset.id;
     const rawTimeout =
       typeof body.turnTimeoutMs === 'number'
         ? body.turnTimeoutMs
@@ -292,6 +327,7 @@ export async function handleBoardGameRequest(
           hostName,
           matchId: candidateMatchId,
           inviteCode: candidateCode,
+          rulesetId,
         }),
       });
       if (regRes.status === 409) continue;

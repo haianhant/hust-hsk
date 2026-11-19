@@ -3176,6 +3176,7 @@ export default function HomePage() {
               isSpectator={bgSnap.isSpectator}
               inviteCode={bgSnap.inviteCode}
               matchStatusLabel={bgStatusLabel}
+              rulesetId={bgSnap.rulesetId}
               isHost={isBgHost}
               localReady={Boolean(selfBgPlayer?.ready)}
               serverNotice={bgSnap.lastError}
@@ -3191,6 +3192,7 @@ export default function HomePage() {
               onCreateMatch={handleCreateBoardGameMatch}
               onJoinByCode={handleJoinBoardGameByCode}
               onJoinDirectoryMatch={handleJoinDirectoryBoardGameMatch}
+              onSelectRuleset={(nextRulesetId) => boardGameClient.setRuleset(nextRulesetId)}
               onToggleReady={() => boardGameClient.setReady(!selfBgPlayer?.ready)}
               onStartMatch={() => boardGameClient.startMatch()}
               onLeaveMatch={() => {

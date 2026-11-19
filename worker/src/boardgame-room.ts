@@ -15,6 +15,8 @@
 
 import {
   BOARD_GAME_ABANDONED_MATCH_TTL_MS,
+  BOARD_GAME_CATALOG_VERSION,
+  BOARD_GAME_DEFAULT_RULESET_ID,
   BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS,
   BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
   BOARD_GAME_FINISHED_TTL_MS,
@@ -34,6 +36,7 @@ import {
   sanitizeBoardGameName,
   sanitizeBoardGamePlayerKey,
   sanitizeBoardGameRequestId,
+  sanitizeBoardGameRulesetId,
   sanitizeBoardGameSeatIndex,
   sanitizeBoardGameTableId,
   sanitizeBoardGameToken,
@@ -54,11 +57,13 @@ import {
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
   type BoardGameRoleId,
+  type BoardGameRulesetId,
   type BoardGameServerMessage,
   type BoardGameTableId,
 } from '../../shared/contracts/boardgame';
 import {
   DEFAULT_CLUSTER_PAIRS,
+  DEFAULT_RULESET_REGISTRY,
   ROLES_BY_ID,
   applyPlayerGameAction,
   applyTimeoutAutoTurn,
@@ -121,6 +126,8 @@ interface MatchDbRow {
   updated_at_ms: number;
   game_state_json: string | null;
   leaderboard_recorded?: number;
+  ruleset_id?: string | null;
+  catalog_version?: string | null;
 }
 
 interface MatchPlayerDbRow {
@@ -188,6 +195,7 @@ interface DirectoryRow {
   table_id: BoardGameTableId;
   host_name: string;
   status: BoardGameMatchStatus;
+  ruleset_id?: string | null;
   player_count: number;
   max_players: number;
   spectator_count: number;
@@ -307,11 +315,23 @@ export class BoardGameRoom {
         created_at_ms INTEGER NOT NULL,
         updated_at_ms INTEGER NOT NULL,
         game_state_json TEXT,
-        leaderboard_recorded INTEGER NOT NULL DEFAULT 0
+        leaderboard_recorded INTEGER NOT NULL DEFAULT 0,
+        ruleset_id TEXT NOT NULL DEFAULT 'classic',
+        catalog_version TEXT
       )
     `);
     try {
       sql.exec('ALTER TABLE matches ADD COLUMN leaderboard_recorded INTEGER NOT NULL DEFAULT 0');
+    } catch {
+      // already migrated
+    }
+    try {
+      sql.exec("ALTER TABLE matches ADD COLUMN ruleset_id TEXT NOT NULL DEFAULT 'classic'");
+    } catch {
+      // already migrated
+    }
+    try {
+      sql.exec('ALTER TABLE matches ADD COLUMN catalog_version TEXT');
     } catch {
       // already migrated
     }
@@ -355,12 +375,18 @@ export class BoardGameRoom {
         table_id TEXT NOT NULL,
         host_name TEXT NOT NULL,
         status TEXT NOT NULL,
+        ruleset_id TEXT NOT NULL DEFAULT 'classic',
         player_count INTEGER NOT NULL,
         max_players INTEGER NOT NULL,
         spectator_count INTEGER NOT NULL,
         updated_at_ms INTEGER NOT NULL
       )
     `);
+    try {
+      sql.exec("ALTER TABLE directory_matches ADD COLUMN ruleset_id TEXT NOT NULL DEFAULT 'classic'");
+    } catch {
+      // already migrated
+    }
     sql.exec(`
       CREATE INDEX IF NOT EXISTS idx_dir_status_updated
       ON directory_matches(status, updated_at_ms DESC)
@@ -492,6 +518,7 @@ export class BoardGameRoom {
       const inviteCode = sanitizeInviteCode(body.inviteCode);
       const tableId = sanitizeBoardGameTableId(body.tableId);
       const hostName = sanitizeBoardGameName(body.hostName);
+      const rulesetId = sanitizeBoardGameRulesetId(body.rulesetId);
       if (!matchId || !inviteCode) {
         return Response.json({ ok: false, error: 'invalid-fields' }, { status: 400 });
       }
@@ -512,20 +539,21 @@ export class BoardGameRoom {
       }
       this.sql.exec(
         `INSERT INTO directory_matches (
-          match_id, invite_code, table_id, host_name, status, player_count, max_players, spectator_count, updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          match_id, invite_code, table_id, host_name, status, ruleset_id, player_count, max_players, spectator_count, updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         matchId,
         inviteCode,
         tableId,
         hostName,
         'CREATED',
+        rulesetId,
         0,
         BOARD_GAME_MAX_PLAYERS,
         0,
         nowMs,
       );
       this.broadcastDirectorySnapshot();
-      return Response.json({ ok: true, matchId, inviteCode, tableId }, { status: 201 });
+      return Response.json({ ok: true, matchId, inviteCode, tableId, rulesetId }, { status: 201 });
     }
 
     if (url.pathname === '/__dir/join-or-register-table' && request.method === 'POST') {
@@ -614,6 +642,7 @@ export class BoardGameRoom {
       if (!matchId) return Response.json({ ok: false, error: 'invalid-matchId' }, { status: 400 });
       const status = typeof body.status === 'string' ? body.status : 'WAITING';
       const hostName = sanitizeBoardGameName(body.hostName);
+      const rulesetId = sanitizeBoardGameRulesetId(body.rulesetId);
       const playerCount = typeof body.playerCount === 'number' ? Math.max(0, Math.floor(body.playerCount)) : 0;
       const spectatorCount =
         typeof body.spectatorCount === 'number' ? Math.max(0, Math.floor(body.spectatorCount)) : 0;
@@ -622,10 +651,11 @@ export class BoardGameRoom {
       } else {
         this.sql.exec(
           `UPDATE directory_matches
-           SET status = ?, host_name = ?, player_count = ?, spectator_count = ?, updated_at_ms = ?
+           SET status = ?, host_name = ?, ruleset_id = ?, player_count = ?, spectator_count = ?, updated_at_ms = ?
            WHERE match_id = ?`,
           status,
           hostName,
+          rulesetId,
           playerCount,
           spectatorCount,
           nowMs,
@@ -932,6 +962,19 @@ export class BoardGameRoom {
       const matchId = sanitizeBoardGameMatchId(body.matchId);
       const inviteCode = sanitizeInviteCode(body.inviteCode);
       const tableId = sanitizeBoardGameTableId(body.tableId);
+      const requestedRuleset =
+        body.rulesetId === undefined ? BOARD_GAME_DEFAULT_RULESET_ID : body.rulesetId;
+      const rulesetCheck = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
+        requestedRuleset,
+        BOARD_GAME_MIN_PLAYERS,
+      );
+      if (!rulesetCheck.ok) {
+        return Response.json(
+          { ok: false, code: rulesetCheck.code, error: rulesetCheck.error },
+          { status: 400 },
+        );
+      }
+      const rulesetId = rulesetCheck.ruleset.id;
       const rawTimeout = typeof body.turnTimeoutMs === 'number' ? body.turnTimeoutMs : BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
       const turnTimeoutMs = clampBoardGameTurnTimeoutMs(rawTimeout, this.env);
       if (!matchId || !inviteCode) {
@@ -945,18 +988,21 @@ export class BoardGameRoom {
           matchId: existing.match_id,
           inviteCode: existing.invite_code,
           tableId: existing.table_id,
+          rulesetId: sanitizeBoardGameRulesetId(existing.ruleset_id),
         });
       }
       this.sql.exec(
         `INSERT INTO matches (
-          match_id, invite_code, table_id, host_player_id, status, revision, turn_deadline_ms, turn_timeout_ms, created_at_ms, updated_at_ms, game_state_json
-        ) VALUES (?, ?, ?, '', 'CREATED', 1, NULL, ?, ?, ?, NULL)`,
+          match_id, invite_code, table_id, host_player_id, status, revision, turn_deadline_ms, turn_timeout_ms, created_at_ms, updated_at_ms, game_state_json, ruleset_id, catalog_version
+        ) VALUES (?, ?, ?, '', 'CREATED', 1, NULL, ?, ?, ?, NULL, ?, ?)`,
         matchId,
         inviteCode,
         tableId,
         turnTimeoutMs,
         nowMs,
         nowMs,
+        rulesetId,
+        rulesetCheck.catalogVersion,
       );
       await this.scheduleNextAlarm(nowMs);
       logBoardGameEvent(this.env, 'MATCH_CREATED', {
@@ -965,7 +1011,7 @@ export class BoardGameRoom {
         status: 'CREATED',
         revision: 1,
       });
-      return Response.json({ ok: true, matchId, inviteCode, tableId }, { status: 201 });
+      return Response.json({ ok: true, matchId, inviteCode, tableId, rulesetId }, { status: 201 });
     }
 
     // Read-only match public meta (`GET /__meta`)
@@ -1023,6 +1069,7 @@ export class BoardGameRoom {
       tableId: sanitizeBoardGameTableId(row.table_id),
       hostName: sanitizeBoardGameName(row.host_name),
       status: row.status,
+      rulesetId: sanitizeBoardGameRulesetId(row.ruleset_id),
       playerCount: Math.max(0, Math.min(BOARD_GAME_MAX_PLAYERS, row.player_count)),
       maxPlayers: row.max_players || BOARD_GAME_MAX_PLAYERS,
       spectatorCount: Math.max(0, row.spectator_count),
@@ -1142,6 +1189,7 @@ export class BoardGameRoom {
           matchId: match.match_id,
           status: match.status,
           hostName: hostRow?.display_name ?? 'Sinh viên',
+          rulesetId: sanitizeBoardGameRulesetId(match.ruleset_id),
           playerCount: seated.length,
           spectatorCount: spectators.length,
         }),
@@ -1365,12 +1413,16 @@ export class BoardGameRoom {
         await this.handleSetReady(ws, player, validatedMsg.ready, reqId);
         return;
       }
+      case 'BG_SET_RULESET': {
+        await this.handleSetRuleset(ws, player, validatedMsg.rulesetId, reqId);
+        return;
+      }
       case 'BG_START_MATCH': {
         const timeoutOverride =
           typeof validatedMsg.turnTimeoutMs === 'number'
             ? clampBoardGameTurnTimeoutMs(validatedMsg.turnTimeoutMs, this.env)
             : undefined;
-        await this.handleStartMatch(ws, player, reqId, timeoutOverride);
+        await this.handleStartMatch(ws, player, reqId, timeoutOverride, validatedMsg.rulesetId);
         return;
       }
       default:
@@ -2032,11 +2084,66 @@ export class BoardGameRoom {
     await this.syncDirectoryFromMatch();
   }
 
+  private async handleSetRuleset(
+    ws: WebSocket,
+    player: MatchPlayerDbRow,
+    rulesetId: BoardGameRulesetId,
+    requestId?: string,
+  ): Promise<void> {
+    const match = this.getMatchRow();
+    if (!match) return;
+    if (match.host_player_id !== player.player_id) {
+      this.sendError(ws, 'NOT_HOST', 'Chỉ trưởng bàn (Host) mới được thay đổi bộ luật.', {
+        requestId,
+      });
+      return;
+    }
+    if (match.status === 'PLAYING' || match.status === 'STARTING' || match.status === 'CLOSED') {
+      this.sendError(
+        ws,
+        'INVALID_ACTION',
+        'Không thể đổi bộ luật khi ván đấu đã bắt đầu hoặc đã đóng.',
+        { requestId },
+      );
+      return;
+    }
+
+    const validation = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
+      rulesetId,
+      BOARD_GAME_MIN_PLAYERS,
+    );
+    if (!validation.ok) {
+      this.sendError(ws, validation.code, validation.error, { requestId });
+      return;
+    }
+
+    const nowMs = Date.now();
+    this.sql.exec(
+      'UPDATE matches SET ruleset_id = ?, catalog_version = ?, revision = revision + 1, updated_at_ms = ? WHERE match_id = ?',
+      validation.ruleset.id,
+      validation.catalogVersion,
+      nowMs,
+      match.match_id,
+    );
+    const updated = this.getMatchRow();
+    if (requestId && updated) {
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId,
+        ok: true,
+        revision: updated.revision,
+      });
+    }
+    this.broadcastStateSync();
+    await this.syncDirectoryFromMatch();
+  }
+
   private async handleStartMatch(
     ws: WebSocket,
     player: MatchPlayerDbRow,
     requestId?: string,
     turnTimeoutOverrideMs?: number,
+    rulesetOverrideId?: BoardGameRulesetId,
   ): Promise<void> {
     const match = this.getMatchRow();
     if (!match) return;
@@ -2073,6 +2180,20 @@ export class BoardGameRoom {
       return;
     }
 
+    // Khóa và xác thực bộ luật & phiên bản catalog tại server trước khi khởi tạo ván
+    const requestedRulesetId =
+      rulesetOverrideId ?? match.ruleset_id ?? BOARD_GAME_DEFAULT_RULESET_ID;
+    const rulesetValidation = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
+      requestedRulesetId,
+      seated.length,
+    );
+    if (!rulesetValidation.ok) {
+      this.sendError(ws, rulesetValidation.code, rulesetValidation.error, { requestId });
+      return;
+    }
+    const lockedRulesetId = rulesetValidation.ruleset.id;
+    const lockedCatalogVersion = rulesetValidation.catalogVersion;
+
     const nowMs = Date.now();
     // Clean any disconnected or unseated ghost lobby rows before locking PLAYING roster
     this.sql.exec(
@@ -2100,6 +2221,7 @@ export class BoardGameRoom {
       matchId: match.match_id,
       seed,
       nowMs,
+      rulesetId: lockedRulesetId,
       players: seated.map((p) => ({
         playerId: p.player_id,
         displayName: p.display_name,
@@ -2118,11 +2240,15 @@ export class BoardGameRoom {
            turn_timeout_ms = ?,
            updated_at_ms = ?,
            leaderboard_recorded = 0,
+           ruleset_id = ?,
+           catalog_version = ?,
            game_state_json = ?
        WHERE match_id = ?`,
       deadlineMs,
       timeoutMs,
       nowMs,
+      lockedRulesetId,
+      lockedCatalogVersion,
       JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
       match.match_id,
     );
@@ -2789,6 +2915,12 @@ export class BoardGameRoom {
       return this.adaptLegacyEngineState(match, rawRecord, playerRows);
     }
     const engineState = rawEngine as AuthoritativeGameState;
+    if (!engineState.rulesetId) {
+      engineState.rulesetId = sanitizeBoardGameRulesetId(match.ruleset_id);
+    }
+    if (!engineState.catalogVersion) {
+      engineState.catalogVersion = match.catalog_version ?? BOARD_GAME_CATALOG_VERSION;
+    }
     if (!Array.isArray(engineState.clusterPairs) || engineState.clusterPairs.length !== 3) {
       engineState.clusterPairs = DEFAULT_CLUSTER_PAIRS.map((pair) => ({
         clusterId: pair.clusterId,
@@ -2909,6 +3041,11 @@ export class BoardGameRoom {
       inviteCode: effectiveMatch.invite_code,
       tableId: effectiveMatch.table_id,
       status: effectiveMatch.status,
+      rulesetId: engineState?.rulesetId ?? sanitizeBoardGameRulesetId(effectiveMatch.ruleset_id),
+      catalogVersion:
+        engineState?.catalogVersion ??
+        effectiveMatch.catalog_version ??
+        BOARD_GAME_CATALOG_VERSION,
       revision: effectiveMatch.revision,
       hostPlayerId: effectiveMatch.host_player_id,
       players,

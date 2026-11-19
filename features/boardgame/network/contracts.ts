@@ -9,6 +9,7 @@ import {
   BOARD_GAME_MAX_PLAYERS,
   BOARD_GAME_PROTOCOL_VERSION,
   BOARD_GAME_RULESET_VERSION,
+  isValidBoardGameRulesetId,
   sanitizeBoardGameMatchId,
   sanitizeBoardGameName,
   sanitizeBoardGameTableId,
@@ -129,6 +130,7 @@ export function sanitizeMatchSummary(raw: unknown): BoardGameMatchSummary | null
     tableId: sanitizeBoardGameTableId(obj.tableId),
     hostName: sanitizeBoardGameName(obj.hostName),
     status,
+    ...(isValidBoardGameRulesetId(obj.rulesetId) ? { rulesetId: obj.rulesetId } : {}),
     playerCount:
       typeof obj.playerCount === 'number' && Number.isFinite(obj.playerCount)
         ? Math.max(0, Math.min(BOARD_GAME_MAX_PLAYERS, Math.floor(obj.playerCount)))

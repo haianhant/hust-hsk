@@ -4,15 +4,18 @@
 // ---------------------------------------------------------------------------
 
 import {
+  BOARD_GAME_DEFAULT_RULESET_ID,
   BOARD_GAME_VALID_LOCATIONS,
   type BoardGameClusterPair,
   type BoardGameDeckId,
   type BoardGameRoleId,
+  type BoardGameRulesetId,
 } from '../../../shared/contracts/boardgame';
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
 import { listCardIdsByDeck } from './cards';
 import { appendPublicLog } from './effects';
-import { getRoleDesign, getRoleDistribution, listRolesForFaction } from './roles';
+import { DEFAULT_RULESET_REGISTRY } from './registry';
+import { getRoleDesign, getRoleDistribution } from './roles';
 import {
   BOARD_GAME_SAFETY_MAX_ROUNDS,
   LOCATIONS_CATALOG,
@@ -32,6 +35,7 @@ export interface CreateGameStateInput {
   matchId: string;
   seed: number;
   nowMs: number;
+  rulesetId?: BoardGameRulesetId;
   players: readonly CreateGamePlayerInput[];
 }
 
@@ -39,21 +43,26 @@ export function createInitialGameState(
   input: CreateGameStateInput,
 ): AuthoritativeGameState {
   const orderedInputs = [...input.players].sort((a, b) => a.seatIndex - b.seatIndex);
+  const requestedRulesetId = input.rulesetId ?? BOARD_GAME_DEFAULT_RULESET_ID;
+  const resolvedPool = DEFAULT_RULESET_REGISTRY.resolvePlayableRolePoolOrThrow(
+    requestedRulesetId,
+    orderedInputs.length,
+  );
   let rngState = (input.seed >>> 0) || 135792468;
 
   const split = getRoleDistribution(orderedInputs.length);
   const hunters = shuffleWithRng(
-    listRolesForFaction('lantern-guard').map((r) => r.id),
+    resolvedPool.pools.lanternGuard as readonly BoardGameRoleId[],
     rngState,
   );
   rngState = hunters.nextState;
   const shadows = shuffleWithRng(
-    listRolesForFaction('mist-order').map((r) => r.id),
+    resolvedPool.pools.mistOrder as readonly BoardGameRoleId[],
     rngState,
   );
   rngState = shadows.nextState;
   const wanderers = shuffleWithRng(
-    listRolesForFaction('wanderer').map((r) => r.id),
+    resolvedPool.pools.wanderer as readonly BoardGameRoleId[],
     rngState,
   );
   rngState = wanderers.nextState;
@@ -142,6 +151,8 @@ export function createInitialGameState(
 
   const state: AuthoritativeGameState = {
     rulesetVersion: 4,
+    rulesetId: resolvedPool.ruleset.id,
+    catalogVersion: resolvedPool.catalogVersion,
     matchId: input.matchId,
     seed: input.seed,
     rngState,

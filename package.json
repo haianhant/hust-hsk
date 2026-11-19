@@ -17,7 +17,7 @@
     "test:study": "node --test test/study-social-contracts.test.cjs",
     "test:nav": "node test/leg-sim.cjs",
     "test:mp": "node test/mp-protocol.cjs",
-    "test:boardgame": "node --test test/boardgame-lounge.test.cjs test/boardgame-lobby-do.test.cjs test/boardgame-engine.test.cjs test/boardgame-match-do.test.cjs && node test/boardgame-sim.cjs",
+    "test:boardgame": "node scripts/validate-character-catalog.cjs && node --test test/boardgame-lounge.test.cjs test/boardgame-lobby-do.test.cjs test/boardgame-engine.test.cjs test/boardgame-match-do.test.cjs test/boardgame-expansion-foundation.test.cjs && node test/boardgame-sim.cjs",
     "test:boardgame:e2e": "node test/boardgame-e2e.cjs",
     "test": "npm run test:learn && npm run test:contracts && npm run test:world && npm run test:avatar && npm run test:ui && npm run test:study && npm run test:nav && npm run test:mp && node --test test/campus-engagement.test.cjs"
   },

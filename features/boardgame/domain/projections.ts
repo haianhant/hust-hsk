@@ -3,11 +3,13 @@
 // và kênh Riêng tư (P0 isolation) cho Bóng Đêm KTX v4.
 // ---------------------------------------------------------------------------
 
-import type {
-  BoardGameCardPublicMeta,
-  BoardGamePrivateGameView,
-  BoardGamePublicGameView,
-  BoardGamePublicPlayerView,
+import {
+  BOARD_GAME_CATALOG_VERSION,
+  BOARD_GAME_DEFAULT_RULESET_ID,
+  type BoardGameCardPublicMeta,
+  type BoardGamePrivateGameView,
+  type BoardGamePublicGameView,
+  type BoardGamePublicPlayerView,
 } from '../../../shared/contracts/boardgame';
 import { getCardById, toCardPublicMeta } from './cards';
 import { getRoleDesign } from './roles';
@@ -61,6 +63,8 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
 
   return {
     rulesetVersion: 4,
+    rulesetId: state.rulesetId ?? BOARD_GAME_DEFAULT_RULESET_ID,
+    catalogVersion: state.catalogVersion ?? BOARD_GAME_CATALOG_VERSION,
     matchId: state.matchId,
     round: state.round,
     maxRounds: state.maxRounds,
