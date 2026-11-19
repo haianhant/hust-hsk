@@ -1,0 +1,165 @@
+{
+  "generatedAt": "2026-11-19T06:02:49.523Z",
+  "target": "Phase 2 — Victory & Defeat Cinematic V2 (Desktop 1920x1080)",
+  "environmentNote": "Linux container CPU rasterizer (--use-gl=angle --use-angle=swiftshader) — no hardware GPU present",
+  "beforeBaseline": {
+    "generatedAt": "2026-11-19T05:45:24.714Z",
+    "mode": "before",
+    "video": {
+      "path": "artifacts/boardgame-cinematic-polish/phase-2/before-victory.mp4",
+      "sizeBytes": 1192970,
+      "durationSec": 21.95,
+      "tracks": [
+        {
+          "width": 1920,
+          "height": 1080,
+          "handler": "vide"
+        },
+        {
+          "width": 0,
+          "height": 0,
+          "handler": "soun"
+        }
+      ]
+    },
+    "liveMatch": {
+      "winnerFaction": "mist-order",
+      "winnerLabel": "Hội Bóng Đêm",
+      "p1Outcome": "defeat",
+      "victorySpotlightObserved": false,
+      "modalOpenedAtMs": 16533.300000000745,
+      "screenshots": [
+        "before-01-match-end-instant-modal.png",
+        "before-02-match-result-postcard.png"
+      ]
+    },
+    "recordingFps": {
+      "sampleDurationSec": 21.95,
+      "framesCount": 137,
+      "fpsMean": 6.24,
+      "fpsMinPerSec": 3,
+      "fpsMaxPerSec": 10,
+      "p50FrameMs": 133.3,
+      "p95FrameMs": 366.6,
+      "p99FrameMs": 516.6,
+      "frameDropsOver33ms": 126,
+      "frameDropsOver50ms": 124
+    },
+    "audioStats": {
+      "contextsCreated": 2,
+      "oscillatorsCreated": 759,
+      "buffersStarted": 308
+    }
+  },
+  "afterLiveMatch": {
+    "source": "Real 4-player + 1-spectator BoardGameMatchDO match",
+    "winnerFaction": "mist-order",
+    "winnerLabel": "Hội Bóng Đêm",
+    "p1Outcome": "defeat",
+    "victoryCinematicDurationMs": 2574,
+    "phasesObserved": [
+      "anticipation",
+      "faction-reveal",
+      "impact",
+      "settle"
+    ],
+    "modalOpenedAfterCinematic": true,
+    "f5NonReplayVerified": true,
+    "preEndPrivacyVerified": true,
+    "video": {
+      "path": "artifacts/boardgame-cinematic-polish/phase-2/after-victory-defeat.mp4",
+      "sizeBytes": 772832,
+      "durationSec": 14.3,
+      "tracks": [
+        {
+          "width": 1920,
+          "height": 1080,
+          "handler": "vide"
+        },
+        {
+          "width": 0,
+          "height": 0,
+          "handler": "soun"
+        }
+      ]
+    },
+    "recordingFps": {
+      "sampleDurationSec": 14.38,
+      "framesCount": 85,
+      "fpsMean": 5.91,
+      "fpsMinPerSec": 2,
+      "fpsMaxPerSec": 10,
+      "p50FrameMs": 116.6,
+      "p95FrameMs": 400,
+      "p99FrameMs": 800,
+      "frameDropsOver33ms": 81,
+      "frameDropsOver50ms": 80
+    },
+    "audioStats": {
+      "contextsCreated": 2,
+      "oscillatorsCreated": 467,
+      "buffersStarted": 156
+    },
+    "screenshots": {
+      "liveFactionReveal": "after-01-live-faction-reveal.png",
+      "settlePostcard": "after-04-live-settle-match-postcard.png"
+    }
+  },
+  "afterControlledShowcase": {
+    "source": "Controlled /boardgame-prototype VFX Lab showcase (all 3 factions x Victory/Defeat/Spectator + Skip + Reduced Motion)",
+    "matrix": {
+      "lanternGuardVictory": true,
+      "mistOrderDefeat": true,
+      "wandererSpectator": true,
+      "skipAnimationVerified": true,
+      "reducedMotionVerified": true
+    },
+    "video": {
+      "path": "artifacts/boardgame-cinematic-polish/phase-2/after-factions-showcase.mp4",
+      "sizeBytes": 415287,
+      "durationSec": 16.76,
+      "tracks": [
+        {
+          "width": 1920,
+          "height": 1080,
+          "handler": "vide"
+        },
+        {
+          "width": 0,
+          "height": 0,
+          "handler": "soun"
+        }
+      ]
+    },
+    "recordingFps": {
+      "sampleDurationSec": 16.84,
+      "framesCount": 67,
+      "fpsMean": 3.98,
+      "fpsMinPerSec": 2,
+      "fpsMaxPerSec": 6,
+      "p50FrameMs": 233.4,
+      "p95FrameMs": 533.3,
+      "p99FrameMs": 666.7,
+      "frameDropsOver33ms": 66,
+      "frameDropsOver50ms": 66
+    },
+    "audioStats": {
+      "contextsCreated": 1,
+      "oscillatorsCreated": 30,
+      "buffersStarted": 4
+    },
+    "screenshots": [
+      "after-02-stage1-anticipation-lantern.png",
+      "after-03-stage2-faction-reveal-lantern.png",
+      "after-05-victory-lantern-guard-impact.png",
+      "after-06-defeat-mist-order-impact.png",
+      "after-07-spectator-wanderer-impact.png",
+      "after-08-reduced-motion-victory.png"
+    ]
+  },
+  "errors": {
+    "consoleErrors": 0,
+    "pageErrors": 0,
+    "auditErrors": 0
+  }
+}

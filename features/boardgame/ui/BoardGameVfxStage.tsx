@@ -49,14 +49,17 @@ import {
   VisualEventTracker,
   resolveCombatSequenceTimings,
   resolveRoleRevealTimeline,
+  resolveVictoryCinematicTimeline,
   type BoardGameVisualEvent,
   type CardDrawVisualEvent,
   type CinematicCutInVisualEvent,
   type CombatVfxVisualEvent,
   type DiceRollVisualEvent,
   type FloatingTextVisualEvent,
+  type MatchOutcomeView,
   type RoleRevealPhase,
   type ScreenShakeLevel,
+  type VictoryCinematicPhase,
 } from './vfx-queue';
 
 interface Point2D {
@@ -74,6 +77,7 @@ interface ActiveCombatAnim {
   factionReveal?: BoardGameFactionId | null;
   deckThemeBurst?: BoardGameDeckId | null;
   victoryFactionBurst?: BoardGameFactionId | null;
+  victoryOutcome?: MatchOutcomeView | null;
 }
 
 interface ActiveFloatingPopup {
@@ -634,39 +638,147 @@ function drawVictoryFireworks(
   particleScale: number,
 ): void {
   const faction = anim.victoryFactionBurst ?? 'lantern-guard';
-  const primary =
-    faction === 'mist-order' ? '#fb7185' : faction === 'wanderer' ? '#34d399' : '#fbbf24';
-  const secondary =
-    faction === 'mist-order' ? '#c084fc' : faction === 'wanderer' ? '#fde68a' : '#34d399';
-  const count = reducedMotion || particleScale <= 0 ? 6 : Math.max(10, Math.round(20 * particleScale));
+  const outcome = anim.victoryOutcome ?? 'victory';
+  const isDefeat = outcome === 'defeat';
+  const primary = isDefeat
+    ? '#e11d48'
+    : faction === 'mist-order'
+      ? '#fb7185'
+      : faction === 'wanderer'
+        ? '#f59e0b'
+        : '#10b981';
+  const secondary = isDefeat
+    ? '#94a3b8'
+    : faction === 'mist-order'
+      ? '#c084fc'
+      : faction === 'wanderer'
+        ? '#e2e8f0'
+        : '#fbbf24';
+  const count =
+    reducedMotion || particleScale <= 0
+      ? 6
+      : Math.max(10, Math.round((isDefeat ? 16 : 24) * particleScale));
+  const center = anim.source;
+
+  // Defeat: mưa tro/sương trầm lắng rơi chậm + vòng nhật thực mờ dần (không bắn pháo hoa ăn mừng)
+  if (isDefeat) {
+    const fade = Math.sin(p * Math.PI);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(0.82, fade * 0.85));
+
+    ctx.strokeStyle = primary;
+    ctx.lineWidth = 2.4 * (1 - p * 0.45);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 44 + p * 92, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = secondary;
+    ctx.lineWidth = 1.4 * (1 - p * 0.5);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 70 + p * 64, Math.PI * 0.2, Math.PI * 1.65);
+    ctx.stroke();
+
+    for (let k = 0; k < count; k++) {
+      const spreadX = (((k * 73) % 100) / 100 - 0.5) * 440;
+      const startY = center.y - 110 + ((k * 37) % 70);
+      const driftX = Math.sin(p * 4 + k) * 14;
+      const fallY = p * (120 + (k % 4) * 28);
+      ctx.fillStyle = k % 3 === 0 ? primary : secondary;
+      ctx.beginPath();
+      ctx.arc(center.x + spreadX + driftX, startY + fallY, 2.2 * (1 - p * 0.4), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+
+  // Victory / Spectator: Năng lượng đặc trưng từng phe tại trung tâm & các cụm pháo sáng
+  const centerFade = Math.sin(p * Math.PI);
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(0.88, centerFade));
+
+  if (faction === 'lantern-guard') {
+    // Đội Săn Đêm: Tia bình minh vàng-lục bảo rọi lên + tinh tú 4 cánh thăng hoa
+    const beamGrad = ctx.createLinearGradient(center.x, center.y - 160, center.x, center.y + 120);
+    beamGrad.addColorStop(0, 'rgba(251, 191, 36, 0)');
+    beamGrad.addColorStop(0.45, 'rgba(251, 191, 36, 0.22)');
+    beamGrad.addColorStop(0.75, 'rgba(16, 185, 129, 0.2)');
+    beamGrad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+    ctx.fillStyle = beamGrad;
+    ctx.beginPath();
+    ctx.moveTo(center.x - 42, center.y - 160);
+    ctx.lineTo(center.x + 42, center.y - 160);
+    ctx.lineTo(center.x + 126 + p * 36, center.y + 120);
+    ctx.lineTo(center.x - 126 - p * 36, center.y + 120);
+    ctx.closePath();
+    ctx.fill();
+  } else if (faction === 'mist-order') {
+    // Hội Bóng Đêm: Xoáy huyết nguyệt 2 tầng quay ngược chiều quanh tâm
+    ctx.strokeStyle = primary;
+    ctx.lineWidth = 3.2 * (1 - p * 0.45);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 46 + p * 108, p * 2.4, p * 2.4 + Math.PI * 1.45);
+    ctx.stroke();
+
+    ctx.strokeStyle = secondary;
+    ctx.lineWidth = 2.4 * (1 - p * 0.5);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 32 + p * 86, -p * 2.8, -p * 2.8 + Math.PI * 1.35);
+    ctx.stroke();
+  } else {
+    // Kẻ Độc Hành: Nhật thực hổ phách-bạc & 8 tia la bàn sắc nét
+    for (let rIdx = 0; rIdx < 8; rIdx++) {
+      const ang = (Math.PI / 4) * rIdx + p * 0.25;
+      const r1 = 42 + p * 24;
+      const r2 = r1 + (rIdx % 2 === 0 ? 78 : 52);
+      ctx.strokeStyle = rIdx % 2 === 0 ? primary : secondary;
+      ctx.lineWidth = rIdx % 2 === 0 ? 2.6 : 1.6;
+      ctx.beginPath();
+      ctx.moveTo(center.x + Math.cos(ang) * r1, center.y + Math.sin(ang) * r1);
+      ctx.lineTo(center.x + Math.cos(ang) * r2, center.y + Math.sin(ang) * r2);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 
   anim.targets.forEach((pt, idx) => {
     const delay = idx * 0.14;
-    const localP = Math.max(0, Math.min(1, (p - delay) / Math.max(0.3, 1 - delay)));
+    const localP = Math.max(0, Math.min(1, (p - delay) / Math.max(0.32, 1 - delay)));
     if (localP <= 0) return;
     const fade = Math.sin(localP * Math.PI);
 
     ctx.save();
-    ctx.globalAlpha = fade * 0.9;
+    ctx.globalAlpha = fade * (outcome === 'spectator' ? 0.78 : 0.9);
     ctx.strokeStyle = idx % 2 === 0 ? primary : secondary;
     ctx.lineWidth = 2.4 * fade;
     ctx.beginPath();
-    ctx.arc(pt.x, pt.y, 18 + localP * 86, 0, Math.PI * 2);
+    ctx.arc(pt.x, pt.y, 20 + localP * 88, 0, Math.PI * 2);
     ctx.stroke();
 
     for (let k = 0; k < count; k++) {
-      const ang = (Math.PI * 2 * k) / count + idx * 0.35;
-      const dist = localP * (78 + (k % 3) * 20);
-      ctx.fillStyle = k % 2 === 0 ? primary : '#ffffff';
-      ctx.beginPath();
-      ctx.arc(
-        pt.x + Math.cos(ang) * dist,
-        pt.y + Math.sin(ang) * dist + localP * 18,
-        (2.8 - localP * 1.1) * fade,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
+      const ang =
+        (Math.PI * 2 * k) / count +
+        idx * 0.35 +
+        (faction === 'mist-order' ? -localP * 1.2 : localP * 0.4);
+      const dist = localP * (78 + (k % 3) * 24);
+      const px = pt.x + Math.cos(ang) * dist;
+      const py =
+        pt.y +
+        Math.sin(ang) * dist +
+        (faction === 'lantern-guard' ? -localP * 22 : localP * 14);
+      ctx.fillStyle = k % 2 === 0 ? primary : k % 3 === 0 ? secondary : '#ffffff';
+      if (faction === 'wanderer' && k % 2 === 0) {
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(ang + Math.PI / 4);
+        const s = Math.max(2, (4.4 - localP * 1.6) * fade);
+        ctx.fillRect(-s * 0.5, -s * 0.5, s, s);
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(1.1, (2.9 - localP * 1.1) * fade), 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.restore();
   });
@@ -1139,6 +1251,9 @@ export interface BoardGameVfxState {
   } | null;
   activeCutIn: CinematicCutInVisualEvent | null;
   revealPhase: RoleRevealPhase;
+  victoryPhase: VictoryCinematicPhase;
+  victoryDurationMs: number;
+  isVictoryCinematicActive: boolean;
   screenShake: ScreenShakeLevel;
   reducedMotion: boolean;
   enableBackdropBlur: boolean;
@@ -1222,6 +1337,8 @@ export function useBoardGameVfxQueue({
   const [activeCutIn, setActiveCutIn] = useState<CinematicCutInVisualEvent | null>(null);
   const activeCutInIdRef = useRef<string | null>(null);
   const [revealPhase, setRevealPhase] = useState<RoleRevealPhase>('settle');
+  const [victoryPhase, setVictoryPhase] = useState<VictoryCinematicPhase>('settle');
+  const [victoryDurationMs, setVictoryDurationMs] = useState<number>(2200);
   const [screenShake, setScreenShake] = useState<ScreenShakeLevel>('none');
 
   const timeoutsRef = useRef<Set<number>>(new Set());
@@ -1314,6 +1431,7 @@ export function useBoardGameVfxQueue({
     clearAllTimers();
     stopAllBoardGameSounds();
     trackerRef.current.acknowledgeSnapshotDice(publicGameRef.current);
+    trackerRef.current.acknowledgeSnapshotVictory(publicGameRef.current);
     activeCombatAnimsRef.current = [];
     if (rafRef.current !== null) {
       window.cancelAnimationFrame(rafRef.current);
@@ -1338,6 +1456,7 @@ export function useBoardGameVfxQueue({
     setCutInQueue([]);
     setActiveCutIn(null);
     setRevealPhase('settle');
+    setVictoryPhase('settle');
     setScreenShake('none');
   }, [clearAllTimers]);
 
@@ -1417,35 +1536,75 @@ export function useBoardGameVfxQueue({
       }
     } else if (nextBanner.bannerType === 'VICTORY') {
       setRevealPhase('settle');
-      const container = containerRef.current;
-      const cw = container?.clientWidth || 720;
-      const ch = container?.clientHeight || 480;
-      activeCombatAnimsRef.current.push({
-        uid: `${nextBanner.id}::victory-fireworks`,
-        event: {
-          id: `${nextBanner.id}::victory-fireworks`,
-          kind: 'COMBAT_VFX',
-          order: 63,
-          durationMs: nextBanner.durationMs,
-          effect: 'HEAL_AURA',
-          sourcePlayerId: null,
-          targetPlayerIds: [],
-          shake: 'none',
-        },
-        source: { x: cw * 0.5, y: ch * 0.35 },
-        targets: [
-          { x: cw * 0.25, y: ch * 0.28 },
-          { x: cw * 0.5, y: ch * 0.22 },
-          { x: cw * 0.75, y: ch * 0.3 },
-        ],
-        startedAt: performance.now(),
-        durationMs: nextBanner.durationMs,
-        victoryFactionBurst: nextBanner.faction ?? 'lantern-guard',
-      });
-      setActiveCombatCount(activeCombatAnimsRef.current.length);
-      ensureCanvasLoop();
+      const vicTl = resolveVictoryCinematicTimeline(
+        nextBanner.durationMs,
+        reducedMotionRef.current,
+        qualityTierRef.current,
+      );
+      closeAfterMs = vicTl.totalMs;
+      setVictoryDurationMs(vicTl.totalMs);
+
+      const spawnVictoryBurst = (burstDurMs: number) => {
+        if (particleScaleRef.current <= 0) return;
+        const container = containerRef.current;
+        const cw = container?.clientWidth || 720;
+        const ch = container?.clientHeight || 480;
+        const burstUid = `${nextBanner.id}::victory-fireworks`;
+        activeCombatAnimsRef.current = [
+          ...activeCombatAnimsRef.current.filter((a) => a.uid !== burstUid),
+          {
+            uid: burstUid,
+            event: {
+              id: burstUid,
+              kind: 'COMBAT_VFX',
+              order: 63,
+              durationMs: burstDurMs,
+              effect: 'HEAL_AURA',
+              sourcePlayerId: null,
+              targetPlayerIds: [],
+              shake: 'none',
+            },
+            source: { x: cw * 0.5, y: ch * 0.44 },
+            targets: [
+              { x: cw * 0.24, y: ch * 0.34 },
+              { x: cw * 0.5, y: ch * 0.3 },
+              { x: cw * 0.76, y: ch * 0.34 },
+            ],
+            startedAt: performance.now(),
+            durationMs: burstDurMs,
+            victoryFactionBurst: nextBanner.faction ?? 'lantern-guard',
+            victoryOutcome: nextBanner.matchOutcome ?? 'victory',
+          },
+        ];
+        setActiveCombatCount(activeCombatAnimsRef.current.length);
+        ensureCanvasLoop();
+      };
+
+      if (vicTl.anticipationEndMs <= 0) {
+        setVictoryPhase('settle');
+      } else {
+        setVictoryPhase('anticipation');
+        scheduleTimeout(() => {
+          if (activeCutInIdRef.current !== nextBanner.id) return;
+          setVictoryPhase('faction-reveal');
+          spawnVictoryBurst(Math.max(900, vicTl.totalMs - vicTl.anticipationEndMs));
+        }, vicTl.anticipationEndMs);
+        scheduleTimeout(() => {
+          if (activeCutInIdRef.current !== nextBanner.id) return;
+          setVictoryPhase('impact');
+          if (enableScreenShakeRef.current) {
+            setScreenShake('light');
+            scheduleTimeout(() => setScreenShake('none'), 190);
+          }
+        }, vicTl.factionRevealEndMs);
+        scheduleTimeout(() => {
+          if (activeCutInIdRef.current !== nextBanner.id) return;
+          setVictoryPhase('settle');
+        }, vicTl.impactEndMs);
+      }
     } else {
       setRevealPhase('settle');
+      setVictoryPhase('settle');
     }
 
     scheduleTimeout(() => {
@@ -1719,7 +1878,15 @@ export function useBoardGameVfxQueue({
       }
 
       if (newCutIns.length > 0) {
-        setCutInQueue((prev) => [...prev.slice(-6), ...newCutIns]);
+        const victoryCutIn = newCutIns.find((c) => c.bannerType === 'VICTORY') ?? null;
+        if (victoryCutIn) {
+          // Ưu tiên phát ngay Victory/Defeat Cinematic V2 (không kẹt sau banner KO/YourTurn cũ)
+          activeCutInIdRef.current = null;
+          setActiveCutIn(null);
+          setCutInQueue([victoryCutIn]);
+        } else {
+          setCutInQueue((prev) => [...prev.slice(-6), ...newCutIns]);
+        }
       }
     },
     [containerRef, ensureCanvasLoop, scheduleTimeout],
@@ -1813,6 +1980,14 @@ export function useBoardGameVfxQueue({
     seenMatchRef.current === publicGame.matchId
       ? trackerRef.current.peekPendingDiceRoll(publicGame, reducedMotion)
       : null;
+  const pendingVictory =
+    seenMatchRef.current === publicGame.matchId
+      ? trackerRef.current.peekPendingVictory(publicGame)
+      : false;
+  const isVictoryCinematicActive =
+    pendingVictory ||
+    activeCutIn?.bannerType === 'VICTORY' ||
+    cutInQueue.some((c) => c.bannerType === 'VICTORY');
   const effectiveActiveDiceRoll = pendingDiceRoll ?? activeDiceRoll;
   const effectiveDiceRollStage: DiceRollStage = pendingDiceRoll
     ? reducedMotion
@@ -1851,6 +2026,9 @@ export function useBoardGameVfxQueue({
     activeCardDraw,
     activeCutIn,
     revealPhase,
+    victoryPhase,
+    victoryDurationMs,
+    isVictoryCinematicActive,
     screenShake,
     reducedMotion,
     enableBackdropBlur,
@@ -1909,6 +2087,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
 
   const cutIn = vfx.activeCutIn;
   const isRoleRevealCutIn = cutIn?.bannerType === 'ROLE_REVEAL';
+  const isVictoryCutIn = cutIn?.bannerType === 'VICTORY';
   const revealActorId = isRoleRevealCutIn ? cutIn?.actorId ?? null : null;
 
   useEffect(() => {
@@ -2570,7 +2749,314 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
         );
       })()}
 
-      {cutIn && !isRoleRevealCutIn && (
+      {/* LỚP 5B: PHASE 2 — VICTORY / DEFEAT / SPECTATOR CINEMATIC V2 STAGE (1.5–2.5s) */}
+      {cutIn && isVictoryCutIn && (() => {
+        const outcome: MatchOutcomeView = cutIn.matchOutcome ?? 'victory';
+        const isDefeat = outcome === 'defeat';
+        const isSpectatorView = outcome === 'spectator';
+        const vicPhase: VictoryCinematicPhase = vfx.reducedMotion ? 'settle' : vfx.victoryPhase;
+        const isAnticipation = !vfx.reducedMotion && vicPhase === 'anticipation';
+        const showFactionCrest = vfx.reducedMotion || vicPhase !== 'anticipation';
+        const showImpactVerdict =
+          vfx.reducedMotion || vicPhase === 'impact' || vicPhase === 'settle';
+        const showImpactBurst =
+          !vfx.reducedMotion && (vicPhase === 'impact' || vicPhase === 'settle');
+        const primaryHex = isDefeat ? '#e11d48' : cutInAccent;
+        const secondaryHex = isDefeat ? '#94a3b8' : cutInSecondary;
+        const factionMotif =
+          cutIn.faction === 'mist-order'
+            ? '🌒 BÓNG TỐI THỐNG TRỊ KTX · HỘI BÓNG ĐÊM'
+            : cutIn.faction === 'wanderer'
+              ? '🧭 KẺ ĐỘC HÀNH TOÀN THẮNG · PHE THỨ BA'
+              : '🔦 ÁNH ĐÈN PHÁ TAN MÀN ĐÊM · ĐỘI SĂN ĐÊM';
+        const factionBeamAccent =
+          cutIn.faction === 'mist-order'
+            ? '-skew-x-12 rotate-2'
+            : cutIn.faction === 'wanderer'
+              ? 'skew-x-6'
+              : '-skew-x-6';
+        const durationStyle = {
+          '--bg-victory-duration': `${vfx.victoryDurationMs}ms`,
+        } as React.CSSProperties;
+        const spotlightBackground = isDefeat
+          ? [
+              'radial-gradient(ellipse 460px 310px at 50% 48%, rgba(190,18,60,0.3) 0%, rgba(30,41,59,0.55) 42%, rgba(2,6,23,0.88) 76%, rgba(2,6,23,0.96) 100%)',
+              'radial-gradient(circle at 50% 50%, transparent 28%, rgba(2,6,23,0.75) 100%)',
+            ].join(', ')
+          : isSpectatorView
+            ? [
+                `radial-gradient(ellipse 520px 340px at 50% 48%, ${primaryHex}42 0%, ${secondaryHex}1e 38%, rgba(2,6,23,0.8) 72%, rgba(2,6,23,0.95) 100%)`,
+                'radial-gradient(circle at 50% 50%, transparent 32%, rgba(2,6,23,0.68) 100%)',
+              ].join(', ')
+            : [
+                `radial-gradient(ellipse 560px 360px at 50% 48%, ${primaryHex}52 0%, ${secondaryHex}24 36%, rgba(2,6,23,0.78) 70%, rgba(2,6,23,0.95) 100%)`,
+                'radial-gradient(circle at 50% 50%, transparent 32%, rgba(2,6,23,0.66) 100%)',
+              ].join(', ');
+        const winnerDisplayLabel =
+          cutIn.winnerFactionLabel ?? cutInTheme?.label ?? 'Kết thúc ván đấu';
+
+        return (
+          <>
+            {/* Darkened theatrical board backdrop + central spotlight */}
+            <div
+              data-testid="bg-vfx-victory-spotlight"
+              data-victory-phase={vicPhase}
+              data-outcome={outcome}
+              data-faction={cutIn.faction ?? 'unknown'}
+              aria-hidden="true"
+              className={`pointer-events-none absolute inset-0 z-[29] ${
+                vfx.reducedMotion ? '' : 'bg-vfx-victory-vignette'
+              }`}
+              style={{
+                ...durationStyle,
+                background: spotlightBackground,
+              }}
+            />
+
+            <div
+              data-testid="bg-vfx-cutin"
+              data-banner-type={cutIn.bannerType}
+              data-victory-phase={vicPhase}
+              data-outcome={outcome}
+              data-faction={cutIn.faction ?? 'unknown'}
+              className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4"
+            >
+              <div
+                data-testid="bg-vfx-victory-stage"
+                className={`relative flex w-full max-w-xl flex-col items-center overflow-visible rounded-3xl border-2 px-6 py-6 sm:px-8 sm:py-7 text-center shadow-2xl ${blurCls} ${
+                  isDefeat ? 'bg-slate-950/95' : 'bg-slate-950/92'
+                } ${
+                  vfx.reducedMotion
+                    ? ''
+                    : isDefeat
+                      ? 'bg-vfx-defeat-stage-push'
+                      : 'bg-vfx-victory-stage-push'
+                }`}
+                style={{
+                  ...durationStyle,
+                  borderColor: showImpactVerdict && !isDefeat ? secondaryHex : primaryHex,
+                  boxShadow: isDefeat
+                    ? '0 26px 76px -12px rgba(2,6,23,0.96), 0 0 36px rgba(190,18,60,0.42)'
+                    : showImpactVerdict
+                      ? `0 28px 84px -10px ${primaryHex}cc, 0 0 48px ${secondaryHex}66`
+                      : `0 24px 66px -12px ${primaryHex}99`,
+                }}
+              >
+                {/* Nền năng lượng phe, watermark ấn ký & flash sweep */}
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl"
+                >
+                  <div
+                    className={`absolute inset-y-0 -left-16 w-72 ${factionBeamAccent} transition-opacity duration-300 ${
+                      isAnticipation
+                        ? 'opacity-15'
+                        : isDefeat
+                          ? 'opacity-15'
+                          : 'opacity-25'
+                    }`}
+                    style={{
+                      background: `linear-gradient(135deg, ${primaryHex}cc, ${secondaryHex}55, transparent)`,
+                    }}
+                  />
+                  {cutIn.faction && (
+                    <div
+                      data-testid="bg-vfx-victory-watermark"
+                      className={`pointer-events-none absolute -right-4 top-1/2 -translate-y-1/2 transition-all duration-300 ${
+                        showFactionCrest
+                          ? isDefeat
+                            ? 'opacity-10 scale-100'
+                            : 'opacity-20 scale-105'
+                          : 'opacity-5 scale-90'
+                      }`}
+                    >
+                      <FactionCrestSvg faction={cutIn.faction} size={156} />
+                    </div>
+                  )}
+                  {vfx.enableFoil && showImpactVerdict && !isDefeat && (
+                    <div
+                      className="mn-foil-sweep pointer-events-none absolute inset-0 opacity-20"
+                      style={{
+                        backgroundImage:
+                          'linear-gradient(115deg, transparent 22%, rgba(255,255,255,0.48) 48%, transparent 74%)',
+                      }}
+                    />
+                  )}
+                  {showImpactBurst && !isDefeat && (
+                    <div
+                      className="bg-vfx-victory-flash-sweep pointer-events-none absolute inset-y-0 left-0 w-44"
+                      style={{
+                        background: `linear-gradient(90deg, transparent, ${secondaryHex}77, transparent)`,
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Vòng sóng xung kích khi chạm Impact */}
+                {showImpactBurst && (
+                  <>
+                    <div
+                      aria-hidden="true"
+                      className="bg-vfx-victory-shockwave pointer-events-none absolute -inset-3 rounded-[28px] border-2"
+                      style={{
+                        borderColor: isDefeat ? 'rgba(225,29,72,0.55)' : secondaryHex,
+                        boxShadow: isDefeat
+                          ? '0 0 24px rgba(190,18,60,0.4)'
+                          : `0 0 36px ${primaryHex}99`,
+                      }}
+                    />
+                    {!isDefeat && (
+                      <div
+                        aria-hidden="true"
+                        className="bg-vfx-reveal-impact-glow pointer-events-none absolute -inset-5 rounded-[34px] border"
+                        style={{ borderColor: `${primaryHex}aa` }}
+                      />
+                    )}
+                  </>
+                )}
+
+                {/* Biểu tượng huy hiệu phe chiến thắng trong tâm spotlight */}
+                <div className="relative z-10 mb-3 flex items-center justify-center">
+                  <div
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute -inset-5 rounded-full transition-opacity duration-300 ${
+                      isAnticipation ? 'opacity-35' : isDefeat ? 'opacity-45' : 'opacity-90'
+                    }`}
+                    style={{
+                      background: `radial-gradient(circle, ${secondaryHex}55 0%, ${primaryHex}33 48%, transparent 76%)`,
+                    }}
+                  />
+                  <div
+                    data-testid="bg-vfx-victory-crest"
+                    className={`relative flex h-24 w-24 sm:h-28 sm:w-28 items-center justify-center rounded-full border-2 bg-slate-950/90 shadow-2xl transition-transform duration-300 ${
+                      showFactionCrest
+                        ? vfx.reducedMotion
+                          ? 'scale-100'
+                          : 'bg-vfx-victory-crest-reveal'
+                        : 'scale-90 opacity-80'
+                    }`}
+                    style={{
+                      borderColor: showFactionCrest ? secondaryHex : `${primaryHex}88`,
+                      boxShadow: isDefeat
+                        ? '0 12px 34px rgba(2,6,23,0.92), 0 0 22px rgba(225,29,72,0.45)'
+                        : `0 16px 40px rgba(2,6,23,0.92), 0 0 32px ${primaryHex}aa`,
+                    }}
+                  >
+                    <FactionCrestSvg faction={cutIn.faction} size={74} />
+                  </div>
+                </div>
+
+                {/* Nội dung theo 4 giai đoạn: Anticipation -> Faction Reveal -> Impact -> Settle */}
+                <div className="relative z-10 w-full space-y-2">
+                  {isAnticipation ? (
+                    <>
+                      <span
+                        className="inline-block rounded-full border px-3 py-0.5 text-[10px] sm:text-xs font-black uppercase tracking-widest"
+                        style={{
+                          borderColor: `${primaryHex}99`,
+                          backgroundColor: 'rgba(15,23,42,0.88)',
+                          color: secondaryHex,
+                        }}
+                      >
+                        {isDefeat
+                          ? '🌘 MÀN ĐÊM BUÔNG XUỐNG'
+                          : isSpectatorView
+                            ? '🎭 HỒI KẾT BÓNG ĐÊM KTX'
+                            : '✦ KẾT CỤC ĐÊM KHUYA'}
+                      </span>
+                      <p className="text-lg sm:text-2xl font-black text-white">
+                        {isDefeat
+                          ? 'Trận chiến KTX đã đi đến hồi kết...'
+                          : isSpectatorView
+                            ? 'Phe thắng cuộc đang lộ diện...'
+                            : 'Định mệnh KTX đã được định đoạt...'}
+                      </p>
+                    </>
+                  ) : !showImpactVerdict ? (
+                    <div className={vfx.reducedMotion ? '' : 'bg-vfx-victory-impact-title'}>
+                      <span
+                        className="inline-block rounded-full border px-3 py-0.5 text-[10px] sm:text-xs font-extrabold tracking-wider bg-slate-900/85"
+                        style={{ borderColor: `${primaryHex}aa`, color: secondaryHex }}
+                      >
+                        {factionMotif}
+                      </span>
+                      <p className="mt-2 text-2xl sm:text-3xl font-black text-white drop-shadow">
+                        {winnerDisplayLabel}
+                      </p>
+                      <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-300">
+                        {isDefeat
+                          ? 'Phe đối phương đã chiếm quyền kiểm soát KTX'
+                          : isSpectatorView
+                            ? 'Phe làm chủ KTX trong ván đấu này'
+                            : 'Ánh sáng chiến thắng đang xác lập...'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className={vfx.reducedMotion ? '' : 'bg-vfx-victory-impact-title'}>
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        <span
+                          className="rounded-md px-2.5 py-0.5 text-[10px] sm:text-xs font-black uppercase tracking-widest"
+                          style={{
+                            backgroundColor: isDefeat ? 'rgba(190,18,60,0.32)' : secondaryHex,
+                            color: isDefeat ? '#fecdd3' : '#020617',
+                            border: isDefeat ? '1px solid rgba(251,113,133,0.55)' : 'none',
+                          }}
+                        >
+                          {isDefeat
+                            ? '🌘 PHỤC THÙ VÁN SAU'
+                            : isSpectatorView
+                              ? '👁️ GÓC NHÌN KHÁN GIẢ'
+                              : '✦ VINH QUANG BÓNG ĐÊM KTX'}
+                        </span>
+                        <span
+                          className="rounded-md border px-2 py-0.5 text-[10px] sm:text-xs font-extrabold tracking-wide bg-slate-900/85"
+                          style={{ borderColor: `${primaryHex}99`, color: secondaryHex }}
+                        >
+                          {factionMotif}
+                        </span>
+                      </div>
+                      <h2
+                        data-testid="bg-vfx-victory-title"
+                        className={`mt-2.5 text-2xl sm:text-4xl font-black tracking-tight whitespace-nowrap ${
+                          isDefeat
+                            ? 'text-rose-200'
+                            : isSpectatorView
+                              ? 'text-slate-100'
+                              : 'text-amber-100'
+                        }`}
+                        style={{
+                          textShadow: isDefeat
+                            ? '0 4px 20px rgba(190,18,60,0.65)'
+                            : `0 4px 26px ${primaryHex}cc`,
+                        }}
+                      >
+                        {isDefeat
+                          ? '⚔️ THẤT BẠI'
+                          : isSpectatorView
+                            ? '🎭 KẾT THÚC VÁN ĐẤU'
+                            : '👑 CHIẾN THẮNG'}
+                      </h2>
+                      <p
+                        className="mt-1.5 text-base sm:text-xl font-extrabold"
+                        style={{ color: isDefeat ? '#fda4af' : secondaryHex }}
+                      >
+                        🏆 {winnerDisplayLabel}
+                      </p>
+                      {cutIn.winReason && (
+                        <p className="mt-1 text-xs sm:text-sm font-medium text-slate-300">
+                          {cutIn.winReason}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
+      {cutIn && !isRoleRevealCutIn && !isVictoryCutIn && (
         <div
           data-testid="bg-vfx-cutin"
           data-banner-type={cutIn.bannerType}

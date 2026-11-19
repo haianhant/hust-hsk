@@ -573,6 +573,53 @@ export function BoardGameVfxSandbox() {
     });
   };
 
+  // Phase 2 Showcase: Phát trực tiếp Victory / Defeat / Spectator Cinematic V2 cho cả 3 phe
+  const triggerPhase2EndingShowcase = (
+    faction: 'lantern-guard' | 'mist-order' | 'wanderer',
+    outcome: 'victory' | 'defeat' | 'spectator',
+  ) => {
+    const seq = ++seqRef.current;
+    const factionLabel =
+      faction === 'mist-order'
+        ? 'Hội Bóng Đêm'
+        : faction === 'wanderer'
+          ? 'Kẻ Độc Hành'
+          : 'Đội Săn Đêm';
+    const winReason =
+      faction === 'mist-order'
+        ? 'Toàn bộ Đội Săn Đêm đã gục ngã — Hội Bóng Đêm làm chủ KTX!'
+        : faction === 'wanderer'
+          ? 'Kẻ Độc Hành hoàn thành mục tiêu bí mật và toàn thắng!'
+          : 'Toàn bộ Hội Bóng Đêm đã bị loại khỏi KTX!';
+    const title =
+      outcome === 'victory'
+        ? 'CHIẾN THẮNG'
+        : outcome === 'defeat'
+          ? 'THẤT BẠI'
+          : 'KẾT THÚC VÁN ĐẤU';
+    setLastDemoLabel(`Phase 2 Finale: ${title} · ${factionLabel} (${outcome})`);
+    vfx.enqueueEvents([
+      {
+        id: `sb-phase2-${faction}-${outcome}-${seq}`,
+        kind: 'CINEMATIC_CUTIN',
+        order: 62,
+        durationMs: vfx.reducedMotion ? 260 : 2200,
+        bannerType: 'VICTORY',
+        title,
+        subtitle: `${factionLabel} — ${winReason}`,
+        faction,
+        roleId: null,
+        roleName: null,
+        portraitSrc: null,
+        skillName: null,
+        actorId: null,
+        matchOutcome: outcome,
+        winnerFactionLabel: factionLabel,
+        winReason,
+      },
+    ]);
+  };
+
   return (
     <section
       data-testid="proto-section-vfx-sandbox"
@@ -723,6 +770,30 @@ export function BoardGameVfxSandbox() {
         >
           🏆 6. Hồi máu + Hạ gục + Thắng
         </button>
+        <button
+          type="button"
+          data-testid="proto-vfx-victory-lantern"
+          onClick={() => triggerPhase2EndingShowcase('lantern-guard', 'victory')}
+          className="rounded-xl border border-emerald-400/60 bg-emerald-950/80 px-3 py-2 text-xs font-black text-emerald-100 hover:bg-emerald-900 cursor-pointer"
+        >
+          👑 7A. Victory · Đội Săn Đêm
+        </button>
+        <button
+          type="button"
+          data-testid="proto-vfx-defeat-mist"
+          onClick={() => triggerPhase2EndingShowcase('mist-order', 'defeat')}
+          className="rounded-xl border border-rose-500/60 bg-rose-950/80 px-3 py-2 text-xs font-black text-rose-100 hover:bg-rose-900 cursor-pointer"
+        >
+          ⚔️ 7B. Defeat · Hội Bóng Đêm
+        </button>
+        <button
+          type="button"
+          data-testid="proto-vfx-spectator-wanderer"
+          onClick={() => triggerPhase2EndingShowcase('wanderer', 'spectator')}
+          className="rounded-xl border border-amber-400/60 bg-amber-950/80 px-3 py-2 text-xs font-black text-amber-100 hover:bg-amber-900 cursor-pointer"
+        >
+          👁️ 7C. Spectator · Kẻ Độc Hành
+        </button>
       </div>
 
       <p
@@ -739,7 +810,7 @@ export function BoardGameVfxSandbox() {
         data-active-tier={gfx.profile.tier}
         data-shake-enabled={String(gfx.profile.enableScreenShake)}
         data-reduced-motion={String(vfx.reducedMotion)}
-        className={`relative min-h-[340px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/95 p-3 sm:p-5 space-y-4 ${
+        className={`relative min-h-[420px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/95 p-3 sm:p-5 space-y-4 ${
           vfx.screenShake === 'heavy'
             ? 'bg-vfx-shake-heavy'
             : vfx.screenShake === 'light'

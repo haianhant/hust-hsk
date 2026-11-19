@@ -67,6 +67,21 @@ export interface RoleRevealTimeline {
   totalMs: number;
 }
 
+export type VictoryCinematicPhase =
+  | 'anticipation'
+  | 'faction-reveal'
+  | 'impact'
+  | 'settle';
+
+export type MatchOutcomeView = 'victory' | 'defeat' | 'spectator';
+
+export interface VictoryCinematicTimeline {
+  anticipationEndMs: number;
+  factionRevealEndMs: number;
+  impactEndMs: number;
+  totalMs: number;
+}
+
 export type CombatSequencePhase = 'target-lock' | 'travel' | 'hit-stop' | 'damage' | 'recovery';
 
 export interface CombatSequenceTimings {
@@ -146,6 +161,10 @@ export interface CinematicCutInVisualEvent {
   portraitSrc: string | null;
   skillName: string | null;
   actorId: string | null;
+  /** Phase 2 — Phân biệt kết cục theo góc nhìn người chơi hiện tại (Victory / Defeat / Spectator) */
+  matchOutcome?: MatchOutcomeView | null;
+  winnerFactionLabel?: string | null;
+  winReason?: string | null;
 }
 
 export type BoardGameVisualEvent =
@@ -328,6 +347,60 @@ export function resolveRoleRevealTimeline(
     impactEndMs,
     totalMs,
   };
+}
+
+/**
+ * Chia 4 giai đoạn Victory / Defeat / Spectator Cinematic (1.5–2.5s, mặc định 2200ms):
+ *   anticipation -> faction-reveal -> impact -> settle.
+ * Tôn trọng cấu hình đồ họa (`high`/`balanced`/`low`) và rút gọn `<= 280ms` khi bật Reduced Motion.
+ */
+export function resolveVictoryCinematicTimeline(
+  durationMs: number,
+  reducedMotion: boolean,
+  qualityTier: 'high' | 'balanced' | 'low' = 'high',
+): VictoryCinematicTimeline {
+  const safeTotal = Math.max(180, Math.round(durationMs));
+  if (reducedMotion || safeTotal <= 380) {
+    return {
+      anticipationEndMs: 0,
+      factionRevealEndMs: 0,
+      impactEndMs: 0,
+      totalMs: Math.min(280, safeTotal),
+    };
+  }
+  const clamped = Math.max(1500, Math.min(2500, safeTotal));
+  const totalMs =
+    qualityTier === 'low'
+      ? Math.min(clamped, 1750)
+      : qualityTier === 'balanced'
+        ? Math.min(clamped, 2000)
+        : clamped;
+  const anticipationEndMs = Math.round(totalMs * 0.22);
+  const factionRevealEndMs = Math.round(totalMs * 0.5);
+  const impactEndMs = Math.round(totalMs * 0.8);
+  return {
+    anticipationEndMs,
+    factionRevealEndMs,
+    impactEndMs,
+    totalMs,
+  };
+}
+
+export function resolveMatchOutcomeForViewer(
+  publicGame: Pick<BoardGamePublicGameView, 'winnerLabel' | 'winnerPlayerIds'>,
+  ctx: Pick<ExtractVisualEventsContext, 'selfPlayerId' | 'isSpectator'>,
+): MatchOutcomeView {
+  if (ctx.isSpectator || !ctx.selfPlayerId) {
+    return 'spectator';
+  }
+  return publicGame.winnerPlayerIds.includes(ctx.selfPlayerId) ? 'victory' : 'defeat';
+}
+
+export function computeVictoryEventId(
+  pub: Pick<BoardGamePublicGameView, 'matchId' | 'winnerLabel'>,
+): string | null {
+  if (!pub.winnerLabel) return null;
+  return `${pub.matchId}::victory::${pub.winnerLabel}`;
 }
 
 /**
@@ -1080,7 +1153,7 @@ export function extractVisualEventsFromDiff(
     }
   }
 
-  // 5. CHIẾN THẮNG (order: 62)
+  // 5. CHIẾN THẮNG / THẤT BẠI / KHÁN GIẢ (order: 62) — chỉ phát khi server chính thức kết thúc trận
   if (!prev.winnerLabel && next.winnerLabel) {
     const winFaction =
       next.winnerFaction === 'lantern-guard' ||
@@ -1090,13 +1163,21 @@ export function extractVisualEventsFromDiff(
         : next.winnerFaction === 'wanderer-solo'
           ? 'wanderer'
           : null;
+    const matchOutcome = resolveMatchOutcomeForViewer(next, ctx);
+    const outcomeTitle =
+      matchOutcome === 'victory'
+        ? 'CHIẾN THẮNG'
+        : matchOutcome === 'defeat'
+          ? 'THẤT BẠI'
+          : 'KẾT THÚC VÁN ĐẤU';
+    const victoryId = computeVictoryEventId(next) ?? `${next.matchId}::victory::${next.winnerLabel}`;
     events.push({
-      id: `${next.matchId}::victory::${next.winnerLabel}`,
+      id: victoryId,
       kind: 'CINEMATIC_CUTIN',
       order: 62,
-      durationMs: scaleDuration(1700, reduced),
+      durationMs: scaleDuration(2200, reduced),
       bannerType: 'VICTORY',
-      title: 'CHIẾN THẮNG',
+      title: outcomeTitle,
       subtitle: `${next.winnerLabel}${next.winReason ? ` — ${next.winReason}` : ''}`,
       faction: winFaction,
       roleId: null,
@@ -1104,6 +1185,9 @@ export function extractVisualEventsFromDiff(
       portraitSrc: null,
       skillName: null,
       actorId: null,
+      matchOutcome,
+      winnerFactionLabel: next.winnerLabel,
+      winReason: next.winReason ?? null,
     });
   }
 
@@ -1199,6 +1283,37 @@ export class VisualEventTracker {
   }
 
   /**
+   * Kiểm tra thuần túy (Frame 1) xem trận vừa chuyển từ PLAYING -> FINISHED
+   * và cần giữ MatchResult lại chờ Victory/Defeat Cinematic chạy xong.
+   * Trả về `false` khi mới vào/F5 reconnect lên trận đã FINISHED.
+   */
+  peekPendingVictory(nextGame: BoardGamePublicGameView): boolean {
+    if (!this.baselineGame || this.matchId !== nextGame.matchId) {
+      return false;
+    }
+    if (this.baselineGame.winnerLabel || !nextGame.winnerLabel) {
+      return false;
+    }
+    const evId = computeVictoryEventId(nextGame);
+    if (!evId || this.seenIds.has(evId)) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Đánh dấu event kết thúc trận hiện tại đã xử lý khi bấm Skip.
+   */
+  acknowledgeSnapshotVictory(publicGame: BoardGamePublicGameView | null): void {
+    if (!publicGame || this.matchId !== publicGame.matchId) return;
+    const evId = computeVictoryEventId(publicGame);
+    if (evId && !this.seenIds.has(evId)) {
+      this.markSeen([evId]);
+    }
+    this.baselineGame = publicGame;
+  }
+
+  /**
    * Nạp trạng thái ban đầu (lúc mới vào bàn hoặc khi F5 Reconnect).
    * Không phát lại các event lịch sử đã diễn ra trước khi client kết nối.
    */
@@ -1210,6 +1325,12 @@ export class VisualEventTracker {
       this.resetForMatch(publicGame.matchId);
     }
     this.baselineGame = publicGame;
+
+    // Đánh dấu ngay trận đã FINISHED khi F5/reconnect để tuyệt đối không phát lại cinematic
+    const existingVictoryId = computeVictoryEventId(publicGame);
+    if (existingVictoryId && !this.seenIds.has(existingVictoryId)) {
+      this.markSeen([existingVictoryId]);
+    }
 
     const initialEvents: BoardGameVisualEvent[] = [];
     const reduced = Boolean(ctx.reducedMotion);

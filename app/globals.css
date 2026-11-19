@@ -78,6 +78,14 @@ canvas {
   .bg-vfx-reveal-flash-sweep,
   .bg-vfx-reveal-shockwave,
   .bg-vfx-reveal-text-lock,
+  .bg-vfx-victory-vignette,
+  .bg-vfx-victory-stage-push,
+  .bg-vfx-defeat-stage-push,
+  .bg-vfx-victory-crest-reveal,
+  .bg-vfx-victory-impact-title,
+  .bg-vfx-victory-flash-sweep,
+  .bg-vfx-victory-shockwave,
+  .bg-vfx-match-result-enter,
   .bg-vfx-faction-crest-pop,
   .bg-vfx-impact-flash,
   .bg-vfx-card-flight,
@@ -529,4 +537,90 @@ canvas {
 
 .bg-vfx-card-draw-ring {
   animation: bg-vfx-card-draw-ring 780ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Phase 2 — Victory / Defeat / Spectator Cinematic V2 (1.5-2.5s, 4 stages) */
+@keyframes bg-vfx-victory-vignette {
+  0%   { opacity: 0.84; }
+  14%  { opacity: 1; }
+  84%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes bg-vfx-victory-stage-push {
+  0%   { opacity: 0.9; transform: translate3d(0, 14px, 0) scale(0.9); }
+  22%  { opacity: 1; transform: translate3d(0, 0, 0) scale(0.97); }
+  50%  { opacity: 1; transform: translate3d(0, -2px, 0) scale(1.025); }
+  66%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1.055); }
+  84%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  100% { opacity: 0; transform: translate3d(0, -10px, 0) scale(1.02); }
+}
+
+@keyframes bg-vfx-defeat-stage-push {
+  0%   { opacity: 0.9; transform: translate3d(0, -12px, 0) scale(1.04); }
+  22%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1.01); }
+  50%  { opacity: 1; transform: translate3d(0, 2px, 0) scale(1); }
+  68%  { opacity: 1; transform: translate3d(0, 4px, 0) scale(0.985); }
+  84%  { opacity: 1; transform: translate3d(0, 2px, 0) scale(0.99); }
+  100% { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.97); }
+}
+
+@keyframes bg-vfx-victory-crest-reveal {
+  0%   { opacity: 0.85; transform: scale(0.76) rotate(-8deg); }
+  52%  { opacity: 1; transform: scale(1.14) rotate(2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes bg-vfx-victory-impact-title {
+  0%   { opacity: 0.88; transform: translate3d(0, 8px, 0) scale(0.92); }
+  58%  { opacity: 1; transform: translate3d(0, 0, 0) scale(1.04); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes bg-vfx-victory-flash-sweep {
+  0%   { opacity: 0; transform: translateX(-115%) skewX(-18deg); }
+  36%  { opacity: 0.55; }
+  100% { opacity: 0; transform: translateX(185%) skewX(-18deg); }
+}
+
+@keyframes bg-vfx-victory-shockwave {
+  0%   { opacity: 0.88; transform: scale(0.84); }
+  100% { opacity: 0; transform: scale(1.26); }
+}
+
+@keyframes bg-vfx-match-result-enter {
+  0%   { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.97); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+.bg-vfx-victory-vignette {
+  animation: bg-vfx-victory-vignette var(--bg-victory-duration, 2200ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.bg-vfx-victory-stage-push {
+  animation: bg-vfx-victory-stage-push var(--bg-victory-duration, 2200ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.bg-vfx-defeat-stage-push {
+  animation: bg-vfx-defeat-stage-push var(--bg-victory-duration, 2200ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.bg-vfx-victory-crest-reveal {
+  animation: bg-vfx-victory-crest-reveal 440ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.bg-vfx-victory-impact-title {
+  animation: bg-vfx-victory-impact-title 360ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bg-vfx-victory-flash-sweep {
+  animation: bg-vfx-victory-flash-sweep 540ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bg-vfx-victory-shockwave {
+  animation: bg-vfx-victory-shockwave 620ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bg-vfx-match-result-enter {
+  animation: bg-vfx-match-result-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }

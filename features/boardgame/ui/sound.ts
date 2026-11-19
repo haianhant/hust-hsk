@@ -892,13 +892,67 @@ export function playVictoryFanfare(faction?: BoardGameFactionId | null): void {
       ? [329.63, 440, 493.88, 659.25, 987.77] // E/A bright sus hero fanfare
       : [261.63, 523.25, 659.25, 783.99, 1046.5]; // Warm major victory chord
 
+  playLayeredCue(
+    [
+      // Stage 1: Anticipation warm swell (0.00s..0.38s)
+      { freq: notes[0] * 0.5, endFreq: notes[0], startOffsetSec: 0, durationSec: 0.42, type: 'sine', gainPeak: 0.044 },
+      // Stage 2: Faction crest arpeggio (0.36s..0.78s)
+      { freq: notes[1], startOffsetSec: 0.36, durationSec: 0.18, type: 'triangle', gainPeak: 0.052 },
+      { freq: notes[2], startOffsetSec: 0.5, durationSec: 0.18, type: 'triangle', gainPeak: 0.056 },
+      { freq: notes[3], startOffsetSec: 0.64, durationSec: 0.24, type: 'triangle', gainPeak: 0.06 },
+      // Stage 3: Victory impact resonant chord (0.88s..1.48s)
+      { freq: notes[0], startOffsetSec: 0.88, durationSec: 0.62, type: 'triangle', gainPeak: 0.048 },
+      { freq: notes[4], startOffsetSec: 0.88, durationSec: 0.58, type: 'sine', gainPeak: 0.066 },
+      { freq: notes[4] * 1.25, startOffsetSec: 0.92, durationSec: 0.52, type: 'sine', gainPeak: 0.036 },
+    ],
+    [
+      {
+        bufferKey: 'arcCrackle',
+        startOffsetSec: 0.86,
+        durationSec: 0.42,
+        playbackRate: isMist ? 0.92 : isWanderer ? 1.15 : 1.05,
+        gainPeak: 0.032,
+        filterType: 'bandpass',
+        filterFreq: isMist ? 1800 : 2800,
+      },
+    ],
+  );
+}
+
+export function playDefeatToll(faction?: BoardGameFactionId | null): void {
+  const root = faction === 'mist-order' ? 146.83 : faction === 'wanderer' ? 164.81 : 130.81;
+  playLayeredCue(
+    [
+      // Stage 1: Low somber sub pulse (0.00s..0.40s)
+      { freq: root, endFreq: root * 0.75, startOffsetSec: 0, durationSec: 0.44, type: 'sine', gainPeak: 0.056 },
+      // Stage 2: Descending minor motif (0.36s..0.85s)
+      { freq: root * 2.4, endFreq: root * 2.0, startOffsetSec: 0.36, durationSec: 0.26, type: 'triangle', gainPeak: 0.044 },
+      { freq: root * 1.8, endFreq: root * 1.5, startOffsetSec: 0.58, durationSec: 0.32, type: 'triangle', gainPeak: 0.048 },
+      // Stage 3: Deep midnight bell toll (0.86s..1.52s)
+      { freq: root, endFreq: root * 0.88, startOffsetSec: 0.86, durationSec: 0.66, type: 'sine', gainPeak: 0.06 },
+      { freq: root * 1.5, endFreq: root * 1.42, startOffsetSec: 0.88, durationSec: 0.56, type: 'triangle', gainPeak: 0.034 },
+    ],
+    [
+      {
+        bufferKey: 'blade',
+        startOffsetSec: 0.84,
+        durationSec: 0.36,
+        playbackRate: 0.55,
+        gainPeak: 0.036,
+        filterType: 'lowpass',
+        filterFreq: 620,
+      },
+    ],
+  );
+}
+
+export function playSpectatorFinale(faction?: BoardGameFactionId | null): void {
+  const base = faction === 'mist-order' ? 293.66 : faction === 'wanderer' ? 329.63 : 261.63;
   playLayeredCue([
-    { freq: notes[0], startOffsetSec: 0, durationSec: 0.45, type: 'triangle', gainPeak: 0.046 },
-    { freq: notes[1], startOffsetSec: 0, durationSec: 0.16, type: 'triangle', gainPeak: 0.055 },
-    { freq: notes[2], startOffsetSec: 0.11, durationSec: 0.16, type: 'triangle', gainPeak: 0.056 },
-    { freq: notes[3], startOffsetSec: 0.22, durationSec: 0.2, type: 'triangle', gainPeak: 0.062 },
-    { freq: notes[4], startOffsetSec: 0.34, durationSec: 0.46, type: 'sine', gainPeak: 0.068 },
-    { freq: notes[4] * 1.25, startOffsetSec: 0.36, durationSec: 0.42, type: 'sine', gainPeak: 0.036 },
+    { freq: base, startOffsetSec: 0, durationSec: 0.38, type: 'sine', gainPeak: 0.04 },
+    { freq: base * 1.5, startOffsetSec: 0.38, durationSec: 0.28, type: 'triangle', gainPeak: 0.048 },
+    { freq: base * 2, startOffsetSec: 0.72, durationSec: 0.56, type: 'sine', gainPeak: 0.054 },
+    { freq: base * 3, startOffsetSec: 0.86, durationSec: 0.46, type: 'sine', gainPeak: 0.03 },
   ]);
 }
 
@@ -1051,7 +1105,13 @@ export function playSoundForVisualEvent(
           playRoleReveal(event.faction);
           return true;
         case 'VICTORY':
-          playVictoryFanfare(event.faction);
+          if (event.matchOutcome === 'defeat') {
+            playDefeatToll(event.faction);
+          } else if (event.matchOutcome === 'spectator') {
+            playSpectatorFinale(event.faction);
+          } else {
+            playVictoryFanfare(event.faction);
+          }
           return true;
         case 'ULTIMATE_SKILL':
           playSignatureSkillCue(event.roleId);

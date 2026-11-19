@@ -1,0 +1,49 @@
+{
+  "generatedAt": "2026-11-19T05:45:24.714Z",
+  "mode": "before",
+  "video": {
+    "path": "artifacts/boardgame-cinematic-polish/phase-2/before-victory.mp4",
+    "sizeBytes": 1192970,
+    "durationSec": 0,
+    "tracks": [
+      {
+        "width": 1920,
+        "height": 1080,
+        "handler": "vide"
+      },
+      {
+        "width": 0,
+        "height": 0,
+        "handler": "soun"
+      }
+    ]
+  },
+  "liveMatch": {
+    "winnerFaction": "mist-order",
+    "winnerLabel": "Hội Bóng Đêm",
+    "p1Outcome": "defeat",
+    "victorySpotlightObserved": false,
+    "modalOpenedAtMs": 16533.300000000745,
+    "screenshots": [
+      "before-01-match-end-instant-modal.png",
+      "before-02-match-result-postcard.png"
+    ]
+  },
+  "recordingFps": {
+    "sampleDurationSec": 21.95,
+    "framesCount": 137,
+    "fpsMean": 6.24,
+    "fpsMinPerSec": 3,
+    "fpsMaxPerSec": 10,
+    "p50FrameMs": 133.3,
+    "p95FrameMs": 366.6,
+    "p99FrameMs": 516.6,
+    "frameDropsOver33ms": 126,
+    "frameDropsOver50ms": 124
+  },
+  "audioStats": {
+    "contextsCreated": 2,
+    "oscillatorsCreated": 759,
+    "buffersStarted": 308
+  }
+}

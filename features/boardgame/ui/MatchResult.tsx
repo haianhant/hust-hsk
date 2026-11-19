@@ -18,6 +18,8 @@ export interface MatchResultProps {
   publicGame: BoardGamePublicGameView;
   selfPlayerId: string | null;
   isSpectator: boolean;
+  animateEntrance?: boolean;
+  reducedMotion?: boolean;
   postcardSlot?: ReactNode;
   onOpenLeaderboard?: () => void;
   onPlayAgain?: () => void;
@@ -28,6 +30,8 @@ export default function MatchResult({
   publicGame,
   selfPlayerId,
   isSpectator,
+  animateEntrance = false,
+  reducedMotion = false,
   postcardSlot,
   onOpenLeaderboard,
   onPlayAgain,
@@ -58,13 +62,22 @@ export default function MatchResult({
         ? 'from-emerald-950/70 via-slate-900 to-amber-950/60'
         : 'from-amber-950/70 via-slate-900 to-emerald-950/60';
 
+  const viewerOutcome = isSpectator ? 'spectator' : selfWon ? 'victory' : 'defeat';
+
   return (
     <div
       data-testid="bg-match-result-modal"
       data-winner-faction={resolvedWinFaction ?? 'none'}
+      data-outcome={viewerOutcome}
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-md"
     >
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-amber-400/50 bg-slate-900 text-slate-100 shadow-[0_24px_72px_-12px_rgba(251,191,36,0.35)]">
+      <div
+        className={`flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-slate-900 text-slate-100 ${
+          viewerOutcome === 'defeat'
+            ? 'border-rose-500/45 shadow-[0_24px_72px_-12px_rgba(225,29,72,0.3)]'
+            : 'border-amber-400/50 shadow-[0_24px_72px_-12px_rgba(251,191,36,0.35)]'
+        } ${animateEntrance && !reducedMotion ? 'bg-vfx-match-result-enter' : ''}`}
+      >
         <div className={`relative overflow-hidden border-b border-slate-800 bg-gradient-to-r ${headerGradientClass} px-5 py-4`}>
           <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -80,7 +93,7 @@ export default function MatchResult({
                 </h2>
               </div>
             </div>
-            {!isSpectator && (
+            {!isSpectator ? (
               <span
                 className={`rounded-xl border px-3.5 py-1.5 text-xs font-black tracking-wide shadow ${
                   selfWon
@@ -89,6 +102,10 @@ export default function MatchResult({
                 }`}
               >
                 {selfWon ? '👑 CHIẾN THẮNG!' : '⚔️ THẤT BẠI — PHỤC THÙ VÁN SAU'}
+              </span>
+            ) : (
+              <span className="rounded-xl border border-slate-500/55 bg-slate-950/75 px-3.5 py-1.5 text-xs font-black tracking-wide text-slate-200 shadow">
+                👁️ GÓC NHÌN KHÁN GIẢ
               </span>
             )}
           </div>

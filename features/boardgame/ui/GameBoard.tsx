@@ -185,6 +185,15 @@ export function GameBoard({
       : p.location;
 
   const prevTurnRef = useRef<number>(publicGame.turnNumber);
+  const sawLiveVictoryCinematicRef = useRef<string | null>(null);
+  if (vfx.isVictoryCinematicActive && publicGame.matchId) {
+    sawLiveVictoryCinematicRef.current = publicGame.matchId;
+  }
+  const showMatchResultModal = Boolean(
+    publicGame.winnerLabel && publicGame.finalReveal && !vfx.isVictoryCinematicActive,
+  );
+  const animateMatchResultEntrance =
+    showMatchResultModal && sawLiveVictoryCinematicRef.current === publicGame.matchId;
   const prevEmoteItemRef = useRef<BoardGameChatEmoteServerMessage | null>(
     recentEmotes.length > 0 ? recentEmotes[recentEmotes.length - 1] : null,
   );
@@ -1530,12 +1539,14 @@ export function GameBoard({
         />
       </div>
 
-      {/* MODAL TỔNG KẾT VÁN ĐẤU */}
-      {publicGame.winnerLabel && publicGame.finalReveal && (
+      {/* MODAL TỔNG KẾT VÁN ĐẤU (chờ Victory/Defeat Cinematic V2 khép lại mượt mà; hiện ngay khi F5/Skip) */}
+      {showMatchResultModal && (
         <MatchResult
           publicGame={publicGame}
           selfPlayerId={selfPlayerId}
           isSpectator={isSpectator}
+          animateEntrance={animateMatchResultEntrance}
+          reducedMotion={vfx.reducedMotion}
           postcardSlot={<MatchPostcard publicGame={publicGame} inviteCode={inviteCode} />}
           onOpenLeaderboard={onOpenLeaderboard}
           onPlayAgain={onPlayAgain}

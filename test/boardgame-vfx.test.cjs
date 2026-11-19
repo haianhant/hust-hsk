@@ -12,9 +12,12 @@ const {
   VisualEventTracker,
   buildDiceRollEventFromSnapshot,
   computeDiceSig,
+  computeVictoryEventId,
   extractVisualEventsFromDiff,
   resolveCombatSequenceTimings,
+  resolveMatchOutcomeForViewer,
   resolveRoleRevealTimeline,
+  resolveVictoryCinematicTimeline,
 } = require('../features/boardgame/ui/vfx-queue.ts');
 const {
   buildDiceRollTimeline,
@@ -1385,4 +1388,182 @@ test('Cinematic V2 Phase 1 (16) — Multiplayer Role Reveal sync, strict pre-rev
   assert.ok(fbRev, 'State transition alone must emit ROLE_REVEAL for other connected clients');
   assert.equal(fbRev.roleId, 'gac-radio');
   assert.equal(fbRev.faction, 'lantern-guard');
+});
+
+test('Cinematic V2 Phase 2 (17) — Victory/Defeat 4-stage timeline (1.5-2.5s), Quality Tiers & Reduced Motion', () => {
+  const high = resolveVictoryCinematicTimeline(2200, false, 'high');
+  assert.ok(high.totalMs >= 1500 && high.totalMs <= 2500, 'Victory cinematic duration must stay within 1.5-2.5s');
+  assert.ok(
+    high.anticipationEndMs > 0 &&
+      high.anticipationEndMs < high.factionRevealEndMs &&
+      high.factionRevealEndMs < high.impactEndMs &&
+      high.impactEndMs < high.totalMs,
+    'Victory cinematic must strictly follow anticipation -> faction-reveal -> impact -> settle',
+  );
+
+  const balanced = resolveVictoryCinematicTimeline(2200, false, 'balanced');
+  assert.ok(balanced.totalMs >= 1500 && balanced.totalMs <= 2000);
+
+  const low = resolveVictoryCinematicTimeline(2200, false, 'low');
+  assert.ok(low.totalMs >= 1500 && low.totalMs <= 1750);
+
+  assert.equal(resolveVictoryCinematicTimeline(900, false, 'high').totalMs, 1500);
+  assert.equal(resolveVictoryCinematicTimeline(4000, false, 'high').totalMs, 2500);
+
+  const reduced = resolveVictoryCinematicTimeline(2200, true, 'high');
+  assert.equal(reduced.anticipationEndMs, 0);
+  assert.equal(reduced.factionRevealEndMs, 0);
+  assert.equal(reduced.impactEndMs, 0);
+  assert.ok(reduced.totalMs <= 280, 'Reduced Motion must clamp Victory cinematic to <= 280ms');
+});
+
+test('Cinematic V2 Phase 2 (18) — All 3 factions x Victory/Defeat/Spectator outcome distinction & pre-end privacy', () => {
+  const activeMatch = makePubState({ turnNumber: 7 });
+
+  // 1) Pre-match-end safety: while winnerLabel is null, NEVER emit VICTORY or leak secret roles even if winnerFaction/finalReveal tampered
+  const preEndProbe = {
+    ...activeMatch,
+    turnNumber: 8,
+    winnerLabel: null,
+    winnerFaction: null,
+    winnerPlayerIds: [],
+    finalReveal: null,
+  };
+  for (const viewer of [
+    { selfPlayerId: 'p1', isSpectator: false },
+    { selfPlayerId: 'p2', isSpectator: false },
+    { selfPlayerId: null, isSpectator: true },
+  ]) {
+    const preEvents = extractVisualEventsFromDiff(activeMatch, preEndProbe, viewer);
+    assert.equal(
+      preEvents.some((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'VICTORY'),
+      false,
+      'Must NEVER emit VICTORY cinematic before server finishes the match',
+    );
+  }
+
+  // 2) Test all winning faction shapes (lantern-guard, mist-order, wanderer, wanderer-solo)
+  const cases = [
+    { rawFaction: 'lantern-guard', expectedFaction: 'lantern-guard', label: 'Đội Săn Đêm', winners: ['p1', 'p3'] },
+    { rawFaction: 'mist-order', expectedFaction: 'mist-order', label: 'Hội Bóng Đêm', winners: ['p2', 'p4'] },
+    { rawFaction: 'wanderer', expectedFaction: 'wanderer', label: 'Kẻ Độc Hành', winners: ['p3'] },
+    { rawFaction: 'wanderer-solo', expectedFaction: 'wanderer', label: 'Hải "Sưu Tầm" (Độc Hành)', winners: ['p4'] },
+  ];
+
+  for (const c of cases) {
+    const finishedSnap = {
+      ...activeMatch,
+      turnNumber: 9,
+      turnPhase: 'ENDED',
+      winnerFaction: c.rawFaction,
+      winnerLabel: c.label,
+      winnerPlayerIds: c.winners,
+      winReason: `${c.label} đã hoàn thành điều kiện chiến thắng.`,
+    };
+
+    const winnerId = c.winners[0];
+    const loserId = ['p1', 'p2', 'p3', 'p4'].find((id) => !c.winners.includes(id));
+
+    assert.equal(resolveMatchOutcomeForViewer(finishedSnap, { selfPlayerId: winnerId, isSpectator: false }), 'victory');
+    assert.equal(resolveMatchOutcomeForViewer(finishedSnap, { selfPlayerId: loserId, isSpectator: false }), 'defeat');
+    assert.equal(resolveMatchOutcomeForViewer(finishedSnap, { selfPlayerId: null, isSpectator: true }), 'spectator');
+    assert.equal(resolveMatchOutcomeForViewer(finishedSnap, { selfPlayerId: winnerId, isSpectator: true }), 'spectator');
+
+    const winEv = extractVisualEventsFromDiff(activeMatch, finishedSnap, {
+      selfPlayerId: winnerId,
+      isSpectator: false,
+    }).find((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'VICTORY');
+    assert.ok(winEv);
+    assert.equal(winEv.matchOutcome, 'victory');
+    assert.equal(winEv.title, 'CHIẾN THẮNG');
+    assert.equal(winEv.faction, c.expectedFaction);
+    assert.equal(winEv.winnerFactionLabel, c.label);
+    assert.ok(winEv.durationMs >= 1500 && winEv.durationMs <= 2500);
+
+    const loseEv = extractVisualEventsFromDiff(activeMatch, finishedSnap, {
+      selfPlayerId: loserId,
+      isSpectator: false,
+    }).find((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'VICTORY');
+    assert.ok(loseEv);
+    assert.equal(loseEv.matchOutcome, 'defeat');
+    assert.equal(loseEv.title, 'THẤT BẠI');
+    assert.equal(loseEv.faction, c.expectedFaction);
+
+    const specEv = extractVisualEventsFromDiff(activeMatch, finishedSnap, {
+      selfPlayerId: null,
+      isSpectator: true,
+    }).find((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'VICTORY');
+    assert.ok(specEv);
+    assert.equal(specEv.matchOutcome, 'spectator');
+    assert.equal(specEv.title, 'KẾT THÚC VÁN ĐẤU');
+    assert.equal(specEv.faction, c.expectedFaction);
+  }
+});
+
+test('Cinematic V2 Phase 2 (19) — Frame-1 pendingVictory guard, Skip acknowledge, F5 non-replay & Audio dedupe', () => {
+  const base = makePubState({ turnNumber: 10 });
+  const finished = {
+    ...base,
+    turnNumber: 11,
+    turnPhase: 'ENDED',
+    winnerFaction: 'lantern-guard',
+    winnerLabel: 'Đội Săn Đêm',
+    winnerPlayerIds: ['p1', 'p3'],
+    winReason: 'Toàn bộ Hội Bóng Đêm đã gục ngã!',
+  };
+
+  // Live transition: Frame-1 peekPendingVictory is true before ingestSnapshot runs
+  const liveTracker = new VisualEventTracker();
+  liveTracker.seedBaseline(base, { selfPlayerId: 'p1', isSpectator: false });
+  assert.equal(liveTracker.peekPendingVictory(finished), true, 'Live PLAYING->FINISHED transition must hold MatchResult on Frame 1');
+
+  // Skip acknowledges immediately and clears peekPendingVictory
+  liveTracker.acknowledgeSnapshotVictory(finished);
+  assert.equal(liveTracker.peekPendingVictory(finished), false, 'Skip acknowledge must release MatchResult immediately');
+  assert.equal(
+    liveTracker.ingestSnapshot(finished, { selfPlayerId: 'p1', isSpectator: false }).length,
+    0,
+    'After Skip acknowledge, ingesting the same FINISHED snapshot must not emit VICTORY again',
+  );
+
+  // F5 / Reconnect directly onto already-FINISHED match: NEVER holds MatchResult or replays cinematic
+  const f5Tracker = new VisualEventTracker();
+  const seedEvents = f5Tracker.seedBaseline(finished, { selfPlayerId: 'p2', isSpectator: false });
+  assert.equal(seedEvents.length, 0);
+  assert.equal(f5Tracker.peekPendingVictory(finished), false, 'F5 reconnect onto FINISHED match must open MatchResult immediately');
+  assert.equal(f5Tracker.hasEventBeenSeen(computeVictoryEventId(finished)), true);
+  assert.equal(
+    f5Tracker.ingestSnapshot(finished, { selfPlayerId: 'p2', isSpectator: false }).length,
+    0,
+    'Duplicate FINISHED sync after F5 must never replay Victory/Defeat cinematic',
+  );
+
+  // Audio dispatch + deduplication across Victory / Defeat / Spectator
+  resetBoardGameAudioForTests();
+  setBoardGameSoundMuted(false);
+  const outcomes = ['victory', 'defeat', 'spectator'];
+  for (let i = 0; i < outcomes.length; i++) {
+    const ev = {
+      id: `phase2-audio-${outcomes[i]}`,
+      kind: 'CINEMATIC_CUTIN',
+      order: 62,
+      durationMs: 2200,
+      bannerType: 'VICTORY',
+      title: outcomes[i].toUpperCase(),
+      subtitle: 'Test',
+      faction: i === 0 ? 'lantern-guard' : i === 1 ? 'mist-order' : 'wanderer',
+      roleId: null,
+      roleName: null,
+      portraitSrc: null,
+      skillName: null,
+      actorId: null,
+      matchOutcome: outcomes[i],
+      winnerFactionLabel: 'Test',
+      winReason: null,
+    };
+    const now = 10000 + i * 500;
+    assert.equal(playSoundForVisualEvent(ev, now), true, `Expected audio cue for ${outcomes[i]}`);
+    assert.equal(playSoundForVisualEvent(ev, now + 500), false, `Duplicate ${outcomes[i]} event ID must be deduped`);
+  }
+  stopAllBoardGameSounds();
 });
