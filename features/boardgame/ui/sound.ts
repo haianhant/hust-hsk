@@ -25,7 +25,8 @@ import {
 const SOUND_MUTED_STORAGE_KEY = 'hustverse:bg-sound-muted:v1';
 const MAX_PLAYED_EVENT_IDS = 256;
 const MAX_ACTIVE_VOICES = 14;
-const DEFAULT_CATEGORY_COOLDOWN_MS = 75;
+const DEFAULT_CATEGORY_COOLDOWN_MS = 85;
+const MASTER_GAIN_LEVEL = 0.78;
 
 let sharedAudioCtx: AudioContext | null = null;
 let masterGainNode: GainNode | null = null;
@@ -93,7 +94,7 @@ export function setBoardGameSoundMuted(muted: boolean): void {
     stopAllBoardGameSounds();
   } else if (masterGainNode && sharedAudioCtx) {
     try {
-      masterGainNode.gain.setTargetAtTime(0.85, sharedAudioCtx.currentTime, 0.015);
+      masterGainNode.gain.setTargetAtTime(MASTER_GAIN_LEVEL, sharedAudioCtx.currentTime, 0.015);
     } catch {
       // ignore
     }
@@ -127,14 +128,14 @@ function ensureAudioGraph(): {
 
     if (!masterGainNode || !masterCompressorNode) {
       masterGainNode = ctx.createGain();
-      masterGainNode.gain.setValueAtTime(0.85, ctx.currentTime);
+      masterGainNode.gain.setValueAtTime(MASTER_GAIN_LEVEL, ctx.currentTime);
 
       masterCompressorNode = ctx.createDynamicsCompressor();
-      masterCompressorNode.threshold.setValueAtTime(-14, ctx.currentTime);
-      masterCompressorNode.knee.setValueAtTime(18, ctx.currentTime);
-      masterCompressorNode.ratio.setValueAtTime(6, ctx.currentTime);
-      masterCompressorNode.attack.setValueAtTime(0.003, ctx.currentTime);
-      masterCompressorNode.release.setValueAtTime(0.16, ctx.currentTime);
+      masterCompressorNode.threshold.setValueAtTime(-16, ctx.currentTime);
+      masterCompressorNode.knee.setValueAtTime(14, ctx.currentTime);
+      masterCompressorNode.ratio.setValueAtTime(8, ctx.currentTime);
+      masterCompressorNode.attack.setValueAtTime(0.002, ctx.currentTime);
+      masterCompressorNode.release.setValueAtTime(0.14, ctx.currentTime);
 
       masterGainNode.connect(masterCompressorNode);
       masterCompressorNode.connect(ctx.destination);
@@ -329,6 +330,9 @@ function playLayeredCue(
   const graph = ensureAudioGraph();
   if (!graph) return;
   const { ctx, bus, buffers } = graph;
+  // Giảm nhẹ biên độ khi nhiều nguồn âm chồng lên nhau (Attack + Shield + Counter / AoE) để không vỡ tiếng
+  const concurrencyDuck =
+    activeSources.size >= 8 ? 0.66 : activeSources.size >= 4 ? 0.82 : 1;
   try {
     const baseTime = ctx.currentTime + 0.006;
 
@@ -353,7 +357,7 @@ function playLayeredCue(
       filter.Q.setValueAtTime(n.filterQ ?? 1.4, start);
 
       const gain = ctx.createGain();
-      const peak = n.gainPeak ?? 0.06;
+      const peak = Math.max(0.004, Math.min(0.11, (n.gainPeak ?? 0.06) * concurrencyDuck));
       gain.gain.setValueAtTime(0.0001, start);
       gain.gain.exponentialRampToValueAtTime(peak, start + Math.min(0.015, n.durationSec * 0.2));
       gain.gain.exponentialRampToValueAtTime(0.0001, stop);
@@ -382,7 +386,7 @@ function playLayeredCue(
         osc.detune.setValueAtTime(note.detuneCents, start);
       }
 
-      const peak = note.gainPeak ?? 0.055;
+      const peak = Math.max(0.004, Math.min(0.095, (note.gainPeak ?? 0.055) * concurrencyDuck));
       const attack = note.attackSec ?? Math.min(0.018, note.durationSec * 0.25);
       gain.gain.setValueAtTime(0.0001, start);
       gain.gain.exponentialRampToValueAtTime(peak, start + Math.max(0.002, attack));
@@ -510,6 +514,23 @@ export function playDiceRoll(
   }
 
   const rawSettleMs = typeof settleAtMs === 'number' ? settleAtMs : durationMs * 0.77;
+  // Khi xúc xắc tấn công đồng bộ trực tiếp vào mốc Impact (360..680ms), thu gọn tiếng lắc để khớp đúng cú chạm đòn
+  if (isAttack && rawSettleMs > 0 && rawSettleMs <= 680) {
+    const settleSec = Math.max(0.32, rawSettleMs / 1000);
+    playLayeredCue(
+      [
+        { freq: 195, endFreq: 105, startOffsetSec: 0.1, durationSec: 0.04, type: 'triangle', gainPeak: 0.022 },
+        { freq: 320, endFreq: 460, startOffsetSec: Math.max(0.24, settleSec - 0.03), durationSec: 0.09, type: 'triangle', gainPeak: 0.028 },
+      ],
+      [
+        { bufferKey: 'diceClick', startOffsetSec: 0.03, durationSec: 0.038, playbackRate: 1.08, gainPeak: 0.056, filterType: 'bandpass', filterFreq: 1850 },
+        { bufferKey: 'diceClick', startOffsetSec: Math.min(0.18, settleSec * 0.42), durationSec: 0.036, playbackRate: 1.24, gainPeak: 0.046, filterType: 'bandpass', filterFreq: 2150 },
+        { bufferKey: 'diceClick', startOffsetSec: Math.min(0.3, settleSec * 0.74), durationSec: 0.034, playbackRate: 1.0, gainPeak: 0.034, filterType: 'bandpass', filterFreq: 1700 },
+      ],
+    );
+    return;
+  }
+
   const settleSec = Math.max(0.72, Math.min(1.18, rawSettleMs / 1000));
   playLayeredCue(
     [
@@ -571,10 +592,19 @@ export interface CombatAudioCueOptions {
   recoveryAtSec?: number;
   isCritical?: boolean;
   isMiss?: boolean;
+  targetCount?: number;
 }
 
-function buildCombatAudioSchedule(event: CombatVfxVisualEvent): CombatAudioCueOptions {
+export interface PlayVisualSoundOptions {
+  impactOverrideMs?: number;
+}
+
+function buildCombatAudioSchedule(
+  event: CombatVfxVisualEvent,
+  options?: PlayVisualSoundOptions,
+): CombatAudioCueOptions {
   const isFast = event.durationMs <= 320;
+  const targetCount = Math.max(1, event.targetPlayerIds.length);
   if (isFast) {
     return {
       anticipationAtSec: 0,
@@ -583,45 +613,61 @@ function buildCombatAudioSchedule(event: CombatVfxVisualEvent): CombatAudioCueOp
       recoveryAtSec: 0.12,
       isCritical: Boolean(event.isCritical),
       isMiss: Boolean(event.isMiss),
+      targetCount,
     };
   }
   const t = resolveCombatSequenceTimings(event.durationMs, event.effect, false, {
     isCritical: event.isCritical,
     isMiss: event.isMiss,
   });
+  const impactMs =
+    typeof options?.impactOverrideMs === 'number' && options.impactOverrideMs >= 0
+      ? options.impactOverrideMs
+      : t.impactStartMs;
   return {
     anticipationAtSec: Math.max(0.08, t.targetLockEndMs / 1000),
     travelAtSec: Math.max(0.18, t.anticipationEndMs / 1000),
-    impactAtSec: Math.max(0.32, t.impactStartMs / 1000),
-    recoveryAtSec: Math.max(0.46, t.impactEndMs / 1000),
+    impactAtSec: Math.max(0.24, impactMs / 1000),
+    recoveryAtSec: Math.max(0.46, Math.max(impactMs + 140, t.impactEndMs) / 1000),
     isCritical: Boolean(event.isCritical),
     isMiss: Boolean(event.isMiss),
+    targetCount,
   };
 }
 
-/** Đánh hụt (MISS): khóa mục tiêu nhẹ -> vút gió trượt qua khoảng không, không có cú va chạm nặng */
+/** Đánh hụt (MISS): khóa mục tiêu nhẹ -> vút gió trượt qua khoảng không + tiếng né gọn, không có va chạm nặng */
 export function playMissWhoosh(opts: CombatAudioCueOptions = {}): void {
   const ant = opts.anticipationAtSec ?? 0.12;
   const trv = opts.travelAtSec ?? 0.25;
   const imp = opts.impactAtSec ?? 0.42;
   playLayeredCue(
     [
-      { freq: 520, endFreq: 640, startOffsetSec: 0.01, durationSec: 0.05, type: 'sine', gainPeak: 0.018 },
-      { freq: 340, endFreq: 490, startOffsetSec: ant, durationSec: 0.11, type: 'triangle', gainPeak: 0.022 },
-      // Tiếng trượt gió nhẹ xuống trầm khi né ngang
-      { freq: 520, endFreq: 210, startOffsetSec: imp, durationSec: 0.14, type: 'sine', gainPeak: 0.026 },
+      { freq: 560, endFreq: 690, startOffsetSec: 0.01, durationSec: 0.05, type: 'sine', gainPeak: 0.022 },
+      { freq: 380, endFreq: 540, startOffsetSec: ant, durationSec: 0.11, type: 'triangle', gainPeak: 0.026 },
+      // Tiếng trượt gió rơi cao độ rõ rệt khi mục tiêu né ngang (không có sub-bass)
+      { freq: 640, endFreq: 210, startOffsetSec: imp - 0.02, durationSec: 0.16, type: 'sine', gainPeak: 0.04 },
+      { freq: 920, endFreq: 420, startOffsetSec: imp, durationSec: 0.11, type: 'triangle', gainPeak: 0.024 },
     ],
     [
       {
         bufferKey: 'blade',
         startOffsetSec: trv,
-        durationSec: 0.19,
-        playbackRate: 1.38,
-        gainPeak: 0.058,
+        durationSec: 0.21,
+        playbackRate: 1.42,
+        gainPeak: 0.074,
         filterType: 'bandpass',
-        filterFreq: 2400,
-        filterEndFreq: 950,
-        filterQ: 1.6,
+        filterFreq: 2800,
+        filterEndFreq: 860,
+        filterQ: 1.5,
+      },
+      {
+        bufferKey: 'paper',
+        startOffsetSec: Math.max(trv + 0.04, imp - 0.04),
+        durationSec: 0.11,
+        playbackRate: 1.55,
+        gainPeak: 0.052,
+        filterType: 'highpass',
+        filterFreq: 2100,
       },
     ],
   );
@@ -988,28 +1034,60 @@ export function playExplosionImpact(opts: CombatAudioCueOptions = {}): void {
   );
 }
 
-/** Lá Chắn Thiên Thần BLOCK — kết tinh khiên lục giác -> ngân vang kim loại chặn đòn */
+/** Lá Chắn Thiên Thần BLOCK — kết tinh khiên lục giác -> ngân vang kim loại chặn đòn đúng khung Impact */
 export function playBlockClang(opts: CombatAudioCueOptions = {}): void {
-  const imp = opts.impactAtSec ? Math.min(0.36, opts.impactAtSec * 0.75) : 0;
-  playLayeredCue([
-    ...(imp > 0.08
-      ? [{ freq: 440, endFreq: 660, startOffsetSec: 0.02, durationSec: imp, type: 'sine' as const, gainPeak: 0.024 }]
-      : []),
-    { freq: 760, endFreq: 580, startOffsetSec: imp, durationSec: 0.11, type: 'triangle', gainPeak: 0.058 },
-    { freq: 1220, startOffsetSec: imp + 0.015, durationSec: 0.18, type: 'sine', gainPeak: 0.048 },
-    { freq: 1820, startOffsetSec: imp + 0.03, durationSec: 0.16, type: 'sine', gainPeak: 0.028 },
-  ]);
+  const imp = typeof opts.impactAtSec === 'number' ? Math.max(0.02, opts.impactAtSec) : 0.32;
+  playLayeredCue(
+    [
+      ...(imp > 0.1
+        ? [{ freq: 460, endFreq: 720, startOffsetSec: 0.02, durationSec: Math.min(0.26, imp - 0.04), type: 'sine' as const, gainPeak: 0.026 }]
+        : []),
+      { freq: 820, endFreq: 610, startOffsetSec: imp, durationSec: 0.12, type: 'triangle', gainPeak: 0.064 },
+      { freq: 1318.5, startOffsetSec: imp + 0.012, durationSec: 0.2, type: 'sine', gainPeak: 0.052 },
+      { freq: 1975.5, startOffsetSec: imp + 0.025, durationSec: 0.18, type: 'sine', gainPeak: 0.032 },
+    ],
+    [
+      {
+        bufferKey: 'diceClick',
+        startOffsetSec: imp,
+        durationSec: 0.042,
+        playbackRate: 1.75,
+        gainPeak: 0.055,
+        filterType: 'highpass',
+        filterFreq: 2600,
+      },
+    ],
+  );
 }
 
-/** Hồi máu / Khế ước ánh sáng — dâng nhẹ ấm áp theo xoắn ốc lục bảo */
+/** Hồi máu / Khế ước ánh sáng — hợp âm chuông-hạc ấm áp dâng lên theo xoắn ốc lục bảo */
 export function playHealShimmer(opts: CombatAudioCueOptions = {}): void {
-  const base = opts.anticipationAtSec ? Math.min(0.14, opts.anticipationAtSec * 0.7) : 0;
-  playLayeredCue([
-    { freq: 523.25, startOffsetSec: base, durationSec: 0.12, type: 'sine', gainPeak: 0.042 },
-    { freq: 659.25, startOffsetSec: base + 0.085, durationSec: 0.14, type: 'sine', gainPeak: 0.046 },
-    { freq: 783.99, startOffsetSec: base + 0.17, durationSec: 0.18, type: 'sine', gainPeak: 0.052 },
-    { freq: 1046.5, startOffsetSec: base + 0.25, durationSec: 0.24, type: 'triangle', gainPeak: 0.036 },
-  ]);
+  const base = opts.anticipationAtSec ? Math.min(0.12, opts.anticipationAtSec * 0.6) : 0.02;
+  playLayeredCue(
+    [
+      // Nền ấm dâng nhẹ theo hào quang hồi phục
+      { freq: 261.63, endFreq: 329.63, startOffsetSec: base, durationSec: 0.34, type: 'sine', gainPeak: 0.032, attackSec: 0.05 },
+      // Chuỗi hợp âm hồi phục C5 -> E5 -> G5 -> B5 -> C6 rõ nét, tách biệt với báo lượt
+      { freq: 523.25, startOffsetSec: base + 0.02, durationSec: 0.14, type: 'sine', gainPeak: 0.046 },
+      { freq: 659.25, startOffsetSec: base + 0.1, durationSec: 0.16, type: 'sine', gainPeak: 0.05 },
+      { freq: 783.99, startOffsetSec: base + 0.18, durationSec: 0.2, type: 'triangle', gainPeak: 0.052 },
+      { freq: 987.77, startOffsetSec: base + 0.26, durationSec: 0.22, type: 'sine', gainPeak: 0.042 },
+      { freq: 1046.5, startOffsetSec: base + 0.33, durationSec: 0.32, type: 'sine', gainPeak: 0.048 },
+    ],
+    [
+      {
+        bufferKey: 'paper',
+        startOffsetSec: base + 0.04,
+        durationSec: 0.22,
+        playbackRate: 0.72,
+        gainPeak: 0.026,
+        filterType: 'bandpass',
+        filterFreq: 2400,
+        filterEndFreq: 4200,
+        filterQ: 2.2,
+      },
+    ],
+  );
 }
 
 /** Cướp trang bị */
@@ -1127,18 +1205,19 @@ export function playSignatureSkillCue(roleId?: BoardGameRoleId | null): void {
   const isLightning = roleId === 'gac-radio' || roleId === 'gac-ky-thuat';
   const isShadow = roleId === 'suong-an-danh' || roleId === 'suong-tin-gia';
   const base = isLightning ? 340 : isShadow ? 220 : 415;
+  // Gọn sắc trong 0..170ms để dẫn mượt vào nhịp Anticipation/Impact của chiêu mà không chồng âm
   playLayeredCue(
     [
-      { freq: base, endFreq: base * 1.48, startOffsetSec: 0, durationSec: 0.14, type: 'triangle', gainPeak: 0.05 },
-      { freq: base * 1.5, endFreq: base * 2.05, startOffsetSec: 0.07, durationSec: 0.18, type: 'sine', gainPeak: 0.048 },
+      { freq: base, endFreq: base * 1.48, startOffsetSec: 0, durationSec: 0.11, type: 'triangle', gainPeak: 0.042 },
+      { freq: base * 1.5, endFreq: base * 2.05, startOffsetSec: 0.05, durationSec: 0.12, type: 'sine', gainPeak: 0.038 },
     ],
     [
       {
         bufferKey: isLightning ? 'arcCrackle' : 'blade',
-        startOffsetSec: 0.02,
-        durationSec: 0.16,
-        playbackRate: isShadow ? 0.85 : 1.15,
-        gainPeak: 0.056,
+        startOffsetSec: 0.01,
+        durationSec: 0.12,
+        playbackRate: isShadow ? 0.88 : 1.2,
+        gainPeak: 0.044,
         filterType: 'bandpass',
         filterFreq: isShadow ? 1300 : 2300,
       },
@@ -1263,12 +1342,15 @@ function resolveCategoryForVisualEvent(event: BoardGameVisualEvent): {
     case 'COMBAT_VFX':
       return {
         category: `combat:${event.effect.toLowerCase()}`,
-        cooldownMs: DEFAULT_CATEGORY_COOLDOWN_MS,
+        cooldownMs:
+          event.effect === 'SHIELD_GUARD' || event.effect === 'HEAL_AURA'
+            ? 120
+            : DEFAULT_CATEGORY_COOLDOWN_MS,
       };
     case 'CINEMATIC_CUTIN':
       return {
         category: `cutin:${event.bannerType.toLowerCase()}`,
-        cooldownMs: 90,
+        cooldownMs: 95,
       };
     case 'FLOATING_TEXT':
       // Số nhảy sát thương/hồi máu dùng âm thanh của COMBAT_VFX tương ứng, không kêu trùng
@@ -1285,6 +1367,7 @@ function resolveCategoryForVisualEvent(event: BoardGameVisualEvent): {
 export function playSoundForVisualEvent(
   event: BoardGameVisualEvent,
   nowMs: number = Date.now(),
+  options?: PlayVisualSoundOptions,
 ): boolean {
   if (isBoardGameSoundMuted()) return false;
 
@@ -1321,13 +1404,13 @@ export function playSoundForVisualEvent(
       return true;
 
     case 'COMBAT_VFX': {
-      const schedule = buildCombatAudioSchedule(event);
+      const schedule = buildCombatAudioSchedule(event, options);
       switch (event.effect) {
         case 'LIGHTNING_STRIKE':
           playLightningStrike(schedule);
           return true;
         case 'MACHINE_GUN_BARRAGE':
-          playGunfireBurst(3, schedule);
+          playGunfireBurst(Math.max(3, Math.min(4, event.targetPlayerIds.length)), schedule);
           return true;
         case 'HANDGUN_SHOT':
           playGunfireBurst(1, schedule);

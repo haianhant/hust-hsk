@@ -48,6 +48,8 @@ import {
 import {
   VisualEventTracker,
   resolveCombatSequenceTimings,
+  resolveMultiTargetStaggerMs,
+  resolveNonOverlappingPopupPos,
   resolveRoleRevealTimeline,
   resolveVictoryCinematicTimeline,
   type BoardGameVisualEvent,
@@ -112,7 +114,13 @@ interface ActiveImpactFlash {
   secondaryColor: string;
   isCounter: boolean;
   isCritical?: boolean;
+  compact?: boolean;
   hitStopMs: number;
+}
+
+interface TrackedDomAnim {
+  anim: Animation;
+  baseZ: string;
 }
 
 function resolvePlayerElements(
@@ -158,7 +166,7 @@ function runCombatPawnAndTileChoreography(
   timings: CombatSequenceTimings,
   reducedMotion: boolean,
   qualityTier: 'high' | 'balanced' | 'low',
-  domAnimsRef: React.MutableRefObject<Set<Animation>>,
+  domAnimsRef: React.MutableRefObject<Map<HTMLElement, TrackedDomAnim>>,
 ): void {
   if (!container || reducedMotion || timings.recoveryEndMs <= 300) return;
 
@@ -170,19 +178,37 @@ function runCombatPawnAndTileChoreography(
   const impEndF = Math.min(0.84, Math.max(hsEndF + 0.04, timings.impactEndMs / total));
   const colors = getCombatAccentColor(ev);
 
-  const trackAnim = (el: HTMLElement, frames: Keyframe[], elevateZ = false) => {
+  const trackAnim = (el: HTMLElement, frames: Keyframe[], elevateZ = false, delayMs = 0) => {
     if (typeof el.animate !== 'function') return;
-    const prevZ = elevateZ ? el.style.zIndex : '';
+    // Hủy sạch animation cũ trên cùng quân cờ để tuyệt đối không lệch tọa độ hay rò z-index
+    const existing = domAnimsRef.current.get(el);
+    let baseZ = el.style.zIndex;
+    if (existing) {
+      baseZ = existing.baseZ;
+      domAnimsRef.current.delete(el);
+      try {
+        existing.anim.onfinish = null;
+        existing.anim.oncancel = null;
+        existing.anim.cancel();
+      } catch {
+        // ignore finished animations
+      }
+      el.style.zIndex = baseZ;
+    }
     if (elevateZ) el.style.zIndex = '36';
     const anim = el.animate(frames, {
       duration: total,
+      delay: Math.max(0, delayMs),
       easing: 'linear',
       fill: 'none',
     });
-    domAnimsRef.current.add(anim);
+    const entry: TrackedDomAnim = { anim, baseZ };
+    domAnimsRef.current.set(el, entry);
     const cleanup = () => {
-      domAnimsRef.current.delete(anim);
-      if (elevateZ) el.style.zIndex = prevZ;
+      if (domAnimsRef.current.get(el) === entry) {
+        domAnimsRef.current.delete(el);
+        el.style.zIndex = baseZ;
+      }
     };
     anim.onfinish = cleanup;
     anim.oncancel = cleanup;
@@ -203,38 +229,73 @@ function runCombatPawnAndTileChoreography(
   const isMiss = Boolean(ev.isMiss);
   const isCrit = Boolean(ev.isCritical);
 
-  // 1) QUÂN TẤN CÔNG (Anticipation nhích & tích năng lượng -> Travel lao đòn -> Recovery hồi vị trí)
+  // 1) QUÂN TẤN CÔNG — Phân biệt rõ CHUYỂN ĐỘNG giữa Đòn thường, Chí mạng (kéo sâu -> đập mạnh) & Phản kích (đỡ -> xoay đảo hướng -> phản đòn)
   if (ev.sourcePlayerId && !isShield && !isHeal) {
     const srcEls = resolvePlayerElements(container, ev.sourcePlayerId);
     for (const srcEl of srcEls) {
       if (isCounter) {
-        // Phản kích: Phòng thủ co thế (-4px) -> Đảo hướng xoay người (+4px) -> Lao phản đòn (+10px) -> Hồi vị trí
+        // Phản kích 3 nhịp tách biệt: Đỡ thế thủ (-5px) -> Xoay trụ đảo hướng (-7deg -> +5deg) -> Quất phản công (+10px) -> Hồi vị trí
         trackAnim(
           srcEl,
           [
-            { transform: 'translate3d(0, 0, 0) scale(1)', boxShadow: '0 0 0 0 rgba(56,189,248,0)', offset: 0, easing: 'ease-out' },
+            { transform: 'translate3d(0, 0, 0) scale(1) rotate(0deg)', boxShadow: '0 0 0 0 rgba(56,189,248,0)', offset: 0, easing: 'ease-out' },
             {
-              transform: `translate3d(${(-ux * 4).toFixed(1)}px, ${(-uy * 4).toFixed(1)}px, 0) scale(1.06)`,
+              transform: `translate3d(${(-ux * 5).toFixed(1)}px, ${(-uy * 5).toFixed(1)}px, 0) scale(1.07) rotate(-7deg)`,
               boxShadow: '0 0 0 2px rgba(56,189,248,0.95), 0 0 18px rgba(192,132,252,0.8)',
               offset: lockF,
               easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
             },
             {
-              transform: `translate3d(${(ux * 4).toFixed(1)}px, ${(uy * 4).toFixed(1)}px, 0) scale(1.08) rotate(-3deg)`,
-              boxShadow: '0 0 0 2px rgba(192,132,252,0.95), 0 0 22px rgba(244,63,94,0.75)',
-              filter: 'brightness(1.26)',
+              transform: `translate3d(${(ux * 3).toFixed(1)}px, ${(uy * 3).toFixed(1)}px, 0) scale(1.09) rotate(5deg)`,
+              boxShadow: '0 0 0 2px rgba(192,132,252,0.95), 0 0 22px rgba(244,63,94,0.8)',
+              filter: 'brightness(1.28)',
               offset: antF,
               easing: 'cubic-bezier(0.55, 0, 0.85, 0.45)',
             },
             {
-              transform: `translate3d(${(ux * 10).toFixed(1)}px, ${(uy * 10).toFixed(1)}px, 0) scale(1.09)`,
-              filter: 'brightness(1.32)',
+              transform: `translate3d(${(ux * 10).toFixed(1)}px, ${(uy * 10).toFixed(1)}px, 0) scale(1.1) rotate(0deg)`,
+              filter: 'brightness(1.34)',
               offset: impF,
               easing: 'linear',
             },
             {
-              transform: `translate3d(${(ux * 9).toFixed(1)}px, ${(uy * 9).toFixed(1)}px, 0) scale(1.07)`,
-              filter: 'brightness(1.22)',
+              transform: `translate3d(${(ux * 9).toFixed(1)}px, ${(uy * 9).toFixed(1)}px, 0) scale(1.06) rotate(0deg)`,
+              filter: 'brightness(1.2)',
+              offset: hsEndF,
+              easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            },
+            { transform: 'translate3d(0, 0, 0) scale(1) rotate(0deg)', filter: 'brightness(1)', boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 1 },
+          ],
+          true,
+        );
+      } else if (isCrit) {
+        // Chí mạng: Kéo lùi nén lực mạnh (-6.5px, scale 0.94) -> Bùng tốc lao đập (+10px, scale 1.10) -> Giữ hit-stop 85ms -> Hồi mượt
+        trackAnim(
+          srcEl,
+          [
+            { transform: 'translate3d(0, 0, 0) scale(1)', offset: 0, easing: 'ease-out' },
+            {
+              transform: `translate3d(${(-ux * 3.5).toFixed(1)}px, ${(-uy * 3.5).toFixed(1)}px, 0) scale(0.97)`,
+              boxShadow: `0 0 0 2px ${colors.primary}bb, 0 0 14px ${colors.primary}66`,
+              offset: lockF,
+              easing: 'cubic-bezier(0.32, 0, 0.67, 0)',
+            },
+            {
+              transform: `translate3d(${(-ux * 6.5).toFixed(1)}px, ${(-uy * 6.5).toFixed(1)}px, 0) scale(0.94, 1.05)`,
+              boxShadow: `0 0 0 2px ${colors.secondary}, 0 0 24px ${colors.primary}cc`,
+              filter: 'brightness(1.36)',
+              offset: antF,
+              easing: 'cubic-bezier(0.68, -0.2, 0.25, 1.1)',
+            },
+            {
+              transform: `translate3d(${(ux * 10).toFixed(1)}px, ${(uy * 10).toFixed(1)}px, 0) scale(1.1, 0.96)`,
+              filter: 'brightness(1.42)',
+              offset: impF,
+              easing: 'linear',
+            },
+            {
+              transform: `translate3d(${(ux * 9.5).toFixed(1)}px, ${(uy * 9.5).toFixed(1)}px, 0) scale(1.08, 0.97)`,
+              filter: 'brightness(1.24)',
               offset: hsEndF,
               easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
             },
@@ -243,34 +304,34 @@ function runCombatPawnAndTileChoreography(
           true,
         );
       } else {
-        // Đòn tấn công chuẩn: Target Lock đứng thế -> Anticipation kéo nhẹ & nhích tới tích lực (+5px) -> Travel lao tới (+9px) -> Recovery
-        const lungePx = isCrit ? 10 : isSteal ? 6 : 8.5;
+        // Đòn tấn công thường: Khóa thế -> Nhích hướng mục tiêu (+4.5px) -> Lao dứt khoát (+8px) -> Hồi gọn
+        const lungePx = isSteal ? 6 : 8;
         trackAnim(
           srcEl,
           [
             { transform: 'translate3d(0, 0, 0) scale(1)', offset: 0, easing: 'ease-out' },
             {
-              transform: `translate3d(${(-ux * 2.5).toFixed(1)}px, ${(-uy * 2.5).toFixed(1)}px, 0) scale(1.02)`,
-              boxShadow: `0 0 0 1px ${colors.primary}aa, 0 0 12px ${colors.primary}66`,
+              transform: `translate3d(${(-ux * 2).toFixed(1)}px, ${(-uy * 2).toFixed(1)}px, 0) scale(1.02)`,
+              boxShadow: `0 0 0 1px ${colors.primary}aa, 0 0 10px ${colors.primary}55`,
               offset: lockF,
               easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
             },
             {
-              transform: `translate3d(${(ux * 5).toFixed(1)}px, ${(uy * 5).toFixed(1)}px, 0) scale(1.06)`,
-              boxShadow: `0 0 0 2px ${colors.primary}, 0 0 20px ${colors.primary}99`,
-              filter: 'brightness(1.25)',
+              transform: `translate3d(${(ux * 4.5).toFixed(1)}px, ${(uy * 4.5).toFixed(1)}px, 0) scale(1.05)`,
+              boxShadow: `0 0 0 2px ${colors.primary}, 0 0 16px ${colors.primary}88`,
+              filter: 'brightness(1.2)',
               offset: antF,
               easing: 'cubic-bezier(0.55, 0, 0.85, 0.45)',
             },
             {
-              transform: `translate3d(${(ux * lungePx).toFixed(1)}px, ${(uy * lungePx).toFixed(1)}px, 0) scale(1.08)`,
-              filter: 'brightness(1.28)',
+              transform: `translate3d(${(ux * lungePx).toFixed(1)}px, ${(uy * lungePx).toFixed(1)}px, 0) scale(1.07)`,
+              filter: 'brightness(1.25)',
               offset: impF,
               easing: 'linear',
             },
             {
-              transform: `translate3d(${(ux * (lungePx - 1)).toFixed(1)}px, ${(uy * (lungePx - 1)).toFixed(1)}px, 0) scale(1.06)`,
-              filter: 'brightness(1.16)',
+              transform: `translate3d(${(ux * (lungePx - 1)).toFixed(1)}px, ${(uy * (lungePx - 1)).toFixed(1)}px, 0) scale(1.05)`,
+              filter: 'brightness(1.14)',
               offset: hsEndF,
               easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
             },
@@ -282,9 +343,11 @@ function runCombatPawnAndTileChoreography(
     }
   }
 
-  // 2) QUÂN MỤC TIÊU + TƯƠNG TÁC Ô ĐỊA ĐIỂM
+  // 2) QUÂN MỤC TIÊU (CÓ STAGGER RIÊNG CHO ĐA MỤC TIÊU) + TƯƠNG TÁC Ô ĐỊA ĐIỂM
   const pulsedTiles = new Set<HTMLElement>();
+  const totalTargets = ev.targetPlayerIds.length;
   ev.targetPlayerIds.forEach((tid, idx) => {
+    const targetStaggerMs = resolveMultiTargetStaggerMs(idx, totalTargets, reducedMotion);
     const tgtPt = targetPts[idx] ?? firstTgt;
     const tdx = tgtPt.x - sourcePt.x;
     const tdy = tgtPt.y - sourcePt.y;
@@ -295,21 +358,21 @@ function runCombatPawnAndTileChoreography(
     const tgtEls = resolvePlayerElements(container, tid);
     for (const tgtEl of tgtEls) {
       if (isShield) {
-        // Khiên chặn: vững chãi không giật lùi (0px knockback), phát sáng lục giác xanh dương
+        // Khiên chặn: đứng vững tuyệt đối (0px knockback), phát sáng lục giác xanh dương sắc gọn
         trackAnim(
           tgtEl,
           [
             { transform: 'translate3d(0, 0, 0) scale(1)', boxShadow: '0 0 0 0 rgba(56,189,248,0)', offset: 0 },
             {
-              transform: 'translate3d(0, 0, 0) scale(1.07)',
-              boxShadow: '0 0 0 3px rgba(56,189,248,0.95), 0 0 24px rgba(56,189,248,0.8)',
+              transform: 'translate3d(0, 0, 0) scale(1.06)',
+              boxShadow: '0 0 0 3px rgba(56,189,248,0.95), 0 0 22px rgba(56,189,248,0.75)',
               filter: 'brightness(1.22)',
               offset: impF,
               easing: 'ease-out',
             },
             {
-              transform: 'translate3d(0, 0, 0) scale(1.04)',
-              boxShadow: '0 0 0 2px rgba(186,230,253,0.75), 0 0 16px rgba(56,189,248,0.45)',
+              transform: 'translate3d(0, 0, 0) scale(1.03)',
+              boxShadow: '0 0 0 2px rgba(186,230,253,0.75), 0 0 14px rgba(56,189,248,0.45)',
               filter: 'brightness(1.1)',
               offset: impEndF,
               easing: 'ease-out',
@@ -317,61 +380,63 @@ function runCombatPawnAndTileChoreography(
             { transform: 'translate3d(0, 0, 0) scale(1)', filter: 'brightness(1)', boxShadow: '0 0 0 0 rgba(56,189,248,0)', offset: 1 },
           ],
           true,
+          targetStaggerMs,
         );
       } else if (isHeal) {
-        // Hồi máu: nâng nhẹ mềm mại (-6px) kèm hào quang ngọc lục bảo
+        // Hồi máu: nổi bổng êm ái (-7px ease-in-out) kèm hào quang lục bảo ấm
         trackAnim(
           tgtEl,
           [
             { transform: 'translate3d(0, 0, 0) scale(1)', boxShadow: '0 0 0 0 rgba(52,211,153,0)', offset: 0, easing: 'ease-out' },
             {
-              transform: 'translate3d(0, -6px, 0) scale(1.05)',
-              boxShadow: '0 0 0 2px rgba(52,211,153,0.9), 0 0 20px rgba(253,224,71,0.55)',
-              filter: 'brightness(1.2)',
+              transform: 'translate3d(0, -7px, 0) scale(1.06)',
+              boxShadow: '0 0 0 2px rgba(52,211,153,0.95), 0 0 22px rgba(253,224,71,0.55)',
+              filter: 'brightness(1.22)',
               offset: impF,
               easing: 'ease-in-out',
             },
             {
-              transform: 'translate3d(0, -4px, 0) scale(1.03)',
-              boxShadow: '0 0 0 2px rgba(110,231,183,0.65), 0 0 14px rgba(52,211,153,0.4)',
+              transform: 'translate3d(0, -4.5px, 0) scale(1.03)',
+              boxShadow: '0 0 0 2px rgba(110,231,183,0.7), 0 0 14px rgba(52,211,153,0.4)',
               offset: impEndF,
               easing: 'ease-out',
             },
             { transform: 'translate3d(0, 0, 0) scale(1)', filter: 'brightness(1)', boxShadow: '0 0 0 0 rgba(52,211,153,0)', offset: 1 },
           ],
           true,
+          targetStaggerMs,
         );
       } else if (isMiss) {
-        // Đánh hụt: quân mục tiêu né ngang vuông góc hướng đòn (9px sidestep), không hit-stop
-        const dodgeX = (-tuy * 9).toFixed(1);
-        const dodgeY = (tux * 9).toFixed(1);
+        // Đánh hụt: quân mục tiêu né ngang linh hoạt vuông góc hướng đòn (9.5px sidestep + nghiêng 5deg), 0ms hit-stop
+        const dodgeX = (-tuy * 9.5).toFixed(1);
+        const dodgeY = (tux * 9.5).toFixed(1);
         trackAnim(
           tgtEl,
           [
-            { transform: 'translate3d(0, 0, 0) scale(1)', offset: 0 },
+            { transform: 'translate3d(0, 0, 0) scale(1) rotate(0deg)', offset: 0 },
             {
-              transform: 'translate3d(0, 0, 0) scale(1.03)',
-              boxShadow: '0 0 0 2px rgba(226,232,240,0.75), 0 0 12px rgba(148,163,184,0.5)',
+              transform: 'translate3d(0, 0, 0) scale(1.02) rotate(0deg)',
+              boxShadow: '0 0 0 2px rgba(226,232,240,0.75), 0 0 12px rgba(148,163,184,0.45)',
               offset: lockF,
             },
-            { transform: 'translate3d(0, 0, 0) scale(1.02)', offset: Math.max(antF, impF - 0.04), easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
+            { transform: 'translate3d(0, 0, 0) scale(1.01) rotate(-1deg)', offset: Math.max(antF, impF - 0.08), easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
             {
-              transform: `translate3d(${dodgeX}px, ${dodgeY}px, 0) scale(1.03) rotate(4deg)`,
-              boxShadow: '0 0 0 2px rgba(226,232,240,0.85), 0 0 16px rgba(148,163,184,0.55)',
-              filter: 'brightness(1.16)',
-              offset: impEndF,
+              transform: `translate3d(${dodgeX}px, ${dodgeY}px, 0) scale(1.03) rotate(5deg)`,
+              boxShadow: '0 0 0 2px rgba(226,232,240,0.9), 0 0 16px rgba(148,163,184,0.55)',
+              filter: 'brightness(1.18)',
+              offset: Math.min(impEndF, impF + 0.1),
               easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
             },
             { transform: 'translate3d(0, 0, 0) scale(1) rotate(0deg)', filter: 'brightness(1)', boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 1 },
           ],
           true,
+          targetStaggerMs,
         );
-      } else {
-        // Trúng đòn / Chí mạng / Phản kích: Target Lock sáng viền -> Impact giật lùi 6–10px + giữ khung hit-stop -> Recovery hồi mượt
-        const knockPx = isCrit ? 10 : isCounter ? 8.5 : isSteal ? 6 : 7.5;
-        const kx = (tux * knockPx).toFixed(1);
-        const ky = (tuy * knockPx).toFixed(1);
-        const tiltDeg = tux >= 0 ? (isCrit ? 4.5 : 3) : isCrit ? -4.5 : -3;
+      } else if (isCrit) {
+        // Chí mạng: giật lùi sâu 10px + nén squash(1.06, 0.90) + rung nhẹ dư chấn trước khi bật hồi
+        const kx = (tux * 10).toFixed(1);
+        const ky = (tuy * 10).toFixed(1);
+        const tiltDeg = tux >= 0 ? 5.5 : -5.5;
         trackAnim(
           tgtEl,
           [
@@ -384,26 +449,26 @@ function runCombatPawnAndTileChoreography(
             },
             {
               transform: 'translate3d(0, 0, 0) scale(1.03)',
-              boxShadow: `0 0 0 2px ${colors.primary}, 0 0 18px ${colors.primary}aa`,
+              boxShadow: `0 0 0 2px ${colors.secondary}, 0 0 18px ${colors.primary}aa`,
               offset: Math.max(antF, impF - 0.02),
               easing: 'cubic-bezier(0.12, 0.9, 0.2, 1)',
             },
             {
-              transform: `translate3d(${kx}px, ${ky}px, 0) scale(${isCrit ? 0.92 : 0.95}) rotate(${tiltDeg}deg)`,
+              transform: `translate3d(${kx}px, ${ky}px, 0) scale(1.06, 0.90) rotate(${tiltDeg}deg)`,
               boxShadow: `0 0 0 3px #ffffff, 0 0 26px ${colors.primary}`,
-              filter: isCrit ? 'brightness(1.85)' : 'brightness(1.55)',
+              filter: 'brightness(1.9)',
               offset: impF,
               easing: 'linear',
             },
             {
-              transform: `translate3d(${kx}px, ${ky}px, 0) scale(${isCrit ? 0.93 : 0.96}) rotate(${tiltDeg}deg)`,
-              boxShadow: `0 0 0 2px ${colors.secondary}, 0 0 24px ${colors.primary}`,
-              filter: isCrit ? 'brightness(1.55)' : 'brightness(1.32)',
+              transform: `translate3d(${(tux * 9.5).toFixed(1)}px, ${(tuy * 9.5).toFixed(1)}px, 0) scale(0.93, 1.04) rotate(${(tiltDeg * 0.75).toFixed(1)}deg)`,
+              boxShadow: `0 0 0 2px ${colors.secondary}, 0 0 22px ${colors.primary}`,
+              filter: 'brightness(1.55)',
               offset: hsEndF,
               easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
             },
             {
-              transform: `translate3d(${(-tux * 2).toFixed(1)}px, ${(-tuy * 2).toFixed(1)}px, 0) scale(1.02) rotate(0deg)`,
+              transform: `translate3d(${(-tux * 2.5).toFixed(1)}px, ${(-tuy * 2.5).toFixed(1)}px, 0) scale(1.02) rotate(${(-tiltDeg * 0.25).toFixed(1)}deg)`,
               boxShadow: `0 0 0 1px ${colors.primary}88, 0 0 12px ${colors.primary}44`,
               filter: 'brightness(1.08)',
               offset: Math.min(0.92, impEndF + 0.1),
@@ -412,6 +477,55 @@ function runCombatPawnAndTileChoreography(
             { transform: 'translate3d(0, 0, 0) scale(1) rotate(0deg)', filter: 'brightness(1)', boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 1 },
           ],
           true,
+          targetStaggerMs,
+        );
+      } else {
+        // Trúng đòn thường / Phản kích / Cướp: giật lùi 6–8.5px sắc gọn + giữ khung hit-stop -> hồi mượt
+        const knockPx = isCounter ? 8.5 : isSteal ? 6 : 7.5;
+        const kx = (tux * knockPx).toFixed(1);
+        const ky = (tuy * knockPx).toFixed(1);
+        const tiltDeg = tux >= 0 ? (isCounter ? -3.5 : 3) : isCounter ? 3.5 : -3;
+        trackAnim(
+          tgtEl,
+          [
+            { transform: 'translate3d(0, 0, 0) scale(1)', boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 0, easing: 'ease-out' },
+            {
+              transform: 'translate3d(0, 0, 0) scale(1.03)',
+              boxShadow: `0 0 0 2px ${colors.primary}, 0 0 14px ${colors.primary}88`,
+              offset: lockF,
+              easing: 'linear',
+            },
+            {
+              transform: 'translate3d(0, 0, 0) scale(1.02)',
+              boxShadow: `0 0 0 2px ${colors.primary}, 0 0 16px ${colors.primary}99`,
+              offset: Math.max(antF, impF - 0.02),
+              easing: 'cubic-bezier(0.12, 0.9, 0.2, 1)',
+            },
+            {
+              transform: `translate3d(${kx}px, ${ky}px, 0) scale(0.95) rotate(${tiltDeg}deg)`,
+              boxShadow: `0 0 0 3px #ffffff, 0 0 22px ${colors.primary}`,
+              filter: 'brightness(1.55)',
+              offset: impF,
+              easing: 'linear',
+            },
+            {
+              transform: `translate3d(${kx}px, ${ky}px, 0) scale(0.96) rotate(${tiltDeg}deg)`,
+              boxShadow: `0 0 0 2px ${colors.secondary}, 0 0 20px ${colors.primary}`,
+              filter: 'brightness(1.3)',
+              offset: hsEndF,
+              easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            },
+            {
+              transform: `translate3d(${(-tux * 1.5).toFixed(1)}px, ${(-tuy * 1.5).toFixed(1)}px, 0) scale(1.01) rotate(0deg)`,
+              boxShadow: `0 0 0 1px ${colors.primary}77, 0 0 10px ${colors.primary}33`,
+              filter: 'brightness(1.06)',
+              offset: Math.min(0.92, impEndF + 0.1),
+              easing: 'ease-out',
+            },
+            { transform: 'translate3d(0, 0, 0) scale(1) rotate(0deg)', filter: 'brightness(1)', boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 1 },
+          ],
+          true,
+          targetStaggerMs,
         );
       }
 
@@ -419,25 +533,26 @@ function runCombatPawnAndTileChoreography(
       const tileEl = tgtEl.closest<HTMLElement>('[data-testid^="bg-loc-"]');
       if (tileEl && !pulsedTiles.has(tileEl)) {
         pulsedTiles.add(tileEl);
-        const glowRadius = qualityTier === 'low' ? 14 : isCrit ? 32 : 24;
+        const glowRadius = qualityTier === 'low' ? 12 : isCrit ? 28 : 20;
         trackAnim(
           tileEl,
           [
             { boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 0 },
             { boxShadow: `0 0 0 1px ${colors.primary}66`, offset: Math.max(lockF, impF - 0.03) },
             {
-              boxShadow: `inset 0 0 ${glowRadius}px ${colors.primary}66, 0 0 ${glowRadius}px ${colors.primary}88`,
+              boxShadow: `inset 0 0 ${glowRadius}px ${colors.primary}55, 0 0 ${glowRadius}px ${colors.primary}77`,
               offset: impF,
               easing: 'ease-out',
             },
             {
-              boxShadow: `inset 0 0 ${Math.round(glowRadius * 0.5)}px ${colors.primary}33, 0 0 10px ${colors.primary}33`,
+              boxShadow: `inset 0 0 ${Math.round(glowRadius * 0.45)}px ${colors.primary}2a, 0 0 8px ${colors.primary}2a`,
               offset: impEndF,
               easing: 'ease-out',
             },
             { boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 1 },
           ],
           false,
+          targetStaggerMs,
         );
       }
     }
@@ -724,34 +839,113 @@ function drawImpactHitStopStarburst(
   secondaryColor: string,
   scale: number,
   isCounter = false,
+  isCritical = false,
 ): void {
   ctx.save();
   ctx.translate(pt.x, pt.y);
+
+  // Vòng sóng mặt bàn dẹt (ground-plane slam shockwave kiểu Hearthstone/Marvel Snap)
+  ctx.save();
+  ctx.strokeStyle = secondaryColor;
+  ctx.lineWidth = (isCritical ? 3.2 : 2.4) * Math.max(0.7, scale);
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.ellipse(0, 4 * scale, 34 * scale, 15 * scale, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
   if (isCounter) ctx.rotate(Math.PI / 4);
 
-  const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, 38 * scale);
+  // Lõi va chạm trắng sắc nét gọn tâm (không đổ glow mờ lan rộng)
+  const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, 32 * scale);
   grad.addColorStop(0, '#ffffff');
-  grad.addColorStop(0.35, secondaryColor);
-  grad.addColorStop(0.75, color);
+  grad.addColorStop(0.32, secondaryColor);
+  grad.addColorStop(0.72, color);
   grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
   ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.arc(0, 0, 38 * scale, 0, Math.PI * 2);
+  ctx.arc(0, 0, 32 * scale, 0, Math.PI * 2);
   ctx.fill();
 
-  // Cross-slash starburst spikes during 75ms Hit-Stop
+  // Khung hình thoi xoay riêng cho Phản kích
+  if (isCounter) {
+    const dR = 26 * scale;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(0, -dR);
+    ctx.lineTo(dR, 0);
+    ctx.lineTo(0, dR);
+    ctx.lineTo(-dR, 0);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  // Tia sắc 4 / 6 / 8 cánh đúng khung Hit-Stop 60-90ms
   ctx.fillStyle = '#ffffff';
-  const arms = isCounter ? 6 : 4;
+  const arms = isCritical ? 8 : isCounter ? 6 : 4;
   for (let i = 0; i < arms; i++) {
     ctx.save();
     ctx.rotate((Math.PI * 2 * i) / arms);
+    const armLen = (isCritical && i % 2 === 0 ? 48 : 38) * scale;
+    const armW = (isCritical ? 4.4 : 3.8) * scale;
     ctx.beginPath();
-    ctx.moveTo(0, -42 * scale);
-    ctx.lineTo(4.5 * scale, 0);
-    ctx.lineTo(0, 42 * scale);
-    ctx.lineTo(-4.5 * scale, 0);
+    ctx.moveTo(0, -armLen);
+    ctx.lineTo(armW, 0);
+    ctx.lineTo(0, armLen);
+    ctx.lineTo(-armW, 0);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawMissDodgeCue(
+  ctx: CanvasRenderingContext2D,
+  source: Point2D,
+  target: Point2D,
+  postP: number,
+  fade: number,
+  sizeScale = 1,
+): void {
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const len = Math.max(1, Math.hypot(dx, dy));
+  // Vector né vuông góc trùng hướng WAAPI sidestep của quân cờ
+  const dodgeUx = -dy / len;
+  const dodgeUy = dx / len;
+  const dodgeAng = Math.atan2(dodgeUy, dodgeUx);
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(0.92, fade * 0.95));
+
+  // Vòng dư ảnh bóng mờ tại vị trí cũ trước khi né
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 2.2 * fade;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.arc(target.x, target.y, (16 + postP * 14) * sizeScale, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 2 vệt gió chữ V (slipstream chevrons) dọc hướng né ngang
+  for (let c = 0; c < 2; c++) {
+    const dist = (14 + c * 11 + postP * 22) * sizeScale;
+    const cx = target.x + dodgeUx * dist;
+    const cy = target.y + dodgeUy * dist;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(dodgeAng);
+    ctx.strokeStyle = c === 0 ? '#f8fafc' : '#94a3b8';
+    ctx.lineWidth = (c === 0 ? 2.6 : 1.8) * fade;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-7 * sizeScale, -7 * sizeScale);
+    ctx.lineTo(2 * sizeScale, 0);
+    ctx.lineTo(-7 * sizeScale, 7 * sizeScale);
+    ctx.stroke();
     ctx.restore();
   }
   ctx.restore();
@@ -1190,38 +1384,56 @@ function drawDirectionalImpactSparks(
   particleScale: number,
   reducedMotion: boolean,
   isCritical = false,
+  sizeScale = 1,
 ): void {
   const dx = target.x - source.x;
   const dy = target.y - source.y;
   const baseAng = Math.hypot(dx, dy) > 4 ? Math.atan2(dy, dx) : 0;
 
-  // 2 vòng sóng xung kích đồng tâm tại điểm va chạm
+  // 2 vòng sóng xung kích sắc gọn + sóng mặt bàn có trọng lượng tại đúng điểm mục tiêu
   ctx.save();
   ctx.globalAlpha = fade;
   ctx.strokeStyle = primary;
-  ctx.lineWidth = (isCritical ? 4.2 : 3.2) * fade;
+  ctx.lineWidth = (isCritical ? 4.4 : 3.4) * fade;
   ctx.beginPath();
-  ctx.arc(target.x, target.y, 14 + postP * (isCritical ? 68 : 52), 0, Math.PI * 2);
+  ctx.arc(target.x, target.y, (14 + postP * (isCritical ? 64 : 48)) * sizeScale, 0, Math.PI * 2);
   ctx.stroke();
 
   ctx.strokeStyle = secondary;
-  ctx.lineWidth = (isCritical ? 2.4 : 1.8) * fade;
+  ctx.lineWidth = (isCritical ? 2.6 : 1.9) * fade;
   ctx.beginPath();
-  ctx.arc(target.x, target.y, 8 + postP * (isCritical ? 86 : 64), 0, Math.PI * 2);
+  ctx.arc(target.x, target.y, (8 + postP * (isCritical ? 82 : 60)) * sizeScale, 0, Math.PI * 2);
   ctx.stroke();
+
+  // Dấu nứt xung lực theo hướng đòn (directional shock chevron) giúp nhìn rõ hướng va chạm ở 1920x1080
+  ctx.save();
+  ctx.translate(
+    target.x + Math.cos(baseAng) * (12 + postP * 26) * sizeScale,
+    target.y + Math.sin(baseAng) * (12 + postP * 26) * sizeScale,
+  );
+  ctx.rotate(baseAng);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = (isCritical ? 3.2 : 2.3) * fade;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-10 * sizeScale, -13 * sizeScale);
+  ctx.lineTo(4 * sizeScale, 0);
+  ctx.lineTo(-10 * sizeScale, 13 * sizeScale);
+  ctx.stroke();
+  ctx.restore();
 
   const count =
     reducedMotion || particleScale <= 0
       ? 0
-      : Math.max(4, Math.round((isCritical ? 14 : 10) * particleScale));
+      : Math.max(3, Math.round((isCritical ? 12 : 8) * particleScale * Math.max(0.6, sizeScale)));
   for (let k = 0; k < count; k++) {
     // 70% tia bắn dọc nón va chạm về phía sau mục tiêu + 30% văng quanh tâm
     const spread =
       k < count * 0.7
-        ? baseAng + ((k / Math.max(1, count * 0.7) - 0.5) * 1.45)
+        ? baseAng + (k / Math.max(1, count * 0.7) - 0.5) * 1.4
         : (Math.PI * 2 * k) / count + postP * 0.8;
-    const dist = 10 + postP * ((isCritical ? 78 : 58) + (k % 3) * 14);
-    const tailDist = Math.max(4, dist - (isCritical ? 18 : 13) * fade);
+    const dist = (10 + postP * ((isCritical ? 74 : 54) + (k % 3) * 12)) * sizeScale;
+    const tailDist = Math.max(4, dist - (isCritical ? 17 : 12) * fade * sizeScale);
     ctx.strokeStyle = k % 3 === 0 ? '#ffffff' : k % 2 === 0 ? primary : secondary;
     ctx.lineWidth = (isCritical ? 2.8 : 2.2) * fade;
     ctx.lineCap = 'round';
@@ -1241,7 +1453,11 @@ function drawCombatAnimation(
   particleScale = 1,
 ): boolean {
   const rawElapsed = Math.max(0, nowMs - anim.startedAt);
-  const totalDur = Math.max(120, anim.timings?.recoveryEndMs ?? anim.durationMs);
+  const maxStaggerMs =
+    anim.targets.length > 1 && !reducedMotion
+      ? resolveMultiTargetStaggerMs(anim.targets.length - 1, anim.targets.length, reducedMotion)
+      : 0;
+  const totalDur = Math.max(120, (anim.timings?.recoveryEndMs ?? anim.durationMs) + maxStaggerMs);
   const p = Math.max(0, Math.min(1, rawElapsed / totalDur));
   if (p >= 1) return false;
 
@@ -1322,6 +1538,30 @@ function drawCombatAnimation(
     ctx.restore();
   };
 
+  const multiScale = targets.length >= 5 ? 0.68 : targets.length >= 3 ? 0.8 : 1;
+
+  const evalTargetTiming = (tIdx: number) => {
+    const staggerMs = resolveMultiTargetStaggerMs(tIdx, targets.length, reducedMotion);
+    const tElapsed = Math.max(0, rawElapsed - staggerMs);
+    const tRawTravel =
+      tElapsed < timings.anticipationEndMs
+        ? 0
+        : tElapsed >= timings.travelEndMs
+          ? 1
+          : Math.max(0, Math.min(1, (tElapsed - timings.anticipationEndMs) / travelSpan));
+    const tTravelP = tRawTravel <= 0 ? 0 : tRawTravel >= 1 ? 1 : Math.pow(tRawTravel, 1.45);
+    const tInHitStop =
+      timings.hitStopDurationMs > 0 &&
+      tElapsed >= timings.hitStopStartMs &&
+      tElapsed < timings.hitStopEndMs;
+    const tPostP =
+      tElapsed <= timings.hitStopEndMs
+        ? 0
+        : Math.max(0, Math.min(1, (tElapsed - timings.hitStopEndMs) / postImpactSpan));
+    const tFade = tInHitStop ? 1 : Math.max(0, 1 - tPostP * tPostP);
+    return { tElapsed, tTravelP, tInHitStop, tPostP, tFade };
+  };
+
   ctx.save();
 
   switch (effect) {
@@ -1379,7 +1619,7 @@ function drawCombatAnimation(
           const swingP = Math.min(1, (travelP - 0.45) / 0.55);
           const cx = isMiss ? tgt.x + 24 : tgt.x;
           const cy = isMiss ? tgt.y - 12 : tgt.y;
-          const radius = (isCrit ? 58 : isCursed ? 52 : 44) * (0.82 + postImpactP * 0.34);
+          const radius = (isCrit ? 58 : isCursed ? 52 : 44) * multiScale * (0.82 + postImpactP * 0.34);
           ctx.save();
           ctx.globalAlpha = (isMiss ? 0.62 : 1) * fade;
           ctx.strokeStyle = primary;
@@ -1397,24 +1637,26 @@ function drawCombatAnimation(
           ctx.stroke();
           ctx.setLineDash([]);
 
-          // Chữ X kép cho Chí Mạng hoặc Masamune
+          // Chữ X kép sắc nét cho Chí Mạng hoặc Masamune
           if (!isMiss && (isCursed || isCrit)) {
             ctx.strokeStyle = isCrit ? '#fef08a' : '#e11d48';
-            ctx.lineWidth = isCrit ? 6 : 5;
+            ctx.lineWidth = isCrit ? 6.5 : 5;
             ctx.beginPath();
-            ctx.moveTo(tgt.x - 36 * swingP, tgt.y - 30 * swingP);
-            ctx.lineTo(tgt.x + 36 * swingP, tgt.y + 30 * swingP);
+            ctx.moveTo(tgt.x - 38 * swingP * multiScale, tgt.y - 32 * swingP * multiScale);
+            ctx.lineTo(tgt.x + 38 * swingP * multiScale, tgt.y + 32 * swingP * multiScale);
             if (isCrit) {
-              ctx.moveTo(tgt.x + 34 * swingP, tgt.y - 28 * swingP);
-              ctx.lineTo(tgt.x - 34 * swingP, tgt.y + 28 * swingP);
+              ctx.moveTo(tgt.x + 36 * swingP * multiScale, tgt.y - 30 * swingP * multiScale);
+              ctx.lineTo(tgt.x - 36 * swingP * multiScale, tgt.y + 30 * swingP * multiScale);
             }
             ctx.stroke();
           }
           ctx.restore();
         }
 
-        if (!isMiss && inHitStop) {
-          drawImpactHitStopStarburst(ctx, tgt, primary, secondary, isCrit ? 1.38 : isCursed ? 1.22 : 1.05, false);
+        if (isMiss && (travelP >= 0.75 || postImpactP > 0)) {
+          drawMissDodgeCue(ctx, source, tgt, postImpactP, fade, multiScale);
+        } else if (!isMiss && inHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, primary, secondary, (isCrit ? 1.38 : isCursed ? 1.22 : 1.05) * multiScale, false, isCrit);
         } else if (!isMiss && postImpactP > 0) {
           drawDirectionalImpactSparks(
             ctx,
@@ -1427,6 +1669,7 @@ function drawCombatAnimation(
             particleScale,
             reducedMotion,
             isCrit,
+            multiScale,
           );
         }
       }
@@ -1476,8 +1719,10 @@ function drawCombatAnimation(
         ctx.fill();
         ctx.restore();
 
-        if (!isMiss && inHitStop) {
-          drawImpactHitStopStarburst(ctx, tgt, primary, secondary, isCrit ? 1.35 : 1.15, false);
+        if (isMiss && (travelP >= 0.75 || postImpactP > 0)) {
+          drawMissDodgeCue(ctx, source, tgt, postImpactP, fade, multiScale);
+        } else if (!isMiss && inHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, primary, secondary, (isCrit ? 1.35 : 1.15) * multiScale, false, isCrit);
         } else if (!isMiss && postImpactP > 0) {
           drawDirectionalImpactSparks(
             ctx,
@@ -1490,6 +1735,7 @@ function drawCombatAnimation(
             particleScale,
             reducedMotion,
             isCrit,
+            multiScale,
           );
         }
       }
@@ -1509,26 +1755,25 @@ function drawCombatAnimation(
           drawTargetLockReticle(ctx, tgt, inTargetLock ? lockP : 1, primary, false);
           return;
         }
-        const delay = effect === 'MACHINE_GUN_BARRAGE' ? tIdx * 0.08 : 0;
-        const localTravel = Math.max(0, Math.min(1, (travelP - delay) / Math.max(0.25, 1 - delay)));
+        const { tTravelP, tInHitStop, tPostP, tFade } = evalTargetTiming(tIdx);
         const endPt = isMiss ? { x: tgt.x + 26, y: tgt.y - 18 } : tgt;
-        ctx.globalAlpha = fade;
+        ctx.globalAlpha = tFade;
 
-        if (localTravel > 0) {
+        if (tTravelP > 0 && (tTravelP < 1 || tInHitStop || tPostP < 0.3)) {
           for (let b = 0; b < burstCount; b++) {
-            const offsetAngle = (b - (burstCount - 1) * 0.5) * 8;
-            const tail = Math.max(0, localTravel - 0.42);
+            const offsetAngle = (b - (burstCount - 1) * 0.5) * (targets.length >= 4 ? 5 : 8);
+            const tail = Math.max(0, tTravelP - 0.44);
             const sx = source.x + (endPt.x - source.x) * tail;
             const sy = source.y + (endPt.y - source.y) * tail + offsetAngle;
-            const ex = source.x + (endPt.x - source.x) * localTravel;
-            const ey = source.y + (endPt.y - source.y) * localTravel + offsetAngle;
+            const ex = source.x + (endPt.x - source.x) * tTravelP;
+            const ey = source.y + (endPt.y - source.y) * tTravelP + offsetAngle;
 
             const trGrad = ctx.createLinearGradient(sx, sy, ex, ey);
             trGrad.addColorStop(0, 'rgba(251, 191, 36, 0)');
             trGrad.addColorStop(0.65, b % 2 === 0 ? '#fbbf24' : '#fb7185');
             trGrad.addColorStop(1, '#ffffff');
             ctx.strokeStyle = trGrad;
-            ctx.lineWidth = isCrit ? 4.8 : 3.8;
+            ctx.lineWidth = isCrit ? 4.4 : 3.4;
             ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(sx, sy);
@@ -1537,20 +1782,23 @@ function drawCombatAnimation(
           }
         }
 
-        if (!isMiss && inHitStop) {
-          drawImpactHitStopStarburst(ctx, tgt, '#fb7185', '#fde047', isCrit ? 1.25 : 1.08, false);
-        } else if (!isMiss && postImpactP > 0) {
+        if (isMiss && (tTravelP >= 0.75 || tPostP > 0)) {
+          drawMissDodgeCue(ctx, source, tgt, tPostP, tFade, multiScale);
+        } else if (!isMiss && tInHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, '#fb7185', '#fde047', (isCrit ? 1.25 : 1.06) * multiScale, false, isCrit);
+        } else if (!isMiss && tPostP > 0) {
           drawDirectionalImpactSparks(
             ctx,
             source,
             tgt,
-            postImpactP,
-            fade,
+            tPostP,
+            tFade,
             '#fb7185',
             '#fde047',
             particleScale,
             reducedMotion,
             isCrit,
+            multiScale,
           );
         }
       });
@@ -1567,41 +1815,43 @@ function drawCombatAnimation(
           drawTargetLockReticle(ctx, tgt, inTargetLock ? lockP : 1, '#34d399', false);
           return;
         }
-        ctx.globalAlpha = fade;
+        const { tTravelP, tInHitStop, tPostP, tFade } = evalTargetTiming(idx);
+        ctx.globalAlpha = tFade;
         const skyOrigin: Point2D = { x: tgt.x + (idx % 2 === 0 ? -24 : 24), y: Math.max(0, tgt.y - 230) };
         const endPt: Point2D = {
-          x: skyOrigin.x + (tgt.x - skyOrigin.x) * travelP,
-          y: skyOrigin.y + (tgt.y - skyOrigin.y) * travelP,
+          x: skyOrigin.x + (tgt.x - skyOrigin.x) * tTravelP,
+          y: skyOrigin.y + (tgt.y - skyOrigin.y) * tTravelP,
         };
-        const boltPts = buildLightningPoints(skyOrigin, endPt, Math.floor((inHitStop ? timings.hitStopStartMs : nowMs) / 42) + idx * 97, 9);
+        const boltPts = buildLightningPoints(skyOrigin, endPt, Math.floor((tInHitStop ? timings.hitStopStartMs : nowMs) / 42) + idx * 97, 9);
 
         ctx.strokeStyle = '#34d399';
-        ctx.lineWidth = (inHitStop ? 13 : 9.5) * fade;
+        ctx.lineWidth = (tInHitStop ? 12 : 9) * tFade;
         ctx.lineJoin = 'round';
         ctx.beginPath();
         boltPts.forEach((pt, j) => (j === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
         ctx.stroke();
 
         ctx.strokeStyle = '#fef9c3';
-        ctx.lineWidth = (inHitStop ? 4.8 : 3.2) * fade;
+        ctx.lineWidth = (tInHitStop ? 4.5 : 3) * tFade;
         ctx.beginPath();
         boltPts.forEach((pt, j) => (j === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
         ctx.stroke();
 
-        if (inHitStop) {
-          drawImpactHitStopStarburst(ctx, tgt, '#34d399', '#fef08a', isCrit ? 1.38 : 1.2, false);
-        } else if (postImpactP > 0) {
+        if (tInHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, '#34d399', '#fef08a', (isCrit ? 1.38 : 1.2) * multiScale, false, isCrit);
+        } else if (tPostP > 0) {
           drawDirectionalImpactSparks(
             ctx,
             skyOrigin,
             tgt,
-            postImpactP,
-            fade,
+            tPostP,
+            tFade,
             '#34d399',
             '#fef08a',
             particleScale,
             reducedMotion,
             isCrit,
+            multiScale,
           );
         }
       });
@@ -1612,16 +1862,17 @@ function drawCombatAnimation(
       if (inAnticipation) {
         drawAnticipationCharge(ctx, source, antP, '#f97316', '#fef08a', false);
       }
-      for (const tgt of targets) {
+      targets.forEach((tgt, idx) => {
         if (inTargetLock || inAnticipation) {
           drawLockLine(tgt, '#f97316');
           drawTargetLockReticle(ctx, tgt, inTargetLock ? lockP : 1, '#f97316', false);
-          continue;
+          return;
         }
-        if (travelP < 1) {
+        const { tTravelP, tInHitStop, tPostP, tFade } = evalTargetTiming(idx);
+        if (tTravelP < 1) {
           // Đạn kíp nổ bay tới mục tiêu trước khi phát nổ ở Impact
-          const ox = source.x + (tgt.x - source.x) * travelP;
-          const oy = source.y + (tgt.y - source.y) * travelP - Math.sin(travelP * Math.PI) * 32;
+          const ox = source.x + (tgt.x - source.x) * tTravelP;
+          const oy = source.y + (tgt.y - source.y) * tTravelP - Math.sin(tTravelP * Math.PI) * 32;
           ctx.fillStyle = '#fef08a';
           ctx.beginPath();
           ctx.arc(ox, oy, 6, 0, Math.PI * 2);
@@ -1632,39 +1883,40 @@ function drawCombatAnimation(
           ctx.moveTo(source.x, source.y);
           ctx.quadraticCurveTo((source.x + tgt.x) * 0.5, Math.min(source.y, tgt.y) - 36, ox, oy);
           ctx.stroke();
-          continue;
+          return;
         }
 
-        if (inHitStop) {
-          drawImpactHitStopStarburst(ctx, tgt, '#f97316', '#fef08a', isCrit ? 1.42 : 1.28, false);
+        if (tInHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, '#f97316', '#fef08a', (isCrit ? 1.4 : 1.24) * multiScale, false, isCrit);
         }
-        const coreR = 16 + (inHitStop ? 0.25 : postImpactP) * (isCrit ? 74 : 62);
-        ctx.globalAlpha = fade * 0.82;
+        const coreR = (14 + (tInHitStop ? 0.25 : tPostP) * (isCrit ? 64 : 54)) * multiScale;
+        ctx.globalAlpha = tFade * 0.8;
         const rad = ctx.createRadialGradient(tgt.x, tgt.y, 2, tgt.x, tgt.y, coreR);
         rad.addColorStop(0, '#fef08a');
         rad.addColorStop(0.45, '#f97316');
-        rad.addColorStop(0.8, 'rgba(225, 29, 72, 0.5)');
+        rad.addColorStop(0.8, 'rgba(225, 29, 72, 0.45)');
         rad.addColorStop(1, 'rgba(225, 29, 72, 0)');
         ctx.fillStyle = rad;
         ctx.beginPath();
         ctx.arc(tgt.x, tgt.y, coreR, 0, Math.PI * 2);
         ctx.fill();
 
-        if (postImpactP > 0) {
+        if (tPostP > 0) {
           drawDirectionalImpactSparks(
             ctx,
             source,
             tgt,
-            postImpactP,
-            fade,
+            tPostP,
+            tFade,
             '#f97316',
             '#fbbf24',
             particleScale,
             reducedMotion,
             isCrit,
+            multiScale,
           );
         }
-      }
+      });
       break;
     }
 
@@ -1673,7 +1925,7 @@ function drawCombatAnimation(
       // 1) Phòng thủ lục giác cyan-violet quanh người đỡ đòn (Target Lock)
       // 2) Đảo hướng xoáy tụ năng lượng tím-đỏ (Anticipation)
       // 3) Đôi vuốt phản kích xoắn lao ngược lại kẻ tấn công (Travel)
-      // 4) Va chạm phản đòn + Hit-stop 80ms + 6-point X burst (Impact -> Recovery)
+      // 4) Va chạm phản đòn + Hit-stop 80ms + 6-point rotated diamond burst (Impact -> Recovery)
       const parryAlpha = Math.max(0, 1 - postImpactP * 1.4);
       if (parryAlpha > 0) {
         ctx.save();
@@ -1738,8 +1990,10 @@ function drawCombatAnimation(
         ctx.quadraticCurveTo(midX - nx, midY - ny, curX, curY);
         ctx.stroke();
 
-        if (!isMiss && inHitStop) {
-          drawImpactHitStopStarburst(ctx, tgt, '#c084fc', '#f43f5e', isCrit ? 1.35 : 1.2, true);
+        if (isMiss && (travelP >= 0.75 || postImpactP > 0)) {
+          drawMissDodgeCue(ctx, source, tgt, postImpactP, fade, multiScale);
+        } else if (!isMiss && inHitStop) {
+          drawImpactHitStopStarburst(ctx, tgt, '#c084fc', '#f43f5e', (isCrit ? 1.35 : 1.2) * multiScale, true, isCrit);
         } else if (!isMiss && postImpactP > 0) {
           drawDirectionalImpactSparks(
             ctx,
@@ -1752,6 +2006,7 @@ function drawCombatAnimation(
             particleScale,
             reducedMotion,
             isCrit,
+            multiScale,
           );
         }
       }
@@ -1759,49 +2014,62 @@ function drawCombatAnimation(
     }
 
     case 'HEAL_AURA': {
-      // Hồi máu khác biệt hình dạng & chuyển động: dải xoắn ốc ngọc-vàng dâng lên + biểu tượng chữ thập (+)
+      // Hồi máu rõ nét & nhẹ nhàng: cột ánh sáng lục bảo dâng lên + 2 vòng sanctuary + xoắn ốc đôi + dấu thập (+)
       const healFade = Math.sin(p * Math.PI);
       for (const tgt of targets) {
         ctx.save();
         ctx.globalAlpha = Math.max(0, Math.min(1, healFade));
 
-        // 2 vòng sóng chữa lành lan tỏa êm ái
-        ctx.strokeStyle = '#34d399';
-        ctx.lineWidth = 3 * healFade;
+        // Cột sáng hồi phục cục bộ quanh quân cờ (sắc gọn, không phủ mờ toàn màn)
+        const pillarH = (68 + p * 26) * multiScale;
+        const pillarW = 30 * multiScale;
+        const pillarGrad = ctx.createLinearGradient(tgt.x, tgt.y + 18, tgt.x, tgt.y - pillarH);
+        pillarGrad.addColorStop(0, 'rgba(52, 211, 153, 0.34)');
+        pillarGrad.addColorStop(0.55, 'rgba(110, 231, 183, 0.22)');
+        pillarGrad.addColorStop(1, 'rgba(253, 224, 71, 0)');
+        ctx.fillStyle = pillarGrad;
         ctx.beginPath();
-        ctx.arc(tgt.x, tgt.y, 14 + p * 38, 0, Math.PI * 2);
+        ctx.rect(tgt.x - pillarW, tgt.y - pillarH, pillarW * 2, pillarH + 18);
+        ctx.fill();
+
+        // 2 vòng sóng chữa lành lan tỏa êm ái (vòng mặt đất + vòng nâng)
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 3.2 * healFade;
+        ctx.beginPath();
+        ctx.ellipse(tgt.x, tgt.y + 8, (18 + p * 36) * multiScale, (8 + p * 14) * multiScale, 0, 0, Math.PI * 2);
         ctx.stroke();
 
         ctx.strokeStyle = '#fde047';
-        ctx.lineWidth = 1.8 * healFade;
+        ctx.lineWidth = 2.2 * healFade;
         ctx.beginPath();
-        ctx.arc(tgt.x, tgt.y, 8 + p * 26, 0, Math.PI * 2);
+        ctx.arc(tgt.x, tgt.y, (14 + p * 30) * multiScale, 0, Math.PI * 2);
         ctx.stroke();
 
         // 2 dải xoắn ốc dâng lên quanh quân cờ
         for (let strand = 0; strand < 2; strand++) {
           ctx.strokeStyle = strand === 0 ? '#6ee7b7' : '#fef08a';
-          ctx.lineWidth = 2.4;
+          ctx.lineWidth = 2.6;
           ctx.beginPath();
           for (let s = 0; s <= 12; s++) {
             const frac = s / 12;
-            const yOff = 18 - (p * 34 + frac * 42);
+            const yOff = 18 - (p * 36 + frac * 48) * multiScale;
             const ang = frac * Math.PI * 2.4 + p * 4.5 + strand * Math.PI;
-            const xOff = Math.cos(ang) * (20 * (1 - frac * 0.35));
+            const xOff = Math.cos(ang) * (24 * multiScale * (1 - frac * 0.3));
             if (s === 0) ctx.moveTo(tgt.x + xOff, tgt.y + yOff);
             else ctx.lineTo(tgt.x + xOff, tgt.y + yOff);
           }
           ctx.stroke();
         }
 
-        // Các chữ thập (+) hồi phục nổi lên
-        const crossCount = reducedMotion || particleScale <= 0 ? 2 : Math.max(3, Math.round(6 * particleScale));
+        // Các chữ thập (+) hồi phục nổi lên rõ nét
+        const crossCount = reducedMotion || particleScale <= 0 ? 3 : Math.max(4, Math.round(6 * particleScale));
         for (let i = 0; i < crossCount; i++) {
-          const ox = (i - (crossCount - 1) / 2) * 14;
-          const oy = 6 - p * 48 - (i % 2) * 12;
-          const arm = 4.5;
+          const ox = (i - (crossCount - 1) / 2) * 16 * multiScale;
+          const oy = 4 - p * 54 * multiScale - (i % 2) * 14;
+          const arm = 5.2 * multiScale;
           ctx.strokeStyle = i % 2 === 0 ? '#6ee7b7' : '#fef08a';
-          ctx.lineWidth = 2.2;
+          ctx.lineWidth = 2.5;
+          ctx.lineCap = 'round';
           ctx.beginPath();
           ctx.moveTo(tgt.x + ox - arm, tgt.y + oy);
           ctx.lineTo(tgt.x + ox + arm, tgt.y + oy);
@@ -2004,7 +2272,7 @@ export function useBoardGameVfxQueue({
   const [activeCombatCount, setActiveCombatCount] = useState(0);
   const [combatFocus, setCombatFocus] = useState<ActiveCombatFocusState | null>(null);
   const activeCombatFocusIdRef = useRef<string | null>(null);
-  const combatDomAnimsRef = useRef<Set<Animation>>(new Set());
+  const combatDomAnimsRef = useRef<Map<HTMLElement, TrackedDomAnim>>(new Map());
   const [floatingPopups, setFloatingPopups] = useState<ActiveFloatingPopup[]>([]);
   const [impactFlashes, setImpactFlashes] = useState<ActiveImpactFlash[]>([]);
   const [activeDiceRoll, setActiveDiceRoll] = useState<DiceRollVisualEvent | null>(null);
@@ -2118,12 +2386,15 @@ export function useBoardGameVfxQueue({
   }, [containerRef]);
 
   const cancelCombatDomAnims = useCallback(() => {
-    combatDomAnimsRef.current.forEach((anim) => {
+    combatDomAnimsRef.current.forEach(({ anim, baseZ }, el) => {
       try {
+        anim.onfinish = null;
+        anim.oncancel = null;
         anim.cancel();
       } catch {
         // ignore finished animations
       }
+      el.style.zIndex = baseZ;
     });
     combatDomAnimsRef.current.clear();
   }, []);
@@ -2401,13 +2672,30 @@ export function useBoardGameVfxQueue({
                 !ev.rerollRequired &&
                 !ev.freeChoice,
             );
-            const timeline = buildDiceRollTimeline({
+            const baseTimeline = buildDiceRollTimeline({
               diceKind: ev.diceKind,
               qualityTier: qualityTierRef.current,
               pawnGlideDurationMs: pawnGlideDurationMsRef.current,
               reducedMotion: reducedMotionRef.current,
               hasDestinationMove,
             });
+            // Khi xúc xắc tấn công đi cùng chuỗi đòn đánh, chốt kết quả xúc xắc đúng khung Impact
+            // để không bao giờ xảy ra trạng thái "Đang tung xúc xắc..." khi số sát thương đã bật lên bàn.
+            const syncAttackDiceWithImpact =
+              ev.diceKind === 'attack' &&
+              !reducedMotionRef.current &&
+              Boolean(batchAttackTimings && batchAttackTimings.impactStartMs > 0);
+            const timeline =
+              syncAttackDiceWithImpact && batchAttackTimings
+                ? {
+                    ...baseTimeline,
+                    windupEndMs: Math.max(80, batchAttackTimings.targetLockEndMs),
+                    tumbleEndMs: Math.max(180, batchAttackTimings.anticipationEndMs),
+                    diceSettleAtMs: Math.max(320, batchAttackTimings.impactStartMs),
+                    destHighlightStartMs: Math.max(320, batchAttackTimings.impactStartMs),
+                    diceOverlayEndMs: Math.max(batchAttackTimings.recoveryEndMs + 280, 1200),
+                  }
+                : baseTimeline;
             activeDiceIdRef.current = ev.id;
             playSoundForVisualEvent({
               ...ev,
@@ -2537,21 +2825,34 @@ export function useBoardGameVfxQueue({
                 ev.targetPlayerIds.length > 0 ? ev.targetPlayerIds : [ev.sourcePlayerId ?? '']
               ).map((tid) => resolvePlayerAnchor(containerRef.current, tid, playersSnapshotRef.current));
 
+              const maxStaggerMs =
+                liveTargets.length > 1 && !reducedMotionRef.current
+                  ? resolveMultiTargetStaggerMs(liveTargets.length - 1, liveTargets.length, reducedMotionRef.current)
+                  : 0;
+
               activeCombatAnimsRef.current.push({
                 uid: ev.id,
                 event: ev,
                 source: liveSource,
                 targets: liveTargets,
                 startedAt: performance.now(),
-                durationMs: seqTimings.recoveryEndMs,
+                durationMs: seqTimings.recoveryEndMs + maxStaggerMs,
                 timings: seqTimings,
               });
               setActiveCombatCount(activeCombatAnimsRef.current.length);
               ensureCanvasLoop();
-              playSoundForVisualEvent({
-                ...ev,
-                durationMs: seqTimings.recoveryEndMs,
-              });
+              const shieldSyncMs =
+                ev.effect === 'SHIELD_GUARD' && batchAttackTimings && !reducedMotionRef.current
+                  ? batchAttackTimings.impactStartMs
+                  : undefined;
+              playSoundForVisualEvent(
+                {
+                  ...ev,
+                  durationMs: seqTimings.recoveryEndMs,
+                },
+                Date.now(),
+                shieldSyncMs !== undefined ? { impactOverrideMs: shieldSyncMs } : undefined,
+              );
 
               // Kích hoạt chuyển động vật lý quân cờ (Target Lock glow -> Anticipation lunge -> Impact knockback 6-10px -> Recovery) & tương tác ô địa điểm
               runCombatPawnAndTileChoreography(
@@ -2588,35 +2889,39 @@ export function useBoardGameVfxQueue({
                 scheduleTimeout(() => setFocusPhase('anticipation'), seqTimings.targetLockEndMs);
                 scheduleTimeout(() => setFocusPhase('travel'), seqTimings.anticipationEndMs);
                 scheduleTimeout(() => setFocusPhase('impact'), seqTimings.impactStartMs);
-                scheduleTimeout(() => setFocusPhase('recovery'), seqTimings.impactEndMs);
+                scheduleTimeout(() => setFocusPhase('recovery'), seqTimings.impactEndMs + maxStaggerMs);
                 scheduleTimeout(() => {
                   if (activeCombatFocusIdRef.current === ev.id) {
                     activeCombatFocusIdRef.current = null;
                     setCombatFocus(null);
                   }
-                }, seqTimings.recoveryEndMs);
+                }, seqTimings.recoveryEndMs + maxStaggerMs);
               }
 
-              // Impact Flash tập trung (chỉ khi trúng đòn có hit-stop, KHÔNG bật trên MISS/HEAL/SHIELD)
+              // Impact Flash tập trung riêng cho từng mục tiêu (stagger theo multi-target, KHÔNG bật trên MISS/HEAL/SHIELD)
               if (seqTimings.hitStopDurationMs > 0 && !reducedMotionRef.current && !ev.isMiss) {
                 const isCounter = ev.effect === 'COUNTER_STRIKE';
-                scheduleTimeout(() => {
-                  const created = liveTargets.map((pt, idx) => ({
-                    uid: `${ev.id}::flash::${idx}`,
-                    x: pt.x,
-                    y: pt.y,
-                    color: colors.primary,
-                    secondaryColor: colors.secondary,
-                    isCounter,
-                    isCritical: Boolean(ev.isCritical),
-                    hitStopMs: seqTimings.hitStopDurationMs,
-                  }));
-                  setImpactFlashes((prev) => [...prev.slice(-6), ...created]);
+                const isCompactFlash = liveTargets.length >= 4;
+                liveTargets.forEach((pt, idx) => {
+                  const staggerMs = resolveMultiTargetStaggerMs(idx, liveTargets.length, false);
                   scheduleTimeout(() => {
-                    const createdIds = new Set(created.map((f) => f.uid));
-                    setImpactFlashes((prev) => prev.filter((f) => !createdIds.has(f.uid)));
-                  }, 300);
-                }, seqTimings.impactStartMs);
+                    const flashItem: ActiveImpactFlash = {
+                      uid: `${ev.id}::flash::${idx}`,
+                      x: pt.x,
+                      y: pt.y,
+                      color: colors.primary,
+                      secondaryColor: colors.secondary,
+                      isCounter,
+                      isCritical: Boolean(ev.isCritical),
+                      compact: isCompactFlash,
+                      hitStopMs: seqTimings.hitStopDurationMs,
+                    };
+                    setImpactFlashes((prev) => [...prev.slice(-10), flashItem]);
+                    scheduleTimeout(() => {
+                      setImpactFlashes((prev) => prev.filter((f) => f.uid !== flashItem.uid));
+                    }, 340);
+                  }, seqTimings.impactStartMs + staggerMs);
+                });
               }
 
               // Rung nhẹ có kiểm soát đúng khung Impact (không rung toàn màn quá mạnh)
@@ -2642,6 +2947,12 @@ export function useBoardGameVfxQueue({
             const uid = ev.id;
             const syncGroup = ev.syncGroup;
             let spawnMs = 0;
+            const offensiveTargets = primaryOffensive?.targetPlayerIds ?? [];
+            const offensiveTargetIdx = offensiveTargets.indexOf(ev.targetPlayerId);
+            const targetStaggerMs =
+              !reducedMotionRef.current && offensiveTargetIdx >= 0
+                ? resolveMultiTargetStaggerMs(offensiveTargetIdx, offensiveTargets.length, false)
+                : 0;
             if (!reducedMotionRef.current) {
               if (syncGroup === 'counter' || ev.variant === 'counter') {
                 spawnMs = counterDelayMs + (batchCounterTimings?.damagePopAtMs ?? 660);
@@ -2660,37 +2971,40 @@ export function useBoardGameVfxQueue({
                   ev.variant === 'miss') &&
                 batchAttackTimings
               ) {
-                // Quan trọng: Sát thương chỉ xuất hiện TẠI/SAU Impact (damagePopAtMs === impactEndMs)
-                spawnMs = batchAttackTimings.damagePopAtMs;
+                // Quan trọng: Sát thương chỉ xuất hiện TẠI/SAU Impact của chính mục tiêu đó (damagePopAtMs + staggerMs)
+                spawnMs = batchAttackTimings.damagePopAtMs + targetStaggerMs;
               } else {
                 spawnMs = 120;
               }
             }
+            const isMultiTargetCrowd = offensiveTargets.length >= 4;
             scheduleTimeout(() => {
+              const cEl = containerRef.current;
               const livePt = resolvePlayerAnchor(
-                containerRef.current,
+                cEl,
                 ev.targetPlayerId,
                 playersSnapshotRef.current,
               );
-              const jitterX = ((ev.targetPlayerId.charCodeAt(ev.targetPlayerId.length - 1) || 0) % 3 - 1) * 6;
+              const cw = cEl?.clientWidth || 720;
+              const ch = cEl?.clientHeight || 480;
               setFloatingPopups((prev) => {
-                // Tránh chồng chữ khi nhiều quân cờ cùng đứng chung 1 ô
-                const baseX = livePt.x + jitterX;
-                const baseY = livePt.y - 16 + (ev.variant === 'counter' ? -26 : 0);
-                const nearbyCount = prev.filter(
-                  (item) =>
-                    item.event.targetPlayerId === ev.targetPlayerId ||
-                    (Math.abs(item.x - baseX) < 52 && Math.abs(item.y - baseY) < 30),
-                ).length;
-                const stackOffsetY = -nearbyCount * 28;
-                const stackOffsetX = nearbyCount % 2 === 1 ? 16 : nearbyCount >= 2 ? -16 : 0;
+                const baseX = livePt.x;
+                const baseY = livePt.y - 18 + (ev.variant === 'counter' ? -24 : 0);
+                const placed = resolveNonOverlappingPopupPos(
+                  baseX,
+                  baseY,
+                  prev,
+                  cw,
+                  ch,
+                  isMultiTargetCrowd || prev.length >= 3,
+                );
                 return [
-                  ...prev.slice(-10),
+                  ...prev.slice(-12),
                   {
                     uid,
                     event: ev,
-                    x: baseX + stackOffsetX,
-                    y: baseY + stackOffsetY,
+                    x: placed.x,
+                    y: placed.y,
                   },
                 ];
               });
@@ -2954,8 +3268,12 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
       data-reduced-motion={String(vfx.reducedMotion)}
       className="pointer-events-none absolute inset-0 z-[48] overflow-hidden"
     >
-      {/* LỚP 1: SVG ĐƯỜNG NHẮM MỤC TIÊU */}
-      {targetLine && (
+      {/* LỚP 1: SVG ĐƯỜNG NHẮM MỤC TIÊU (Tự ẩn hoàn toàn trong suốt Combat/Impact/Floating Popup để không che tầm nhìn) */}
+      {targetLine &&
+        vfx.activeCombatCount === 0 &&
+        !vfx.combatFocus &&
+        vfx.impactFlashes.length === 0 &&
+        vfx.floatingPopups.length === 0 && (
         <svg
           data-testid="bg-vfx-targeting-line"
           className="pointer-events-none absolute inset-0 h-full w-full"
@@ -3041,93 +3359,121 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
         className="pointer-events-none absolute inset-0 z-[18] h-full w-full"
       />
 
-      {/* LỚP 2B: IMPACT FLASH RINGS (60–90ms HIT-STOP IMPACT) */}
-      {vfx.impactFlashes.map((flash) => (
-        <div
-          key={flash.uid}
-          data-testid="bg-vfx-impact-flash"
-          data-counter={String(flash.isCounter)}
-          data-critical={String(Boolean(flash.isCritical))}
-          data-hit-stop-ms={flash.hitStopMs}
-          style={{
-            left: flash.x,
-            top: flash.y,
-            borderColor: flash.color,
-            background: `radial-gradient(circle, #ffffffcc 0%, ${flash.secondaryColor}88 28%, ${flash.color}38 56%, transparent 76%)`,
-            boxShadow: `0 0 ${flash.isCritical ? 36 : 26}px ${flash.color}dd`,
-          }}
-          className={`pointer-events-none absolute z-[19] rounded-full border-2 ${
-            flash.isCritical ? 'h-24 w-24' : 'h-20 w-20'
-          } ${
-            vfx.reducedMotion ? '-translate-x-1/2 -translate-y-1/2 opacity-80' : 'bg-vfx-impact-flash'
-          }`}
-        />
-      ))}
+      {/* LỚP 2B: IMPACT FLASH RINGS (60–90ms HIT-STOP IMPACT — Phân hình Normal / Critical / Counter Diamond) */}
+      {vfx.impactFlashes.map((flash) => {
+        const flashSizeCls = flash.compact
+          ? flash.isCritical
+            ? 'h-16 w-16'
+            : 'h-14 w-14'
+          : flash.isCritical
+            ? 'h-24 w-24'
+            : 'h-20 w-20';
+        const flashAnimCls = vfx.reducedMotion
+          ? '-translate-x-1/2 -translate-y-1/2 opacity-80'
+          : flash.isCounter
+            ? 'bg-vfx-impact-flash-counter'
+            : flash.isCritical
+              ? 'bg-vfx-impact-flash-critical'
+              : 'bg-vfx-impact-flash';
+        const flashShapeCls = flash.isCounter ? 'rounded-lg border-[3px]' : 'rounded-full border-[3px]';
+        return (
+          <div
+            key={flash.uid}
+            data-testid="bg-vfx-impact-flash"
+            data-counter={String(flash.isCounter)}
+            data-critical={String(Boolean(flash.isCritical))}
+            data-hit-stop-ms={flash.hitStopMs}
+            style={{
+              left: flash.x,
+              top: flash.y,
+              borderColor: flash.isCritical ? '#fef08a' : flash.color,
+              background: `radial-gradient(circle, #ffffffdd 0%, ${flash.secondaryColor}80 24%, ${flash.color}30 52%, transparent 74%)`,
+              boxShadow: `0 0 ${flash.compact ? 18 : flash.isCritical ? 34 : 24}px ${flash.color}cc, inset 0 0 10px #ffffffaa`,
+            }}
+            className={`pointer-events-none absolute z-[19] ${flashShapeCls} ${flashSizeCls} ${flashAnimCls}`}
+          />
+        );
+      })}
 
-      {/* LỚP 3: FLOATING DAMAGE / CRITICAL / HEAL / BLOCK / COUNTER / MISS */}
+      {/* LỚP 3: FLOATING DAMAGE / CRITICAL / HEAL / BLOCK / COUNTER / MISS (Tối ưu tương phản 1920x1080 & tự co gọn khi đông quân) */}
       {vfx.floatingPopups.map((pop) => {
+        const crowdedPopups = vfx.floatingPopups.length >= 4;
         const meta =
           pop.event.variant === 'critical'
             ? {
                 animCls: 'bg-vfx-float-critical',
                 pillCls:
-                  'border-2 border-amber-300 bg-gradient-to-b from-rose-700/95 via-rose-950/95 to-slate-950/95 text-amber-100 shadow-[0_8px_26px_rgba(244,63,94,0.75)] ring-2 ring-rose-500/60',
+                  'border-2 border-amber-300 bg-gradient-to-b from-rose-700/98 via-rose-950/98 to-slate-950/98 text-amber-100 shadow-[0_8px_24px_rgba(244,63,94,0.8),0_2px_8px_rgba(0,0,0,0.95)] ring-2 ring-rose-500/70',
                 icon: '⚡',
                 prefix: 'CRIT',
-                sizeCls: 'text-2xl sm:text-[26px] px-3 py-1 rounded-2xl',
+                sizeCls: crowdedPopups
+                  ? 'text-lg sm:text-xl px-2 py-0.5 rounded-xl'
+                  : 'text-2xl sm:text-[26px] px-3 py-1 rounded-2xl',
               }
             : pop.event.variant === 'damage'
               ? {
                   animCls: 'bg-vfx-float-damage',
                   pillCls:
-                    'border-rose-400/90 bg-gradient-to-b from-rose-950/95 to-slate-950/95 text-rose-100 shadow-[0_6px_18px_rgba(225,29,72,0.6)]',
+                    'border-2 border-rose-400/95 bg-gradient-to-b from-rose-950/98 to-slate-950/98 text-white shadow-[0_6px_18px_rgba(225,29,72,0.68),0_2px_6px_rgba(0,0,0,0.95)]',
                   icon: '💥',
                   prefix: null,
-                  sizeCls: 'text-xl sm:text-2xl px-2.5 py-0.5 rounded-xl',
+                  sizeCls: crowdedPopups
+                    ? 'text-base sm:text-lg px-2 py-0.5 rounded-lg'
+                    : 'text-xl sm:text-2xl px-2.5 py-0.5 rounded-xl',
                 }
               : pop.event.variant === 'heal'
                 ? {
                     animCls: 'bg-vfx-float-heal',
                     pillCls:
-                      'border-emerald-300/90 bg-gradient-to-b from-emerald-950/95 to-slate-950/95 text-emerald-100 shadow-[0_6px_18px_rgba(16,185,129,0.55)]',
+                      'border-2 border-emerald-300/95 bg-gradient-to-b from-emerald-950/98 to-slate-950/98 text-emerald-100 shadow-[0_6px_18px_rgba(16,185,129,0.62),0_2px_6px_rgba(0,0,0,0.95)]',
                     icon: '✚',
                     prefix: null,
-                    sizeCls: 'text-lg sm:text-xl px-2.5 py-0.5 rounded-full',
+                    sizeCls: crowdedPopups
+                      ? 'text-base sm:text-lg px-2 py-0.5 rounded-full'
+                      : 'text-lg sm:text-xl px-2.5 py-0.5 rounded-full',
                   }
                 : pop.event.variant === 'block'
                   ? {
                       animCls: 'bg-vfx-float-block',
                       pillCls:
-                        'border-2 border-sky-300/90 bg-gradient-to-b from-sky-950/95 to-slate-950/95 text-sky-100 shadow-[0_6px_20px_rgba(56,189,248,0.6)]',
+                        'border-2 border-sky-300/95 bg-gradient-to-b from-sky-950/98 to-slate-950/98 text-sky-100 shadow-[0_6px_20px_rgba(56,189,248,0.65),0_2px_6px_rgba(0,0,0,0.95)]',
                       icon: '🛡️',
                       prefix: null,
-                      sizeCls: 'text-base sm:text-lg px-2.5 py-0.5 rounded-lg uppercase tracking-wider',
+                      sizeCls: crowdedPopups
+                        ? 'text-xs sm:text-sm px-2 py-0.5 rounded-md uppercase tracking-wider'
+                        : 'text-base sm:text-lg px-2.5 py-0.5 rounded-lg uppercase tracking-wider',
                     }
                   : pop.event.variant === 'counter'
                     ? {
                         animCls: 'bg-vfx-float-counter',
                         pillCls:
-                          'border-2 border-fuchsia-400/95 bg-gradient-to-r from-purple-950/95 via-rose-950/95 to-slate-950/95 text-amber-200 shadow-[0_6px_24px_rgba(168,85,247,0.65)]',
+                          'border-2 border-fuchsia-400/95 bg-gradient-to-r from-purple-950/98 via-rose-950/98 to-slate-950/98 text-amber-200 shadow-[0_6px_24px_rgba(168,85,247,0.7),0_2px_6px_rgba(0,0,0,0.95)]',
                         icon: '⚔️',
                         prefix: null,
-                        sizeCls: 'text-base sm:text-lg px-2.5 py-0.5 rounded-xl uppercase tracking-wider',
+                        sizeCls: crowdedPopups
+                          ? 'text-xs sm:text-sm px-2 py-0.5 rounded-lg uppercase tracking-wider'
+                          : 'text-base sm:text-lg px-2.5 py-0.5 rounded-xl uppercase tracking-wider',
                       }
                     : pop.event.variant === 'steal'
                       ? {
                           animCls: 'bg-vfx-float-pop',
                           pillCls:
-                            'border-amber-300/85 bg-amber-950/95 text-amber-200 shadow-[0_6px_18px_rgba(245,158,11,0.5)]',
+                            'border-2 border-amber-300/90 bg-amber-950/98 text-amber-200 shadow-[0_6px_18px_rgba(245,158,11,0.55),0_2px_6px_rgba(0,0,0,0.95)]',
                           icon: '🧲',
                           prefix: null,
-                          sizeCls: 'text-base sm:text-lg px-2.5 py-0.5 rounded-xl uppercase tracking-wider',
+                          sizeCls: crowdedPopups
+                            ? 'text-xs sm:text-sm px-2 py-0.5 rounded-lg uppercase tracking-wider'
+                            : 'text-base sm:text-lg px-2.5 py-0.5 rounded-xl uppercase tracking-wider',
                         }
                       : {
                           animCls: 'bg-vfx-float-miss',
                           pillCls:
-                            'border-dashed border-slate-400/80 bg-slate-950/90 text-slate-200 italic shadow-[0_4px_14px_rgba(15,23,42,0.75)]',
+                            'border-2 border-dashed border-slate-300/90 bg-slate-950/95 text-slate-100 italic shadow-[0_4px_14px_rgba(15,23,42,0.9)]',
                           icon: '💨',
                           prefix: null,
-                          sizeCls: 'text-sm sm:text-base px-2.5 py-0.5 rounded-full uppercase tracking-widest',
+                          sizeCls: crowdedPopups
+                            ? 'text-xs sm:text-sm px-2 py-0.5 rounded-full uppercase tracking-widest'
+                            : 'text-sm sm:text-base px-2.5 py-0.5 rounded-full uppercase tracking-widest',
                         };
         return (
           <div
@@ -3137,14 +3483,14 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
             data-sync-group={pop.event.syncGroup ?? 'attack'}
             data-target-player={pop.event.targetPlayerId}
             style={{ left: pop.x, top: pop.y }}
-            className={`pointer-events-none absolute z-20 -translate-x-1/2 font-black tracking-tight tabular-nums ${
+            className={`pointer-events-none absolute z-20 -translate-x-1/2 font-black tracking-tight tabular-nums whitespace-nowrap ${
               vfx.reducedMotion ? '' : meta.animCls
             }`}
           >
             <span
-              className={`inline-flex items-center gap-1 border ${meta.sizeCls} ${meta.pillCls}`}
+              className={`inline-flex items-center gap-1 border drop-shadow-[0_2px_3px_rgba(0,0,0,0.95)] ${meta.sizeCls} ${meta.pillCls}`}
             >
-              <span aria-hidden="true" className="text-sm sm:text-base leading-none">
+              <span aria-hidden="true" className={crowdedPopups ? 'text-xs leading-none' : 'text-sm sm:text-base leading-none'}>
                 {meta.icon}
               </span>
               {meta.prefix && (
@@ -3162,6 +3508,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
       {vfx.activeDiceRoll && (
         <div
           data-testid="bg-vfx-dice-overlay"
+          data-dice-kind={vfx.activeDiceRoll.diceKind}
           data-dice-stage={vfx.diceRollStage}
           data-dice-settled={String(vfx.isDiceSettled)}
           className="pointer-events-none absolute inset-x-0 bottom-20 flex justify-center px-3"

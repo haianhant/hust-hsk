@@ -515,6 +515,91 @@ export function resolveCombatPhaseAt(
 }
 
 /**
+ * Tính độ trễ từng mục tiêu cho đòn đa mục tiêu (2–8 quân) để mỗi mục tiêu có
+ * nhịp va chạm, hit-flash và popup riêng mà tổng chuỗi vẫn gọn trong <= 1.1s.
+ */
+export function resolveMultiTargetStaggerMs(
+  targetIndex: number,
+  totalTargets: number,
+  reducedMotion: boolean,
+): number {
+  if (reducedMotion || totalTargets <= 1 || targetIndex <= 0) return 0;
+  const clampedIdx = Math.min(targetIndex, totalTargets - 1);
+  if (totalTargets <= 3) return clampedIdx * 55;
+  return Math.round((clampedIdx / Math.max(1, totalTargets - 1)) * 165);
+}
+
+/**
+ * Bố trí tọa độ Floating Damage / BLOCK / MISS / HEAL không chồng lấp nhau ngay cả khi
+ * 4–8 quân cùng đứng trong 1 ô địa điểm và trúng đòn diện rộng đồng thời.
+ */
+export function resolveNonOverlappingPopupPos(
+  baseX: number,
+  baseY: number,
+  existing: readonly { x: number; y: number }[],
+  containerWidth: number,
+  containerHeight: number,
+  isCrowded = false,
+): { x: number; y: number } {
+  const safeW = Math.max(320, containerWidth || 720);
+  const safeH = Math.max(240, containerHeight || 480);
+  const padX = isCrowded ? 42 : 50;
+  const minX = padX;
+  const maxX = Math.max(padX, safeW - padX);
+  const minY = 36;
+  const maxY = Math.max(40, safeH - 28);
+  const minSepX = isCrowded ? 66 : 82;
+  const minSepY = isCrowded ? 28 : 34;
+
+  const clamp = (x: number, y: number) => ({
+    x: Math.round(Math.max(minX, Math.min(maxX, x))),
+    y: Math.round(Math.max(minY, Math.min(maxY, y))),
+  });
+
+  const candidates: readonly [number, number][] = [
+    [0, 0],
+    [0, -32],
+    [42, -16],
+    [-42, -16],
+    [0, -64],
+    [54, -46],
+    [-54, -46],
+    [0, 26],
+    [68, 0],
+    [-68, 0],
+    [46, 26],
+    [-46, 26],
+    [88, -32],
+    [-88, -32],
+    [0, -96],
+  ];
+
+  let bestPos = clamp(baseX, baseY);
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (const [ox, oy] of candidates) {
+    const pt = clamp(baseX + ox, baseY + oy);
+    let overlapPenalty = 0;
+    for (const item of existing) {
+      const dx = Math.abs(item.x - pt.x);
+      const dy = Math.abs(item.y - pt.y);
+      if (dx < minSepX && dy < minSepY) {
+        overlapPenalty += (minSepX - dx) * (minSepY - dy);
+      }
+    }
+    if (overlapPenalty === 0) return pt;
+    const distPenalty = Math.hypot(ox, oy) * 0.25;
+    const score = overlapPenalty + distPenalty;
+    if (score < bestScore) {
+      bestScore = score;
+      bestPos = pt;
+    }
+  }
+
+  return bestPos;
+}
+
+/**
  * Suy xuất danh sách hiệu ứng có ID duy nhất và thứ tự rõ ràng từ 2 ảnh chụp liên tiếp
  * của state trên server (`prev` -> `next`), tôn trọng tuyệt đối bảo mật vai ẩn & bài kín.
  */

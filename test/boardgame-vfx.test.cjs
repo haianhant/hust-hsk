@@ -17,6 +17,8 @@ const {
   resolveCombatPhaseAt,
   resolveCombatSequenceTimings,
   resolveMatchOutcomeForViewer,
+  resolveMultiTargetStaggerMs,
+  resolveNonOverlappingPopupPos,
   resolveRoleRevealTimeline,
   resolveVictoryCinematicTimeline,
 } = require('../features/boardgame/ui/vfx-queue.ts');
@@ -1817,5 +1819,58 @@ test('Cinematic V2 Phase 3 (22) — 8-Player Same-Tile Barrage, F5 Reconnect Com
     assert.equal(playSoundForVisualEvent(audioSamples[i], t), true, `Expected audio for ${audioSamples[i].id}`);
     assert.equal(playSoundForVisualEvent(audioSamples[i], t + 300), false, `Duplicate ${audioSamples[i].id} must be deduped`);
   }
+  stopAllBoardGameSounds();
+});
+
+test('Cinematic V2 Phase 3.1 (23) — Multi-Target Stagger, 8-Pawn Crowded Anti-Overlap Solver & Burst Audio Coalescing', () => {
+  // 1) Multi-target stagger keeps each target distinct while capping total spread <= 165ms
+  assert.equal(resolveMultiTargetStaggerMs(0, 1, false), 0);
+  assert.equal(resolveMultiTargetStaggerMs(2, 5, true), 0, 'Reduced motion must disable stagger');
+  assert.equal(resolveMultiTargetStaggerMs(0, 3, false), 0);
+  assert.equal(resolveMultiTargetStaggerMs(1, 3, false), 55);
+  assert.equal(resolveMultiTargetStaggerMs(2, 3, false), 110);
+
+  const spread8 = Array.from({ length: 7 }, (_, i) => resolveMultiTargetStaggerMs(i, 7, false));
+  assert.equal(spread8[0], 0);
+  assert.equal(spread8[spread8.length - 1], 165);
+  for (let i = 1; i < spread8.length; i++) {
+    assert.ok(spread8[i] > spread8[i - 1], 'Stagger must strictly increase across victims');
+  }
+
+  // 2) 8-pawn crowded tile popup placement: 8 pawns inside one compact 2x4 tile -> 0 overlaps & in-bounds
+  const containerW = 1440;
+  const containerH = 860;
+  const crowdedAnchors = [];
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 4; col++) {
+      crowdedAnchors.push({ x: 320 + col * 86, y: 220 + row * 34 });
+    }
+  }
+  const placed = [];
+  for (const anchor of crowdedAnchors) {
+    const pt = resolveNonOverlappingPopupPos(anchor.x, anchor.y - 18, placed, containerW, containerH, true);
+    assert.ok(pt.x >= 42 && pt.x <= containerW - 42, `x=${pt.x} must stay inside safe horizontal bounds`);
+    assert.ok(pt.y >= 36 && pt.y <= containerH - 28, `y=${pt.y} must stay inside safe vertical bounds`);
+    for (const prev of placed) {
+      const overlaps = Math.abs(prev.x - pt.x) < 66 && Math.abs(prev.y - pt.y) < 28;
+      assert.equal(overlaps, false, `Crowded popups (${prev.x},${prev.y}) and (${pt.x},${pt.y}) must NOT overlap`);
+    }
+    placed.push(pt);
+  }
+
+  // 3) Audio burst coalescing for simultaneous AoE shields/heals + impactOverrideMs sync option
+  resetBoardGameAudioForTests();
+  setBoardGameSoundMuted(false);
+  const s1 = { id: 'p31-shd-1', kind: 'COMBAT_VFX', order: 42, durationMs: 840, effect: 'SHIELD_GUARD', sourcePlayerId: 'p1', targetPlayerIds: ['p2'], shake: 'none' };
+  const s2 = { id: 'p31-shd-2', kind: 'COMBAT_VFX', order: 42, durationMs: 840, effect: 'SHIELD_GUARD', sourcePlayerId: 'p1', targetPlayerIds: ['p3'], shake: 'none' };
+  const h1 = { id: 'p31-heal-1', kind: 'COMBAT_VFX', order: 41, durationMs: 840, effect: 'HEAL_AURA', sourcePlayerId: 'p1', targetPlayerIds: ['p2'], shake: 'none' };
+  const h2 = { id: 'p31-heal-2', kind: 'COMBAT_VFX', order: 41, durationMs: 840, effect: 'HEAL_AURA', sourcePlayerId: 'p1', targetPlayerIds: ['p3'], shake: 'none' };
+  assert.equal(playSoundForVisualEvent(s1, 30000, { impactOverrideMs: 480 }), true);
+  assert.equal(playSoundForVisualEvent(s2, 30090, { impactOverrideMs: 480 }), false, 'Simultaneous shield within 120ms burst window must coalesce');
+  assert.equal(playSoundForVisualEvent(h1, 30010), true);
+  assert.equal(playSoundForVisualEvent(h2, 30100), false, 'Simultaneous heal within 120ms burst window must coalesce');
+  assert.equal(playSoundForVisualEvent({ ...h2, id: 'p31-heal-3' }, 30160), true, 'Heal after 120ms cooldown must play cleanly');
+  const diag = getBoardGameAudioDiagnostics();
+  assert.equal(diag.coalescedCount, 2);
   stopAllBoardGameSounds();
 });

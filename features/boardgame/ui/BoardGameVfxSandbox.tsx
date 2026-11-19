@@ -163,6 +163,36 @@ function createSandboxInitialGame(): BoardGamePublicGameView {
   };
 }
 
+function createExtraCrowdedPawns(): BoardGamePublicPlayerView[] {
+  const extraSpecs = [
+    { id: 'sb-em', name: 'Em Thảo', seat: 4, wounds: 1 },
+    { id: 'sb-phong', name: 'Phong Vũ', seat: 5, wounds: 2 },
+    { id: 'sb-giang', name: 'Giang Nam', seat: 6, wounds: 1 },
+    { id: 'sb-ha', name: 'Hà Linh', seat: 7, wounds: 2 },
+  ];
+  return extraSpecs.map((spec) => ({
+    playerId: spec.id,
+    displayName: spec.name,
+    seatIndex: spec.seat,
+    location: 'canteen',
+    woundsTaken: spec.wounds,
+    handCount: 0,
+    equipped: [],
+    attacksMade: 0,
+    attacksThisTurn: 0,
+    investigationsCount: 0,
+    guardianShieldActive: false,
+    alive: true,
+    connected: true,
+    revealedRoleId: null,
+    revealedFaction: null,
+    revealedMaxHp: null,
+    revealedSkillCooldown: 0,
+    revealedSkillUsedOnce: false,
+    appearance: BASE_APPEARANCE,
+  }));
+}
+
 export function BoardGameVfxSandbox() {
   const stageRef = useRef<HTMLDivElement>(null);
   const seqRef = useRef<number>(1);
@@ -771,44 +801,72 @@ export function BoardGameVfxSandbox() {
     });
   };
 
-  // Phase 3 Showcase E: Cùng Ô Đông Quân (4 quân tụ cùng 1 ô canteen + Súng Liên Thanh đa mục tiêu + BLOCK)
+  // Phase 3.1 Showcase E: Cùng Ô Đông Quân (8 quân tụ cùng 1 ô canteen + Súng Liên Thanh đa mục tiêu 7 người + CRIT + BLOCK)
   const triggerPhase3SameTileBarrage = () => {
     setSelectedTargetId(null);
-    setLastDemoLabel('Phase 3 Cùng Ô Đông Quân: 4 quân tại Canteen · Súng Liên Thanh đa mục tiêu + BLOCK');
-    setGame((prev) => {
-      const turn = prev.turnNumber + 1;
-      const now = Date.now();
-      return {
-        ...prev,
-        turnNumber: turn,
-        activePlayerId: 'sb-tu',
-        players: prev.players.map((p) => {
-          if (p.playerId === 'sb-minh') return { ...p, location: 'canteen', woundsTaken: p.woundsTaken + 2 };
-          if (p.playerId === 'sb-vy') return { ...p, location: 'canteen', woundsTaken: p.woundsTaken + 3 };
-          if (p.playerId === 'sb-dung') return { ...p, location: 'canteen', guardianShieldActive: false };
-          return { ...p, location: 'canteen', equipped: [cardMeta('ev-06')] };
-        }),
-        publicLog: [
-          ...prev.publicLog.slice(-15),
-          {
-            id: nextLogId('p3-st-blk'),
-            round: prev.round,
-            atMs: now,
-            kind: 'skill',
-            actorId: 'sb-dung',
-            text: '🛡️ Lá Chắn Thiên Thần che chở Dũng Kiên — miễn nhiễm đòn đánh!',
-          },
-          {
-            id: nextLogId('p3-st-mg'),
-            round: prev.round,
-            atMs: now + 1,
-            kind: 'attack',
-            actorId: 'sb-tu',
-            text: '🔫 Súng Liên Thanh! Tú Linh xả đạn (|5 - 2|, tổng 3) vào 3 người trong tầm → tổng 5 sát thương!',
-          },
-        ],
-      };
-    });
+    setLastDemoLabel('Phase 3.1 Cùng Ô 8 Quân: 8 quân tại Canteen · Súng Liên Thanh 7 mục tiêu (CRIT -4, -3, -2 & BLOCK)');
+    const fireBarrage = () => {
+      setGame((prev) => {
+        const turn = prev.turnNumber + 1;
+        const now = Date.now();
+        return {
+          ...prev,
+          turnNumber: turn,
+          players: prev.players.map((p) => {
+            if (p.playerId === 'sb-minh') return { ...p, location: 'canteen', woundsTaken: p.woundsTaken + 2 };
+            if (p.playerId === 'sb-vy') return { ...p, location: 'canteen', woundsTaken: p.woundsTaken + 3 };
+            if (p.playerId === 'sb-dung') return { ...p, location: 'canteen', guardianShieldActive: false };
+            if (p.playerId === 'sb-em') return { ...p, location: 'canteen', woundsTaken: p.woundsTaken + 4 };
+            if (p.playerId === 'sb-phong') return { ...p, location: 'canteen', woundsTaken: p.woundsTaken + 2 };
+            if (p.playerId === 'sb-giang') return { ...p, location: 'canteen', woundsTaken: p.woundsTaken + 3 };
+            if (p.playerId === 'sb-ha') return { ...p, location: 'canteen', woundsTaken: p.woundsTaken + 2 };
+            return { ...p, location: 'canteen', equipped: [cardMeta('ev-06')] };
+          }),
+          publicLog: [
+            ...prev.publicLog.slice(-15),
+            {
+              id: nextLogId('p3-st-blk'),
+              round: prev.round,
+              atMs: now,
+              kind: 'skill',
+              actorId: 'sb-dung',
+              text: '🛡️ Lá Chắn Thiên Thần che chở Dũng Kiên — miễn nhiễm đòn đánh!',
+            },
+            {
+              id: nextLogId('p3-st-mg'),
+              round: prev.round,
+              atMs: now + 1,
+              kind: 'attack',
+              actorId: 'sb-tu',
+              text: '🔫 Súng Liên Thanh! Tú Linh xả đạn (|6 - 2|, tổng 4) vào 7 người tại Canteen → tổng 16 sát thương!',
+            },
+          ],
+        };
+      });
+    };
+
+    if (game.players.length < 8) {
+      setGame((prev) => {
+        const extras = createExtraCrowdedPawns();
+        const combined = [
+          ...prev.players.map((p) => ({
+            ...p,
+            location: 'canteen' as const,
+            guardianShieldActive: p.playerId === 'sb-dung' ? true : p.guardianShieldActive,
+            equipped: p.playerId === 'sb-tu' ? [cardMeta('ev-06')] : p.equipped,
+          })),
+          ...extras,
+        ];
+        return {
+          ...prev,
+          players: combined,
+          turnOrder: combined.map((p) => p.playerId),
+        };
+      });
+      window.setTimeout(fireBarrage, 70);
+    } else {
+      fireBarrage();
+    }
   };
 
   return (
@@ -1049,8 +1107,17 @@ export function BoardGameVfxSandbox() {
               : ''
         }`}
       >
-        {/* 4 quân cờ ở các ô */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {/* 4 hoặc 8 quân cờ (khi thử nghiệm Cùng Ô Đông Quân 8 người) */}
+        <div className={game.players.length > 4 ? 'rounded-2xl border border-fuchsia-400/45 bg-slate-900/75 p-3 space-y-2' : ''}>
+          {game.players.length > 4 && (
+            <div className="flex items-center justify-between text-[11px] font-extrabold text-fuchsia-200">
+              <span>📍 Ô 8 · Khu Sân Cũ Đêm (Cùng Ô {game.players.length} Quân)</span>
+              <span className="rounded bg-fuchsia-950/90 px-2 py-0.5 text-[10px] text-fuchsia-200">
+                Multi-Target Anti-Overlap Stress Test
+              </span>
+            </div>
+          )}
+          <div className={game.players.length > 4 ? 'grid grid-cols-2 gap-2 sm:grid-cols-4' : 'grid grid-cols-2 gap-3 sm:grid-cols-4'}>
           {game.players.map((p) => {
             const isTarget = selectedTargetId === p.playerId;
             return (
@@ -1060,7 +1127,9 @@ export function BoardGameVfxSandbox() {
                 data-vfx-player={p.playerId}
                 data-pawn-glide={p.playerId}
                 onClick={() => setSelectedTargetId((prev) => (prev === p.playerId ? null : p.playerId))}
-                className={`flex flex-col items-start gap-2 rounded-2xl border p-3 text-left transition cursor-pointer ${
+                className={`flex flex-col items-start rounded-2xl border text-left transition cursor-pointer ${
+                  game.players.length > 4 ? 'gap-1.5 p-2' : 'gap-2 p-3'
+                } ${
                   !p.alive
                     ? 'opacity-45 border-slate-800 bg-slate-900/50'
                     : isTarget
@@ -1104,6 +1173,7 @@ export function BoardGameVfxSandbox() {
               </button>
             );
           })}
+          </div>
         </div>
 
         {/* Khay xúc xắc 3D & 3 chồng bài */}
