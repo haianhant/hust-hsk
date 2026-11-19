@@ -14,6 +14,7 @@ const {
   computeDiceSig,
   computeVictoryEventId,
   extractVisualEventsFromDiff,
+  resolveCombatPhaseAt,
   resolveCombatSequenceTimings,
   resolveMatchOutcomeForViewer,
   resolveRoleRevealTimeline,
@@ -1144,27 +1145,40 @@ test('AAA Polish (12) — Cinematic Role Reveal 5 phases (1.2-1.8s), Quality Tie
   assert.ok(reduced.totalMs <= 260, 'Reduced Motion must clamp Role Reveal to <= 260ms');
 });
 
-test('AAA Polish (13) — Combat 5 phases + 75ms Hit-Stop (60-100ms) for strikes vs 0ms for heal/shield', () => {
+test('AAA Polish (13) — Combat 5 phases (750-1100ms) + 60-90ms Hit-Stop for strikes vs 0ms for heal/shield/miss', () => {
   for (const eff of ['SLASH', 'MASAMUNE_SLASH', 'SPEAR_THRUST', 'HANDGUN_SHOT', 'MACHINE_GUN_BARRAGE', 'LIGHTNING_STRIKE', 'EXPLOSION', 'COUNTER_STRIKE']) {
-    const t = resolveCombatSequenceTimings(680, eff, false);
-    assert.ok(t.targetLockEndMs > 0 && t.targetLockEndMs < t.travelEndMs);
+    const t = resolveCombatSequenceTimings(960, eff, false);
+    assert.ok(t.recoveryEndMs >= 750 && t.recoveryEndMs <= 1100, `${eff} total must be 750-1100ms`);
+    assert.ok(
+      t.targetLockEndMs > 0 &&
+        t.targetLockEndMs < t.anticipationEndMs &&
+        t.anticipationEndMs < t.travelEndMs,
+      `${eff} must progress target-lock -> anticipation -> travel`,
+    );
+    assert.equal(t.impactStartMs, t.travelEndMs);
     assert.equal(t.hitStopStartMs, t.travelEndMs);
-    assert.ok(t.hitStopDurationMs >= 60 && t.hitStopDurationMs <= 100, `${eff} hitStopDurationMs must be 60-100ms`);
-    assert.equal(t.hitStopDurationMs, 75);
+    assert.ok(t.hitStopDurationMs >= 60 && t.hitStopDurationMs <= 90, `${eff} hitStopDurationMs must be 60-90ms`);
     assert.equal(t.hitStopEndMs, t.hitStopStartMs + t.hitStopDurationMs);
-    assert.ok(t.damagePopAtMs >= t.hitStopStartMs && t.damagePopAtMs <= t.hitStopEndMs);
-    assert.ok(t.hitStopEndMs < t.recoveryEndMs);
+    assert.ok(t.damagePopAtMs >= t.hitStopEndMs && t.damagePopAtMs >= t.impactEndMs, `${eff} damage must NEVER pop before impact/hit-stop`);
+    assert.ok(t.impactEndMs < t.recoveryEndMs);
   }
 
   for (const eff of ['HEAL_AURA', 'SHIELD_GUARD', 'STEAL_TETHER']) {
-    const t = resolveCombatSequenceTimings(680, eff, false);
+    const t = resolveCombatSequenceTimings(840, eff, false);
     assert.equal(t.hitStopDurationMs, 0);
   }
 
-  const reduced = resolveCombatSequenceTimings(680, 'COUNTER_STRIKE', true);
+  const missT = resolveCombatSequenceTimings(820, 'SLASH', false, { isMiss: true });
+  assert.equal(missT.hitStopDurationMs, 0, 'MISS must have 0ms hit-stop');
+
+  const critT = resolveCombatSequenceTimings(1020, 'SPEAR_THRUST', false, { isCritical: true });
+  assert.equal(critT.hitStopDurationMs, 85, 'Critical strike must have 85ms hit-stop (within 60-90ms)');
+
+  const reduced = resolveCombatSequenceTimings(960, 'COUNTER_STRIKE', true);
   assert.equal(reduced.hitStopDurationMs, 0);
   assert.equal(reduced.targetLockEndMs, 0);
-  assert.ok(reduced.recoveryEndMs <= 260);
+  assert.equal(reduced.anticipationEndMs, 0);
+  assert.ok(reduced.recoveryEndMs <= 240);
 });
 
 test('AAA Polish (14) — Character Signature Skill VFX with strict P0 secret role isolation', () => {
@@ -1564,6 +1578,244 @@ test('Cinematic V2 Phase 2 (19) — Frame-1 pendingVictory guard, Skip acknowled
     const now = 10000 + i * 500;
     assert.equal(playSoundForVisualEvent(ev, now), true, `Expected audio cue for ${outcomes[i]}`);
     assert.equal(playSoundForVisualEvent(ev, now + 500), false, `Duplicate ${outcomes[i]} event ID must be deduped`);
+  }
+  stopAllBoardGameSounds();
+});
+
+test('Cinematic V2 Phase 3 (20) — 5-Stage Combat Timeline (750-1100ms), Phase Transitions, Quality Tiers & Strict Damage-After-Impact', () => {
+  const high = resolveCombatSequenceTimings(1000, 'SLASH', false, { qualityTier: 'high' });
+  assert.equal(high.targetLockEndMs, 150);
+  assert.equal(high.anticipationEndMs, 300);
+  assert.equal(high.travelEndMs, 500);
+  assert.equal(high.impactStartMs, 500);
+  assert.equal(high.hitStopDurationMs, 75);
+  assert.equal(high.impactEndMs, 700);
+  assert.equal(high.damagePopAtMs, 700);
+  assert.equal(high.recoveryEndMs, 1000);
+
+  // Kiểm chứng resolveCombatPhaseAt chạy đúng thứ tự 5 pha
+  assert.equal(resolveCombatPhaseAt(0, high), 'target-lock');
+  assert.equal(resolveCombatPhaseAt(149, high), 'target-lock');
+  assert.equal(resolveCombatPhaseAt(150, high), 'anticipation');
+  assert.equal(resolveCombatPhaseAt(299, high), 'anticipation');
+  assert.equal(resolveCombatPhaseAt(300, high), 'travel');
+  assert.equal(resolveCombatPhaseAt(499, high), 'travel');
+  assert.equal(resolveCombatPhaseAt(500, high), 'impact');
+  assert.equal(resolveCombatPhaseAt(699, high), 'impact');
+  assert.equal(resolveCombatPhaseAt(700, high), 'recovery');
+  assert.equal(resolveCombatPhaseAt(999, high), 'recovery');
+
+  // Quality tiers tôn trọng biên 750-1100ms & damagePopAtMs luôn >= impactEndMs > impactStartMs
+  for (const tier of ['high', 'balanced', 'low']) {
+    const t = resolveCombatSequenceTimings(1040, 'MASAMUNE_SLASH', false, { qualityTier: tier, isCritical: true });
+    assert.ok(t.recoveryEndMs >= 750 && t.recoveryEndMs <= 1100, `${tier} total must stay in 750-1100ms`);
+    assert.ok(t.damagePopAtMs >= t.impactEndMs && t.impactEndMs > t.impactStartMs, `${tier} damage must pop strictly after impact`);
+  }
+  assert.equal(resolveCombatSequenceTimings(500, 'SLASH', false).recoveryEndMs, 750);
+  assert.equal(resolveCombatSequenceTimings(1800, 'SLASH', false).recoveryEndMs, 1100);
+});
+
+test('Cinematic V2 Phase 3 (21) — Combat Variants (Critical, Counter syncGroup, Miss, Shield, Heal, Skill) & 0.6-0.9s Popup Readability', () => {
+  const base = makePubState({
+    players: makePubState().players.map((p) =>
+      p.playerId === 'p1'
+        ? { ...p, equipped: [eqMeta('ev-01')] }
+        : p.playerId === 'p3'
+          ? { ...p, revealedRoleId: 'suong-gac-cong', revealedFaction: 'mist-order', revealedMaxHp: 14 }
+          : p,
+    ),
+  });
+
+  // 1) Critical Masamune (-4 on p3) + Counterattack (-1 on p1): counter damage MUST be tagged syncGroup='counter'
+  const afterCounter = {
+    ...base,
+    turnNumber: 6,
+    players: base.players.map((p) => {
+      if (p.playerId === 'p3') return { ...p, woundsTaken: p.woundsTaken + 4 };
+      if (p.playerId === 'p1') return { ...p, woundsTaken: p.woundsTaken + 1 };
+      return p;
+    }),
+    lastDiceRoll: {
+      id: 'atk-p3-crit-6',
+      round: 2,
+      atMs: 6000,
+      kind: 'attack',
+      playerId: 'p1',
+      displayName: 'Minh An',
+      d6: 0,
+      d4: 4,
+      total: 4,
+      rerollRequired: false,
+      freeChoice: false,
+      resolvedLocation: null,
+      targetPlayerId: 'p3',
+      damageDealt: 4,
+    },
+    publicLog: [
+      {
+        id: 'log-p3-crit-1',
+        round: 2,
+        atMs: 6000,
+        kind: 'attack',
+        actorId: 'p1',
+        text: '⚔️ Minh An tấn công Dũng Kiên (1d4=4, tổng 4) → gây 4 sát thương!',
+      },
+      {
+        id: 'log-p3-ctr-1',
+        round: 2,
+        atMs: 6001,
+        kind: 'skill',
+        actorId: 'p3',
+        text: '🥊 Dũng "Gác Cổng" (Dũng Kiên) phản kích tức thì (|3 - 2|, tổng 1) → Minh An chịu 1 sát thương!',
+      },
+    ],
+  };
+
+  const ctrEvents = extractVisualEventsFromDiff(base, afterCounter, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  const atkFx = ctrEvents.find((e) => e.kind === 'COMBAT_VFX' && e.effect === 'MASAMUNE_SLASH');
+  const ctrFx = ctrEvents.find((e) => e.kind === 'COMBAT_VFX' && e.effect === 'COUNTER_STRIKE');
+  assert.ok(atkFx && atkFx.isCritical === true && atkFx.durationMs >= 750 && atkFx.durationMs <= 1100);
+  assert.ok(ctrFx && ctrFx.durationMs >= 750 && ctrFx.durationMs <= 1100 && ctrFx.targetPlayerIds.includes('p1'));
+
+  const critPop = ctrEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.targetPlayerId === 'p3');
+  const counterDmgPop = ctrEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.targetPlayerId === 'p1');
+  const counterTagPop = ctrEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.variant === 'counter');
+  assert.ok(critPop && critPop.variant === 'critical' && critPop.syncGroup === 'attack');
+  assert.ok(counterDmgPop && counterDmgPop.variant === 'damage' && counterDmgPop.syncGroup === 'counter', 'Counterattack damage must sync with COUNTER_STRIKE, never premature');
+  assert.ok(counterTagPop && counterTagPop.syncGroup === 'counter');
+
+  for (const pop of ctrEvents.filter((e) => e.kind === 'FLOATING_TEXT')) {
+    assert.ok(pop.durationMs >= 600 && pop.durationMs <= 900, `Floating popup ${pop.label} (${pop.durationMs}ms) must stay in 600-900ms`);
+  }
+
+  // 2) Miss (ĐÁNH HỤT): isMiss=true, shake='none', 0ms hit-stop, MISS popup synced to attack
+  const afterMiss = {
+    ...base,
+    turnNumber: 7,
+    publicLog: [
+      {
+        id: 'log-p3-miss-1',
+        round: 2,
+        atMs: 7000,
+        kind: 'attack',
+        actorId: 'p1',
+        text: '⚔️ Minh An đánh Vy Hà (|3-3|=0) → ĐÁNH HỤT (0 sát thương)!',
+      },
+    ],
+  };
+  const missEvents = extractVisualEventsFromDiff(base, afterMiss, { selfPlayerId: 'p1', isSpectator: false });
+  const missFx = missEvents.find((e) => e.kind === 'COMBAT_VFX');
+  const missPop = missEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.variant === 'miss');
+  assert.ok(missFx && missFx.isMiss === true && missFx.shake === 'none');
+  assert.ok(missPop && missPop.label === 'MISS' && missPop.syncGroup === 'attack' && missPop.durationMs >= 600 && missPop.durationMs <= 900);
+
+  // 3) Shield & Healing syncGroup + durations
+  const afterHealShield = {
+    ...base,
+    turnNumber: 8,
+    players: base.players.map((p) => {
+      if (p.playerId === 'p4') return { ...p, woundsTaken: Math.max(0, p.woundsTaken - 2) };
+      if (p.playerId === 'p2') return { ...p, guardianShieldActive: true };
+      return p;
+    }),
+  };
+  const hsEvents = extractVisualEventsFromDiff(base, afterHealShield, { selfPlayerId: 'p1', isSpectator: false });
+  const healPop = hsEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.variant === 'heal');
+  const blockPop = hsEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.variant === 'block');
+  assert.ok(healPop && healPop.syncGroup === 'heal' && healPop.durationMs >= 600 && healPop.durationMs <= 900);
+  assert.ok(blockPop && blockPop.syncGroup === 'shield' && blockPop.durationMs >= 600 && blockPop.durationMs <= 900);
+});
+
+test('Cinematic V2 Phase 3 (22) — 8-Player Same-Tile Barrage, F5 Reconnect Combat Non-Replay & Synced Audio Dispatch', () => {
+  // 8 người chơi cùng đứng chung 1 ô `canteen`
+  const eightPlayers = Array.from({ length: 8 }, (_, idx) => ({
+    playerId: `p${idx + 1}`,
+    displayName: `SV ${idx + 1}`,
+    seatIndex: idx,
+    location: 'canteen',
+    woundsTaken: 1,
+    handCount: 0,
+    equipped: idx === 0 ? [eqMeta('ev-06')] : [],
+    attacksMade: 0,
+    attacksThisTurn: 0,
+    investigationsCount: 0,
+    guardianShieldActive: idx === 4,
+    alive: true,
+    connected: true,
+    revealedRoleId: null,
+    revealedFaction: null,
+    revealedMaxHp: null,
+    revealedSkillCooldown: 0,
+    revealedSkillUsedOnce: false,
+    appearance: {},
+  }));
+  const prev8 = makePubState({
+    matchId: 'vfx-8p-same-tile',
+    turnNumber: 9,
+    turnOrder: eightPlayers.map((p) => p.playerId),
+    players: eightPlayers,
+  });
+  const next8 = {
+    ...prev8,
+    turnNumber: 10,
+    players: eightPlayers.map((p, idx) => {
+      if (idx === 0) return p;
+      if (idx === 4) return { ...p, guardianShieldActive: false };
+      return { ...p, woundsTaken: p.woundsTaken + (idx === 1 ? 4 : 2) };
+    }),
+    publicLog: [
+      {
+        id: 'log-8p-blk',
+        round: 2,
+        atMs: 9000,
+        kind: 'skill',
+        actorId: 'p5',
+        text: '🛡️ Lá Chắn Thiên Thần che chở SV 5 — miễn nhiễm đòn đánh!',
+      },
+      {
+        id: 'log-8p-mg',
+        round: 2,
+        atMs: 9001,
+        kind: 'attack',
+        actorId: 'p1',
+        text: '🔫 Súng Liên Thanh! SV 1 xả đạn (|6 - 2|, tổng 4) vào 7 người trong tầm → tổng 14 sát thương!',
+      },
+    ],
+  };
+
+  const tracker = new VisualEventTracker();
+  tracker.seedBaseline(prev8, { selfPlayerId: 'p1', isSpectator: false });
+  const events = tracker.ingestSnapshot(next8, { selfPlayerId: 'p1', isSpectator: false });
+
+  const mgFx = events.find((e) => e.kind === 'COMBAT_VFX' && e.effect === 'MACHINE_GUN_BARRAGE');
+  assert.ok(mgFx && mgFx.isCritical === true && mgFx.targetPlayerIds.length >= 6);
+  const blockPop = events.find((e) => e.kind === 'FLOATING_TEXT' && e.targetPlayerId === 'p5' && e.variant === 'block');
+  assert.ok(blockPop && blockPop.syncGroup === 'shield');
+  const critPop = events.find((e) => e.kind === 'FLOATING_TEXT' && e.targetPlayerId === 'p2' && e.variant === 'critical');
+  assert.ok(critPop && critPop.label === '-4');
+
+  // Reconnect F5 giữa ván sau pha combat không phát lại bất kỳ VFX/Audio nào
+  const reconnectTracker = new VisualEventTracker();
+  assert.equal(reconnectTracker.seedBaseline(next8, { selfPlayerId: 'p2', isSpectator: false }).length, 0);
+  assert.equal(reconnectTracker.ingestSnapshot(next8, { selfPlayerId: 'p2', isSpectator: false }).length, 0);
+
+  // Audio dispatch + dedupe cho mọi biến thể mới (Miss, Critical, Counter, Shield, Heal)
+  resetBoardGameAudioForTests();
+  setBoardGameSoundMuted(false);
+  const audioSamples = [
+    { id: 'p3-a-miss', kind: 'COMBAT_VFX', order: 40, durationMs: 820, effect: 'SLASH', sourcePlayerId: 'p1', targetPlayerIds: ['p2'], shake: 'none', isMiss: true },
+    { id: 'p3-a-crit', kind: 'COMBAT_VFX', order: 40, durationMs: 1020, effect: 'SPEAR_THRUST', sourcePlayerId: 'p1', targetPlayerIds: ['p2'], shake: 'heavy', isCritical: true },
+    { id: 'p3-a-ctr', kind: 'COMBAT_VFX', order: 45, durationMs: 980, effect: 'COUNTER_STRIKE', sourcePlayerId: 'p3', targetPlayerIds: ['p1'], shake: 'light' },
+    { id: 'p3-a-shd', kind: 'COMBAT_VFX', order: 42, durationMs: 840, effect: 'SHIELD_GUARD', sourcePlayerId: 'p3', targetPlayerIds: ['p3'], shake: 'none' },
+    { id: 'p3-a-heal', kind: 'COMBAT_VFX', order: 41, durationMs: 840, effect: 'HEAL_AURA', sourcePlayerId: 'p2', targetPlayerIds: ['p2'], shake: 'none' },
+  ];
+  for (let i = 0; i < audioSamples.length; i++) {
+    const t = 20000 + i * 250;
+    assert.equal(playSoundForVisualEvent(audioSamples[i], t), true, `Expected audio for ${audioSamples[i].id}`);
+    assert.equal(playSoundForVisualEvent(audioSamples[i], t + 300), false, `Duplicate ${audioSamples[i].id} must be deduped`);
   }
   stopAllBoardGameSounds();
 });

@@ -1,0 +1,1123 @@
+{
+  "generatedAt": "2026-11-19T07:57:44.129Z",
+  "target": "Phase 3 — Top-Tier Combat Impact V2 (Desktop 1920x1080)",
+  "environmentNote": "Linux container CPU rasterizer (--use-gl=angle --use-angle=swiftshader) — no hardware GPU present",
+  "beforeBaseline": {
+    "generatedAt": "2026-11-19T07:05:34.556Z",
+    "mode": "before",
+    "environmentNote": "Linux container CPU rasterizer (--use-gl=angle --use-angle=swiftshader) — no hardware GPU present",
+    "liveMatch": {
+      "attacksExecuted": 3,
+      "video": {
+        "path": "artifacts/boardgame-cinematic-polish/phase-3/before-combat-live.mp4",
+        "sizeBytes": 566757,
+        "durationSec": 10.34,
+        "tracks": [
+          {
+            "width": 1920,
+            "height": 1080,
+            "handler": "vide"
+          },
+          {
+            "width": 0,
+            "height": 0,
+            "handler": "soun"
+          }
+        ]
+      },
+      "recordingFps": {
+        "sampleDurationSec": 10.39,
+        "framesCount": 85,
+        "fpsMean": 8.18,
+        "fpsMinPerSec": 4,
+        "fpsMaxPerSec": 15,
+        "p50FrameMs": 83.4,
+        "p95FrameMs": 333.3,
+        "p99FrameMs": 699.9,
+        "frameDropsOver33ms": 81,
+        "frameDropsOver50ms": 78
+      },
+      "audioStats": {
+        "contextsCreated": 2,
+        "oscillatorsCreated": 247,
+        "buffersStarted": 36
+      },
+      "combatLog": {
+        "sequences": [],
+        "currentSeq": null,
+        "impactFlashesSeen": [
+          {
+            "atMs": 3777.5,
+            "isCounter": false,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 7334,
+            "isCounter": false,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 8612,
+            "isCounter": false,
+            "hitStopMs": 75
+          }
+        ],
+        "floatingPopupsSeen": [
+          {
+            "atMs": 3811.6,
+            "variant": "damage",
+            "target": "bgp_yTI9xba0Bxk",
+            "label": "💥-2"
+          },
+          {
+            "atMs": 4099.4,
+            "variant": "damage",
+            "target": "bgp_yTI9xba0Bxk",
+            "label": "💥-2"
+          },
+          {
+            "atMs": 4768.2,
+            "variant": "damage",
+            "target": "bgp_yTI9xba0Bxk",
+            "label": "💥-2"
+          },
+          {
+            "atMs": 7368.1,
+            "variant": "miss",
+            "target": "bgp_ChGDjxh2npc",
+            "label": "💨MISS"
+          },
+          {
+            "atMs": 7654.2,
+            "variant": "miss",
+            "target": "bgp_ChGDjxh2npc",
+            "label": "💨MISS"
+          },
+          {
+            "atMs": 8024.1,
+            "variant": "miss",
+            "target": "bgp_ChGDjxh2npc",
+            "label": "💨MISS"
+          },
+          {
+            "atMs": 8645.2,
+            "variant": "damage",
+            "target": "bgp_yTI9xba0Bxk",
+            "label": "💥-1"
+          },
+          {
+            "atMs": 9102.7,
+            "variant": "damage",
+            "target": "bgp_yTI9xba0Bxk",
+            "label": "💥-1"
+          },
+          {
+            "atMs": 9605,
+            "variant": "damage",
+            "target": "bgp_yTI9xba0Bxk",
+            "label": "💥-1"
+          }
+        ],
+        "pawnAnimDetections": 77,
+        "maxPawnDisplacementPx": 3.36
+      }
+    },
+    "variantsShowcase": {
+      "video": {
+        "path": "artifacts/boardgame-cinematic-polish/phase-3/before-combat-variants.mp4",
+        "sizeBytes": 398009,
+        "durationSec": 20.66,
+        "tracks": [
+          {
+            "width": 1920,
+            "height": 1080,
+            "handler": "vide"
+          },
+          {
+            "width": 0,
+            "height": 0,
+            "handler": "soun"
+          }
+        ]
+      },
+      "recordingFps": {
+        "sampleDurationSec": 20.72,
+        "framesCount": 74,
+        "fpsMean": 3.57,
+        "fpsMinPerSec": 1,
+        "fpsMaxPerSec": 6,
+        "p50FrameMs": 266.6,
+        "p95FrameMs": 566.7,
+        "p99FrameMs": 900,
+        "frameDropsOver33ms": 72,
+        "frameDropsOver50ms": 72
+      },
+      "audioStats": {
+        "contextsCreated": 1,
+        "oscillatorsCreated": 48,
+        "buffersStarted": 29
+      },
+      "combatLog": {
+        "sequences": [],
+        "currentSeq": null,
+        "impactFlashesSeen": [
+          {
+            "atMs": 1012.9,
+            "isCounter": false,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 5448.3,
+            "isCounter": false,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 5718.5,
+            "isCounter": false,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 5718.5,
+            "isCounter": true,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 5768.5,
+            "isCounter": true,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 10200.1,
+            "isCounter": false,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 10200.1,
+            "isCounter": false,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 14783.3,
+            "isCounter": false,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 19567.5,
+            "isCounter": false,
+            "hitStopMs": 75
+          },
+          {
+            "atMs": 19849.9,
+            "isCounter": false,
+            "hitStopMs": 75
+          }
+        ],
+        "floatingPopupsSeen": [
+          {
+            "atMs": 1047.1,
+            "variant": "damage",
+            "target": "sb-tu",
+            "label": "💥-3"
+          },
+          {
+            "atMs": 1697.1,
+            "variant": "damage",
+            "target": "sb-tu",
+            "label": "💥-3"
+          },
+          {
+            "atMs": 2001,
+            "variant": "damage",
+            "target": "sb-tu",
+            "label": "💥-3"
+          },
+          {
+            "atMs": 5482.3,
+            "variant": "damage",
+            "target": "sb-minh",
+            "label": "💥-1"
+          },
+          {
+            "atMs": 5482.3,
+            "variant": "damage",
+            "target": "sb-dung",
+            "label": "💥-4"
+          },
+          {
+            "atMs": 5718.5,
+            "variant": "damage",
+            "target": "sb-minh",
+            "label": "💥-1"
+          },
+          {
+            "atMs": 5718.5,
+            "variant": "damage",
+            "target": "sb-dung",
+            "label": "💥-4"
+          },
+          {
+            "atMs": 5739.3,
+            "variant": "counter",
+            "target": "sb-dung",
+            "label": "⚔️COUNTER"
+          },
+          {
+            "atMs": 6038.6,
+            "variant": "damage",
+            "target": "sb-minh",
+            "label": "💥-1"
+          },
+          {
+            "atMs": 6038.6,
+            "variant": "damage",
+            "target": "sb-dung",
+            "label": "💥-4"
+          },
+          {
+            "atMs": 6038.6,
+            "variant": "counter",
+            "target": "sb-dung",
+            "label": "⚔️COUNTER"
+          },
+          {
+            "atMs": 6682.7,
+            "variant": "counter",
+            "target": "sb-dung",
+            "label": "⚔️COUNTER"
+          },
+          {
+            "atMs": 9903.4,
+            "variant": "block",
+            "target": "sb-dung",
+            "label": "🛡️BLOCK"
+          },
+          {
+            "atMs": 10200.1,
+            "variant": "block",
+            "target": "sb-dung",
+            "label": "🛡️BLOCK"
+          },
+          {
+            "atMs": 10234.5,
+            "variant": "damage",
+            "target": "sb-minh",
+            "label": "💥-2"
+          },
+          {
+            "atMs": 10234.5,
+            "variant": "damage",
+            "target": "sb-vy",
+            "label": "💥-3"
+          },
+          {
+            "atMs": 10520.5,
+            "variant": "block",
+            "target": "sb-dung",
+            "label": "🛡️BLOCK"
+          },
+          {
+            "atMs": 10520.5,
+            "variant": "damage",
+            "target": "sb-minh",
+            "label": "💥-2"
+          },
+          {
+            "atMs": 10520.5,
+            "variant": "damage",
+            "target": "sb-vy",
+            "label": "💥-3"
+          },
+          {
+            "atMs": 11003.5,
+            "variant": "damage",
+            "target": "sb-minh",
+            "label": "💥-2"
+          },
+          {
+            "atMs": 11003.5,
+            "variant": "damage",
+            "target": "sb-vy",
+            "label": "💥-3"
+          },
+          {
+            "atMs": 14817.3,
+            "variant": "damage",
+            "target": "sb-tu",
+            "label": "💥-5"
+          },
+          {
+            "atMs": 15103.2,
+            "variant": "damage",
+            "target": "sb-tu",
+            "label": "💥-5"
+          },
+          {
+            "atMs": 15851.4,
+            "variant": "damage",
+            "target": "sb-tu",
+            "label": "💥-5"
+          },
+          {
+            "atMs": 19405.7,
+            "variant": "heal",
+            "target": "sb-vy",
+            "label": "💚+2"
+          },
+          {
+            "atMs": 19567.5,
+            "variant": "heal",
+            "target": "sb-vy",
+            "label": "💚+2"
+          },
+          {
+            "atMs": 19601.4,
+            "variant": "damage",
+            "target": "sb-tu",
+            "label": "💥-3"
+          },
+          {
+            "atMs": 20466.2,
+            "variant": "heal",
+            "target": "sb-vy",
+            "label": "💚+2"
+          },
+          {
+            "atMs": 20466.2,
+            "variant": "damage",
+            "target": "sb-tu",
+            "label": "💥-3"
+          },
+          {
+            "atMs": 20555.8,
+            "variant": "damage",
+            "target": "sb-tu",
+            "label": "💥-3"
+          }
+        ],
+        "pawnAnimDetections": 11,
+        "maxPawnDisplacementPx": 0
+      },
+      "screenshots": [
+        "before-01-live-attack.png",
+        "before-02-attack-variant.png",
+        "before-03-counter-variant.png",
+        "before-04-shield-barrage.png",
+        "before-05-skill-lightning.png"
+      ]
+    }
+  },
+  "afterLiveMatch": {
+    "source": "Real 4-player + 1-spectator BoardGameMatchDO match",
+    "attacksExecuted": 3,
+    "f5CombatNonReplayVerified": true,
+    "video": {
+      "path": "artifacts/boardgame-cinematic-polish/phase-3/after-combat-live.mp4",
+      "sizeBytes": 773136,
+      "durationSec": 14.18,
+      "tracks": [
+        {
+          "width": 1920,
+          "height": 1080,
+          "handler": "vide"
+        },
+        {
+          "width": 0,
+          "height": 0,
+          "handler": "soun"
+        }
+      ]
+    },
+    "recordingFps": {
+      "sampleDurationSec": 14.26,
+      "framesCount": 93,
+      "fpsMean": 6.52,
+      "fpsMinPerSec": 1,
+      "fpsMaxPerSec": 11,
+      "p50FrameMs": 116.7,
+      "p95FrameMs": 366.7,
+      "p99FrameMs": 550,
+      "frameDropsOver33ms": 88,
+      "frameDropsOver50ms": 88
+    },
+    "audioStats": {
+      "contextsCreated": 2,
+      "oscillatorsCreated": 345,
+      "buffersStarted": 57
+    },
+    "combatLog": {
+      "sequences": [
+        {
+          "uid": "bg_ebfdddc5ab0efc93::atk::log-1-4-1795074977472",
+          "effect": "SLASH",
+          "targets": [
+            "bgp_yOvPxX_DGS8"
+          ],
+          "isCounter": false,
+          "isCritical": false,
+          "isMiss": true,
+          "hitStopMs": 0,
+          "startedAtMs": 3840.2,
+          "impactAtMs": 4240.7,
+          "endedAtMs": 4650.4,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel",
+            "impact",
+            "recovery"
+          ]
+        },
+        {
+          "uid": "bg_ebfdddc5ab0efc93::atk::log-3-10-1795074980658",
+          "effect": "SLASH",
+          "targets": [
+            "bgp_yOvPxX_DGS8"
+          ],
+          "isCounter": false,
+          "isCritical": false,
+          "isMiss": true,
+          "hitStopMs": 0,
+          "startedAtMs": 6991.4,
+          "impactAtMs": 7400.4,
+          "endedAtMs": 7810,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel",
+            "impact",
+            "recovery"
+          ]
+        },
+        {
+          "uid": "bg_ebfdddc5ab0efc93::atk::log-5-16-1795074985883",
+          "effect": "SLASH",
+          "targets": [
+            "bgp_yOvPxX_DGS8"
+          ],
+          "isCounter": false,
+          "isCritical": false,
+          "isMiss": false,
+          "hitStopMs": 75,
+          "startedAtMs": 12254.3,
+          "impactAtMs": 12704.9,
+          "endedAtMs": 13166.3,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel",
+            "impact",
+            "recovery"
+          ]
+        }
+      ],
+      "currentSeq": {
+        "uid": "bg_ebfdddc5ab0efc93::atk::log-5-16-1795074985883",
+        "effect": "SLASH",
+        "targets": [
+          "bgp_yOvPxX_DGS8"
+        ],
+        "isCounter": false,
+        "isCritical": false,
+        "isMiss": false,
+        "hitStopMs": 75,
+        "startedAtMs": 12254.3,
+        "impactAtMs": 12704.9,
+        "endedAtMs": 13166.3,
+        "phasesSeen": [
+          "target-lock",
+          "anticipation",
+          "travel",
+          "impact",
+          "recovery"
+        ]
+      },
+      "impactFlashesSeen": [
+        {
+          "atMs": 12704.9,
+          "isCounter": false,
+          "hitStopMs": 75
+        },
+        {
+          "atMs": 12889.6,
+          "isCounter": false,
+          "hitStopMs": 75
+        }
+      ],
+      "floatingPopupsSeen": [
+        {
+          "atMs": 4405.6,
+          "variant": "miss",
+          "syncGroup": "attack",
+          "target": "bgp_yOvPxX_DGS8",
+          "label": "💨MISS"
+        },
+        {
+          "atMs": 4645.3,
+          "variant": "miss",
+          "syncGroup": "attack",
+          "target": "bgp_yOvPxX_DGS8",
+          "label": "💨MISS"
+        },
+        {
+          "atMs": 5147.6,
+          "variant": "miss",
+          "syncGroup": "attack",
+          "target": "bgp_yOvPxX_DGS8",
+          "label": "💨MISS"
+        },
+        {
+          "atMs": 7565,
+          "variant": "miss",
+          "syncGroup": "attack",
+          "target": "bgp_yOvPxX_DGS8",
+          "label": "💨MISS"
+        },
+        {
+          "atMs": 8004.4,
+          "variant": "miss",
+          "syncGroup": "attack",
+          "target": "bgp_yOvPxX_DGS8",
+          "label": "💨MISS"
+        },
+        {
+          "atMs": 12889.6,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "bgp_yOvPxX_DGS8",
+          "label": "💥-2"
+        },
+        {
+          "atMs": 13005,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "bgp_yOvPxX_DGS8",
+          "label": "💥-2"
+        },
+        {
+          "atMs": 13560.8,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "bgp_yOvPxX_DGS8",
+          "label": "💥-2"
+        }
+      ],
+      "pawnAnimDetections": 146,
+      "maxPawnDisplacementPx": 12.12
+    }
+  },
+  "afterVariantsShowcase": {
+    "source": "Controlled /boardgame-prototype Phase 3 Combat Showcase (Attack, Critical, Counterattack, Miss, Shield, Healing, Skill, Crowded Same-Tile, Skip, Reduced Motion)",
+    "matrix": {
+      "normalAttack": true,
+      "criticalHit": true,
+      "counterattack": true,
+      "miss": true,
+      "shield": true,
+      "healing": true,
+      "signatureSkill": true,
+      "sameTileMultiTarget": true,
+      "skipAnimationVerified": true,
+      "reducedMotionVerified": true
+    },
+    "damageAfterImpactVerified": {
+      "sequencesObserved": 8,
+      "checkedPairs": 7,
+      "maxPawnDisplacementPx": 10,
+      "pawnAnimDetections": 103
+    },
+    "video": {
+      "path": "artifacts/boardgame-cinematic-polish/phase-3/after-combat-variants.mp4",
+      "sizeBytes": 533409,
+      "durationSec": 23.6,
+      "tracks": [
+        {
+          "width": 1920,
+          "height": 1080,
+          "handler": "vide"
+        },
+        {
+          "width": 0,
+          "height": 0,
+          "handler": "soun"
+        }
+      ]
+    },
+    "recordingFps": {
+      "sampleDurationSec": 23.72,
+      "framesCount": 76,
+      "fpsMean": 3.2,
+      "fpsMinPerSec": 1,
+      "fpsMaxPerSec": 5,
+      "p50FrameMs": 216.7,
+      "p95FrameMs": 666.7,
+      "p99FrameMs": 816.6,
+      "frameDropsOver33ms": 75,
+      "frameDropsOver50ms": 74
+    },
+    "audioStats": {
+      "contextsCreated": 1,
+      "oscillatorsCreated": 76,
+      "buffersStarted": 40
+    },
+    "combatLog": {
+      "sequences": [
+        {
+          "uid": "sandbox-vfx-v1::atk::sb-log-atk-2",
+          "effect": "SLASH",
+          "targets": [
+            "sb-tu"
+          ],
+          "isCounter": false,
+          "isCritical": false,
+          "isMiss": false,
+          "hitStopMs": 75,
+          "startedAtMs": 823.5,
+          "impactAtMs": 1234.3,
+          "endedAtMs": 1690.9,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel",
+            "impact",
+            "recovery"
+          ]
+        },
+        {
+          "uid": "sandbox-vfx-v1::atk::sb-log-p3-crit-3",
+          "effect": "SPEAR_THRUST",
+          "targets": [
+            "sb-tu"
+          ],
+          "isCounter": false,
+          "isCritical": true,
+          "isMiss": false,
+          "hitStopMs": 85,
+          "startedAtMs": 3520.7,
+          "impactAtMs": 3978.9,
+          "endedAtMs": 4500.4,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel",
+            "impact",
+            "recovery"
+          ]
+        },
+        {
+          "uid": "sandbox-vfx-v1::atk::sb-log-masa-5",
+          "effect": "MASAMUNE_SLASH",
+          "targets": [
+            "sb-dung"
+          ],
+          "isCounter": false,
+          "isCritical": true,
+          "isMiss": false,
+          "hitStopMs": 85,
+          "startedAtMs": 6265.6,
+          "impactAtMs": 6724.1,
+          "endedAtMs": 6931.1,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel",
+            "impact",
+            "recovery"
+          ]
+        },
+        {
+          "uid": "sandbox-vfx-v1::counter-fx::sb-log-ctr-6",
+          "effect": "COUNTER_STRIKE",
+          "targets": [
+            "sb-minh"
+          ],
+          "isCounter": true,
+          "isCritical": false,
+          "isMiss": false,
+          "hitStopMs": 80,
+          "startedAtMs": 6931.1,
+          "impactAtMs": 7420.7,
+          "endedAtMs": 7910.7,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel",
+            "impact",
+            "recovery"
+          ]
+        },
+        {
+          "uid": "sandbox-vfx-v1::atk::sb-log-p3-miss-7",
+          "effect": "SLASH",
+          "targets": [
+            "sb-tu"
+          ],
+          "isCounter": false,
+          "isCritical": false,
+          "isMiss": true,
+          "hitStopMs": 0,
+          "startedAtMs": 9699.9,
+          "impactAtMs": 10058.1,
+          "endedAtMs": 10468.5,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel",
+            "impact",
+            "recovery"
+          ]
+        },
+        {
+          "uid": "sandbox-vfx-v1::lightning::sb-log-vy-ult-10",
+          "effect": "LIGHTNING_STRIKE",
+          "targets": [
+            "sb-tu"
+          ],
+          "isCounter": false,
+          "isCritical": true,
+          "isMiss": false,
+          "hitStopMs": 85,
+          "startedAtMs": 15634.6,
+          "impactAtMs": 16101.5,
+          "endedAtMs": 16623.5,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel",
+            "impact",
+            "recovery"
+          ]
+        },
+        {
+          "uid": "sandbox-vfx-v1::atk::sb-log-p3-st-mg-12",
+          "effect": "MACHINE_GUN_BARRAGE",
+          "targets": [
+            "sb-minh",
+            "sb-vy"
+          ],
+          "isCounter": false,
+          "isCritical": false,
+          "isMiss": false,
+          "hitStopMs": 75,
+          "startedAtMs": 18702.2,
+          "impactAtMs": 19170.1,
+          "endedAtMs": 19689.8,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel",
+            "impact",
+            "recovery"
+          ]
+        },
+        {
+          "uid": "sandbox-vfx-v1::atk::sb-log-atk-14",
+          "effect": "SLASH",
+          "targets": [
+            "sb-tu"
+          ],
+          "isCounter": false,
+          "isCritical": false,
+          "isMiss": false,
+          "hitStopMs": 75,
+          "startedAtMs": 21068.2,
+          "impactAtMs": null,
+          "endedAtMs": 21336.6,
+          "phasesSeen": [
+            "target-lock",
+            "anticipation",
+            "travel"
+          ]
+        }
+      ],
+      "currentSeq": {
+        "uid": "sandbox-vfx-v1::atk::sb-log-atk-14",
+        "effect": "SLASH",
+        "targets": [
+          "sb-tu"
+        ],
+        "isCounter": false,
+        "isCritical": false,
+        "isMiss": false,
+        "hitStopMs": 75,
+        "startedAtMs": 21068.2,
+        "impactAtMs": null,
+        "endedAtMs": 21336.6,
+        "phasesSeen": [
+          "target-lock",
+          "anticipation",
+          "travel"
+        ]
+      },
+      "impactFlashesSeen": [
+        {
+          "atMs": 1234.3,
+          "isCounter": false,
+          "hitStopMs": 75
+        },
+        {
+          "atMs": 1415.9,
+          "isCounter": false,
+          "hitStopMs": 75
+        },
+        {
+          "atMs": 3978.9,
+          "isCounter": false,
+          "hitStopMs": 85
+        },
+        {
+          "atMs": 4185.3,
+          "isCounter": false,
+          "hitStopMs": 85
+        },
+        {
+          "atMs": 6724.1,
+          "isCounter": false,
+          "hitStopMs": 85
+        },
+        {
+          "atMs": 6927.4,
+          "isCounter": false,
+          "hitStopMs": 85
+        },
+        {
+          "atMs": 7420.7,
+          "isCounter": true,
+          "hitStopMs": 80
+        },
+        {
+          "atMs": 7532,
+          "isCounter": true,
+          "hitStopMs": 80
+        },
+        {
+          "atMs": 16101.5,
+          "isCounter": false,
+          "hitStopMs": 85
+        },
+        {
+          "atMs": 16309.6,
+          "isCounter": false,
+          "hitStopMs": 85
+        },
+        {
+          "atMs": 19170.1,
+          "isCounter": false,
+          "hitStopMs": 75
+        },
+        {
+          "atMs": 19170.1,
+          "isCounter": false,
+          "hitStopMs": 75
+        },
+        {
+          "atMs": 19378.9,
+          "isCounter": false,
+          "hitStopMs": 75
+        },
+        {
+          "atMs": 19378.9,
+          "isCounter": false,
+          "hitStopMs": 75
+        }
+      ],
+      "floatingPopupsSeen": [
+        {
+          "atMs": 1415.9,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "sb-tu",
+          "label": "💥-3"
+        },
+        {
+          "atMs": 1533.9,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "sb-tu",
+          "label": "💥-3"
+        },
+        {
+          "atMs": 2085.8,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "sb-tu",
+          "label": "💥-3"
+        },
+        {
+          "atMs": 4185.3,
+          "variant": "critical",
+          "syncGroup": "attack",
+          "target": "sb-tu",
+          "label": "⚡CRIT-5"
+        },
+        {
+          "atMs": 4500.4,
+          "variant": "critical",
+          "syncGroup": "attack",
+          "target": "sb-tu",
+          "label": "⚡CRIT-5"
+        },
+        {
+          "atMs": 6931.1,
+          "variant": "critical",
+          "syncGroup": "attack",
+          "target": "sb-dung",
+          "label": "⚡CRIT-4"
+        },
+        {
+          "atMs": 7023.9,
+          "variant": "critical",
+          "syncGroup": "attack",
+          "target": "sb-dung",
+          "label": "⚡CRIT-4"
+        },
+        {
+          "atMs": 7532,
+          "variant": "critical",
+          "syncGroup": "attack",
+          "target": "sb-dung",
+          "label": "⚡CRIT-4"
+        },
+        {
+          "atMs": 7614.7,
+          "variant": "counter",
+          "syncGroup": "counter",
+          "target": "sb-dung",
+          "label": "⚔️COUNTER"
+        },
+        {
+          "atMs": 7614.7,
+          "variant": "damage",
+          "syncGroup": "counter",
+          "target": "sb-minh",
+          "label": "💥-1"
+        },
+        {
+          "atMs": 8455,
+          "variant": "counter",
+          "syncGroup": "counter",
+          "target": "sb-dung",
+          "label": "⚔️COUNTER"
+        },
+        {
+          "atMs": 10223.6,
+          "variant": "miss",
+          "syncGroup": "attack",
+          "target": "sb-tu",
+          "label": "💨MISS"
+        },
+        {
+          "atMs": 12091.5,
+          "variant": "block",
+          "syncGroup": "shield",
+          "target": "sb-dung",
+          "label": "🛡️BLOCK"
+        },
+        {
+          "atMs": 14154,
+          "variant": "heal",
+          "syncGroup": "heal",
+          "target": "sb-vy",
+          "label": "✚+2"
+        },
+        {
+          "atMs": 16309.6,
+          "variant": "critical",
+          "syncGroup": "attack",
+          "target": "sb-tu",
+          "label": "⚡CRIT-5"
+        },
+        {
+          "atMs": 16623.5,
+          "variant": "critical",
+          "syncGroup": "attack",
+          "target": "sb-tu",
+          "label": "⚡CRIT-5"
+        },
+        {
+          "atMs": 19212,
+          "variant": "block",
+          "syncGroup": "shield",
+          "target": "sb-dung",
+          "label": "🛡️BLOCK"
+        },
+        {
+          "atMs": 19381.7,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "sb-minh",
+          "label": "💥-2"
+        },
+        {
+          "atMs": 19381.7,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "sb-vy",
+          "label": "💥-3"
+        },
+        {
+          "atMs": 19689.8,
+          "variant": "block",
+          "syncGroup": "shield",
+          "target": "sb-dung",
+          "label": "🛡️BLOCK"
+        },
+        {
+          "atMs": 19689.8,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "sb-minh",
+          "label": "💥-2"
+        },
+        {
+          "atMs": 19689.8,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "sb-vy",
+          "label": "💥-3"
+        },
+        {
+          "atMs": 20052,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "sb-minh",
+          "label": "💥-2"
+        },
+        {
+          "atMs": 20052,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "sb-vy",
+          "label": "💥-3"
+        },
+        {
+          "atMs": 22723.7,
+          "variant": "damage",
+          "syncGroup": "attack",
+          "target": "sb-tu",
+          "label": "💥-3"
+        }
+      ],
+      "pawnAnimDetections": 103,
+      "maxPawnDisplacementPx": 10
+    },
+    "screenshots": [
+      "after-01-stage1-target-lock.png",
+      "after-02-stage2-anticipation.png",
+      "after-03-stage3-travel.png",
+      "after-04-stage4-impact-hitstop.png",
+      "after-05-stage5-recovery-damage.png",
+      "after-10-critical-hit.png",
+      "after-06-counterattack.png",
+      "after-07-miss-dodge.png",
+      "after-08-shield-block.png",
+      "after-09-healing-aura.png",
+      "after-11-skill-lightning.png",
+      "after-12-live-multiplayer-combat.png"
+    ]
+  },
+  "errors": {
+    "consoleErrors": 0,
+    "pageErrors": 0,
+    "auditErrors": 0
+  }
+}

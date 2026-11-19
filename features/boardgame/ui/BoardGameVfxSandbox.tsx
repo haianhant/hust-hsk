@@ -283,7 +283,7 @@ export function BoardGameVfxSandbox() {
         activePlayerId: 'sb-minh',
         players: prev.players.map((p) =>
           p.playerId === 'sb-tu'
-            ? { ...p, woundsTaken: Math.min(11, p.woundsTaken + 3) }
+            ? { ...p, woundsTaken: p.woundsTaken + 3 }
             : p,
         ),
         lastDiceRoll: {
@@ -332,12 +332,12 @@ export function BoardGameVfxSandbox() {
           if (p.playerId === 'sb-minh') {
             return {
               ...p,
-              woundsTaken: Math.min(11, p.woundsTaken + 1),
+              woundsTaken: p.woundsTaken + 1,
               equipped: [cardMeta('ev-01')],
             };
           }
           if (p.playerId === 'sb-dung') {
-            return { ...p, woundsTaken: Math.min(11, p.woundsTaken + 4) };
+            return { ...p, woundsTaken: p.woundsTaken + 4 };
           }
           return p;
         }),
@@ -400,8 +400,8 @@ export function BoardGameVfxSandbox() {
         turnNumber: turn,
         activePlayerId: 'sb-tu',
         players: prev.players.map((p) => {
-          if (p.playerId === 'sb-minh') return { ...p, woundsTaken: Math.min(11, p.woundsTaken + 2) };
-          if (p.playerId === 'sb-vy') return { ...p, woundsTaken: Math.min(10, p.woundsTaken + 3) };
+          if (p.playerId === 'sb-minh') return { ...p, woundsTaken: p.woundsTaken + 2 };
+          if (p.playerId === 'sb-vy') return { ...p, woundsTaken: p.woundsTaken + 3 };
           if (p.playerId === 'sb-dung') return { ...p, guardianShieldActive: false };
           return p;
         }),
@@ -457,7 +457,7 @@ export function BoardGameVfxSandbox() {
         activePlayerId: 'sb-vy',
         players: prev.players.map((p) =>
           p.playerId === 'sb-tu'
-            ? { ...p, woundsTaken: Math.min(12, p.woundsTaken + 5) }
+            ? { ...p, woundsTaken: p.woundsTaken + 5 }
             : p,
         ),
         publicLog: [
@@ -618,6 +618,197 @@ export function BoardGameVfxSandbox() {
         winReason,
       },
     ]);
+  };
+
+  // Phase 3 Showcase A: Đánh Chí Mạng (Thương Ánh Sáng CRIT -5, 85ms hit-stop, 10px knockback)
+  const triggerPhase3Critical = () => {
+    setSelectedTargetId('sb-tu');
+    setLastDemoLabel('Phase 3 Critical: Vy Hà đâm Thương Ánh Sáng chí mạng (-5 CRIT, 85ms hit-stop)');
+    setGame((prev) => {
+      const turn = prev.turnNumber + 1;
+      const now = Date.now();
+      return {
+        ...prev,
+        turnNumber: turn,
+        players: prev.players.map((p) => {
+          if (p.playerId === 'sb-vy') {
+            return {
+              ...p,
+              equipped: [cardMeta('eq-04')],
+            };
+          }
+          if (p.playerId === 'sb-tu') {
+            return { ...p, woundsTaken: p.woundsTaken + 5 };
+          }
+          return p;
+        }),
+        publicLog: [
+          ...prev.publicLog.slice(-15),
+          {
+            id: nextLogId('p3-crit'),
+            round: prev.round,
+            atMs: now,
+            kind: 'attack',
+            actorId: 'sb-vy',
+            text: '⚔️ Vy Hà tấn công Tú Linh (|6-3|=3, tổng 5) → gây 5 sát thương!',
+          },
+        ],
+      };
+    });
+  };
+
+  // Phase 3 Showcase B: Đánh Hụt (MISS — né ngang 9px, 0ms hit-stop, không rung màn)
+  const triggerPhase3Miss = () => {
+    setSelectedTargetId('sb-tu');
+    setLastDemoLabel('Phase 3 Miss: Minh An đánh hụt Tú Linh (|3-3|=0 → ĐÁNH HỤT, né ngang)');
+    setGame((prev) => {
+      const turn = prev.turnNumber + 1;
+      const now = Date.now();
+      return {
+        ...prev,
+        turnNumber: turn,
+        activePlayerId: 'sb-minh',
+        players: prev.players.map((p) =>
+          p.playerId === 'sb-minh' ? { ...p, equipped: [] } : p,
+        ),
+        publicLog: [
+          ...prev.publicLog.slice(-15),
+          {
+            id: nextLogId('p3-miss'),
+            round: prev.round,
+            atMs: now,
+            kind: 'attack',
+            actorId: 'sb-minh',
+            text: '⚔️ Minh An đánh Tú Linh (|3-3|=0) → ĐÁNH HỤT (0 sát thương)!',
+          },
+        ],
+      };
+    });
+  };
+
+  // Phase 3 Showcase C: Khiên Bảo Vệ BLOCK (lục giác tinh thể, 0px knockback)
+  const triggerPhase3Shield = () => {
+    setSelectedTargetId('sb-dung');
+    setLastDemoLabel('Phase 3 Shield: Lá Chắn Thiên Thần che chở Dũng Kiên (BLOCK, không giật lùi)');
+    setGame((prev) => {
+      const turn = prev.turnNumber + 1;
+      const now = Date.now();
+      return {
+        ...prev,
+        turnNumber: turn,
+        activePlayerId: 'sb-minh',
+        players: prev.players.map((p) =>
+          p.playerId === 'sb-dung' ? { ...p, guardianShieldActive: true } : p,
+        ),
+        publicLog: [
+          ...prev.publicLog.slice(-15),
+          {
+            id: nextLogId('p3-shield'),
+            round: prev.round,
+            atMs: now,
+            kind: 'skill',
+            actorId: 'sb-dung',
+            text: '🛡️ Lá Chắn Thiên Thần che chở Dũng Kiên — miễn nhiễm đòn đánh!',
+          },
+        ],
+      };
+    });
+  };
+
+  // Phase 3 Showcase D: Hồi Máu (xoắn ốc lục bảo + dấu cộng, nâng nhẹ quân cờ +3)
+  const triggerPhase3Heal = () => {
+    setSelectedTargetId('sb-vy');
+    setLastDemoLabel('Phase 3 Healing: Vy Hà hồi 3 thương tích (xoắn ốc ngọc lục bảo +3)');
+    const vyWounds = game.players.find((p) => p.playerId === 'sb-vy')?.woundsTaken ?? 0;
+    if (vyWounds === 0) {
+      const seq = ++seqRef.current;
+      vfx.enqueueEvents([
+        {
+          id: `sb-p3-heal-fx-${seq}`,
+          kind: 'COMBAT_VFX',
+          order: 41,
+          durationMs: vfx.reducedMotion ? 220 : 840,
+          effect: 'HEAL_AURA',
+          sourcePlayerId: 'sb-vy',
+          targetPlayerIds: ['sb-vy'],
+          shake: 'none',
+        },
+        {
+          id: `sb-p3-heal-txt-${seq}`,
+          kind: 'FLOATING_TEXT',
+          order: 50,
+          durationMs: vfx.reducedMotion ? 220 : 840,
+          targetPlayerId: 'sb-vy',
+          label: '+3',
+          variant: 'heal',
+          syncGroup: 'heal',
+        },
+      ]);
+      return;
+    }
+    setGame((prev) => {
+      const turn = prev.turnNumber + 1;
+      const now = Date.now();
+      return {
+        ...prev,
+        turnNumber: turn,
+        activePlayerId: 'sb-vy',
+        players: prev.players.map((p) =>
+          p.playerId === 'sb-vy' ? { ...p, woundsTaken: Math.max(0, p.woundsTaken - 3) } : p,
+        ),
+        publicLog: [
+          ...prev.publicLog.slice(-15),
+          {
+            id: nextLogId('p3-heal'),
+            round: prev.round,
+            atMs: now,
+            kind: 'equipment',
+            actorId: 'sb-vy',
+            text: '💚 Vy Hà hồi thương tích (Nước Suối Hồi Phục).',
+          },
+        ],
+      };
+    });
+  };
+
+  // Phase 3 Showcase E: Cùng Ô Đông Quân (4 quân tụ cùng 1 ô canteen + Súng Liên Thanh đa mục tiêu + BLOCK)
+  const triggerPhase3SameTileBarrage = () => {
+    setSelectedTargetId(null);
+    setLastDemoLabel('Phase 3 Cùng Ô Đông Quân: 4 quân tại Canteen · Súng Liên Thanh đa mục tiêu + BLOCK');
+    setGame((prev) => {
+      const turn = prev.turnNumber + 1;
+      const now = Date.now();
+      return {
+        ...prev,
+        turnNumber: turn,
+        activePlayerId: 'sb-tu',
+        players: prev.players.map((p) => {
+          if (p.playerId === 'sb-minh') return { ...p, location: 'canteen', woundsTaken: p.woundsTaken + 2 };
+          if (p.playerId === 'sb-vy') return { ...p, location: 'canteen', woundsTaken: p.woundsTaken + 3 };
+          if (p.playerId === 'sb-dung') return { ...p, location: 'canteen', guardianShieldActive: false };
+          return { ...p, location: 'canteen', equipped: [cardMeta('ev-06')] };
+        }),
+        publicLog: [
+          ...prev.publicLog.slice(-15),
+          {
+            id: nextLogId('p3-st-blk'),
+            round: prev.round,
+            atMs: now,
+            kind: 'skill',
+            actorId: 'sb-dung',
+            text: '🛡️ Lá Chắn Thiên Thần che chở Dũng Kiên — miễn nhiễm đòn đánh!',
+          },
+          {
+            id: nextLogId('p3-st-mg'),
+            round: prev.round,
+            atMs: now + 1,
+            kind: 'attack',
+            actorId: 'sb-tu',
+            text: '🔫 Súng Liên Thanh! Tú Linh xả đạn (|5 - 2|, tổng 3) vào 3 người trong tầm → tổng 5 sát thương!',
+          },
+        ],
+      };
+    });
   };
 
   return (
@@ -794,6 +985,46 @@ export function BoardGameVfxSandbox() {
         >
           👁️ 7C. Spectator · Kẻ Độc Hành
         </button>
+        <button
+          type="button"
+          data-testid="proto-vfx-p3-critical"
+          onClick={triggerPhase3Critical}
+          className="rounded-xl border border-amber-300/70 bg-rose-950/85 px-3 py-2 text-xs font-black text-amber-200 hover:bg-rose-900 cursor-pointer"
+        >
+          ⚡ 8A. Chí Mạng (CRIT -5)
+        </button>
+        <button
+          type="button"
+          data-testid="proto-vfx-p3-miss"
+          onClick={triggerPhase3Miss}
+          className="rounded-xl border border-slate-500/70 bg-slate-900/90 px-3 py-2 text-xs font-black text-slate-200 hover:bg-slate-800 cursor-pointer"
+        >
+          💨 8B. Đánh Hụt (MISS)
+        </button>
+        <button
+          type="button"
+          data-testid="proto-vfx-p3-shield"
+          onClick={triggerPhase3Shield}
+          className="rounded-xl border border-sky-400/70 bg-sky-950/80 px-3 py-2 text-xs font-black text-sky-100 hover:bg-sky-900 cursor-pointer"
+        >
+          🛡️ 8C. Khiên Chặn (BLOCK)
+        </button>
+        <button
+          type="button"
+          data-testid="proto-vfx-p3-heal"
+          onClick={triggerPhase3Heal}
+          className="rounded-xl border border-emerald-400/70 bg-emerald-950/80 px-3 py-2 text-xs font-black text-emerald-100 hover:bg-emerald-900 cursor-pointer"
+        >
+          ✚ 8D. Hồi Máu (+3)
+        </button>
+        <button
+          type="button"
+          data-testid="proto-vfx-p3-same-tile"
+          onClick={triggerPhase3SameTileBarrage}
+          className="rounded-xl border border-fuchsia-400/60 bg-fuchsia-950/75 px-3 py-2 text-xs font-black text-fuchsia-100 hover:bg-fuchsia-900 cursor-pointer"
+        >
+          👥 8E. Cùng Ô Đông Quân
+        </button>
       </div>
 
       <p
@@ -810,7 +1041,7 @@ export function BoardGameVfxSandbox() {
         data-active-tier={gfx.profile.tier}
         data-shake-enabled={String(gfx.profile.enableScreenShake)}
         data-reduced-motion={String(vfx.reducedMotion)}
-        className={`relative min-h-[420px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/95 p-3 sm:p-5 space-y-4 ${
+        className={`relative min-h-[440px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/95 px-3 pb-4 pt-12 sm:px-5 sm:pb-5 sm:pt-12 space-y-4 ${
           vfx.screenShake === 'heavy'
             ? 'bg-vfx-shake-heavy'
             : vfx.screenShake === 'light'

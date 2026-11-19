@@ -35,6 +35,7 @@ export type CombatVfxEffectKind =
 
 export type FloatingTextVariant =
   | 'damage'
+  | 'critical'
   | 'heal'
   | 'block'
   | 'counter'
@@ -82,16 +83,30 @@ export interface VictoryCinematicTimeline {
   totalMs: number;
 }
 
-export type CombatSequencePhase = 'target-lock' | 'travel' | 'hit-stop' | 'damage' | 'recovery';
+export type CombatSequencePhase =
+  | 'target-lock'
+  | 'anticipation'
+  | 'travel'
+  | 'impact'
+  | 'recovery';
 
 export interface CombatSequenceTimings {
   targetLockEndMs: number;
+  anticipationEndMs: number;
   travelEndMs: number;
+  impactStartMs: number;
   hitStopStartMs: number;
   hitStopEndMs: number;
   hitStopDurationMs: number;
+  impactEndMs: number;
   damagePopAtMs: number;
   recoveryEndMs: number;
+}
+
+export interface CombatSequenceOptions {
+  qualityTier?: 'high' | 'balanced' | 'low';
+  isCritical?: boolean;
+  isMiss?: boolean;
 }
 
 export interface DiceRollVisualEvent {
@@ -135,7 +150,12 @@ export interface CombatVfxVisualEvent {
   targetPlayerIds: string[];
   shake: ScreenShakeLevel;
   roleId?: BoardGameRoleId | null;
+  isCritical?: boolean;
+  isMiss?: boolean;
+  damageAmount?: number;
 }
+
+export type FloatingTextSyncGroup = 'attack' | 'counter' | 'shield' | 'heal' | 'steal';
 
 export interface FloatingTextVisualEvent {
   id: string;
@@ -145,6 +165,7 @@ export interface FloatingTextVisualEvent {
   targetPlayerId: string;
   label: string;
   variant: FloatingTextVariant;
+  syncGroup?: FloatingTextSyncGroup;
 }
 
 export interface CinematicCutInVisualEvent {
@@ -404,44 +425,93 @@ export function computeVictoryEventId(
 }
 
 /**
- * Chia chuỗi 5 pha Combat Impact & Counterattack:
- *   Target Lock -> Attack Travel -> Impact + 75ms Hit-Stop (60–100ms) -> Damage -> Recovery.
+ * Chia chuỗi 5 pha Combat Impact V2 (tổng 750–1.100ms):
+ *   1. Target Lock (0–150ms)
+ *   2. Anticipation (150–300ms)
+ *   3. Attack Travel (300–500ms)
+ *   4. Impact (500–700ms, gồm Hit-Stop 60–90ms)
+ *   5. Recovery (700–1.100ms — Floating Damage chỉ xuất hiện từ sau Impact)
  */
 export function resolveCombatSequenceTimings(
   durationMs: number,
   effect: CombatVfxEffectKind,
   reducedMotion: boolean,
+  options?: CombatSequenceOptions,
 ): CombatSequenceTimings {
   const safeTotal = Math.max(120, Math.round(durationMs));
   if (reducedMotion || safeTotal <= 320) {
     return {
       targetLockEndMs: 0,
+      anticipationEndMs: 0,
       travelEndMs: 0,
+      impactStartMs: 0,
       hitStopStartMs: 0,
       hitStopEndMs: 0,
       hitStopDurationMs: 0,
+      impactEndMs: 0,
       damagePopAtMs: 0,
-      recoveryEndMs: Math.min(260, safeTotal),
+      recoveryEndMs: Math.min(240, safeTotal),
     };
   }
-  const recoveryEndMs = Math.max(520, safeTotal);
-  const targetLockEndMs = Math.round(recoveryEndMs * 0.18);
-  const travelEndMs = Math.round(recoveryEndMs * 0.44);
+  const tier = options?.qualityTier ?? 'high';
+  const clamped = Math.max(750, Math.min(1100, safeTotal));
+  const totalMs =
+    tier === 'low'
+      ? Math.min(clamped, 840)
+      : tier === 'balanced'
+        ? Math.min(clamped, 960)
+        : clamped;
+
+  const targetLockEndMs = Math.round(totalMs * 0.15);
+  const anticipationEndMs = Math.round(totalMs * 0.3);
+  const travelEndMs = Math.round(totalMs * 0.5);
+  const impactStartMs = travelEndMs;
+  const hitStopStartMs = travelEndMs;
+
   const isNonOffensive =
     effect === 'HEAL_AURA' || effect === 'SHIELD_GUARD' || effect === 'STEAL_TETHER';
-  const hitStopDurationMs = isNonOffensive ? 0 : 75;
-  const hitStopStartMs = travelEndMs;
-  const hitStopEndMs = Math.min(recoveryEndMs - 90, travelEndMs + hitStopDurationMs);
-  const damagePopAtMs = Math.round(hitStopStartMs + Math.max(24, hitStopDurationMs * 0.45));
+  const isMiss = Boolean(options?.isMiss);
+  const hitStopDurationMs =
+    isNonOffensive || isMiss
+      ? 0
+      : options?.isCritical
+        ? 85
+        : effect === 'COUNTER_STRIKE'
+          ? 80
+          : 75;
+  const hitStopEndMs = hitStopStartMs + hitStopDurationMs;
+  const impactEndMs = Math.max(
+    hitStopEndMs + (hitStopDurationMs > 0 ? 55 : 40),
+    Math.round(totalMs * 0.7),
+  );
+  const recoveryEndMs = Math.max(impactEndMs + 160, totalMs);
+  // Sát thương tuyệt đối KHÔNG xuất hiện trước Impact (chỉ bật ngay sau pha Impact/Hit-Stop)
+  const damagePopAtMs = impactEndMs;
+
   return {
     targetLockEndMs,
+    anticipationEndMs,
     travelEndMs,
+    impactStartMs,
     hitStopStartMs,
     hitStopEndMs,
     hitStopDurationMs,
+    impactEndMs,
     damagePopAtMs,
     recoveryEndMs,
   };
+}
+
+export function resolveCombatPhaseAt(
+  elapsedMs: number,
+  timings: CombatSequenceTimings,
+): CombatSequencePhase {
+  if (timings.travelEndMs <= 0) return 'recovery';
+  if (elapsedMs < timings.targetLockEndMs) return 'target-lock';
+  if (elapsedMs < timings.anticipationEndMs) return 'anticipation';
+  if (elapsedMs < timings.travelEndMs) return 'travel';
+  if (elapsedMs < timings.impactEndMs) return 'impact';
+  return 'recovery';
 }
 
 /**
@@ -490,6 +560,7 @@ export function extractVisualEventsFromDiff(
   // Theo dõi liệu log đã tạo Combat VFX chưa để tránh trùng hoặc bổ sung hợp lý
   let hasAttackOrExplosionVfx = false;
   const blockedTargets = new Set<string>();
+  const counterDamagedIds = new Set<string>();
   const revealedActorIdsThisTick = new Set<string>();
 
   // 2. Xử lý lần lượt từng dòng log mới được server xác nhận
@@ -578,7 +649,7 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::shield::${log.id}::${tid}`,
             kind: 'COMBAT_VFX',
             order: 42,
-            durationMs: scaleDuration(650, reduced),
+            durationMs: scaleDuration(840, reduced),
             effect: 'SHIELD_GUARD',
             sourcePlayerId: actorId,
             targetPlayerIds: [tid],
@@ -588,10 +659,11 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::block-txt::${log.id}::${tid}`,
             kind: 'FLOATING_TEXT',
             order: 50,
-            durationMs: scaleDuration(1100, reduced),
+            durationMs: scaleDuration(840, reduced),
             targetPlayerId: tid,
             label: 'BLOCK',
             variant: 'block',
+            syncGroup: 'shield',
           });
         }
         continue;
@@ -601,26 +673,40 @@ export function extractVisualEventsFromDiff(
         const dungId = actorId;
         const attackerId =
           next.lastDiceRoll?.kind === 'attack' ? next.lastDiceRoll.playerId : null;
+        const counterMentions = findPlayersByNameMention(log.text, next.players, dungId);
+        const counterTargetId =
+          attackerId && attackerId !== dungId
+            ? attackerId
+            : counterMentions[0] ?? dungId;
+        const counterMissed = log.text.includes('không gây sát thương');
+        const counterDmg = counterTargetId ? woundDeltas.get(counterTargetId) ?? 0 : 0;
+        if (!counterMissed && counterTargetId && counterTargetId !== dungId && counterDmg > 0) {
+          counterDamagedIds.add(counterTargetId);
+        }
         if (dungId) {
           events.push({
             id: `${next.matchId}::counter-fx::${log.id}`,
             kind: 'COMBAT_VFX',
             order: 45,
-            durationMs: scaleDuration(780, reduced),
+            durationMs: scaleDuration(counterMissed ? 860 : 980, reduced),
             effect: 'COUNTER_STRIKE',
             sourcePlayerId: dungId,
-            targetPlayerIds: attackerId && attackerId !== dungId ? [attackerId] : [dungId],
-            shake: log.text.includes('không gây sát thương') ? 'none' : 'light',
+            targetPlayerIds: counterTargetId ? [counterTargetId] : [dungId],
+            shake: counterMissed ? 'none' : counterDmg >= 4 ? 'heavy' : 'light',
             roleId: actorPub?.revealedRoleId ?? null,
+            isCritical: !counterMissed && counterDmg >= 4,
+            isMiss: counterMissed,
+            damageAmount: counterDmg,
           });
           events.push({
             id: `${next.matchId}::counter-txt::${log.id}`,
             kind: 'FLOATING_TEXT',
             order: 52,
-            durationMs: scaleDuration(1150, reduced),
+            durationMs: scaleDuration(860, reduced),
             targetPlayerId: dungId,
             label: 'COUNTER',
             variant: 'counter',
+            syncGroup: 'counter',
           });
         }
         continue;
@@ -653,16 +739,22 @@ export function extractVisualEventsFromDiff(
           });
           if (skillTargets.length > 0) {
             hasAttackOrExplosionVfx = true;
+            const maxSkillDmg = skillTargets.reduce(
+              (mx, id) => Math.max(mx, woundDeltas.get(id) ?? 0),
+              0,
+            );
             events.push({
               id: `${next.matchId}::lightning::${log.id}`,
               kind: 'COMBAT_VFX',
               order: 40,
-              durationMs: scaleDuration(760, reduced),
+              durationMs: scaleDuration(1040, reduced),
               effect: 'LIGHTNING_STRIKE',
               sourcePlayerId: actorId,
               targetPlayerIds: skillTargets,
               shake: 'heavy',
               roleId: 'gac-radio',
+              isCritical: maxSkillDmg >= 4,
+              damageAmount: maxSkillDmg,
             });
           }
         } else if (actorPub.revealedRoleId === 'gac-ky-thuat' && log.text.includes('Đòn Phá Vây')) {
@@ -683,16 +775,22 @@ export function extractVisualEventsFromDiff(
           });
           if (skillTargets.length > 0) {
             hasAttackOrExplosionVfx = true;
+            const maxSkillDmg = skillTargets.reduce(
+              (mx, id) => Math.max(mx, woundDeltas.get(id) ?? 0),
+              0,
+            );
             events.push({
               id: `${next.matchId}::demo-boom::${log.id}`,
               kind: 'COMBAT_VFX',
               order: 40,
-              durationMs: scaleDuration(760, reduced),
+              durationMs: scaleDuration(1020, reduced),
               effect: 'EXPLOSION',
               sourcePlayerId: actorId,
               targetPlayerIds: skillTargets,
               shake: 'heavy',
               roleId: 'gac-ky-thuat',
+              isCritical: maxSkillDmg >= 4,
+              damageAmount: maxSkillDmg,
             });
           }
         } else if (actorPub.revealedRoleId === 'lang-quan-sat' && log.text.includes('Ý Chí Hồi Sinh')) {
@@ -715,7 +813,7 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::sig-fx::${log.id}`,
             kind: 'COMBAT_VFX',
             order: 40,
-            durationMs: scaleDuration(720, reduced),
+            durationMs: scaleDuration(860, reduced),
             effect: 'HEAL_AURA',
             sourcePlayerId: actorId,
             targetPlayerIds: [actorId],
@@ -744,7 +842,7 @@ export function extractVisualEventsFromDiff(
               id: `${next.matchId}::feast-slash::${log.id}`,
               kind: 'COMBAT_VFX',
               order: 40,
-              durationMs: scaleDuration(680, reduced),
+              durationMs: scaleDuration(960, reduced),
               effect: 'MASAMUNE_SLASH',
               sourcePlayerId: actorId,
               targetPlayerIds: skillTargets,
@@ -772,7 +870,7 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::sig-fx::${log.id}`,
             kind: 'COMBAT_VFX',
             order: 40,
-            durationMs: scaleDuration(680, reduced),
+            durationMs: scaleDuration(840, reduced),
             effect: 'SHIELD_GUARD',
             sourcePlayerId: actorId,
             targetPlayerIds: [actorId],
@@ -799,7 +897,7 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::sig-fx::${log.id}`,
             kind: 'COMBAT_VFX',
             order: 40,
-            durationMs: scaleDuration(700, reduced),
+            durationMs: scaleDuration(840, reduced),
             effect: 'HEAL_AURA',
             sourcePlayerId: actorId,
             targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
@@ -826,7 +924,7 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::sig-fx::${log.id}`,
             kind: 'COMBAT_VFX',
             order: 40,
-            durationMs: scaleDuration(700, reduced),
+            durationMs: scaleDuration(840, reduced),
             effect: 'STEAL_TETHER',
             sourcePlayerId: actorId,
             targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
@@ -841,7 +939,7 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::sig-fx::${log.id}`,
             kind: 'COMBAT_VFX',
             order: 40,
-            durationMs: scaleDuration(680, reduced),
+            durationMs: scaleDuration(860, reduced),
             effect: actorPub.revealedRoleId === 'lang-tien-phong' ? 'EXPLOSION' : 'SHIELD_GUARD',
             sourcePlayerId: actorId,
             targetPlayerIds: [actorId],
@@ -893,15 +991,26 @@ export function extractVisualEventsFromDiff(
           (mx, id) => Math.max(mx, woundDeltas.get(id) ?? 0),
           0,
         );
+        const isCritical = !missed && maxDamage >= 4;
+        const attackBaseMs = missed
+          ? 820
+          : effect === 'MACHINE_GUN_BARRAGE'
+            ? 1040
+            : isCritical || effect === 'MASAMUNE_SLASH'
+              ? 1020
+              : 920;
         events.push({
           id: `${next.matchId}::atk::${log.id}`,
           kind: 'COMBAT_VFX',
           order: 40,
-          durationMs: scaleDuration(effect === 'MACHINE_GUN_BARRAGE' ? 880 : 740, reduced),
+          durationMs: scaleDuration(attackBaseMs, reduced),
           effect,
           sourcePlayerId: actorId,
           targetPlayerIds: targetsForFx,
-          shake: missed ? 'none' : maxDamage >= 3 || effect === 'MACHINE_GUN_BARRAGE' ? 'heavy' : 'light',
+          shake: missed ? 'none' : isCritical || effect === 'MACHINE_GUN_BARRAGE' ? 'heavy' : 'light',
+          isCritical,
+          isMiss: missed,
+          damageAmount: maxDamage,
         });
 
         if (missed) {
@@ -911,10 +1020,11 @@ export function extractVisualEventsFromDiff(
                 id: `${next.matchId}::miss-txt::${log.id}::${tid}`,
                 kind: 'FLOATING_TEXT',
                 order: 50,
-                durationMs: scaleDuration(1050, reduced),
+                durationMs: scaleDuration(780, reduced),
                 targetPlayerId: tid,
                 label: 'MISS',
                 variant: 'miss',
+                syncGroup: 'attack',
               });
             }
           }
@@ -932,7 +1042,7 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::ward-fx::${log.id}::${tid}`,
             kind: 'COMBAT_VFX',
             order: 42,
-            durationMs: scaleDuration(650, reduced),
+            durationMs: scaleDuration(840, reduced),
             effect: 'SHIELD_GUARD',
             sourcePlayerId: actorId,
             targetPlayerIds: [tid],
@@ -942,10 +1052,11 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::ward-txt::${log.id}::${tid}`,
             kind: 'FLOATING_TEXT',
             order: 50,
-            durationMs: scaleDuration(1100, reduced),
+            durationMs: scaleDuration(840, reduced),
             targetPlayerId: tid,
             label: 'BLOCK',
             variant: 'block',
+            syncGroup: 'shield',
           });
         }
       } else if (
@@ -961,15 +1072,21 @@ export function extractVisualEventsFromDiff(
         );
         if (boomTargets.length > 0) {
           hasAttackOrExplosionVfx = true;
+          const maxBoomDmg = boomTargets.reduce(
+            (mx, id) => Math.max(mx, woundDeltas.get(id) ?? 0),
+            0,
+          );
           events.push({
             id: `${next.matchId}::boom::${log.id}`,
             kind: 'COMBAT_VFX',
             order: 40,
-            durationMs: scaleDuration(780, reduced),
+            durationMs: scaleDuration(980, reduced),
             effect: 'EXPLOSION',
             sourcePlayerId: actorId,
             targetPlayerIds: boomTargets,
             shake: 'heavy',
+            isCritical: maxBoomDmg >= 4,
+            damageAmount: maxBoomDmg,
           });
         }
       }
@@ -983,7 +1100,7 @@ export function extractVisualEventsFromDiff(
           id: `${next.matchId}::steal-fx::${log.id}`,
           kind: 'COMBAT_VFX',
           order: 44,
-          durationMs: scaleDuration(700, reduced),
+          durationMs: scaleDuration(840, reduced),
           effect: 'STEAL_TETHER',
           sourcePlayerId: actorId,
           targetPlayerIds: victims,
@@ -994,10 +1111,11 @@ export function extractVisualEventsFromDiff(
             id: `${next.matchId}::steal-txt::${log.id}::${vid}`,
             kind: 'FLOATING_TEXT',
             order: 52,
-            durationMs: scaleDuration(1100, reduced),
+            durationMs: scaleDuration(840, reduced),
             targetPlayerId: vid,
             label: 'STEAL',
             variant: 'steal',
+            syncGroup: 'steal',
           });
         }
       }
@@ -1063,27 +1181,32 @@ export function extractVisualEventsFromDiff(
     const delta = woundDeltas.get(np.playerId) ?? 0;
 
     if (delta > 0) {
-      if (!hasAttackOrExplosionVfx) {
+      const isCritHit = delta >= 4;
+      const fromCounter = counterDamagedIds.has(np.playerId);
+      if (!hasAttackOrExplosionVfx && !fromCounter) {
         events.push({
           id: mkId(`auto-hit-${np.playerId}`),
           kind: 'COMBAT_VFX',
           order: 40,
-          durationMs: scaleDuration(580, reduced),
+          durationMs: scaleDuration(isCritHit ? 980 : 900, reduced),
           effect: 'SLASH',
           sourcePlayerId: next.activePlayerId,
           targetPlayerIds: [np.playerId],
-          shake: delta >= 3 ? 'heavy' : 'light',
+          shake: isCritHit ? 'heavy' : 'light',
+          isCritical: isCritHit,
+          damageAmount: delta,
         });
         hasAttackOrExplosionVfx = true;
       }
       events.push({
         id: mkId(`dmg-${np.playerId}-${np.woundsTaken}`),
         kind: 'FLOATING_TEXT',
-        order: 50,
-        durationMs: scaleDuration(1200, reduced),
+        order: fromCounter ? 53 : 50,
+        durationMs: scaleDuration(isCritHit ? 880 : 840, reduced),
         targetPlayerId: np.playerId,
         label: `-${delta}`,
-        variant: 'damage',
+        variant: isCritHit ? 'critical' : 'damage',
+        syncGroup: fromCounter ? 'counter' : 'attack',
       });
     } else if (delta < 0) {
       const healed = Math.abs(delta);
@@ -1091,7 +1214,7 @@ export function extractVisualEventsFromDiff(
         id: mkId(`heal-fx-${np.playerId}-${np.woundsTaken}`),
         kind: 'COMBAT_VFX',
         order: 41,
-        durationMs: scaleDuration(720, reduced),
+        durationMs: scaleDuration(840, reduced),
         effect: 'HEAL_AURA',
         sourcePlayerId: next.activePlayerId,
         targetPlayerIds: [np.playerId],
@@ -1101,10 +1224,11 @@ export function extractVisualEventsFromDiff(
         id: mkId(`heal-txt-${np.playerId}-${np.woundsTaken}`),
         kind: 'FLOATING_TEXT',
         order: 50,
-        durationMs: scaleDuration(1150, reduced),
+        durationMs: scaleDuration(840, reduced),
         targetPlayerId: np.playerId,
         label: `+${healed}`,
         variant: 'heal',
+        syncGroup: 'heal',
       });
     }
 
@@ -1113,7 +1237,7 @@ export function extractVisualEventsFromDiff(
         id: mkId(`shield-on-${np.playerId}`),
         kind: 'COMBAT_VFX',
         order: 42,
-        durationMs: scaleDuration(680, reduced),
+        durationMs: scaleDuration(840, reduced),
         effect: 'SHIELD_GUARD',
         sourcePlayerId: np.playerId,
         targetPlayerIds: [np.playerId],
@@ -1123,10 +1247,11 @@ export function extractVisualEventsFromDiff(
         id: mkId(`shield-on-txt-${np.playerId}`),
         kind: 'FLOATING_TEXT',
         order: 50,
-        durationMs: scaleDuration(1100, reduced),
+        durationMs: scaleDuration(840, reduced),
         targetPlayerId: np.playerId,
         label: 'BLOCK',
         variant: 'block',
+        syncGroup: 'shield',
       });
     }
 

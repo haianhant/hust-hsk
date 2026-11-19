@@ -16,7 +16,11 @@ import type {
   BoardGameFactionId,
   BoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
-import type { BoardGameVisualEvent } from './vfx-queue';
+import {
+  resolveCombatSequenceTimings,
+  type BoardGameVisualEvent,
+  type CombatVfxVisualEvent,
+} from './vfx-queue';
 
 const SOUND_MUTED_STORAGE_KEY = 'hustverse:bg-sound-muted:v1';
 const MAX_PLAYED_EVENT_IDS = 256;
@@ -560,55 +564,205 @@ export function playPawnTouchdown(): void {
   );
 }
 
-/** Chém thường hoặc Masamune nguyền rủa */
-export function playSlashHit(cursed = false): void {
+export interface CombatAudioCueOptions {
+  anticipationAtSec?: number;
+  travelAtSec?: number;
+  impactAtSec?: number;
+  recoveryAtSec?: number;
+  isCritical?: boolean;
+  isMiss?: boolean;
+}
+
+function buildCombatAudioSchedule(event: CombatVfxVisualEvent): CombatAudioCueOptions {
+  const isFast = event.durationMs <= 320;
+  if (isFast) {
+    return {
+      anticipationAtSec: 0,
+      travelAtSec: 0,
+      impactAtSec: 0.02,
+      recoveryAtSec: 0.12,
+      isCritical: Boolean(event.isCritical),
+      isMiss: Boolean(event.isMiss),
+    };
+  }
+  const t = resolveCombatSequenceTimings(event.durationMs, event.effect, false, {
+    isCritical: event.isCritical,
+    isMiss: event.isMiss,
+  });
+  return {
+    anticipationAtSec: Math.max(0.08, t.targetLockEndMs / 1000),
+    travelAtSec: Math.max(0.18, t.anticipationEndMs / 1000),
+    impactAtSec: Math.max(0.32, t.impactStartMs / 1000),
+    recoveryAtSec: Math.max(0.46, t.impactEndMs / 1000),
+    isCritical: Boolean(event.isCritical),
+    isMiss: Boolean(event.isMiss),
+  };
+}
+
+/** Đánh hụt (MISS): khóa mục tiêu nhẹ -> vút gió trượt qua khoảng không, không có cú va chạm nặng */
+export function playMissWhoosh(opts: CombatAudioCueOptions = {}): void {
+  const ant = opts.anticipationAtSec ?? 0.12;
+  const trv = opts.travelAtSec ?? 0.25;
+  const imp = opts.impactAtSec ?? 0.42;
   playLayeredCue(
     [
-      {
-        freq: cursed ? 740 : 660,
-        endFreq: cursed ? 115 : 145,
-        startOffsetSec: 0,
-        durationSec: 0.11,
-        type: 'sawtooth',
-        gainPeak: 0.05,
-        filterType: 'lowpass',
-        filterFreq: 3200,
-        filterEndFreq: 420,
-      },
-      { freq: cursed ? 148 : 190, endFreq: 52, startOffsetSec: 0.035, durationSec: 0.13, type: 'triangle', gainPeak: 0.068 },
-      ...(cursed
-        ? [{ freq: 295, endFreq: 210, startOffsetSec: 0.05, durationSec: 0.22, type: 'sine' as const, gainPeak: 0.04, detuneCents: -14 }]
-        : []),
+      { freq: 520, endFreq: 640, startOffsetSec: 0.01, durationSec: 0.05, type: 'sine', gainPeak: 0.018 },
+      { freq: 340, endFreq: 490, startOffsetSec: ant, durationSec: 0.11, type: 'triangle', gainPeak: 0.022 },
+      // Tiếng trượt gió nhẹ xuống trầm khi né ngang
+      { freq: 520, endFreq: 210, startOffsetSec: imp, durationSec: 0.14, type: 'sine', gainPeak: 0.026 },
     ],
     [
       {
         bufferKey: 'blade',
-        startOffsetSec: 0,
-        durationSec: 0.15,
-        playbackRate: cursed ? 0.95 : 1.15,
-        gainPeak: 0.08,
-        filterType: 'highpass',
-        filterFreq: 1850,
+        startOffsetSec: trv,
+        durationSec: 0.19,
+        playbackRate: 1.38,
+        gainPeak: 0.058,
+        filterType: 'bandpass',
+        filterFreq: 2400,
+        filterEndFreq: 950,
+        filterQ: 1.6,
       },
     ],
   );
 }
 
-/** Thương Ánh Sáng / Đâm xuyên */
-export function playSpearThrust(): void {
+/** Chém thường, Chí mạng (CRIT) hoặc Masamune nguyền rủa — đồng bộ 4 lớp Anticipation -> Whoosh -> Impact -> Recovery */
+export function playSlashHit(cursed = false, opts: CombatAudioCueOptions = {}): void {
+  if (opts.isMiss) {
+    playMissWhoosh(opts);
+    return;
+  }
+  const ant = opts.anticipationAtSec ?? 0;
+  const trv = opts.travelAtSec ?? 0;
+  const imp = opts.impactAtSec ?? 0;
+  const rec = opts.recoveryAtSec ?? imp + 0.14;
+  const crit = Boolean(opts.isCritical);
+
+  const preTones: ToneLayer[] =
+    imp >= 0.25
+      ? [
+          // Target Lock ping nhẹ
+          { freq: cursed ? 640 : 780, endFreq: cursed ? 760 : 940, startOffsetSec: 0.01, durationSec: 0.055, type: 'sine', gainPeak: 0.022 },
+          // Anticipation tụ lực kéo đao
+          { freq: cursed ? 185 : 220, endFreq: cursed ? 390 : 450, startOffsetSec: ant, durationSec: Math.max(0.08, trv - ant), type: 'triangle', gainPeak: 0.032 },
+        ]
+      : [];
+
+  const preNoises: NoiseLayer[] =
+    imp >= 0.25
+      ? [
+          // Attack Travel whoosh xé gió dẫn thẳng vào khung Impact
+          {
+            bufferKey: 'blade',
+            startOffsetSec: trv,
+            durationSec: Math.max(0.11, imp - trv + 0.04),
+            playbackRate: cursed ? 0.92 : 1.18,
+            gainPeak: 0.068,
+            filterType: 'bandpass',
+            filterFreq: 1200,
+            filterEndFreq: 3200,
+            filterQ: 1.4,
+          },
+        ]
+      : [];
+
   playLayeredCue(
     [
-      { freq: 920, endFreq: 360, startOffsetSec: 0, durationSec: 0.11, type: 'triangle', gainPeak: 0.055 },
-      { freq: 1480, startOffsetSec: 0.02, durationSec: 0.17, type: 'sine', gainPeak: 0.04 },
-      { freq: 165, endFreq: 68, startOffsetSec: 0.03, durationSec: 0.12, type: 'triangle', gainPeak: 0.058 },
+      ...preTones,
+      // Impact: cú chém kim loại + sub-bass nặng
+      {
+        freq: crit ? 860 : cursed ? 740 : 660,
+        endFreq: cursed ? 110 : 140,
+        startOffsetSec: imp,
+        durationSec: crit ? 0.14 : 0.11,
+        type: 'sawtooth',
+        gainPeak: crit ? 0.062 : 0.05,
+        filterType: 'lowpass',
+        filterFreq: crit ? 3800 : 3200,
+        filterEndFreq: 420,
+      },
+      {
+        freq: crit ? 128 : cursed ? 148 : 185,
+        endFreq: crit ? 36 : 48,
+        startOffsetSec: imp + 0.015,
+        durationSec: crit ? 0.18 : 0.13,
+        type: 'triangle',
+        gainPeak: crit ? 0.082 : 0.068,
+      },
+      ...(crit
+        ? [
+            // Hào quang thép chí mạng
+            { freq: 1680, endFreq: 1120, startOffsetSec: imp + 0.01, durationSec: 0.2, type: 'sine' as const, gainPeak: 0.046 },
+          ]
+        : []),
+      ...(cursed
+        ? [{ freq: 295, endFreq: 205, startOffsetSec: imp + 0.04, durationSec: 0.22, type: 'sine' as const, gainPeak: 0.04, detuneCents: -14 }]
+        : []),
+      // Recovery resonance dẫn nhịp popup sát thương
+      { freq: crit ? 420 : 320, endFreq: 190, startOffsetSec: rec, durationSec: 0.11, type: 'sine', gainPeak: 0.022 },
     ],
     [
+      ...preNoises,
       {
-        bufferKey: 'blade',
-        startOffsetSec: 0,
-        durationSec: 0.14,
-        playbackRate: 1.4,
-        gainPeak: 0.075,
+        bufferKey: crit ? 'gunCrack' : 'blade',
+        startOffsetSec: imp,
+        durationSec: crit ? 0.11 : 0.14,
+        playbackRate: crit ? 1.05 : cursed ? 0.95 : 1.15,
+        gainPeak: crit ? 0.095 : 0.08,
+        filterType: 'highpass',
+        filterFreq: crit ? 1400 : 1850,
+      },
+    ],
+  );
+}
+
+/** Thương Ánh Sáng / Đâm xuyên — đồng bộ 4 lớp */
+export function playSpearThrust(opts: CombatAudioCueOptions = {}): void {
+  if (opts.isMiss) {
+    playMissWhoosh(opts);
+    return;
+  }
+  const ant = opts.anticipationAtSec ?? 0;
+  const trv = opts.travelAtSec ?? 0;
+  const imp = opts.impactAtSec ?? 0;
+  const rec = opts.recoveryAtSec ?? imp + 0.14;
+  const crit = Boolean(opts.isCritical);
+
+  playLayeredCue(
+    [
+      ...(imp >= 0.25
+        ? [
+            { freq: 880, endFreq: 1180, startOffsetSec: 0.01, durationSec: 0.06, type: 'sine' as const, gainPeak: 0.022 },
+            { freq: 340, endFreq: 680, startOffsetSec: ant, durationSec: Math.max(0.08, trv - ant), type: 'triangle' as const, gainPeak: 0.032 },
+          ]
+        : []),
+      { freq: crit ? 1120 : 920, endFreq: 340, startOffsetSec: imp, durationSec: 0.13, type: 'triangle', gainPeak: crit ? 0.068 : 0.055 },
+      { freq: crit ? 1760 : 1480, startOffsetSec: imp + 0.015, durationSec: 0.2, type: 'sine', gainPeak: crit ? 0.052 : 0.04 },
+      { freq: crit ? 132 : 165, endFreq: 46, startOffsetSec: imp + 0.015, durationSec: 0.16, type: 'triangle', gainPeak: crit ? 0.078 : 0.06 },
+      { freq: 660, endFreq: 440, startOffsetSec: rec, durationSec: 0.1, type: 'sine', gainPeak: 0.02 },
+    ],
+    [
+      ...(imp >= 0.25
+        ? [
+            {
+              bufferKey: 'blade' as const,
+              startOffsetSec: trv,
+              durationSec: Math.max(0.11, imp - trv + 0.04),
+              playbackRate: 1.45,
+              gainPeak: 0.064,
+              filterType: 'bandpass' as const,
+              filterFreq: 1800,
+              filterEndFreq: 3600,
+            },
+          ]
+        : []),
+      {
+        bufferKey: crit ? 'gunCrack' : 'blade',
+        startOffsetSec: imp,
+        durationSec: 0.13,
+        playbackRate: 1.35,
+        gainPeak: crit ? 0.09 : 0.075,
         filterType: 'bandpass',
         filterFreq: 2600,
       },
@@ -616,154 +770,263 @@ export function playSpearThrust(): void {
   );
 }
 
-/** Súng lục / Súng liên thanh đa lớp đạn + vỏ đồng */
-export function playGunfireBurst(shots = 3): void {
+/** Súng lục / Súng liên thanh đa lớp đạn + vỏ đồng — khóa mục tiêu -> lên đạn -> xả đạn tới impact */
+export function playGunfireBurst(shots = 3, opts: CombatAudioCueOptions = {}): void {
+  if (opts.isMiss) {
+    playMissWhoosh(opts);
+    return;
+  }
+  const ant = opts.anticipationAtSec ?? 0;
+  const trv = opts.travelAtSec ?? 0;
+  const imp = opts.impactAtSec ?? 0;
+  const crit = Boolean(opts.isCritical);
   const count = Math.max(1, Math.min(4, shots));
   const tones: ToneLayer[] = [];
   const noises: NoiseLayer[] = [];
+
+  if (imp >= 0.25) {
+    // Target lock + lên đạn kim loại (Anticipation)
+    tones.push({ freq: 840, startOffsetSec: 0.01, durationSec: 0.05, type: 'sine', gainPeak: 0.022 });
+    noises.push({
+      bufferKey: 'diceClick',
+      startOffsetSec: ant,
+      durationSec: 0.042,
+      playbackRate: 1.45,
+      gainPeak: 0.058,
+      filterType: 'highpass',
+      filterFreq: 2100,
+    });
+  }
+
+  const startBurst = imp >= 0.25 ? Math.max(trv, imp - (count - 1) * 0.065) : 0;
   for (let i = 0; i < count; i++) {
-    const t = i * 0.072;
+    const t = startBurst + i * 0.065;
     noises.push({
       bufferKey: 'gunCrack',
       startOffsetSec: t,
       durationSec: 0.08,
       playbackRate: 0.96 + i * 0.08,
-      gainPeak: 0.095,
+      gainPeak: crit ? 0.105 : 0.092,
       filterType: 'lowpass',
       filterFreq: 3800,
       filterEndFreq: 680,
     });
     tones.push(
-      { freq: 210 + i * 16, endFreq: 62, startOffsetSec: t, durationSec: 0.068, type: 'square', gainPeak: 0.038, filterType: 'lowpass', filterFreq: 900 },
-      { freq: 3900 + i * 240, startOffsetSec: t + 0.045, durationSec: 0.045, type: 'sine', gainPeak: 0.015 },
+      { freq: 210 + i * 16, endFreq: 54, startOffsetSec: t, durationSec: 0.075, type: 'square', gainPeak: 0.04, filterType: 'lowpass', filterFreq: 920 },
+      { freq: 3900 + i * 240, startOffsetSec: t + 0.048, durationSec: 0.045, type: 'sine', gainPeak: 0.015 },
     );
+  }
+  if (crit) {
+    tones.push({ freq: 118, endFreq: 36, startOffsetSec: imp, durationSec: 0.18, type: 'triangle', gainPeak: 0.076 });
   }
   playLayeredCue(tones, noises);
 }
 
-/** Tia sét cao áp Vy Radio */
-export function playLightningStrike(): void {
+/** Tia sét cao áp Vy Radio — tụ điện cao áp -> sét giáng -> dư chấn sấm */
+export function playLightningStrike(opts: CombatAudioCueOptions = {}): void {
+  const ant = opts.anticipationAtSec ?? 0;
+  const trv = opts.travelAtSec ?? 0;
+  const imp = opts.impactAtSec ?? 0;
+  const rec = opts.recoveryAtSec ?? imp + 0.16;
+
   playLayeredCue(
     [
-      { freq: 1560, endFreq: 240, startOffsetSec: 0, durationSec: 0.14, type: 'sawtooth', gainPeak: 0.048, filterType: 'bandpass', filterFreq: 2200, filterEndFreq: 480 },
-      { freq: 920, endFreq: 145, startOffsetSec: 0.04, durationSec: 0.18, type: 'triangle', gainPeak: 0.052 },
-      { freq: 96, endFreq: 38, startOffsetSec: 0.03, durationSec: 0.28, type: 'sine', gainPeak: 0.075 },
+      ...(imp >= 0.25
+        ? [
+            { freq: 280, endFreq: 960, startOffsetSec: ant, durationSec: Math.max(0.1, trv - ant + 0.06), type: 'sawtooth' as const, gainPeak: 0.032, filterType: 'bandpass' as const, filterFreq: 1400, filterEndFreq: 3200 },
+          ]
+        : []),
+      { freq: 1620, endFreq: 220, startOffsetSec: imp, durationSec: 0.16, type: 'sawtooth', gainPeak: 0.054, filterType: 'bandpass', filterFreq: 2400, filterEndFreq: 480 },
+      { freq: 940, endFreq: 140, startOffsetSec: imp + 0.03, durationSec: 0.18, type: 'triangle', gainPeak: 0.056 },
+      { freq: 102, endFreq: 34, startOffsetSec: imp + 0.02, durationSec: 0.3, type: 'sine', gainPeak: 0.082 },
+      { freq: 440, endFreq: 260, startOffsetSec: rec, durationSec: 0.12, type: 'sine', gainPeak: 0.022 },
     ],
     [
+      ...(imp >= 0.25
+        ? [
+            {
+              bufferKey: 'arcCrackle' as const,
+              startOffsetSec: trv,
+              durationSec: Math.max(0.1, imp - trv + 0.04),
+              playbackRate: 1.35,
+              gainPeak: 0.045,
+              filterType: 'highpass' as const,
+              filterFreq: 2600,
+            },
+          ]
+        : []),
       {
         bufferKey: 'arcCrackle',
-        startOffsetSec: 0,
-        durationSec: 0.26,
-        playbackRate: 1.1,
-        gainPeak: 0.09,
+        startOffsetSec: imp,
+        durationSec: 0.28,
+        playbackRate: 1.05,
+        gainPeak: 0.095,
         filterType: 'bandpass',
         filterFreq: 2900,
-        filterEndFreq: 700,
+        filterEndFreq: 680,
       },
     ],
   );
 }
 
-/** Phản kích tức thì (Parry metallic clang at 0ms -> Riposte energy whip + thud at 95ms) */
-export function playCounterStrike(): void {
+/** Phản kích tức thì 4 nhịp riêng: Phòng thủ (0.03s) -> Đảo hướng tụ lực (0.16s) -> Phản kích xé gió (0.30s) -> Impact (0.50s) */
+export function playCounterStrike(opts: CombatAudioCueOptions = {}): void {
+  const ant = opts.anticipationAtSec ?? 0.14;
+  const trv = opts.travelAtSec ?? 0.28;
+  const imp = opts.impactAtSec ?? 0.48;
+  const rec = opts.recoveryAtSec ?? imp + 0.15;
+  const missed = Boolean(opts.isMiss);
+  const crit = Boolean(opts.isCritical);
+
   playLayeredCue(
     [
-      // Stage 1: Parry steel guard clang (0ms)
-      { freq: 1140, endFreq: 880, startOffsetSec: 0, durationSec: 0.085, type: 'triangle', gainPeak: 0.062 },
-      { freq: 1780, endFreq: 1420, startOffsetSec: 0.008, durationSec: 0.11, type: 'sine', gainPeak: 0.048 },
-      // Stage 2: Riposte claw whip + chest thud (95ms)
-      {
-        freq: 620,
-        endFreq: 145,
-        startOffsetSec: 0.095,
-        durationSec: 0.14,
-        type: 'sawtooth',
-        gainPeak: 0.056,
-        filterType: 'lowpass',
-        filterFreq: 2400,
-        filterEndFreq: 420,
-      },
-      { freq: 165, endFreq: 55, startOffsetSec: 0.105, durationSec: 0.13, type: 'triangle', gainPeak: 0.068 },
+      // Stage 1: Phòng thủ (Parry steel clang tại 0.02s)
+      { freq: 1180, endFreq: 880, startOffsetSec: 0.02, durationSec: 0.09, type: 'triangle', gainPeak: 0.064 },
+      { freq: 1840, endFreq: 1460, startOffsetSec: 0.025, durationSec: 0.11, type: 'sine', gainPeak: 0.048 },
+      // Stage 2: Đảo hướng tụ năng lượng phản công
+      { freq: 240, endFreq: 560, startOffsetSec: ant, durationSec: Math.max(0.09, trv - ant), type: 'sawtooth', gainPeak: 0.036, filterType: 'bandpass', filterFreq: 950, filterEndFreq: 2400 },
+      // Stage 4: Va chạm phản kích (hoặc trượt gió nếu counter hụt)
+      ...(missed
+        ? [{ freq: 480, endFreq: 220, startOffsetSec: imp, durationSec: 0.13, type: 'sine' as const, gainPeak: 0.028 }]
+        : [
+            {
+              freq: crit ? 760 : 620,
+              endFreq: 135,
+              startOffsetSec: imp,
+              durationSec: 0.15,
+              type: 'sawtooth' as const,
+              gainPeak: crit ? 0.066 : 0.056,
+              filterType: 'lowpass' as const,
+              filterFreq: 2600,
+              filterEndFreq: 420,
+            },
+            { freq: crit ? 132 : 165, endFreq: 44, startOffsetSec: imp + 0.01, durationSec: 0.16, type: 'triangle' as const, gainPeak: crit ? 0.08 : 0.07 },
+            { freq: 520, endFreq: 310, startOffsetSec: rec, durationSec: 0.11, type: 'sine' as const, gainPeak: 0.024 },
+          ]),
     ],
     [
       {
         bufferKey: 'diceClick',
-        startOffsetSec: 0,
-        durationSec: 0.032,
-        playbackRate: 1.55,
-        gainPeak: 0.042,
+        startOffsetSec: 0.015,
+        durationSec: 0.035,
+        playbackRate: 1.6,
+        gainPeak: 0.05,
         filterType: 'highpass',
         filterFreq: 2800,
       },
+      // Stage 3: Đòn phản kích xé gió ngược lại kẻ tấn công
       {
         bufferKey: 'blade',
-        startOffsetSec: 0.09,
-        durationSec: 0.13,
-        playbackRate: 1.28,
+        startOffsetSec: trv,
+        durationSec: Math.max(0.12, imp - trv + 0.05),
+        playbackRate: 1.32,
         gainPeak: 0.072,
         filterType: 'bandpass',
-        filterFreq: 2600,
-        filterEndFreq: 800,
+        filterFreq: 2700,
+        filterEndFreq: 860,
       },
+      ...(!missed
+        ? [
+            {
+              bufferKey: 'gunCrack' as const,
+              startOffsetSec: imp,
+              durationSec: 0.085,
+              playbackRate: 1.12,
+              gainPeak: 0.074,
+              filterType: 'bandpass' as const,
+              filterFreq: 1650,
+            },
+          ]
+        : []),
     ],
   );
 }
 
-/** Vụ nổ / Đột kích gây sát thương diện rộng */
-export function playExplosionImpact(): void {
+/** Vụ nổ / Đột kích gây sát thương diện rộng — kíp kích -> nổ vang -> dư chấn */
+export function playExplosionImpact(opts: CombatAudioCueOptions = {}): void {
+  const ant = opts.anticipationAtSec ?? 0;
+  const trv = opts.travelAtSec ?? 0;
+  const imp = opts.impactAtSec ?? 0;
+  const rec = opts.recoveryAtSec ?? imp + 0.18;
+
   playLayeredCue(
     [
-      { freq: 145, endFreq: 38, startOffsetSec: 0, durationSec: 0.28, type: 'sawtooth', gainPeak: 0.068, filterType: 'lowpass', filterFreq: 480, filterEndFreq: 90 },
-      { freq: 92, endFreq: 36, startOffsetSec: 0.025, durationSec: 0.3, type: 'triangle', gainPeak: 0.072 },
+      ...(imp >= 0.25
+        ? [
+            { freq: 320, endFreq: 720, startOffsetSec: ant, durationSec: Math.max(0.09, trv - ant), type: 'triangle' as const, gainPeak: 0.03 },
+          ]
+        : []),
+      { freq: 145, endFreq: 34, startOffsetSec: imp, durationSec: 0.3, type: 'sawtooth', gainPeak: 0.074, filterType: 'lowpass', filterFreq: 520, filterEndFreq: 85 },
+      { freq: 96, endFreq: 34, startOffsetSec: imp + 0.02, durationSec: 0.32, type: 'triangle', gainPeak: 0.078 },
+      { freq: 260, endFreq: 140, startOffsetSec: rec, durationSec: 0.14, type: 'sine', gainPeak: 0.022 },
     ],
     [
+      ...(imp >= 0.25
+        ? [
+            {
+              bufferKey: 'blade' as const,
+              startOffsetSec: trv,
+              durationSec: Math.max(0.1, imp - trv + 0.03),
+              playbackRate: 0.88,
+              gainPeak: 0.055,
+              filterType: 'lowpass' as const,
+              filterFreq: 1800,
+            },
+          ]
+        : []),
       {
         bufferKey: 'arcCrackle',
-        startOffsetSec: 0,
-        durationSec: 0.28,
+        startOffsetSec: imp,
+        durationSec: 0.3,
         playbackRate: 0.72,
         gainPeak: 0.1,
         filterType: 'lowpass',
-        filterFreq: 1400,
-        filterEndFreq: 220,
+        filterFreq: 1450,
+        filterEndFreq: 210,
       },
     ],
   );
 }
 
-/** Lá Chắn Thiên Thần BLOCK */
-export function playBlockClang(): void {
+/** Lá Chắn Thiên Thần BLOCK — kết tinh khiên lục giác -> ngân vang kim loại chặn đòn */
+export function playBlockClang(opts: CombatAudioCueOptions = {}): void {
+  const imp = opts.impactAtSec ? Math.min(0.36, opts.impactAtSec * 0.75) : 0;
   playLayeredCue([
-    { freq: 740, endFreq: 560, startOffsetSec: 0, durationSec: 0.095, type: 'triangle', gainPeak: 0.055 },
-    { freq: 1180, startOffsetSec: 0.02, durationSec: 0.16, type: 'sine', gainPeak: 0.045 },
-    { freq: 1760, startOffsetSec: 0.035, durationSec: 0.14, type: 'sine', gainPeak: 0.024 },
+    ...(imp > 0.08
+      ? [{ freq: 440, endFreq: 660, startOffsetSec: 0.02, durationSec: imp, type: 'sine' as const, gainPeak: 0.024 }]
+      : []),
+    { freq: 760, endFreq: 580, startOffsetSec: imp, durationSec: 0.11, type: 'triangle', gainPeak: 0.058 },
+    { freq: 1220, startOffsetSec: imp + 0.015, durationSec: 0.18, type: 'sine', gainPeak: 0.048 },
+    { freq: 1820, startOffsetSec: imp + 0.03, durationSec: 0.16, type: 'sine', gainPeak: 0.028 },
   ]);
 }
 
-/** Hồi máu / Khế ước ánh sáng */
-export function playHealShimmer(): void {
+/** Hồi máu / Khế ước ánh sáng — dâng nhẹ ấm áp theo xoắn ốc lục bảo */
+export function playHealShimmer(opts: CombatAudioCueOptions = {}): void {
+  const base = opts.anticipationAtSec ? Math.min(0.14, opts.anticipationAtSec * 0.7) : 0;
   playLayeredCue([
-    { freq: 523.25, startOffsetSec: 0, durationSec: 0.11, type: 'sine', gainPeak: 0.04 },
-    { freq: 659.25, startOffsetSec: 0.055, durationSec: 0.13, type: 'sine', gainPeak: 0.045 },
-    { freq: 783.99, startOffsetSec: 0.11, durationSec: 0.18, type: 'sine', gainPeak: 0.05 },
-    { freq: 1046.5, startOffsetSec: 0.16, durationSec: 0.22, type: 'triangle', gainPeak: 0.032 },
+    { freq: 523.25, startOffsetSec: base, durationSec: 0.12, type: 'sine', gainPeak: 0.042 },
+    { freq: 659.25, startOffsetSec: base + 0.085, durationSec: 0.14, type: 'sine', gainPeak: 0.046 },
+    { freq: 783.99, startOffsetSec: base + 0.17, durationSec: 0.18, type: 'sine', gainPeak: 0.052 },
+    { freq: 1046.5, startOffsetSec: base + 0.25, durationSec: 0.24, type: 'triangle', gainPeak: 0.036 },
   ]);
 }
 
 /** Cướp trang bị */
-export function playStealSnatch(): void {
+export function playStealSnatch(opts: CombatAudioCueOptions = {}): void {
+  const trv = opts.travelAtSec ? Math.min(0.24, opts.travelAtSec * 0.8) : 0;
   playLayeredCue(
     [
-      { freq: 380, endFreq: 860, startOffsetSec: 0, durationSec: 0.12, type: 'triangle', gainPeak: 0.045 },
-      { freq: 920, endFreq: 680, startOffsetSec: 0.09, durationSec: 0.09, type: 'sine', gainPeak: 0.04 },
+      { freq: 380, endFreq: 860, startOffsetSec: trv, durationSec: 0.14, type: 'triangle', gainPeak: 0.046 },
+      { freq: 920, endFreq: 680, startOffsetSec: trv + 0.11, durationSec: 0.1, type: 'sine', gainPeak: 0.042 },
     ],
     [
       {
         bufferKey: 'paper',
-        startOffsetSec: 0,
-        durationSec: 0.09,
+        startOffsetSec: trv,
+        durationSec: 0.1,
         playbackRate: 1.45,
-        gainPeak: 0.05,
+        gainPeak: 0.052,
         filterType: 'highpass',
         filterFreq: 1900,
       },
@@ -1058,40 +1321,41 @@ export function playSoundForVisualEvent(
       return true;
 
     case 'COMBAT_VFX': {
+      const schedule = buildCombatAudioSchedule(event);
       switch (event.effect) {
         case 'LIGHTNING_STRIKE':
-          playLightningStrike();
+          playLightningStrike(schedule);
           return true;
         case 'MACHINE_GUN_BARRAGE':
-          playGunfireBurst(3);
+          playGunfireBurst(3, schedule);
           return true;
         case 'HANDGUN_SHOT':
-          playGunfireBurst(1);
+          playGunfireBurst(1, schedule);
           return true;
         case 'EXPLOSION':
-          playExplosionImpact();
+          playExplosionImpact(schedule);
           return true;
         case 'COUNTER_STRIKE':
-          playCounterStrike();
+          playCounterStrike(schedule);
           return true;
         case 'SHIELD_GUARD':
-          playBlockClang();
+          playBlockClang(schedule);
           return true;
         case 'HEAL_AURA':
-          playHealShimmer();
+          playHealShimmer(schedule);
           return true;
         case 'STEAL_TETHER':
-          playStealSnatch();
+          playStealSnatch(schedule);
           return true;
         case 'SPEAR_THRUST':
-          playSpearThrust();
+          playSpearThrust(schedule);
           return true;
         case 'MASAMUNE_SLASH':
-          playSlashHit(true);
+          playSlashHit(true, schedule);
           return true;
         case 'SLASH':
         default:
-          playSlashHit(false);
+          playSlashHit(false, schedule);
           return true;
       }
     }
@@ -1119,7 +1383,6 @@ export function playSoundForVisualEvent(
         case 'ELIMINATION':
           playEliminationBell();
           return true;
-        case 'ULTIMATE_SKILL':
         default:
           playCutInWhoosh();
           return true;
