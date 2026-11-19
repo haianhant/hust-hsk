@@ -47,9 +47,11 @@ import {
 } from './sound';
 import {
   VisualEventTracker,
+  isFreshMatchOpening,
   resolveCombatSequenceTimings,
   resolveMultiTargetStaggerMs,
   resolveNonOverlappingPopupPos,
+  resolveOpeningDealTimeline,
   resolveRoleRevealTimeline,
   resolveVictoryCinematicTimeline,
   type BoardGameVisualEvent,
@@ -61,6 +63,7 @@ import {
   type DiceRollVisualEvent,
   type FloatingTextVisualEvent,
   type MatchOutcomeView,
+  type OpeningDealPhase,
   type RoleRevealPhase,
   type ScreenShakeLevel,
   type VictoryCinematicPhase,
@@ -83,6 +86,7 @@ interface ActiveCombatAnim {
   deckThemeBurst?: BoardGameDeckId | null;
   victoryFactionBurst?: BoardGameFactionId | null;
   victoryOutcome?: MatchOutcomeView | null;
+  openingAmbientBurst?: boolean;
 }
 
 interface ActiveCombatFocusState {
@@ -1445,6 +1449,49 @@ function drawDirectionalImpactSparks(
   ctx.restore();
 }
 
+function drawOpeningAmbient(
+  ctx: CanvasRenderingContext2D,
+  anim: ActiveCombatAnim,
+  p: number,
+  reducedMotion: boolean,
+  particleScale: number,
+): void {
+  if (reducedMotion || particleScale <= 0) return;
+  const center = anim.source;
+  const fade = p < 0.12 ? p / 0.12 : p > 0.82 ? Math.max(0, (1 - p) / 0.18) : 1;
+  if (fade <= 0.01) return;
+
+  const moteCount = Math.max(8, Math.round(18 * particleScale));
+  ctx.save();
+  ctx.globalAlpha = fade * 0.62;
+
+  // Vòng ánh trăng trung tính phe (vàng hổ phách nhạt + xanh đêm) tạo cảm giác nghi thức mở màn
+  ctx.strokeStyle = 'rgba(251, 191, 36, 0.24)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(center.x, center.y, 118 + Math.sin(p * Math.PI) * 34, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+  ctx.lineWidth = 1.1;
+  ctx.beginPath();
+  ctx.arc(center.x, center.y, 164 + Math.cos(p * Math.PI * 1.4) * 18, p * 0.9, p * 0.9 + Math.PI * 1.45);
+  ctx.stroke();
+
+  for (let i = 0; i < moteCount; i++) {
+    const ang = (Math.PI * 2 * i) / moteCount + p * (i % 2 === 0 ? 0.45 : -0.35);
+    const orbit = 96 + (i % 5) * 44 + Math.sin(p * 3 + i) * 14;
+    const mx = center.x + Math.cos(ang) * orbit * 1.35;
+    const my = center.y + Math.sin(ang) * orbit * 0.72 - p * 18;
+    const r = 1.2 + (i % 3) * 0.65;
+    ctx.fillStyle = i % 3 === 0 ? '#fde68a' : i % 2 === 0 ? '#cbd5e1' : '#7dd3fc';
+    ctx.beginPath();
+    ctx.arc(mx, my, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawCombatAnimation(
   ctx: CanvasRenderingContext2D,
   anim: ActiveCombatAnim,
@@ -1460,6 +1507,11 @@ function drawCombatAnimation(
   const totalDur = Math.max(120, (anim.timings?.recoveryEndMs ?? anim.durationMs) + maxStaggerMs);
   const p = Math.max(0, Math.min(1, rawElapsed / totalDur));
   if (p >= 1) return false;
+
+  if (anim.openingAmbientBurst) {
+    drawOpeningAmbient(ctx, anim, p, reducedMotion, particleScale);
+    return true;
+  }
 
   if (anim.factionReveal) {
     drawFactionRevealBurst(ctx, anim, p, reducedMotion, particleScale);
@@ -2209,6 +2261,9 @@ export interface BoardGameVfxState {
   victoryPhase: VictoryCinematicPhase;
   victoryDurationMs: number;
   isVictoryCinematicActive: boolean;
+  openingPhase: OpeningDealPhase;
+  openingCardFlipped: boolean;
+  openingDurationMs: number;
   screenShake: ScreenShakeLevel;
   reducedMotion: boolean;
   enableBackdropBlur: boolean;
@@ -2294,9 +2349,13 @@ export function useBoardGameVfxQueue({
   const [cutInQueue, setCutInQueue] = useState<CinematicCutInVisualEvent[]>([]);
   const [activeCutIn, setActiveCutIn] = useState<CinematicCutInVisualEvent | null>(null);
   const activeCutInIdRef = useRef<string | null>(null);
+  const activeOpeningIdRef = useRef<string | null>(null);
   const [revealPhase, setRevealPhase] = useState<RoleRevealPhase>('settle');
   const [victoryPhase, setVictoryPhase] = useState<VictoryCinematicPhase>('settle');
   const [victoryDurationMs, setVictoryDurationMs] = useState<number>(2200);
+  const [openingPhase, setOpeningPhase] = useState<OpeningDealPhase>('back-to-board');
+  const [openingCardFlipped, setOpeningCardFlipped] = useState<boolean>(false);
+  const [openingDurationMs, setOpeningDurationMs] = useState<number>(3550);
   const [screenShake, setScreenShake] = useState<ScreenShakeLevel>('none');
 
   const timeoutsRef = useRef<Set<number>>(new Set());
@@ -2405,6 +2464,7 @@ export function useBoardGameVfxQueue({
     stopAllBoardGameSounds();
     trackerRef.current.acknowledgeSnapshotDice(publicGameRef.current);
     trackerRef.current.acknowledgeSnapshotVictory(publicGameRef.current);
+    trackerRef.current.acknowledgeSnapshotOpening(publicGameRef.current);
     activeCombatAnimsRef.current = [];
     if (rafRef.current !== null) {
       window.cancelAnimationFrame(rafRef.current);
@@ -2428,10 +2488,13 @@ export function useBoardGameVfxQueue({
     setSkipGeneration((n) => n + 1);
     setActiveCardDraw(null);
     activeCutInIdRef.current = null;
+    activeOpeningIdRef.current = null;
     setCutInQueue([]);
     setActiveCutIn(null);
     setRevealPhase('settle');
     setVictoryPhase('settle');
+    setOpeningPhase('back-to-board');
+    setOpeningCardFlipped(false);
     setScreenShake('none');
   }, [cancelCombatDomAnims, clearAllTimers]);
 
@@ -2577,6 +2640,139 @@ export function useBoardGameVfxQueue({
           setVictoryPhase('settle');
         }, vicTl.impactEndMs);
       }
+    } else if (nextBanner.bannerType === 'OPENING_DEAL') {
+      activeOpeningIdRef.current = nextBanner.id;
+      setRevealPhase('settle');
+      setVictoryPhase('settle');
+      const opTl = resolveOpeningDealTimeline(
+        nextBanner.durationMs,
+        reducedMotionRef.current,
+        qualityTierRef.current,
+      );
+      closeAfterMs = opTl.totalMs;
+      setOpeningDurationMs(opTl.totalMs);
+      const canFlipPersonalCard = Boolean(!nextBanner.openingIsSpectator && nextBanner.roleId);
+
+      const pulseFirstTurnHighlight = () => {
+        if (reducedMotionRef.current) return;
+        const container = containerRef.current;
+        if (!container) return;
+        const targetsToPulse: HTMLElement[] = [];
+        if (nextBanner.actorId) {
+          targetsToPulse.push(...resolvePlayerElements(container, nextBanner.actorId));
+        }
+        if (nextBanner.openingIsSelfFirstTurn && !nextBanner.openingIsSpectator) {
+          const diceTray = container.querySelector<HTMLElement>('[data-testid="bg-dice-tray"], [data-testid="bg-sandbox-dice-tray"]');
+          const rollBtn = container.querySelector<HTMLElement>('[data-testid="bg-roll-dice-btn"]');
+          if (diceTray) targetsToPulse.push(diceTray);
+          if (rollBtn) targetsToPulse.push(rollBtn);
+        }
+        for (const el of targetsToPulse) {
+          if (typeof el.animate !== 'function') continue;
+          const existing = combatDomAnimsRef.current.get(el);
+          let baseZ = el.style.zIndex;
+          if (existing) {
+            baseZ = existing.baseZ;
+            combatDomAnimsRef.current.delete(el);
+            try {
+              existing.anim.onfinish = null;
+              existing.anim.oncancel = null;
+              existing.anim.cancel();
+            } catch {
+              // ignore
+            }
+            el.style.zIndex = baseZ;
+          }
+          const anim = el.animate(
+            [
+              { boxShadow: '0 0 0 0 rgba(251,191,36,0)', transform: 'scale(1)' },
+              { boxShadow: '0 0 0 3px rgba(251,191,36,0.9), 0 0 24px rgba(56,189,248,0.55)', transform: 'scale(1.035)' },
+              { boxShadow: '0 0 0 0 rgba(251,191,36,0)', transform: 'scale(1)' },
+            ],
+            { duration: 640, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'none' },
+          );
+          const entry: TrackedDomAnim = { anim, baseZ };
+          combatDomAnimsRef.current.set(el, entry);
+          const cleanup = () => {
+            if (combatDomAnimsRef.current.get(el) === entry) {
+              combatDomAnimsRef.current.delete(el);
+              el.style.zIndex = baseZ;
+            }
+          };
+          anim.onfinish = cleanup;
+          anim.oncancel = cleanup;
+        }
+      };
+
+      if (opTl.startStingerEndMs <= 0) {
+        // Reduced Motion: bỏ rung/bay, hiển thị ngắn gọn vai riêng (hoặc niêm phong khán giả) -> vào bàn
+        setOpeningPhase('personal-reveal');
+        setOpeningCardFlipped(canFlipPersonalCard);
+        scheduleTimeout(() => {
+          if (activeCutInIdRef.current !== nextBanner.id) return;
+          setOpeningPhase('back-to-board');
+        }, opTl.personalRevealEndMs);
+      } else {
+        setOpeningPhase('start-stinger');
+        setOpeningCardFlipped(false);
+
+        if (particleScaleRef.current > 0 && qualityTierRef.current !== 'low') {
+          const container = containerRef.current;
+          const cw = container?.clientWidth || 720;
+          const ch = container?.clientHeight || 480;
+          const ambUid = `${nextBanner.id}::opening-ambient`;
+          activeCombatAnimsRef.current = [
+            ...activeCombatAnimsRef.current.filter((a) => a.uid !== ambUid),
+            {
+              uid: ambUid,
+              event: {
+                id: ambUid,
+                kind: 'COMBAT_VFX',
+                order: 6,
+                durationMs: opTl.personalRevealEndMs,
+                effect: 'HEAL_AURA',
+                sourcePlayerId: null,
+                targetPlayerIds: [],
+                shake: 'none',
+              },
+              source: { x: cw * 0.5, y: ch * 0.46 },
+              targets: [],
+              startedAt: performance.now(),
+              durationMs: opTl.personalRevealEndMs,
+              openingAmbientBurst: true,
+            },
+          ];
+          setActiveCombatCount(activeCombatAnimsRef.current.length);
+          ensureCanvasLoop();
+        }
+
+        // Beat 2: Shuffle / Deal Roles
+        scheduleTimeout(() => {
+          if (activeCutInIdRef.current !== nextBanner.id) return;
+          setOpeningPhase('shuffle-deal');
+        }, opTl.startStingerEndMs);
+
+        // Beat 3: Personal Secret Role Reveal (hoặc Spectator Sealed Notice)
+        scheduleTimeout(() => {
+          if (activeCutInIdRef.current !== nextBanner.id) return;
+          setOpeningPhase('personal-reveal');
+        }, opTl.shuffleDealEndMs);
+
+        // Lật 3D lá bài bí mật CHỈ cho người chơi hiện tại (Spectator KHÔNG BAO GIỜ lật)
+        if (canFlipPersonalCard) {
+          scheduleTimeout(() => {
+            if (activeCutInIdRef.current !== nextBanner.id) return;
+            setOpeningCardFlipped(true);
+          }, opTl.personalRevealFlipAtMs);
+        }
+
+        // Beat 4: Back To Board / First Turn Ready
+        scheduleTimeout(() => {
+          if (activeCutInIdRef.current !== nextBanner.id) return;
+          setOpeningPhase('back-to-board');
+          pulseFirstTurnHighlight();
+        }, opTl.personalRevealEndMs);
+      }
     } else {
       setRevealPhase('settle');
       setVictoryPhase('settle');
@@ -2585,6 +2781,11 @@ export function useBoardGameVfxQueue({
     scheduleTimeout(() => {
       if (activeCutInIdRef.current === nextBanner.id) {
         activeCutInIdRef.current = null;
+      }
+      if (activeOpeningIdRef.current === nextBanner.id) {
+        activeOpeningIdRef.current = null;
+        setOpeningPhase('back-to-board');
+        setOpeningCardFlipped(false);
       }
       setActiveCutIn((curr) => (curr?.id === nextBanner.id ? null : curr));
     }, closeAfterMs);
@@ -3059,6 +3260,24 @@ export function useBoardGameVfxQueue({
       return;
     }
 
+    // Nếu người chơi chủ động thao tác sớm ngay khi Opening đang chạy (VD: tung xúc xắc Turn 1),
+    // tự nhường sạch overlay Opening sang hiệu ứng bàn chơi mới để tuyệt đối không che hay chồng VFX.
+    if (activeOpeningIdRef.current && !isFreshMatchOpening(publicGame)) {
+      const openingIdToClear = activeOpeningIdRef.current;
+      activeOpeningIdRef.current = null;
+      if (activeCutInIdRef.current === openingIdToClear) {
+        activeCutInIdRef.current = null;
+      }
+      activeCombatAnimsRef.current = activeCombatAnimsRef.current.filter(
+        (a) => !a.openingAmbientBurst,
+      );
+      setActiveCombatCount(activeCombatAnimsRef.current.length);
+      setActiveCutIn((curr) => (curr?.bannerType === 'OPENING_DEAL' ? null : curr));
+      setCutInQueue((prev) => prev.filter((c) => c.bannerType !== 'OPENING_DEAL'));
+      setOpeningPhase('back-to-board');
+      setOpeningCardFlipped(false);
+    }
+
     const fresh = tracker.ingestSnapshot(publicGame, ctx);
     if (fresh.length > 0) {
       enqueueEvents(fresh);
@@ -3120,7 +3339,16 @@ export function useBoardGameVfxQueue({
   }, [cancelCombatDomAnims, clearAllTimers]);
 
   // Suy xuất đồng bộ ngay trong frame render đầu tiên sau snapshot mới:
-  // ngăn GameBoard lóe kết quả server trước khi useEffect khởi tạo animation xúc xắc.
+  // ngăn GameBoard lóe kết quả server / thẻ vai sidebar trước khi useEffect khởi tạo animation.
+  const pendingOpening =
+    seenMatchRef.current !== publicGame.matchId
+      ? trackerRef.current.peekPendingOpening(publicGame, {
+          selfPlayerId,
+          isSpectator,
+          privateView,
+          reducedMotion,
+        })
+      : null;
   const pendingDiceRoll =
     seenMatchRef.current === publicGame.matchId
       ? trackerRef.current.peekPendingDiceRoll(publicGame, reducedMotion)
@@ -3133,6 +3361,25 @@ export function useBoardGameVfxQueue({
     pendingVictory ||
     activeCutIn?.bannerType === 'VICTORY' ||
     cutInQueue.some((c) => c.bannerType === 'VICTORY');
+  const queuedOpening = !activeCutIn
+    ? cutInQueue.find((c) => c.bannerType === 'OPENING_DEAL') ?? null
+    : null;
+  const pendingOrQueuedOpening = queuedOpening ?? pendingOpening;
+  const effectiveActiveCutIn = activeCutIn ?? pendingOrQueuedOpening;
+  const effectiveOpeningPhase: OpeningDealPhase =
+    !activeCutIn && pendingOrQueuedOpening
+      ? reducedMotion
+        ? 'personal-reveal'
+        : 'start-stinger'
+      : openingPhase;
+  const effectiveOpeningCardFlipped =
+    !activeCutIn && pendingOrQueuedOpening
+      ? Boolean(
+          reducedMotion &&
+            !pendingOrQueuedOpening.openingIsSpectator &&
+            pendingOrQueuedOpening.roleId,
+        )
+      : openingCardFlipped;
   const effectiveActiveDiceRoll = pendingDiceRoll ?? activeDiceRoll;
   const effectiveDiceRollStage: DiceRollStage = pendingDiceRoll
     ? reducedMotion
@@ -3156,7 +3403,7 @@ export function useBoardGameVfxQueue({
     Boolean(effectiveActiveDiceRoll) ||
     Boolean(effectiveHighlightedLocationId) ||
     Boolean(activeCardDraw) ||
-    Boolean(activeCutIn) ||
+    Boolean(effectiveActiveCutIn) ||
     cutInQueue.length > 0;
 
   return {
@@ -3171,11 +3418,14 @@ export function useBoardGameVfxQueue({
     highlightedLocationId: effectiveHighlightedLocationId,
     skipGeneration,
     activeCardDraw,
-    activeCutIn,
+    activeCutIn: effectiveActiveCutIn,
     revealPhase,
     victoryPhase,
     victoryDurationMs,
     isVictoryCinematicActive,
+    openingPhase: effectiveOpeningPhase,
+    openingCardFlipped: effectiveOpeningCardFlipped,
+    openingDurationMs,
     screenShake,
     reducedMotion,
     enableBackdropBlur,
@@ -3233,6 +3483,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
   }, [containerRef, selectedTargetId, sourcePlayerId, playersLocationSig]);
 
   const cutIn = vfx.activeCutIn;
+  const isOpeningDealCutIn = cutIn?.bannerType === 'OPENING_DEAL';
   const isRoleRevealCutIn = cutIn?.bannerType === 'ROLE_REVEAL';
   const isVictoryCutIn = cutIn?.bannerType === 'VICTORY';
   const revealActorId = isRoleRevealCutIn ? cutIn?.actorId ?? null : null;
@@ -4298,7 +4549,405 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
         );
       })()}
 
-      {cutIn && !isRoleRevealCutIn && !isVictoryCutIn && (
+      {/* LỚP 5C: PHASE 4 — OPENING & SECRET ROLE DEAL CINEMATIC (2.5–4.0s, 4 NHỊP) */}
+      {cutIn && isOpeningDealCutIn && (() => {
+        const isSpectatorOpening = Boolean(cutIn.openingIsSpectator || !cutIn.roleId);
+        const opPhase: OpeningDealPhase = vfx.openingPhase;
+        const cardFlipped = !isSpectatorOpening && (vfx.reducedMotion || vfx.openingCardFlipped);
+        const playerCount = Math.max(4, Math.min(8, cutIn.openingPlayerCount ?? publicGame.players.length ?? 4));
+        const isBackToBoard = opPhase === 'back-to-board';
+        const personalTheme = !isSpectatorOpening && cutIn.faction ? MIDNIGHT_FACTION_TOKENS[cutIn.faction] : null;
+        const personalPrimary = personalTheme?.primaryHex ?? '#f59e0b';
+        const personalSecondary = personalTheme?.secondaryHex ?? '#fde68a';
+        const dealCards = Array.from({ length: playerCount }, (_, idx) => {
+          const t = playerCount > 1 ? idx / (playerCount - 1) - 0.5 : 0;
+          // Quạt rộng tách hẳn khỏi chồng bài phía trên để cả 4–8 lá bài úp đều đọc rõ 100%
+          const dx = Math.round(t * (playerCount >= 7 ? 560 : 420));
+          const dy = Math.round(74 + Math.abs(t) * 26);
+          const rot = Math.round(t * 22);
+          return { idx, dx, dy, rot, delayMs: idx * 45 };
+        });
+
+        return (
+          <div
+            data-testid="bg-vfx-opening-stage"
+            data-opening-phase={opPhase}
+            data-opening-card-flipped={String(cardFlipped)}
+            data-spectator={String(isSpectatorOpening)}
+            className="pointer-events-none absolute inset-0 z-[32]"
+          >
+            {/* Màn đêm Midnight Noir + vignette (không dùng full-screen backdrop-blur để giữ FPS mượt trên mọi GPU) */}
+            <div
+              data-testid="bg-vfx-opening-backdrop"
+              aria-hidden="true"
+              className={`pointer-events-none absolute inset-0 transition-opacity duration-300 ease-out ${
+                isBackToBoard ? 'opacity-0' : 'opacity-100'
+              }`}
+              style={{
+                background:
+                  opPhase === 'personal-reveal' && cardFlipped
+                    ? [
+                        `radial-gradient(ellipse 580px 400px at 50% 48%, ${personalPrimary}30 0%, ${personalSecondary}14 30%, rgba(2,6,23,0.95) 68%, rgba(2,6,23,0.98) 100%)`,
+                        'radial-gradient(circle at 50% 50%, rgba(2,6,23,0.18) 0%, rgba(2,6,23,0.82) 100%)',
+                      ].join(', ')
+                    : [
+                        'radial-gradient(ellipse 600px 380px at 50% 48%, rgba(56,189,248,0.14) 0%, rgba(251,191,36,0.09) 26%, rgba(2,6,23,0.95) 66%, rgba(2,6,23,0.98) 100%)',
+                        'radial-gradient(circle at 50% 50%, rgba(2,6,23,0.22) 0%, rgba(2,6,23,0.84) 100%)',
+                      ].join(', '),
+              }}
+            />
+
+            {/* NHỊP 1: GAME START STINGER ("ĐÊM XUỐNG TẠI KTX…" / "VÁN ĐẤU BẮT ĐẦU") */}
+            {opPhase === 'start-stinger' && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+                <div
+                  className={`relative flex w-full max-w-2xl flex-col items-center rounded-3xl border border-amber-400/45 bg-slate-950/92 px-6 py-8 sm:px-10 sm:py-10 text-center shadow-2xl ${blurCls} ${
+                    vfx.reducedMotion ? '' : 'bg-vfx-opening-stinger-enter'
+                  }`}
+                  style={{
+                    boxShadow: '0 30px 90px -12px rgba(2,6,23,0.98), 0 0 54px rgba(251,191,36,0.22)',
+                  }}
+                >
+                  {/* Huy hiệu trăng đêm trung tính phe */}
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-amber-300/60 bg-slate-900/95 shadow-lg">
+                    <svg viewBox="0 0 48 48" className="h-9 w-9" aria-hidden="true">
+                      <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(251,191,36,0.45)" strokeWidth="1.5" strokeDasharray="3 3" />
+                      <path
+                        d="M29.5 13.2a11.5 11.5 0 1 0 5.3 20.6A10 10 0 0 1 29.5 13.2Z"
+                        fill="#fde68a"
+                      />
+                      <circle cx="32" cy="17" r="1.8" fill="#7dd3fc" />
+                    </svg>
+                  </div>
+
+                  <span className="rounded-full border border-amber-400/50 bg-amber-950/60 px-3.5 py-0.5 text-[11px] font-black uppercase tracking-[0.22em] text-amber-200">
+                    🌙 BÓNG ĐÊM KTX · KHAI CUỘC
+                  </span>
+
+                  <h2
+                    data-testid="bg-vfx-opening-title"
+                    className="mt-3.5 text-2xl sm:text-4xl font-black tracking-wide text-white"
+                    style={{ textShadow: '0 4px 28px rgba(251,191,36,0.45)' }}
+                  >
+                    {cutIn.title}
+                  </h2>
+
+                  {/* Đường quét ánh sáng ngang kiểu Anime Noir */}
+                  <div className="relative my-4 h-[2px] w-56 sm:w-72 overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className={`h-full w-full bg-gradient-to-r from-transparent via-amber-300 to-transparent ${
+                        vfx.reducedMotion ? '' : 'bg-vfx-opening-scanline'
+                      }`}
+                    />
+                  </div>
+
+                  <p className="text-xs sm:text-sm font-bold text-slate-200">
+                    Ván đấu bắt đầu · <span className="text-amber-300">{playerCount} sinh viên</span> bước vào màn đêm KTX
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* NHỊP 2: SHUFFLE / DEAL ROLES (BÀI ÚP 100% TRUNG TÍNH — KHÔNG LỘ BẤT KỲ PHE NÀO) */}
+            {opPhase === 'shuffle-deal' && (
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-4">
+                <div className="relative flex h-72 sm:h-80 w-full max-w-3xl items-center justify-center">
+                  {/* Chồng bài úp ở phía trên tâm xáo gọn */}
+                  <div
+                    className={`relative z-20 h-32 w-24 sm:h-36 sm:w-28 rounded-xl border-2 border-amber-300/80 bg-slate-950 shadow-2xl overflow-hidden ${
+                      vfx.reducedMotion ? '-translate-y-12' : 'bg-vfx-opening-deal-deck'
+                    }`}
+                    style={{ boxShadow: '0 18px 46px rgba(2,6,23,0.95), 0 0 28px rgba(251,191,36,0.28)' }}
+                  >
+                    <img
+                      src={MIDNIGHT_CARD_BACK_ART}
+                      alt="Chồng hồ sơ vai bí mật"
+                      className="h-full w-full object-cover opacity-90"
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-slate-950/55"
+                    />
+                    <div className="absolute inset-x-1.5 bottom-2 rounded-md border border-amber-300/40 bg-slate-950/88 py-1 text-center text-[9px] font-black uppercase tracking-widest text-amber-200">
+                      HỒ SƠ KÍN
+                    </div>
+                  </div>
+
+                  {/* Các lá bài úp bay tỏa thành quạt rộng phía dưới chồng bài (hoàn toàn úp mặt lưng) */}
+                  {dealCards.map((c) => (
+                    <div
+                      key={c.idx}
+                      data-testid="bg-vfx-opening-dealt-card"
+                      className={`absolute z-10 h-32 w-[88px] sm:h-36 sm:w-[98px] overflow-hidden rounded-xl border border-amber-300/70 bg-slate-950 shadow-xl ${
+                        vfx.reducedMotion ? '' : 'bg-vfx-opening-deal-card'
+                      }`}
+                      style={
+                        {
+                          '--deal-x': `${c.dx}px`,
+                          '--deal-y': `${c.dy}px`,
+                          '--deal-rot': `${c.rot}deg`,
+                          '--deal-delay': `${c.delayMs}ms`,
+                          boxShadow: '0 14px 32px rgba(2,6,23,0.92), 0 0 16px rgba(56,189,248,0.26)',
+                        } as React.CSSProperties
+                      }
+                    >
+                      <img
+                        src={MIDNIGHT_CARD_BACK_ART}
+                        alt="Thẻ vai niêm phong"
+                        className="h-full w-full object-cover opacity-92"
+                      />
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-0 bg-gradient-to-t from-slate-950/88 via-transparent to-slate-950/45"
+                      />
+                      <div className="absolute inset-x-1 bottom-1.5 text-center text-[9px] font-extrabold uppercase tracking-wider text-slate-100">
+                        Ghế #{c.idx + 1}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div
+                  data-testid="bg-vfx-opening-deal-caption"
+                  className={`mt-4 rounded-2xl border border-slate-700/90 bg-slate-950/94 px-5 py-2.5 text-center shadow-xl ${blurCls}`}
+                >
+                  <p className="text-xs sm:text-sm font-black uppercase tracking-[0.18em] text-amber-200">
+                    🃏 ĐANG XÁO &amp; CHIA VAI BÍ MẬT…
+                  </p>
+                  <p className="mt-0.5 text-[11px] sm:text-xs font-semibold text-slate-300">
+                    Mỗi sinh viên nhận 1 lá bài úp niêm phong riêng biệt
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* NHỊP 3: PERSONAL SECRET ROLE REVEAL (CHỈ NGƯỜI CHƠI HIỆN TẠI) HOẶC NIÊM PHONG KHÁN GIẢ */}
+            {opPhase === 'personal-reveal' && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+                {!isSpectatorOpening && cutIn.roleId ? (
+                  <div
+                    className={`relative flex w-full max-w-2xl flex-col sm:flex-row items-center gap-5 sm:gap-7 rounded-3xl border-2 bg-slate-950/95 px-6 py-6 sm:px-8 sm:py-7 shadow-2xl ${blurCls} ${
+                      vfx.reducedMotion ? '' : 'bg-vfx-opening-secret-enter'
+                    }`}
+                    style={{
+                      borderColor: cardFlipped ? personalSecondary : 'rgba(251,191,36,0.65)',
+                      boxShadow: cardFlipped
+                        ? `0 28px 86px -10px ${personalPrimary}cc, 0 0 46px ${personalSecondary}55`
+                        : '0 26px 76px -12px rgba(2,6,23,0.96), 0 0 38px rgba(251,191,36,0.28)',
+                    }}
+                  >
+                    {/* Thẻ bài 3D vai bí mật nổi bật trên nền tối */}
+                    <div className="relative shrink-0">
+                      <div
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute -inset-5 rounded-3xl ${
+                          vfx.reducedMotion ? 'opacity-65' : 'bg-vfx-opening-secret-halo'
+                        }`}
+                        style={{
+                          background: cardFlipped
+                            ? `radial-gradient(circle, ${personalSecondary}66 0%, ${personalPrimary}38 52%, transparent 78%)`
+                            : 'radial-gradient(circle, rgba(251,191,36,0.44) 0%, rgba(56,189,248,0.18) 54%, transparent 78%)',
+                        }}
+                      />
+                      <div
+                        data-testid="bg-vfx-opening-secret-card"
+                        className="mn-card-perspective relative w-36 sm:w-44 aspect-[2/3]"
+                      >
+                        <div
+                          className="mn-card-flip-stage relative h-full w-full rounded-2xl shadow-2xl"
+                          style={{
+                            transform: cardFlipped
+                              ? 'rotateY(0deg) scale(1.03)'
+                              : 'rotateY(180deg) rotateZ(-2deg) scale(0.95)',
+                            transitionDuration: vfx.reducedMotion ? '120ms' : '420ms',
+                          }}
+                        >
+                          {/* Mặt trước: Chân dung vai bí mật của CHÍNH NGƯỜI CHƠI */}
+                          <div
+                            className="mn-card-face absolute inset-0 overflow-hidden rounded-2xl border-2 bg-slate-900 shadow-2xl"
+                            style={{
+                              borderColor: personalSecondary,
+                              boxShadow: `0 20px 48px rgba(2,6,23,0.95), 0 0 32px ${personalPrimary}99`,
+                            }}
+                          >
+                            {cutIn.portraitSrc ? (
+                              <img
+                                src={cutIn.portraitSrc}
+                                alt={cutIn.roleName ?? 'Vai bí mật của bạn'}
+                                className="h-full w-full object-cover object-top"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center bg-slate-900">
+                                <RolePortraitSvg roleId={cutIn.roleId} faction={cutIn.faction} size={118} />
+                              </div>
+                            )}
+                            {vfx.enableFoil && cardFlipped && (
+                              <div
+                                aria-hidden="true"
+                                className="mn-foil-sweep pointer-events-none absolute inset-0 opacity-35"
+                                style={{
+                                  backgroundImage:
+                                    'linear-gradient(115deg, transparent 22%, rgba(255,255,255,0.58) 48%, transparent 74%)',
+                                }}
+                              />
+                            )}
+                            <div
+                              aria-hidden="true"
+                              className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/95 via-slate-950/60 to-transparent"
+                            />
+                            {cutIn.openingSecretMaxHp && (
+                              <span className="absolute top-2 right-2 rounded-full border border-white/25 bg-slate-950/90 px-2 py-0.5 text-[10px] font-black text-rose-200 shadow">
+                                ♥ {cutIn.openingSecretMaxHp} HP
+                              </span>
+                            )}
+                            {cutIn.faction && (
+                              <div className="absolute right-2 bottom-2 rounded-full border border-white/25 bg-slate-950/90 p-1.5 shadow-lg">
+                                <FactionCrestSvg faction={cutIn.faction} size={24} />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Mặt lưng niêm phong khi Anticipation */}
+                          <div className="mn-card-face mn-card-face-back absolute inset-0 overflow-hidden rounded-2xl border-2 border-amber-300/80 bg-slate-950 shadow-xl">
+                            <img
+                              src={MIDNIGHT_CARD_BACK_ART}
+                              alt="Hồ sơ bí mật niêm phong"
+                              className="absolute inset-0 h-full w-full object-cover opacity-85"
+                            />
+                            <div
+                              aria-hidden="true"
+                              className="absolute inset-0 bg-gradient-to-t from-slate-950/92 via-slate-950/35 to-slate-950/80"
+                            />
+                            <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-3 text-center">
+                              <span className="text-2xl">🔒</span>
+                              <span className="mt-1.5 rounded bg-slate-950/85 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-amber-200">
+                                NIÊM PHONG
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hồ sơ danh tính riêng tư */}
+                    <div className="relative z-10 min-w-0 flex-1 text-center sm:text-left">
+                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                        <span className="rounded-full border border-amber-400/65 bg-amber-950/75 px-3 py-0.5 text-[10px] sm:text-xs font-black uppercase tracking-widest text-amber-200">
+                          🔒 VAI BÍ MẬT CỦA BẠN
+                        </span>
+                        {cardFlipped && personalTheme && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] sm:text-xs font-extrabold bg-slate-900/90"
+                            style={{ borderColor: `${personalPrimary}aa`, color: personalSecondary }}
+                          >
+                            <FactionCrestSvg faction={cutIn.faction} size={15} />
+                            <span>{personalTheme.label}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {!cardFlipped ? (
+                        <div className="mt-3 space-y-1.5">
+                          <p className="text-xl sm:text-2xl font-black text-white">
+                            Đang mở niêm phong hồ sơ…
+                          </p>
+                          <p className="text-xs sm:text-sm font-semibold text-slate-300">
+                            Hãy chuẩn bị giữ kín danh tính của bạn trong đêm nay
+                          </p>
+                        </div>
+                      ) : (
+                        <div className={`mt-2.5 space-y-2 ${vfx.reducedMotion ? '' : 'bg-vfx-reveal-text-lock'}`}>
+                          <h3 className="text-2xl sm:text-3xl font-black text-white leading-tight drop-shadow">
+                            {cutIn.roleName}
+                          </h3>
+                          {cutIn.skillName && (
+                            <p className="text-xs sm:text-sm font-extrabold" style={{ color: personalSecondary }}>
+                              ✦ Kỹ năng: {cutIn.skillName}
+                            </p>
+                          )}
+                          {cutIn.openingSecretGoalHint && (
+                            <p className="rounded-xl border border-slate-700/80 bg-slate-900/85 px-3 py-2 text-xs font-medium text-slate-200 leading-relaxed">
+                              {cutIn.openingSecretGoalHint}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <p
+                        data-testid="bg-vfx-opening-privacy-subtitle"
+                        className="mt-3 text-[11px] sm:text-xs font-bold text-amber-200/90"
+                      >
+                        🤫 Hãy giữ bí mật · Chỉ hiển thị riêng trên thiết bị của bạn
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  /* CHẾ ĐỘ KHÁN GIẢ: TUYỆT ĐỐI KHÔNG RENDER THẺ VAI, CHÂN DUNG, TÊN VAI HAY PHE */
+                  <div
+                    data-testid="bg-vfx-opening-spectator-notice"
+                    className={`relative flex w-full max-w-lg flex-col items-center rounded-3xl border border-sky-400/55 bg-slate-950/94 px-6 py-7 text-center shadow-2xl ${blurCls} ${
+                      vfx.reducedMotion ? '' : 'bg-vfx-opening-secret-enter'
+                    }`}
+                    style={{
+                      boxShadow: '0 26px 76px -10px rgba(2,6,23,0.96), 0 0 36px rgba(56,189,248,0.24)',
+                    }}
+                  >
+                    <div className="relative mb-4 flex h-28 w-36 items-center justify-center">
+                      <div className="absolute -translate-x-5 -rotate-6 h-24 w-16 overflow-hidden rounded-xl border border-slate-600/80 bg-slate-900 shadow-lg">
+                        <img src={MIDNIGHT_CARD_BACK_ART} alt="Thẻ vai niêm phong" className="h-full w-full object-cover opacity-85" />
+                      </div>
+                      <div className="absolute translate-x-5 rotate-6 h-24 w-16 overflow-hidden rounded-xl border border-sky-400/60 bg-slate-900 shadow-lg">
+                        <img src={MIDNIGHT_CARD_BACK_ART} alt="Thẻ vai niêm phong" className="h-full w-full object-cover opacity-90" />
+                      </div>
+                      <div className="relative z-10 flex h-11 w-11 items-center justify-center rounded-full border border-sky-300/70 bg-slate-950/95 text-lg shadow-lg">
+                        👁️
+                      </div>
+                    </div>
+
+                    <span className="rounded-full border border-sky-400/55 bg-sky-950/75 px-3 py-0.5 text-[10px] sm:text-xs font-black uppercase tracking-widest text-sky-200">
+                      👁️ CHẾ ĐỘ KHÁN GIẢ · BẢO MẬT VAI
+                    </span>
+                    <h3 className="mt-3 text-xl sm:text-2xl font-black text-white">
+                      Các vai bí mật đã được chia kín
+                    </h3>
+                    <p className="mt-1.5 text-xs sm:text-sm font-medium text-slate-300">
+                      Danh tính nhân vật chỉ hiển thị riêng cho từng người chơi. Bàn đấu chuẩn bị khai cuộc!
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* NHỊP 4: BACK TO BOARD / FIRST TURN READY (BÀN CHƠI SÁNG RÕ + HIGHLIGHT NGƯỜI ĐI TRƯỚC) */}
+            {opPhase === 'back-to-board' && (
+              <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-3">
+                <div
+                  data-testid="bg-vfx-opening-ready-banner"
+                  className={`flex items-center gap-3 rounded-2xl border-2 border-amber-400/80 bg-slate-950/95 px-4 py-2.5 shadow-2xl ${blurCls} ${
+                    vfx.reducedMotion ? '' : 'bg-vfx-opening-ready-enter'
+                  }`}
+                  style={{
+                    boxShadow: '0 18px 46px -8px rgba(2,6,23,0.95), 0 0 28px rgba(251,191,36,0.34)',
+                  }}
+                >
+                  <span className="rounded-lg bg-amber-400 px-2.5 py-0.5 text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-950">
+                    {cutIn.openingIsSelfFirstTurn && !isSpectatorOpening
+                      ? '⚡ LƯỢT ĐẦU · BẠN ĐI TRƯỚC'
+                      : '⚡ LƯỢT ĐẦU TIÊN'}
+                  </span>
+                  <p className="text-xs sm:text-sm font-extrabold text-white">
+                    {cutIn.openingIsSelfFirstTurn && !isSpectatorOpening
+                      ? 'Bàn đấu đã sẵn sàng — hãy tung xúc xắc 1d6 + 1d4!'
+                      : `${cutIn.openingFirstPlayerName ?? 'Người chơi 1'} bắt đầu lượt tung xúc xắc đầu tiên!`}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {cutIn && !isRoleRevealCutIn && !isVictoryCutIn && !isOpeningDealCutIn && (
         <div
           data-testid="bg-vfx-cutin"
           data-banner-type={cutIn.bannerType}

@@ -12,13 +12,16 @@ const {
   VisualEventTracker,
   buildDiceRollEventFromSnapshot,
   computeDiceSig,
+  computeOpeningDealEventId,
   computeVictoryEventId,
   extractVisualEventsFromDiff,
+  isFreshMatchOpening,
   resolveCombatPhaseAt,
   resolveCombatSequenceTimings,
   resolveMatchOutcomeForViewer,
   resolveMultiTargetStaggerMs,
   resolveNonOverlappingPopupPos,
+  resolveOpeningDealTimeline,
   resolveRoleRevealTimeline,
   resolveVictoryCinematicTimeline,
 } = require('../features/boardgame/ui/vfx-queue.ts');
@@ -1872,5 +1875,178 @@ test('Cinematic V2 Phase 3.1 (23) — Multi-Target Stagger, 8-Pawn Crowded Anti-
   assert.equal(playSoundForVisualEvent({ ...h2, id: 'p31-heal-3' }, 30160), true, 'Heal after 120ms cooldown must play cleanly');
   const diag = getBoardGameAudioDiagnostics();
   assert.equal(diag.coalescedCount, 2);
+  stopAllBoardGameSounds();
+});
+
+test('Cinematic V2 Phase 4 (24) — Opening & Secret Role Deal 4-Beat Timeline (2.5-4.0s), Quality Tiers & Reduced Motion', () => {
+  // High tier default 3550ms -> strictly within 2500..4000ms with monotonically increasing 4 beats
+  const high = resolveOpeningDealTimeline(3550, false, 'high');
+  assert.ok(high.totalMs >= 2500 && high.totalMs <= 4000, `High opening totalMs=${high.totalMs} must be 2.5-4.0s`);
+  assert.ok(
+    high.startStingerEndMs > 0 &&
+      high.startStingerEndMs < high.shuffleDealEndMs &&
+      high.shuffleDealEndMs < high.personalRevealFlipAtMs &&
+      high.personalRevealFlipAtMs < high.personalRevealEndMs &&
+      high.personalRevealEndMs < high.totalMs,
+    'Opening 4 beats + 3D flip timing must be strictly ordered',
+  );
+
+  // Balanced & Low tiers remain concise within 2500..4000ms
+  const balanced = resolveOpeningDealTimeline(3550, false, 'balanced');
+  const low = resolveOpeningDealTimeline(3550, false, 'low');
+  assert.ok(balanced.totalMs >= 2500 && balanced.totalMs <= high.totalMs);
+  assert.ok(low.totalMs >= 2500 && low.totalMs <= balanced.totalMs);
+
+  // Extreme input clamping
+  assert.equal(resolveOpeningDealTimeline(900, false, 'high').totalMs, 2500);
+  assert.equal(resolveOpeningDealTimeline(9999, false, 'high').totalMs, 4000);
+
+  // Reduced Motion collapses opening <= 280ms with instant stinger/deal skip
+  const rm = resolveOpeningDealTimeline(3550, true, 'high');
+  assert.ok(rm.totalMs <= 280, `Reduced motion opening must be <= 280ms, got ${rm.totalMs}`);
+  assert.equal(rm.startStingerEndMs, 0);
+  assert.equal(rm.shuffleDealEndMs, 0);
+  assert.equal(rm.personalRevealFlipAtMs, 0);
+});
+
+test('Cinematic V2 Phase 4 (25) — Fresh Opening Deal, Strict Spectator P0 Isolation, F5/Mid-Game Non-Replay & Neutral Audio', () => {
+  const freshMatch = makePubState({
+    matchId: 'phase4-fresh-match-1',
+    round: 1,
+    turnNumber: 1,
+    turnPhase: 'ROLL_MOVE',
+    activePlayerId: 'p1',
+    lastDiceRoll: null,
+    lastInvestigation: null,
+    lastRevealEvent: null,
+    deadCount: 0,
+    players: makePubState().players.map((p) => ({
+      ...p,
+      woundsTaken: 0,
+      attacksMade: 0,
+      investigationsCount: 0,
+      revealedRoleId: null,
+      revealedFaction: null,
+      handCount: 0,
+    })),
+  });
+  assert.equal(isFreshMatchOpening(freshMatch), true);
+
+  const p1Private = {
+    playerId: 'p1',
+    roleId: 'suong-gac-cong',
+    roleName: 'Dũng "Gác Cổng"',
+    faction: 'mist-order',
+    hp: 14,
+    maxHp: 14,
+    woundsTaken: 0,
+    skillCooldown: 0,
+    skillUsedOnce: false,
+    revealed: false,
+    secretGoalText: 'Hội Bóng Đêm thắng khi loại toàn bộ Đội Săn Đêm.',
+    protegePlayerId: null,
+    protegeDisplayName: null,
+    avengedProtegeKiller: false,
+    investigatedTargetIds: [],
+    hand: [],
+    equipped: [],
+    privateClues: [],
+  };
+
+  // 1) Player receives personal secret role deal ONLY for selfPlayerId (including synchronous Frame-1 peek)
+  const p1Tracker = new VisualEventTracker();
+  const p1Peek = p1Tracker.peekPendingOpening(freshMatch, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+    privateView: p1Private,
+  });
+  assert.ok(p1Peek && p1Peek.bannerType === 'OPENING_DEAL' && p1Peek.roleId === 'suong-gac-cong', 'Frame-1 peekPendingOpening must prevent pre-opening board/role flicker');
+  const p1Events = p1Tracker.seedBaseline(freshMatch, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+    privateView: p1Private,
+  });
+  assert.equal(p1Tracker.peekPendingOpening(freshMatch, { selfPlayerId: 'p1', isSpectator: false, privateView: p1Private }), null, 'Once seeded, peekPendingOpening must return null');
+  assert.equal(p1Events.length, 1);
+  const p1Ev = p1Events[0];
+  assert.equal(p1Ev.kind, 'CINEMATIC_CUTIN');
+  assert.equal(p1Ev.bannerType, 'OPENING_DEAL');
+  assert.equal(p1Ev.id, computeOpeningDealEventId('phase4-fresh-match-1'));
+  assert.equal(p1Ev.openingIsSpectator, false);
+  assert.equal(p1Ev.openingIsSelfFirstTurn, true);
+  assert.equal(p1Ev.roleId, 'suong-gac-cong');
+  assert.equal(p1Ev.roleName, 'Dũng "Gác Cổng"');
+  assert.equal(p1Ev.faction, 'mist-order');
+  assert.equal(p1Ev.openingSecretMaxHp, 14);
+  assert.ok(p1Ev.portraitSrc && p1Ev.portraitSrc.includes('dung'), 'Player secret reveal must load own portrait');
+  assert.equal(p1Ev.openingPlayerCount, 4);
+
+  // 2) Duplicate sync / re-seeding same tracker NEVER replays opening
+  assert.equal(
+    p1Tracker.ingestSnapshot(freshMatch, { selfPlayerId: 'p1', isSpectator: false, privateView: p1Private }).length,
+    0,
+  );
+  assert.equal(
+    p1Tracker.seedBaseline(freshMatch, { selfPlayerId: 'p1', isSpectator: false, privateView: p1Private }).length,
+    0,
+    'Re-seeding after opening must NEVER replay Opening cinematic',
+  );
+
+  // 3) Spectator P0 Isolation: even if privateView is mistakenly passed, spectator gets ZERO secret fields
+  const specTracker = new VisualEventTracker();
+  const specEvents = specTracker.seedBaseline(freshMatch, {
+    selfPlayerId: 'spec-9',
+    isSpectator: true,
+    privateView: p1Private,
+  });
+  assert.equal(specEvents.length, 1);
+  const specEv = specEvents[0];
+  assert.equal(specEv.bannerType, 'OPENING_DEAL');
+  assert.equal(specEv.openingIsSpectator, true);
+  assert.equal(specEv.openingIsSelfFirstTurn, false);
+  assert.equal(specEv.roleId, null, 'Spectator MUST NEVER receive roleId');
+  assert.equal(specEv.roleName, null, 'Spectator MUST NEVER receive roleName');
+  assert.equal(specEv.faction, null, 'Spectator MUST NEVER receive faction');
+  assert.equal(specEv.portraitSrc, null, 'Spectator MUST NEVER receive portraitSrc');
+  assert.equal(specEv.skillName, null, 'Spectator MUST NEVER receive skillName');
+  assert.equal(specEv.openingSecretMaxHp, null, 'Spectator MUST NEVER receive secret maxHp');
+  assert.equal(specEv.openingSecretGoalHint, null, 'Spectator MUST NEVER receive secret goal');
+
+  // 4) Mismatched privateView.playerId is rejected for safety
+  const p2Tracker = new VisualEventTracker();
+  const p2Events = p2Tracker.seedBaseline(freshMatch, {
+    selfPlayerId: 'p2',
+    isSpectator: false,
+    privateView: p1Private, // belongs to p1, NOT p2!
+  });
+  assert.equal(p2Events.length, 1);
+  assert.equal(p2Events[0].roleId, null, 'Mismatched privateView must NEVER leak another player role');
+  assert.equal(p2Events[0].faction, null);
+
+  // 5) Mid-match / Post-roll Turn-1 reconnect NEVER plays Opening
+  const postRollTurn1 = { ...freshMatch, turnPhase: 'LOCATION_ACTION' };
+  assert.equal(isFreshMatchOpening(postRollTurn1), false);
+  const reconnectTracker = new VisualEventTracker();
+  assert.equal(
+    reconnectTracker.seedBaseline(postRollTurn1, { selfPlayerId: 'p1', isSpectator: false, privateView: p1Private }).length,
+    0,
+    'Reconnect after Turn 1 dice roll must NOT play Opening',
+  );
+  assert.equal(
+    reconnectTracker.hasEventBeenSeen(computeOpeningDealEventId(freshMatch.matchId)),
+    true,
+    'Mid-match reconnect must permanently lock opening-deal ID',
+  );
+
+  // 6) Neutral Opening Audio triggers & dedupes cleanly by event.id
+  resetBoardGameAudioForTests();
+  setBoardGameSoundMuted(false);
+  assert.equal(playSoundForVisualEvent(p1Ev, 40000), true, 'Player Opening audio must trigger');
+  assert.equal(playSoundForVisualEvent(p1Ev, 40500), false, 'Duplicate Opening event.id must be deduped');
+  assert.equal(
+    playSoundForVisualEvent({ ...specEv, id: 'phase4-spec-audio-2' }, 40800),
+    true,
+    'Spectator Opening audio must trigger cleanly',
+  );
   stopAllBoardGameSounds();
 });

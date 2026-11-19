@@ -1,0 +1,161 @@
+{
+  "phase": "Phase 4 — Opening & Secret Role Deal Cinematic",
+  "capturedAt": "2026-11-19T11:20:14.647Z",
+  "viewport": "1920x1080",
+  "beforeBaseline": {
+    "openingStageDetected": false,
+    "fps": {
+      "sampleDurationSec": 6.69,
+      "framesCount": 69,
+      "fpsMean": 10.31,
+      "fpsMinPerSec": 2,
+      "fpsMaxPerSec": 15,
+      "p50FrameMs": 66.7,
+      "p95FrameMs": 199.9,
+      "p99FrameMs": 1199.9,
+      "frameDropsOver33ms": 69,
+      "frameDropsOver50ms": 65
+    },
+    "video": {
+      "file": "before-opening-role-deal.mp4",
+      "sizeBytes": 363919,
+      "tracks": [
+        {
+          "width": 1920,
+          "height": 1080,
+          "handler": "vide"
+        },
+        {
+          "width": 0,
+          "height": 0,
+          "handler": "soun"
+        }
+      ],
+      "mvhdDurationSec": 0
+    }
+  },
+  "afterPlayerOpening": {
+    "hasAudioTrack": true,
+    "openingDurationMs": 3593.2,
+    "phasesSeen": [
+      "start-stinger",
+      "shuffle-deal",
+      "personal-reveal",
+      "back-to-board"
+    ],
+    "phaseTimestampsMs": {
+      "start-stinger": 982.7,
+      "shuffle-deal": 1736,
+      "personal-reveal": 2588.9,
+      "back-to-board": 3937.9
+    },
+    "cardFlippedAtMs": 2908.2,
+    "turn1ActionSucceeded": true,
+    "audioStats": {
+      "contextsCreated": 2,
+      "oscillatorsCreated": 165,
+      "buffersStarted": 13
+    },
+    "fps": {
+      "sampleDurationSec": 6.94,
+      "framesCount": 42,
+      "fpsMean": 6.05,
+      "fpsMinPerSec": 2,
+      "fpsMaxPerSec": 10,
+      "p50FrameMs": 83.4,
+      "p95FrameMs": 300,
+      "p99FrameMs": 1583.3,
+      "frameDropsOver33ms": 40,
+      "frameDropsOver50ms": 40
+    },
+    "video": {
+      "file": "after-opening-role-deal.mp4",
+      "sizeBytes": 348520,
+      "tracks": [
+        {
+          "width": 1920,
+          "height": 1080,
+          "handler": "vide"
+        },
+        {
+          "width": 0,
+          "height": 0,
+          "handler": "soun"
+        }
+      ],
+      "mvhdDurationSec": 0
+    }
+  },
+  "afterSpectatorCheck": {
+    "hasAudioTrack": true,
+    "openingDurationMs": 2939.9,
+    "phasesSeen": [
+      "start-stinger",
+      "shuffle-deal",
+      "personal-reveal",
+      "back-to-board"
+    ],
+    "phaseTimestampsMs": {
+      "start-stinger": 814.7,
+      "shuffle-deal": 1436.7,
+      "personal-reveal": 2130.8,
+      "back-to-board": 3233.7
+    },
+    "spectatorAttr": "true",
+    "cardFlippedAtMs": null,
+    "privacyViolations": [],
+    "privateViewNonNullCount": 0,
+    "audioStats": {
+      "contextsCreated": 2,
+      "oscillatorsCreated": 144,
+      "buffersStarted": 7
+    },
+    "fps": {
+      "sampleDurationSec": 4.69,
+      "framesCount": 53,
+      "fpsMean": 11.29,
+      "fpsMinPerSec": 3,
+      "fpsMaxPerSec": 16,
+      "p50FrameMs": 66.6,
+      "p95FrameMs": 333.2,
+      "p99FrameMs": 400,
+      "frameDropsOver33ms": 50,
+      "frameDropsOver50ms": 34
+    },
+    "video": {
+      "file": "spectator-check.mp4",
+      "sizeBytes": 345336,
+      "tracks": [
+        {
+          "width": 1920,
+          "height": 1080,
+          "handler": "vide"
+        },
+        {
+          "width": 0,
+          "height": 0,
+          "handler": "soun"
+        }
+      ],
+      "mvhdDurationSec": 0
+    }
+  },
+  "reliabilityChecks": {
+    "skipAnimationDismissMs": 37,
+    "f5MidTurnNoReplay": true,
+    "f5UntouchedTurn1NoReplay": true,
+    "consoleErrorsCount": 0,
+    "pageErrorsCount": 0,
+    "securityAuditErrorsCount": 0
+  },
+  "screenshots": [
+    "screenshots/before-01-abrupt-start.png",
+    "screenshots/after-01-start-stinger.png",
+    "screenshots/after-02-shuffle-deal.png",
+    "screenshots/after-03-personal-reveal.png",
+    "screenshots/after-04-back-to-board.png",
+    "screenshots/after-05-spectator-sealed.png",
+    "screenshots/after-06-after-skip.png",
+    "screenshots/after-07-f5-no-replay.png"
+  ]
+}

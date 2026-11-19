@@ -1,0 +1,49 @@
+{
+  "capturedAt": "2026-11-19T11:07:25.376Z",
+  "mode": "before",
+  "hasAudioTrack": true,
+  "openingObs": {
+    "startedAtMs": null,
+    "endedAtMs": null,
+    "phasesSeen": [],
+    "phaseTimestampsMs": {},
+    "spectatorAttr": null,
+    "cardFlippedAtMs": null,
+    "boardMountedAtMs": 1011.5,
+    "privacyViolations": []
+  },
+  "audioStats": {
+    "contextsCreated": 2,
+    "oscillatorsCreated": 172,
+    "buffersStarted": 0
+  },
+  "fps": {
+    "sampleDurationSec": 6.69,
+    "framesCount": 69,
+    "fpsMean": 10.31,
+    "fpsMinPerSec": 2,
+    "fpsMaxPerSec": 15,
+    "p50FrameMs": 66.7,
+    "p95FrameMs": 199.9,
+    "p99FrameMs": 1199.9,
+    "frameDropsOver33ms": 69,
+    "frameDropsOver50ms": 65
+  },
+  "video": {
+    "file": "before-opening-role-deal.mp4",
+    "sizeBytes": 363919,
+    "tracks": [
+      {
+        "width": 1920,
+        "height": 1080,
+        "handler": "vide"
+      },
+      {
+        "width": 0,
+        "height": 0,
+        "handler": "soun"
+      }
+    ],
+    "mvhdDurationSec": 0
+  }
+}

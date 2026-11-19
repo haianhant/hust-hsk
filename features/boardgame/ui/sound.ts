@@ -18,6 +18,7 @@ import type {
 } from '../../../shared/contracts/boardgame';
 import {
   resolveCombatSequenceTimings,
+  resolveOpeningDealTimeline,
   type BoardGameVisualEvent,
   type CombatVfxVisualEvent,
 } from './vfx-queue';
@@ -1319,6 +1320,146 @@ export function playCutInWhoosh(): void {
   );
 }
 
+/**
+ * Phase 4 — Opening & Secret Role Deal Cinematic (2.5–4.0s, 4 nhịp).
+ * BẢO MẬT P0 TUYỆT ĐỐI: Âm thanh hoàn toàn TRUNG TÍNH PHE (không nhận tham số `faction`/`roleId`),
+ * tránh rò rỉ thông tin phe qua loa khi nhiều người chơi ngồi cùng phòng.
+ */
+export function playOpeningDealCinematic(opts?: {
+  isSpectator?: boolean;
+  durationMs?: number;
+  reducedMotion?: boolean;
+  qualityTier?: 'high' | 'balanced' | 'low';
+}): void {
+  const isSpectator = Boolean(opts?.isSpectator);
+  const reduced = Boolean(opts?.reducedMotion);
+  const baseDur = opts?.durationMs ?? (isSpectator ? 2900 : 3550);
+  const tl = resolveOpeningDealTimeline(baseDur, reduced, opts?.qualityTier ?? 'high');
+
+  if (reduced || tl.startStingerEndMs <= 0) {
+    // Reduced Motion: 1 hợp âm mở màn gọn, êm, trung tính phe
+    playLayeredCue(
+      [
+        { freq: 293.66, startOffsetSec: 0, durationSec: 0.18, type: 'sine', gainPeak: 0.042 },
+        { freq: 440, startOffsetSec: 0.04, durationSec: 0.2, type: 'triangle', gainPeak: 0.036 },
+      ],
+      [
+        {
+          bufferKey: 'paper',
+          startOffsetSec: 0.01,
+          durationSec: 0.08,
+          playbackRate: 1.12,
+          gainPeak: 0.04,
+          filterType: 'bandpass',
+          filterFreq: 1900,
+        },
+      ],
+    );
+    return;
+  }
+
+  const dealStartSec = tl.startStingerEndMs / 1000;
+  const dealEndSec = tl.shuffleDealEndMs / 1000;
+  const flipSec = tl.personalRevealFlipAtMs / 1000;
+  const backSec = tl.personalRevealEndMs / 1000;
+
+  const tones: ToneLayer[] = [
+    // Beat 1 — Game Start Stinger (0.00s): nốt trầm Midnight Noir + chuông đêm thanh sắc
+    { freq: 110, endFreq: 82.41, startOffsetSec: 0.0, durationSec: 0.42, type: 'sine', gainPeak: 0.056, attackSec: 0.025 },
+    { freq: 293.66, startOffsetSec: 0.04, durationSec: 0.24, type: 'triangle', gainPeak: 0.042, filterType: 'lowpass', filterFreq: 1800 },
+    { freq: 440, startOffsetSec: 0.14, durationSec: 0.28, type: 'sine', gainPeak: 0.038 },
+  ];
+
+  const noises: NoiseLayer[] = [
+    // Beat 1 — Hơi gió đêm nhẹ mở màn
+    {
+      bufferKey: 'paper',
+      startOffsetSec: 0.0,
+      durationSec: 0.22,
+      playbackRate: 0.68,
+      gainPeak: 0.036,
+      filterType: 'lowpass',
+      filterFreq: 1100,
+      filterEndFreq: 480,
+    },
+  ];
+
+  // Beat 2 — Shuffle / Deal Roles: 5 nhịp lướt chia lá bài úp dứt khoát, đều nhịp
+  const dealFlicks = 5;
+  const dealSpanSec = Math.max(0.42, dealEndSec - dealStartSec - 0.1);
+  for (let i = 0; i < dealFlicks; i++) {
+    const t = dealStartSec + (i / dealFlicks) * dealSpanSec;
+    noises.push({
+      bufferKey: 'paper',
+      startOffsetSec: t,
+      durationSec: 0.075,
+      playbackRate: 1.04 + i * 0.07,
+      gainPeak: 0.058,
+      filterType: 'bandpass',
+      filterFreq: 1850 + i * 160,
+    });
+    tones.push({
+      freq: 260 + i * 26,
+      endFreq: 210 + i * 20,
+      startOffsetSec: t,
+      durationSec: 0.055,
+      type: 'triangle',
+      gainPeak: 0.018,
+    });
+  }
+
+  // Beat 3 — Personal Secret Role Reveal (hoặc Spectator Sealed Notice) — 100% trung tính phe!
+  if (isSpectator) {
+    // Khán giả: tiếng chốt niêm phong trầm êm, tuyệt đối không có âm điệu lật vai riêng
+    noises.push({
+      bufferKey: 'paper',
+      startOffsetSec: dealEndSec + 0.06,
+      durationSec: 0.1,
+      playbackRate: 0.9,
+      gainPeak: 0.036,
+      filterType: 'lowpass',
+      filterFreq: 1450,
+    });
+    tones.push(
+      { freq: 220, endFreq: 246.94, startOffsetSec: dealEndSec + 0.05, durationSec: 0.34, type: 'sine', gainPeak: 0.032 },
+      { freq: 329.63, startOffsetSec: dealEndSec + 0.18, durationSec: 0.36, type: 'sine', gainPeak: 0.026 },
+    );
+  } else {
+    // Người chơi: Anticipation tụ khí -> Lật lá bài 3D -> Hợp âm bí mật D-sus2 trung tính phe
+    tones.push(
+      {
+        freq: 196,
+        endFreq: 293.66,
+        startOffsetSec: dealEndSec,
+        durationSec: Math.max(0.16, flipSec - dealEndSec + 0.04),
+        type: 'sine',
+        gainPeak: 0.036,
+        attackSec: 0.03,
+      },
+      { freq: 293.66, startOffsetSec: flipSec, durationSec: 0.42, type: 'triangle', gainPeak: 0.052, filterType: 'lowpass', filterFreq: 2200 },
+      { freq: 440, startOffsetSec: flipSec + 0.06, durationSec: 0.44, type: 'sine', gainPeak: 0.046 },
+      { freq: 659.25, startOffsetSec: flipSec + 0.13, durationSec: 0.46, type: 'sine', gainPeak: 0.034 },
+    );
+    noises.push({
+      bufferKey: 'paper',
+      startOffsetSec: Math.max(dealEndSec + 0.04, flipSec - 0.03),
+      durationSec: 0.11,
+      playbackRate: 1.24,
+      gainPeak: 0.068,
+      filterType: 'highpass',
+      filterFreq: 1900,
+    });
+  }
+
+  // Beat 4 — Back To Board / First Turn Ready chime sắc gọn
+  tones.push(
+    { freq: 587.33, startOffsetSec: backSec, durationSec: 0.11, type: 'sine', gainPeak: 0.042 },
+    { freq: 880, startOffsetSec: backSec + 0.09, durationSec: 0.2, type: 'sine', gainPeak: 0.044 },
+  );
+
+  playLayeredCue(tones, noises);
+}
+
 function recordEventId(id: string): boolean {
   if (playedEventSet.has(id)) return false;
   playedEventSet.add(id);
@@ -1445,6 +1586,13 @@ export function playSoundForVisualEvent(
 
     case 'CINEMATIC_CUTIN': {
       switch (event.bannerType) {
+        case 'OPENING_DEAL':
+          playOpeningDealCinematic({
+            isSpectator: Boolean(event.openingIsSpectator),
+            durationMs: event.durationMs,
+            reducedMotion: event.durationMs <= 340,
+          });
+          return true;
         case 'YOUR_TURN':
           playTurnAlert();
           return true;

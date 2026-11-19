@@ -43,11 +43,26 @@ export type FloatingTextVariant =
   | 'steal';
 
 export type CinematicBannerType =
+  | 'OPENING_DEAL'
   | 'YOUR_TURN'
   | 'ROLE_REVEAL'
   | 'ULTIMATE_SKILL'
   | 'ELIMINATION'
   | 'VICTORY';
+
+export type OpeningDealPhase =
+  | 'start-stinger'
+  | 'shuffle-deal'
+  | 'personal-reveal'
+  | 'back-to-board';
+
+export interface OpeningDealTimeline {
+  startStingerEndMs: number;
+  shuffleDealEndMs: number;
+  personalRevealFlipAtMs: number;
+  personalRevealEndMs: number;
+  totalMs: number;
+}
 
 export type ScreenShakeLevel = 'none' | 'light' | 'heavy';
 
@@ -186,6 +201,13 @@ export interface CinematicCutInVisualEvent {
   matchOutcome?: MatchOutcomeView | null;
   winnerFactionLabel?: string | null;
   winReason?: string | null;
+  /** Phase 4 — Opening & Secret Role Deal metadata (tuyệt đối chỉ chứa vai riêng của chính người xem, null với Spectator) */
+  openingPlayerCount?: number;
+  openingFirstPlayerName?: string | null;
+  openingIsSelfFirstTurn?: boolean;
+  openingIsSpectator?: boolean;
+  openingSecretMaxHp?: number | null;
+  openingSecretGoalHint?: string | null;
 }
 
 export type BoardGameVisualEvent =
@@ -422,6 +444,137 @@ export function computeVictoryEventId(
 ): string | null {
   if (!pub.winnerLabel) return null;
   return `${pub.matchId}::victory::${pub.winnerLabel}`;
+}
+
+export function computeOpeningDealEventId(matchId: string): string {
+  return `${matchId}::opening-deal`;
+}
+
+export function buildOpeningDealEvent(
+  publicGame: BoardGamePublicGameView,
+  ctx: ExtractVisualEventsContext,
+): CinematicCutInVisualEvent {
+  const reduced = Boolean(ctx.reducedMotion);
+  const openingId = computeOpeningDealEventId(publicGame.matchId);
+  const firstPlayer =
+    publicGame.players.find((p) => p.playerId === publicGame.activePlayerId) ??
+    publicGame.players[0] ??
+    null;
+  const isSelfFirstTurn = Boolean(
+    !ctx.isSpectator &&
+      ctx.selfPlayerId &&
+      publicGame.activePlayerId === ctx.selfPlayerId,
+  );
+  // BẢO MẬT P0 TUYỆT ĐỐI:
+  // - Spectator (`ctx.isSpectator === true`) không bao giờ nhận bất kỳ thông tin vai/phe/portrait nào,
+  //   ngay cả nếu caller truyền nhầm `privateView`.
+  // - Người chơi chỉ nhận duy nhất vai bí mật của CHÍNH MÌNH từ `ctx.privateView` (khớp `selfPlayerId`).
+  const ownPrivateView =
+    !ctx.isSpectator &&
+    ctx.selfPlayerId &&
+    ctx.privateView &&
+    ctx.privateView.playerId === ctx.selfPlayerId
+      ? ctx.privateView
+      : null;
+  const ownRoleDesign = ownPrivateView ? getRoleDesign(ownPrivateView.roleId) : null;
+  const baseDuration = ctx.isSpectator ? 2900 : 3550;
+
+  return {
+    id: openingId,
+    kind: 'CINEMATIC_CUTIN',
+    order: 5,
+    durationMs: scaleDuration(baseDuration, reduced),
+    bannerType: 'OPENING_DEAL',
+    title: 'ĐÊM XUỐNG TẠI KTX…',
+    subtitle: ctx.isSpectator
+      ? 'Ván đấu bắt đầu — các vai bí mật đã được chia kín'
+      : ownPrivateView
+        ? 'Vai bí mật của bạn · Hãy giữ bí mật'
+        : 'Ván đấu bắt đầu — chuẩn bị khai cuộc',
+    faction: ownPrivateView ? ownPrivateView.faction : null,
+    roleId: ownPrivateView ? ownPrivateView.roleId : null,
+    roleName: ownPrivateView ? ownPrivateView.roleName : null,
+    portraitSrc: ownPrivateView ? getRevealPortrait(ownPrivateView.roleId) : null,
+    skillName: ownRoleDesign?.skillName ?? null,
+    actorId: firstPlayer?.playerId ?? null,
+    openingPlayerCount: publicGame.players.length,
+    openingFirstPlayerName: firstPlayer?.displayName ?? null,
+    openingIsSelfFirstTurn: isSelfFirstTurn,
+    openingIsSpectator: Boolean(ctx.isSpectator),
+    openingSecretMaxHp: ownPrivateView ? ownPrivateView.maxHp : null,
+    openingSecretGoalHint: ownPrivateView ? ownPrivateView.secretGoalText : null,
+  };
+}
+
+/**
+ * Xác định trạng thái trận đấu có phải khoảnh khắc khai cuộc hoàn toàn mới (Turn 1 chưa có bất kỳ hành động nào)
+ * hay không. Nếu trận đã diễn tiến (dù vẫn ở Turn 1 sau khi tung xúc xắc hoặc sang lượt 2+), trả về `false`
+ * để reconnect / F5 giữa trận không bao giờ phát lại Opening Cinematic.
+ */
+export function isFreshMatchOpening(publicGame: BoardGamePublicGameView): boolean {
+  if (
+    publicGame.round !== 1 ||
+    publicGame.turnNumber !== 1 ||
+    publicGame.turnPhase !== 'ROLL_MOVE' ||
+    Boolean(publicGame.winnerLabel) ||
+    Boolean(publicGame.lastDiceRoll) ||
+    Boolean(publicGame.lastInvestigation) ||
+    Boolean(publicGame.lastRevealEvent) ||
+    publicGame.deadCount > 0
+  ) {
+    return false;
+  }
+  return publicGame.players.every(
+    (p) =>
+      p.woundsTaken === 0 &&
+      p.attacksMade === 0 &&
+      p.investigationsCount === 0 &&
+      p.revealedRoleId === null &&
+      p.handCount === 0,
+  );
+}
+
+/**
+ * Chia 4 nhịp Opening & Secret Role Deal Cinematic (2.5–4.0s, mặc định 3550ms High):
+ *   1) start-stinger   (0..~20%)   — Màn tối nhẹ + stinger "Đêm xuống tại KTX…"
+ *   2) shuffle-deal    (~20..~44%) — Xáo & chia bài úp đều nhịp, tuyệt đối không lộ phe
+ *   3) personal-reveal (~44..~82%) — Chỉ người chơi hiện tại lật thẻ vai bí mật của chính mình (Spectator thấy niêm phong)
+ *   4) back-to-board   (~82..100%) — Nhả nền mượt, trả focus về bàn & highlight người đi trước
+ */
+export function resolveOpeningDealTimeline(
+  durationMs: number,
+  reducedMotion: boolean,
+  qualityTier: 'high' | 'balanced' | 'low' = 'high',
+): OpeningDealTimeline {
+  const safeTotal = Math.max(180, Math.round(durationMs));
+  if (reducedMotion || safeTotal <= 420) {
+    const totalMs = Math.min(280, safeTotal);
+    return {
+      startStingerEndMs: 0,
+      shuffleDealEndMs: 0,
+      personalRevealFlipAtMs: 0,
+      personalRevealEndMs: Math.round(totalMs * 0.65),
+      totalMs,
+    };
+  }
+  const clamped = Math.max(2500, Math.min(4000, safeTotal));
+  const totalMs =
+    qualityTier === 'low'
+      ? Math.max(2500, Math.min(clamped, 2750))
+      : qualityTier === 'balanced'
+        ? Math.max(2500, Math.min(clamped, 3200))
+        : clamped;
+  const startStingerEndMs = Math.round(totalMs * 0.2);
+  const shuffleDealEndMs = Math.round(totalMs * 0.44);
+  const personalRevealFlipAtMs = Math.round(totalMs * 0.53);
+  const personalRevealEndMs = Math.round(totalMs * 0.82);
+  return {
+    startStingerEndMs,
+    shuffleDealEndMs,
+    personalRevealFlipAtMs,
+    personalRevealEndMs,
+    totalMs,
+  };
 }
 
 /**
@@ -1524,6 +1677,43 @@ export class VisualEventTracker {
   }
 
   /**
+   * Kiểm tra thuần túy ngay Frame 1 (khi GameBoard vừa mount lên trận mới)
+   * xem có cần hiển thị Opening Cinematic ngay lập tức hay không —
+   * ngăn tuyệt đối hiện tượng lóe 1 frame bàn chơi / thẻ vai ở sidebar trước khi Stinger hạ màn.
+   */
+  peekPendingOpening(
+    publicGame: BoardGamePublicGameView,
+    ctx: ExtractVisualEventsContext,
+  ): CinematicCutInVisualEvent | null {
+    if (!isFreshMatchOpening(publicGame)) {
+      return null;
+    }
+    const openingId = computeOpeningDealEventId(publicGame.matchId);
+    if (this.matchId === publicGame.matchId) {
+      if (this.seenIds.has(openingId)) return null;
+    } else {
+      const persisted = readSeenIdsFromStorage(publicGame.matchId);
+      if (persisted.includes(openingId)) return null;
+    }
+    return buildOpeningDealEvent(publicGame, ctx);
+  }
+
+  /**
+   * Đánh dấu Opening Cinematic của trận hiện tại đã hoàn tất / bị Skip để F5 không phát lại.
+   */
+  acknowledgeSnapshotOpening(publicGame: BoardGamePublicGameView | null): void {
+    if (!publicGame || this.matchId !== publicGame.matchId) return;
+    const openingId = computeOpeningDealEventId(publicGame.matchId);
+    const turn1Id = `${publicGame.matchId}::your-turn::1`;
+    const toMark: string[] = [];
+    if (!this.seenIds.has(openingId)) toMark.push(openingId);
+    if (!this.seenIds.has(turn1Id)) toMark.push(turn1Id);
+    if (toMark.length > 0) {
+      this.markSeen(toMark);
+    }
+  }
+
+  /**
    * Nạp trạng thái ban đầu (lúc mới vào bàn hoặc khi F5 Reconnect).
    * Không phát lại các event lịch sử đã diễn ra trước khi client kết nối.
    */
@@ -1543,36 +1733,20 @@ export class VisualEventTracker {
     }
 
     const initialEvents: BoardGameVisualEvent[] = [];
-    const reduced = Boolean(ctx.reducedMotion);
 
-    // Chỉ chào "LƯỢT CỦA BẠN" ở lượt đầu tiên mới khai trận nếu chưa từng hiện khi F5
-    const isFreshOpeningTurn =
-      publicGame.turnNumber === 1 &&
-      publicGame.turnPhase === 'ROLL_MOVE' &&
-      !publicGame.winnerLabel &&
-      !ctx.isSpectator &&
-      Boolean(ctx.selfPlayerId && publicGame.activePlayerId === ctx.selfPlayerId);
-
-    if (isFreshOpeningTurn) {
-      const evId = `${publicGame.matchId}::your-turn::1`;
-      if (!this.seenIds.has(evId)) {
-        this.markSeen([evId]);
-        initialEvents.push({
-          id: evId,
-          kind: 'CINEMATIC_CUTIN',
-          order: 65,
-          durationMs: scaleDuration(1150, reduced),
-          bannerType: 'YOUR_TURN',
-          title: 'LƯỢT CỦA BẠN',
-          subtitle: 'Ván đấu bắt đầu — hãy tung xúc xắc 1d6 + 1d4!',
-          faction: null,
-          roleId: null,
-          roleName: null,
-          portraitSrc: null,
-          skillName: null,
-          actorId: ctx.selfPlayerId,
-        });
+    // Phase 4: Opening & Secret Role Deal Cinematic — CHỈ phát đúng 1 lần duy nhất
+    // khi trận đấu mới khai cuộc (Turn 1, ROLL_MOVE, chưa có bất kỳ hành động nào).
+    // F5 ở Turn 1 (đã lưu sessionStorage) hoặc reconnect giữa trận tuyệt đối KHÔNG phát lại.
+    const openingId = computeOpeningDealEventId(publicGame.matchId);
+    const turn1Id = `${publicGame.matchId}::your-turn::1`;
+    if (isFreshMatchOpening(publicGame)) {
+      if (!this.seenIds.has(openingId)) {
+        this.markSeen([openingId, turn1Id]);
+        initialEvents.push(buildOpeningDealEvent(publicGame, ctx));
       }
+    } else if (!this.seenIds.has(openingId)) {
+      // Nếu client join/reconnect khi trận đã qua khoảnh khắc khai cuộc, khóa vĩnh viễn openingId
+      this.markSeen([openingId, turn1Id]);
     }
 
     return initialEvents;

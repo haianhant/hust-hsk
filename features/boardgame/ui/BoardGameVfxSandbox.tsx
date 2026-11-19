@@ -24,6 +24,7 @@ import {
   PlayerPawnToken,
 } from './BoardGameArt';
 import { MidnightDicePair3D } from './MidnightDice3D';
+import { MIDNIGHT_CHARACTER_ART } from './midnight-noir-tokens';
 import { useSmoothPawnGlide } from './useSmoothPawnGlide';
 import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
 import { computeDiceSig } from './vfx-queue';
@@ -869,6 +870,66 @@ export function BoardGameVfxSandbox() {
     }
   };
 
+  // Phase 4 Showcase A: Opening & Secret Role Deal (Player View — 4 nhịp 3.55s)
+  const triggerPhase4OpeningPlayer = () => {
+    vfx.skipAllAnimations();
+    const id = nextLogId('p4-open-player');
+    setLastDemoLabel('Phase 4 Opening (Người chơi): Stinger → Chia bài úp → Lật thẻ vai bí mật riêng → Vào lượt đầu');
+    vfx.enqueueEvents([
+      {
+        id,
+        kind: 'CINEMATIC_CUTIN',
+        order: 5,
+        durationMs: vfx.reducedMotion ? 260 : 3550,
+        bannerType: 'OPENING_DEAL',
+        title: 'ĐÊM XUỐNG TẠI KTX…',
+        subtitle: 'Vai bí mật của bạn · Hãy giữ bí mật',
+        faction: 'lantern-guard',
+        roleId: 'gac-ky-thuat',
+        roleName: 'Minh "Kỹ Thuật"',
+        portraitSrc: MIDNIGHT_CHARACTER_ART['gac-ky-thuat'] ?? null,
+        skillName: 'Khóa Cầu Dao',
+        actorId: 'sb-minh',
+        openingPlayerCount: game.players.length,
+        openingFirstPlayerName: 'Minh An',
+        openingIsSelfFirstTurn: true,
+        openingIsSpectator: false,
+        openingSecretMaxHp: 11,
+        openingSecretGoalHint: 'Đội Săn Đêm thắng khi toàn bộ Hội Bóng Đêm bị loại khỏi ván đấu.',
+      },
+    ]);
+  };
+
+  // Phase 4 Showcase B: Opening (Spectator View — 0 rò rỉ vai/phe/portrait)
+  const triggerPhase4OpeningSpectator = () => {
+    vfx.skipAllAnimations();
+    const id = nextLogId('p4-open-spec');
+    setLastDemoLabel('Phase 4 Opening (Khán giả): Stinger → Chia bài úp → Niêm phong bảo mật (0 lộ vai) → Vào lượt đầu');
+    vfx.enqueueEvents([
+      {
+        id,
+        kind: 'CINEMATIC_CUTIN',
+        order: 5,
+        durationMs: vfx.reducedMotion ? 260 : 2900,
+        bannerType: 'OPENING_DEAL',
+        title: 'ĐÊM XUỐNG TẠI KTX…',
+        subtitle: 'Ván đấu bắt đầu — các vai bí mật đã được chia kín',
+        faction: null,
+        roleId: null,
+        roleName: null,
+        portraitSrc: null,
+        skillName: null,
+        actorId: 'sb-minh',
+        openingPlayerCount: game.players.length,
+        openingFirstPlayerName: 'Minh An',
+        openingIsSelfFirstTurn: false,
+        openingIsSpectator: true,
+        openingSecretMaxHp: null,
+        openingSecretGoalHint: null,
+      },
+    ]);
+  };
+
   return (
     <section
       data-testid="proto-section-vfx-sandbox"
@@ -1082,6 +1143,22 @@ export function BoardGameVfxSandbox() {
           className="rounded-xl border border-fuchsia-400/60 bg-fuchsia-950/75 px-3 py-2 text-xs font-black text-fuchsia-100 hover:bg-fuchsia-900 cursor-pointer"
         >
           👥 8E. Cùng Ô Đông Quân
+        </button>
+        <button
+          type="button"
+          data-testid="proto-vfx-p4-opening-player"
+          onClick={triggerPhase4OpeningPlayer}
+          className="rounded-xl border border-amber-300/75 bg-amber-950/85 px-3 py-2 text-xs font-black text-amber-100 hover:bg-amber-900 cursor-pointer"
+        >
+          🌙 9A. Khai Cuộc &amp; Chia Vai (Người chơi)
+        </button>
+        <button
+          type="button"
+          data-testid="proto-vfx-p4-opening-spectator"
+          onClick={triggerPhase4OpeningSpectator}
+          className="rounded-xl border border-sky-400/70 bg-sky-950/85 px-3 py-2 text-xs font-black text-sky-100 hover:bg-sky-900 cursor-pointer"
+        >
+          👁️ 9B. Khai Cuộc (Khán giả · Kín vai)
         </button>
       </div>
 
