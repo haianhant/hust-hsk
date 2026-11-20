@@ -545,6 +545,25 @@ export function ActionPanel({
     if (privateView.roleId === 'gac-truc-ban' && publicGame.turnPhase !== 'ROLL_MOVE') {
       return 'Chỉ kích hoạt ở Pha 1 trước khi tung xúc xắc';
     }
+    if (privateView.roleId === 'exp2_father_harrison') {
+      if (publicGame.turnPhase !== 'ROLL_MOVE') {
+        return 'Chỉ kích hoạt ở Pha 1 trước khi tung xúc xắc';
+      }
+      if (selfPlayer.location === 'lobby') {
+        return 'Đang đứng tại Sảnh Tầng 1 (Church) — không thể đứng yên';
+      }
+      if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
+        return 'Đã bắt đầu tung xúc xắc trong lượt này';
+      }
+    }
+    if (privateView.roleId === 'exp1_bipolar') {
+      if (publicGame.turnPhase !== 'ROLL_MOVE') {
+        return 'Chỉ kích hoạt vào đầu lượt (trước khi di chuyển)';
+      }
+      if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
+        return 'Đã bắt đầu tung xúc xắc trong lượt này';
+      }
+    }
     if (privateView.roleId === 'lang-cuu-ho') {
       if (publicGame.turnPhase !== 'MAIN_ACTION' || attacksThisTurn < 1) {
         return 'Chỉ dùng ở Pha 3 sau khi đánh thường';

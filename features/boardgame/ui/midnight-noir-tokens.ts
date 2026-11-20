@@ -187,8 +187,8 @@ export const STARTER_EIGHT_ROLE_IDS: readonly Phase2RoleId[] = [
   'exp1_undying',
 ];
 
-/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — 10 Classic + 8 Starter Eight). */
-export const MIDNIGHT_CHARACTER_ART: Readonly<Record<BoardGameRoleId, string>> = {
+/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — 10 Classic + 8 Starter Eight; Wave 2 dùng Noir Monogram tới Phase 3B). */
+export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, string>>> = {
   // 10 Classic Roles (preserved untouched)
   'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
   'gac-truc-ban': '/assets/boardgame/roles/role-lan-truc-ban.webp',

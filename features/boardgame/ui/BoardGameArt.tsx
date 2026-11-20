@@ -196,6 +196,62 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
     motif: 'Lớp Giáp Mạ Sắt',
     shortAbility: 'Khi nhận ≥ 2 ST (đòn đánh/kỹ năng/thẻ): Lật vai hoặc đang lật giảm 1 ST',
   },
+  exp1_elysia: {
+    codeName: 'Elysia',
+    title: 'Hunter MR1 · 10 HP',
+    accentHex: '#22d3ee',
+    motif: 'Kiếm Sĩ Phản Công',
+    shortAbility: 'Đánh trúng gây 1–2 ST (trước phòng thủ): Có thể cộng thêm +2 ST',
+  },
+  exp2_unchained: {
+    codeName: 'Unchained',
+    title: 'Shadow MR2 · 11 HP',
+    accentHex: '#f43f5e',
+    motif: 'Xiềng Xích Phá Vỡ',
+    shortAbility: 'Nội tại sau lật vai: Đòn tấn công trúng gây thêm +2 sát thương',
+  },
+  exp2_warlock: {
+    codeName: 'Warlock',
+    title: 'Shadow MR2 · 14 HP',
+    accentHex: '#a855f7',
+    motif: 'Cổ Ngữ Sân Bóng (10)',
+    shortAbility: 'Nội tại sau lật vai: Đứng tại Sân Bóng (10) đánh trúng gây thêm +3 ST',
+  },
+  exp2_witch: {
+    codeName: 'Witch',
+    title: 'Shadow MR2 · 14 HP',
+    accentHex: '#c084fc',
+    motif: 'Màn Sương Hành Lang (9)',
+    shortAbility: 'Nội tại sau lật vai: Miễn toàn bộ sát thương HP khi đứng tại Hành Lang (9)',
+  },
+  exp2_father_harrison: {
+    codeName: 'Father Harrison',
+    title: 'Hunter MR2 · 12 HP',
+    accentHex: '#fbbf24',
+    motif: 'Đèn Lồng Lễ Chủ Nhật',
+    shortAbility: 'Pha di chuyển (đã lật vai): Chọn bước thẳng vào Sảnh Tầng 1 (6) thay vì đổ xúc xắc',
+  },
+  exp2_gloria: {
+    codeName: 'Gloria',
+    title: 'Hunter MR2 · 14 HP',
+    accentHex: '#34d399',
+    motif: 'Phước Lành Thẻ Trắng',
+    shortAbility: 'Nội tại sau lật vai: Rút 2 thẻ Trắng tuần tự khi đi vào Sảnh Tầng 1 (6)',
+  },
+  exp1_cindy: {
+    codeName: 'Cindy',
+    title: 'Neutral MR1 · 11 HP',
+    accentHex: '#e879f9',
+    motif: 'Phản Đòn Ác Mộng',
+    shortAbility: 'Khi nhận ≥ 1 ST & còn sống: Lật vai hoặc đang lật phản kích 1 ST · Thắng khi chỉ còn mình là Neutral sống',
+  },
+  exp1_bipolar: {
+    codeName: 'Bipolar',
+    title: 'Neutral MR1 · 10 HP',
+    accentHex: '#f59e0b',
+    motif: 'Đồng Xu Định Mệnh',
+    shortAbility: '1 lần/trận (đầu lượt): Chọn tự hồi hoặc tự nhận d4+2 ST · Thắng khi sống (Hunter thắng) hoặc chết (Shadow thắng)',
+  },
 };
 
 export interface LocationVisualMeta {

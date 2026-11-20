@@ -37,10 +37,11 @@ import {
   type SourceFactionId,
 } from './expansion-catalog';
 import {
+  ALL_EXPANSION_SKILL_BINDINGS,
+  ALL_EXPANSION_VICTORY_BINDINGS,
   PHASE2A_ROLE_IDS,
   PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
-  PHASE2_SKILL_BINDINGS,
-  PHASE2_VICTORY_BINDINGS,
+  STARTER_SIXTEEN_EXPANSION_ROLE_IDS,
 } from './expansion-skills';
 import { ROLES_CATALOG, getRoleDistribution } from './roles';
 import {
@@ -291,8 +292,8 @@ function buildExpansionCharacterEntries(): CharacterRegistryEntry[] {
   return EXPANSION_CHARACTER_CATALOG.map((rec) => {
     const faction = mapSourceFactionToBoardGameFaction(rec.faction);
     const archetype = inferExpansionVictoryArchetype(rec);
-    const skillBinding = PHASE2_SKILL_BINDINGS[rec.id] ?? null;
-    const victoryBinding = PHASE2_VICTORY_BINDINGS[rec.id] ?? null;
+    const skillBinding = ALL_EXPANSION_SKILL_BINDINGS[rec.id] ?? null;
+    const victoryBinding = ALL_EXPANSION_VICTORY_BINDINGS[rec.id] ?? null;
     const isImplemented =
       rec.implementationStatus === 'implemented' &&
       skillBinding !== null &&
@@ -510,6 +511,24 @@ export const EXPERIMENTAL_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
       ...PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
     ],
     expectedCharacterCount: 18,
+    catalogVersion: BOARD_GAME_CATALOG_VERSION,
+  },
+  {
+    id: 'starter-sixteen',
+    label: 'Starter Sixteen (Thử nghiệm Wave 2 · 10 Classic + 16 Tướng Mở rộng)',
+    shortLabel: 'Starter 16 (Exp)',
+    description:
+      'Pool thử nghiệm nội bộ gồm 26 nhân vật (10 Classic + 8 Phase 2 + 8 Phase 3 Wave 2: 10 Hunter · 10 Shadow · 6 Neutral). Tắt trên production.',
+    availability: 'experimental',
+    enabledInProduction: false,
+    isExperimental: true,
+    allowExperimentalHouseRules: true,
+    includedExpansions: ['classic', 'expansion-1', 'expansion-2'],
+    explicitCharacterIds: [
+      ...ROLES_CATALOG.map((r) => r.id),
+      ...STARTER_SIXTEEN_EXPANSION_ROLE_IDS,
+    ],
+    expectedCharacterCount: 26,
     catalogVersion: BOARD_GAME_CATALOG_VERSION,
   },
 ];

@@ -202,7 +202,14 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
       ? 'Phe Đội Săn Đêm thắng ngay khi toàn bộ Hội Bóng Đêm bị loại khỏi KTX.'
       : faction === 'mist-order'
         ? 'Hội Bóng Đêm thắng khi toàn bộ Đội Săn Đêm bị loại HOẶC có từ 3 Kẻ Độc Hành bị loại.'
-        : rec.victoryCondition;
+        : rec.id === 'exp1_cindy'
+          ? 'Tất cả Kẻ Độc Hành khác đã bị loại và bạn còn sống (bàn 5P chỉ có 1 Neutral: đồng thắng nếu còn sống khi hết trận).'
+          : rec.id === 'exp1_bipolar'
+            ? 'Còn sống khi Đội Săn Đêm thắng, HOẶC đã chết khi Hội Bóng Đêm thắng.'
+            : rec.victoryCondition;
+
+  const targetMode: CharacterDesign['targetMode'] =
+    rec.id === 'exp2_father_harrison' || rec.id === 'exp1_bipolar' ? 'self' : 'passive';
 
   return {
     id: rec.id as BoardGameRoleId,
@@ -214,7 +221,7 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
     skillSummary: rec.skillDescription,
     cooldownRounds: 0,
     oncePerMatch: rec.usageLimit === 'once_per_match',
-    targetMode: 'passive',
+    targetMode,
     secretGoalText: defaultGoal,
   };
 }

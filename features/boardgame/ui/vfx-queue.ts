@@ -1238,7 +1238,10 @@ export function extractVisualEventsFromDiff(
           });
         } else if (
           actorPub.revealedRoleId === 'exp2_fiona' ||
-          actorPub.revealedRoleId === 'exp1_gayle'
+          actorPub.revealedRoleId === 'exp1_gayle' ||
+          actorPub.revealedRoleId === 'exp1_elysia' ||
+          actorPub.revealedRoleId === 'exp2_unchained' ||
+          actorPub.revealedRoleId === 'exp2_warlock'
         ) {
           events.push({
             id: `${next.matchId}::exp-dice-skill::${log.id}`,
@@ -1248,6 +1251,59 @@ export function extractVisualEventsFromDiff(
             effect: 'SLASH',
             sourcePlayerId: actorId,
             targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
+            shake: 'none',
+            roleId: actorPub.revealedRoleId,
+          });
+        } else if (actorPub.revealedRoleId === 'exp2_witch') {
+          events.push({
+            id: `${next.matchId}::exp-witch-immune::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 42,
+            durationMs: scaleDuration(820, reduced),
+            effect: 'SHIELD_GUARD',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [actorId],
+            shake: 'none',
+            roleId: 'exp2_witch',
+          });
+          events.push({
+            id: `${next.matchId}::exp-witch-txt::${log.id}`,
+            kind: 'FLOATING_TEXT',
+            order: 50,
+            durationMs: scaleDuration(820, reduced),
+            targetPlayerId: actorId,
+            label: 'MIỄN ST',
+            variant: 'block',
+            syncGroup: 'shield',
+          });
+        } else if (actorPub.revealedRoleId === 'exp1_cindy' && log.text.includes('Con Ác Mộng')) {
+          events.push({
+            id: `${next.matchId}::exp-cindy-retaliate::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 42,
+            durationMs: scaleDuration(860, reduced),
+            effect: 'COUNTER_STRIKE',
+            sourcePlayerId: actorId,
+            targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
+            shake: 'light',
+            roleId: 'exp1_cindy',
+          });
+        } else if (
+          actorPub.revealedRoleId === 'exp2_father_harrison' ||
+          actorPub.revealedRoleId === 'exp2_gloria' ||
+          actorPub.revealedRoleId === 'exp1_bipolar'
+        ) {
+          events.push({
+            id: `${next.matchId}::exp-wave2-util::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(800, reduced),
+            effect:
+              actorPub.revealedRoleId === 'exp1_bipolar' && log.text.includes('tự nhận')
+                ? 'EXPLOSION'
+                : 'HEAL_AURA',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [actorId],
             shake: 'none',
             roleId: actorPub.revealedRoleId,
           });

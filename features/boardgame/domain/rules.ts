@@ -134,6 +134,31 @@ export function getLocationDefinition(id: BoardGameLocationId): LocationDefiniti
   return LOCATIONS_BY_ID[id];
 }
 
+/**
+ * Nguồn sự thật duy nhất ánh xạ tên địa điểm Shadow Hunters Expansion sang địa điểm KTX.
+ * Phân biệt tuyệt đối `exact location` (`isPlayerAtExactLocationAlias`) với `cluster` (`areInSameCluster`).
+ */
+export type ExpansionLocationAlias = 'church' | 'weird_woods' | 'erstwhile_altar';
+
+export const EXPANSION_LOCATION_ALIASES: Readonly<
+  Record<ExpansionLocationAlias, BoardGameLocationId>
+> = {
+  church: 'lobby', // Church (6) -> Sảnh Tầng 1
+  weird_woods: 'corridor', // Weird Woods (9) -> Hành Lang Tầng 4
+  erstwhile_altar: 'court', // Erstwhile Altar (10) -> Sân Bóng Rổ Đêm
+};
+
+export function resolveLocationAlias(alias: ExpansionLocationAlias): BoardGameLocationId {
+  return EXPANSION_LOCATION_ALIASES[alias];
+}
+
+export function isPlayerAtExactLocationAlias(
+  player: Pick<AuthoritativePlayerState, 'location'>,
+  alias: ExpansionLocationAlias,
+): boolean {
+  return player.location === EXPANSION_LOCATION_ALIASES[alias];
+}
+
 export function isValidLocationId(raw: unknown): raw is BoardGameLocationId {
   return typeof raw === 'string' && Object.hasOwn(LOCATIONS_BY_ID, raw);
 }

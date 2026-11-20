@@ -27,10 +27,14 @@ import {
   applyExpandedUseCard,
   applyExpandedUseSkill,
   clearPendingChoiceOnForcedAutoTurn,
+  deliverNextGloriaQueuedCard,
+  discardGloriaQueuedCards,
+  hasGloriaQueuedCards,
   isExpandedRuleset,
   resolveExpiredPendingChoice,
   resolvePendingChoice,
   startExpandedAttack,
+  triggerExpandedTurnStart,
   type TurnContinuationCallbacks,
 } from './expansion-skills';
 import {
@@ -112,7 +116,9 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
         nowMs,
         current.playerId,
       );
-      finalizeIfFinished(state, nowMs);
+      if (!finalizeIfFinished(state, nowMs) && isExpandedRuleset(state)) {
+        triggerExpandedTurnStart(state, current, nowMs);
+      }
       return;
     }
   }
@@ -156,7 +162,9 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
   state.activePlayerId = nextPlayer.playerId;
   state.turnPhase = 'ROLL_MOVE';
 
-  finalizeIfFinished(state, nowMs);
+  if (!finalizeIfFinished(state, nowMs) && isExpandedRuleset(state)) {
+    triggerExpandedTurnStart(state, nextPlayer, nowMs);
+  }
 }
 
 function canTriggerCharlesBloodyFeast(
@@ -300,6 +308,9 @@ export function applyPlayerGameAction(
       break;
     case 'EQUIP_CARD':
       result = resolveEquipCard(state, actor, action.cardId, nowMs);
+      if (result.ok && expanded) {
+        deliverNextGloriaQueuedCard(state, actor, nowMs);
+      }
       break;
     case 'USE_CARD':
       if (expanded) {
@@ -344,10 +355,10 @@ export function applyPlayerGameAction(
       }
       break;
     case 'ATTACK': {
-      if (actor.hand.length > 0) {
+      if (actor.hand.length > 0 || (expanded && hasGloriaQueuedCards(state, actor.playerId))) {
         result = {
           ok: false,
-          error: 'Hãy giải quyết lá bài vừa rút trên tay trước khi tấn công.',
+          error: 'Hãy giải quyết hết các lá bài vừa rút trên tay trước khi tấn công.',
         };
         break;
       }
@@ -407,10 +418,10 @@ export function applyPlayerGameAction(
           error: 'Hãy tung xúc xắc và di chuyển sang khu vực kế tiếp trước khi kết thúc lượt.',
         };
       }
-      if (actor.hand.length > 0) {
+      if (actor.hand.length > 0 || (expanded && hasGloriaQueuedCards(state, actor.playerId))) {
         return {
           ok: false,
-          error: 'Hãy giải quyết lá bài vừa rút trên tay trước khi kết thúc lượt.',
+          error: 'Hãy giải quyết hết các lá bài vừa rút trên tay trước khi kết thúc lượt.',
         };
       }
       if (
@@ -500,6 +511,9 @@ export function applyTimeoutAutoTurn(
   while (actor.hand.length > 0) {
     const id = actor.hand.shift();
     if (id) discardCardId(state, id);
+  }
+  if (isExpandedRuleset(state)) {
+    discardGloriaQueuedCards(state, actor.playerId);
   }
 
   if (!finalizeIfFinished(state, nowMs)) {

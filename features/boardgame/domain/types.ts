@@ -143,10 +143,12 @@ export interface AuthoritativePlayerState {
 
 export type DamageSourceKind =
   | 'attack'
+  | 'card'
   | 'event'
   | 'location'
   | 'skill'
   | 'investigation'
+  | 'retaliation'
   | 'hp-cost';
 
 export interface AttackRollSample {
@@ -161,6 +163,7 @@ export type PendingResolutionStep =
   | {
       kind: 'DAMAGE';
       damageEventId: string;
+      causationId?: string;
       targetPlayerId: string;
       rawAmount: number;
       sourceType: DamageSourceKind;
@@ -168,6 +171,7 @@ export type PendingResolutionStep =
       isTalismanWardable?: boolean;
       isHpCost?: boolean;
       unpreventable?: boolean;
+      isRetaliation?: boolean;
       undyingChecked?: boolean;
       undyingReduced?: boolean;
       preUndyingDmg?: number;
@@ -180,6 +184,18 @@ export type PendingResolutionStep =
       postLogPrefix?: string;
       postLogSuffix?: string;
       postLogActorId?: string | null;
+    }
+  | {
+      kind: 'AFTER_DAMAGE_TRIGGERS';
+      afterDamageEventId: string;
+      sourceDamageEventId: string;
+      targetPlayerId: string;
+      attackerPlayerId: string | null;
+      actualDealt: number;
+      sourceType: DamageSourceKind;
+      isRetaliation?: boolean;
+      isHpCost?: boolean;
+      cindyChecked?: boolean;
     }
   | {
       kind: 'POST_ATTACK_EFFECTS';
@@ -276,6 +292,26 @@ export type PendingChoiceContextData =
       damageEventId: string;
       preUndyingDmg: number;
       sourceType: DamageSourceKind;
+    }
+  | {
+      kind: 'elysia_counter_boost';
+      actorPlayerId: string;
+      targetPlayerId: string;
+      hasMasamune: boolean;
+      hasMachineGun: boolean;
+      roll: AttackRollSample;
+    }
+  | {
+      kind: 'cindy_reveal_retaliate';
+      cindyPlayerId: string;
+      sourceDamageEventId: string;
+      attackerPlayerId: string;
+      attackerDisplayName: string;
+    }
+  | {
+      kind: 'bipolar_fate_coin';
+      actorPlayerId: string;
+      turnNumber: number;
     };
 
 export interface AuthoritativePendingChoice {
@@ -301,11 +337,19 @@ export interface ExpansionRuntimeStats {
   bonusDamageByRole: Record<string, number>;
 }
 
+export interface GloriaQueuedCardEntry {
+  playerId: string;
+  cardId: string;
+  movementEventId: string;
+}
+
 export interface ExpansionRuntimeState {
   eventSeq: number;
   processedEventIds: string[];
   resolvedChoiceIds: string[];
   pendingSteps: PendingResolutionStep[];
+  gloriaQueuedCards?: GloriaQueuedCardEntry[];
+  bipolarPromptedTurnNumber?: number;
   choiceTimeoutMs?: number;
   stats: ExpansionRuntimeStats;
 }

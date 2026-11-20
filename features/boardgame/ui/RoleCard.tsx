@@ -202,29 +202,45 @@ export const RoleCard = React.memo(function RoleCard({
   const skillStatusLabel = !privateView.revealed
     ? privateView.roleId === 'lang-tien-phong'
       ? 'Tự lộ khi có người ngã'
-      : privateView.roleId === 'exp1_wendigo' || privateView.roleId === 'exp1_undying'
+      : privateView.roleId === 'exp1_wendigo' ||
+          privateView.roleId === 'exp1_undying' ||
+          privateView.roleId === 'exp1_cindy'
         ? 'Sẵn sàng lật phản ứng'
         : 'Cần lật vai'
     : privateView.roleId === 'exp1_victor'
       ? privateView.hp >= 2
         ? 'Sẵn sàng (Trả 1 HP → +2 ST)'
         : 'Cần ≥ 2 HP'
-      : privateView.roleId === 'exp2_fiona' || privateView.roleId === 'exp1_gayle'
+      : privateView.roleId === 'exp2_fiona' ||
+          privateView.roleId === 'exp1_gayle' ||
+          privateView.roleId === 'exp1_elysia'
         ? 'Sẵn sàng khi tấn công'
         : privateView.roleId === 'exp1_felicia'
           ? 'Sẵn sàng khi rút Trắng/Đen'
-          : privateView.roleId === 'exp2_g43' ||
-              privateView.roleId === 'exp2_wyvern' ||
-              privateView.roleId === 'exp1_wendigo' ||
-              privateView.roleId === 'exp1_undying'
-            ? 'Nội tại đang kích hoạt'
-            : roleDesign.targetMode === 'passive'
-              ? 'Nội tại'
-              : roleDesign.oncePerMatch && privateView.skillUsedOnce
-                ? 'Đã dùng'
-                : privateView.skillCooldown > 0
-                  ? `Hồi ${privateView.skillCooldown} vòng`
-                  : 'Sẵn sàng';
+          : privateView.roleId === 'exp2_gloria'
+            ? 'Sẵn sàng khi vào Sảnh (6)'
+            : privateView.roleId === 'exp2_father_harrison'
+              ? 'Pha di chuyển → Sảnh (6)'
+              : privateView.roleId === 'exp1_bipolar'
+                ? privateView.skillUsedOnce
+                  ? 'Đã dùng (1 lần/trận)'
+                  : 'Đầu lượt (d4+2 hồi/ST)'
+                : privateView.roleId === 'exp2_g43' ||
+                    privateView.roleId === 'exp2_wyvern' ||
+                    privateView.roleId === 'exp1_wendigo' ||
+                    privateView.roleId === 'exp1_undying' ||
+                    privateView.roleId === 'exp2_unchained' ||
+                    privateView.roleId === 'exp2_warlock' ||
+                    privateView.roleId === 'exp2_witch' ||
+                    privateView.roleId === 'exp1_cindy'
+                  ? 'Nội tại đang kích hoạt'
+                  : roleDesign.targetMode === 'passive'
+                    ? 'Nội tại'
+                    : roleDesign.oncePerMatch && privateView.skillUsedOnce
+                      ? 'Đã dùng'
+                      : privateView.skillCooldown > 0
+                        ? `Hồi ${privateView.skillCooldown} vòng`
+                        : 'Sẵn sàng';
 
   const characterDetailsBlocks = (
     <>

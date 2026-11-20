@@ -28,7 +28,7 @@ export type BoardGameMatchStatus =
 
 export const BOARD_GAME_RULESET_VERSION = 4 as const;
 export const BOARD_GAME_PROTOCOL_VERSION = 1 as const;
-export const BOARD_GAME_CATALOG_VERSION = '2026.11-p2b' as const;
+export const BOARD_GAME_CATALOG_VERSION = '2026.11-p3a' as const;
 
 export type BoardGameProductionRulesetId =
   | 'classic'
@@ -36,7 +36,10 @@ export type BoardGameProductionRulesetId =
   | 'expansion-2'
   | 'full-expansion';
 
-export type BoardGameExperimentalRulesetId = 'starter-four' | 'starter-eight';
+export type BoardGameExperimentalRulesetId =
+  | 'starter-four'
+  | 'starter-eight'
+  | 'starter-sixteen';
 
 export type BoardGameRulesetId =
   | BoardGameProductionRulesetId
@@ -56,6 +59,7 @@ export const BOARD_GAME_VALID_RULESETS: readonly BoardGameProductionRulesetId[] 
 export const BOARD_GAME_EXPERIMENTAL_RULESETS: readonly BoardGameExperimentalRulesetId[] = [
   'starter-four',
   'starter-eight',
+  'starter-sixteen',
 ];
 
 export const BOARD_GAME_ALL_RULESETS: readonly BoardGameRulesetId[] = [
@@ -126,7 +130,17 @@ export type Phase2BRoleId =
 
 export type Phase2RoleId = Phase2ARoleId | Phase2BRoleId;
 
-export type BoardGameRoleId = ClassicBoardGameRoleId | Phase2RoleId;
+export type Phase3RoleId =
+  | 'exp1_elysia'
+  | 'exp2_unchained'
+  | 'exp2_warlock'
+  | 'exp2_witch'
+  | 'exp2_father_harrison'
+  | 'exp2_gloria'
+  | 'exp1_cindy'
+  | 'exp1_bipolar';
+
+export type BoardGameRoleId = ClassicBoardGameRoleId | Phase2RoleId | Phase3RoleId;
 
 export type BoardGameLocationId =
   | 'lobby'
@@ -385,7 +399,10 @@ export type BoardGamePendingChoiceKind =
   | 'gayle_attack_reroll'
   | 'felicia_draw_choice'
   | 'victor_blood_boost'
-  | 'undying_reveal_reduce';
+  | 'undying_reveal_reduce'
+  | 'elysia_counter_boost'
+  | 'cindy_reveal_retaliate'
+  | 'bipolar_fate_coin';
 
 export interface BoardGameChoiceOptionView {
   optionId: string;

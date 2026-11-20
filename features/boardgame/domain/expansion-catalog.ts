@@ -156,13 +156,13 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "effect": "Tăng thêm 2 sát thương cho đòn tấn công.",
     "targetMode": "single_other",
     "usageLimit": "per_attack",
-    "revealRequirement": "needs-clarification",
+    "revealRequirement": "must_be_revealed",
     "victoryCondition": "Tiêu diệt tất cả các Shadow.",
     "complexity": "low",
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-1-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_fallen",
@@ -429,13 +429,13 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "effect": "Chọn hồi máu hoặc nhận sát thương bằng d4 + 2 (3 đến 6).",
     "targetMode": "self",
     "usageLimit": "once_per_match",
-    "revealRequirement": "needs-clarification",
+    "revealRequirement": "must_be_revealed",
     "victoryCondition": "Còn sống khi phe Hunter thắng. Hoặc chết khi phe Shadow thắng.",
     "complexity": "medium",
     "implementationDifficulty": "tier-2",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-2-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_anathema",
@@ -497,8 +497,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "medium",
     "implementationDifficulty": "tier-2",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-2-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_arnold",
@@ -618,13 +618,13 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "effect": "Chọn di chuyển thẳng vào vị trí tương đương Church (6) thay vì đổ xúc xắc.",
     "targetMode": "self",
     "usageLimit": "per_turn",
-    "revealRequirement": "needs-clarification",
+    "revealRequirement": "must_be_revealed",
     "victoryCondition": "Tất cả Shadow bị tiêu diệt.",
     "complexity": "low",
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-hunter-cua-ban-mo-rong-thu-2-p",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_gloria",
@@ -639,13 +639,13 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "effect": "Rút 2 thẻ Trắng (Equipment/White) thay vì 1 khi kích hoạt hiệu ứng khu vực Church.",
     "targetMode": "self",
     "usageLimit": "passive",
-    "revealRequirement": "needs-clarification",
+    "revealRequirement": "must_be_revealed",
     "victoryCondition": "Tất cả Shadow bị tiêu diệt.",
     "complexity": "low",
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-hunter-cua-ban-mo-rong-thu-2-p",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_fujiko",
@@ -807,13 +807,13 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "effect": "Tăng thêm 3 sát thương cho đòn tấn công thành công.",
     "targetMode": "single_other",
     "usageLimit": "passive",
-    "revealRequirement": "needs-clarification",
+    "revealRequirement": "must_be_revealed",
     "victoryCondition": "Tất cả Hunter hoặc 3 Neutral bị tiêu diệt.",
     "complexity": "low",
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-shadow-cua-ban-mo-rong-thu-2-p",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_witch",
@@ -828,13 +828,13 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "effect": "Miễn hoàn toàn sát thương khi đứng tại Weird Woods.",
     "targetMode": "self",
     "usageLimit": "passive",
-    "revealRequirement": "needs-clarification",
+    "revealRequirement": "must_be_revealed",
     "victoryCondition": "Tất cả Hunter hoặc 3 Neutral bị tiêu diệt.",
     "complexity": "low",
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-shadow-cua-ban-mo-rong-thu-2-p",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_wyvern",
@@ -938,8 +938,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "low",
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-shadow-cua-ban-mo-rong-thu-2-p",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_warlord",
@@ -1235,4 +1235,4 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "rulesStatus": "needs-clarification",
     "implementationStatus": "not-started"
   }
-] as const;
+];
