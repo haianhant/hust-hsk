@@ -199,7 +199,7 @@ test('P4B-1 — starter-twenty-six exposes 36 playable roles (14H/14S/8N), block
   // Remaining unimplemented expansion roles stay strictly needs-clarification & not-started
   const allExp = DEFAULT_CHARACTER_REGISTRY.listByExpansions(['expansion-1', 'expansion-2']);
   const remaining = allExp.filter((e) => e.metadata.implementationStatus !== 'implemented');
-  assert.ok(remaining.length >= 18 && remaining.length <= 30, `Expected 18..30 remaining unimplemented roles, got ${remaining.length}`);
+  assert.ok(remaining.length >= 8 && remaining.length <= 30, `Expected 8..30 remaining unimplemented roles, got ${remaining.length}`);
   for (const rem of remaining) {
     assert.equal(rem.metadata.rulesStatus, 'needs-clarification');
     assert.equal(rem.metadata.implementationStatus, 'not-started');

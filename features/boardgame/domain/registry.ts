@@ -41,6 +41,7 @@ import {
   ALL_EXPANSION_VICTORY_BINDINGS,
   PHASE2A_ROLE_IDS,
   PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
+  STARTER_FORTY_EIGHT_EXPANSION_ROLE_IDS,
   STARTER_SIXTEEN_EXPANSION_ROLE_IDS,
   STARTER_THIRTY_EIGHT_EXPANSION_ROLE_IDS,
   STARTER_TWENTY_SIX_EXPANSION_ROLE_IDS,
@@ -570,6 +571,24 @@ export const EXPERIMENTAL_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
       ...STARTER_THIRTY_EIGHT_EXPANSION_ROLE_IDS,
     ],
     expectedCharacterCount: 48,
+    catalogVersion: BOARD_GAME_CATALOG_VERSION,
+  },
+  {
+    id: 'starter-forty-eight',
+    label: 'Starter Forty-Eight (Thử nghiệm Wave 5 · 10 Classic + 48 Tướng Mở rộng)',
+    shortLabel: 'Starter 48 (Exp)',
+    description:
+      'Pool thử nghiệm nội bộ gồm 58 nhân vật hoàn tất toàn bộ Tier-3 (10 Classic + 48 Tướng Mở rộng: 19 Hunter · 18 Shadow · 21 Neutral; khóa 8 vai Tier-4). Tắt trên production.',
+    availability: 'experimental',
+    enabledInProduction: false,
+    isExperimental: true,
+    allowExperimentalHouseRules: true,
+    includedExpansions: ['classic', 'expansion-1', 'expansion-2'],
+    explicitCharacterIds: [
+      ...ROLES_CATALOG.map((r) => r.id),
+      ...STARTER_FORTY_EIGHT_EXPANSION_ROLE_IDS,
+    ],
+    expectedCharacterCount: 58,
     catalogVersion: BOARD_GAME_CATALOG_VERSION,
   },
 ];

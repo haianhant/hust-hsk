@@ -28,7 +28,7 @@ export type BoardGameMatchStatus =
 
 export const BOARD_GAME_RULESET_VERSION = 4 as const;
 export const BOARD_GAME_PROTOCOL_VERSION = 1 as const;
-export const BOARD_GAME_CATALOG_VERSION = '2026.11-p5c' as const;
+export const BOARD_GAME_CATALOG_VERSION = '2026.11-p6b' as const;
 
 export type BoardGameProductionRulesetId =
   | 'classic'
@@ -41,7 +41,8 @@ export type BoardGameExperimentalRulesetId =
   | 'starter-eight'
   | 'starter-sixteen'
   | 'starter-twenty-six'
-  | 'starter-thirty-eight';
+  | 'starter-thirty-eight'
+  | 'starter-forty-eight';
 
 export type BoardGameRulesetId =
   | BoardGameProductionRulesetId
@@ -64,6 +65,7 @@ export const BOARD_GAME_EXPERIMENTAL_RULESETS: readonly BoardGameExperimentalRul
   'starter-sixteen',
   'starter-twenty-six',
   'starter-thirty-eight',
+  'starter-forty-eight',
 ];
 
 export const BOARD_GAME_ALL_RULESETS: readonly BoardGameRulesetId[] = [
@@ -191,7 +193,8 @@ export type BoardGameRoleId =
   | Phase2RoleId
   | Phase3RoleId
   | Phase4RoleId
-  | Phase5RoleId;
+  | Phase5RoleId
+  | Phase6RoleId;
 
 export type BoardGameLocationId =
   | 'lobby'

@@ -216,9 +216,27 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
                     ? 'Còn sống khi trận đấu kết thúc VÀ (tất cả Kẻ Độc Hành đều còn sống HOẶC bạn đứng tại chính xác Sảnh Tầng 1 / Church).'
                     : rec.id === 'exp2_bianca'
                       ? 'Còn sống khi trận đấu kết thúc và có lượng HP còn lại thấp nhất trong các người chơi còn sống (cho phép hòa).'
-                      : rec.id === 'exp2_dalton'
-                        ? 'Hạ gục một người chơi khác sau khi kích hoạt Vòng Đấu Thứ 12, HOẶC còn nhiều máu nhất khi trận đấu kết thúc (cho phép hòa).'
-                        : rec.victoryCondition;
+                    : rec.id === 'exp2_dalton'
+                      ? 'Hạ gục một người chơi khác sau khi kích hoạt Vòng Đấu Thứ 12, HOẶC còn nhiều máu nhất khi trận đấu kết thúc (cho phép hòa).'
+                      : rec.id === 'exp1_anathema'
+                        ? 'Còn sống khi trò chơi kết thúc.'
+                        : rec.id === 'exp1_bethany'
+                          ? 'Người được chọn của bạn giành chiến thắng (không yêu cầu Bethany phải còn sống; nếu không có Người được chọn sẽ thua).'
+                          : rec.id === 'exp1_arnold'
+                            ? 'Còn sống khi trận đấu kết thúc và có nhiều hơn 2 người chơi còn sống trên bàn.'
+                            : rec.id === 'exp1_cassie'
+                              ? 'Sao chép điều kiện thắng của Neutral KHÁC đầu tiên lộ diện trong gameplay bình thường (áp dụng trên trạng thái của chính bạn).'
+                              : rec.id === 'exp1_clairvoyant'
+                                ? 'Sao chép điều kiện thắng của nhân vật chưa lộ diện mà bạn đã soi bí mật bằng Lời Tiên Tri.'
+                                : rec.id === 'exp2_april_skipps'
+                                  ? 'Chưa lộ diện và còn sống khi trận đấu kết thúc, HOẶC sống sót tới hết lượt tiếp theo của mình sau khi bị kỹ năng ép lộ ở ô 7 vết thương.'
+                                  : rec.id === 'exp2_colt'
+                                    ? 'Thắng tức thì khi đang đeo ít nhất 3 vũ khí trong nhóm Dao Rọc (ev-02), Cưa Máy (ev-03), Rìu Sắt (ev-04), Súng Bắn Đinh (ev-05).'
+                                    : rec.id === 'exp2_diana'
+                                      ? 'Còn sống và Khách hàng đang hoạt động của bạn thắng; nếu chưa kích hoạt được Khách hàng thì phải còn sống với đầy máu khi hết trận.'
+                                      : rec.id === 'exp2_aaron'
+                                        ? 'Cả bạn và Người vợ (nhân vật nữ đầu tiên lộ diện) đều còn sống khi hết trận; nếu chưa tìm thấy vợ, phải chết trước khi hết trận.'
+                                        : rec.victoryCondition;
 
   const targetMode: CharacterDesign['targetMode'] =
     rec.id === 'exp2_father_harrison' ||
@@ -230,7 +248,11 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
     rec.id === 'exp2_elise' ||
     rec.id === 'exp1_ernest' ||
     rec.id === 'exp2_warlord' ||
-    rec.id === 'exp1_angel'
+    rec.id === 'exp1_angel' ||
+    rec.id === 'exp1_anathema' ||
+    rec.id === 'exp1_bethany' ||
+    rec.id === 'exp1_cassie' ||
+    rec.id === 'exp1_clairvoyant'
       ? 'self'
       : 'passive';
 

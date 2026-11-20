@@ -139,6 +139,9 @@ export function ActionPanel({
   const selfVisionsMarkedId = selfPlayerId
     ? publicGame.visionsMarkedTargetByPlayer?.[selfPlayerId] ?? null
     : null;
+  const selfAaronSpouseId = selfPlayerId
+    ? publicGame.aaronSpouseByPlayer?.[selfPlayerId] ?? null
+    : null;
   const isPlayerProtectedAsUdi = (candidate: typeof aliveOthers[number]): boolean => {
     if (candidate.revealedRoleId !== 'exp1_udi' || !candidate.alive) return false;
     const othersInSameCluster = alivePlayers.filter(
@@ -156,9 +159,10 @@ export function ActionPanel({
       if (!(hasHandgun ? !same : same)) return false;
       if (isPlayerProtectedAsUdi(p)) return false;
       if (selfVisionsMarkedId && p.playerId === selfVisionsMarkedId) return false;
+      if (selfAaronSpouseId && p.playerId === selfAaronSpouseId) return false;
       return true;
     });
-  }, [aliveOthers, alivePlayers, selfPlayer, clusterPairs, selfVisionsMarkedId]);
+  }, [aliveOthers, alivePlayers, selfPlayer, clusterPairs, selfVisionsMarkedId, selfAaronSpouseId]);
 
   const clearContext = () => {
     if (onClearContext) {
@@ -266,6 +270,39 @@ export function ActionPanel({
             {publicGame.usurperAuraActive && selectedPlayer.revealedRoleId === 'exp2_usurper' && (
               <span className="font-bold text-fuchsia-200 whitespace-nowrap">
                 🚫 Hào quang cấm hồi
+              </span>
+            )}
+            {Object.values(publicGame.anathemaCursedTargetByPlayer ?? {}).includes(
+              selectedPlayer.playerId,
+            ) && (
+              <span className="font-bold text-rose-300 whitespace-nowrap">
+                🩸 Bị nguyền (Anathema)
+              </span>
+            )}
+            {Object.values(publicGame.bethanyChosenTargetByPlayer ?? {}).includes(
+              selectedPlayer.playerId,
+            ) && (
+              <span className="font-bold text-amber-300 whitespace-nowrap">
+                ✨ Người được chọn (Bethany)
+              </span>
+            )}
+            {Object.values(publicGame.dianaActiveCustomerByPlayer ?? {}).includes(
+              selectedPlayer.playerId,
+            ) && (
+              <span className="font-bold text-pink-300 whitespace-nowrap">
+                📜 Khách hàng (Diana)
+              </span>
+            )}
+            {Object.values(publicGame.aaronSpouseByPlayer ?? {}).includes(
+              selectedPlayer.playerId,
+            ) && (
+              <span className="font-bold text-rose-200 whitespace-nowrap">
+                💘 Vợ của Aaron
+              </span>
+            )}
+            {publicGame.aprilSkippsCountdownByPlayer?.[selectedPlayer.playerId] !== undefined && (
+              <span className="font-bold text-yellow-200 whitespace-nowrap">
+                🚨 Đếm ngược ô 7 (April)
               </span>
             )}
             {gearNames.length > 0 && (
@@ -518,37 +555,68 @@ export function ActionPanel({
   );
 
   const renderPrivateReactionPolicyBar = () => {
-    if (!privateView?.reactionPolicy) return null;
-    const currentPolicy = privateView.reactionPolicy;
+    const hasClairvoyantReveals = Boolean(
+      privateView?.clairvoyantReveals && privateView.clairvoyantReveals.length > 0,
+    );
+    const hasCopiedSummary = Boolean(privateView?.copiedVictoryGoalSummary);
+    if (!privateView?.reactionPolicy && !hasClairvoyantReveals && !hasCopiedSummary) return null;
+    const currentPolicy = privateView?.reactionPolicy;
     const items: Array<{ id: BoardGameReactionPolicy; label: string }> = [
       { id: 'ASK', label: 'Hỏi' },
       { id: 'AUTO_DECLINE', label: 'Tự bỏ qua' },
       { id: 'AUTO_ACTIVATE_WHEN_ELIGIBLE', label: 'Tự kích hoạt' },
     ];
     return (
-      <div
-        data-testid="bg-reaction-policy-bar"
-        className="flex flex-wrap items-center justify-between gap-1.5 rounded-xl border border-slate-700/75 bg-slate-950/75 px-2.5 py-1 text-[11px]"
-      >
-        <span className="font-bold text-slate-300">🔐 Phản ứng riêng tư:</span>
-        <div className="flex items-center gap-1">
-          {items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              data-testid={`bg-reaction-policy-${item.id}`}
-              aria-pressed={currentPolicy === item.id}
-              onClick={() => onAction({ type: 'SET_REACTION_PREF', policy: item.id })}
-              className={`px-2 py-0.5 rounded-lg border font-bold transition cursor-pointer ${
-                currentPolicy === item.id
-                  ? 'border-amber-300/80 bg-amber-500/25 text-amber-100'
-                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+      <div className="space-y-1">
+        {hasClairvoyantReveals && privateView?.clairvoyantReveals && (
+          <div
+            data-testid="bg-clairvoyant-vision-panel"
+            className="rounded-xl border border-indigo-400/55 bg-indigo-950/75 px-2.5 py-1.5 text-[11px] text-indigo-100 space-y-0.5"
+          >
+            {privateView.clairvoyantReveals.map((rev) => (
+              <p key={rev.targetPlayerId} className="leading-snug">
+                <span className="font-black text-indigo-200">🔮 Tiên Tri kín:</span>{' '}
+                <span className="font-bold text-white">{rev.targetDisplayName}</span> là{' '}
+                <span className="font-black text-amber-200">{rev.roleName}</span> (
+                {FACTION_LABELS[rev.faction]} · {rev.maxHp} HP) — {rev.copiedGoalSummary}
+              </p>
+            ))}
+          </div>
+        )}
+        {!hasClairvoyantReveals && hasCopiedSummary && (
+          <div
+            data-testid="bg-copied-goal-banner"
+            className="rounded-xl border border-amber-400/45 bg-amber-950/55 px-2.5 py-1 text-[11px] text-amber-100"
+          >
+            🎯 {privateView?.copiedVictoryGoalSummary}
+          </div>
+        )}
+        {currentPolicy && (
+          <div
+            data-testid="bg-reaction-policy-bar"
+            className="flex flex-wrap items-center justify-between gap-1.5 rounded-xl border border-slate-700/75 bg-slate-950/75 px-2.5 py-1 text-[11px]"
+          >
+            <span className="font-bold text-slate-300">🔐 Phản ứng riêng tư:</span>
+            <div className="flex items-center gap-1">
+              {items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  data-testid={`bg-reaction-policy-${item.id}`}
+                  aria-pressed={currentPolicy === item.id}
+                  onClick={() => onAction({ type: 'SET_REACTION_PREF', policy: item.id })}
+                  className={`px-2 py-0.5 rounded-lg border font-bold transition cursor-pointer ${
+                    currentPolicy === item.id
+                      ? 'border-amber-300/80 bg-amber-500/25 text-amber-100'
+                      : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -609,7 +677,7 @@ export function ActionPanel({
 
   // Điều kiện kích hoạt & lý do khóa cụ thể cho Kỹ năng nhân vật
   const skillLockReason: string | null = (() => {
-    if (!privateView.revealed) {
+    if (!privateView.revealed && privateView.roleId !== 'exp1_anathema') {
       return 'Cần lật vai công khai trước khi dùng kỹ năng';
     }
     if (roleDesign.targetMode === 'passive') {
@@ -750,6 +818,48 @@ export function ActionPanel({
       }
       if (hasAnyHandCard) {
         return 'Giải quyết thẻ vừa rút trước';
+      }
+    }
+    if (privateView.roleId === 'exp1_anathema') {
+      if (publicGame.turnPhase !== 'ROLL_MOVE') {
+        return 'Chỉ nguyền vào đầu lượt (Pha 1 trước khi tung xúc xắc)';
+      }
+      if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
+        return 'Đã bắt đầu tung xúc xắc trong lượt này';
+      }
+      if (aliveOthers.length === 0) {
+        return 'Không còn người chơi khác để nguyền';
+      }
+    }
+    if (privateView.roleId === 'exp1_bethany') {
+      if (publicGame.turnPhase !== 'ROLL_MOVE') {
+        return 'Chỉ chỉ định Người được chọn vào đầu lượt (Pha 1)';
+      }
+      if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
+        return 'Đã bắt đầu tung xúc xắc trong lượt này';
+      }
+      if (!selfPlayer.equipped.some((eq) => eq.id !== 'ev-01')) {
+        return 'Cần có ít nhất 1 trang bị (trừ Masamune) để trao tặng';
+      }
+    }
+    if (privateView.roleId === 'exp1_cassie') {
+      if (publicGame.turnPhase !== 'ROLL_MOVE') {
+        return 'Chỉ hồi 1 HP vào đầu lượt (Pha 1)';
+      }
+      if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
+        return 'Đã bắt đầu tung xúc xắc trong lượt này';
+      }
+    }
+    if (privateView.roleId === 'exp1_clairvoyant') {
+      if (publicGame.turnPhase !== 'ROLL_MOVE') {
+        return 'Chỉ dùng Lời Tiên Tri vào đầu lượt (Pha 1)';
+      }
+      if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
+        return 'Đã bắt đầu tung xúc xắc trong lượt này';
+      }
+      const hasUnrevealedOther = aliveOthers.some((p) => p.revealedRoleId === null);
+      if (!hasUnrevealedOther) {
+        return 'Tất cả người chơi khác đều đã lộ diện';
       }
     }
     if (privateView.roleId === 'lang-cuu-ho') {
@@ -1668,6 +1778,53 @@ export function ActionPanel({
                   </p>
                 )}
               </div>
+
+              {/* 3. Tặng trang bị tự nguyện cho Bethany đã lộ diện (Phase 6B — TRANSFER_TO_BETHANY) */}
+              {(() => {
+                const revealedBethanies = aliveOthers.filter(
+                  (p) => p.revealedRoleId === 'exp1_bethany',
+                );
+                const giftableGear = selfPlayer.equipped.filter((eq) => eq.id !== 'ev-01');
+                const canOfferBethany =
+                  revealedBethanies.length > 0 &&
+                  giftableGear.length > 0 &&
+                  !hasAnyHandCard &&
+                  (publicGame.turnPhase === 'LOCATION_ACTION' ||
+                    publicGame.turnPhase === 'MAIN_ACTION');
+                if (!canOfferBethany) return null;
+                return (
+                  <div
+                    data-testid="bg-transfer-to-bethany-box"
+                    className="space-y-1.5 border-t border-slate-800 pt-2"
+                  >
+                    <p className="text-xs font-black text-amber-200">
+                      🎁 Tặng trang bị cho Bethany (Thành Người được chọn)
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {revealedBethanies.map((beth) =>
+                        giftableGear.map((gear) => (
+                          <button
+                            key={`${beth.playerId}-${gear.id}`}
+                            type="button"
+                            data-testid={`bg-gift-bethany-${gear.id}`}
+                            onClick={() => {
+                              setSecondaryOpen(false);
+                              onAction({
+                                type: 'TRANSFER_TO_BETHANY',
+                                targetPlayerId: beth.playerId,
+                                cardId: gear.id,
+                              });
+                            }}
+                            className="px-2 py-1 rounded-lg border border-amber-400/55 bg-amber-950/75 hover:bg-amber-900/80 text-amber-100 text-[11px] font-bold cursor-pointer"
+                          >
+                            🎁 {gear.title} → {beth.displayName}
+                          </button>
+                        )),
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

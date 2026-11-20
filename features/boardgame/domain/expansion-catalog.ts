@@ -455,8 +455,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-2-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_bethany",
@@ -476,8 +476,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-2-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_cindy",
@@ -518,8 +518,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-2-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_antimony",
@@ -560,8 +560,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-2-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_clairvoyant",
@@ -581,8 +581,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-2-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_angel",
@@ -707,8 +707,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-hunter-cua-ban-mo-rong-thu-2-p",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_g43",
@@ -1043,8 +1043,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_bonnie",
@@ -1106,8 +1106,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_cruz",
@@ -1148,8 +1148,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_aaron",
@@ -1169,8 +1169,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_arlene",

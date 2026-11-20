@@ -26,6 +26,8 @@ import {
   applyExpandedInvestigateCard,
   applyExpandedLocationPower,
   applyExpandedRevealRole,
+  applyExpandedTransferToBethany,
+  applyExpandedTurnEndHooks,
   applyExpandedUseCard,
   applyExpandedUseSkill,
   canExpandedPlayerAttackTarget,
@@ -447,12 +449,22 @@ export function applyPlayerGameAction(
       }
       break;
     case 'TRANSFER_TO_BETHANY':
-      result = {
-        ok: false,
-        error: expanded
-          ? 'Chức năng tặng trang bị cho Bethany sẽ mở khi nhân vật Phase 6B được kích hoạt.'
-          : 'Hành động tặng trang bị cho Bethany chỉ khả dụng ở bộ luật mở rộng.',
-      };
+      if (expanded) {
+        result = applyExpandedTransferToBethany(
+          state,
+          actor,
+          action.targetPlayerId,
+          action.cardId,
+          nowMs,
+          TURN_CONTINUATION_CALLBACKS,
+        );
+        continuationManaged = true;
+      } else {
+        result = {
+          ok: false,
+          error: 'Hành động tặng trang bị cho Bethany chỉ khả dụng ở bộ luật mở rộng.',
+        };
+      }
       break;
     case 'END_TURN':
       if (state.turnPhase === 'ROLL_MOVE' || state.turnPhase === 'CHOOSE_MOVE') {
@@ -507,6 +519,9 @@ export function applyPlayerGameAction(
   }
 
   if (autoEndTurnAfterAction || !actor.alive) {
+    if (expanded && applyExpandedTurnEndHooks(state, actor, nowMs, TURN_CONTINUATION_CALLBACKS)) {
+      return { ok: true };
+    }
     advanceTurn(state, nowMs);
   }
 
@@ -559,6 +574,9 @@ export function applyTimeoutAutoTurn(
   }
   if (isExpandedRuleset(state)) {
     discardGloriaQueuedCards(state, actor.playerId);
+    if (applyExpandedTurnEndHooks(state, actor, nowMs, TURN_CONTINUATION_CALLBACKS)) {
+      return;
+    }
   }
 
   if (!finalizeIfFinished(state, nowMs)) {
