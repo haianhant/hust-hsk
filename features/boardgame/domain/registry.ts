@@ -37,6 +37,7 @@ import {
   type SourceFactionId,
 } from './expansion-catalog';
 import {
+  PHASE2A_ROLE_IDS,
   PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
   PHASE2_SKILL_BINDINGS,
   PHASE2_VICTORY_BINDINGS,
@@ -488,9 +489,27 @@ export const EXPERIMENTAL_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
     includedExpansions: ['classic', 'expansion-1', 'expansion-2'],
     explicitCharacterIds: [
       ...ROLES_CATALOG.map((r) => r.id),
-      ...PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
+      ...PHASE2A_ROLE_IDS,
     ],
     expectedCharacterCount: 14,
+    catalogVersion: BOARD_GAME_CATALOG_VERSION,
+  },
+  {
+    id: 'starter-eight',
+    label: 'Starter Eight (Thử nghiệm nội bộ · 10 Classic + 8 Tướng Mở rộng)',
+    shortLabel: 'Starter 8 (Exp)',
+    description:
+      'Pool thử nghiệm nội bộ gồm 10 tướng Classic + 8 tướng Starter Eight (4 luật xác minh Phase 2A + 4 house-rule thử nghiệm HUSTVerse Phase 2B). Tắt trên production.',
+    availability: 'experimental',
+    enabledInProduction: false,
+    isExperimental: true,
+    allowExperimentalHouseRules: true,
+    includedExpansions: ['classic', 'expansion-1', 'expansion-2'],
+    explicitCharacterIds: [
+      ...ROLES_CATALOG.map((r) => r.id),
+      ...PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
+    ],
+    expectedCharacterCount: 18,
     catalogVersion: BOARD_GAME_CATALOG_VERSION,
   },
 ];

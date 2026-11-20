@@ -72,13 +72,13 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "effect": "Được đổ lại xúc xắc tấn công 1 lần và bắt buộc áp dụng kết quả lần đổ thứ hai.",
     "targetMode": "self",
     "usageLimit": "per_attack",
-    "revealRequirement": "needs-clarification",
+    "revealRequirement": "must_be_revealed",
     "victoryCondition": "Tiêu diệt tất cả các Shadow.",
     "complexity": "low",
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-1-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_lloyd",
@@ -114,13 +114,13 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "effect": "Rút 2 lá bài, giữ 1 lá và hủy lá còn lại.",
     "targetMode": "self",
     "usageLimit": "passive",
-    "revealRequirement": "needs-clarification",
+    "revealRequirement": "must_be_revealed",
     "victoryCondition": "Tiêu diệt tất cả các Shadow.",
     "complexity": "medium",
     "implementationDifficulty": "tier-2",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-1-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_ernest",
@@ -266,8 +266,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "medium",
     "implementationDifficulty": "tier-2",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-shadow-phien-ban-mo-rong-thu-1-phan-3-sh",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_victor",
@@ -282,13 +282,13 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "effect": "Tự nhận 1 sát thương để cộng thêm 2 sát thương cho đòn tấn công.",
     "targetMode": "single_other",
     "usageLimit": "per_attack",
-    "revealRequirement": "needs-clarification",
+    "revealRequirement": "must_be_revealed",
     "victoryCondition": "Tiêu diệt tất cả các Hunter hoặc 3 Neutral.",
     "complexity": "low",
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-shadow-phien-ban-mo-rong-thu-1-phan-3-sh",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_vengeance",

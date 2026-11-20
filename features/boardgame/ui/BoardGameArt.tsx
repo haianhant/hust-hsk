@@ -168,6 +168,34 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
     motif: 'Cánh Rồng Hấp Thụ',
     shortAbility: 'Hạ mục tiêu bằng đòn đánh: Hồi 5 HP (Hunter/Neutral) hoặc đầy máu (Shadow)',
   },
+  exp1_gayle: {
+    codeName: 'Gayle',
+    title: 'Hunter MR1 · 14 HP',
+    accentHex: '#38bdf8',
+    motif: 'Găng Đấu Sĩ Thực Tập',
+    shortAbility: 'Khi tấn công (đã lật vai): Có thể đổ lại xúc xắc đánh 1 lần (bắt buộc lấy lần 2)',
+  },
+  exp1_felicia: {
+    codeName: 'Felicia',
+    title: 'Hunter MR1 · 12 HP',
+    accentHex: '#34d399',
+    motif: 'Bộ Thẻ Tháo Vát',
+    shortAbility: 'Khi rút bài Trắng/Đen (đã lật vai): Rút 2 chọn 1, hủy lá còn lại',
+  },
+  exp1_victor: {
+    codeName: 'Victor',
+    title: 'Shadow MR1 · 13 HP',
+    accentHex: '#f97316',
+    motif: 'Ống Nghiệm Bác Học Điên',
+    shortAbility: 'Khi đánh trúng (≥ 2 HP, đã lật vai): Trả 1 HP để +2 ST cho 1 mục tiêu',
+  },
+  exp1_undying: {
+    codeName: 'Undying',
+    title: 'Shadow MR1 · 11 HP',
+    accentHex: '#94a3b8',
+    motif: 'Lớp Giáp Mạ Sắt',
+    shortAbility: 'Khi nhận ≥ 2 ST (đòn đánh/kỹ năng/thẻ): Lật vai hoặc đang lật giảm 1 ST',
+  },
 };
 
 export interface LocationVisualMeta {

@@ -1062,10 +1062,12 @@ export function resolveUseCard(
     case 'eq_chocolate': {
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
+      const isExpandedMode = Boolean(state.rulesetId && state.rulesetId !== 'classic');
       const qualifies =
         actor.roleId === 'lang-quan-sat' ||
         actor.roleId === 'gac-truc-ban' ||
-        actor.roleId === 'suong-tin-gia';
+        actor.roleId === 'suong-tin-gia' ||
+        (isExpandedMode && actor.roleId === 'exp1_undying');
       if (!skipEffect && qualifies) {
         revealPlayerNow(state, actor, 'voluntary', nowMs);
         const healed = applyHeal(state, actor, actor.woundsTaken);

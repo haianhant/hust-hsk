@@ -109,5 +109,63 @@
 
 ---
 
-## 3. Quyết định Luật cho 4 Nhân vật Phase 2B (Sẽ hoàn thiện & kiểm thử ở Milestone 2B)
-*(Chờ triển khai ở Phase 2B — hiện 4 tướng `exp1_gayle`, `exp1_felicia`, `exp1_victor`, `exp1_undying` vẫn đang ở trạng thái `not-started` và chưa playable.)*
+## 3. Quyết định Luật cho 4 Nhân vật Phase 2B (HUSTVerse Experimental House Rules)
+
+> [!IMPORTANT]
+> Cả 4 nhân vật Phase 2B dưới đây sử dụng **`rulesStatus: "house-rule-approved"`** trong [`character-catalog.json`](../character-catalog.json) — **tuyệt đối KHÔNG gắn nhãn là Verified Official Rules**. Các quy tắc này chỉ được kích hoạt trong pool thử nghiệm nội bộ **`starter-eight`** (`ALLOW_EXPERIMENTAL_RULESETS=1`), giữ nguyên 100% mô tả gốc từ nguồn `thegioiboardgame.vn` và không ảnh hưởng tới `classic` hay `starter-four`.
+
+### RD-2B-01: Gayle (`exp1_gayle` — Hunter, 14 HP)
+- **Source rule:** *"Đấu sĩ thực tập: Bạn có thể đổ lại xúc xắc đánh 1 lần nữa. Nếu làm vậy, bạn bắt buộc lấy kết quả thứ 2."*
+- **Ambiguity:** Phần Ưu điểm bài review nguồn có nhắc tới việc đổ lại xúc xắc di chuyển, trong khi mô tả thẻ chỉ nói "xúc xắc đánh"; chưa ghi rõ điều kiện lật vai và tương tác với vũ khí đổi xúc xắc (`Masamune`).
+- **Proposed HUSTVerse rule (Experimental House Rule):**
+  - Trigger `BEFORE_ATTACK` (priority 15), **chỉ áp dụng cho xúc xắc tấn công** (không áp dụng cho `ROLL_MOVE`).
+  - Phải **đã lộ diện** (`revealed === true`) trước khi sử dụng.
+  - Sau lần tung đầu (`firstRoll`), mở Pending Choice `gayle_attack_reroll` (`keep` vs `reroll`, timeout fallback `keep`).
+  - Nếu chọn `reroll`: server tung lại bằng deterministic RNG đúng **1 lần duy nhất** theo cùng loại xúc xắc hợp lệ của vũ khí (`1d4` nếu đeo `Masamune`, `|1d6 - 1d4|` nếu thường) và **bắt buộc dùng kết quả lần 2 kể cả khi xấu hơn**; không cho xếp chồng reroll.
+- **Balance rationale:** Khác biệt rõ với Fiona (chọn tốt nhất trong 2 lần, 12 HP): Gayle có 14 HP và chấp nhận rủi ro "được ăn cả, ngã về không" khi reroll.
+- **Tests:** `P2B-2` (`test/boardgame-phase2b.test.cjs`).
+- **Decision status:** `HOUSE_RULE_APPROVED_EXPERIMENTAL`
+
+### RD-2B-02: Felicia (`exp1_felicia` — Hunter, 12 HP)
+- **Source rule:** *"Tháo vát: Mỗi lần lấy bài, lấy 2 lá, chọn 1 lá và lá còn lại hủy."*
+- **Ambiguity:** Chưa ghi rõ điều kiện lộ diện, có áp dụng cho Green Investigation (Khám Phá bí mật 1-đối-1) hay không, xử lý cạn bộ bài (0/1 lá) và phòng chống đệ quy.
+- **Proposed HUSTVerse rule (HUSTVerse Experimental House Rule — KHÔNG khẳng định là luật chính thức):**
+  - Trigger `ON_DRAW_CARD` (priority 10), yêu cầu `revealed === true`.
+  - **Giới hạn thử nghiệm:** Chỉ áp dụng cho hai bộ bài **Trắng (`equipment` — Cung Ứng)** và **Đen (`event` — Đột Kích)**; **chưa áp dụng cho Xanh (`investigation` — Khám Phá)** để không làm lệch cơ chế điều tra bí mật và nhịp lộ phe.
+  - Server rút đúng 2 lá theo đúng thứ tự bộ bài (`takeOneCardFromDeck`, tự xáo lại chồng bỏ nếu cần). Nếu chỉ còn 0 lá → chuyển `MAIN_ACTION`; nếu còn đúng 1 lá → rút thường 1 lá (không treo choice).
+  - Felicia xem đầy đủ 2 lá trong `privateView.pendingChoice` (người chơi khác & Spectator tuyệt đối không thấy tên 2 lá bài trong `publicGame` hay `publicLog`), chọn giữ 1 lá (`pick_0` / `pick_1`, timeout/disconnect tự giữ `pick_0`).
+  - Lá không chọn đi thẳng vào `discards[deckId]`; chỉ lá được chọn mới thực thi (đeo ngay nếu Trang bị, lên tay nếu Dùng 1 lần). Không kích hoạt đệ quy khi thẻ/kỹ năng khác tạo draw phụ (`isLocationDraw === true && !isRecursiveDraw`).
+- **Balance rationale:** Giữ sức mạnh lọc bài/tìm trang bị rất tốt cho Hunter 12 HP mà không biến Felicia thành máy dò danh tính phá vỡ ẩn vai của phe Shadow/Neutral.
+- **Tests:** `P2B-3`, `P2B-6` (`test/boardgame-phase2b.test.cjs`).
+- **Decision status:** `HOUSE_RULE_APPROVED_EXPERIMENTAL`
+
+### RD-2B-03: Victor (`exp1_victor` — Shadow, 13 HP)
+- **Source rule:** *"Bác học điên: Mỗi lần bạn tấn công thành công, bạn có thể nhận 1 sát thương để tăng thêm 2 sát thương cho cuộc tấn công của bạn."*
+- **Ambiguity:** Chưa rõ yêu cầu lộ diện, ngưỡng máu tối thiểu (có được tự sát ở 1 HP hay không), 1 HP mất có phải HP cost hay sát thương giảm được bởi giáp, và tương tác với vũ khí đánh nhiều mục tiêu (`Machine Gun`).
+- **Proposed HUSTVerse rule (HUSTVerse Experimental Balance Rule):**
+  - Trigger `BEFORE_DAMAGE` (phase `attack_boost_check`, priority 5), yêu cầu `revealed === true`.
+  - Chỉ kích hoạt khi đòn tấn công trúng mục tiêu và **sát thương nền lớn hơn 0** (`baseDmg > 0`); tối đa 1 lần mỗi attack; thẻ bài/kỹ năng/địa điểm không kích hoạt.
+  - Victor phải còn **ít nhất 2 HP thực tế** (`hp >= 2`) để trả 1 HP (không được tự sát).
+  - **1 HP trả là HP cost** (`applyHpCost`, `isHpCost: true`) — **không thể bị giảm** bởi `Holy Robe`, khiên hay kỹ năng giảm thương.
+  - Mở Pending Choice `victor_blood_boost` (`boost:<targetId>` hoặc `skip`, timeout fallback `skip`). Khi kích hoạt, cộng **`+2` sát thương cho ĐÚNG 1 mục tiêu được chọn** — kể cả khi cầm **Machine Gun (`ev-06`)**, không tăng đồng loạt cho mọi mục tiêu để tránh combo AoE quá mạnh.
+- **Balance rationale:** Tạo mẫu Shadow chủ động đổi máu lấy đột biến dứt điểm đơn mục tiêu mà không tạo combo Machine Gun hủy diệt toàn bàn.
+- **Tests:** `P2B-4`, `P2B-6` (`test/boardgame-phase2b.test.cjs`).
+- **Decision status:** `HOUSE_RULE_APPROVED_EXPERIMENTAL`
+
+### RD-2B-04: Undying (`exp1_undying` — Shadow, 11 HP)
+- **Source rule:** *"Mạ Sắt: Mỗi khi bạn nhận 2 hoặc nhiều sát thương, bạn có thể lộ diện (hoặc đã lộ diện) thì sát thương nhận được giảm đi 1."*
+- **Ambiguity:** Nguồn sát thương hợp lệ (chỉ attack hay gồm cả skill/card), thứ tự cộng dồn với giáp/khiên (`Holy Robe`, `Guardian Angel`, `Talisman`), bảo mật lựa chọn lật vai khi còn ẩn.
+- **Proposed HUSTVerse rule (Experimental House Rule):**
+  - Trigger `BEFORE_DAMAGE` (priority 30 — chạy **sau** `Guardian Shield`, `Talisman`, `Holy Robe (-1)` và `G43`, **trước** khi trừ HP).
+  - Áp dụng cho sát thương từ **attack, skill và card** (`attack | skill | event | investigation`); **không** áp dụng cho HP cost (`isHpCost`), tự hy sinh, sát thương không thể ngăn chặn (`unpreventable`) hoặc bẫy địa điểm (`location`).
+  - Kiểm tra ngưỡng **`>= 2` sát thương sau các phép giảm đã có**: ví dụ nhận 2 ST tấn công khi đang mặc `Holy Robe (-1)` → còn 1 ST (`< 2`) nên Undying **không** kích hoạt; nhận 3 ST khi mặc `Holy Robe (-1)` → còn 2 ST (`>= 2`) → Undying giảm thêm 1 còn 1 ST.
+  - Khi chưa lộ diện: mở **Secret Pending Choice** (`undying_reveal_reduce`, `isSecret: true`, `reveal_and_reduce` vs `decline`, fallback `decline`) — tuyệt đối không tự lật vai và không lộ danh tính khi từ chối/timeout.
+  - Khi đã lộ diện: tự động áp dụng giảm 1 ST đúng 1 lần mỗi `damageEventId`; không tạo hồi máu và không lặp trigger.
+  - Tương tác thẻ White `eq_chocolate` (*Sô-cô-la Năng Lượng* — mở rộng cho tên gốc bắt đầu A/E/U trong chế độ Expanded): `Undying` (chữ U) hợp lệ khi chơi ở bộ luật mở rộng; bộ luật Classic giữ nguyên 3 vai gốc (`Allie`, `Emi`, `Unknown`).
+- **Balance rationale:** Bù đắp mốc 11 HP thấp của Undying bằng khả năng chịu đòn bền bỉ trước cả đòn đánh lẫn thẻ Đột Kích/kỹ năng, đồng thời giữ counterplay bằng sát thương 1 điểm (Thăm Dò 1 ST, đòn 1 ST).
+- **Tests:** `P2B-5`, `P2B-6` (`test/boardgame-phase2b.test.cjs`).
+- **Decision status:** `HOUSE_RULE_APPROVED_EXPERIMENTAL`
+
+### RD-2B-05: Experimental Pool `starter-eight` (18 Nhân vật Thử nghiệm Nội bộ)
+- **Proposed HUSTVerse rule:** Đăng ký ruleset thử nghiệm nội bộ `starter-eight` (10 Classic + 8 Starter Eight = 18 tướng: 7 Hunter · 7 Shadow · 4 Neutral) với `isExperimental: true`, `enabledInProduction: false`, `allowExperimentalHouseRules: true`. Bị chặn mặc định trên production (`RULESET_UNAVAILABLE`), chỉ mở khi `ALLOW_EXPERIMENTAL_RULESETS=1` trong harness/test/playtest nội bộ.
+- **Decision status:** `RATIFIED_EXPERIMENTAL`

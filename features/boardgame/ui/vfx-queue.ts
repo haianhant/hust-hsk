@@ -1184,6 +1184,73 @@ export function extractVisualEventsFromDiff(
             shake: 'none',
             roleId: actorPub.revealedRoleId,
           });
+        } else if (
+          actorPub.revealedRoleId === 'exp1_wendigo' ||
+          actorPub.revealedRoleId === 'exp2_wyvern'
+        ) {
+          events.push({
+            id: `${next.matchId}::exp-heal::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(840, reduced),
+            effect: 'HEAL_AURA',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [actorId],
+            shake: 'none',
+            roleId: actorPub.revealedRoleId,
+          });
+        } else if (
+          actorPub.revealedRoleId === 'exp2_g43' ||
+          actorPub.revealedRoleId === 'exp1_undying'
+        ) {
+          events.push({
+            id: `${next.matchId}::exp-shield::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 42,
+            durationMs: scaleDuration(820, reduced),
+            effect: 'SHIELD_GUARD',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [actorId],
+            shake: 'none',
+            roleId: actorPub.revealedRoleId,
+          });
+          events.push({
+            id: `${next.matchId}::exp-block-txt::${log.id}`,
+            kind: 'FLOATING_TEXT',
+            order: 50,
+            durationMs: scaleDuration(820, reduced),
+            targetPlayerId: actorId,
+            label: actorPub.revealedRoleId === 'exp2_g43' ? '-2 ST' : '-1 ST',
+            variant: 'block',
+            syncGroup: 'shield',
+          });
+        } else if (actorPub.revealedRoleId === 'exp1_victor' && log.text.includes('Bác Học Điên')) {
+          events.push({
+            id: `${next.matchId}::exp-victor::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(880, reduced),
+            effect: 'MASAMUNE_SLASH',
+            sourcePlayerId: actorId,
+            targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
+            shake: 'light',
+            roleId: 'exp1_victor',
+          });
+        } else if (
+          actorPub.revealedRoleId === 'exp2_fiona' ||
+          actorPub.revealedRoleId === 'exp1_gayle'
+        ) {
+          events.push({
+            id: `${next.matchId}::exp-dice-skill::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(760, reduced),
+            effect: 'SLASH',
+            sourcePlayerId: actorId,
+            targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
+            shake: 'none',
+            roleId: actorPub.revealedRoleId,
+          });
         }
       }
     }

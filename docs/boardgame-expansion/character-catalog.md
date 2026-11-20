@@ -1,6 +1,6 @@
 # Bóng Đêm KTX — Character Expansion Catalog (56 Tướng Mở Rộng + 10 Classic = 66)
 
-> **Trạng thái Phase 0:** Tài liệu này được sinh đồng bộ trực tiếp từ [`character-catalog.json`](./character-catalog.json). **Toàn bộ 56 nhân vật mở rộng đều đang ở trạng thái `implementationStatus = not-started` và KHÔNG được đăng ký vào pool phân vai đang hoạt động.**
+> **Trạng thái Phase 2B (Internal Experimental Only):** Tài liệu này được đồng bộ từ [`character-catalog.json`](./character-catalog.json). Hiện có **8/56 tướng Starter Eight đã triển khai** trong pool thử nghiệm nội bộ (`starter-four` / `starter-eight`, tắt trên production); **48 tướng còn lại giữ nguyên `implementationStatus = not-started`** và production vẫn chỉ kích hoạt duy nhất **`classic` (10 tướng)**.
 > **Kiểm tra dữ liệu:** Chạy `node scripts/validate-character-catalog.cjs`.
 
 ## 1. Tổng hợp Phân bổ & Nguồn Đối chiếu
@@ -8,8 +8,8 @@
 | Bộ nhân vật | Hunter | Shadow | Neutral / Wanderer | Tổng | Trạng thái Production | Nguồn đối chiếu |
 |---|---:|---:|---:|---:|---|---|
 | **Classic (Baseline KTX)** | 3 | 3 | 4 | **10** | ✅ Active (`classic`) | `features/boardgame/domain/roles.ts` |
-| **Expansion 1 (Shadow Hunters MR1)** | 8 | 9 | 9 | **26** | ⛔ Disabled (`not-started`) | 3 bài review `thegioiboardgame.vn` |
-| **Expansion 2 (Shadow Hunters MR2)** | 9 | 9 | 12 | **30** | ⛔ Disabled (`not-started`) | 3 bài review `thegioiboardgame.vn` |
+| **Expansion 1 (Shadow Hunters MR1)** | 8 | 9 | 9 | **26** | ⛔ Prod Disabled (5/26 `implemented` nội bộ) | 3 bài review `thegioiboardgame.vn` |
+| **Expansion 2 (Shadow Hunters MR2)** | 9 | 9 | 12 | **30** | ⛔ Prod Disabled (3/30 `implemented` nội bộ) | 3 bài review `thegioiboardgame.vn` |
 | **Tổng quy hoạch** | **20** | **21** | **25** | **66** | Classic only | — |
 
 ### 6 Liên kết Nguồn Chính (`https://thegioiboardgame.vn/`)
@@ -21,10 +21,11 @@
 - **expansion-2-shadow:** https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-shadow-cua-ban-mo-rong-thu-2-p
 - **expansion-2-neutral:** https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2
 
-### Thống kê Trạng thái Luật (`rulesStatus`)
+### Thống kê Trạng thái Luật (`rulesStatus`) & Triển khai (`implementationStatus`)
 
-- **`verified`:** 4 nhân vật (`exp1_wendigo`, `exp2_g43`, `exp2_fiona`, `exp2_wyvern`)
-- **`needs-clarification`:** 52 nhân vật (tất cả đều có mục `UNRESOLVED` tương ứng trong [`rules-clarifications.md`](./rules-clarifications.md))
+- **`verified` (`implemented` — Phase 2A):** 4 nhân vật (`exp1_wendigo`, `exp2_g43`, `exp2_fiona`, `exp2_wyvern`)
+- **`house-rule-approved` (`implemented` — Phase 2B, HUSTVerse Experimental House Rules):** 4 nhân vật (`exp1_gayle`, `exp1_felicia`, `exp1_victor`, `exp1_undying`) — chi tiết quyết định tại [`phase-2/rules-decisions.md`](./phase-2/rules-decisions.md)
+- **`needs-clarification` (`not-started`):** 48 nhân vật (tất cả đều có mục `UNRESOLVED` tương ứng trong [`rules-clarifications.md`](./rules-clarifications.md))
 - **`unknown`:** 0 nhân vật
 
 ---

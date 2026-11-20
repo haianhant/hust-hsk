@@ -21,6 +21,7 @@ import {
   resolveUseSkill,
 } from './effects';
 import {
+  applyExpandedDrawLocationCard,
   applyExpandedInvestigateCard,
   applyExpandedLocationPower,
   applyExpandedUseCard,
@@ -258,7 +259,18 @@ export function applyPlayerGameAction(
       result = resolveChooseDestination(state, actor, action.location, nowMs);
       break;
     case 'DRAW_CARD':
-      result = resolveDrawLocationCard(state, actor, action.deck, nowMs);
+      if (expanded) {
+        result = applyExpandedDrawLocationCard(
+          state,
+          actor,
+          action.deck,
+          nowMs,
+          TURN_CONTINUATION_CALLBACKS,
+        );
+        continuationManaged = true;
+      } else {
+        result = resolveDrawLocationCard(state, actor, action.deck, nowMs);
+      }
       break;
     case 'USE_LOC_POWER':
       if (expanded) {

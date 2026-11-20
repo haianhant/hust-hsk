@@ -1204,12 +1204,17 @@ export function playEmotePop(): void {
 
 export function playSignatureSkillCue(roleId?: BoardGameRoleId | null): void {
   const isLightning =
-    roleId === 'gac-radio' || roleId === 'gac-ky-thuat' || roleId === 'exp2_fiona';
+    roleId === 'gac-radio' ||
+    roleId === 'gac-ky-thuat' ||
+    roleId === 'exp2_fiona' ||
+    roleId === 'exp1_gayle';
   const isShadow =
     roleId === 'suong-an-danh' ||
     roleId === 'suong-tin-gia' ||
     roleId === 'exp1_wendigo' ||
-    roleId === 'exp2_wyvern';
+    roleId === 'exp2_wyvern' ||
+    roleId === 'exp1_victor' ||
+    roleId === 'exp1_undying';
   const base = isLightning ? 340 : isShadow ? 220 : 415;
   // Gọn sắc trong 0..170ms để dẫn mượt vào nhịp Anticipation/Impact của chiêu mà không chồng âm
   playLayeredCue(

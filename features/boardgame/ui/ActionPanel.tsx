@@ -376,31 +376,69 @@ export function ActionPanel({
         </div>
         <p className="text-xs text-slate-200 leading-snug">{privatePendingChoice.description}</p>
         <div className="flex flex-wrap items-stretch gap-2">
-          {privatePendingChoice.options.map((opt, idx) => (
-            <button
-              key={opt.optionId}
-              type="button"
-              data-testid={`bg-choice-opt-${opt.optionId}`}
-              data-primary-cta={idx === 0 ? 'true' : undefined}
-              onClick={() =>
-                onAction({
-                  type: 'RESOLVE_CHOICE',
-                  choiceId: privatePendingChoice.choiceId,
-                  optionId: opt.optionId,
-                })
-              }
-              className={`flex-1 min-w-[160px] rounded-xl border px-3 py-2 text-left transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
-                idx === 0
-                  ? 'border-amber-300/80 bg-gradient-to-r from-amber-500/25 to-emerald-500/20 hover:from-amber-500/35 hover:to-emerald-500/30 text-white'
-                  : 'border-slate-600 bg-slate-800/90 hover:bg-slate-700 text-slate-100'
-              }`}
-            >
-              <span className="block text-xs font-black">{opt.label}</span>
-              {opt.detail && (
-                <span className="mt-0.5 block text-[11px] text-slate-300">{opt.detail}</span>
-              )}
-            </button>
-          ))}
+          {privatePendingChoice.options.map((opt, idx) => {
+            const cardThumb = opt.card ? (MIDNIGHT_CARD_ART[opt.card.id] ?? null) : null;
+            const deckBadge = opt.card
+              ? opt.card.deck === 'equipment'
+                ? '🛡️ Cung Ứng (Trắng)'
+                : opt.card.deck === 'event'
+                  ? '⚡ Đột Kích (Đen)'
+                  : '🔍 Khám Phá (Xanh)'
+              : null;
+            return (
+              <button
+                key={opt.optionId}
+                type="button"
+                data-testid={`bg-choice-opt-${opt.optionId}`}
+                data-primary-cta={idx === 0 ? 'true' : undefined}
+                onClick={() =>
+                  onAction({
+                    type: 'RESOLVE_CHOICE',
+                    choiceId: privatePendingChoice.choiceId,
+                    optionId: opt.optionId,
+                  })
+                }
+                className={`flex-1 min-w-[170px] rounded-xl border px-3 py-2 text-left transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                  idx === 0
+                    ? 'border-amber-300/80 bg-gradient-to-r from-amber-500/25 to-emerald-500/20 hover:from-amber-500/35 hover:to-emerald-500/30 text-white'
+                    : 'border-slate-600 bg-slate-800/90 hover:bg-slate-700 text-slate-100'
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  {cardThumb && (
+                    <img
+                      src={cardThumb}
+                      alt={opt.card?.title ?? opt.label}
+                      width={48}
+                      height={72}
+                      className="h-14 w-9 shrink-0 rounded-md border border-amber-300/45 object-cover"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    {deckBadge && (
+                      <span className="inline-block text-[10px] font-bold uppercase tracking-wide text-cyan-300">
+                        {deckBadge}
+                        {opt.card && !opt.card.isConsumable ? ' · Trang bị' : ' · Dùng 1 lần'}
+                      </span>
+                    )}
+                    {opt.roll && (
+                      <span className="inline-block text-[10px] font-extrabold text-amber-200 bg-slate-950/75 border border-amber-400/40 rounded px-1.5 py-0.5 mr-1">
+                        {opt.roll.hasMasamune
+                          ? `🎲 1d4=${opt.roll.d4}`
+                          : `🎲 ${opt.roll.d6} & ${opt.roll.d4} → ${opt.roll.totalDmg} ST`}
+                      </span>
+                    )}
+                    <span className="block text-xs font-black">{opt.label}</span>
+                    {opt.detail && (
+                      <span className="block text-[11px] text-slate-300 leading-snug">
+                        {opt.detail}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
         {contextBar}
       </section>

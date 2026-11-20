@@ -170,6 +170,7 @@ export type PendingResolutionStep =
       unpreventable?: boolean;
       undyingChecked?: boolean;
       undyingReduced?: boolean;
+      preUndyingDmg?: number;
       /** Ngữ cảnh ghi log đòn tấn công đơn mục tiêu hoặc bài/kỹ năng */
       attackSingleTargetLog?: {
         rollDesc: string;

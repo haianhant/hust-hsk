@@ -28,7 +28,7 @@ export type BoardGameMatchStatus =
 
 export const BOARD_GAME_RULESET_VERSION = 4 as const;
 export const BOARD_GAME_PROTOCOL_VERSION = 1 as const;
-export const BOARD_GAME_CATALOG_VERSION = '2026.11-p2a' as const;
+export const BOARD_GAME_CATALOG_VERSION = '2026.11-p2b' as const;
 
 export type BoardGameProductionRulesetId =
   | 'classic'
@@ -36,7 +36,7 @@ export type BoardGameProductionRulesetId =
   | 'expansion-2'
   | 'full-expansion';
 
-export type BoardGameExperimentalRulesetId = 'starter-four';
+export type BoardGameExperimentalRulesetId = 'starter-four' | 'starter-eight';
 
 export type BoardGameRulesetId =
   | BoardGameProductionRulesetId
@@ -55,6 +55,7 @@ export const BOARD_GAME_VALID_RULESETS: readonly BoardGameProductionRulesetId[] 
 
 export const BOARD_GAME_EXPERIMENTAL_RULESETS: readonly BoardGameExperimentalRulesetId[] = [
   'starter-four',
+  'starter-eight',
 ];
 
 export const BOARD_GAME_ALL_RULESETS: readonly BoardGameRulesetId[] = [
@@ -117,7 +118,15 @@ export type Phase2ARoleId =
   | 'exp2_fiona'
   | 'exp2_wyvern';
 
-export type BoardGameRoleId = ClassicBoardGameRoleId | Phase2ARoleId;
+export type Phase2BRoleId =
+  | 'exp1_gayle'
+  | 'exp1_felicia'
+  | 'exp1_victor'
+  | 'exp1_undying';
+
+export type Phase2RoleId = Phase2ARoleId | Phase2BRoleId;
+
+export type BoardGameRoleId = ClassicBoardGameRoleId | Phase2RoleId;
 
 export type BoardGameLocationId =
   | 'lobby'

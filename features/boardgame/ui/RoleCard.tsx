@@ -202,14 +202,29 @@ export const RoleCard = React.memo(function RoleCard({
   const skillStatusLabel = !privateView.revealed
     ? privateView.roleId === 'lang-tien-phong'
       ? 'Tự lộ khi có người ngã'
-      : 'Cần lật vai'
-    : roleDesign.targetMode === 'passive'
-      ? 'Nội tại'
-      : roleDesign.oncePerMatch && privateView.skillUsedOnce
-        ? 'Đã dùng'
-        : privateView.skillCooldown > 0
-          ? `Hồi ${privateView.skillCooldown} vòng`
-          : 'Sẵn sàng';
+      : privateView.roleId === 'exp1_wendigo' || privateView.roleId === 'exp1_undying'
+        ? 'Sẵn sàng lật phản ứng'
+        : 'Cần lật vai'
+    : privateView.roleId === 'exp1_victor'
+      ? privateView.hp >= 2
+        ? 'Sẵn sàng (Trả 1 HP → +2 ST)'
+        : 'Cần ≥ 2 HP'
+      : privateView.roleId === 'exp2_fiona' || privateView.roleId === 'exp1_gayle'
+        ? 'Sẵn sàng khi tấn công'
+        : privateView.roleId === 'exp1_felicia'
+          ? 'Sẵn sàng khi rút Trắng/Đen'
+          : privateView.roleId === 'exp2_g43' ||
+              privateView.roleId === 'exp2_wyvern' ||
+              privateView.roleId === 'exp1_wendigo' ||
+              privateView.roleId === 'exp1_undying'
+            ? 'Nội tại đang kích hoạt'
+            : roleDesign.targetMode === 'passive'
+              ? 'Nội tại'
+              : roleDesign.oncePerMatch && privateView.skillUsedOnce
+                ? 'Đã dùng'
+                : privateView.skillCooldown > 0
+                  ? `Hồi ${privateView.skillCooldown} vòng`
+                  : 'Sẵn sàng';
 
   const characterDetailsBlocks = (
     <>
