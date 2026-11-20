@@ -255,7 +255,10 @@ test('P2.5-2 — asset-manifest.json & MIDNIGHT_CHARACTER_ART cover all 18 roles
     const absPath = path.join(ROOT, 'public', expectedUrl.slice(1));
     assert.equal(fs.existsSync(absPath), true, `Missing Classic portrait: ${absPath}`);
   }
-  assert.equal(Object.keys(MIDNIGHT_CHARACTER_ART).length, 18, 'Expected 10 Classic + 8 Starter Eight portraits');
+  assert.ok(
+    Object.keys(MIDNIGHT_CHARACTER_ART).length >= 18,
+    'Expected at least 10 Classic + 8 Starter Eight portraits',
+  );
 
   // Verify asset-manifest.json matches disk byte-for-byte
   const manifestPath = path.join(ROOT, 'docs/boardgame-expansion/phase-2.5/asset-manifest.json');
