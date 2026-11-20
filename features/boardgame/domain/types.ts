@@ -26,6 +26,12 @@ import type {
   BoardGameZoneClusterId,
 } from '../../../shared/contracts/boardgame';
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
+import type { DamageRedirectionTrace } from './damage-redirection';
+import type { EquipmentTransferTransaction } from './equipment-transactions';
+import type {
+  AuthoritativeRevealTriggerReason,
+  AuthoritativeRoleRevealRecord,
+} from './reveal-events';
 
 export type GameCardEffectKind =
   | 'inv_anger'
@@ -184,6 +190,68 @@ export interface DaltonActivationEntry {
   damageEventId: string;
 }
 
+export interface AnathemaCurseEntry {
+  targetPlayerId: string;
+  activatedOnTurnNumber: number;
+  active: boolean;
+  endTurnSelfDamageApplied: boolean;
+}
+
+export interface BethanyChosenEntry {
+  chosenPlayerId: string;
+  designatedOnTurnNumber: number;
+  boundEventId: string;
+  boundAtMs: number;
+  txId: string;
+}
+
+export interface CopiedGoalBindingEntry {
+  targetPlayerId: string;
+  sourceRoleId: string;
+  boundEventId: string;
+  boundAtMs: number;
+  boundTurnNumber: number;
+}
+
+export interface ClairvoyantVisionEntry {
+  targetPlayerId: string;
+  targetDisplayName: string;
+  sourceRoleId: string;
+  roleName: string;
+  faction: BoardGameFactionId;
+  maxHp: number;
+  copiedGoalSummary: string;
+  boundEventId: string;
+  boundAtMs: number;
+  boundTurnNumber: number;
+}
+
+export interface AprilSkippsCountdownEntry {
+  revealedBySkill: boolean;
+  triggeredOnTurnNumber: number;
+  triggeredDuringOwnTurn: boolean;
+  ownTurnsCompletedAfterTrigger: number;
+  survivedDeadlineWon: boolean;
+}
+
+export interface DianaContractEntry {
+  customerPlayerId: string;
+  sourceRoleId: string;
+  boundOnTurnNumber: number;
+  boundEventId: string;
+  boundAtMs: number;
+  status: 'pending' | 'active' | 'cancelled';
+  activatedOnTurnNumber?: number;
+}
+
+export interface AaronSpouseEntry {
+  spousePlayerId: string;
+  sourceRoleId: string;
+  boundEventId: string;
+  boundAtMs: number;
+  boundTurnNumber: number;
+}
+
 export interface AttackRollSample {
   d6: number;
   d4: number;
@@ -202,6 +270,15 @@ export type PendingResolutionStep =
       rawAmount: number;
       sourceType: DamageSourceKind;
       attackerPlayerId: string | null;
+      /** CAP-06 attribution & bounded redirection ancestry (Phase 6A). */
+      originalAttackerPlayerId?: string | null;
+      originalTargetPlayerId?: string;
+      redirectChain?: string[];
+      redirectDepth?: number;
+      anathemaRedirected?: boolean;
+      arnoldChecked?: boolean;
+      arnoldReflected?: boolean;
+      isArnoldReflection?: boolean;
       preAttackTargetHp?: number;
       preAttackTargetRevealed?: boolean;
       isFujikoExecution?: boolean;
@@ -257,8 +334,33 @@ export type PendingResolutionStep =
       kind: 'ROLE_REVEALED_TRIGGERS';
       revealEventId: string;
       revealedPlayerId: string;
-      revealCause: 'voluntary' | 'forced-card' | 'reaction';
+      revealCause: 'voluntary' | 'forced-card' | 'reaction' | 'skill-forced';
+      revealTriggerReason?: AuthoritativeRevealTriggerReason;
+      sourceActorId?: string | null;
+      wasAliveBeforeReveal?: boolean;
+      isDeathReveal?: boolean;
+      isFinalMatchDisclosure?: boolean;
       umibozuChecked?: boolean;
+      cassieChecked?: boolean;
+      dianaChecked?: boolean;
+      aaronChecked?: boolean;
+      chainDepth?: number;
+    }
+  | {
+      kind: 'GIDEON_DRAW_WHITE_CARD';
+      gideonPlayerId: string;
+      eliminationEventId: string;
+      remainingDraws: number;
+      drawIndex: number;
+      chainDepth?: number;
+    }
+  | {
+      kind: 'COLT_THEFT_COUNTER';
+      coltPlayerId: string;
+      thiefPlayerId: string;
+      txId: string;
+      stolenCardId: string;
+      stolenCardTitle: string;
       chainDepth?: number;
     }
   | {
@@ -343,6 +445,7 @@ export type PendingResolutionStep =
       wyvernChecked?: boolean;
       vengeanceChecked?: boolean;
       wendigoCheckedIds?: string[];
+      gideonCheckedIds?: string[];
     }
   | {
       kind: 'FINISH_ACTION';
@@ -500,6 +603,74 @@ export type PendingChoiceContextData =
       incomingDmg: number;
       sourceType: DamageSourceKind;
       cardMap: Record<string, string>;
+    }
+  | {
+      kind: 'gideon_draw_white';
+      gideonPlayerId: string;
+      eliminationEventId: string;
+      victimPlayerId: string;
+      victimDisplayName: string;
+    }
+  | {
+      kind: 'gideon_white_card_target';
+      gideonPlayerId: string;
+      eliminationEventId: string;
+      cardId: string;
+      remainingDraws: number;
+      drawIndex: number;
+      targetMap: Record<string, string>;
+    }
+  | {
+      kind: 'anathema_curse_target';
+      anathemaPlayerId: string;
+      turnNumber: number;
+      targetMap: Record<string, string>;
+    }
+  | {
+      kind: 'bethany_designate_chosen';
+      bethanyPlayerId: string;
+      turnNumber: number;
+      giftMap: Record<string, { targetPlayerId: string; cardId: string }>;
+    }
+  | {
+      kind: 'arnold_reflect_lethal';
+      arnoldPlayerId: string;
+      damageEventId: string;
+      reflectTargetPlayerId: string;
+      reflectedAmount: number;
+      wasUnrevealed: boolean;
+    }
+  | {
+      kind: 'cassie_turn_heal';
+      cassiePlayerId: string;
+      turnNumber: number;
+      targetMap: Record<string, string>;
+    }
+  | {
+      kind: 'clairvoyant_peek_copy';
+      clairvoyantPlayerId: string;
+      turnNumber: number;
+      targetMap: Record<string, string>;
+    }
+  | {
+      kind: 'colt_theft_counter';
+      coltPlayerId: string;
+      thiefPlayerId: string;
+      txId: string;
+      stolenCardId: string;
+      stolenCardTitle: string;
+      chainDepth: number;
+    }
+  | {
+      kind: 'colt_recover_or_damage';
+      coltPlayerId: string;
+      thiefPlayerId: string;
+      txId: string;
+      stolenCardId: string;
+      stolenCardTitle: string;
+      rolledDamage: number;
+      rollDesc: string;
+      chainDepth: number;
     };
 
 export interface AuthoritativePendingChoice {
@@ -515,15 +686,22 @@ export interface AuthoritativePendingChoice {
   defaultOptionId: string;
   createdAtMs: number;
   deadlineMs: number;
+  /** Mốc deadline công khai chuẩn hóa (che sự khác biệt kết nối cho secret choices — Phase 6A). */
+  publicDeadlineMs?: number;
   data: PendingChoiceContextData;
 }
 
 export interface ExpansionRuntimeStats {
   activationsByRole: Record<string, number>;
   damagePreventedByRole: Record<string, number>;
+  damageRedirectedByRole?: Record<string, number>;
   healByRole: Record<string, number>;
   bonusDamageByRole: Record<string, number>;
   healsBlockedByRole?: Record<string, number>;
+  equipmentReclaimedByRole?: Record<string, number>;
+  clairvoyantInspections?: number;
+  copiedVictoryLinksBound?: number;
+  victoryCyclesDetected?: number;
 }
 
 export interface GloriaQueuedCardEntry {
@@ -566,6 +744,23 @@ export interface ExpansionRuntimeState {
   arleneHunterKillTriggeredIds?: string[];
   /** Danh sách playerId Umibozu đã kích hoạt AoE lộ diện 1 lần/trận. */
   umibozuTriggeredIds?: string[];
+  // ---- Phase 6 (Tier-3 Completion & Advanced Victory Mechanics) ----
+  anathemaCurses?: Record<string, AnathemaCurseEntry>;
+  bethanyChosenByPlayer?: Record<string, BethanyChosenEntry>;
+  cassieCopiedGoalByPlayer?: Record<string, CopiedGoalBindingEntry>;
+  clairvoyantVisions?: Record<string, ClairvoyantVisionEntry>;
+  aprilSkippsCountdownByPlayer?: Record<string, AprilSkippsCountdownEntry>;
+  dianaContracts?: Record<string, DianaContractEntry>;
+  aaronSpouseByPlayer?: Record<string, AaronSpouseEntry>;
+  revealSeq?: number;
+  revealHistory?: AuthoritativeRoleRevealRecord[];
+  equipmentTransactions?: EquipmentTransferTransaction[];
+  damageTraces?: DamageRedirectionTrace[];
+  anathemaPromptedTurnNumber?: number;
+  bethanyPromptedTurnNumber?: number;
+  cassiePromptedTurnNumber?: number;
+  clairvoyantPromptedTurnNumber?: number;
+  competitiveReactionTiming?: boolean;
   choiceTimeoutMs?: number;
   stats: ExpansionRuntimeStats;
 }

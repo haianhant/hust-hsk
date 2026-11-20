@@ -22,6 +22,13 @@ import type {
   ClassicBoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
 import { BOARD_GAME_DEFAULT_RULESET_ID } from '../../../shared/contracts/boardgame';
+import { countColtQualifyingWeapons } from './cards';
+import {
+  evaluateCopiedVictoryGraph,
+  isLinkedVictoryRoleId,
+  type CopiedVictoryGraphResult,
+  type VictoryDependencyLink,
+} from './copied-victory-graph';
 import { FACTION_LABELS, getRoleDesign } from './roles';
 import { getRemainingHp, isPlayerAtExactLocationAlias } from './rules';
 import type {
@@ -119,6 +126,234 @@ export function isAngelEndOfMatchVictorySatisfied(
     areAllNeutralsAlive(allWanderers) ||
     isPlayerAtExactLocationAlias(player, 'church')
   );
+}
+
+/** CAP-07: Điều kiện thắng tức thì của Colt (sở hữu >= 3 vũ khí chuẩn ev-02..ev-05). */
+export function isColtImmediateVictorySatisfied(
+  player: AuthoritativePlayerState,
+): boolean {
+  return player.alive && countColtQualifyingWeapons(player.equipped) >= 3;
+}
+
+/** CAP-07: Điều kiện thắng tức thì của April & Skipps sau khi trụ qua cuối lượt kế của mình. */
+export function isAprilSkippsCountdownVictorySatisfied(
+  state: AuthoritativeGameState,
+  player: AuthoritativePlayerState,
+): boolean {
+  return Boolean(
+    player.alive &&
+      state.expansionState?.aprilSkippsCountdownByPlayer?.[player.playerId]?.survivedDeadlineWon ===
+        true,
+  );
+}
+
+/** CAP-07: Xây dựng toàn bộ tập liên kết phụ thuộc chiến thắng từ trạng thái hiện tại (thuần túy). */
+export function buildVictoryDependencyLinks(
+  state: AuthoritativeGameState,
+): VictoryDependencyLink[] {
+  const links: VictoryDependencyLink[] = [];
+  const orderedIds =
+    state.turnOrder.length > 0 ? state.turnOrder : Object.keys(state.players);
+  const exp = state.expansionState;
+
+  for (const pid of orderedIds) {
+    const player = state.players[pid];
+    if (!player) continue;
+    const roleId = player.roleId as string;
+
+    if (roleId === 'exp1_bethany') {
+      const chosen = exp?.bethanyChosenByPlayer?.[pid];
+      const targetId = chosen?.chosenPlayerId ?? null;
+      const targetPlayer = targetId ? state.players[targetId] : null;
+      links.push({
+        linkId: `link:bethany:${pid}`,
+        ownerPlayerId: pid,
+        targetPlayerId: targetId,
+        relation: 'SHARE_OUTCOME',
+        sourceRoleId: targetPlayer?.roleId ?? null,
+        sourceGoalRef: targetId ? `outcome:${targetId}` : 'unresolved:bethany-no-chosen',
+        boundEventId: chosen?.boundEventId ?? 'unbound',
+        boundAtMs: chosen?.boundAtMs ?? 0,
+        boundTurnNumber: chosen?.designatedOnTurnNumber ?? 0,
+        active: Boolean(targetId),
+        requireOwnerAlive: false,
+        bondMode: 'target-wins',
+        fallbackCondition: 'none',
+        unresolved: !targetId,
+      });
+    } else if (roleId === 'exp1_cassie') {
+      const bind = exp?.cassieCopiedGoalByPlayer?.[pid];
+      const targetId = bind?.targetPlayerId ?? null;
+      links.push({
+        linkId: `link:cassie:${pid}`,
+        ownerPlayerId: pid,
+        targetPlayerId: targetId,
+        relation: 'COPY_GOAL',
+        sourceRoleId: bind?.sourceRoleId ?? null,
+        sourceGoalRef: bind ? `role:${bind.sourceRoleId}` : 'unresolved:cassie-no-neutral',
+        boundEventId: bind?.boundEventId ?? 'unbound',
+        boundAtMs: bind?.boundAtMs ?? 0,
+        boundTurnNumber: bind?.boundTurnNumber ?? 0,
+        active: Boolean(targetId && bind?.sourceRoleId),
+        fallbackCondition: 'none',
+        unresolved: !(targetId && bind?.sourceRoleId),
+      });
+    } else if (roleId === 'exp1_clairvoyant') {
+      const vision = exp?.clairvoyantVisions?.[pid];
+      const targetId = vision?.targetPlayerId ?? null;
+      links.push({
+        linkId: `link:clairvoyant:${pid}`,
+        ownerPlayerId: pid,
+        targetPlayerId: targetId,
+        relation: 'COPY_GOAL',
+        sourceRoleId: vision?.sourceRoleId ?? null,
+        sourceGoalRef: vision ? `role:${vision.sourceRoleId}` : 'unresolved:clairvoyant-unused',
+        boundEventId: vision?.boundEventId ?? 'unbound',
+        boundAtMs: vision?.boundAtMs ?? 0,
+        boundTurnNumber: vision?.boundTurnNumber ?? 0,
+        active: Boolean(targetId && vision?.sourceRoleId),
+        fallbackCondition: 'none',
+        unresolved: !(targetId && vision?.sourceRoleId),
+      });
+    } else if (roleId === 'exp2_diana') {
+      const contract = exp?.dianaContracts?.[pid];
+      const isActive = contract?.status === 'active' && Boolean(contract.customerPlayerId);
+      links.push({
+        linkId: `link:diana:${pid}`,
+        ownerPlayerId: pid,
+        targetPlayerId: isActive ? contract!.customerPlayerId : null,
+        relation: 'CONDITIONAL_SHARED',
+        sourceRoleId: contract?.sourceRoleId ?? null,
+        sourceGoalRef: isActive
+          ? `outcome:${contract!.customerPlayerId}`
+          : 'fallback:diana_full_hp_survivor',
+        boundEventId: contract?.boundEventId ?? 'unbound',
+        boundAtMs: contract?.boundAtMs ?? 0,
+        boundTurnNumber: contract?.boundOnTurnNumber ?? 0,
+        active: isActive,
+        requireOwnerAlive: true,
+        bondMode: 'target-wins',
+        fallbackCondition: 'diana_full_hp_survivor',
+        unresolved: !isActive,
+      });
+    } else if (roleId === 'exp2_aaron') {
+      const spouse = exp?.aaronSpouseByPlayer?.[pid];
+      const hasSpouse = Boolean(spouse?.spousePlayerId);
+      links.push({
+        linkId: `link:aaron:${pid}`,
+        ownerPlayerId: pid,
+        targetPlayerId: spouse?.spousePlayerId ?? null,
+        relation: 'CONDITIONAL_SHARED',
+        sourceRoleId: spouse?.sourceRoleId ?? null,
+        sourceGoalRef: hasSpouse
+          ? `both-alive:${spouse!.spousePlayerId}`
+          : 'fallback:aaron_dead_before_end',
+        boundEventId: spouse?.boundEventId ?? 'unbound',
+        boundAtMs: spouse?.boundAtMs ?? 0,
+        boundTurnNumber: spouse?.boundTurnNumber ?? 0,
+        active: hasSpouse,
+        requireOwnerAlive: true,
+        requireTargetAlive: true,
+        bondMode: 'both-alive',
+        fallbackCondition: 'aaron_dead_before_end',
+        unresolved: !hasSpouse,
+      });
+    }
+  }
+
+  return links;
+}
+
+/**
+ * Đánh giá điều kiện thắng trực tiếp (non-linked) của một `asRoleId` áp lên trạng thái của `subject`.
+ * Thuần túy — dùng chung cho đánh giá vai gốc và đánh giá `COPY_GOAL` (Cassie / Clairvoyant).
+ */
+export function evaluateDirectRoleGoalForSubject(
+  state: AuthoritativeGameState,
+  subject: AuthoritativePlayerState,
+  asRoleId: string,
+  resolvedWinnerFaction: VictoryEvaluation['winnerFaction'],
+  allWanderers: readonly AuthoritativePlayerState[],
+  timing: 'immediate' | 'end-of-match',
+  isFinalFallback = false,
+): boolean {
+  const allPlayers = Object.values(state.players);
+  const alivePlayers = allPlayers.filter((p) => p.alive);
+  const deadCount = allPlayers.length - alivePlayers.length;
+  const huntersWon = resolvedWinnerFaction === 'lantern-guard';
+  const shadowsWon = resolvedWinnerFaction === 'mist-order';
+
+  const design = getRoleDesign(asRoleId as BoardGameRoleId);
+  if (design.faction === 'lantern-guard') {
+    return timing === 'end-of-match' && huntersWon;
+  }
+  if (design.faction === 'mist-order') {
+    return timing === 'end-of-match' && shadowsWon;
+  }
+
+  switch (asRoleId) {
+    case 'lang-anh-san': // Bob: 5+ Trang bị
+      return subject.alive && (isFinalFallback ? subject.equipped.length >= 3 : subject.equipped.length >= 5);
+    case 'lang-quan-sat': // Allie: sống sót cuối trận (hoặc sống sót duy nhất)
+      return timing === 'immediate' ? subject.alive && alivePlayers.length === 1 : subject.alive;
+    case 'lang-cuu-ho': // Charles: giết người khi deadCount >= 3
+      return subject.alive && subject.charlesKillWon;
+    case 'lang-tien-phong': {
+      // Daniel: người ĐẦU TIÊN bị loại, HOẶC còn sống khi Đội Săn Đêm thắng
+      if (!subject.alive && state.firstDeadPlayerId === subject.playerId && deadCount === 1) {
+        return true;
+      }
+      return timing === 'end-of-match' && subject.alive && huntersWon;
+    }
+    case 'exp1_cindy': {
+      if (!subject.alive) return false;
+      const otherNeutrals = allWanderers.filter((w) => w.playerId !== subject.playerId);
+      if (otherNeutrals.length === 0) {
+        return timing === 'end-of-match';
+      }
+      return otherNeutrals.every((w) => !w.alive);
+    }
+    case 'exp1_bipolar': {
+      if (timing !== 'end-of-match') return false;
+      if (huntersWon) return subject.alive;
+      if (shadowsWon) return !subject.alive;
+      return false;
+    }
+    case 'exp2_cruz':
+      return Boolean(
+        subject.alive &&
+          state.expansionState?.cruzWinTriggeredIds?.includes(subject.playerId),
+      );
+    case 'exp2_bryon':
+      return timing === 'end-of-match' && subject.alive && allWanderers.every((w) => w.alive);
+    case 'exp2_arlene':
+      return isArleneImmediateVictorySatisfied(state, subject);
+    case 'exp1_angel':
+      return timing === 'end-of-match' && isAngelEndOfMatchVictorySatisfied(subject, allWanderers);
+    case 'exp2_bianca':
+      return timing === 'end-of-match' && hasLowestRemainingHpAmongSurvivors(subject, alivePlayers);
+    case 'exp2_dalton':
+      if (isDaltonImmediateVictorySatisfied(state, subject)) return true;
+      return timing === 'end-of-match' && hasHighestRemainingHpAmongSurvivors(subject, alivePlayers);
+    case 'exp1_anathema':
+      // Anathema: sống sót đến khi trận kết thúc (hoặc là người sống sót duy nhất)
+      return timing === 'immediate' ? subject.alive && alivePlayers.length === 1 : subject.alive;
+    case 'exp1_arnold':
+      // Arnold: còn sống cuối trận với > 2 tổng số người chơi còn sống trên bàn
+      return timing === 'end-of-match' && subject.alive && alivePlayers.length > 2;
+    case 'exp2_april_skipps':
+      if (isAprilSkippsCountdownVictorySatisfied(state, subject)) return true;
+      return timing === 'end-of-match' && subject.alive && !subject.revealed;
+    case 'exp2_colt':
+      return isColtImmediateVictorySatisfied(subject);
+    default:
+      return false;
+  }
+}
+
+export interface ExpandedVictoryDiagnostics {
+  readonly evaluation: VictoryEvaluation;
+  readonly graph: CopiedVictoryGraphResult | null;
 }
 
 export const VICTORY_ARCHETYPES = [
@@ -229,96 +464,55 @@ function qualifiesClassicOrExpandedWanderer(
   isFinalFallback = false,
 ): boolean {
   if (player.faction !== 'wanderer') return false;
-  const huntersWon = resolvedWinnerFaction === 'lantern-guard';
-  const shadowsWon = resolvedWinnerFaction === 'mist-order';
+  if (isLinkedVictoryRoleId(player.roleId)) return false;
+  return evaluateDirectRoleGoalForSubject(
+    state,
+    player,
+    player.roleId,
+    resolvedWinnerFaction,
+    allWanderers,
+    'end-of-match',
+    isFinalFallback,
+  );
+}
 
-  switch (player.roleId) {
-    case 'lang-anh-san': // Bob: 5+ Trang bị
-      return player.alive && (isFinalFallback ? player.equipped.length >= 3 : player.equipped.length >= 5);
-    case 'lang-quan-sat': // Allie: còn sống khi kết thúc trận
-      return player.alive;
-    case 'lang-cuu-ho': // Charles: giết người khi deadCount >= 3
-      return player.alive && player.charlesKillWon;
-    case 'lang-tien-phong': {
-      // Daniel: người ĐẦU TIÊN bị loại, HOẶC còn sống khi Đội Săn Đêm thắng
-      const deadCount = Object.values(state.players).filter((p) => !p.alive).length;
-      if (!player.alive && state.firstDeadPlayerId === player.playerId && deadCount === 1) {
-        return true;
-      }
-      return player.alive && huntersWon;
-    }
-    case 'exp1_cindy': {
-      // Cindy (Phase 3A house rule):
-      // - Khi có Neutral khác (6P–8P): thắng khi tất cả Neutral khác đã chết & Cindy còn sống.
-      // - Khi Cindy là Neutral duy nhất từ đầu (5P house rule): KHÔNG tự thắng đầu trận;
-      //   đồng thắng nếu còn sống khi trận đấu kết thúc hợp lệ.
-      if (!player.alive) return false;
-      const otherNeutrals = allWanderers.filter((w) => w.playerId !== player.playerId);
-      if (otherNeutrals.length === 0) {
-        return true;
-      }
-      return otherNeutrals.every((w) => !w.alive);
-    }
-    case 'exp1_bipolar': {
-      // Bipolar (Phase 3A house rule):
-      // - Chỉ đánh giá sau khi xác định phe thắng chung cuộc.
-      // - Hunter thắng -> Bipolar thắng nếu ĐANG SỐNG.
-      // - Shadow thắng -> Bipolar thắng nếu ĐÃ CHẾT.
-      // - Neutral khác thắng solo (không có Hunter/Shadow thắng) -> Bipolar KHÔNG thắng.
-      if (huntersWon) return player.alive;
-      if (shadowsWon) return !player.alive;
-      return false;
-    }
-    case 'exp2_cruz': {
-      // Cruz (Phase 4B house rule):
-      // Thắng cá nhân tức thì khi tự tay hạ gục người chơi khác bằng hoặc sau khi dùng
-      // một trong 4 lá Đen hợp lệ (ev-07..ev-10) trong cùng lượt.
-      return Boolean(
-        player.alive &&
-          state.expansionState?.cruzWinTriggeredIds?.includes(player.playerId),
-      );
-    }
-    case 'exp2_bryon': {
-      // Bryon (Phase 4B house rule):
-      // Chỉ đánh giá ở thời điểm kết thúc trận hợp lệ (KHÔNG tự thắng đầu trận):
-      // thắng nếu Bryon còn sống VÀ toàn bộ các nhân vật Neutral trong ván đều còn sống.
-      return player.alive && allWanderers.every((w) => w.alive);
-    }
-    case 'exp2_arlene': {
-      // Arlene (Phase 5B house rule):
-      // Thắng cá nhân tức thì khi bị hạ gục bởi một nhân vật phe Đội Săn Đêm (Hunter).
-      return isArleneImmediateVictorySatisfied(state, player);
-    }
-    case 'exp1_angel': {
-      // Angel (Phase 5C house rule — End-of-Match Only):
-      // Còn sống AND (tất cả Neutral còn sống OR đứng chính xác ô `lobby` / Church).
-      return isAngelEndOfMatchVictorySatisfied(player, allWanderers);
-    }
-    case 'exp2_bianca': {
-      // Bianca (Phase 5C house rule — End-of-Match Only):
-      // Còn sống và có lượng HP còn lại thấp nhất trong nhóm người chơi còn sống (cho phép hòa).
-      const alivePlayers = Object.values(state.players).filter((p) => p.alive);
-      return hasLowestRemainingHpAmongSurvivors(player, alivePlayers);
-    }
-    case 'exp2_dalton': {
-      // Dalton (Phase 5C house rule):
-      // Thắng tức thì nếu hạ gục 1 người sau khi kích hoạt Vòng Đấu Thứ 12,
-      // HOẶC thắng cuối trận nếu còn sống & có lượng HP còn lại cao nhất (cho phép hòa).
-      if (isDaltonImmediateVictorySatisfied(state, player)) return true;
-      const alivePlayers = Object.values(state.players).filter((p) => p.alive);
-      return hasHighestRemainingHpAmongSurvivors(player, alivePlayers);
-    }
-    default:
-      return false;
-  }
+function resolveWinnersWithCopiedGraph(
+  state: AuthoritativeGameState,
+  baseWinnerIds: ReadonlySet<string>,
+  resolvedWinnerFaction: VictoryEvaluation['winnerFaction'],
+  wanderers: readonly AuthoritativePlayerState[],
+  links: readonly VictoryDependencyLink[],
+  isFinalFallback = false,
+): { readonly winnerIds: string[]; readonly graph: CopiedVictoryGraphResult } {
+  const graph = evaluateCopiedVictoryGraph({
+    state,
+    timing: 'end-of-match',
+    baseWinnerIds,
+    links,
+    evaluateDirectRoleGoalForSubject: (subject, asRoleId, timing) =>
+      evaluateDirectRoleGoalForSubject(
+        state,
+        subject,
+        asRoleId,
+        resolvedWinnerFaction,
+        wanderers,
+        timing,
+        isFinalFallback,
+      ),
+  });
+  return {
+    winnerIds: [...graph.qualifiedPlayerIds],
+    graph,
+  };
 }
 
 /**
- * Bộ đánh giá điều kiện thắng cho các ruleset mở rộng (`rulesetId !== 'classic'`).
- * Hỗ trợ đầy đủ 10 Classic + Phase 2 + Phase 3 Neutral (`exp1_cindy`, `exp1_bipolar`)
- * mà KHÔNG thay đổi bất kỳ dòng nào của `victory.ts` dùng cho Classic production.
+ * Bộ đánh giá điều kiện thắng cho các ruleset mở rộng kèm chẩn đoán đồ thị `CopiedVictoryGraph`
+ * (thuần túy — tuyệt đối không mutate `state` và không chạm vào `victory.ts` của Classic).
  */
-export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryEvaluation {
+export function evaluateExpandedVictoryWithDiagnostics(
+  state: AuthoritativeGameState,
+): ExpandedVictoryDiagnostics {
   const allPlayers = Object.values(state.players);
   const alivePlayers = allPlayers.filter((p) => p.alive);
   const deadCount = allPlayers.length - alivePlayers.length;
@@ -326,6 +520,7 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
   const hunterPlayers = allPlayers.filter((p) => p.faction === 'lantern-guard');
   const shadowPlayers = allPlayers.filter((p) => p.faction === 'mist-order');
   const wanderers = allPlayers.filter((p) => p.faction === 'wanderer');
+  const links = buildVictoryDependencyLinks(state);
 
   const huntersAlive = hunterPlayers.filter((p) => p.alive).length;
   const shadowsAlive = shadowPlayers.filter((p) => p.alive).length;
@@ -337,7 +532,7 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
   const huntersTriggered = allShadowsDead;
   const shadowsTriggered = allHuntersDead || shadowsReachedThreeNeutralKills;
 
-  // Các điều kiện thắng tức thì của Kẻ Độc Hành (Classic + Cindy khi có >= 1 Neutral khác)
+  // Các điều kiện thắng tức thì của Kẻ Độc Hành (Classic + Waves 1–5 + Copied Immediate Goals)
   const bobWinners = wanderers.filter(
     (w) => w.alive && w.roleId === 'lang-anh-san' && w.equipped.length >= 5,
   );
@@ -351,8 +546,11 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
       state.firstDeadPlayerId === w.playerId &&
       deadCount === 1,
   );
-  const soleAllieWinners = wanderers.filter(
-    (w) => w.alive && w.roleId === 'lang-quan-sat' && alivePlayers.length === 1,
+  const soleSurvivorNeutralWinners = wanderers.filter(
+    (w) =>
+      w.alive &&
+      alivePlayers.length === 1 &&
+      (w.roleId === 'lang-quan-sat' || (w.roleId as string) === 'exp1_anathema'),
   );
   const cindySoloWinners = wanderers.filter((w) => {
     if (!w.alive || w.roleId !== 'exp1_cindy') return false;
@@ -373,6 +571,42 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
   const daltonSoloWinners = wanderers.filter(
     (w) => w.roleId === 'exp2_dalton' && isDaltonImmediateVictorySatisfied(state, w),
   );
+  const coltSoloWinners = wanderers.filter(
+    (w) => (w.roleId as string) === 'exp2_colt' && isColtImmediateVictorySatisfied(w),
+  );
+  const aprilCountdownWinners = wanderers.filter(
+    (w) =>
+      (w.roleId as string) === 'exp2_april_skipps' &&
+      isAprilSkippsCountdownVictorySatisfied(state, w),
+  );
+
+  // Kiểm tra mục tiêu tức thì thông qua `COPY_GOAL` (vd. Cassie/Clairvoyant sao chép Colt/Bob và tự gom đủ đồ!)
+  const copiedImmediateWinners: AuthoritativePlayerState[] = [];
+  if (links.some((l) => l.relation === 'COPY_GOAL' && l.active && !l.unresolved)) {
+    const immGraph = evaluateCopiedVictoryGraph({
+      state,
+      timing: 'immediate',
+      baseWinnerIds: new Set<string>(),
+      links,
+      evaluateDirectRoleGoalForSubject: (subject, asRoleId, timing) =>
+        evaluateDirectRoleGoalForSubject(
+          state,
+          subject,
+          asRoleId,
+          null,
+          wanderers,
+          timing,
+          false,
+        ),
+    });
+    for (const pid of immGraph.qualifiedPlayerIds) {
+      const node = immGraph.evaluatedByPlayer[pid];
+      const p = state.players[pid];
+      if (p && node && node.won && node.via === 'copy_goal') {
+        copiedImmediateWinners.push(p);
+      }
+    }
+  }
 
   // 1. Đòn quyết tử đồng quy (Hunter & Shadow cùng kích hoạt)
   if (huntersTriggered && shadowsTriggered) {
@@ -392,14 +626,23 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
         winnerSet.add(w.playerId);
       }
     }
-    const winnerIds = Array.from(winnerSet);
+    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
+      state,
+      winnerSet,
+      tiebreakFaction,
+      wanderers,
+      links,
+    );
     return {
-      finished: true,
-      winnerFaction: tiebreakFaction,
-      winnerLabel: `${FACTION_LABELS[tiebreakFaction]} (Đòn quyết tử)`,
-      winnerPlayerIds: winnerIds,
-      winReason: `Đòn quyết tử đồng quy — ${FACTION_LABELS[tiebreakFaction]} giành chiến thắng chung cuộc!`,
-      winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      graph,
+      evaluation: {
+        finished: true,
+        winnerFaction: tiebreakFaction,
+        winnerLabel: `${FACTION_LABELS[tiebreakFaction]} (Đòn quyết tử)`,
+        winnerPlayerIds: winnerIds,
+        winReason: `Đòn quyết tử đồng quy — ${FACTION_LABELS[tiebreakFaction]} giành chiến thắng chung cuộc!`,
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      },
     };
   }
 
@@ -411,14 +654,23 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
         winnerSet.add(w.playerId);
       }
     }
-    const winnerIds = Array.from(winnerSet);
+    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
+      state,
+      winnerSet,
+      'lantern-guard',
+      wanderers,
+      links,
+    );
     return {
-      finished: true,
-      winnerFaction: 'lantern-guard',
-      winnerLabel: FACTION_LABELS['lantern-guard'],
-      winnerPlayerIds: winnerIds,
-      winReason: 'Toàn bộ Hội Bóng Đêm đã bị loại khỏi KTX!',
-      winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      graph,
+      evaluation: {
+        finished: true,
+        winnerFaction: 'lantern-guard',
+        winnerLabel: FACTION_LABELS['lantern-guard'],
+        winnerPlayerIds: winnerIds,
+        winReason: 'Toàn bộ Hội Bóng Đêm đã bị loại khỏi KTX!',
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      },
     };
   }
 
@@ -430,29 +682,41 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
         winnerSet.add(w.playerId);
       }
     }
-    const winnerIds = Array.from(winnerSet);
+    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
+      state,
+      winnerSet,
+      'mist-order',
+      wanderers,
+      links,
+    );
     return {
-      finished: true,
-      winnerFaction: 'mist-order',
-      winnerLabel: FACTION_LABELS['mist-order'],
-      winnerPlayerIds: winnerIds,
-      winReason: allHuntersDead
-        ? 'Toàn bộ Đội Săn Đêm đã gục ngã — Hội Bóng Đêm làm chủ KTX!'
-        : `Đã có ${wanderersDead} Kẻ Độc Hành gục ngã — Hội Bóng Đêm kích hoạt thắng lợi!`,
-      winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      graph,
+      evaluation: {
+        finished: true,
+        winnerFaction: 'mist-order',
+        winnerLabel: FACTION_LABELS['mist-order'],
+        winnerPlayerIds: winnerIds,
+        winReason: allHuntersDead
+          ? 'Toàn bộ Đội Săn Đêm đã gục ngã — Hội Bóng Đêm làm chủ KTX!'
+          : `Đã có ${wanderersDead} Kẻ Độc Hành gục ngã — Hội Bóng Đêm kích hoạt thắng lợi!`,
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      },
     };
   }
 
-  // 4. Các điều kiện thắng tức thì của Kẻ Độc Hành (Bob / Charles / Daniel / sole Allie / Cindy / Cruz)
+  // 4. Các điều kiện thắng tức thì của Kẻ Độc Hành
   const soloTriggers = [
     ...bobWinners,
     ...charlesWinners,
     ...danielFirstDeathWinners,
-    ...soleAllieWinners,
+    ...soleSurvivorNeutralWinners,
     ...cindySoloWinners,
     ...cruzSoloWinners,
     ...arleneSoloWinners,
     ...daltonSoloWinners,
+    ...coltSoloWinners,
+    ...aprilCountdownWinners,
+    ...copiedImmediateWinners,
   ];
   if (soloTriggers.length > 0) {
     const lead = soloTriggers[0];
@@ -463,30 +727,46 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
         winnerSet.add(w.playerId);
       }
     }
-    const winnerIds = Array.from(winnerSet);
+    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
+      state,
+      winnerSet,
+      'wanderer-solo',
+      wanderers,
+      links,
+    );
+    const leadRoleStr = lead.roleId as string;
     const winReason =
-      lead.roleId === 'lang-anh-san'
+      leadRoleStr === 'lang-anh-san'
         ? `${lead.displayName} sở hữu đủ ${lead.equipped.length} Trang bị — hoàn thành mục tiêu Độc Hành!`
-        : lead.roleId === 'lang-cuu-ho'
+        : leadRoleStr === 'lang-cuu-ho'
           ? `${lead.displayName} đã hạ gục mục tiêu khi có ${deadCount} người ngã xuống (≥ 3)!`
-          : lead.roleId === 'lang-tien-phong'
+          : leadRoleStr === 'lang-tien-phong'
             ? `${lead.displayName} (Đạt "Cảm Tử") là người ĐẦU TIÊN ngã xuống — hoàn thành mục tiêu tức thì!`
-            : lead.roleId === 'exp1_cindy'
+            : leadRoleStr === 'exp1_cindy'
               ? `${lead.displayName} (Cindy) là Kẻ Độc Hành duy nhất sống sót khi toàn bộ Neutral khác đã bị loại!`
-              : lead.roleId === 'exp2_cruz'
+              : leadRoleStr === 'exp2_cruz'
                 ? `${lead.displayName} (Cruz) đã hạ gục mục tiêu trong lượt dùng thẻ Đột Kích đặc trưng — hoàn thành mục tiêu Độc Hành!`
-                : lead.roleId === 'exp2_arlene'
+                : leadRoleStr === 'exp2_arlene'
                   ? `${lead.displayName} (Arlene) đã bị một Đội Săn Đêm hạ gục — hoàn thành mục tiêu Độc Hành tức thì!`
-                  : lead.roleId === 'exp2_dalton'
+                  : leadRoleStr === 'exp2_dalton'
                     ? `${lead.displayName} (Dalton) đã hạ gục mục tiêu sau khi kích hoạt Vòng Đấu Thứ 12 — hoàn thành mục tiêu Độc Hành tức thì!`
-                    : `${lead.displayName} (Trang "Kiên Cường") trụ lại sống sót cuối cùng!`;
+                    : leadRoleStr === 'exp2_colt'
+                      ? `${lead.displayName} (Colt) đã thu thập đủ ${countColtQualifyingWeapons(lead.equipped)} vũ khí chuẩn — hoàn thành mục tiêu Độc Hành tức thì!`
+                      : leadRoleStr === 'exp2_april_skipps'
+                        ? `${lead.displayName} (April & Skipps) đã sống sót qua cuối lượt kế tiếp sau khi bị phát hiện ở ô 7 — chiến thắng tức thì!`
+                        : leadRoleStr === 'exp1_cassie' || leadRoleStr === 'exp1_clairvoyant'
+                          ? `${lead.displayName} (${leadDesign.name}) đã hoàn thành điều kiện thắng sao chép tức thì!`
+                          : `${lead.displayName} (${leadDesign.name}) trụ lại sống sót cuối cùng!`;
     return {
-      finished: true,
-      winnerFaction: 'wanderer-solo',
-      winnerLabel: `Kẻ Độc Hành — ${lead.displayName} (${leadDesign.name})`,
-      winnerPlayerIds: winnerIds,
-      winReason,
-      winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      graph,
+      evaluation: {
+        finished: true,
+        winnerFaction: 'wanderer-solo',
+        winnerLabel: `Kẻ Độc Hành — ${lead.displayName} (${leadDesign.name})`,
+        winnerPlayerIds: winnerIds,
+        winReason,
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      },
     };
   }
 
@@ -511,25 +791,46 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
         winnerSet.add(w.playerId);
       }
     }
-    const winnerIds = Array.from(winnerSet);
+    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
+      state,
+      winnerSet,
+      topFaction,
+      wanderers,
+      links,
+      true,
+    );
     return {
-      finished: true,
-      winnerFaction: topFaction,
-      winnerLabel: `${FACTION_LABELS[topFaction]} (Ưu thế sinh tồn)`,
-      winnerPlayerIds: winnerIds,
-      winReason: `Hết ${state.maxRounds} vòng an toàn — ${FACTION_LABELS[topFaction]} chiếm ưu thế sinh tồn!`,
-      winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      graph,
+      evaluation: {
+        finished: true,
+        winnerFaction: topFaction,
+        winnerLabel: `${FACTION_LABELS[topFaction]} (Ưu thế sinh tồn)`,
+        winnerPlayerIds: winnerIds,
+        winReason: `Hết ${state.maxRounds} vòng an toàn — ${FACTION_LABELS[topFaction]} chiếm ưu thế sinh tồn!`,
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      },
     };
   }
 
   return {
-    finished: false,
-    winnerFaction: null,
-    winnerLabel: null,
-    winnerPlayerIds: [],
-    winReason: null,
-    winningRoleIds: [],
+    graph: null,
+    evaluation: {
+      finished: false,
+      winnerFaction: null,
+      winnerLabel: null,
+      winnerPlayerIds: [],
+      winReason: null,
+      winningRoleIds: [],
+    },
   };
+}
+
+/**
+ * Bộ đánh giá điều kiện thắng cho các ruleset mở rộng (`rulesetId !== 'classic'`).
+ * Ủy quyền sang `evaluateExpandedVictoryWithDiagnostics()` mà KHÔNG chạm `victory.ts`.
+ */
+export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryEvaluation {
+  return evaluateExpandedVictoryWithDiagnostics(state).evaluation;
 }
 
 /**

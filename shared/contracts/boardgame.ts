@@ -174,6 +174,18 @@ export type Phase5CRoleId =
 
 export type Phase5RoleId = Phase5BRoleId | Phase5CRoleId;
 
+export type Phase6RoleId =
+  | 'exp2_gideon'
+  | 'exp1_anathema'
+  | 'exp1_bethany'
+  | 'exp1_arnold'
+  | 'exp1_cassie'
+  | 'exp1_clairvoyant'
+  | 'exp2_april_skipps'
+  | 'exp2_colt'
+  | 'exp2_diana'
+  | 'exp2_aaron';
+
 export type BoardGameRoleId =
   | ClassicBoardGameRoleId
   | Phase2RoleId
@@ -465,7 +477,16 @@ export type BoardGamePendingChoiceKind =
   | 'freyja_extra_attack'
   | 'warlord_pull_attack'
   | 'usurper_reveal_block_heal'
-  | 'bianca_discard_prevent';
+  | 'bianca_discard_prevent'
+  | 'gideon_draw_white'
+  | 'gideon_white_card_target'
+  | 'anathema_curse_target'
+  | 'bethany_designate_chosen'
+  | 'arnold_reflect_lethal'
+  | 'cassie_turn_heal'
+  | 'clairvoyant_peek_copy'
+  | 'colt_theft_counter'
+  | 'colt_recover_or_damage';
 
 export interface BoardGameChoiceOptionView {
   optionId: string;
@@ -529,6 +550,16 @@ export interface BoardGamePublicGameView {
   usurperAuraActive?: boolean;
   /** Danh sách playerId Dalton đã lộ diện & kích hoạt Vòng Đấu Thứ 12 (cấm tự hồi máu). */
   daltonActivatedPlayerIds?: readonly string[];
+  /** Mục tiêu lời nguyền Anathema công khai (CHỈ xuất khi Anathema đã lộ diện & mục tiêu còn sống). */
+  anathemaCursedTargetByPlayer?: Readonly<Record<string, string>>;
+  /** Người được chọn công khai của Bethany (CHỈ xuất khi Bethany đã lộ diện). */
+  bethanyChosenTargetByPlayer?: Readonly<Record<string, string>>;
+  /** Khách hàng ĐANG HOẠT ĐỘNG của Diana (CHỈ xuất khi Diana đã lộ diện & hợp đồng đã kích hoạt; KHÔNG lộ trạng thái chờ). */
+  dianaActiveCustomerByPlayer?: Readonly<Record<string, string>>;
+  /** Người vợ công khai của Aaron (CHỈ xuất khi Aaron đã lộ diện & đã gắn kết). */
+  aaronSpouseByPlayer?: Readonly<Record<string, string>>;
+  /** Đếm ngược sống sót của April & Skipps (CHỈ xuất sau khi bị ép lộ vai ở ô 7). */
+  aprilSkippsCountdownByPlayer?: Readonly<Record<string, number>>;
   deadCount: number;
   players: readonly BoardGamePublicPlayerView[];
   deckCounts: Record<BoardGameDeckId, number>;
@@ -543,6 +574,17 @@ export interface BoardGamePublicGameView {
   winReason: string | null;
   /** Chỉ điền đầy đủ sau khi trận đấu kết thúc (`FINISHED`). */
   finalReveal: readonly BoardGameRevealRecord[] | null;
+}
+
+export interface BoardGameClairvoyantRevealView {
+  readonly targetPlayerId: string;
+  readonly targetDisplayName: string;
+  readonly roleId: string;
+  readonly roleName: string;
+  readonly faction: BoardGameFactionId;
+  readonly maxHp: number;
+  readonly copiedGoalSummary: string;
+  readonly atMs: number;
 }
 
 export interface BoardGamePrivateGameView {
@@ -566,6 +608,10 @@ export interface BoardGamePrivateGameView {
   privateClues: readonly BoardGamePrivateClueEntry[];
   /** Chính sách phản ứng riêng tư trên server (CHỈ gửi unicast cho chủ sở hữu, tuyệt đối không xuất công khai). */
   reactionPolicy?: BoardGameReactionPolicy;
+  /** Kết quả soi vai bí mật của Clairvoyant (BẢO MẬT P0: CHỈ gửi unicast cho chủ sở hữu Clairvoyant!). */
+  clairvoyantReveals?: readonly BoardGameClairvoyantRevealView[];
+  /** Tóm tắt mục tiêu chiến thắng đang sao chép/gắn kết của riêng chủ sở hữu (Cassie / Clairvoyant / Diana). */
+  copiedVictoryGoalSummary?: string | null;
   pendingChoice?: BoardGamePrivatePendingChoice | null;
 }
 
@@ -605,6 +651,11 @@ export type BoardGameActionPayload =
   | {
       type: 'SET_REACTION_PREF';
       policy: BoardGameReactionPolicy;
+    }
+  | {
+      type: 'TRANSFER_TO_BETHANY';
+      targetPlayerId: string;
+      cardId: string;
     }
   | { type: 'END_TURN' };
 
@@ -1073,6 +1124,7 @@ const ACTION_ALLOWED_KEYS: Record<BoardGameActionPayload['type'], ReadonlySet<st
   USE_SKILL: new Set(['type', 'targetPlayerId', 'targetLocation']),
   RESOLVE_CHOICE: new Set(['type', 'choiceId', 'optionId']),
   SET_REACTION_PREF: new Set(['type', 'policy']),
+  TRANSFER_TO_BETHANY: new Set(['type', 'targetPlayerId', 'cardId']),
   END_TURN: new Set(['type']),
 };
 
@@ -1243,6 +1295,22 @@ export function validateBoardGameActionPayload(
         action: {
           type: 'SET_REACTION_PREF',
           policy: raw.policy,
+        },
+      };
+    }
+    case 'TRANSFER_TO_BETHANY': {
+      if (!isValidBoardGamePlayerIdSyntax(raw.targetPlayerId)) {
+        return { ok: false, error: 'Mục tiêu nhận trang bị (Bethany) không hợp lệ.' };
+      }
+      if (!isValidBoardGameCardIdSyntax(raw.cardId)) {
+        return { ok: false, error: 'Mã trang bị chuyển tặng không hợp lệ.' };
+      }
+      return {
+        ok: true,
+        action: {
+          type: 'TRANSFER_TO_BETHANY',
+          targetPlayerId: raw.targetPlayerId,
+          cardId: raw.cardId,
         },
       };
     }

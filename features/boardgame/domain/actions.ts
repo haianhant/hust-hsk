@@ -446,6 +446,14 @@ export function applyPlayerGameAction(
         }
       }
       break;
+    case 'TRANSFER_TO_BETHANY':
+      result = {
+        ok: false,
+        error: expanded
+          ? 'Chức năng tặng trang bị cho Bethany sẽ mở khi nhân vật Phase 6B được kích hoạt.'
+          : 'Hành động tặng trang bị cho Bethany chỉ khả dụng ở bộ luật mở rộng.',
+      };
+      break;
     case 'END_TURN':
       if (state.turnPhase === 'ROLL_MOVE' || state.turnPhase === 'CHOOSE_MOVE') {
         return {

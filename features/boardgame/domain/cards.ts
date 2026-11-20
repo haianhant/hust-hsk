@@ -577,6 +577,13 @@ export function getCardIdByCanonicalShId(canonicalId: CanonicalShCardId): string
   return CANONICAL_SH_CARD_IDS[canonicalId];
 }
 
+export const COLT_QUALIFYING_WEAPON_IDS: readonly string[] = [
+  CANONICAL_SH_CARD_IDS.butcher_knife,
+  CANONICAL_SH_CARD_IDS.chainsaw,
+  CANONICAL_SH_CARD_IDS.rusted_broad_axe,
+  CANONICAL_SH_CARD_IDS.handgun,
+];
+
 export function isCardCanonicalShId(cardId: string, canonicalId: CanonicalShCardId): boolean {
   return cardId === CANONICAL_SH_CARD_IDS[canonicalId];
 }
@@ -591,6 +598,18 @@ export function isConsumableDamagingBlackCardId(cardId: string | null | undefine
 
 export function isWhiteHealCardId(cardId: string | null | undefined): boolean {
   return typeof cardId === 'string' && WHITE_HEAL_CARD_IDS.includes(cardId);
+}
+
+export function isColtQualifyingWeaponId(cardId: string | null | undefined): boolean {
+  return typeof cardId === 'string' && COLT_QUALIFYING_WEAPON_IDS.includes(cardId);
+}
+
+export function countColtQualifyingWeapons(equippedCardIds: readonly string[]): number {
+  let count = 0;
+  for (const id of equippedCardIds) {
+    if (isColtQualifyingWeaponId(id)) count += 1;
+  }
+  return count;
 }
 
 export function getCardById(cardId: string): GameCardDefinition | null {

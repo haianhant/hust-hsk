@@ -5,8 +5,10 @@
 
 import {
   BOARD_GAME_CATALOG_VERSION,
+  BOARD_GAME_CHOICE_TIMEOUT_MS,
   BOARD_GAME_DEFAULT_RULESET_ID,
   type BoardGameCardPublicMeta,
+  type BoardGameClairvoyantRevealView,
   type BoardGamePrivateGameView,
   type BoardGamePrivatePendingChoice,
   type BoardGamePublicGameView,
@@ -71,7 +73,12 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
         ownerPlayerId: state.pendingChoice.isSecret ? null : state.pendingChoice.ownerPlayerId,
         kind: state.pendingChoice.isSecret ? null : state.pendingChoice.kind,
         promptLabel: state.pendingChoice.publicPromptLabel,
-        deadlineMs: state.pendingChoice.deadlineMs,
+        // Phase 6A Privacy Hardening: chuẩn hóa deadlineMs công khai cho secret choice để không lộ trạng thái rớt mạng!
+        deadlineMs: state.pendingChoice.isSecret
+          ? (state.pendingChoice.publicDeadlineMs ??
+              state.pendingChoice.createdAtMs +
+                (state.expansionState?.choiceTimeoutMs ?? BOARD_GAME_CHOICE_TIMEOUT_MS))
+          : state.pendingChoice.deadlineMs,
       }
     : null;
 
@@ -119,6 +126,64 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     }
   }
 
+  // Phase 6A/6B: Các huy hiệu công khai CHỈ được xuất khi chủ sở hữu ĐÃ LỘ DIỆN (zero hidden role leak!)
+  const anathemaCursedTargetByPlayer: Record<string, string> = {};
+  if (state.expansionState?.anathemaCurses) {
+    for (const [anathemaId, curse] of Object.entries(state.expansionState.anathemaCurses)) {
+      const owner = state.players[anathemaId];
+      const victim = state.players[curse.targetPlayerId];
+      if (curse.active && owner && (owner.revealed || state.finished) && victim && victim.alive) {
+        anathemaCursedTargetByPlayer[anathemaId] = curse.targetPlayerId;
+      }
+    }
+  }
+
+  const bethanyChosenTargetByPlayer: Record<string, string> = {};
+  if (state.expansionState?.bethanyChosenByPlayer) {
+    for (const [bethanyId, chosen] of Object.entries(state.expansionState.bethanyChosenByPlayer)) {
+      const owner = state.players[bethanyId];
+      if (owner && (owner.revealed || state.finished) && state.players[chosen.chosenPlayerId]) {
+        bethanyChosenTargetByPlayer[bethanyId] = chosen.chosenPlayerId;
+      }
+    }
+  }
+
+  const dianaActiveCustomerByPlayer: Record<string, string> = {};
+  if (state.expansionState?.dianaContracts) {
+    for (const [dianaId, contract] of Object.entries(state.expansionState.dianaContracts)) {
+      const owner = state.players[dianaId];
+      // BẢO MẬT P0: Chỉ xuất khi hợp đồng đã `active` (và Diana đã lộ diện) — tuyệt đối KHÔNG lộ trạng thái `pending`!
+      if (
+        contract.status === 'active' &&
+        owner &&
+        (owner.revealed || state.finished) &&
+        state.players[contract.customerPlayerId]
+      ) {
+        dianaActiveCustomerByPlayer[dianaId] = contract.customerPlayerId;
+      }
+    }
+  }
+
+  const aaronSpouseByPlayer: Record<string, string> = {};
+  if (state.expansionState?.aaronSpouseByPlayer) {
+    for (const [aaronId, spouse] of Object.entries(state.expansionState.aaronSpouseByPlayer)) {
+      const owner = state.players[aaronId];
+      if (owner && (owner.revealed || state.finished) && state.players[spouse.spousePlayerId]) {
+        aaronSpouseByPlayer[aaronId] = spouse.spousePlayerId;
+      }
+    }
+  }
+
+  const aprilSkippsCountdownByPlayer: Record<string, number> = {};
+  if (state.expansionState?.aprilSkippsCountdownByPlayer) {
+    for (const [aprilId, entry] of Object.entries(state.expansionState.aprilSkippsCountdownByPlayer)) {
+      const owner = state.players[aprilId];
+      if (entry.revealedBySkill && owner && (owner.revealed || state.finished)) {
+        aprilSkippsCountdownByPlayer[aprilId] = entry.triggeredOnTurnNumber;
+      }
+    }
+  }
+
   return {
     rulesetVersion: 4,
     rulesetId: state.rulesetId ?? BOARD_GAME_DEFAULT_RULESET_ID,
@@ -139,6 +204,19 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     ...(angelProtectedPlayerIds.length > 0 ? { angelProtectedPlayerIds } : {}),
     ...(usurperAuraActive ? { usurperAuraActive: true } : {}),
     ...(daltonActivatedPlayerIds.length > 0 ? { daltonActivatedPlayerIds } : {}),
+    ...(Object.keys(anathemaCursedTargetByPlayer).length > 0
+      ? { anathemaCursedTargetByPlayer }
+      : {}),
+    ...(Object.keys(bethanyChosenTargetByPlayer).length > 0
+      ? { bethanyChosenTargetByPlayer }
+      : {}),
+    ...(Object.keys(dianaActiveCustomerByPlayer).length > 0
+      ? { dianaActiveCustomerByPlayer }
+      : {}),
+    ...(Object.keys(aaronSpouseByPlayer).length > 0 ? { aaronSpouseByPlayer } : {}),
+    ...(Object.keys(aprilSkippsCountdownByPlayer).length > 0
+      ? { aprilSkippsCountdownByPlayer }
+      : {}),
     deadCount,
     players: orderedPlayers,
     deckCounts: {
@@ -192,6 +270,43 @@ export function getPrivateGameView(
     ? (state.expansionState?.reactionPolicyByPlayer?.[player.playerId] ?? 'ASK')
     : undefined;
 
+  // BẢO MẬT P0: Chỉ chiếu kết quả soi vai Clairvoyant & mục tiêu sao chép cho ĐÚNG chủ sở hữu!
+  let clairvoyantReveals: BoardGameClairvoyantRevealView[] | undefined;
+  const vision = state.expansionState?.clairvoyantVisions?.[player.playerId];
+  if (vision) {
+    clairvoyantReveals = [
+      {
+        targetPlayerId: vision.targetPlayerId,
+        targetDisplayName: vision.targetDisplayName,
+        roleId: vision.sourceRoleId,
+        roleName: vision.roleName,
+        faction: vision.faction,
+        maxHp: vision.maxHp,
+        copiedGoalSummary: vision.copiedGoalSummary,
+        atMs: vision.boundAtMs,
+      },
+    ];
+  }
+
+  let copiedVictoryGoalSummary: string | null | undefined;
+  if (vision) {
+    copiedVictoryGoalSummary = `Sao chép mục tiêu của ${vision.targetDisplayName} (${vision.roleName}): ${vision.copiedGoalSummary}`;
+  } else if (state.expansionState?.cassieCopiedGoalByPlayer?.[player.playerId]) {
+    const cassieBind = state.expansionState.cassieCopiedGoalByPlayer[player.playerId];
+    const copiedDesign = getRoleDesign(cassieBind.sourceRoleId as Parameters<typeof getRoleDesign>[0]);
+    const boundPlayer = state.players[cassieBind.targetPlayerId];
+    copiedVictoryGoalSummary = `Sao chép mục tiêu của ${boundPlayer?.displayName ?? cassieBind.targetPlayerId} (${copiedDesign.name}): ${copiedDesign.secretGoalText}`;
+  } else if (state.expansionState?.dianaContracts?.[player.playerId]) {
+    const contract = state.expansionState.dianaContracts[player.playerId];
+    const custName = state.players[contract.customerPlayerId]?.displayName ?? contract.customerPlayerId;
+    copiedVictoryGoalSummary =
+      contract.status === 'active'
+        ? `Khách hàng đang hoạt động: ${custName} (cần sống sót & khách hàng thắng).`
+        : contract.status === 'pending'
+          ? `Khách hàng chờ kích hoạt vào đầu lượt kế của họ: ${custName}.`
+          : 'Khách hàng đã bị loại trước khi kích hoạt — cần sống sót với đầy máu cuối trận.';
+  }
+
   return {
     playerId: player.playerId,
     roleId: player.roleId,
@@ -212,6 +327,8 @@ export function getPrivateGameView(
     equipped: mapCardIdsToMeta(player.equipped),
     privateClues: [...player.privateClues],
     ...(reactionPolicy ? { reactionPolicy } : {}),
+    ...(clairvoyantReveals ? { clairvoyantReveals } : {}),
+    ...(copiedVictoryGoalSummary !== undefined ? { copiedVictoryGoalSummary } : {}),
     ...(privatePendingChoice ? { pendingChoice: privatePendingChoice } : {}),
   };
 }

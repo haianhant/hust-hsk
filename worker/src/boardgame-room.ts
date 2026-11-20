@@ -1501,6 +1501,11 @@ export class BoardGameRoom {
           engineState.pendingChoice.deadlineMs,
           nowMs + disconnChoiceMs,
         );
+        // Phase 6A Privacy Hardening: giữ nguyên publicDeadlineMs ban đầu cho secret choice
+        // để đối thủ không thể phát hiện chủ nhân secret choice vừa rớt mạng!
+        if (engineState.pendingChoice.isSecret && engineState.pendingChoice.publicDeadlineMs === undefined) {
+          engineState.pendingChoice.publicDeadlineMs = engineState.pendingChoice.deadlineMs;
+        }
         engineState.pendingChoice.deadlineMs = cappedChoiceDeadline;
         this.sql.exec(
           'UPDATE matches SET turn_deadline_ms = ?, game_state_json = ? WHERE match_id = ?',
@@ -2674,6 +2679,9 @@ export class BoardGameRoom {
         engineState.pendingChoice.deadlineMs,
         nowMs + disconnChoiceMs,
       );
+      if (engineState.pendingChoice.isSecret && engineState.pendingChoice.publicDeadlineMs === undefined) {
+        engineState.pendingChoice.publicDeadlineMs = engineState.pendingChoice.deadlineMs;
+      }
       engineState.pendingChoice.deadlineMs = cappedChoiceDeadline;
       this.sql.exec(
         'UPDATE matches SET turn_deadline_ms = ?, game_state_json = ? WHERE match_id = ?',
