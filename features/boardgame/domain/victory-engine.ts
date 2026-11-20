@@ -178,6 +178,21 @@ function qualifiesClassicOrExpandedWanderer(
       if (shadowsWon) return !player.alive;
       return false;
     }
+    case 'exp2_cruz': {
+      // Cruz (Phase 4B house rule):
+      // Thắng cá nhân tức thì khi tự tay hạ gục người chơi khác bằng hoặc sau khi dùng
+      // một trong 4 lá Đen hợp lệ (ev-07..ev-10) trong cùng lượt.
+      return Boolean(
+        player.alive &&
+          state.expansionState?.cruzWinTriggeredIds?.includes(player.playerId),
+      );
+    }
+    case 'exp2_bryon': {
+      // Bryon (Phase 4B house rule):
+      // Chỉ đánh giá ở thời điểm kết thúc trận hợp lệ (KHÔNG tự thắng đầu trận):
+      // thắng nếu Bryon còn sống VÀ toàn bộ các nhân vật Neutral trong ván đều còn sống.
+      return player.alive && allWanderers.every((w) => w.alive);
+    }
     default:
       return false;
   }
@@ -231,6 +246,12 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
     if (otherNeutrals.length === 0) return false;
     return otherNeutrals.every((other) => !other.alive);
   });
+  const cruzSoloWinners = wanderers.filter(
+    (w) =>
+      w.alive &&
+      w.roleId === 'exp2_cruz' &&
+      Boolean(state.expansionState?.cruzWinTriggeredIds?.includes(w.playerId)),
+  );
 
   // 1. Đòn quyết tử đồng quy (Hunter & Shadow cùng kích hoạt)
   if (huntersTriggered && shadowsTriggered) {
@@ -301,13 +322,14 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
     };
   }
 
-  // 4. Các điều kiện thắng tức thì của Kẻ Độc Hành (Bob / Charles / Daniel / sole Allie / Cindy)
+  // 4. Các điều kiện thắng tức thì của Kẻ Độc Hành (Bob / Charles / Daniel / sole Allie / Cindy / Cruz)
   const soloTriggers = [
     ...bobWinners,
     ...charlesWinners,
     ...danielFirstDeathWinners,
     ...soleAllieWinners,
     ...cindySoloWinners,
+    ...cruzSoloWinners,
   ];
   if (soloTriggers.length > 0) {
     const lead = soloTriggers[0];
@@ -328,7 +350,9 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
             ? `${lead.displayName} (Đạt "Cảm Tử") là người ĐẦU TIÊN ngã xuống — hoàn thành mục tiêu tức thì!`
             : lead.roleId === 'exp1_cindy'
               ? `${lead.displayName} (Cindy) là Kẻ Độc Hành duy nhất sống sót khi toàn bộ Neutral khác đã bị loại!`
-              : `${lead.displayName} (Trang "Kiên Cường") trụ lại sống sót cuối cùng!`;
+              : lead.roleId === 'exp2_cruz'
+                ? `${lead.displayName} (Cruz) đã hạ gục mục tiêu trong lượt dùng thẻ Đột Kích đặc trưng — hoàn thành mục tiêu Độc Hành!`
+                : `${lead.displayName} (Trang "Kiên Cường") trụ lại sống sót cuối cùng!`;
     return {
       finished: true,
       winnerFaction: 'wanderer-solo',

@@ -12,6 +12,7 @@ import type {
   BoardGameRoleId,
   Phase2RoleId,
   Phase3RoleId,
+  Phase4RoleId,
 } from '../../../shared/contracts/boardgame';
 import { getCardById } from '../domain/cards';
 import { getRoleDesign } from '../domain/roles';
@@ -200,8 +201,22 @@ export const WAVE2_ROLE_IDS: readonly Phase3RoleId[] = [
   'exp1_bipolar',
 ];
 
-/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — đầy đủ 26 vai: 10 Classic + 8 Starter Eight + 8 Wave 2). */
-export const MIDNIGHT_CHARACTER_ART: Readonly<Record<BoardGameRoleId, string>> = {
+/** 10 tướng mở rộng Wave 3 (Starter Twenty-Six · Phase 4 — 4 Hunter + 4 Shadow + 2 Neutral). */
+export const WAVE3_ROLE_IDS: readonly Phase4RoleId[] = [
+  'exp1_fallen',
+  'exp1_fea',
+  'exp2_eleanor',
+  'exp2_fujiko',
+  'exp1_udi',
+  'exp1_wrath',
+  'exp1_vengeance',
+  'exp2_visions',
+  'exp2_cruz',
+  'exp2_bryon',
+];
+
+/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — Phase 4B dùng fallback Noir Monogram cho 10 vai Wave 3 trước khi Phase 4C bổ sung chân dung). */
+export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, string>>> = {
   // 10 Classic Roles (preserved untouched)
   'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
   'gac-truc-ban': '/assets/boardgame/roles/role-lan-truc-ban.webp',

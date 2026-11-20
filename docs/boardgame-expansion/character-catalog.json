@@ -138,8 +138,8 @@
       "complexity": "medium",
       "implementationDifficulty": "tier-2",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-1-sha",
-      "rulesStatus": "needs-clarification",
-      "implementationStatus": "not-started"
+      "rulesStatus": "house-rule-approved",
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp1_gwendolen",
@@ -180,8 +180,8 @@
       "complexity": "medium",
       "implementationDifficulty": "tier-2",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-1-sha",
-      "rulesStatus": "needs-clarification",
-      "implementationStatus": "not-started"
+      "rulesStatus": "house-rule-approved",
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp1_vengeful_spirit",
@@ -264,8 +264,8 @@
       "complexity": "medium",
       "implementationDifficulty": "tier-2",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-shadow-phien-ban-mo-rong-thu-1-phan-3-sh",
-      "rulesStatus": "needs-clarification",
-      "implementationStatus": "not-started"
+      "rulesStatus": "house-rule-approved",
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp1_wendigo",
@@ -327,8 +327,8 @@
       "complexity": "medium",
       "implementationDifficulty": "tier-2",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-shadow-phien-ban-mo-rong-thu-1-phan-3-sh",
-      "rulesStatus": "needs-clarification",
-      "implementationStatus": "not-started"
+      "rulesStatus": "house-rule-approved",
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp1_wrath",
@@ -348,8 +348,8 @@
       "complexity": "medium",
       "implementationDifficulty": "tier-2",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-shadow-phien-ban-mo-rong-thu-1-phan-3-sh",
-      "rulesStatus": "needs-clarification",
-      "implementationStatus": "not-started"
+      "rulesStatus": "house-rule-approved",
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp1_undead",
@@ -621,8 +621,8 @@
       "complexity": "medium",
       "implementationDifficulty": "tier-2",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-hunter-cua-ban-mo-rong-thu-2-p",
-      "rulesStatus": "needs-clarification",
-      "implementationStatus": "not-started"
+      "rulesStatus": "house-rule-approved",
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp2_freyja",
@@ -705,8 +705,8 @@
       "complexity": "medium",
       "implementationDifficulty": "tier-2",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-hunter-cua-ban-mo-rong-thu-2-p",
-      "rulesStatus": "needs-clarification",
-      "implementationStatus": "not-started"
+      "rulesStatus": "house-rule-approved",
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp2_elise",
@@ -873,8 +873,8 @@
       "complexity": "medium",
       "implementationDifficulty": "tier-2",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-shadow-cua-ban-mo-rong-thu-2-p",
-      "rulesStatus": "needs-clarification",
-      "implementationStatus": "not-started"
+      "rulesStatus": "house-rule-approved",
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp2_unchained",
@@ -1083,8 +1083,8 @@
       "complexity": "medium",
       "implementationDifficulty": "tier-2",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-      "rulesStatus": "needs-clarification",
-      "implementationStatus": "not-started"
+      "rulesStatus": "house-rule-approved",
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp2_diana",
@@ -1167,8 +1167,8 @@
       "complexity": "medium",
       "implementationDifficulty": "tier-2",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-      "rulesStatus": "needs-clarification",
-      "implementationStatus": "not-started"
+      "rulesStatus": "house-rule-approved",
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp2_nc_soldier",

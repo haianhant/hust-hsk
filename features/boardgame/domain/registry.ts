@@ -42,6 +42,7 @@ import {
   PHASE2A_ROLE_IDS,
   PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
   STARTER_SIXTEEN_EXPANSION_ROLE_IDS,
+  STARTER_TWENTY_SIX_EXPANSION_ROLE_IDS,
 } from './expansion-skills';
 import { ROLES_CATALOG, getRoleDistribution } from './roles';
 import {
@@ -216,6 +217,7 @@ function inferExpansionVictoryArchetype(rec: ExpansionCatalogRecord): VictoryArc
       return 'simultaneous-victory';
     case 'exp1_bethany':
     case 'exp2_aaron':
+    case 'exp2_bryon':
       return 'shared';
     case 'exp1_bipolar':
       return 'conditional';
@@ -529,6 +531,24 @@ export const EXPERIMENTAL_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
       ...STARTER_SIXTEEN_EXPANSION_ROLE_IDS,
     ],
     expectedCharacterCount: 26,
+    catalogVersion: BOARD_GAME_CATALOG_VERSION,
+  },
+  {
+    id: 'starter-twenty-six',
+    label: 'Starter Twenty-Six (Thử nghiệm Wave 3 · 10 Classic + 26 Tướng Mở rộng)',
+    shortLabel: 'Starter 26 (Exp)',
+    description:
+      'Pool thử nghiệm nội bộ gồm 36 nhân vật (10 Classic + 8 Phase 2 + 8 Wave 2 + 10 Wave 3: 14 Hunter · 14 Shadow · 8 Neutral). Tắt trên production.',
+    availability: 'experimental',
+    enabledInProduction: false,
+    isExperimental: true,
+    allowExperimentalHouseRules: true,
+    includedExpansions: ['classic', 'expansion-1', 'expansion-2'],
+    explicitCharacterIds: [
+      ...ROLES_CATALOG.map((r) => r.id),
+      ...STARTER_TWENTY_SIX_EXPANSION_ROLE_IDS,
+    ],
+    expectedCharacterCount: 36,
     catalogVersion: BOARD_GAME_CATALOG_VERSION,
   },
 ];

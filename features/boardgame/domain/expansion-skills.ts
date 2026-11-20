@@ -16,13 +16,20 @@ import {
   type BoardGameChoiceOptionView,
   type BoardGameDeckId,
   type BoardGameFactionId,
+  type BoardGameLocationId,
   type BoardGameRoleId,
   type Phase2ARoleId,
   type Phase2BRoleId,
   type Phase2RoleId,
   type Phase3RoleId,
+  type Phase4RoleId,
 } from '../../../shared/contracts/boardgame';
-import { getCardById, toCardPublicMeta } from './cards';
+import {
+  getCardById,
+  isCruzQualifyingCardId,
+  MASAMUNE_CARD_ID,
+  toCardPublicMeta,
+} from './cards';
 import {
   appendHighlight,
   appendPrivateClue,
@@ -30,7 +37,9 @@ import {
   applyHeal,
   discardCardId,
   equipToPlayerSlot,
+  resolveDiceRollMove,
   resolveDrawLocationCard,
+  resolveRevealRole,
   resolveUseCard,
   revealPlayerNow,
   stealAllEquippedGear,
@@ -43,8 +52,12 @@ import {
   BOARD_GAME_MAX_HAND,
   canPlayerAttackTarget,
   getLocationDefinition,
+  getRemainingHp,
   isPlayerAtExactLocationAlias,
+  listLivingPlayersInSameCluster,
   listReachableAttackTargets,
+  LOCATIONS_CATALOG,
+  nextRandomInt,
   resolveLocationAlias,
   resolveLocationForDiceTotal,
   rollD4,
@@ -71,7 +84,7 @@ import type { VictoryArchetype } from './victory-engine';
 const MAX_PROCESSED_EVENT_IDS = 256;
 const MAX_RESOLVED_CHOICE_IDS = 256;
 
-export type ExpansionImplementedRoleId = Phase2RoleId | Phase3RoleId;
+export type ExpansionImplementedRoleId = Phase2RoleId | Phase3RoleId | Phase4RoleId;
 
 export interface ExpansionSkillExecutableBinding {
   readonly roleId: ExpansionImplementedRoleId;
@@ -116,9 +129,27 @@ export const PHASE3A_ROLE_IDS: readonly Phase3RoleId[] = [
   'exp1_bipolar',
 ];
 
-export const STARTER_SIXTEEN_EXPANSION_ROLE_IDS: readonly ExpansionImplementedRoleId[] = [
+export const STARTER_SIXTEEN_EXPANSION_ROLE_IDS: readonly (Phase2RoleId | Phase3RoleId)[] = [
   ...PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
   ...PHASE3A_ROLE_IDS,
+];
+
+export const PHASE4B_ROLE_IDS: readonly Phase4RoleId[] = [
+  'exp1_fallen',
+  'exp1_fea',
+  'exp2_eleanor',
+  'exp2_fujiko',
+  'exp1_udi',
+  'exp1_wrath',
+  'exp1_vengeance',
+  'exp2_visions',
+  'exp2_cruz',
+  'exp2_bryon',
+];
+
+export const STARTER_TWENTY_SIX_EXPANSION_ROLE_IDS: readonly ExpansionImplementedRoleId[] = [
+  ...STARTER_SIXTEEN_EXPANSION_ROLE_IDS,
+  ...PHASE4B_ROLE_IDS,
 ];
 
 export const PHASE2_SKILL_BINDINGS: Readonly<
@@ -317,11 +348,132 @@ export const PHASE3_VICTORY_BINDINGS: Readonly<
   },
 };
 
+export const PHASE4_SKILL_BINDINGS: Readonly<
+  Partial<Record<string, ExpansionSkillExecutableBinding>>
+> = {
+  exp1_fallen: {
+    roleId: 'exp1_fallen',
+    handlerId: 'exp:exp1_fallen:resistance',
+    trigger: 'BEFORE_DAMAGE',
+    resolverSymbol: 'expansion-skills.ts:fallenResistanceHandler',
+  },
+  exp1_fea: {
+    roleId: 'exp1_fea',
+    handlerId: 'exp:exp1_fea:dice-adjust',
+    trigger: 'ON_MOVE',
+    resolverSymbol: 'expansion-skills.ts:feaMoveAdjustHandler',
+  },
+  exp2_eleanor: {
+    roleId: 'exp2_eleanor',
+    handlerId: 'exp:exp2_eleanor:interrogator',
+    trigger: 'ACTIVE_SKILL',
+    resolverSymbol: 'expansion-skills.ts:eleanorInterrogatorHandler',
+  },
+  exp2_fujiko: {
+    roleId: 'exp2_fujiko',
+    handlerId: 'exp:exp2_fujiko:its-over',
+    trigger: 'AFTER_ATTACK',
+    resolverSymbol: 'expansion-skills.ts:fujikoItsOverHandler',
+  },
+  exp1_udi: {
+    roleId: 'exp1_udi',
+    handlerId: 'exp:exp1_udi:hiding',
+    trigger: 'BEFORE_ATTACK',
+    resolverSymbol: 'expansion-skills.ts:udiHidingHandler',
+  },
+  exp1_wrath: {
+    roleId: 'exp1_wrath',
+    handlerId: 'exp:exp1_wrath:cluster-aoe',
+    trigger: 'ON_TURN_START',
+    resolverSymbol: 'expansion-skills.ts:wrathTurnStartAoeHandler',
+  },
+  exp1_vengeance: {
+    roleId: 'exp1_vengeance',
+    handlerId: 'exp:exp1_vengeance:chain-strike',
+    trigger: 'ON_ELIMINATION',
+    resolverSymbol: 'expansion-skills.ts:vengeanceChainStrikeHandler',
+  },
+  exp2_visions: {
+    roleId: 'exp2_visions',
+    handlerId: 'exp:exp2_visions:curse-mark',
+    trigger: 'ON_TURN_START',
+    resolverSymbol: 'expansion-skills.ts:visionsCurseHandler',
+  },
+  exp2_cruz: {
+    roleId: 'exp2_cruz',
+    handlerId: 'exp:exp2_cruz:black-redraw',
+    trigger: 'ON_DRAW_CARD',
+    resolverSymbol: 'expansion-skills.ts:cruzBlackRedrawHandler',
+  },
+  exp2_bryon: {
+    roleId: 'exp2_bryon',
+    handlerId: 'exp:exp2_bryon:generous-service',
+    trigger: 'BEFORE_ATTACK',
+    resolverSymbol: 'expansion-skills.ts:bryonGenerousServiceHandler',
+  },
+};
+
+export const PHASE4_VICTORY_BINDINGS: Readonly<
+  Partial<Record<string, ExpansionVictoryExecutableBinding>>
+> = {
+  exp1_fallen: {
+    roleId: 'exp1_fallen',
+    evaluatorId: 'victory-engine.ts:faction#hunters',
+    archetype: 'faction',
+  },
+  exp1_fea: {
+    roleId: 'exp1_fea',
+    evaluatorId: 'victory-engine.ts:faction#hunters',
+    archetype: 'faction',
+  },
+  exp2_eleanor: {
+    roleId: 'exp2_eleanor',
+    evaluatorId: 'victory-engine.ts:faction#hunters',
+    archetype: 'faction',
+  },
+  exp2_fujiko: {
+    roleId: 'exp2_fujiko',
+    evaluatorId: 'victory-engine.ts:faction#hunters',
+    archetype: 'faction',
+  },
+  exp1_udi: {
+    roleId: 'exp1_udi',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp1_wrath: {
+    roleId: 'exp1_wrath',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp1_vengeance: {
+    roleId: 'exp1_vengeance',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp2_visions: {
+    roleId: 'exp2_visions',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp2_cruz: {
+    roleId: 'exp2_cruz',
+    evaluatorId: 'victory-engine.ts:neutral#cruz',
+    archetype: 'individual',
+  },
+  exp2_bryon: {
+    roleId: 'exp2_bryon',
+    evaluatorId: 'victory-engine.ts:shared#bryon',
+    archetype: 'shared',
+  },
+};
+
 export const ALL_EXPANSION_SKILL_BINDINGS: Readonly<
   Partial<Record<string, ExpansionSkillExecutableBinding>>
 > = {
   ...PHASE2_SKILL_BINDINGS,
   ...PHASE3_SKILL_BINDINGS,
+  ...PHASE4_SKILL_BINDINGS,
 };
 
 export const ALL_EXPANSION_VICTORY_BINDINGS: Readonly<
@@ -329,6 +481,7 @@ export const ALL_EXPANSION_VICTORY_BINDINGS: Readonly<
 > = {
   ...PHASE2_VICTORY_BINDINGS,
   ...PHASE3_VICTORY_BINDINGS,
+  ...PHASE4_VICTORY_BINDINGS,
 };
 
 export interface TurnContinuationCallbacks {
@@ -1042,6 +1195,337 @@ const bipolarFateCoinHandler: SkillHandlerDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Phase 4B Executable Skill Handlers (Wave 3 — 10 Tier-2 House-Rule Characters)
+// ---------------------------------------------------------------------------
+
+/** Udi (exp1_udi): Đã lộ diện & có >= 2 người chơi khác còn sống trong cùng Cụm chiến đấu. */
+export function isUdiProtectedFromAttack(
+  state: AuthoritativeGameState,
+  target: AuthoritativePlayerState,
+): boolean {
+  if (!target.alive || !target.revealed || target.roleId !== 'exp1_udi') {
+    return false;
+  }
+  return listLivingPlayersInSameCluster(state, target, { includeSelf: false }).length >= 2;
+}
+
+/** Visions (exp2_visions): Cấm người chơi Visions tấn công trực tiếp mục tiêu đã đánh dấu. */
+export function isVisionsMarkedTarget(
+  state: AuthoritativeGameState,
+  attackerPlayerId: string,
+  targetPlayerId: string,
+): boolean {
+  const mark = state.expansionState?.visionsMarks?.[attackerPlayerId];
+  return Boolean(mark && mark.targetPlayerId === targetPlayerId);
+}
+
+/**
+ * Kiểm tra mục tiêu tấn công trực tiếp hợp lệ trong chế độ mở rộng:
+ * kế thừa tầm đánh chuẩn (Cluster / Handgun) và thực thi cấm đánh trên server cho Udi & Visions.
+ */
+export function canExpandedPlayerAttackTarget(
+  state: AuthoritativeGameState,
+  attacker: AuthoritativePlayerState,
+  target: AuthoritativePlayerState,
+): boolean {
+  if (!canPlayerAttackTarget(state, attacker, target)) return false;
+  if (isUdiProtectedFromAttack(state, target)) return false;
+  if (isVisionsMarkedTarget(state, attacker.playerId, target.playerId)) return false;
+  return true;
+}
+
+/** Danh sách mục tiêu tấn công hợp lệ trong chế độ mở rộng (đã lọc Udi & Visions). */
+export function listExpandedReachableAttackTargets(
+  state: AuthoritativeGameState,
+  attacker: AuthoritativePlayerState,
+): AuthoritativePlayerState[] {
+  return listReachableAttackTargets(state, attacker).filter(
+    (target) =>
+      !isUdiProtectedFromAttack(state, target) &&
+      !isVisionsMarkedTarget(state, attacker.playerId, target.playerId),
+  );
+}
+
+const fallenResistanceHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_fallen:resistance',
+  roleId: 'exp1_fallen',
+  trigger: 'BEFORE_DAMAGE',
+  priority: 3,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload) return false;
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (payload.phase !== 'outgoing_attack_modifiers') return false;
+    if (payload.fallenApplied) return false;
+    const baseDmg = typeof payload.baseDmg === 'number' ? payload.baseDmg : 0;
+    // House rule: >= 8 remaining HP & đòn tấn công trúng (baseDmg > 0)
+    return baseDmg > 0 && getRemainingHp(ctx.owner) >= 8;
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    const prevRaw = typeof payload.rawDmg === 'number' ? payload.rawDmg : 0;
+    const targetCount = Math.max(1, typeof payload.targetCount === 'number' ? payload.targetCount : 1);
+    payload.rawDmg = prevRaw + 2;
+    payload.fallenBonus = 2;
+    payload.fallenApplied = true;
+
+    const exp = ensureExpansionState(ctx.state);
+    incRoleStat(exp.stats.activationsByRole, 'exp1_fallen', 1);
+    incRoleStat(exp.stats.bonusDamageByRole, 'exp1_fallen', 2 * targetCount);
+    return { applied: true, note: 'fallen-hp>=8-bonus=+2' };
+  },
+};
+
+const feaMoveAdjustHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_fea:dice-adjust',
+  roleId: 'exp1_fea',
+  trigger: 'ON_MOVE',
+  priority: 12,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload || payload.phase !== 'dice_move_adjust') return false;
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (ctx.state.turnPhase !== 'ROLL_MOVE') return false;
+    return !ctx.owner.equipped.includes('eq-05');
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.feaCanAdjust = true;
+    return { applied: true, note: 'fea-move-adjust-ready' };
+  },
+};
+
+const eleanorInterrogatorHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_eleanor:interrogator',
+  roleId: 'exp2_eleanor',
+  trigger: 'ACTIVE_SKILL',
+  priority: 10,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (ctx.state.turnPhase !== 'MAIN_ACTION') return false;
+    if (ctx.owner.attacksThisTurn > 0) return false;
+    if (ctx.owner.hand.length > 0 || hasGloriaQueuedCards(ctx.state, ctx.owner.playerId)) {
+      return false;
+    }
+    if (
+      ctx.owner.equipped.includes(MASAMUNE_CARD_ID) &&
+      listExpandedReachableAttackTargets(ctx.state, ctx.owner).length > 0
+    ) {
+      return false;
+    }
+    return true;
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.eleanorApproved = true;
+    return { applied: true, note: 'eleanor-green-draw-approved' };
+  },
+};
+
+const fujikoItsOverHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_fujiko:its-over',
+  roleId: 'exp2_fujiko',
+  trigger: 'AFTER_ATTACK',
+  priority: 10,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload) return false;
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (payload.sourceType !== 'attack') return false;
+    const actualDealt = typeof payload.actualDealt === 'number' ? payload.actualDealt : 0;
+    const preHp = typeof payload.preAttackTargetHp === 'number' ? payload.preAttackTargetHp : 99;
+    const preRevealed = payload.preAttackTargetRevealed === true;
+    const targetId = typeof ctx.event.targetPlayerId === 'string' ? ctx.event.targetPlayerId : '';
+    const target = targetId ? ctx.state.players[targetId] : null;
+    return Boolean(
+      actualDealt >= 1 &&
+        preRevealed &&
+        preHp <= 4 &&
+        target &&
+        target.alive &&
+        target.hp > 0,
+    );
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.fujikoExecute = true;
+    return { applied: true, note: 'fujiko-execute-triggered' };
+  },
+};
+
+const udiHidingHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_udi:hiding',
+  roleId: 'exp1_udi',
+  trigger: 'BEFORE_ATTACK',
+  priority: 5,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    if (ctx.event.targetPlayerId !== ctx.owner.playerId) return false;
+    return isUdiProtectedFromAttack(ctx.state, ctx.owner);
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.udiBlockedAttack = true;
+    const exp = ensureExpansionState(ctx.state);
+    incRoleStat(exp.stats.activationsByRole, 'exp1_udi', 1);
+    return { applied: true, stopPropagation: true, note: 'udi-crowd-protection' };
+  },
+};
+
+const wrathTurnStartAoeHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_wrath:cluster-aoe',
+  roleId: 'exp1_wrath',
+  trigger: 'ON_TURN_START',
+  priority: 11,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (ctx.state.turnPhase !== 'ROLL_MOVE') return false;
+    const exp = ensureExpansionState(ctx.state);
+    if (exp.wrathPromptedTurnNumber === ctx.state.turnNumber) return false;
+    return listLivingPlayersInSameCluster(ctx.state, ctx.owner, { includeSelf: false }).length > 0;
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.wrathCanPrompt = true;
+    return { applied: true, note: 'wrath-cluster-aoe-ready' };
+  },
+};
+
+const vengeanceChainStrikeHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_vengeance:chain-strike',
+  roleId: 'exp1_vengeance',
+  trigger: 'ON_ELIMINATION',
+  priority: 15, // Chạy SAU Wyvern (10), TRƯỚC Wendigo (20)!
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload) return false;
+    if (payload.vengeanceAlreadyChecked) return false;
+    if (ctx.owner.skillUsedOnce) return false;
+    if (payload.killerPlayerId !== ctx.owner.playerId) return false;
+    if (payload.victimPlayerId === ctx.owner.playerId) return false;
+    return ctx.owner.alive && ctx.owner.revealed;
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.vengeanceAlreadyChecked = true;
+    const others = ctx.state.turnOrder
+      .map((id) => ctx.state.players[id])
+      .filter(
+        (p): p is AuthoritativePlayerState =>
+          Boolean(p && p.alive && p.playerId !== ctx.owner.playerId),
+      );
+    if (others.length === 0) {
+      return { applied: false, note: 'vengeance-no-targets' };
+    }
+    payload.pendingVengeanceChoice = {
+      vengeancePlayerId: ctx.owner.playerId,
+      eliminationEventId: String(payload.eliminationEventId ?? ''),
+      victimPlayerId: String(payload.victimPlayerId ?? ''),
+      candidateTargetIds: others.map((p) => p.playerId),
+    };
+    return { applied: false, stopPropagation: true, note: 'pending-vengeance-chain-strike' };
+  },
+};
+
+const visionsCurseHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_visions:curse-mark',
+  roleId: 'exp2_visions',
+  trigger: 'ON_TURN_START',
+  priority: 12,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (ctx.state.turnPhase !== 'ROLL_MOVE') return false;
+    const exp = ensureExpansionState(ctx.state);
+    const existingMark = exp.visionsMarks?.[ctx.owner.playerId];
+    if (existingMark) {
+      const victim = ctx.state.players[existingMark.targetPlayerId];
+      return Boolean(
+        victim &&
+          victim.alive &&
+          existingMark.markedOnTurnNumber < ctx.state.turnNumber &&
+          existingMark.lastTickTurnNumber !== ctx.state.turnNumber,
+      );
+    }
+    if (ctx.owner.skillUsedOnce || exp.visionsPromptedTurnNumber === ctx.state.turnNumber) {
+      return false;
+    }
+    return Object.values(ctx.state.players).some(
+      (p) => p.alive && p.playerId !== ctx.owner.playerId,
+    );
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    const exp = ensureExpansionState(ctx.state);
+    const existingMark = exp.visionsMarks?.[ctx.owner.playerId];
+    if (existingMark) {
+      payload.visionsTickTargetId = existingMark.targetPlayerId;
+      return { applied: true, note: `visions-tick=${existingMark.targetPlayerId}` };
+    }
+    payload.visionsCanPrompt = true;
+    return { applied: true, note: 'visions-mark-prompt-ready' };
+  },
+};
+
+const cruzBlackRedrawHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_cruz:black-redraw',
+  roleId: 'exp2_cruz',
+  trigger: 'ON_DRAW_CARD',
+  priority: 14,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload) return false;
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (payload.isLocationDraw !== true || payload.isRecursiveDraw === true) return false;
+    return payload.deckId === 'event';
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.cruzBlackRedraw = true;
+    return { applied: true, note: 'cruz-black-redraw-ready' };
+  },
+};
+
+const bryonGenerousServiceHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_bryon:generous-service',
+  roleId: 'exp2_bryon',
+  trigger: 'BEFORE_ATTACK',
+  priority: 20,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (ctx.state.turnPhase !== 'MAIN_ACTION' || ctx.owner.attacksThisTurn > 0) return false;
+    const hasGiftable = ctx.owner.equipped.some((cid) => cid !== MASAMUNE_CARD_ID);
+    if (!hasGiftable) return false;
+    return listLivingPlayersInSameCluster(ctx.state, ctx.owner, { includeSelf: false }).some(
+      (p) => p.faction === 'wanderer' && p.revealed,
+    );
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.bryonCanGift = true;
+    return { applied: true, note: 'bryon-gift-ready' };
+  },
+};
+
 export function createExpansionSkillEngine(): SkillEngine {
   const engine = createSkillEngine();
   engine.registerHandler(g43FortressHandler);
@@ -1061,6 +1545,17 @@ export function createExpansionSkillEngine(): SkillEngine {
   engine.registerHandler(gloriaMightyBlessingHandler);
   engine.registerHandler(cindyNightmareHandler);
   engine.registerHandler(bipolarFateCoinHandler);
+  // Phase 4B Wave 3 handlers
+  engine.registerHandler(fallenResistanceHandler);
+  engine.registerHandler(feaMoveAdjustHandler);
+  engine.registerHandler(eleanorInterrogatorHandler);
+  engine.registerHandler(fujikoItsOverHandler);
+  engine.registerHandler(udiHidingHandler);
+  engine.registerHandler(wrathTurnStartAoeHandler);
+  engine.registerHandler(vengeanceChainStrikeHandler);
+  engine.registerHandler(visionsCurseHandler);
+  engine.registerHandler(cruzBlackRedrawHandler);
+  engine.registerHandler(bryonGenerousServiceHandler);
   return engine;
 }
 
@@ -1117,11 +1612,12 @@ function enqueueAttackResolution(
     return { ok: false, error: 'Mục tiêu tấn công không còn hợp lệ.' };
   }
 
-  const targets = hasMachineGun ? listReachableAttackTargets(state, actor) : [target];
+  const targets = hasMachineGun ? listExpandedReachableAttackTargets(state, actor) : [target];
   let effectiveRoll: AttackRollSample = roll;
   let modifierTag = options?.outgoingModifierLabel ?? '';
 
-  // Bước 4A trong Damage Pipeline: Attacker passive outgoing attack modifiers (Unchained +2, Warlock +3 tại exact court)
+  // Bước 4A trong Damage Pipeline: Attacker passive outgoing attack modifiers
+  // (Fallen +2 khi >= 8 HP, Unchained +2, Warlock +3 tại exact court)
   // Chỉ áp dụng ĐÚNG 1 LẦN cho đòn tấn công trúng (baseDmg > 0), TRƯỚC defender prevention và KHÔNG cộng lặp khi resume!
   if (!options?.outgoingModifiersApplied && roll.baseDmg > 0 && targets.length > 0) {
     const outPayload: Record<string, unknown> = {
@@ -1129,6 +1625,7 @@ function enqueueAttackResolution(
       baseDmg: roll.baseDmg,
       rawDmg: roll.rawDmg,
       targetCount: targets.length,
+      fallenApplied: false,
       unchainedApplied: false,
       warlockApplied: false,
     };
@@ -1141,6 +1638,9 @@ function enqueueAttackResolution(
     });
     const nextRaw = typeof outPayload.rawDmg === 'number' ? outPayload.rawDmg : roll.rawDmg;
     const tags: string[] = [];
+    if (typeof outPayload.fallenBonus === 'number' && outPayload.fallenBonus > 0) {
+      tags.push(`+${outPayload.fallenBonus} Fallen`);
+    }
     if (typeof outPayload.unchainedBonus === 'number' && outPayload.unchainedBonus > 0) {
       tags.push(`+${outPayload.unchainedBonus} Unchained`);
     }
@@ -1344,6 +1844,8 @@ function enqueueAttackResolution(
       rawAmount: victimRawDmg,
       sourceType: 'attack',
       attackerPlayerId: actor.playerId,
+      preAttackTargetHp: getRemainingHp(victim),
+      preAttackTargetRevealed: victim.revealed,
       ...(targets.length === 1
         ? {
             attackSingleTargetLog: {
@@ -1404,6 +1906,20 @@ export function startExpandedAttack(
       error: actor.equipped.includes('ev-05')
         ? 'Súng Bắn Đinh (Handgun) chỉ bắn được các Cụm KHÁC ngoài Cụm bạn đang đứng!'
         : 'Mục tiêu phải đứng cùng Cụm Khu Vực với bạn.',
+    };
+  }
+  if (isUdiProtectedFromAttack(state, target)) {
+    const exp = ensureExpansionState(state);
+    incRoleStat(exp.stats.activationsByRole, 'exp1_udi', 1);
+    return {
+      ok: false,
+      error: `Ẩn Thân (Udi): ${target.displayName} đang ở cùng Cụm với ≥ 2 người chơi khác nên không thể bị tấn công trực tiếp!`,
+    };
+  }
+  if (isVisionsMarkedTarget(state, actor.playerId, target.playerId)) {
+    return {
+      ok: false,
+      error: `Dấu ấn Visions: Bạn không thể tấn công trực tiếp ${target.displayName} trong suốt phần còn lại của trận đấu!`,
     };
   }
 
@@ -1550,7 +2066,284 @@ export function startExpandedAttack(
 }
 
 // ---------------------------------------------------------------------------
-// Expanded Draw Card Entrypoint (Felicia — Tháo Vát, White/Black House Rule)
+// Expanded Reveal & Movement Entrypoints (Fallen >= 8 HP & Fea +/-1 Dice)
+// ---------------------------------------------------------------------------
+
+/**
+ * Xử lý hành động tự nguyện lật vai (`REVEAL_ROLE`) trong chế độ mở rộng.
+ * Lộ diện bắt buộc (eliminated / eq_mirror / v.v.) gọi trực tiếp `revealPlayerNow` nên không bị chặn.
+ */
+export function applyExpandedRevealRole(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  nowMs: number,
+): EngineActionResult {
+  if (actor.roleId === 'exp1_fallen' && !actor.revealed && getRemainingHp(actor) < 8) {
+    return {
+      ok: false,
+      error: `Sự Chống Cự (Fallen): Bạn chỉ có thể tự nguyện lộ diện khi còn từ 8 HP trở lên (hiện ${getRemainingHp(actor)}/${actor.maxHp} HP).`,
+    };
+  }
+  return resolveRevealRole(state, actor, nowMs);
+}
+
+function commitFeaMovementTotal(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  d6: number,
+  d4: number,
+  rawTotal: number,
+  delta: -1 | 0 | 1,
+  nowMs: number,
+  isTimeoutFallback = false,
+): void {
+  const exp = ensureExpansionState(state);
+  const effectiveTotal = Math.max(2, Math.min(10, rawTotal + delta));
+  const mapped = resolveLocationForDiceTotal(effectiveTotal);
+
+  if (delta !== 0) {
+    exp.feaAdjustedTurnNumber = state.turnNumber;
+    incRoleStat(exp.stats.activationsByRole, 'exp1_fea', 1);
+  }
+
+  const deltaLabel = delta > 0 ? `+1 (${rawTotal} → ${effectiveTotal})` : delta < 0 ? `-1 (${rawTotal} → ${effectiveTotal})` : `giữ nguyên ${rawTotal}`;
+
+  if (mapped === 'choose-any') {
+    state.allowedMoveDestinations = LOCATIONS_CATALOG.filter((l) => l.id !== actor.location).map(
+      (l) => l.id,
+    );
+    state.lastDiceRoll = {
+      id: `roll-${state.turnNumber}-${nowMs}`,
+      round: state.round,
+      atMs: nowMs,
+      playerId: actor.playerId,
+      displayName: actor.displayName,
+      kind: 'move',
+      d6,
+      d4,
+      total: effectiveTotal,
+      rerollRequired: false,
+      freeChoice: true,
+      resolvedLocation: null,
+    };
+    state.turnPhase = 'CHOOSE_MOVE';
+    actor.consecutiveSameZoneRolls = 0;
+    appendPublicLog(
+      state,
+      isTimeoutFallback ? 'timeout' : delta !== 0 ? 'skill' : 'dice',
+      isTimeoutFallback
+        ? `⏱️ Fea (${actor.displayName}) quá hạn Chỉnh Phục — giữ nguyên ${d6} + ${d4} = 7, tự do chọn khu vực!`
+        : delta !== 0
+          ? `🎲✨ Fea (${actor.displayName}) — Chỉnh Phục (${deltaLabel}): đạt tổng 7! Tự do chọn khu vực bất kỳ.`
+          : `🎲 Fea (${actor.displayName}) giữ nguyên ${d6} + ${d4} = 7! Tự do chọn khu vực bất kỳ.`,
+      nowMs,
+      actor.playerId,
+    );
+    return;
+  }
+
+  if (mapped === actor.location) {
+    actor.consecutiveSameZoneRolls += 1;
+    if (actor.consecutiveSameZoneRolls >= 2) {
+      const others = LOCATIONS_CATALOG.filter((l) => l.id !== actor.location);
+      const fallback = others[nextRandomInt(state, others.length)];
+      actor.location = fallback.id;
+      actor.consecutiveSameZoneRolls = 0;
+      state.allowedMoveDestinations = undefined;
+      state.turnPhase = 'LOCATION_ACTION';
+      state.lastDiceRoll = {
+        id: `roll-${state.turnNumber}-${nowMs}`,
+        round: state.round,
+        atMs: nowMs,
+        playerId: actor.playerId,
+        displayName: actor.displayName,
+        kind: 'move',
+        d6,
+        d4,
+        total: effectiveTotal,
+        rerollRequired: false,
+        freeChoice: false,
+        resolvedLocation: fallback.id,
+      };
+      appendPublicLog(
+        state,
+        'move',
+        `🎲 ${actor.displayName} tung trùng ô hiện tại liên tiếp 2 lần → hệ thống chuyển thẳng sang Ô ${fallback.diceLabel} (${fallback.name}).`,
+        nowMs,
+        actor.playerId,
+      );
+      return;
+    }
+
+    state.allowedMoveDestinations = undefined;
+    state.lastDiceRoll = {
+      id: `roll-${state.turnNumber}-${nowMs}`,
+      round: state.round,
+      atMs: nowMs,
+      playerId: actor.playerId,
+      displayName: actor.displayName,
+      kind: 'move',
+      d6,
+      d4,
+      total: effectiveTotal,
+      rerollRequired: true,
+      freeChoice: false,
+      resolvedLocation: mapped,
+    };
+    const sameLoc = getLocationDefinition(mapped);
+    appendPublicLog(
+      state,
+      isTimeoutFallback ? 'timeout' : 'dice',
+      `🎲 ${actor.displayName} giữ nguyên ${d6} + ${d4} = ${effectiveTotal} (trùng ${sameLoc.name}) → được quyền ĐỔ LẠI!`,
+      nowMs,
+      actor.playerId,
+    );
+    return;
+  }
+
+  actor.location = mapped;
+  actor.consecutiveSameZoneRolls = 0;
+  state.allowedMoveDestinations = undefined;
+  state.turnPhase = 'LOCATION_ACTION';
+  const destDef = getLocationDefinition(mapped);
+  state.lastDiceRoll = {
+    id: `roll-${state.turnNumber}-${nowMs}`,
+    round: state.round,
+    atMs: nowMs,
+    playerId: actor.playerId,
+    displayName: actor.displayName,
+    kind: 'move',
+    d6,
+    d4,
+    total: effectiveTotal,
+    rerollRequired: false,
+    freeChoice: false,
+    resolvedLocation: mapped,
+  };
+  appendPublicLog(
+    state,
+    isTimeoutFallback ? 'timeout' : delta !== 0 ? 'skill' : 'move',
+    isTimeoutFallback
+      ? `⏱️ Fea (${actor.displayName}) quá hạn Chỉnh Phục — giữ nguyên ${d6} + ${d4} = ${effectiveTotal} → tới Ô ${destDef.diceLabel} (${destDef.name}).`
+      : delta !== 0
+        ? `🚶✨ Fea (${actor.displayName}) — Chỉnh Phục (${deltaLabel}) → di chuyển tới Ô ${destDef.diceLabel} (${destDef.name}).`
+        : `🚶 ${actor.displayName} tung ${d6} + ${d4} = ${effectiveTotal} → di chuyển tới Ô ${destDef.diceLabel} (${destDef.name}).`,
+    nowMs,
+    actor.playerId,
+  );
+}
+
+/**
+ * Xử lý tung xúc xắc di chuyển trong chế độ mở rộng:
+ * Hỗ trợ Fea (`exp1_fea`) điều chỉnh tổng xúc xắc +/-1 (trong biên [2..10], không sinh thêm RNG, không đứng yên bất hợp lệ).
+ */
+export function applyExpandedDiceRollMove(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  nowMs: number,
+  callbacks: TurnContinuationCallbacks,
+): EngineActionResult {
+  if (state.turnPhase !== 'ROLL_MOVE') {
+    return { ok: false, error: 'Hiện không ở pha tung xúc xắc di chuyển.' };
+  }
+
+  const movePayload: Record<string, unknown> = { phase: 'dice_move_adjust' };
+  EXPANSION_SKILL_ENGINE.dispatch(state, {
+    trigger: 'ON_MOVE',
+    actorPlayerId: actor.playerId,
+    nowMs,
+    payload: movePayload,
+  });
+
+  if (movePayload.feaCanAdjust !== true) {
+    const res = resolveDiceRollMove(state, actor, nowMs);
+    if (res.ok) {
+      callbacks.finalizeIfFinished(state, nowMs);
+    }
+    return res;
+  }
+
+  const d6 = rollD6(state);
+  const d4 = rollD4(state);
+  const rawTotal = d6 + d4;
+
+  const options: BoardGameChoiceOptionView[] = [];
+  const deltaByOptionId: Record<string, -1 | 0 | 1> = {};
+  const candidates: readonly (-1 | 0 | 1)[] = [-1, 0, 1];
+
+  const describeTotalDest = (tot: number): string => {
+    const m = resolveLocationForDiceTotal(tot);
+    if (m === 'choose-any') return 'Tổng 7 — Tự chọn khu vực bất kỳ';
+    const def = getLocationDefinition(m);
+    if (m === actor.location) return `Ô ${def.diceLabel} (${def.name} · Trùng ô → Đổ lại)`;
+    return `Ô ${def.diceLabel} (${def.name})`;
+  };
+
+  for (const delta of candidates) {
+    const adjTotal = rawTotal + delta;
+    if (adjTotal < 2 || adjTotal > 10) continue;
+    const mapped = resolveLocationForDiceTotal(adjTotal);
+    // Không cho phép chủ động chỉnh (+/-1) sang tổng vẫn đứng yên tại chính ô hiện tại
+    if (delta !== 0 && mapped !== 'choose-any' && mapped === actor.location) continue;
+    const optId = delta === -1 ? 'adj_minus' : delta === 1 ? 'adj_plus' : 'adj_0';
+    deltaByOptionId[optId] = delta;
+    options.push({
+      optionId: optId,
+      label:
+        delta === 0
+          ? `Giữ nguyên: ${rawTotal} → ${describeTotalDest(rawTotal)}`
+          : `${delta > 0 ? '+1 nút' : '-1 nút'}: ${rawTotal} → ${adjTotal} (${describeTotalDest(adjTotal)})`,
+      detail:
+        delta === 0
+          ? `Áp dụng đúng kết quả tung ${d6} + ${d4} = ${rawTotal}.`
+          : `Dùng Chỉnh Phục (Fea) đổi tổng thành ${adjTotal}.`,
+    });
+  }
+
+  // Nếu mọi phương án +/-1 đều ngoài biên hoặc trùng ô hiện tại (vd. đứng radio & tung 2) -> xử lý thẳng không cần mở choice!
+  if (options.length <= 1) {
+    commitFeaMovementTotal(state, actor, d6, d4, rawTotal, 0, nowMs, false);
+    callbacks.finalizeIfFinished(state, nowMs);
+    return { ok: true };
+  }
+
+  const choiceId = nextExpansionEventId(state, 'choice-fea');
+  const eventId = nextExpansionEventId(state, 'ev-fea');
+  const timeoutMs = getChoiceTimeoutMs(state, actor);
+  state.pendingChoice = {
+    choiceId,
+    eventId,
+    ownerPlayerId: actor.playerId,
+    kind: 'fea_move_adjust',
+    isSecret: false,
+    title: 'Chỉnh Phục (Fea)',
+    description: `Bạn tung được ${d6} + ${d4} = ${rawTotal}. Chọn giữ nguyên hoặc điều chỉnh +/-1 nút trong khoảng [2..10] (hết giờ tự giữ nguyên ${rawTotal}).`,
+    publicPromptLabel: `🎲 Fea (${actor.displayName}) tung ${d6}+${d4}=${rawTotal} — đang chọn Chỉnh Phục (+/-1)...`,
+    options,
+    defaultOptionId: 'adj_0',
+    createdAtMs: nowMs,
+    deadlineMs: nowMs + timeoutMs,
+    data: {
+      kind: 'fea_move_adjust',
+      actorPlayerId: actor.playerId,
+      d6,
+      d4,
+      rawTotal,
+      deltaByOptionId,
+    },
+  };
+  appendPublicLog(
+    state,
+    'dice',
+    `🎲 Fea (${actor.displayName}) tung ${d6} + ${d4} = ${rawTotal} — đang chọn giữ nguyên hoặc Chỉnh Phục (+/-1)!`,
+    nowMs,
+    actor.playerId,
+  );
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Expanded Draw Card Entrypoint (Felicia / Gloria / Cruz)
 // ---------------------------------------------------------------------------
 
 function getDeckLabel(deckId: BoardGameDeckId): string {
@@ -1726,6 +2519,103 @@ export function applyExpandedDrawLocationCard(
     }
 
     callbacks.finalizeIfFinished(state, nowMs);
+    return { ok: true };
+  }
+
+  // Cruz (Chúa Tể Thẻ Đen — Phase 4B house rule):
+  // Đã lật vai + rút thẻ Đen ('event'): xem lá đầu tiên, chọn giữ hoặc đặt xuống ĐÁY chồng Đột Kích & rút 1 lá thay thế (tối đa 1 lần/lần rút).
+  if (drawPayload.cruzBlackRedraw === true) {
+    markExpansionEventProcessed(state, movementDrawEventId);
+    const deckLabel = getDeckLabel('event');
+    const card0 = takeOneCardFromDeck(state, 'event');
+    if (!card0) {
+      state.turnPhase = 'MAIN_ACTION';
+      appendPublicLog(
+        state,
+        'draw',
+        `🃏 Chồng bài ${deckLabel} đã cạn lá rảnh — ${actor.displayName} bước vào pha Hành động chính.`,
+        nowMs,
+        actor.playerId,
+      );
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+
+    const hasReplacement = state.decks.event.length + state.discards.event.length > 0;
+    if (!hasReplacement) {
+      if (!card0.isConsumable && card0.deck !== 'investigation') {
+        equipToPlayerSlot(actor, card0.id);
+        state.turnPhase = 'MAIN_ACTION';
+        appendPublicLog(
+          state,
+          'equipment',
+          `🎒 Cruz (${actor.displayName}) rút lá cuối từ ${deckLabel} tại ${loc.name} và trang bị ngay "${card0.title}"!`,
+          nowMs,
+          actor.playerId,
+        );
+      } else {
+        if (actor.hand.length >= BOARD_GAME_MAX_HAND) {
+          const dropped = actor.hand.shift();
+          if (dropped) discardCardId(state, dropped);
+        }
+        actor.hand.push(card0.id);
+        state.turnPhase = 'MAIN_ACTION';
+        appendPublicLog(
+          state,
+          'draw',
+          `🃏 Cruz (${actor.displayName}) rút lá duy nhất còn lại của ${deckLabel} tại ${loc.name} (cần giải quyết trong lượt).`,
+          nowMs,
+          actor.playerId,
+        );
+      }
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+
+    const choiceId = nextExpansionEventId(state, 'choice-cruz');
+    const eventId = nextExpansionEventId(state, 'ev-cruz');
+    const timeoutMs = getChoiceTimeoutMs(state, actor);
+    const options: BoardGameChoiceOptionView[] = [
+      {
+        optionId: 'keep',
+        label: `Giữ lá vừa rút: ${card0.title}`,
+        detail: card0.summary,
+        card: toCardPublicMeta(card0),
+      },
+      {
+        optionId: 'redraw',
+        label: 'Đặt xuống đáy chồng bài Đen & Rút 1 lá khác',
+        detail: 'Đưa lá vừa rút xuống đáy chồng Đột Kích và rút 1 lá thay thế (tối đa 1 lần đổi).',
+      },
+    ];
+
+    state.pendingChoice = {
+      choiceId,
+      eventId,
+      ownerPlayerId: actor.playerId,
+      kind: 'cruz_black_redraw',
+      isSecret: false,
+      title: 'Đổi Thẻ Đột Kích (Cruz)',
+      description: `Bạn vừa rút "${card0.title}" từ chồng ${deckLabel}. Chọn giữ lại để giải quyết hoặc đặt xuống đáy chồng bài và rút 1 lá thay thế (hết giờ tự giữ lá đầu).`,
+      publicPromptLabel: `🃏 Cruz (${actor.displayName}) đang cân nhắc giữ hay đổi thẻ Đột Kích...`,
+      options,
+      defaultOptionId: 'keep',
+      createdAtMs: nowMs,
+      deadlineMs: nowMs + timeoutMs,
+      data: {
+        kind: 'cruz_black_redraw',
+        actorPlayerId: actor.playerId,
+        drawnCardId: card0.id,
+      },
+    };
+    // BẢO MẬT P0: Log công khai KHÔNG lộ tên thẻ Cruz đang cân nhắc đổi!
+    appendPublicLog(
+      state,
+      'draw',
+      `🃏 Cruz (${actor.displayName}) rút 1 thẻ ${deckLabel} tại ${loc.name} — đang cân nhắc giữ hay đặt đáy rút lại!`,
+      nowMs,
+      actor.playerId,
+    );
     return { ok: true };
   }
 
@@ -2021,10 +2911,15 @@ export function applyExpandedUseCard(
       }
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
+      if (actor.roleId === 'exp2_cruz' && isCruzQualifyingCardId(card.id)) {
+        if (!exp.cruzQualifyingCardTurnByPlayer) exp.cruzQualifyingCardTurnByPlayer = {};
+        exp.cruzQualifyingCardTurnByPlayer[actor.playerId] = state.turnNumber;
+      }
       exp.pendingSteps.push(
         {
           kind: 'DAMAGE',
           damageEventId: nextExpansionEventId(state, 'dmg'),
+          sourceCardId: card.id,
           targetPlayerId: target.playerId,
           rawAmount: 2,
           sourceType: 'event',
@@ -2055,10 +2950,15 @@ export function applyExpandedUseCard(
       }
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
+      if (actor.roleId === 'exp2_cruz' && isCruzQualifyingCardId(card.id)) {
+        if (!exp.cruzQualifyingCardTurnByPlayer) exp.cruzQualifyingCardTurnByPlayer = {};
+        exp.cruzQualifyingCardTurnByPlayer[actor.playerId] = state.turnNumber;
+      }
       exp.pendingSteps.push(
         {
           kind: 'DAMAGE',
           damageEventId: nextExpansionEventId(state, 'dmg'),
+          sourceCardId: card.id,
           targetPlayerId: target.playerId,
           rawAmount: 2,
           sourceType: 'event',
@@ -2085,6 +2985,10 @@ export function applyExpandedUseCard(
     case 'ev_dynamite': {
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
+      if (actor.roleId === 'exp2_cruz' && isCruzQualifyingCardId(card.id)) {
+        if (!exp.cruzQualifyingCardTurnByPlayer) exp.cruzQualifyingCardTurnByPlayer = {};
+        exp.cruzQualifyingCardTurnByPlayer[actor.playerId] = state.turnNumber;
+      }
       const d6 = rollD6(state);
       const d4 = rollD4(state);
       const total = d6 + d4;
@@ -2116,7 +3020,9 @@ export function applyExpandedUseCard(
         return { ok: true };
       }
       const zoneDef = getLocationDefinition(mapped);
-      const victims = Object.values(state.players).filter((p) => p.alive && p.location === mapped);
+      const victims = state.turnOrder
+        .map((id) => state.players[id])
+        .filter((p): p is AuthoritativePlayerState => Boolean(p && p.alive && p.location === mapped));
       state.lastDiceRoll = {
         id: `dyn-${state.turnNumber}-${nowMs}`,
         round: state.round,
@@ -2143,6 +3049,7 @@ export function applyExpandedUseCard(
         exp.pendingSteps.push({
           kind: 'DAMAGE',
           damageEventId: nextExpansionEventId(state, 'dmg'),
+          sourceCardId: card.id,
           targetPlayerId: v.playerId,
           rawAmount: 3,
           sourceType: 'event',
@@ -2166,11 +3073,16 @@ export function applyExpandedUseCard(
       }
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
+      if (actor.roleId === 'exp2_cruz' && isCruzQualifyingCardId(card.id)) {
+        if (!exp.cruzQualifyingCardTurnByPlayer) exp.cruzQualifyingCardTurnByPlayer = {};
+        exp.cruzQualifyingCardTurnByPlayer[actor.playerId] = state.turnNumber;
+      }
       const d6 = rollD6(state);
       if (d6 <= 4) {
         exp.pendingSteps.push({
           kind: 'DAMAGE',
           damageEventId: nextExpansionEventId(state, 'dmg'),
+          sourceCardId: card.id,
           targetPlayerId: target.playerId,
           rawAmount: 3,
           sourceType: 'event',
@@ -2184,6 +3096,7 @@ export function applyExpandedUseCard(
         exp.pendingSteps.push({
           kind: 'DAMAGE',
           damageEventId: nextExpansionEventId(state, 'dmg'),
+          sourceCardId: card.id,
           targetPlayerId: actor.playerId,
           rawAmount: 3,
           sourceType: 'event',
@@ -2524,14 +3437,191 @@ function openBipolarFateCoinChoice(
   };
 }
 
+function openWrathTurnStartChoice(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  clusterVictims: readonly AuthoritativePlayerState[],
+  nowMs: number,
+): void {
+  const exp = ensureExpansionState(state);
+  exp.wrathPromptedTurnNumber = state.turnNumber;
+  const choiceId = nextExpansionEventId(state, 'choice-wrath');
+  const eventId = nextExpansionEventId(state, 'ev-wrath');
+  const timeoutMs = getChoiceTimeoutMs(state, actor);
+  const victimNames = clusterVictims.map((v) => v.displayName).join(', ');
+
+  state.pendingChoice = {
+    choiceId,
+    eventId,
+    ownerPlayerId: actor.playerId,
+    kind: 'wrath_turn_start_aoe',
+    isSecret: false,
+    title: 'Cơn Thịnh Nộ (Wrath · Đầu lượt)',
+    description: `Có ${clusterVictims.length} người chơi khác đang đứng cùng Cụm với bạn (${victimNames}). Bạn có muốn gây 2 sát thương kỹ năng cho tất cả họ (không gây sát thương cho chính bạn) không? (Hết giờ tự bỏ qua).`,
+    publicPromptLabel: `🔥 Wrath (${actor.displayName}) đang cân nhắc kích hoạt Cơn Thịnh Nộ (2 ST cùng Cụm)...`,
+    options: [
+      {
+        optionId: 'activate',
+        label: `Kích hoạt Cơn Thịnh Nộ (2 ST lên ${clusterVictims.length} người cùng Cụm)`,
+        detail: `Mục tiêu: ${victimNames}. Không tự gây sát thương cho bản thân.`,
+      },
+      {
+        optionId: 'skip',
+        label: 'Bỏ qua lượt này',
+        detail: 'Không gây sát thương đầu lượt và tiếp tục tung xúc xắc di chuyển.',
+      },
+    ],
+    defaultOptionId: 'skip',
+    createdAtMs: nowMs,
+    deadlineMs: nowMs + timeoutMs,
+    data: {
+      kind: 'wrath_turn_start_aoe',
+      actorPlayerId: actor.playerId,
+      turnNumber: state.turnNumber,
+      victimPlayerIds: clusterVictims.map((v) => v.playerId),
+    },
+  };
+}
+
+function openVisionsMarkChoice(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  candidates: readonly AuthoritativePlayerState[],
+  nowMs: number,
+): void {
+  const exp = ensureExpansionState(state);
+  exp.visionsPromptedTurnNumber = state.turnNumber;
+  const choiceId = nextExpansionEventId(state, 'choice-visions');
+  const eventId = nextExpansionEventId(state, 'ev-visions');
+  const timeoutMs = getChoiceTimeoutMs(state, actor);
+  const targetMap: Record<string, string> = {};
+  const options: BoardGameChoiceOptionView[] = candidates.map((p, idx) => {
+    const optId = `mark_${idx}`;
+    targetMap[optId] = p.playerId;
+    return {
+      optionId: optId,
+      label: `Đánh dấu ${p.displayName} (-1 HP mỗi đầu lượt sau)`,
+      detail: `Không thể tấn công trực tiếp ${p.displayName} nữa; bắt đầu trừ 1 HP từ đầu lượt kế tiếp của bạn.`,
+      targetPlayerId: p.playerId,
+    };
+  });
+  options.push({
+    optionId: 'skip',
+    label: 'Chưa đánh dấu lượt này (Giữ nguyên 1 lần/trận)',
+    detail: 'Để dành kỹ năng 1 lần/trận cho đầu lượt sau.',
+  });
+
+  state.pendingChoice = {
+    choiceId,
+    eventId,
+    ownerPlayerId: actor.playerId,
+    kind: 'visions_mark_target',
+    isSecret: false,
+    title: 'Ám Ảnh Dài Lâu (Visions · 1 lần/trận)',
+    description:
+      'Chọn 1 người chơi khác để đặt dấu ấn vĩnh viễn: bạn sẽ không thể tấn công trực tiếp người này nữa, và từ đầu lượt tiếp theo của bạn họ sẽ mất 1 HP mỗi lượt của bạn (hết giờ tự bỏ qua).',
+    publicPromptLabel: `👁️ Visions (${actor.displayName}) đang cân nhắc đặt dấu ấn đầu lượt...`,
+    options,
+    defaultOptionId: 'skip',
+    createdAtMs: nowMs,
+    deadlineMs: nowMs + timeoutMs,
+    data: {
+      kind: 'visions_mark_target',
+      actorPlayerId: actor.playerId,
+      turnNumber: state.turnNumber,
+      targetMap,
+    },
+  };
+}
+
+function openBryonGiftChoice(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  giftableCardIds: readonly string[],
+  recipients: readonly AuthoritativePlayerState[],
+  nowMs: number,
+): void {
+  const choiceId = nextExpansionEventId(state, 'choice-bryon');
+  const eventId = nextExpansionEventId(state, 'ev-bryon');
+  const timeoutMs = getChoiceTimeoutMs(state, actor);
+  const giftMap: Record<string, { recipientPlayerId: string; cardIds: string[] }> = {};
+  const options: BoardGameChoiceOptionView[] = [];
+  let seq = 0;
+
+  for (const recipient of recipients) {
+    if (giftableCardIds.length >= 2) {
+      const optId = `g_${seq++}`;
+      giftMap[optId] = {
+        recipientPlayerId: recipient.playerId,
+        cardIds: [...giftableCardIds],
+      };
+      const names = giftableCardIds
+        .map((cid) => getCardById(cid)?.title ?? cid)
+        .join(', ');
+      options.push({
+        optionId: optId,
+        label: `Tặng TẤT CẢ (${giftableCardIds.length} món) → ${recipient.displayName}`,
+        detail: `Chuyển toàn bộ trang bị hợp lệ (${names}) cho ${recipient.displayName} (trừ Masamune). Vẫn giữ nguyên quyền tấn công.`,
+        targetPlayerId: recipient.playerId,
+      });
+    }
+
+    const seenCards = new Set<string>();
+    for (const cid of giftableCardIds) {
+      if (seenCards.has(cid)) continue;
+      seenCards.add(cid);
+      const card = getCardById(cid);
+      const optId = `g_${seq++}`;
+      giftMap[optId] = {
+        recipientPlayerId: recipient.playerId,
+        cardIds: [cid],
+      };
+      options.push({
+        optionId: optId,
+        label: `Tặng "${card?.title ?? cid}" → ${recipient.displayName}`,
+        detail: card?.summary ?? 'Chuyển 1 trang bị cho Neutral đã lộ diện cùng Cụm.',
+        ...(card ? { card: toCardPublicMeta(card) } : {}),
+        targetPlayerId: recipient.playerId,
+      });
+    }
+  }
+
+  options.push({
+    optionId: 'done',
+    label: 'Hoàn tất / Không tặng thêm',
+    detail: 'Giữ nguyên các trang bị còn lại và tiếp tục pha Hành động chính.',
+  });
+
+  state.pendingChoice = {
+    choiceId,
+    eventId,
+    ownerPlayerId: actor.playerId,
+    kind: 'bryon_gift_equipment',
+    isSecret: false,
+    title: 'Sự Phục Vụ Hào Phóng (Bryon)',
+    description:
+      'Chọn trao tặng 1 hoặc toàn bộ trang bị hợp lệ (trừ Masamune) cho một Neutral đã lộ diện cùng Cụm. Tặng xong vẫn giữ nguyên quyền tấn công và có thể tặng tiếp nếu còn trang bị.',
+    publicPromptLabel: `🎁 Bryon (${actor.displayName}) đang chọn trao tặng trang bị cho đồng minh Neutral cùng Cụm...`,
+    options,
+    defaultOptionId: 'done',
+    createdAtMs: nowMs,
+    deadlineMs: nowMs + timeoutMs,
+    data: {
+      kind: 'bryon_gift_equipment',
+      actorPlayerId: actor.playerId,
+      giftMap,
+    },
+  };
+}
+
 export function triggerExpandedTurnStart(
   state: AuthoritativeGameState,
   actor: AuthoritativePlayerState,
   nowMs: number,
+  callbacks?: TurnContinuationCallbacks,
 ): void {
   if (state.finished || !actor.alive || state.pendingChoice) return;
   const exp = ensureExpansionState(state);
-  if (exp.bipolarPromptedTurnNumber === state.turnNumber) return;
 
   const payload: Record<string, unknown> = {
     turnNumber: state.turnNumber,
@@ -2543,7 +3633,86 @@ export function triggerExpandedTurnStart(
     payload,
   });
 
-  if (payload.bipolarCanPrompt === true && actor.roleId === 'exp1_bipolar' && actor.revealed && !actor.skillUsedOnce) {
+  // 1. Visions persistent mark tick (đầu lượt TIẾP THEO sau lượt đặt dấu -> gây 1 ST kỹ năng!)
+  if (typeof payload.visionsTickTargetId === 'string' && actor.roleId === 'exp2_visions') {
+    const mark = exp.visionsMarks?.[actor.playerId];
+    const markedVictim = state.players[payload.visionsTickTargetId];
+    if (
+      mark &&
+      markedVictim &&
+      markedVictim.alive &&
+      mark.markedOnTurnNumber < state.turnNumber &&
+      mark.lastTickTurnNumber !== state.turnNumber
+    ) {
+      mark.lastTickTurnNumber = state.turnNumber;
+      incRoleStat(exp.stats.activationsByRole, 'exp2_visions', 1);
+      incRoleStat(exp.stats.bonusDamageByRole, 'exp2_visions', 1);
+      exp.pendingSteps.push(
+        {
+          kind: 'DAMAGE',
+          damageEventId: nextExpansionEventId(state, 'dmg-visions'),
+          targetPlayerId: markedVictim.playerId,
+          rawAmount: 1,
+          sourceType: 'skill',
+          attackerPlayerId: actor.playerId,
+          postLogKind: 'skill',
+          postLogPrefix: `👁️ Visions (${actor.displayName}) — Dấu Ấn Đầu Lượt: ${markedVictim.displayName} mất `,
+          postLogSuffix: ' HP!',
+          postLogActorId: actor.playerId,
+        },
+        {
+          kind: 'FINISH_ACTION',
+          actorPlayerId: actor.playerId,
+          autoEndTurnMode: 'never',
+        },
+      );
+      if (callbacks) {
+        drainPendingSteps(state, nowMs, callbacks);
+      }
+      return;
+    }
+  }
+
+  // 2. Visions initial mark prompt (1 lần/trận vào đầu lượt khi đã lộ vai)
+  if (
+    payload.visionsCanPrompt === true &&
+    actor.roleId === 'exp2_visions' &&
+    actor.revealed &&
+    !actor.skillUsedOnce &&
+    exp.visionsPromptedTurnNumber !== state.turnNumber &&
+    !exp.visionsMarks?.[actor.playerId]
+  ) {
+    const candidates = state.turnOrder
+      .map((id) => state.players[id])
+      .filter((p): p is AuthoritativePlayerState => Boolean(p && p.alive && p.playerId !== actor.playerId));
+    if (candidates.length > 0) {
+      openVisionsMarkChoice(state, actor, candidates, nowMs);
+      return;
+    }
+  }
+
+  // 3. Wrath turn-start cluster AoE prompt (tùy chọn 2 ST kỹ năng lên mọi người khác cùng Cụm)
+  if (
+    payload.wrathCanPrompt === true &&
+    actor.roleId === 'exp1_wrath' &&
+    actor.revealed &&
+    exp.wrathPromptedTurnNumber !== state.turnNumber
+  ) {
+    const clusterVictims = listLivingPlayersInSameCluster(state, actor, { includeSelf: false });
+    if (clusterVictims.length > 0) {
+      openWrathTurnStartChoice(state, actor, clusterVictims, nowMs);
+      return;
+    }
+  }
+
+  // 4. Bipolar Fate Coin prompt (1 lần/trận vào đầu lượt khi đã lộ vai)
+  if (
+    payload.bipolarCanPrompt === true &&
+    actor.roleId === 'exp1_bipolar' &&
+    actor.revealed &&
+    !actor.skillUsedOnce &&
+    exp.bipolarPromptedTurnNumber !== state.turnNumber
+  ) {
     openBipolarFateCoinChoice(state, actor, nowMs);
   }
 }
@@ -2561,7 +3730,11 @@ export function applyExpandedUseSkill(
     actor.roleId !== 'gac-radio' &&
     actor.roleId !== 'lang-cuu-ho' &&
     actor.roleId !== 'exp2_father_harrison' &&
-    actor.roleId !== 'exp1_bipolar'
+    actor.roleId !== 'exp1_bipolar' &&
+    actor.roleId !== 'exp2_eleanor' &&
+    actor.roleId !== 'exp1_wrath' &&
+    actor.roleId !== 'exp2_visions' &&
+    actor.roleId !== 'exp2_bryon'
   ) {
     return null;
   }
@@ -2618,6 +3791,169 @@ export function applyExpandedUseSkill(
       };
     }
     openBipolarFateCoinChoice(state, actor, nowMs);
+    return { ok: true };
+  }
+
+  // Eleanor (Người Thẩm Vấn — Phase 4B house rule): thay quyền tấn công ở MAIN_ACTION bằng rút 1 thẻ Xanh
+  if (actor.roleId === 'exp2_eleanor') {
+    if (state.turnPhase !== 'MAIN_ACTION') {
+      return {
+        ok: false,
+        error: 'Người Thẩm Vấn chỉ kích hoạt được trong pha Hành động chính (thay cho tấn công).',
+      };
+    }
+    if (actor.attacksThisTurn > 0) {
+      return {
+        ok: false,
+        error: 'Bạn đã dùng quyền tấn công trong lượt này — không thể kích hoạt Người Thẩm Vấn.',
+      };
+    }
+    if (actor.hand.length > 0 || hasGloriaQueuedCards(state, actor.playerId)) {
+      return {
+        ok: false,
+        error: 'Hãy giải quyết hết thẻ bài đang cầm trên tay trước khi kích hoạt Người Thẩm Vấn.',
+      };
+    }
+    if (
+      actor.equipped.includes(MASAMUNE_CARD_ID) &&
+      listExpandedReachableAttackTargets(state, actor).length > 0
+    ) {
+      return {
+        ok: false,
+        error: 'Kiếm Gỗ Nguyền Rủa (Masamune): Bạn bắt buộc phải tấn công khi có mục tiêu hợp lệ trong tầm — không thể thay bằng rút thẻ Xanh!',
+      };
+    }
+    const eleanorPayload: Record<string, unknown> = {};
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'ACTIVE_SKILL',
+      actorPlayerId: actor.playerId,
+      nowMs,
+      payload: eleanorPayload,
+    });
+    if (eleanorPayload.eleanorApproved !== true) {
+      return { ok: false, error: 'Không thể kích hoạt Người Thẩm Vấn vào lúc này.' };
+    }
+
+    const expEleanor = ensureExpansionState(state);
+    actor.attacksThisTurn = 1;
+    incRoleStat(expEleanor.stats.activationsByRole, 'exp2_eleanor', 1);
+    const drawn = takeOneCardFromDeck(state, 'investigation');
+    if (!drawn) {
+      appendPublicLog(
+        state,
+        'skill',
+        `🔍 Eleanor (${actor.displayName}) — Người Thẩm Vấn: chồng bài Khám Phá (Xanh) đã cạn lá rảnh (đã tiêu hao quyền tấn công lượt này).`,
+        nowMs,
+        actor.playerId,
+      );
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+    if (actor.hand.length >= BOARD_GAME_MAX_HAND) {
+      const dropped = actor.hand.shift();
+      if (dropped) discardCardId(state, dropped);
+    }
+    actor.hand.push(drawn.id);
+    // BẢO MẬT P0: Log công khai KHÔNG lộ nội dung lá bài Xanh Eleanor vừa rút!
+    appendPublicLog(
+      state,
+      'draw',
+      `🔍 Eleanor (${actor.displayName}) — Người Thẩm Vấn: bỏ quyền tấn công để rút 1 thẻ Khám Phá (Xanh) kín (cần giải quyết trong lượt).`,
+      nowMs,
+      actor.playerId,
+    );
+    callbacks.finalizeIfFinished(state, nowMs);
+    return { ok: true };
+  }
+
+  // Wrath (Cơn Thịnh Nộ — Phase 4B house rule): cho phép mở choice nếu Wrath tự lật vai ngay đầu lượt (ROLL_MOVE)
+  if (actor.roleId === 'exp1_wrath') {
+    const expWrath = ensureExpansionState(state);
+    if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
+      return {
+        ok: false,
+        error: 'Cơn Thịnh Nộ chỉ kích hoạt được vào đầu lượt của bạn (trước khi tung xúc xắc di chuyển).',
+      };
+    }
+    if (expWrath.wrathPromptedTurnNumber === state.turnNumber) {
+      return {
+        ok: false,
+        error: 'Bạn đã cân nhắc Cơn Thịnh Nộ trong lượt này rồi.',
+      };
+    }
+    const clusterVictims = listLivingPlayersInSameCluster(state, actor, { includeSelf: false });
+    if (clusterVictims.length === 0) {
+      return {
+        ok: false,
+        error: 'Không có người chơi khác nào đang đứng cùng Cụm với bạn.',
+      };
+    }
+    openWrathTurnStartChoice(state, actor, clusterVictims, nowMs);
+    return { ok: true };
+  }
+
+  // Visions (Ám Ảnh Dài Lâu — Phase 4B house rule): cho phép mở choice nếu Visions tự lật vai ngay đầu lượt (ROLL_MOVE)
+  if (actor.roleId === 'exp2_visions') {
+    const expVis = ensureExpansionState(state);
+    if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
+      return {
+        ok: false,
+        error: 'Dấu Ấn Visions chỉ đặt được vào đầu lượt của bạn (trước khi tung xúc xắc di chuyển).',
+      };
+    }
+    if (actor.skillUsedOnce || expVis.visionsMarks?.[actor.playerId]) {
+      return {
+        ok: false,
+        error: 'Bạn đã đặt Dấu Ấn Visions trong trận này (1 lần/trận, không thể đổi mục tiêu).',
+      };
+    }
+    const candidates = state.turnOrder
+      .map((id) => state.players[id])
+      .filter((p): p is AuthoritativePlayerState => Boolean(p && p.alive && p.playerId !== actor.playerId));
+    if (candidates.length === 0) {
+      return { ok: false, error: 'Không có mục tiêu hợp lệ để đặt Dấu Ấn.' };
+    }
+    openVisionsMarkChoice(state, actor, candidates, nowMs);
+    return { ok: true };
+  }
+
+  // Bryon (Sự Phục Vụ Hào Phóng — Phase 4B house rule): trao tặng trang bị (trừ Masamune) cho Neutral đã lộ diện cùng Cụm trước khi đánh
+  if (actor.roleId === 'exp2_bryon') {
+    if (state.turnPhase !== 'MAIN_ACTION') {
+      return {
+        ok: false,
+        error: 'Sự Phục Vụ Hào Phóng chỉ kích hoạt được ở pha Hành động chính (trước khi tấn công).',
+      };
+    }
+    if (actor.attacksThisTurn > 0) {
+      return {
+        ok: false,
+        error: 'Sự Phục Vụ Hào Phóng chỉ dùng được TRƯỚC khi bạn tấn công trong lượt này.',
+      };
+    }
+    if (actor.hand.length > 0 || hasGloriaQueuedCards(state, actor.playerId)) {
+      return {
+        ok: false,
+        error: 'Hãy giải quyết hết thẻ bài đang cầm trên tay trước khi trao tặng trang bị.',
+      };
+    }
+    const giftable = actor.equipped.filter((cid) => cid !== MASAMUNE_CARD_ID);
+    if (giftable.length === 0) {
+      return {
+        ok: false,
+        error: 'Bạn không có trang bị hợp lệ để trao tặng (Masamune không thể chuyển nhượng).',
+      };
+    }
+    const recipients = listLivingPlayersInSameCluster(state, actor, { includeSelf: false }).filter(
+      (p) => p.faction === 'wanderer' && p.revealed,
+    );
+    if (recipients.length === 0) {
+      return {
+        ok: false,
+        error: 'Không có nhân vật Neutral đã lộ diện nào đang đứng cùng Cụm với bạn.',
+      };
+    }
+    openBryonGiftChoice(state, actor, giftable, recipients, nowMs);
     return { ok: true };
   }
 
@@ -2691,7 +4027,7 @@ export function applyExpandedUseSkill(
     };
   }
   const target = state.players[expectedId];
-  if (!target || !target.alive || !canPlayerAttackTarget(state, actor, target)) {
+  if (!target || !target.alive || !canExpandedPlayerAttackTarget(state, actor, target)) {
     return { ok: false, error: 'Mục tiêu vừa chém đã bị loại hoặc không còn trong tầm đánh.' };
   }
   applyHpCost(state, actor, 2, 'Đòn Đánh Đẫm Máu', nowMs);
@@ -2868,16 +4204,62 @@ function executeDamageStep(
     );
   }
 
-  // Cập nhật bộ đếm cho các bước POST_ATTACK_EFFECTS / VAMPIRE_BAT_HEAL / SPIDER_SELF_DAMAGE đứng sau
+  // Fujiko (Kết Thúc Rồi — Phase 4B house rule):
+  // Đã lộ diện + đòn tấn công thường gây >= 1 ST thực sự (`actual >= 1`) lên mục tiêu đã lộ diện
+  // có <= 4 HP trước đòn đánh (`preAttackTargetHp <= 4`) -> kết liễu trong CHÍNH pipeline loại chuẩn bên dưới!
   const exp = ensureExpansionState(state);
+  let fujikoExecExtra = 0;
+  if (
+    actual >= 1 &&
+    target.alive &&
+    target.hp > 0 &&
+    step.sourceType === 'attack' &&
+    attacker &&
+    attacker.alive &&
+    attacker.revealed &&
+    attacker.roleId === 'exp2_fujiko' &&
+    step.preAttackTargetRevealed === true &&
+    typeof step.preAttackTargetHp === 'number' &&
+    step.preAttackTargetHp <= 4
+  ) {
+    const fujikoPayload: Record<string, unknown> = {
+      sourceType: step.sourceType,
+      actualDealt: actual,
+      preAttackTargetHp: step.preAttackTargetHp,
+      preAttackTargetRevealed: step.preAttackTargetRevealed,
+    };
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'AFTER_ATTACK',
+      actorPlayerId: attacker.playerId,
+      targetPlayerId: target.playerId,
+      nowMs,
+      payload: fujikoPayload,
+    });
+    if (fujikoPayload.fujikoExecute === true) {
+      fujikoExecExtra = target.hp;
+      target.woundsTaken += fujikoExecExtra;
+      target.hp = 0;
+      incRoleStat(exp.stats.activationsByRole, 'exp2_fujiko', 1);
+      incRoleStat(exp.stats.bonusDamageByRole, 'exp2_fujiko', fujikoExecExtra);
+      appendPublicLog(
+        state,
+        'skill',
+        `🗡️ Fujiko (${attacker.displayName}) — Kết Thúc Rồi: hạ gục tức thì ${target.displayName} (đã lộ diện, ${step.preAttackTargetHp} HP ≤ 4 trước đòn đánh)!`,
+        nowMs,
+        attacker.playerId,
+      );
+    }
+  }
+
+  // Cập nhật bộ đếm cho các bước POST_ATTACK_EFFECTS / VAMPIRE_BAT_HEAL / SPIDER_SELF_DAMAGE đứng sau
   if (step.sourceType === 'attack') {
     const postAtk = exp.pendingSteps.find(
       (s): s is Extract<PendingResolutionStep, { kind: 'POST_ATTACK_EFFECTS' }> =>
         s.kind === 'POST_ATTACK_EFFECTS' && s.attackerPlayerId === step.attackerPlayerId,
     );
     if (postAtk) {
-      postAtk.totalDealt += actual;
-      if (target.alive && target.revealed && target.roleId === 'suong-gac-cong') {
+      postAtk.totalDealt += actual + fujikoExecExtra;
+      if (target.alive && target.hp > 0 && target.revealed && target.roleId === 'suong-gac-cong') {
         if (!postAtk.counterAttackerIds.includes(target.playerId)) {
           postAtk.counterAttackerIds.push(target.playerId);
         }
@@ -2969,6 +4351,22 @@ function executeDamageStep(
       attacker.charlesKillWon = true;
     }
 
+    // Cruz (Phase 4B house rule): thắng ngay khi tự tay hạ gục 1 người chơi khác trong chính lượt đã kích hoạt
+    // Vampire Bat (ev-07), Bloodthirsty Spider (ev-08), Dynamite (ev-09) hoặc Spiritual Doll (ev-10)!
+    if (
+      attacker &&
+      attacker.alive &&
+      attacker.playerId !== target.playerId &&
+      attacker.roleId === 'exp2_cruz' &&
+      (exp.cruzQualifyingCardTurnByPlayer?.[attacker.playerId] === state.turnNumber ||
+        isCruzQualifyingCardId(step.sourceCardId))
+    ) {
+      if (!exp.cruzWinTriggeredIds) exp.cruzWinTriggeredIds = [];
+      if (!exp.cruzWinTriggeredIds.includes(attacker.playerId)) {
+        exp.cruzWinTriggeredIds.push(attacker.playerId);
+      }
+    }
+
     // Chiến lợi phẩm khi hạ gục
     if (
       attacker &&
@@ -3021,11 +4419,15 @@ function executeDamageStep(
     exp.pendingSteps.unshift({
       kind: 'ELIMINATION_TRIGGERS',
       eliminationEventId: nextExpansionEventId(state, 'elim'),
+      causationId: step.damageEventId,
+      ...(step.sourceCardId ? { sourceCardId: step.sourceCardId } : {}),
+      turnNumberAtElimination: state.turnNumber,
       victimPlayerId: target.playerId,
       victimFactionAtDeath,
       killerPlayerId: attacker?.playerId ?? null,
       sourceType: step.sourceType,
       wyvernChecked: false,
+      vengeanceChecked: false,
       wendigoCheckedIds: [],
     });
   } else if (
@@ -3180,6 +4582,7 @@ function executeEliminationTriggersStep(
     killerPlayerId: step.killerPlayerId,
     sourceType: step.sourceType,
     wyvernAlreadyResolved: Boolean(step.wyvernChecked),
+    vengeanceAlreadyChecked: Boolean(step.vengeanceChecked),
     wendigoCheckedIds: [...(step.wendigoCheckedIds ?? [])],
   };
 
@@ -3192,9 +4595,97 @@ function executeEliminationTriggersStep(
   });
 
   step.wyvernChecked = Boolean(payload.wyvernAlreadyResolved);
+  step.vengeanceChecked = Boolean(payload.vengeanceAlreadyChecked);
   step.wendigoCheckedIds = Array.isArray(payload.wendigoCheckedIds)
     ? [...(payload.wendigoCheckedIds as string[])]
     : [];
+
+  // Vengeance (priority 15 — chạy sau Wyvern, trước Wendigo!)
+  const pendingVengeance = payload.pendingVengeanceChoice as
+    | {
+        vengeancePlayerId: string;
+        eliminationEventId: string;
+        victimPlayerId: string;
+        candidateTargetIds: string[];
+      }
+    | undefined;
+
+  if (pendingVengeance) {
+    const vengeance = state.players[pendingVengeance.vengeancePlayerId];
+    if (vengeance && vengeance.alive && vengeance.revealed && !vengeance.skillUsedOnce) {
+      const liveCandidates = pendingVengeance.candidateTargetIds
+        .map((id) => state.players[id])
+        .filter(
+          (p): p is AuthoritativePlayerState =>
+            Boolean(p && p.alive && p.playerId !== vengeance.playerId),
+        );
+      if (liveCandidates.length > 0) {
+        const exp = ensureExpansionState(state);
+        // Đặt lại step lên đầu hàng đợi để Wendigo vẫn chạy sau khi Vengeance xử lý xong!
+        exp.pendingSteps.unshift(step);
+
+        const choiceId = nextExpansionEventId(state, 'choice-vengeance');
+        const timeoutMs = getChoiceTimeoutMs(state, vengeance);
+        const targetMap: Record<string, string[]> = {};
+        const options: BoardGameChoiceOptionView[] = [];
+
+        if (liveCandidates.length === 1) {
+          const sole = liveCandidates[0];
+          targetMap.v_0 = [sole.playerId];
+          options.push({
+            optionId: 'v_0',
+            label: `Kích hoạt 1d4 lên ${sole.displayName} (1 mục tiêu còn lại)`,
+            detail: `Dùng 1 lần/trận: tung 1d4 gây sát thương kỹ năng lên ${sole.displayName}.`,
+            targetPlayerId: sole.playerId,
+          });
+        } else {
+          for (let i = 0; i < liveCandidates.length; i++) {
+            for (let j = i + 1; j < liveCandidates.length; j++) {
+              const a = liveCandidates[i];
+              const b = liveCandidates[j];
+              const optId = `v_${i}_${j}`;
+              targetMap[optId] = [a.playerId, b.playerId];
+              options.push({
+                optionId: optId,
+                label: `1d4 → ${a.displayName} & ${b.displayName}`,
+                detail: `Dùng 1 lần/trận: tung 1 xúc xắc 1d4 duy nhất áp dụng cho cả ${a.displayName} và ${b.displayName}.`,
+                targetPlayerId: a.playerId,
+              });
+            }
+          }
+        }
+        options.push({
+          optionId: 'skip',
+          label: 'Bỏ qua lần này (Giữ nguyên 1 lần/trận)',
+          detail: 'Không kích hoạt kỹ năng và giữ lại lượt dùng duy nhất cho lần hạ gục khác.',
+        });
+
+        const victimName = victim?.displayName ?? '1 người chơi';
+        state.pendingChoice = {
+          choiceId,
+          eventId: step.eliminationEventId,
+          ownerPlayerId: vengeance.playerId,
+          kind: 'vengeance_chain_strike',
+          isSecret: false,
+          title: 'Báo Thù Liên Hoàn (Vengeance · 1 lần/trận)',
+          description: `Bạn vừa hạ gục ${victimName}! Chọn ${liveCandidates.length >= 2 ? '2 người chơi khác' : 'người chơi còn lại'} để cùng nhận 1d4 sát thương kỹ năng (1 lần/trận; bỏ qua không mất lượt dùng).`,
+          publicPromptLabel: `⚡ Vengeance (${vengeance.displayName}) đang cân nhắc tung Báo Thù Liên Hoàn (1d4)...`,
+          options,
+          defaultOptionId: 'skip',
+          createdAtMs: nowMs,
+          deadlineMs: nowMs + timeoutMs,
+          data: {
+            kind: 'vengeance_chain_strike',
+            vengeancePlayerId: vengeance.playerId,
+            eliminationEventId: step.eliminationEventId,
+            victimPlayerId: step.victimPlayerId,
+            targetMap,
+          },
+        };
+        return false;
+      }
+    }
+  }
 
   const pendingWendigo = payload.pendingWendigoChoice as
     | { wendigoPlayerId: string; eliminationEventId: string; victimPlayerId: string }
@@ -3342,6 +4833,20 @@ export function drainPendingSteps(
         const dung = state.players[step.defenderPlayerId];
         const origAttacker = state.players[step.attackerPlayerId];
         if (!dung || !dung.alive || !origAttacker || !origAttacker.alive) break;
+        if (isUdiProtectedFromAttack(state, origAttacker)) {
+          incRoleStat(exp.stats.activationsByRole, 'exp1_udi', 1);
+          appendPublicLog(
+            state,
+            'skill',
+            `🫥 Ẩn Thân (Udi): ${origAttacker.displayName} đứng cùng Cụm với ≥ 2 người khác — né hoàn toàn đòn phản kích của ${dung.displayName}!`,
+            nowMs,
+            origAttacker.playerId,
+          );
+          break;
+        }
+        if (isVisionsMarkedTarget(state, dung.playerId, origAttacker.playerId)) {
+          break;
+        }
 
         const cStick = dung.equipped.includes('ev-01');
         const cd6 = cStick ? 0 : rollD6(state);
@@ -3899,6 +5404,320 @@ export function resolvePendingChoice(
       }
       // Khi decline hoặc timeout: KHÔNG phát log công khai nhắc tên Undying (zero secret leak!)
       drainPendingSteps(state, nowMs, callbacks);
+      return { ok: true };
+    }
+
+    case 'fea_move_adjust': {
+      const actor = state.players[data.actorPlayerId];
+      if (!actor || !actor.alive) {
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+      const delta: -1 | 0 | 1 = options?.isTimeoutFallback
+        ? 0
+        : (data.deltaByOptionId[optionId] ?? 0);
+      commitFeaMovementTotal(
+        state,
+        actor,
+        data.d6,
+        data.d4,
+        data.rawTotal,
+        delta,
+        nowMs,
+        Boolean(options?.isTimeoutFallback),
+      );
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+
+    case 'wrath_turn_start_aoe': {
+      const actor = state.players[data.actorPlayerId];
+      if (!actor || !actor.alive) {
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+      if (optionId !== 'activate' || options?.isTimeoutFallback) {
+        if (options?.isTimeoutFallback) {
+          appendPublicLog(
+            state,
+            'timeout',
+            `⏱️ Wrath (${actor.displayName}) quá hạn Cơn Thịnh Nộ — tự bỏ qua lượt này.`,
+            nowMs,
+            actor.playerId,
+          );
+        } else {
+          appendPublicLog(
+            state,
+            'skill',
+            `🔥 Wrath (${actor.displayName}) không kích hoạt Cơn Thịnh Nộ ở đầu lượt này.`,
+            nowMs,
+            actor.playerId,
+          );
+        }
+        return { ok: true };
+      }
+
+      const victims = listLivingPlayersInSameCluster(state, actor, { includeSelf: false });
+      if (victims.length === 0) {
+        return { ok: true };
+      }
+      incRoleStat(exp.stats.activationsByRole, 'exp1_wrath', 1);
+      incRoleStat(exp.stats.bonusDamageByRole, 'exp1_wrath', 2 * victims.length);
+      appendPublicLog(
+        state,
+        'skill',
+        `🔥 Wrath (${actor.displayName}) — Cơn Thịnh Nộ: giáng 2 sát thương kỹ năng lên ${victims.length} người chơi khác cùng Cụm (${victims.map((v) => v.displayName).join(', ')})!`,
+        nowMs,
+        actor.playerId,
+      );
+      for (const victim of victims) {
+        exp.pendingSteps.push({
+          kind: 'DAMAGE',
+          damageEventId: nextExpansionEventId(state, 'dmg-wrath'),
+          targetPlayerId: victim.playerId,
+          rawAmount: 2,
+          sourceType: 'skill',
+          attackerPlayerId: actor.playerId,
+        });
+      }
+      exp.pendingSteps.push({
+        kind: 'FINISH_ACTION',
+        actorPlayerId: actor.playerId,
+        autoEndTurnMode: 'never',
+      });
+      drainPendingSteps(state, nowMs, callbacks);
+      return { ok: true };
+    }
+
+    case 'vengeance_chain_strike': {
+      const vengeance = state.players[data.vengeancePlayerId];
+      if (
+        !vengeance ||
+        !vengeance.alive ||
+        optionId === 'skip' ||
+        options?.isTimeoutFallback
+      ) {
+        if (vengeance && options?.isTimeoutFallback) {
+          appendPublicLog(
+            state,
+            'timeout',
+            `⏱️ Vengeance (${vengeance.displayName}) quá hạn Báo Thù Liên Hoàn — tự bỏ qua (không mất lượt dùng 1 lần/trận).`,
+            nowMs,
+            vengeance.playerId,
+          );
+        }
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+
+      if (vengeance.skillUsedOnce) {
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+
+      const selectedIds = data.targetMap[optionId] ?? [];
+      const liveTargets = selectedIds
+        .map((id) => state.players[id])
+        .filter(
+          (p): p is AuthoritativePlayerState =>
+            Boolean(p && p.alive && p.playerId !== vengeance.playerId),
+        );
+
+      if (liveTargets.length === 0) {
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+
+      // Commit oncePerMatch TRƯỚC khi tung 1d4 & chạy damage (chống đệ quy & replay tuyệt đối!)
+      vengeance.skillUsedOnce = true;
+      const d4 = rollD4(state);
+      incRoleStat(exp.stats.activationsByRole, 'exp1_vengeance', 1);
+      incRoleStat(exp.stats.bonusDamageByRole, 'exp1_vengeance', d4 * liveTargets.length);
+
+      appendPublicLog(
+        state,
+        'skill',
+        `⚡💀 Vengeance (${vengeance.displayName}) — Báo Thù Liên Hoàn (1d4=${d4}): giáng ${d4} sát thương kỹ năng lên ${liveTargets.map((t) => t.displayName).join(' & ')}!`,
+        nowMs,
+        vengeance.playerId,
+      );
+
+      // Chèn lên đầu hàng đợi để chuỗi sát thương Báo Thù chạy ngay theo thứ tự ghế trước khi hoàn tất phần còn lại
+      const chainSteps: PendingResolutionStep[] = liveTargets.map((t) => ({
+        kind: 'DAMAGE',
+        damageEventId: nextExpansionEventId(state, 'dmg-vengeance'),
+        causationId: data.eliminationEventId,
+        targetPlayerId: t.playerId,
+        rawAmount: d4,
+        sourceType: 'skill',
+        attackerPlayerId: vengeance.playerId,
+      }));
+      exp.pendingSteps.unshift(...chainSteps);
+      drainPendingSteps(state, nowMs, callbacks);
+      return { ok: true };
+    }
+
+    case 'visions_mark_target': {
+      const actor = state.players[data.actorPlayerId];
+      if (!actor || !actor.alive) {
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+      if (optionId === 'skip' || options?.isTimeoutFallback) {
+        if (options?.isTimeoutFallback) {
+          appendPublicLog(
+            state,
+            'timeout',
+            `⏱️ Visions (${actor.displayName}) quá hạn đặt Dấu Ấn — tự bỏ qua (giữ nguyên 1 lần/trận).`,
+            nowMs,
+            actor.playerId,
+          );
+        } else {
+          appendPublicLog(
+            state,
+            'skill',
+            `👁️ Visions (${actor.displayName}) chưa đặt Dấu Ấn ở lượt này.`,
+            nowMs,
+            actor.playerId,
+          );
+        }
+        return { ok: true };
+      }
+
+      if (actor.skillUsedOnce || exp.visionsMarks?.[actor.playerId]) {
+        return { ok: true };
+      }
+
+      const targetId = data.targetMap[optionId];
+      const target = targetId ? state.players[targetId] : null;
+      if (!target || !target.alive || target.playerId === actor.playerId) {
+        return { ok: true };
+      }
+
+      actor.skillUsedOnce = true;
+      if (!exp.visionsMarks) exp.visionsMarks = {};
+      exp.visionsMarks[actor.playerId] = {
+        targetPlayerId: target.playerId,
+        markedOnTurnNumber: state.turnNumber,
+      };
+      incRoleStat(exp.stats.activationsByRole, 'exp2_visions', 1);
+      appendPublicLog(
+        state,
+        'skill',
+        `👁️ Visions (${actor.displayName}) đặt Dấu Ấn vĩnh viễn lên ${target.displayName} — cấm đánh trực tiếp & trừ 1 HP từ đầu lượt tiếp theo của Visions!`,
+        nowMs,
+        actor.playerId,
+      );
+      return { ok: true };
+    }
+
+    case 'cruz_black_redraw': {
+      const actor = state.players[data.actorPlayerId];
+      const deckLabel = getDeckLabel('event');
+      let resolvedCard = getCardById(data.drawnCardId);
+
+      if (optionId === 'redraw' && !options?.isTimeoutFallback && actor && actor.alive) {
+        // Đặt lá cũ xuống chính xác ĐÁY chồng Đột Kích (Black deck), sau đó rút 1 lá mới (không đệ quy!)
+        state.decks.event.push(data.drawnCardId);
+        resolvedCard = takeOneCardFromDeck(state, 'event') ?? getCardById(data.drawnCardId);
+        incRoleStat(exp.stats.activationsByRole, 'exp2_cruz', 1);
+      }
+
+      if (actor && actor.alive && resolvedCard) {
+        const didRedraw = optionId === 'redraw' && !options?.isTimeoutFallback;
+        if (!resolvedCard.isConsumable && resolvedCard.deck !== 'investigation') {
+          equipToPlayerSlot(actor, resolvedCard.id);
+          appendPublicLog(
+            state,
+            options?.isTimeoutFallback ? 'timeout' : 'equipment',
+            options?.isTimeoutFallback
+              ? `⏱️ Cruz (${actor.displayName}) quá hạn — tự giữ & trang bị "${resolvedCard.title}" từ ${deckLabel}!`
+              : didRedraw
+                ? `🎒 Cruz (${actor.displayName}) đặt thẻ cũ xuống đáy chồng Đen, rút lại & trang bị ngay "${resolvedCard.title}"!`
+                : `🎒 Cruz (${actor.displayName}) giữ thẻ vừa rút & trang bị ngay "${resolvedCard.title}"!`,
+            nowMs,
+            actor.playerId,
+          );
+        } else {
+          if (actor.hand.length >= BOARD_GAME_MAX_HAND) {
+            const dropped = actor.hand.shift();
+            if (dropped) discardCardId(state, dropped);
+          }
+          actor.hand.push(resolvedCard.id);
+          appendPublicLog(
+            state,
+            options?.isTimeoutFallback ? 'timeout' : 'draw',
+            options?.isTimeoutFallback
+              ? `⏱️ Cruz (${actor.displayName}) quá hạn — tự giữ 1 thẻ ${deckLabel} (cần giải quyết trong lượt).`
+              : didRedraw
+                ? `🃏 Cruz (${actor.displayName}) đặt thẻ cũ xuống đáy chồng Đen và rút 1 thẻ ${deckLabel} thay thế (cần giải quyết trong lượt).`
+                : `🃏 Cruz (${actor.displayName}) giữ 1 thẻ ${deckLabel} vừa rút (cần giải quyết trong lượt).`,
+            nowMs,
+            actor.playerId,
+          );
+        }
+      } else if (resolvedCard) {
+        discardCardId(state, resolvedCard.id);
+      }
+      state.turnPhase = 'MAIN_ACTION';
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+
+    case 'bryon_gift_equipment': {
+      const actor = state.players[data.actorPlayerId];
+      if (!actor || !actor.alive || optionId === 'done' || options?.isTimeoutFallback) {
+        if (actor && options?.isTimeoutFallback) {
+          appendPublicLog(
+            state,
+            'timeout',
+            `⏱️ Bryon (${actor.displayName}) quá hạn trao tặng trang bị — tiếp tục pha Hành động chính.`,
+            nowMs,
+            actor.playerId,
+          );
+        }
+        return { ok: true };
+      }
+
+      const plan = data.giftMap[optionId];
+      if (!plan) return { ok: true };
+      const recipient = state.players[plan.recipientPlayerId];
+      const sameClusterNeutral =
+        recipient &&
+        recipient.alive &&
+        recipient.faction === 'wanderer' &&
+        recipient.revealed &&
+        listLivingPlayersInSameCluster(state, actor, { includeSelf: false }).some(
+          (p) => p.playerId === recipient.playerId,
+        );
+      if (!sameClusterNeutral || !recipient) {
+        return { ok: true };
+      }
+
+      const movedTitles: string[] = [];
+      for (const cid of plan.cardIds) {
+        if (cid === MASAMUNE_CARD_ID) continue;
+        const eqIdx = actor.equipped.indexOf(cid);
+        if (eqIdx === -1) continue;
+        const [movedId] = actor.equipped.splice(eqIdx, 1);
+        if (!movedId) continue;
+        equipToPlayerSlot(recipient, movedId);
+        movedTitles.push(getCardById(movedId)?.title ?? movedId);
+      }
+
+      if (movedTitles.length > 0) {
+        exp.bryonGiftedTurnNumber = state.turnNumber;
+        incRoleStat(exp.stats.activationsByRole, 'exp2_bryon', 1);
+        appendPublicLog(
+          state,
+          'skill',
+          `🎁 Bryon (${actor.displayName}) — Sự Phục Vụ Hào Phóng: trao tặng ${movedTitles.length} trang bị (${movedTitles.join(', ')}) cho ${recipient.displayName}!`,
+          nowMs,
+          actor.playerId,
+        );
+        // Kiểm tra thắng ngay (vd. tặng đủ 5 trang bị cho Bob!)
+        callbacks.finalizeIfFinished(state, nowMs);
+      }
       return { ok: true };
     }
 

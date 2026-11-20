@@ -202,12 +202,40 @@ export const RoleCard = React.memo(function RoleCard({
   const skillStatusLabel = !privateView.revealed
     ? privateView.roleId === 'lang-tien-phong'
       ? 'Tự lộ khi có người ngã'
-      : privateView.roleId === 'exp1_wendigo' ||
-          privateView.roleId === 'exp1_undying' ||
-          privateView.roleId === 'exp1_cindy'
-        ? 'Sẵn sàng lật phản ứng'
-        : 'Cần lật vai'
-    : privateView.roleId === 'exp1_victor'
+      : privateView.roleId === 'exp1_fallen' && privateView.hp < 8
+        ? 'Cần ≥ 8 HP để tự lật'
+        : privateView.roleId === 'exp1_wendigo' ||
+            privateView.roleId === 'exp1_undying' ||
+            privateView.roleId === 'exp1_cindy'
+          ? 'Sẵn sàng lật phản ứng'
+          : 'Cần lật vai'
+    : privateView.roleId === 'exp1_fallen'
+      ? privateView.hp >= 8
+        ? 'Đang bật (+2 ST đánh trúng)'
+        : 'Tắt (< 8 HP)'
+      : privateView.roleId === 'exp1_fea'
+        ? 'Sẵn sàng khi đổ di chuyển'
+        : privateView.roleId === 'exp2_eleanor'
+          ? 'Pha 3: Rút thẻ Xanh thay đánh'
+          : privateView.roleId === 'exp2_fujiko'
+            ? 'Nội tại (Kết liễu lộ diện ≤ 4 HP)'
+            : privateView.roleId === 'exp1_udi'
+              ? 'Nội tại (Miễn đánh khi ≥ 2 cùng Cụm)'
+              : privateView.roleId === 'exp1_wrath'
+                ? 'Đầu lượt (2 ST cùng Cụm)'
+                : privateView.roleId === 'exp1_vengeance'
+                  ? privateView.skillUsedOnce
+                    ? 'Đã dùng (1 lần/trận)'
+                    : 'Sẵn sàng khi hạ gục (1d4 x2)'
+                  : privateView.roleId === 'exp2_visions'
+                    ? privateView.skillUsedOnce
+                      ? 'Dấu ấn đang trừ 1 HP/lượt'
+                      : 'Đầu lượt (Đặt dấu ấn 1 lần/trận)'
+                    : privateView.roleId === 'exp2_cruz'
+                      ? 'Sẵn sàng khi rút thẻ Đen'
+                      : privateView.roleId === 'exp2_bryon'
+                        ? 'Pha 3 trước đánh: Tặng đồ Neutral'
+                        : privateView.roleId === 'exp1_victor'
       ? privateView.hp >= 2
         ? 'Sẵn sàng (Trả 1 HP → +2 ST)'
         : 'Cần ≥ 2 HP'

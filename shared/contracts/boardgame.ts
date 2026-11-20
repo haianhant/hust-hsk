@@ -28,7 +28,7 @@ export type BoardGameMatchStatus =
 
 export const BOARD_GAME_RULESET_VERSION = 4 as const;
 export const BOARD_GAME_PROTOCOL_VERSION = 1 as const;
-export const BOARD_GAME_CATALOG_VERSION = '2026.11-p3a' as const;
+export const BOARD_GAME_CATALOG_VERSION = '2026.11-p4b' as const;
 
 export type BoardGameProductionRulesetId =
   | 'classic'
@@ -39,7 +39,8 @@ export type BoardGameProductionRulesetId =
 export type BoardGameExperimentalRulesetId =
   | 'starter-four'
   | 'starter-eight'
-  | 'starter-sixteen';
+  | 'starter-sixteen'
+  | 'starter-twenty-six';
 
 export type BoardGameRulesetId =
   | BoardGameProductionRulesetId
@@ -60,6 +61,7 @@ export const BOARD_GAME_EXPERIMENTAL_RULESETS: readonly BoardGameExperimentalRul
   'starter-four',
   'starter-eight',
   'starter-sixteen',
+  'starter-twenty-six',
 ];
 
 export const BOARD_GAME_ALL_RULESETS: readonly BoardGameRulesetId[] = [
@@ -140,7 +142,23 @@ export type Phase3RoleId =
   | 'exp1_cindy'
   | 'exp1_bipolar';
 
-export type BoardGameRoleId = ClassicBoardGameRoleId | Phase2RoleId | Phase3RoleId;
+export type Phase4RoleId =
+  | 'exp1_fallen'
+  | 'exp1_fea'
+  | 'exp2_eleanor'
+  | 'exp2_fujiko'
+  | 'exp1_udi'
+  | 'exp1_wrath'
+  | 'exp1_vengeance'
+  | 'exp2_visions'
+  | 'exp2_cruz'
+  | 'exp2_bryon';
+
+export type BoardGameRoleId =
+  | ClassicBoardGameRoleId
+  | Phase2RoleId
+  | Phase3RoleId
+  | Phase4RoleId;
 
 export type BoardGameLocationId =
   | 'lobby'
@@ -402,7 +420,13 @@ export type BoardGamePendingChoiceKind =
   | 'undying_reveal_reduce'
   | 'elysia_counter_boost'
   | 'cindy_reveal_retaliate'
-  | 'bipolar_fate_coin';
+  | 'bipolar_fate_coin'
+  | 'fea_move_adjust'
+  | 'wrath_turn_start_aoe'
+  | 'vengeance_chain_strike'
+  | 'visions_mark_target'
+  | 'cruz_black_redraw'
+  | 'bryon_gift_equipment';
 
 export interface BoardGameChoiceOptionView {
   optionId: string;
@@ -458,6 +482,8 @@ export interface BoardGamePublicGameView {
   clusterPairs: readonly BoardGameClusterPair[];
   allowedMoveDestinations?: readonly BoardGameLocationId[];
   pendingChoice?: BoardGamePublicPendingChoice | null;
+  /** Dấu ấn Visions công khai (CHỈ xuất cho Visions đã lộ vai & mục tiêu còn sống — zero hidden role leak). */
+  visionsMarkedTargetByPlayer?: Readonly<Record<string, string>>;
   deadCount: number;
   players: readonly BoardGamePublicPlayerView[];
   deckCounts: Record<BoardGameDeckId, number>;

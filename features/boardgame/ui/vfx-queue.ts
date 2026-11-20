@@ -1241,14 +1241,66 @@ export function extractVisualEventsFromDiff(
           actorPub.revealedRoleId === 'exp1_gayle' ||
           actorPub.revealedRoleId === 'exp1_elysia' ||
           actorPub.revealedRoleId === 'exp2_unchained' ||
-          actorPub.revealedRoleId === 'exp2_warlock'
+          actorPub.revealedRoleId === 'exp2_warlock' ||
+          actorPub.revealedRoleId === 'exp1_fallen' ||
+          actorPub.revealedRoleId === 'exp2_fujiko'
         ) {
           events.push({
             id: `${next.matchId}::exp-dice-skill::${log.id}`,
             kind: 'COMBAT_VFX',
             order: 40,
-            durationMs: scaleDuration(760, reduced),
-            effect: 'SLASH',
+            durationMs: scaleDuration(actorPub.revealedRoleId === 'exp2_fujiko' ? 920 : 760, reduced),
+            effect: actorPub.revealedRoleId === 'exp2_fujiko' ? 'MASAMUNE_SLASH' : 'SLASH',
+            sourcePlayerId: actorId,
+            targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
+            shake: actorPub.revealedRoleId === 'exp2_fujiko' ? 'heavy' : 'none',
+            roleId: actorPub.revealedRoleId,
+          });
+        } else if (
+          actorPub.revealedRoleId === 'exp1_wrath' ||
+          actorPub.revealedRoleId === 'exp1_vengeance' ||
+          actorPub.revealedRoleId === 'exp2_visions'
+        ) {
+          events.push({
+            id: `${next.matchId}::exp-wave3-shadow::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(940, reduced),
+            effect:
+              actorPub.revealedRoleId === 'exp1_vengeance'
+                ? 'LIGHTNING_STRIKE'
+                : actorPub.revealedRoleId === 'exp1_wrath'
+                  ? 'EXPLOSION'
+                  : 'SLASH',
+            sourcePlayerId: actorId,
+            targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
+            shake: actorPub.revealedRoleId === 'exp2_visions' ? 'light' : 'heavy',
+            roleId: actorPub.revealedRoleId,
+          });
+        } else if (actorPub.revealedRoleId === 'exp1_udi') {
+          events.push({
+            id: `${next.matchId}::exp-udi-hide::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 42,
+            durationMs: scaleDuration(780, reduced),
+            effect: 'SHIELD_GUARD',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [actorId],
+            shake: 'none',
+            roleId: 'exp1_udi',
+          });
+        } else if (
+          actorPub.revealedRoleId === 'exp1_fea' ||
+          actorPub.revealedRoleId === 'exp2_eleanor' ||
+          actorPub.revealedRoleId === 'exp2_cruz' ||
+          actorPub.revealedRoleId === 'exp2_bryon'
+        ) {
+          events.push({
+            id: `${next.matchId}::exp-wave3-util::${log.id}`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(800, reduced),
+            effect: actorPub.revealedRoleId === 'exp2_bryon' ? 'STEAL_TETHER' : 'SHIELD_GUARD',
             sourcePlayerId: actorId,
             targetPlayerIds: skillTargets.length > 0 ? skillTargets : [actorId],
             shake: 'none',

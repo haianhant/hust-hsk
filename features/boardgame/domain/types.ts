@@ -320,6 +320,43 @@ export type PendingChoiceContextData =
       kind: 'bipolar_fate_coin';
       actorPlayerId: string;
       turnNumber: number;
+    }
+  | {
+      kind: 'fea_move_adjust';
+      actorPlayerId: string;
+      d6: number;
+      d4: number;
+      rawTotal: number;
+      deltaByOptionId: Record<string, -1 | 0 | 1>;
+    }
+  | {
+      kind: 'wrath_turn_start_aoe';
+      actorPlayerId: string;
+      turnNumber: number;
+      victimPlayerIds: string[];
+    }
+  | {
+      kind: 'vengeance_chain_strike';
+      vengeancePlayerId: string;
+      eliminationEventId: string;
+      victimPlayerId: string;
+      targetMap: Record<string, string[]>;
+    }
+  | {
+      kind: 'visions_mark_target';
+      actorPlayerId: string;
+      turnNumber: number;
+      targetMap: Record<string, string>;
+    }
+  | {
+      kind: 'cruz_black_redraw';
+      actorPlayerId: string;
+      drawnCardId: string;
+    }
+  | {
+      kind: 'bryon_gift_equipment';
+      actorPlayerId: string;
+      giftMap: Record<string, { recipientPlayerId: string; cardIds: string[] }>;
     };
 
 export interface AuthoritativePendingChoice {

@@ -21,16 +21,20 @@ import {
   resolveUseSkill,
 } from './effects';
 import {
+  applyExpandedDiceRollMove,
   applyExpandedDrawLocationCard,
   applyExpandedInvestigateCard,
   applyExpandedLocationPower,
+  applyExpandedRevealRole,
   applyExpandedUseCard,
   applyExpandedUseSkill,
+  canExpandedPlayerAttackTarget,
   clearPendingChoiceOnForcedAutoTurn,
   deliverNextGloriaQueuedCard,
   discardGloriaQueuedCards,
   hasGloriaQueuedCards,
   isExpandedRuleset,
+  listExpandedReachableAttackTargets,
   resolveExpiredPendingChoice,
   resolvePendingChoice,
   startExpandedAttack,
@@ -117,7 +121,7 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
         current.playerId,
       );
       if (!finalizeIfFinished(state, nowMs) && isExpandedRuleset(state)) {
-        triggerExpandedTurnStart(state, current, nowMs);
+        triggerExpandedTurnStart(state, current, nowMs, TURN_CONTINUATION_CALLBACKS);
       }
       return;
     }
@@ -163,7 +167,7 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
   state.turnPhase = 'ROLL_MOVE';
 
   if (!finalizeIfFinished(state, nowMs) && isExpandedRuleset(state)) {
-    triggerExpandedTurnStart(state, nextPlayer, nowMs);
+    triggerExpandedTurnStart(state, nextPlayer, nowMs, TURN_CONTINUATION_CALLBACKS);
   }
 }
 
@@ -172,6 +176,11 @@ function canTriggerCharlesBloodyFeast(
   actor: AuthoritativePlayerState,
 ): boolean {
   const lastTarget = actor.lastAttackTargetId ? state.players[actor.lastAttackTargetId] : null;
+  const targetReachable =
+    lastTarget &&
+    (isExpandedRuleset(state)
+      ? canExpandedPlayerAttackTarget(state, actor, lastTarget)
+      : canPlayerAttackTarget(state, actor, lastTarget));
   return Boolean(
     actor.alive &&
       actor.revealed &&
@@ -181,7 +190,7 @@ function canTriggerCharlesBloodyFeast(
       actor.hand.length === 0 &&
       lastTarget &&
       lastTarget.alive &&
-      canPlayerAttackTarget(state, actor, lastTarget),
+      targetReachable,
   );
 }
 
@@ -261,7 +270,17 @@ export function applyPlayerGameAction(
 
   switch (action.type) {
     case 'ROLL_DICE':
-      result = resolveDiceRollMove(state, actor, nowMs);
+      if (expanded) {
+        result = applyExpandedDiceRollMove(
+          state,
+          actor,
+          nowMs,
+          TURN_CONTINUATION_CALLBACKS,
+        );
+        continuationManaged = true;
+      } else {
+        result = resolveDiceRollMove(state, actor, nowMs);
+      }
       break;
     case 'CHOOSE_DEST':
       result = resolveChooseDestination(state, actor, action.location, nowMs);
@@ -387,7 +406,9 @@ export function applyPlayerGameAction(
       break;
     }
     case 'REVEAL_ROLE':
-      result = resolveRevealRole(state, actor, nowMs);
+      result = expanded
+        ? applyExpandedRevealRole(state, actor, nowMs)
+        : resolveRevealRole(state, actor, nowMs);
       break;
     case 'USE_SKILL':
       if (expanded) {
@@ -427,7 +448,9 @@ export function applyPlayerGameAction(
       if (
         actor.equipped.includes('ev-01') &&
         actor.attacksThisTurn === 0 &&
-        listReachableAttackTargets(state, actor).length > 0
+        (expanded
+          ? listExpandedReachableAttackTargets(state, actor).length > 0
+          : listReachableAttackTargets(state, actor).length > 0)
       ) {
         return {
           ok: false,

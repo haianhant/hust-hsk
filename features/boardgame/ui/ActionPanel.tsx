@@ -134,14 +134,30 @@ export function ActionPanel({
   const clusterPairs = publicGame.clusterPairs ?? DEFAULT_CLUSTER_PAIRS;
 
   // Tầm đánh chuẩn Shadow Hunters: cùng Cụm, trừ Súng Bắn Đinh (ev-05 Handgun) bắn mọi Cụm khác.
+  // Chế độ mở rộng: lọc thêm bảo vệ Ẩn Thân (Udi lộ diện cùng >= 2 người khác cùng Cụm) & Dấu Ấn Visions!
+  const selfVisionsMarkedId = selfPlayerId
+    ? publicGame.visionsMarkedTargetByPlayer?.[selfPlayerId] ?? null
+    : null;
+  const isPlayerProtectedAsUdi = (candidate: typeof aliveOthers[number]): boolean => {
+    if (candidate.revealedRoleId !== 'exp1_udi' || !candidate.alive) return false;
+    const othersInSameCluster = alivePlayers.filter(
+      (other) =>
+        other.playerId !== candidate.playerId &&
+        areInSameCluster(candidate.location, other.location, clusterPairs),
+    );
+    return othersInSameCluster.length >= 2;
+  };
   const attackableTargets = useMemo(() => {
     if (!selfPlayer) return [];
     const hasHandgun = selfPlayer.equipped.some((eq) => eq.id === 'ev-05');
     return aliveOthers.filter((p) => {
       const same = areInSameCluster(selfPlayer.location, p.location, clusterPairs);
-      return hasHandgun ? !same : same;
+      if (!(hasHandgun ? !same : same)) return false;
+      if (isPlayerProtectedAsUdi(p)) return false;
+      if (selfVisionsMarkedId && p.playerId === selfVisionsMarkedId) return false;
+      return true;
     });
-  }, [aliveOthers, selfPlayer, clusterPairs]);
+  }, [aliveOthers, alivePlayers, selfPlayer, clusterPairs, selfVisionsMarkedId]);
 
   const clearContext = () => {
     if (onClearContext) {
@@ -224,6 +240,16 @@ export function ActionPanel({
             {selectedPlayer.revealedRoleId === 'suong-gac-cong' && !isSelfCtx && (
               <span className="font-bold text-amber-300 whitespace-nowrap">
                 🥊 Phản kích
+              </span>
+            )}
+            {isPlayerProtectedAsUdi(selectedPlayer) && !isSelfCtx && (
+              <span className="font-bold text-violet-300 whitespace-nowrap">
+                🫥 Ẩn thân (Miễn đánh)
+              </span>
+            )}
+            {selfVisionsMarkedId === selectedPlayer.playerId && !isSelfCtx && (
+              <span className="font-bold text-fuchsia-300 whitespace-nowrap">
+                👁️ Dấu ấn Visions (Cấm đánh)
               </span>
             )}
             {gearNames.length > 0 && (
@@ -562,6 +588,65 @@ export function ActionPanel({
       }
       if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
         return 'Đã bắt đầu tung xúc xắc trong lượt này';
+      }
+    }
+    if (privateView.roleId === 'exp2_eleanor') {
+      if (publicGame.turnPhase !== 'MAIN_ACTION') {
+        return 'Chỉ kích hoạt ở Pha 3 thay cho tấn công';
+      }
+      if (attacksThisTurn >= 1) {
+        return 'Đã dùng quyền tấn công trong lượt này';
+      }
+      if (hasAnyHandCard) {
+        return 'Giải quyết thẻ vừa rút trước';
+      }
+      if (hasMasamune && attackableTargets.length > 0) {
+        return 'Masamune bắt buộc tấn công khi có mục tiêu trong tầm';
+      }
+    }
+    if (privateView.roleId === 'exp1_wrath') {
+      if (publicGame.turnPhase !== 'ROLL_MOVE') {
+        return 'Chỉ kích hoạt vào đầu lượt (trước khi di chuyển)';
+      }
+      if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
+        return 'Đã bắt đầu tung xúc xắc trong lượt này';
+      }
+      const sameClusterOthers = aliveOthers.filter((p) =>
+        areInSameCluster(selfPlayer.location, p.location, clusterPairs),
+      );
+      if (sameClusterOthers.length === 0) {
+        return 'Không có người chơi khác cùng Cụm';
+      }
+    }
+    if (privateView.roleId === 'exp2_visions') {
+      if (publicGame.turnPhase !== 'ROLL_MOVE') {
+        return 'Chỉ đặt Dấu Ấn vào đầu lượt (trước khi di chuyển)';
+      }
+      if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
+        return 'Đã bắt đầu tung xúc xắc trong lượt này';
+      }
+      if (aliveOthers.length === 0) {
+        return 'Chưa có mục tiêu hợp lệ';
+      }
+    }
+    if (privateView.roleId === 'exp2_bryon') {
+      if (publicGame.turnPhase !== 'MAIN_ACTION' || attacksThisTurn >= 1) {
+        return 'Chỉ dùng ở Pha 3 TRƯỚC khi tấn công';
+      }
+      if (hasAnyHandCard) {
+        return 'Giải quyết thẻ vừa rút trước';
+      }
+      const hasGiftableGear = selfPlayer.equipped.some((eq) => eq.id !== 'ev-01');
+      if (!hasGiftableGear) {
+        return 'Chưa có trang bị hợp lệ để tặng (trừ Masamune)';
+      }
+      const hasNeutralAlly = aliveOthers.some(
+        (p) =>
+          p.revealedFaction === 'wanderer' &&
+          areInSameCluster(selfPlayer.location, p.location, clusterPairs),
+      );
+      if (!hasNeutralAlly) {
+        return 'Cần Neutral đã lộ diện đứng cùng Cụm';
       }
     }
     if (privateView.roleId === 'lang-cuu-ho') {
@@ -1008,8 +1093,12 @@ export function ActionPanel({
     );
   };
 
+  const fallenRevealBlocked =
+    !privateView.revealed && privateView.roleId === 'exp1_fallen' && privateView.hp < 8;
   const canManualReveal =
-    !privateView.revealed && privateView.roleId !== 'lang-tien-phong';
+    !privateView.revealed &&
+    privateView.roleId !== 'lang-tien-phong' &&
+    !fallenRevealBlocked;
   const secondaryActionAvailable = canManualReveal || canUseSkillNow;
 
   // Render nội dung Pha 2 (LOCATION_ACTION) với đúng 1 Primary CTA
@@ -1404,7 +1493,9 @@ export function ActionPanel({
                   <p data-testid="bg-reveal-locked-reason" className="text-xs font-semibold text-slate-300">
                     {privateView.revealed
                       ? `✅ Đã lật vai: ${roleDesign.name}`
-                      : '🔒 Nội tại Đạt "Cảm Tử": tự lộ khi có người đầu tiên gục'}
+                      : fallenRevealBlocked
+                        ? `🔒 Fallen chỉ được tự lật vai khi còn ≥ 8 HP (hiện ${privateView.hp}/${privateView.maxHp} HP)`
+                        : '🔒 Nội tại Đạt "Cảm Tử": tự lộ khi có người đầu tiên gục'}
                   </p>
                 )}
               </div>

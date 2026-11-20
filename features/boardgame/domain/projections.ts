@@ -75,6 +75,17 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
       }
     : null;
 
+  const visionsMarkedTargetByPlayer: Record<string, string> = {};
+  if (state.expansionState?.visionsMarks) {
+    for (const [visionsId, mark] of Object.entries(state.expansionState.visionsMarks)) {
+      const owner = state.players[visionsId];
+      const victim = state.players[mark.targetPlayerId];
+      if (owner && (owner.revealed || state.finished) && victim && victim.alive) {
+        visionsMarkedTargetByPlayer[visionsId] = mark.targetPlayerId;
+      }
+    }
+  }
+
   return {
     rulesetVersion: 4,
     rulesetId: state.rulesetId ?? BOARD_GAME_DEFAULT_RULESET_ID,
@@ -89,6 +100,9 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     clusterPairs: state.clusterPairs ?? DEFAULT_CLUSTER_PAIRS,
     ...(state.allowedMoveDestinations ? { allowedMoveDestinations: [...state.allowedMoveDestinations] } : {}),
     ...(publicPendingChoice ? { pendingChoice: publicPendingChoice } : {}),
+    ...(Object.keys(visionsMarkedTargetByPlayer).length > 0
+      ? { visionsMarkedTargetByPlayer }
+      : {}),
     deadCount,
     players: orderedPlayers,
     deckCounts: {
