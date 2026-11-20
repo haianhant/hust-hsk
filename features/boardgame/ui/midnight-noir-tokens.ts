@@ -215,8 +215,8 @@ export const WAVE3_ROLE_IDS: readonly Phase4RoleId[] = [
   'exp2_bryon',
 ];
 
-/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — Phase 4B dùng fallback Noir Monogram cho 10 vai Wave 3 trước khi Phase 4C bổ sung chân dung). */
-export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, string>>> = {
+/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — đầy đủ 36 vai: 10 Classic + 8 Starter Eight + 8 Wave 2 + 10 Wave 3). */
+export const MIDNIGHT_CHARACTER_ART: Readonly<Record<BoardGameRoleId, string>> = {
   // 10 Classic Roles (preserved untouched)
   'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
   'gac-truc-ban': '/assets/boardgame/roles/role-lan-truc-ban.webp',
@@ -246,6 +246,17 @@ export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, st
   exp2_witch: '/assets/boardgame/roles/role-exp2-witch.webp',
   exp1_cindy: '/assets/boardgame/roles/role-exp1-cindy.webp',
   exp1_bipolar: '/assets/boardgame/roles/role-exp1-bipolar.webp',
+  // 10 Wave 3 Expansion Roles (Phase 4C — 1024x1536 WebP)
+  exp1_fallen: '/assets/boardgame/roles/role-exp1-fallen.webp',
+  exp1_fea: '/assets/boardgame/roles/role-exp1-fea.webp',
+  exp2_eleanor: '/assets/boardgame/roles/role-exp2-eleanor.webp',
+  exp2_fujiko: '/assets/boardgame/roles/role-exp2-fujiko.webp',
+  exp1_udi: '/assets/boardgame/roles/role-exp1-udi.webp',
+  exp1_wrath: '/assets/boardgame/roles/role-exp1-wrath.webp',
+  exp1_vengeance: '/assets/boardgame/roles/role-exp1-vengeance.webp',
+  exp2_visions: '/assets/boardgame/roles/role-exp2-visions.webp',
+  exp2_cruz: '/assets/boardgame/roles/role-exp2-cruz.webp',
+  exp2_bryon: '/assets/boardgame/roles/role-exp2-bryon.webp',
 };
 
 /** Thư viện đầy đủ 40 loại thẻ riêng biệt (tổng 48 bản sao) phong cách HUSTVerse Midnight (2:3 WebP). */

@@ -176,10 +176,9 @@ test('P3B-2 — MIDNIGHT_CHARACTER_ART covers all 26 playable roles & phase-3/as
   assert.equal(ROLES_CATALOG.length, 10);
   assert.equal(STARTER_EIGHT_ROLE_IDS.length, 8);
   assert.equal(WAVE2_ROLE_IDS.length, 8);
-  assert.equal(
-    Object.keys(MIDNIGHT_CHARACTER_ART).length,
-    26,
-    'Expected exact 26 playable portraits (10 Classic + 8 Starter Eight + 8 Wave 2)',
+  assert.ok(
+    Object.keys(MIDNIGHT_CHARACTER_ART).length >= 26,
+    'Expected at least 26 playable portraits (10 Classic + 8 Starter Eight + 8 Wave 2)',
   );
 
   // Every role in starter-sixteen ruleset resolves a real WebP portrait
