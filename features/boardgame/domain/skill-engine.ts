@@ -246,7 +246,7 @@ export class SkillEngine {
     const maxDepth = Math.max(1, options?.maxDepth ?? DEFAULT_SKILL_MAX_RECURSION_DEPTH);
     const maxDispatches = Math.max(1, options?.maxDispatches ?? DEFAULT_SKILL_MAX_DISPATCHES);
     const atomic = options?.atomic !== false;
-    const snapshot = atomic ? cloneGameStateForRollback(state) : null;
+    let snapshot: AuthoritativeGameState | null = null;
     const rng = createStateDeterministicRng(state);
 
     const trace: SkillDispatchTraceEntry[] = [];
@@ -347,6 +347,10 @@ export class SkillEngine {
 
           if (item.handler.canTrigger && !item.handler.canTrigger(ctx)) {
             continue;
+          }
+
+          if (atomic && snapshot === null) {
+            snapshot = cloneGameStateForRollback(state);
           }
 
           const outcome = item.handler.execute(ctx);
