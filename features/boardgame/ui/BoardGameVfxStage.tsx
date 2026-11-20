@@ -127,6 +127,52 @@ interface TrackedDomAnim {
   baseZ: string;
 }
 
+const VfxPortraitImage = React.memo(function VfxPortraitImage({
+  portraitSrc,
+  alt,
+  roleId,
+  faction,
+  fallbackSize,
+  className = 'h-full w-full object-cover object-top',
+  fallbackWrapClassName = 'flex h-full w-full items-center justify-center bg-slate-900',
+}: {
+  portraitSrc: string | null;
+  alt: string;
+  roleId: BoardGameRoleId | null;
+  faction: BoardGameFactionId | null;
+  fallbackSize: number;
+  className?: string;
+  fallbackWrapClassName?: string;
+}) {
+  const [imgError, setImgError] = useState(false);
+  useEffect(() => {
+    setImgError(false);
+  }, [portraitSrc]);
+
+  if (portraitSrc && !imgError) {
+    return (
+      <img
+        src={portraitSrc}
+        alt={alt}
+        onError={() => setImgError(true)}
+        className={className}
+      />
+    );
+  }
+  if (roleId) {
+    return (
+      <div className={fallbackWrapClassName}>
+        <RolePortraitSvg roleId={roleId} faction={faction} size={fallbackSize} />
+      </div>
+    );
+  }
+  return (
+    <div className={fallbackWrapClassName}>
+      <FactionCrestSvg faction={faction} size={Math.min(64, fallbackSize)} />
+    </div>
+  );
+});
+
 function resolvePlayerElements(
   container: HTMLElement | null,
   playerId: string | null,
@@ -4102,21 +4148,14 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                           boxShadow: `0 20px 44px -8px rgba(2,6,23,0.95), 0 0 32px ${cutInAccent}aa, inset 0 1px 0 rgba(255,255,255,0.35)`,
                         }}
                       >
-                        {cutIn.portraitSrc ? (
-                          <img
-                            src={cutIn.portraitSrc}
-                            alt={cutIn.roleName ?? cutIn.title}
-                            className={`h-full w-full object-cover object-top transition-transform duration-500 ease-out ${portraitParallaxCls}`}
-                          />
-                        ) : cutIn.roleId ? (
-                          <div className="flex h-full w-full items-center justify-center bg-slate-900">
-                            <RolePortraitSvg roleId={cutIn.roleId} faction={cutIn.faction} size={98} />
-                          </div>
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-slate-900">
-                            <FactionCrestSvg faction={cutIn.faction} size={64} />
-                          </div>
-                        )}
+                        <VfxPortraitImage
+                          portraitSrc={cutIn.portraitSrc}
+                          alt={cutIn.roleName ?? cutIn.title}
+                          roleId={cutIn.roleId}
+                          faction={cutIn.faction}
+                          fallbackSize={98}
+                          className={`h-full w-full object-cover object-top transition-transform duration-500 ease-out ${portraitParallaxCls}`}
+                        />
                         {vfx.enableFoil && showPortraitFace && (
                           <div
                             aria-hidden="true"
@@ -4770,17 +4809,13 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                               boxShadow: `0 20px 48px rgba(2,6,23,0.95), 0 0 32px ${personalPrimary}99`,
                             }}
                           >
-                            {cutIn.portraitSrc ? (
-                              <img
-                                src={cutIn.portraitSrc}
-                                alt={cutIn.roleName ?? 'Vai bí mật của bạn'}
-                                className="h-full w-full object-cover object-top"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center bg-slate-900">
-                                <RolePortraitSvg roleId={cutIn.roleId} faction={cutIn.faction} size={118} />
-                              </div>
-                            )}
+                            <VfxPortraitImage
+                              portraitSrc={cutIn.portraitSrc}
+                              alt={cutIn.roleName ?? 'Vai bí mật của bạn'}
+                              roleId={cutIn.roleId}
+                              faction={cutIn.faction}
+                              fallbackSize={118}
+                            />
                             {vfx.enableFoil && cardFlipped && (
                               <div
                                 aria-hidden="true"
@@ -4979,17 +5014,14 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                 className="relative z-10 h-14 w-10 shrink-0 overflow-hidden rounded-xl border-2 bg-slate-900 shadow-lg"
                 style={{ borderColor: cutInSecondary }}
               >
-                {cutIn.portraitSrc ? (
-                  <img
-                    src={cutIn.portraitSrc}
-                    alt={cutIn.roleName ?? cutIn.title}
-                    className="h-full w-full object-cover object-top"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <RolePortraitSvg roleId={cutIn.roleId} faction={cutIn.faction} size={52} />
-                  </div>
-                )}
+                <VfxPortraitImage
+                  portraitSrc={cutIn.portraitSrc}
+                  alt={cutIn.roleName ?? cutIn.title}
+                  roleId={cutIn.roleId}
+                  faction={cutIn.faction}
+                  fallbackSize={52}
+                  fallbackWrapClassName="flex h-full w-full items-center justify-center"
+                />
               </div>
             ) : (
               <div className="relative z-10 shrink-0">

@@ -10,6 +10,7 @@ import type {
   BoardGameFactionId,
   BoardGameLocationId,
   BoardGameRoleId,
+  Phase2RoleId,
 } from '../../../shared/contracts/boardgame';
 import { getCardById } from '../domain/cards';
 import { getRoleDesign } from '../domain/roles';
@@ -174,8 +175,21 @@ export const PROTOTYPE_CARD_ART: Readonly<Record<string, string>> = {
   'ev-01': '/assets/boardgame/prototype/card-ev-kiem-go-nguyen-rua.webp',
 };
 
-/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP; tướng mở rộng dùng Noir Monogram fallback). */
-export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, string>>> = {
+/** 8 tướng mở rộng đầu tiên (Starter Eight · Phase 2 / 2.5 — 4 Hunter + 4 Shadow). */
+export const STARTER_EIGHT_ROLE_IDS: readonly Phase2RoleId[] = [
+  'exp2_g43',
+  'exp2_fiona',
+  'exp1_gayle',
+  'exp1_felicia',
+  'exp1_wendigo',
+  'exp2_wyvern',
+  'exp1_victor',
+  'exp1_undying',
+];
+
+/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — 10 Classic + 8 Starter Eight). */
+export const MIDNIGHT_CHARACTER_ART: Readonly<Record<BoardGameRoleId, string>> = {
+  // 10 Classic Roles (preserved untouched)
   'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
   'gac-truc-ban': '/assets/boardgame/roles/role-lan-truc-ban.webp',
   'gac-radio': '/assets/boardgame/prototype/role-vy-radio.webp',
@@ -186,6 +200,15 @@ export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, st
   'lang-quan-sat': '/assets/boardgame/roles/role-trang-kien-cuong.webp',
   'lang-cuu-ho': '/assets/boardgame/roles/role-bach-cuong-chien.webp',
   'lang-tien-phong': '/assets/boardgame/roles/role-dat-cam-tu.webp',
+  // 8 Starter Eight Expansion Roles (Phase 2.5 — 1024x1536 WebP)
+  exp2_g43: '/assets/boardgame/roles/role-exp2-g43.webp',
+  exp2_fiona: '/assets/boardgame/roles/role-exp2-fiona.webp',
+  exp1_gayle: '/assets/boardgame/roles/role-exp1-gayle.webp',
+  exp1_felicia: '/assets/boardgame/roles/role-exp1-felicia.webp',
+  exp1_wendigo: '/assets/boardgame/roles/role-exp1-wendigo.webp',
+  exp2_wyvern: '/assets/boardgame/roles/role-exp2-wyvern.webp',
+  exp1_victor: '/assets/boardgame/roles/role-exp1-victor.webp',
+  exp1_undying: '/assets/boardgame/roles/role-exp1-undying.webp',
 };
 
 /** Thư viện đầy đủ 40 loại thẻ riêng biệt (tổng 48 bản sao) phong cách HUSTVerse Midnight (2:3 WebP). */

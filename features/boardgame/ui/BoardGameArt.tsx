@@ -746,6 +746,10 @@ export const PlayerPawnToken = React.memo(function PlayerPawnToken({
           ? 'bg-amber-700'
           : 'bg-slate-800';
   const portraitSrc = revealedRoleId ? MIDNIGHT_CHARACTER_ART[revealedRoleId] ?? null : null;
+  const [imgError, setImgError] = React.useState(false);
+  React.useEffect(() => {
+    setImgError(false);
+  }, [portraitSrc]);
 
   return (
     <div
@@ -773,7 +777,7 @@ export const PlayerPawnToken = React.memo(function PlayerPawnToken({
           className="pointer-events-none absolute -bottom-1 inset-x-0.5 h-1.5 rounded-full bg-slate-950/90 blur-[0.5px] -z-10"
         />
       )}
-      {portraitSrc ? (
+      {portraitSrc && !imgError ? (
         <div className="relative h-full w-full overflow-hidden rounded-full">
           <img
             src={portraitSrc}
@@ -782,6 +786,7 @@ export const PlayerPawnToken = React.memo(function PlayerPawnToken({
             height={1080}
             loading="lazy"
             decoding="async"
+            onError={() => setImgError(true)}
             className="h-full w-full object-cover object-top"
             draggable={false}
           />

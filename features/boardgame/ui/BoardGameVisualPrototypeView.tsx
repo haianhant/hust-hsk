@@ -40,6 +40,7 @@ import {
   MIDNIGHT_DECK_TOKENS,
   MIDNIGHT_FACTION_TOKENS,
   PROTOTYPE_SAMPLE_CARD_IDS,
+  STARTER_EIGHT_ROLE_IDS,
   resolveActionCardPresentation,
   resolveRoleCardPresentation,
   type ActionCardZone,
@@ -269,6 +270,9 @@ export default function BoardGameVisualPrototypeView() {
   const [manualFlipIds, setManualFlipIds] = useState<Record<string, boolean>>({});
   const [actionZoneIdx, setActionZoneIdx] = useState<number>(0);
   const [rosterFactionFilter, setRosterFactionFilter] = useState<'all' | BoardGameFactionId>('all');
+  const [starter8FactionFilter, setStarter8FactionFilter] = useState<
+    'all' | 'lantern-guard' | 'mist-order'
+  >('all');
   const [libraryDeckFilter, setLibraryDeckFilter] = useState<'all' | BoardGameDeckId>('all');
   const [pawnStep, setPawnStep] = useState<number>(0);
   const [pawnsRevealed, setPawnsRevealed] = useState<boolean>(false);
@@ -317,6 +321,19 @@ export default function BoardGameVisualPrototypeView() {
         ? ROLES_CATALOG
         : ROLES_CATALOG.filter((r) => r.faction === rosterFactionFilter),
     [rosterFactionFilter],
+  );
+
+  const starterEightRoles = useMemo(
+    () => STARTER_EIGHT_ROLE_IDS.map((roleId) => getRoleDesign(roleId)),
+    [],
+  );
+
+  const filteredStarterEightRoles = useMemo(
+    () =>
+      starter8FactionFilter === 'all'
+        ? starterEightRoles
+        : starterEightRoles.filter((r) => r.faction === starter8FactionFilter),
+    [starter8FactionFilter, starterEightRoles],
   );
 
   const filteredLibraryCards = useMemo(
@@ -894,7 +911,7 @@ export default function BoardGameVisualPrototypeView() {
             <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
               <p className="font-black text-white">Độ nhẹ Tài nguyên</p>
               <p className="mt-1 text-slate-400">
-                57 artwork AI WebP tối ưu (10 nhân vật 720×1080 + 40 loại thẻ 600×900 + 6 địa điểm 960×540 + 1 mặt lưng), lazy-loading &amp; decoding async.
+                65 artwork AI WebP tối ưu (10 nhân vật Classic 720×1080 + 8 nhân vật Starter Eight 1024×1536 + 40 loại thẻ 600×900 + 6 địa điểm 960×540 + 1 mặt lưng), lazy-loading &amp; decoding async.
               </p>
             </div>
           </div>
@@ -952,6 +969,88 @@ export default function BoardGameVisualPrototypeView() {
                     viewerMode={eff.viewerMode}
                     woundsTaken={woundsTaken}
                     foilEnabled={foilEnabled}
+                    reducedMotion={gfx.profile.reducedMotion}
+                    showGoalFooter={false}
+                    onFlipToggle={() => toggleFlipKey(role.id)}
+                    onZoom={() =>
+                      setZoomTarget({
+                        kind: 'role',
+                        roleId: role.id,
+                        revealed: eff.revealed,
+                        viewerMode: eff.viewerMode,
+                        woundsTaken,
+                      })
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* PHẦN 5B: STARTER EIGHT — 8 NHÂN VẬT MỞ RỘNG ĐẦU TIÊN (PHASE 2.5 EXPERIMENTAL PREVIEW) */}
+        <section
+          data-testid="proto-section-starter-eight"
+          className="space-y-4 rounded-3xl border border-violet-500/35 bg-gradient-to-b from-violet-950/20 via-slate-900/55 to-slate-950/70 p-4 sm:p-6"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-violet-400/60 bg-violet-950/85 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-violet-200">
+                  Phase 2.5 · Experimental Preview
+                </span>
+                <span className="rounded-full border border-amber-400/45 bg-amber-950/60 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+                  Production: Classic Only
+                </span>
+              </div>
+              <h2 className="text-lg font-black text-white sm:text-2xl">
+                5B. Starter Eight — 8 Nhân Vật Mở Rộng Full-Art 2:3 ({starterEightRoles.length}/8 Vai Trò)
+              </h2>
+              <p className="text-xs text-slate-400 sm:text-sm">
+                Đồng bộ phong cách HUSTVerse Midnight — Anime Noir (1024×1536 WebP) cho 4 Hunter (G43, Fiona, Gayle, Felicia) &amp; 4 Shadow (Wendigo, Wyvern, Victor, Undying); tuân thủ đầy đủ chế độ bảo mật P0, lật 3D &amp; phóng lớn 🔍.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['all', 'Tất cả (8)'],
+                  ['lantern-guard', 'Đội Săn Đêm (4)'],
+                  ['mist-order', 'Hội Bóng Đêm (4)'],
+                ] as const
+              ).map(([fid, label]) => (
+                <button
+                  key={fid}
+                  type="button"
+                  data-testid={`proto-starter8-tab-${fid}`}
+                  onClick={() => setStarter8FactionFilter(fid)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-extrabold transition cursor-pointer ${
+                    starter8FactionFilter === fid
+                      ? 'bg-violet-400 text-slate-950 shadow'
+                      : 'border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div
+            data-testid="proto-starter8-grid"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            {filteredStarterEightRoles.map((role) => {
+              const eff = effectiveCharacterSecrecy(role.id);
+              return (
+                <div key={role.id} className="mx-auto w-full max-w-[280px]">
+                  <MidnightCharacterCard
+                    testId={`proto-starter8-card-${role.id}`}
+                    roleId={role.id}
+                    revealed={eff.revealed}
+                    viewerMode={eff.viewerMode}
+                    woundsTaken={woundsTaken}
+                    foilEnabled={foilEnabled}
+                    reducedMotion={gfx.profile.reducedMotion}
                     showGoalFooter={false}
                     onFlipToggle={() => toggleFlipKey(role.id)}
                     onZoom={() =>

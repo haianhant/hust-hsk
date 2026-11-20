@@ -61,6 +61,11 @@ export const MidnightCharacterCard = React.memo(function MidnightCharacterCard({
     currentHp,
   });
 
+  const [imgError, setImgError] = React.useState(false);
+  React.useEffect(() => {
+    setImgError(false);
+  }, [presentation.portraitSrc]);
+
   // Nếu không được phép xem mặt trước, truyền palette trung tính ẩn danh để không rò màu phe lên khung!
   const factionToken =
     presentation.showFront && presentation.faction
@@ -90,8 +95,8 @@ export const MidnightCharacterCard = React.memo(function MidnightCharacterCard({
         className="relative flex h-full w-full flex-col justify-between overflow-hidden"
         style={{ background: factionToken.surfaceGradientCss }}
       >
-        {/* Artwork AI Full-Bleed 2:3 hoặc Fallback Noir Monogram cho các vai chưa vẽ */}
-        {presentation.portraitSrc ? (
+        {/* Artwork AI Full-Bleed 2:3 hoặc Fallback Noir Monogram khi tải lỗi */}
+        {presentation.portraitSrc && !imgError ? (
           <img
             src={presentation.portraitSrc}
             alt={presentation.roleName ?? 'Nhân vật Bóng Đêm KTX'}
@@ -99,11 +104,15 @@ export const MidnightCharacterCard = React.memo(function MidnightCharacterCard({
             height={1080}
             loading={priority ? 'eager' : 'lazy'}
             decoding={priority ? 'sync' : 'async'}
+            onError={() => setImgError(true)}
             className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.03]"
             draggable={false}
           />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center pb-20">
+          <div
+            data-portrait-fallback={imgError ? 'true' : 'false'}
+            className="absolute inset-0 flex flex-col items-center justify-center pb-20"
+          >
             <div
               className="rounded-3xl p-4 shadow-2xl"
               style={{
