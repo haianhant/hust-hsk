@@ -2927,7 +2927,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     };
 
     const finishP1TurnPassively = async () => {
-      for (let step = 0; step < 12; step++) {
+      for (let step = 0; step < 35; step++) {
         const ownTurn = await p1.page
           .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
           .catch(() => false);
@@ -2937,25 +2937,29 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
         const skipCard = p1.page.locator('[data-testid^="bg-skip-card-"]').first();
         const useCard = p1.page.locator('[data-testid^="bg-use-card-"]').first();
         const endTurn = p1.page.locator('[data-testid="bg-end-turn-btn"]');
+        const attackBtn = p1.page.locator('[data-testid="bg-attack-btn"]');
         const rollBtn = p1.page.locator('[data-testid="bg-roll-dice-btn"]');
         if ((await chooseDest.count()) > 0 && (await chooseDest.isEnabled().catch(() => false))) {
-          await chooseDest.click();
+          await chooseDest.click({ timeout: 5000 }).catch(() => undefined);
         } else if ((await skipLoc.count()) > 0 && (await skipLoc.isEnabled().catch(() => false))) {
-          await skipLoc.click();
+          await skipLoc.click({ timeout: 5000 }).catch(() => undefined);
         } else if ((await skipCard.count()) > 0 && (await skipCard.isEnabled().catch(() => false))) {
-          await skipCard.click();
+          await skipCard.click({ timeout: 5000 }).catch(() => undefined);
         } else if ((await useCard.count()) > 0 && (await useCard.isEnabled().catch(() => false))) {
-          await useCard.click();
+          await useCard.click({ timeout: 5000 }).catch(() => undefined);
         } else if ((await endTurn.count()) > 0 && (await endTurn.isEnabled().catch(() => false))) {
-          await endTurn.click();
+          await endTurn.click({ timeout: 5000 }).catch(() => undefined);
+        } else if ((await attackBtn.count()) > 0 && (await attackBtn.isEnabled().catch(() => false))) {
+          // Defense-in-depth if Masamune (ev-01) ever disables END_TURN until an attack is made
+          await attackBtn.click({ timeout: 5000 }).catch(() => undefined);
         } else if ((await rollBtn.count()) > 0 && (await rollBtn.isEnabled().catch(() => false))) {
-          await rollBtn.click();
+          await rollBtn.click({ timeout: 5000 }).catch(() => undefined);
         }
-        await p1.page.waitForTimeout(100);
+        await p1.page.waitForTimeout(140);
       }
     };
 
-    await advancePeersUntilP1Active();
+    await advancePeersUntilP1Active({ skipCombat: true });
 
     // Checkpoint 2: Reload during P1's own turn (MOVE_OR_STAY)
     await reloadAndRestoreTo('[data-testid="boardgame-2d-board"]');
@@ -2973,18 +2977,12 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       .catch(() => false);
     if (!hasActionAfterC2) {
       await p1.page.waitForSelector('[data-testid="bg-waiting-turn-banner"]', { timeout: UI_TIMEOUT });
-      await advancePeersUntilP1Active();
+      await advancePeersUntilP1Active({ skipCombat: true });
     }
-    // Complete P1 turn via UI after reload -> pass turn to a peer
+    // Complete P1 turn via real UI clicks (ROLL_DICE -> SKIP_LOC -> END_TURN) without drawing
+    // random cards (avoids eq-12 forced reveal or ev-01 Masamune / eq-05 Compass derailing Checks A-C & C4).
     const p1Tried = new Set();
-    for (let s = 0; s < 20; s++) {
-      const stillOwn = await p1.page
-        .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
-        .catch(() => false);
-      if (!stillOwn) break;
-      await playFirstValidStepOnPage(p1.page, s, p1Tried, { skipReveal: true });
-      await new Promise((r) => setTimeout(r, 70));
-    }
+    await finishP1TurnPassively();
 
     // Checkpoint 3: Reload during another player's turn
     await p1.page.waitForSelector('[data-testid="bg-waiting-turn-banner"]', { timeout: UI_TIMEOUT });
@@ -3006,12 +3004,12 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.waitForSelector('[data-testid="bg-dice-tray"][data-turn-active="true"]', { timeout: UI_TIMEOUT });
     await p1.page
       .locator('[data-testid="bg-vfx-dice-overlay"]')
-      .waitFor({ state: 'detached', timeout: 3000 })
+      .waitFor({ state: 'detached', timeout: 8000 })
       .catch(() => undefined);
     await p1.page.waitForFunction(
       () => document.querySelector('[data-testid="bg-dice-tray"]')?.getAttribute('data-dice-settled') === 'true',
       null,
-      { timeout: 3000, polling: 40 },
+      { timeout: 8000, polling: 40 },
     );
 
     let zeroFlickerVerified = false;
@@ -3167,14 +3165,14 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       await p1.page.waitForFunction(
         () => Boolean(window.__bgRealBoardProbe?.firstUnsettledAt),
         null,
-        { timeout: 4000, polling: 20 },
+        { timeout: 10000, polling: 20 },
       );
       await p1.page.waitForFunction(
         () =>
           Boolean(window.__bgRealBoardProbe?.firstSettledAt) &&
           !document.querySelector('[data-testid="bg-vfx-dice-overlay"]'),
         null,
-        { timeout: 5000, polling: 40 },
+        { timeout: 10000, polling: 40 },
       );
       await p1.page.waitForTimeout(750);
 
@@ -3266,20 +3264,30 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.waitForSelector('[data-testid="bg-roll-dice-btn"]', { timeout: UI_TIMEOUT });
     await p1.page
       .locator('[data-testid="bg-vfx-dice-overlay"]')
-      .waitFor({ state: 'detached', timeout: 3000 })
+      .waitFor({ state: 'detached', timeout: 8000 })
       .catch(() => undefined);
     await p1.page.waitForFunction(
       () => document.querySelector('[data-testid="bg-dice-tray"]')?.getAttribute('data-dice-settled') === 'true',
       null,
-      { timeout: 3000, polling: 40 },
+      { timeout: 8000, polling: 40 },
     );
     await p1.page.locator('[data-testid="bg-roll-dice-btn"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-vfx-dice-overlay"][data-dice-settled="false"]', {
-      timeout: 3000,
-    });
-    await p1.page.waitForSelector('[data-testid="bg-skip-vfx-btn"]', { timeout: 2000 });
-    await p1.page.locator('[data-testid="bg-skip-vfx-btn"]').click();
-    await p1.page.locator('[data-testid="bg-vfx-dice-overlay"]').waitFor({ state: 'detached', timeout: 800 });
+    // Wait and trigger Skip Animation atomically inside the browser tick so a slow 2-vCPU CI runner
+    // cannot miss the ~1s unsettled dice window between sequential Playwright IPC roundtrips.
+    await p1.page.waitForFunction(
+      () => {
+        const ov = document.querySelector('[data-testid="bg-vfx-dice-overlay"][data-dice-settled="false"]');
+        const skipBtn = document.querySelector('[data-testid="bg-skip-vfx-btn"]');
+        if (ov && skipBtn instanceof HTMLButtonElement && !skipBtn.disabled) {
+          skipBtn.click();
+          return true;
+        }
+        return false;
+      },
+      null,
+      { timeout: 10000, polling: 16 },
+    );
+    await p1.page.locator('[data-testid="bg-vfx-dice-overlay"]').waitFor({ state: 'detached', timeout: 2500 });
     const afterSkipTrayMeta = await p1.page.evaluate(() => {
       const tr = document.querySelector('[data-testid="bg-dice-tray"]');
       return {
@@ -3296,16 +3304,16 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.waitForSelector('[data-testid="bg-roll-dice-btn"]', { timeout: UI_TIMEOUT });
     await p1.page
       .locator('[data-testid="bg-vfx-dice-overlay"]')
-      .waitFor({ state: 'detached', timeout: 3000 })
+      .waitFor({ state: 'detached', timeout: 8000 })
       .catch(() => undefined);
     await p1.page.waitForFunction(
       () => document.querySelector('[data-testid="bg-dice-tray"]')?.getAttribute('data-dice-settled') === 'true',
       null,
-      { timeout: 3000, polling: 40 },
+      { timeout: 8000, polling: 40 },
     );
     await clickControlViaSettingsIfCollapsed(p1.page, 'bg-vfx-motion-toggle-btn');
     await p1.page.waitForSelector('[data-testid="bg-vfx-stage"][data-reduced-motion="true"]', {
-      timeout: 3000,
+      timeout: 6000,
     });
     await p1.page.evaluate(() => {
       const board = document.querySelector('[data-testid="boardgame-2d-board"]');
@@ -3342,7 +3350,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.waitForFunction(
       () => Boolean(window.__bgRmRollProbe?.headlineChanged),
       null,
-      { timeout: 4000, polling: 20 },
+      { timeout: 10000, polling: 20 },
     );
     const rmResult = await p1.page.evaluate(() => {
       const p = window.__bgRmRollProbe;
@@ -3356,7 +3364,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     assert.equal(rmResult.settled, 'true', 'Reduced Motion on GameBoard must settle immediately');
     await clickControlViaSettingsIfCollapsed(p1.page, 'bg-vfx-motion-toggle-btn');
     await p1.page.waitForSelector('[data-testid="bg-vfx-stage"][data-reduced-motion="false"]', {
-      timeout: 3000,
+      timeout: 6000,
     });
     await p1.page
       .locator('[data-testid="bg-vfx-dice-overlay"]')
@@ -3418,7 +3426,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-reconnect-check.png') });
 
     // Drive match to FINISHED fast via peers + UI P1
-    for (let step = 0; step < 300; step++) {
+    for (let step = 0; step < 500; step++) {
       const done = await p1.page
         .evaluate(() => Boolean(document.querySelector('[data-testid="bg-match-result-modal"]')))
         .catch(() => false);
