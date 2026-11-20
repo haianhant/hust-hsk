@@ -16,7 +16,7 @@
 | **Phase 3C Integration & 4P–8P DO E2E** | `test/boardgame-phase3c-integration.test.cjs` | ✅ 4/4 PASS | 4-chained single-turn choices, real DO 4P–8P E2E, DO hibernation preserving Gloria queue + secret Cindy choice, disconnect recovery, prod block |
 | **All Prior Boardgame Suites** | `test/boardgame-{lounge,lobby-do,engine,match-do,expansion-foundation,phase2a,phase2b,phase2c-integration,phase25-portraits}.test.cjs` | ✅ 62/62 PASS | 100% pass across Phase 0, 1, 2A, 2B, 2C, 2.5 |
 | **Classic 4,500-Match Simulation** | `node test/boardgame-sim.cjs` | ✅ PASS | 4,500/4,500 matches, 0.00% diff vs pre-Phase 1 baseline |
-| **Starter Sixteen 10,000-Match Sim** | `node scripts/sim-starter-sixteen.cjs --write-json` | ✅ PASS | 10,000/10,000 matches (26.78s), 0 stalls, 0 draws, 0 privacy violations, 49,533 choices |
+| **Starter Sixteen 10,000-Match Sim** | `node scripts/sim-starter-sixteen.cjs --write-json` | ✅ PASS | 10,000/10,000 matches (26.78s), 0 stalls, 0 draws, 0 privacy violations, **39,533** choices *(reconciled in Phase 4A from `totalPendingChoicesResolved`)* |
 | **UI, Contracts, World, Avatar, Study, Learn, Nav, MP** | `npm run test:contracts && npm run test:learn && npm run test:world && npm run test:avatar && npm run test:ui && npm run test:study && npm run test:nav && npm run test:mp` | ✅ PASS | Full HUSTVerse workspace regression gates green |
 | **Next.js Static Production Build** | `npm run build` | ✅ PASS | Clean static export to `out/` |
 | **Playwright Phase 3B Visual QA** | `node scripts/verify-phase3b-visuals.cjs` | ✅ PASS | Desktop `1440×900` + Mobile `390×844`, 0px overflow, 8/8 `1024×1536` WebP, 3-faction tabs, P0 DOM removal, 3-faction Zoom modal, `onError` fallback, Reduced Motion |

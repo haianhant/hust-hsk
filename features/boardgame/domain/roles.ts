@@ -237,6 +237,52 @@ export function isKnownBoardGameRoleId(id: unknown): id is BoardGameRoleId {
   return typeof id === 'string' && Object.hasOwn(ALL_ROLE_DESIGNS_BY_ID, id);
 }
 
+const CLASSIC_SOURCE_NAMES: Readonly<Record<ClassicBoardGameRoleId, string>> = {
+  'gac-ky-thuat': 'George',
+  'gac-truc-ban': 'Emi',
+  'gac-radio': 'Franklin',
+  'suong-an-danh': 'Vampire',
+  'suong-tin-gia': 'Unknown',
+  'suong-gac-cong': 'Werewolf',
+  'lang-anh-san': 'Bob',
+  'lang-quan-sat': 'Allie',
+  'lang-cuu-ho': 'Charles',
+  'lang-tien-phong': 'Daniel',
+};
+
+const EXPANSION_SOURCE_NAMES: Readonly<Record<string, string>> = Object.fromEntries(
+  EXPANSION_CHARACTER_CATALOG.map((rec) => [rec.id, rec.sourceName]),
+);
+
+/** Trả về tên nguồn chuẩn (`sourceName`) khớp 1-1 với CharacterRegistry cho toàn bộ 66 nhân vật. */
+export function getCharacterSourceName(roleId: string): string {
+  if (Object.hasOwn(CLASSIC_SOURCE_NAMES, roleId)) {
+    return CLASSIC_SOURCE_NAMES[roleId as ClassicBoardGameRoleId];
+  }
+  if (Object.hasOwn(EXPANSION_SOURCE_NAMES, roleId)) {
+    return EXPANSION_SOURCE_NAMES[roleId];
+  }
+  return '';
+}
+
+/**
+ * Kiểm tra điều kiện hồi đầy máu của thẻ `eq_chocolate` (`eq-14` — chữ cái đầu A / E / U).
+ * - Chế độ Classic (`isExpandedMode === false`): giữ nguyên 100% bit-for-bit 3 vai gốc (Allie, Emi, Unknown).
+ * - Chế độ Expansion (`isExpandedMode === true`): suy xuất tự động từ chữ cái đầu của `sourceName`
+ *   trong catalog/registry (A / E / U), không cần duy trì danh sách roleId thủ công.
+ */
+export function isEligibleForChocolateHeal(roleId: string, isExpandedMode: boolean): boolean {
+  if (!isExpandedMode) {
+    return (
+      roleId === 'lang-quan-sat' ||
+      roleId === 'gac-truc-ban' ||
+      roleId === 'suong-tin-gia'
+    );
+  }
+  const sourceName = getCharacterSourceName(roleId).trim();
+  return /^[AEU]/i.test(sourceName);
+}
+
 export function getRoleDesign(id: BoardGameRoleId): CharacterDesign {
   const classic = ROLES_BY_ID[id as ClassicBoardGameRoleId];
   if (classic) return classic;

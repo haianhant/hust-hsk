@@ -501,6 +501,66 @@ export const CARDS_BY_ID: Record<string, GameCardDefinition> = Object.fromEntrie
   CARDS_CATALOG.map((card) => [card.id, card]),
 );
 
+/**
+ * Ánh xạ Canonical Shadow Hunters Card IDs sang ID thẻ Bóng Đêm KTX (Phase 4A — CAP-10).
+ * Tránh tuyệt đối việc so sánh chuỗi tên hiển thị tiếng Việt trong logic kỹ năng/thắng thua.
+ */
+export const CANONICAL_SH_CARD_IDS = {
+  // Equipment / White cards
+  holy_robe: 'eq-01',
+  fortune_brooch: 'eq-02',
+  talisman: 'eq-03',
+  spear_of_longinus: 'eq-04',
+  mystic_compass: 'eq-05',
+  silver_rosary: 'eq-06',
+  holy_water: 'eq-07',
+  blessing: 'eq-08',
+  first_aid: 'eq-09',
+  guardian_angel: 'eq-10',
+  flare_of_judgment: 'eq-11',
+  disenchant_mirror: 'eq-12',
+  advent: 'eq-13',
+  chocolate: 'eq-14',
+  concealed_knowledge: 'eq-15',
+  // Event / Black cards
+  masamune: 'ev-01',
+  butcher_knife: 'ev-02',
+  chainsaw: 'ev-03',
+  rusted_broad_axe: 'ev-04',
+  handgun: 'ev-05',
+  machine_gun: 'ev-06',
+  vampire_bat: 'ev-07',
+  bloodthirsty_spider: 'ev-08',
+  dynamite: 'ev-09',
+  spiritual_doll: 'ev-10',
+  moody_goblin: 'ev-11',
+  banana_peel: 'ev-12',
+  diabolic_ritual: 'ev-13',
+} as const;
+
+export type CanonicalShCardId = keyof typeof CANONICAL_SH_CARD_IDS;
+
+export const MASAMUNE_CARD_ID: string = CANONICAL_SH_CARD_IDS.masamune;
+
+export const CRUZ_QUALIFYING_CARD_IDS: readonly string[] = [
+  CANONICAL_SH_CARD_IDS.vampire_bat,
+  CANONICAL_SH_CARD_IDS.bloodthirsty_spider,
+  CANONICAL_SH_CARD_IDS.dynamite,
+  CANONICAL_SH_CARD_IDS.spiritual_doll,
+];
+
+export function getCardIdByCanonicalShId(canonicalId: CanonicalShCardId): string {
+  return CANONICAL_SH_CARD_IDS[canonicalId];
+}
+
+export function isCardCanonicalShId(cardId: string, canonicalId: CanonicalShCardId): boolean {
+  return cardId === CANONICAL_SH_CARD_IDS[canonicalId];
+}
+
+export function isCruzQualifyingCardId(cardId: string | null | undefined): boolean {
+  return typeof cardId === 'string' && CRUZ_QUALIFYING_CARD_IDS.includes(cardId);
+}
+
 export function getCardById(cardId: string): GameCardDefinition | null {
   return CARDS_BY_ID[cardId] ?? null;
 }

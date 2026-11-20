@@ -1281,6 +1281,11 @@ function runStarterSixteenSimulation() {
   );
   const pct = (n, d) => +((n / Math.max(1, d)) * 100).toFixed(2);
 
+  const totalPendingChoicesResolved = Object.values(stats.pendingChoicesResolved).reduce(
+    (sum, n) => sum + n,
+    0,
+  );
+
   const output = {
     rulesetId: 'starter-sixteen',
     playableCharacters: ALL_S16_ROLE_IDS.length,
@@ -1312,6 +1317,7 @@ function runStarterSixteenSimulation() {
     locationOccupancyPct: Object.fromEntries(
       Object.entries(stats.locationOccupancyTurns).map(([loc, cnt]) => [loc, pct(cnt, totalLocTurns)]),
     ),
+    totalPendingChoicesResolved,
     pendingChoicesResolved: stats.pendingChoicesResolved,
     g43Counterplay: {
       overall: {

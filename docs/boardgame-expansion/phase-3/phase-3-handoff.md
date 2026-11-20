@@ -17,7 +17,9 @@
 | **Wave 1 (`starter-eight` additions)** | +8 (4H / 4S / 0N) | 8/8 WebP (`1024×1536`) | 4 `verified` + 4 `house-rule-approved` | 🔒 Experimental Only (`ALLOW_EXPERIMENTAL_RULESETS=1`) |
 | **Wave 2 (`starter-sixteen` additions)** | +8 (3H / 3S / 2N) | 8/8 WebP (`1024×1536`) | 8 `house-rule-approved` | 🔒 Experimental Only (`ALLOW_EXPERIMENTAL_RULESETS=1`) |
 | **Total Playable (`starter-sixteen`)** | **26 (10H / 10S / 6N)** | **26/26 WebP** | **16/56 expansion implemented** | 🔒 Experimental Beta Ready |
-| **Remaining Catalog (Waves 3+)** | 40 (7H / 8S / 25N) | 0/40 | `needs-clarification` / `not-started` | 🔒 Hard-Blocked by Playability Gate |
+| **Remaining Catalog (Waves 3+)** | 40 (**10H / 11S / 19N**) | 0/40 | `needs-clarification` / `not-started` | 🔒 Hard-Blocked by Playability Gate |
+
+> **Phase 4A Erratum (Catalog Reconciliation):** Bản đầu ghi nhầm phân bố 40 tướng còn lại là `7H / 8S / 25N`. Số liệu đúng tính tự động từ [`character-catalog.json`](../character-catalog.json) (`17H / 18S / 21N` tổng − `7H / 7S / 2N` đã implement) là **`10 Hunter / 11 Shadow / 19 Neutral`** (`10 + 11 + 19 = 40`). [`validate-character-catalog.cjs`](../../../scripts/validate-character-catalog.cjs) đã được bổ sung kiểm tra bất biến theo phe để ngăn tái diễn.
 
 ---
 

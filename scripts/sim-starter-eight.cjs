@@ -999,6 +999,10 @@ function runStarterEightSimulation() {
   const elapsedMs = Date.now() - t0;
   const completed = Math.max(1, stats.totalGames - stats.stalledGames);
   const totalSeats = stats.totalGames * 6;
+  const totalPendingChoicesResolved = Object.values(stats.pendingChoicesResolved).reduce(
+    (sum, n) => sum + n,
+    0,
+  );
   const output = {
     rulesetId: 'starter-eight',
     elapsedMs,
@@ -1021,6 +1025,7 @@ function runStarterEightSimulation() {
       wandererPrimaryPct: +((stats.primaryFactions.wanderer / completed) * 100).toFixed(2),
     },
     wanderer5to8WinRatePct: +((stats.wanderer5to8.wins / Math.max(1, stats.wanderer5to8.appearances)) * 100).toFixed(2),
+    totalPendingChoicesResolved,
     pendingChoicesResolved: stats.pendingChoicesResolved,
     combos: {
       victorMachineGun: {

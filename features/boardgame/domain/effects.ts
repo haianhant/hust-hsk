@@ -12,7 +12,7 @@ import type {
   BoardGamePublicLogEntry,
 } from '../../../shared/contracts/boardgame';
 import { getCardById } from './cards';
-import { FACTION_LABELS, getRoleDesign } from './roles';
+import { FACTION_LABELS, getRoleDesign, isEligibleForChocolateHeal } from './roles';
 import {
   BOARD_GAME_MAX_EQUIPPED,
   BOARD_GAME_MAX_HAND,
@@ -1063,11 +1063,7 @@ export function resolveUseCard(
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
       const isExpandedMode = Boolean(state.rulesetId && state.rulesetId !== 'classic');
-      const qualifies =
-        actor.roleId === 'lang-quan-sat' ||
-        actor.roleId === 'gac-truc-ban' ||
-        actor.roleId === 'suong-tin-gia' ||
-        (isExpandedMode && actor.roleId === 'exp1_undying');
+      const qualifies = isEligibleForChocolateHeal(actor.roleId, isExpandedMode);
       if (!skipEffect && qualifies) {
         revealPlayerNow(state, actor, 'voluntary', nowMs);
         const healed = applyHeal(state, actor, actor.woundsTaken);

@@ -34,6 +34,7 @@
     "corridor": 17.88,
     "court": 8.1
   },
+  "totalPendingChoicesResolved": 39533,
   "pendingChoicesResolved": {
     "fiona_attack_roll": 6276,
     "wendigo_reveal_heal": 1841,

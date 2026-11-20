@@ -164,10 +164,14 @@ export type PendingResolutionStep =
       kind: 'DAMAGE';
       damageEventId: string;
       causationId?: string;
+      sourceCardId?: string;
       targetPlayerId: string;
       rawAmount: number;
       sourceType: DamageSourceKind;
       attackerPlayerId: string | null;
+      preAttackTargetHp?: number;
+      preAttackTargetRevealed?: boolean;
+      isFujikoExecution?: boolean;
       isTalismanWardable?: boolean;
       isHpCost?: boolean;
       unpreventable?: boolean;
@@ -234,11 +238,15 @@ export type PendingResolutionStep =
   | {
       kind: 'ELIMINATION_TRIGGERS';
       eliminationEventId: string;
+      causationId?: string;
+      sourceCardId?: string;
+      turnNumberAtElimination?: number;
       victimPlayerId: string;
       victimFactionAtDeath: BoardGameFactionId;
       killerPlayerId: string | null;
       sourceType: DamageSourceKind;
       wyvernChecked?: boolean;
+      vengeanceChecked?: boolean;
       wendigoCheckedIds?: string[];
     }
   | {
@@ -343,6 +351,12 @@ export interface GloriaQueuedCardEntry {
   movementEventId: string;
 }
 
+export interface VisionsMarkEntry {
+  targetPlayerId: string;
+  markedOnTurnNumber: number;
+  lastTickTurnNumber?: number;
+}
+
 export interface ExpansionRuntimeState {
   eventSeq: number;
   processedEventIds: string[];
@@ -350,6 +364,15 @@ export interface ExpansionRuntimeState {
   pendingSteps: PendingResolutionStep[];
   gloriaQueuedCards?: GloriaQueuedCardEntry[];
   bipolarPromptedTurnNumber?: number;
+  wrathPromptedTurnNumber?: number;
+  visionsPromptedTurnNumber?: number;
+  feaAdjustedTurnNumber?: number;
+  bryonGiftedTurnNumber?: number;
+  visionsMarks?: Record<string, VisionsMarkEntry>;
+  /** Ghi nhận lượt mới nhất mà người chơi Cruz kích hoạt lá Đen hợp lệ (`ev-07..ev-10`). */
+  cruzQualifyingCardTurnByPlayer?: Record<string, number>;
+  /** Danh sách playerId Cruz đã hoàn thành điều kiện thắng hạ gục trong lượt hợp lệ. */
+  cruzWinTriggeredIds?: string[];
   choiceTimeoutMs?: number;
   stats: ExpansionRuntimeStats;
 }

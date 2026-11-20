@@ -21,9 +21,11 @@
 | **Tỷ lệ chết V1 / ghế (`round1PlayerDeathRatePct`)** | `0.448%` | `0.560%` | **`0.430%`** | `-0.130%` | ✅ Tốt hơn cả Classic |
 | **Hạ gục TB / trận (`avgEliminationsPerGame`)** | `3.21` | `3.25` | **`3.19`** | `-0.06` | ✅ Ổn định |
 | **Tổng sát thương TB / trận** | — | `68.75` | **`67.89`** | `-0.86` | ✅ Không power creep quá mức |
-| **Tổng Pending Choices đã giải quyết** | `0` | `43,547` (6 loại) | **`49,533` (9 loại)** | `+5,986` | ✅ 9/9 loại choice trơn tru |
+| **Tổng Pending Choices đã giải quyết** | `0` | `43,547` (6 loại) | **`39,533` (9 loại)** | `-4,014` | ✅ 9/9 loại choice trơn tru *(đã đối chiếu tự động từ JSON tại Phase 4A)* |
 
-### Phân bố 49,533 Pending Choices qua 9 loại & Phân bố Chiếm giữ Địa điểm
+### Phân bố 39,533 Pending Choices qua 9 loại & Phân bố Chiếm giữ Địa điểm
+
+> **Ghi chú đối chiếu (Phase 4A Cleanup):** Báo cáo ban đầu ghi nhầm tổng cộng thủ công là `49,533` (lệch `+10,000` do cộng nhẩm tay). Tổng chính xác được sinh tự động bằng trường `totalPendingChoicesResolved` trong [`starter-sixteen-sim-data.json`](./starter-sixteen-sim-data.json): `8,798 + 7,604 + 6,276 + 5,057 + 2,920 + 2,710 + 2,200 + 2,127 + 1,841 = 39,533`. Vì tổng số vai trong pool tăng từ 18 → 26, tần suất xuất hiện của các vai Phase 2 giảm tỷ lệ thuận (`3,150 → ~2,180` lượt/vai), làm tổng số pending choices giảm nhẹ từ `43,547` xuống `39,533` dù có thêm 3 loại choice Wave 2.
 
 | Pending Choice Kind | Lượt xử lý | Địa điểm KTX (Location Alias) | Tỷ lệ lượt đứng |
 |---|---:|---|---:|

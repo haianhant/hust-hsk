@@ -157,6 +157,8 @@ function main() {
   };
   const statusCounts = { verified: 0, 'house-rule-approved': 0, 'needs-clarification': 0, unknown: 0 };
   const implCounts = { 'not-started': 0, 'in-progress': 0, implemented: 0 };
+  const implementedByFaction = { hunter: 0, shadow: 0, neutral: 0 };
+  const remainingByFaction = { hunter: 0, shadow: 0, neutral: 0 };
 
   for (let i = 0; i < chars.length; i++) {
     const c = chars[i];
@@ -227,6 +229,13 @@ function main() {
       errors.push(`${label} Invalid implementationStatus "${c.implementationStatus}"`);
     } else {
       implCounts[c.implementationStatus] += 1;
+      if (VALID_FACTIONS.has(c.faction)) {
+        if (c.implementationStatus === 'implemented') {
+          implementedByFaction[c.faction] += 1;
+        } else {
+          remainingByFaction[c.faction] += 1;
+        }
+      }
     }
     if (
       c.implementationStatus === 'implemented' &&
@@ -247,11 +256,12 @@ function main() {
     }
   }
 
-  // Exact expansion & faction counts
+  // Exact expansion & faction counts + implemented/remaining consistency invariant
   const expectedCounts = {
     'expansion-1': { hunter: 8, shadow: 9, neutral: 9 },
     'expansion-2': { hunter: 9, shadow: 9, neutral: 12 },
   };
+  const expectedTotalByFaction = { hunter: 17, shadow: 18, neutral: 21 };
   for (const expId of Object.keys(expectedCounts)) {
     for (const faction of Object.keys(expectedCounts[expId])) {
       const actual = counts[expId][faction];
@@ -260,6 +270,22 @@ function main() {
         errors.push(`Count mismatch for ${expId}/${faction}: expected ${expected}, got ${actual}`);
       }
     }
+  }
+  for (const faction of Object.keys(expectedTotalByFaction)) {
+    const sumFaction = implementedByFaction[faction] + remainingByFaction[faction];
+    if (sumFaction !== expectedTotalByFaction[faction]) {
+      errors.push(
+        `Faction partition mismatch for ${faction}: implemented(${implementedByFaction[faction]}) + remaining(${remainingByFaction[faction]}) !== ${expectedTotalByFaction[faction]}`,
+      );
+    }
+  }
+  const sumImpl = implementedByFaction.hunter + implementedByFaction.shadow + implementedByFaction.neutral;
+  const sumRem = remainingByFaction.hunter + remainingByFaction.shadow + remainingByFaction.neutral;
+  if (sumImpl !== implCounts.implemented) {
+    errors.push(`Implemented faction sum (${sumImpl}) !== implCounts.implemented (${implCounts.implemented})`);
+  }
+  if (sumImpl + sumRem !== chars.length) {
+    errors.push(`Implemented(${sumImpl}) + Remaining(${sumRem}) !== total(${chars.length})`);
   }
 
   // Cross-check with rules-clarifications.md
@@ -313,7 +339,7 @@ function main() {
   console.log(`   Expansion 1 (26)           : Hunter=${counts['expansion-1'].hunter}, Shadow=${counts['expansion-1'].shadow}, Neutral=${counts['expansion-1'].neutral}`);
   console.log(`   Expansion 2 (30)           : Hunter=${counts['expansion-2'].hunter}, Shadow=${counts['expansion-2'].shadow}, Neutral=${counts['expansion-2'].neutral}`);
   console.log(`   Rules status               : verified=${statusCounts.verified}, house-rule-approved=${statusCounts['house-rule-approved']}, needs-clarification=${statusCounts['needs-clarification']}, unknown=${statusCounts.unknown}`);
-  console.log(`   Implementation status      : implemented=${implCounts.implemented}, in-progress=${implCounts['in-progress']}, not-started=${implCounts['not-started']}`);
+  console.log(`   Implementation status      : implemented=${implCounts.implemented} (H=${implementedByFaction.hunter}, S=${implementedByFaction.shadow}, N=${implementedByFaction.neutral}), in-progress=${implCounts['in-progress']}, not-started=${implCounts['not-started']} (H=${remainingByFaction.hunter}, S=${remainingByFaction.shadow}, N=${remainingByFaction.neutral})`);
   console.log(`   Active in prod gameplay    : ${data.activeInGameplay}`);
 }
 

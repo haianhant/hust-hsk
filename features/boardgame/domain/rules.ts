@@ -194,6 +194,41 @@ export function areInSameCluster(
   return getClusterForLocation(locA, clusterPairs) === getClusterForLocation(locB, clusterPairs);
 }
 
+/**
+ * Quy ước thống nhất Phase 4A: mọi nhân vật mở rộng đọc `remaining HP` qua helper chuẩn
+ * (`hp === maxHp - woundsTaken`, clamp >= 0), tránh nhầm lẫn với thang vết thương bàn giấy.
+ */
+export function getRemainingHp(
+  player: Pick<AuthoritativePlayerState, 'hp' | 'maxHp' | 'woundsTaken'>,
+): number {
+  return Math.max(0, Math.min(player.maxHp, player.hp));
+}
+
+/**
+ * Liệt kê danh sách người chơi còn sống thuộc cùng Cụm chiến đấu (combat cluster)
+ * theo `state.clusterPairs` của ván đấu hiện tại (tôn trọng cặp cụm đã xáo), theo thứ tự ghế deterministic.
+ */
+export function listLivingPlayersInSameCluster(
+  state: AuthoritativeGameState,
+  anchorPlayer: Pick<AuthoritativePlayerState, 'playerId' | 'location'>,
+  options?: { includeSelf?: boolean },
+): AuthoritativePlayerState[] {
+  const clusterPairs = state.clusterPairs ?? DEFAULT_CLUSTER_PAIRS;
+  const includeSelf = Boolean(options?.includeSelf);
+  const orderedIds =
+    state.turnOrder.length > 0 ? state.turnOrder : Object.keys(state.players);
+  const result: AuthoritativePlayerState[] = [];
+  for (const pid of orderedIds) {
+    const candidate = state.players[pid];
+    if (!candidate || !candidate.alive) continue;
+    if (!includeSelf && candidate.playerId === anchorPlayer.playerId) continue;
+    if (areInSameCluster(anchorPlayer.location, candidate.location, clusterPairs)) {
+      result.push(candidate);
+    }
+  }
+  return result;
+}
+
 export function resolveLocationForDiceTotal(
   total: number,
 ): BoardGameLocationId | 'choose-any' {

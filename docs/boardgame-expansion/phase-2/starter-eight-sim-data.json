@@ -20,6 +20,7 @@
     "wandererPrimaryPct": 13.99
   },
   "wanderer5to8WinRatePct": 35.59,
+  "totalPendingChoicesResolved": 43547,
   "pendingChoicesResolved": {
     "fiona_attack_roll": 8701,
     "wendigo_reveal_heal": 2737,
