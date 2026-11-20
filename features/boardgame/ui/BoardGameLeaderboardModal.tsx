@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useState } from 'react';
-import { ROLES_BY_ID } from '../domain/roles';
+import { getRoleDesign, isKnownBoardGameRoleId } from '../domain/roles';
 import { boardGameClient } from '../network/client';
 import {
   type BoardGameLeaderboardEntry,
@@ -79,8 +79,8 @@ function rankBadge(rank: number): { icon: string; badgeClass: string; cardClass:
 }
 
 function getLastRoleBadge(entry: BoardGameLeaderboardEntry) {
-  if (!entry.lastRoleId) return null;
-  const role = ROLES_BY_ID[entry.lastRoleId];
+  if (!entry.lastRoleId || !isKnownBoardGameRoleId(entry.lastRoleId)) return null;
+  const role = getRoleDesign(entry.lastRoleId);
   if (!role) return null;
   const theme = FACTION_THEME[role.faction];
   return (

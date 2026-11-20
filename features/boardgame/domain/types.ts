@@ -6,6 +6,7 @@
 
 import type {
   BoardGameCardPublicMeta,
+  BoardGameChoiceOptionView,
   BoardGameClusterPair,
   BoardGameDeckId,
   BoardGameDiceRollEvent,
@@ -13,6 +14,7 @@ import type {
   BoardGameHighlightEntry,
   BoardGameInvestigationOutcome,
   BoardGameLocationId,
+  BoardGamePendingChoiceKind,
   BoardGamePrivateClueEntry,
   BoardGamePublicLogEntry,
   BoardGameRevealEvent,
@@ -139,6 +141,174 @@ export interface AuthoritativePlayerState {
   appearance: RemoteAppearance;
 }
 
+export type DamageSourceKind =
+  | 'attack'
+  | 'event'
+  | 'location'
+  | 'skill'
+  | 'investigation'
+  | 'hp-cost';
+
+export interface AttackRollSample {
+  d6: number;
+  d4: number;
+  baseDmg: number;
+  rawDmg: number;
+  hasMasamune: boolean;
+}
+
+export type PendingResolutionStep =
+  | {
+      kind: 'DAMAGE';
+      damageEventId: string;
+      targetPlayerId: string;
+      rawAmount: number;
+      sourceType: DamageSourceKind;
+      attackerPlayerId: string | null;
+      isTalismanWardable?: boolean;
+      isHpCost?: boolean;
+      unpreventable?: boolean;
+      undyingChecked?: boolean;
+      undyingReduced?: boolean;
+      /** Ngữ cảnh ghi log đòn tấn công đơn mục tiêu hoặc bài/kỹ năng */
+      attackSingleTargetLog?: {
+        rollDesc: string;
+      };
+      /** Ghi log tùy chỉnh sau khi damage thực sự được áp dụng */
+      postLogKind?: BoardGamePublicLogEntry['kind'];
+      postLogPrefix?: string;
+      postLogSuffix?: string;
+      postLogActorId?: string | null;
+    }
+  | {
+      kind: 'POST_ATTACK_EFFECTS';
+      attackerPlayerId: string;
+      primaryTargetId: string;
+      targetCount: number;
+      d6: number;
+      d4: number;
+      baseDmg: number;
+      rawDmg: number;
+      hasMasamune: boolean;
+      hasMachineGun: boolean;
+      rollDesc: string;
+      totalDealt: number;
+      counterAttackerIds: string[];
+    }
+  | {
+      kind: 'COUNTER_ATTACK';
+      defenderPlayerId: string;
+      attackerPlayerId: string;
+    }
+  | {
+      kind: 'VAMPIRE_BAT_HEAL';
+      actorPlayerId: string;
+      targetPlayerId: string;
+      cardTitle: string;
+      dealtToTarget: number;
+    }
+  | {
+      kind: 'SPIDER_SELF_DAMAGE';
+      actorPlayerId: string;
+      targetPlayerId: string;
+      cardTitle: string;
+      dealtToTarget: number;
+    }
+  | {
+      kind: 'ELIMINATION_TRIGGERS';
+      eliminationEventId: string;
+      victimPlayerId: string;
+      victimFactionAtDeath: BoardGameFactionId;
+      killerPlayerId: string | null;
+      sourceType: DamageSourceKind;
+      wyvernChecked?: boolean;
+      wendigoCheckedIds?: string[];
+    }
+  | {
+      kind: 'FINISH_ACTION';
+      actorPlayerId: string;
+      autoEndTurnMode: 'never' | 'always' | 'if-not-charles-feast';
+    };
+
+export type PendingChoiceContextData =
+  | {
+      kind: 'fiona_attack_roll';
+      actorPlayerId: string;
+      targetPlayerId: string;
+      hasMasamune: boolean;
+      hasMachineGun: boolean;
+      rolls: [AttackRollSample, AttackRollSample];
+    }
+  | {
+      kind: 'wendigo_reveal_heal';
+      wendigoPlayerId: string;
+      eliminationEventId: string;
+      victimPlayerId: string;
+      victimDisplayName: string;
+    }
+  | {
+      kind: 'gayle_attack_reroll';
+      actorPlayerId: string;
+      targetPlayerId: string;
+      hasMasamune: boolean;
+      hasMachineGun: boolean;
+      firstRoll: AttackRollSample;
+    }
+  | {
+      kind: 'felicia_draw_choice';
+      actorPlayerId: string;
+      deckId: BoardGameDeckId;
+      cardIds: [string, string];
+    }
+  | {
+      kind: 'victor_blood_boost';
+      actorPlayerId: string;
+      targetPlayerId: string;
+      hasMasamune: boolean;
+      hasMachineGun: boolean;
+      roll: AttackRollSample;
+      eligibleTargetIds: string[];
+    }
+  | {
+      kind: 'undying_reveal_reduce';
+      undyingPlayerId: string;
+      damageEventId: string;
+      preUndyingDmg: number;
+      sourceType: DamageSourceKind;
+    };
+
+export interface AuthoritativePendingChoice {
+  choiceId: string;
+  eventId: string;
+  ownerPlayerId: string;
+  kind: BoardGamePendingChoiceKind;
+  isSecret: boolean;
+  title: string;
+  description: string;
+  publicPromptLabel: string;
+  options: BoardGameChoiceOptionView[];
+  defaultOptionId: string;
+  createdAtMs: number;
+  deadlineMs: number;
+  data: PendingChoiceContextData;
+}
+
+export interface ExpansionRuntimeStats {
+  activationsByRole: Record<string, number>;
+  damagePreventedByRole: Record<string, number>;
+  healByRole: Record<string, number>;
+  bonusDamageByRole: Record<string, number>;
+}
+
+export interface ExpansionRuntimeState {
+  eventSeq: number;
+  processedEventIds: string[];
+  resolvedChoiceIds: string[];
+  pendingSteps: PendingResolutionStep[];
+  choiceTimeoutMs?: number;
+  stats: ExpansionRuntimeStats;
+}
+
 export interface AuthoritativeGameState {
   rulesetVersion: 4;
   rulesetId?: BoardGameRulesetId;
@@ -154,6 +324,8 @@ export interface AuthoritativeGameState {
   turnOrder: string[];
   clusterPairs: BoardGameClusterPair[];
   allowedMoveDestinations?: BoardGameLocationId[];
+  pendingChoice?: AuthoritativePendingChoice | null;
+  expansionState?: ExpansionRuntimeState;
   firstDeadPlayerId: string | null;
   extraTurnPending: boolean;
   players: Record<string, AuthoritativePlayerState>;

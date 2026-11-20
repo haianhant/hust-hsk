@@ -9,7 +9,7 @@
 
 export type ExpansionPackId = 'expansion-1' | 'expansion-2';
 export type SourceFactionId = 'hunter' | 'shadow' | 'neutral';
-export type CatalogRulesStatus = 'verified' | 'needs-clarification' | 'unknown';
+export type CatalogRulesStatus = 'verified' | 'house-rule-approved' | 'needs-clarification' | 'unknown';
 export type CatalogImplementationStatus = 'not-started' | 'in-progress' | 'implemented';
 export type CatalogComplexity = 'low' | 'medium' | 'high' | 'very-high';
 export type CatalogImplementationDifficulty = 'tier-1' | 'tier-2' | 'tier-3' | 'tier-4';
@@ -330,7 +330,7 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-shadow-phien-ban-mo-rong-thu-1-phan-3-sh",
     "rulesStatus": "verified",
-    "implementationStatus": "not-started"
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_voodoo",
@@ -729,7 +729,7 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-hunter-cua-ban-mo-rong-thu-2-p",
     "rulesStatus": "verified",
-    "implementationStatus": "not-started"
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_eleanor",
@@ -792,7 +792,7 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-hunter-cua-ban-mo-rong-thu-2-p",
     "rulesStatus": "verified",
-    "implementationStatus": "not-started"
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_warlock",
@@ -855,7 +855,7 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "implementationDifficulty": "tier-1",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-shadow-cua-ban-mo-rong-thu-2-p",
     "rulesStatus": "verified",
-    "implementationStatus": "not-started"
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_umibozu",

@@ -140,6 +140,34 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
     motif: 'Còi báo động Cảm Tử',
     shortAbility: 'Tự lộ khi có người đầu tiên ngã · Thắng nếu chết ĐẦU TIÊN',
   },
+  exp1_wendigo: {
+    codeName: 'Wendigo',
+    title: 'Shadow MR1 · 14 HP',
+    accentHex: '#e11d48',
+    motif: 'Nanh Băng Tiệc Thịt',
+    shortAbility: 'Khi người khác bị loại: lật vai hoặc đang lật hồi 1 HP',
+  },
+  exp2_g43: {
+    codeName: 'G43',
+    title: 'Hunter MR2 · 14 HP',
+    accentHex: '#10b981',
+    motif: 'Giáp Thép Pháo Đài',
+    shortAbility: 'Nội tại sau lật vai: Giảm 2 sát thương từ đòn tấn công',
+  },
+  exp2_fiona: {
+    codeName: 'Fiona',
+    title: 'Hunter MR2 · 12 HP',
+    accentHex: '#22d3ee',
+    motif: 'Lưỡi Dao Giải Phẫu',
+    shortAbility: 'Khi tấn công (đã lật vai): Tung xúc xắc 2 lần & chọn 1 kết quả',
+  },
+  exp2_wyvern: {
+    codeName: 'Wyvern',
+    title: 'Shadow MR2 · 14 HP',
+    accentHex: '#c084fc',
+    motif: 'Cánh Rồng Hấp Thụ',
+    shortAbility: 'Hạ mục tiêu bằng đòn đánh: Hồi 5 HP (Hunter/Neutral) hoặc đầy máu (Shadow)',
+  },
 };
 
 export interface LocationVisualMeta {

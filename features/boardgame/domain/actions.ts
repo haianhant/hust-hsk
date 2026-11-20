@@ -21,6 +21,18 @@ import {
   resolveUseSkill,
 } from './effects';
 import {
+  applyExpandedInvestigateCard,
+  applyExpandedLocationPower,
+  applyExpandedUseCard,
+  applyExpandedUseSkill,
+  clearPendingChoiceOnForcedAutoTurn,
+  isExpandedRuleset,
+  resolveExpiredPendingChoice,
+  resolvePendingChoice,
+  startExpandedAttack,
+  type TurnContinuationCallbacks,
+} from './expansion-skills';
+import {
   canPlayerAttackTarget,
   listReachableAttackTargets,
   LOCATIONS_CATALOG,
@@ -31,7 +43,8 @@ import type {
   AuthoritativePlayerState,
   EngineActionResult,
 } from './types';
-import { buildFinalRevealSummary, evaluateVictory } from './victory';
+import { buildFinalRevealSummary } from './victory';
+import { evaluateVictoryWithEngine } from './victory-engine';
 
 export function getActivePlayer(
   state: AuthoritativeGameState,
@@ -41,13 +54,17 @@ export function getActivePlayer(
 }
 
 function finalizeIfFinished(state: AuthoritativeGameState, nowMs: number): boolean {
-  const victory = evaluateVictory(state);
+  const victory = evaluateVictoryWithEngine(state);
   if (!victory.finished) return false;
 
   state.finished = true;
   state.turnPhase = 'ENDED';
   state.activePlayerId = null;
   state.allowedMoveDestinations = undefined;
+  state.pendingChoice = null;
+  if (state.expansionState) {
+    state.expansionState.pendingSteps = [];
+  }
   state.extraTurnPending = false;
   state.winnerFaction = victory.winnerFaction;
   state.winnerLabel = victory.winnerLabel;
@@ -159,6 +176,22 @@ function canTriggerCharlesBloodyFeast(
   );
 }
 
+const TURN_CONTINUATION_CALLBACKS: TurnContinuationCallbacks = {
+  finalizeIfFinished,
+  advanceTurn,
+  canTriggerCharlesBloodyFeast,
+};
+
+export function applyPendingChoiceTimeout(
+  state: AuthoritativeGameState,
+  nowMs: number,
+): boolean {
+  if (state.finished || state.turnPhase === 'ENDED' || !state.pendingChoice) {
+    return false;
+  }
+  return resolveExpiredPendingChoice(state, nowMs, TURN_CONTINUATION_CALLBACKS);
+}
+
 export function applyPlayerGameAction(
   state: AuthoritativeGameState,
   playerId: string,
@@ -172,12 +205,50 @@ export function applyPlayerGameAction(
   if (!actor || !actor.alive) {
     return { ok: false, error: 'Bạn không thể hành động khi đã bị loại.', reason: 'Bạn không thể hành động khi đã bị loại.' };
   }
+
+  // Khi đang có Pending Choice (trong lượt hoặc phản ứng bí mật ngoài lượt):
+  // CHỈ cho phép chủ sở hữu choice gửi đúng `RESOLVE_CHOICE`, chặn mọi hành động khác!
+  if (state.pendingChoice) {
+    if (action.type !== 'RESOLVE_CHOICE') {
+      const msg = 'Đang chờ hoàn tất lựa chọn hiện tại trước khi tiếp tục.';
+      return { ok: false, error: msg, reason: msg };
+    }
+    const res = resolvePendingChoice(
+      state,
+      playerId,
+      action.choiceId,
+      action.optionId,
+      nowMs,
+      TURN_CONTINUATION_CALLBACKS,
+    );
+    if (!res.ok) {
+      const msg = res.reason ?? res.error ?? 'Lựa chọn không hợp lệ.';
+      return { ok: false, error: msg, reason: msg };
+    }
+    return { ok: true };
+  }
+
+  if (action.type === 'RESOLVE_CHOICE') {
+    const res = resolvePendingChoice(
+      state,
+      playerId,
+      action.choiceId,
+      action.optionId,
+      nowMs,
+      TURN_CONTINUATION_CALLBACKS,
+    );
+    const msg = res.reason ?? res.error ?? 'Hiện không có lựa chọn nào đang chờ xử lý.';
+    return { ok: false, error: msg, reason: msg };
+  }
+
   if (state.activePlayerId !== playerId) {
     return { ok: false, error: 'Chưa tới lượt của bạn.', reason: 'Chưa tới lượt của bạn.' };
   }
 
+  const expanded = isExpandedRuleset(state);
   let result: EngineActionResult;
   let autoEndTurnAfterAction = false;
+  let continuationManaged = false;
 
   switch (action.type) {
     case 'ROLL_DICE':
@@ -190,14 +261,27 @@ export function applyPlayerGameAction(
       result = resolveDrawLocationCard(state, actor, action.deck, nowMs);
       break;
     case 'USE_LOC_POWER':
-      result = resolveLocationPower(
-        state,
-        actor,
-        action.targetPlayerId,
-        action.mode,
-        nowMs,
-        action.equipCardId,
-      );
+      if (expanded) {
+        result = applyExpandedLocationPower(
+          state,
+          actor,
+          action.targetPlayerId,
+          action.mode,
+          nowMs,
+          TURN_CONTINUATION_CALLBACKS,
+          action.equipCardId,
+        );
+        continuationManaged = true;
+      } else {
+        result = resolveLocationPower(
+          state,
+          actor,
+          action.targetPlayerId,
+          action.mode,
+          nowMs,
+          action.equipCardId,
+        );
+      }
       break;
     case 'SKIP_LOC':
       result = resolveSkipLocation(state, actor, nowMs);
@@ -206,19 +290,46 @@ export function applyPlayerGameAction(
       result = resolveEquipCard(state, actor, action.cardId, nowMs);
       break;
     case 'USE_CARD':
-      result = resolveUseCard(
-        state,
-        actor,
-        action.cardId,
-        action.targetPlayerId,
-        action.targetLocation,
-        nowMs,
-        action.equipCardId,
-        action.skipEffect,
-      );
+      if (expanded) {
+        result = applyExpandedUseCard(
+          state,
+          actor,
+          action.cardId,
+          action.targetPlayerId,
+          action.targetLocation,
+          nowMs,
+          TURN_CONTINUATION_CALLBACKS,
+          action.equipCardId,
+          action.skipEffect,
+        );
+        continuationManaged = true;
+      } else {
+        result = resolveUseCard(
+          state,
+          actor,
+          action.cardId,
+          action.targetPlayerId,
+          action.targetLocation,
+          nowMs,
+          action.equipCardId,
+          action.skipEffect,
+        );
+      }
       break;
     case 'INVESTIGATE_CARD':
-      result = resolveInvestigateCard(state, actor, action.cardId, action.targetPlayerId, nowMs);
+      if (expanded) {
+        result = applyExpandedInvestigateCard(
+          state,
+          actor,
+          action.cardId,
+          action.targetPlayerId,
+          nowMs,
+          TURN_CONTINUATION_CALLBACKS,
+        );
+        continuationManaged = true;
+      } else {
+        result = resolveInvestigateCard(state, actor, action.cardId, action.targetPlayerId, nowMs);
+      }
       break;
     case 'ATTACK': {
       if (actor.hand.length > 0) {
@@ -235,9 +346,20 @@ export function applyPlayerGameAction(
         };
         break;
       }
-      result = resolveAttack(state, actor, action.targetPlayerId, nowMs);
-      if (result.ok) {
-        autoEndTurnAfterAction = !canTriggerCharlesBloodyFeast(state, actor);
+      if (expanded) {
+        result = startExpandedAttack(
+          state,
+          actor,
+          action.targetPlayerId,
+          nowMs,
+          TURN_CONTINUATION_CALLBACKS,
+        );
+        continuationManaged = true;
+      } else {
+        result = resolveAttack(state, actor, action.targetPlayerId, nowMs);
+        if (result.ok) {
+          autoEndTurnAfterAction = !canTriggerCharlesBloodyFeast(state, actor);
+        }
       }
       break;
     }
@@ -245,9 +367,25 @@ export function applyPlayerGameAction(
       result = resolveRevealRole(state, actor, nowMs);
       break;
     case 'USE_SKILL':
-      result = resolveUseSkill(state, actor, action.targetPlayerId, nowMs);
-      if (result.ok && actor.roleId === 'lang-cuu-ho') {
-        autoEndTurnAfterAction = !canTriggerCharlesBloodyFeast(state, actor);
+      if (expanded) {
+        const expRes = applyExpandedUseSkill(
+          state,
+          actor,
+          action.targetPlayerId,
+          nowMs,
+          TURN_CONTINUATION_CALLBACKS,
+        );
+        if (expRes !== null) {
+          result = expRes;
+          continuationManaged = true;
+        } else {
+          result = resolveUseSkill(state, actor, action.targetPlayerId, nowMs);
+        }
+      } else {
+        result = resolveUseSkill(state, actor, action.targetPlayerId, nowMs);
+        if (result.ok && actor.roleId === 'lang-cuu-ho') {
+          autoEndTurnAfterAction = !canTriggerCharlesBloodyFeast(state, actor);
+        }
       }
       break;
     case 'END_TURN':
@@ -292,6 +430,10 @@ export function applyPlayerGameAction(
     return { ok: false, error: msg, reason: msg };
   }
 
+  if (continuationManaged) {
+    return { ok: true };
+  }
+
   if (finalizeIfFinished(state, nowMs)) {
     return { ok: true };
   }
@@ -308,6 +450,10 @@ export function applyTimeoutAutoTurn(
   nowMs: number,
 ): void {
   if (state.finished || state.turnPhase === 'ENDED') return;
+  if (state.pendingChoice) {
+    clearPendingChoiceOnForcedAutoTurn(state, nowMs, TURN_CONTINUATION_CALLBACKS);
+    if (state.finished) return;
+  }
   const actor = getActivePlayer(state);
   if (!actor || !actor.alive) {
     advanceTurn(state, nowMs);

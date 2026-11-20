@@ -189,9 +189,11 @@ export async function handleBoardGameRequest(
     const hostName = sanitizeBoardGameName(body.hostName);
     const requestedRuleset =
       body.rulesetId === undefined ? BOARD_GAME_DEFAULT_RULESET_ID : body.rulesetId;
+    const allowExperimental = env.ALLOW_EXPERIMENTAL_RULESETS === '1';
     const rulesetCheck = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
       requestedRuleset,
       BOARD_GAME_MIN_PLAYERS,
+      { allowExperimental },
     );
     if (!rulesetCheck.ok) {
       return Response.json(
@@ -298,9 +300,11 @@ export async function handleBoardGameRequest(
     const hostName = sanitizeBoardGameName(body.hostName);
     const requestedRuleset =
       body.rulesetId === undefined ? BOARD_GAME_DEFAULT_RULESET_ID : body.rulesetId;
+    const allowExperimental = env.ALLOW_EXPERIMENTAL_RULESETS === '1';
     const rulesetCheck = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
       requestedRuleset,
       BOARD_GAME_MIN_PLAYERS,
+      { allowExperimental },
     );
     if (!rulesetCheck.ok) {
       return Response.json(
@@ -358,6 +362,7 @@ export async function handleBoardGameRequest(
             matchId: targetMatchId,
             inviteCode: targetInvite,
             tableId,
+            rulesetId,
             turnTimeoutMs,
           }),
         });
@@ -408,6 +413,7 @@ export async function handleBoardGameRequest(
               matchId: targetMatchId,
               inviteCode: targetInvite,
               tableId,
+              rulesetId,
               turnTimeoutMs,
             }),
           })

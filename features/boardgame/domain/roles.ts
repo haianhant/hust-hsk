@@ -6,7 +6,9 @@
 import type {
   BoardGameFactionId,
   BoardGameRoleId,
+  ClassicBoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
+import { EXPANSION_CHARACTER_CATALOG, type ExpansionCatalogRecord } from './expansion-catalog';
 import type { CharacterDesign } from './types';
 
 export const FACTION_LABELS: Record<BoardGameFactionId, string> = {
@@ -173,7 +175,7 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   },
 ];
 
-export const ROLES_BY_ID: Record<BoardGameRoleId, CharacterDesign> = {
+export const ROLES_BY_ID: Record<ClassicBoardGameRoleId, CharacterDesign> = {
   'gac-ky-thuat': ROLES_CATALOG[0],
   'gac-truc-ban': ROLES_CATALOG[1],
   'gac-radio': ROLES_CATALOG[2],
@@ -186,8 +188,54 @@ export const ROLES_BY_ID: Record<BoardGameRoleId, CharacterDesign> = {
   'lang-tien-phong': ROLES_CATALOG[9],
 };
 
+function mapCatalogFactionToBoardFaction(faction: ExpansionCatalogRecord['faction']): BoardGameFactionId {
+  if (faction === 'hunter') return 'lantern-guard';
+  if (faction === 'shadow') return 'mist-order';
+  return 'wanderer';
+}
+
+function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign {
+  const faction = mapCatalogFactionToBoardFaction(rec.faction);
+  const packLabel = rec.expansionId === 'expansion-1' ? 'Mở rộng 1' : 'Mở rộng 2';
+  const defaultGoal =
+    faction === 'lantern-guard'
+      ? 'Phe Đội Săn Đêm thắng ngay khi toàn bộ Hội Bóng Đêm bị loại khỏi KTX.'
+      : faction === 'mist-order'
+        ? 'Hội Bóng Đêm thắng khi toàn bộ Đội Săn Đêm bị loại HOẶC có từ 3 Kẻ Độc Hành bị loại.'
+        : rec.victoryCondition;
+
+  return {
+    id: rec.id as BoardGameRoleId,
+    name: rec.sourceName,
+    title: `${rec.sourceName} · ${packLabel}`,
+    faction,
+    maxHp: rec.maxHp,
+    skillName: rec.skillName,
+    skillSummary: rec.skillDescription,
+    cooldownRounds: 0,
+    oncePerMatch: rec.usageLimit === 'once_per_match',
+    targetMode: 'passive',
+    secretGoalText: defaultGoal,
+  };
+}
+
+export const ALL_ROLE_DESIGNS_BY_ID: Readonly<Record<string, CharacterDesign>> = {
+  ...ROLES_BY_ID,
+  ...Object.fromEntries(
+    EXPANSION_CHARACTER_CATALOG.map((rec) => [rec.id, buildExpansionRoleDesign(rec)]),
+  ),
+};
+
+export function isKnownBoardGameRoleId(id: unknown): id is BoardGameRoleId {
+  return typeof id === 'string' && Object.hasOwn(ALL_ROLE_DESIGNS_BY_ID, id);
+}
+
 export function getRoleDesign(id: BoardGameRoleId): CharacterDesign {
-  return ROLES_BY_ID[id];
+  const classic = ROLES_BY_ID[id as ClassicBoardGameRoleId];
+  if (classic) return classic;
+  const expanded = ALL_ROLE_DESIGNS_BY_ID[id];
+  if (expanded) return expanded;
+  return ROLES_BY_ID['gac-ky-thuat'];
 }
 
 export interface FactionCountSplit {

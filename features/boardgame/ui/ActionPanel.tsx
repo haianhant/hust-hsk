@@ -349,6 +349,85 @@ export function ActionPanel({
     );
   }
 
+  const privatePendingChoice = privateView.pendingChoice ?? null;
+  const publicPendingChoice = publicGame.pendingChoice ?? null;
+
+  // Khi chính người chơi này đang sở hữu Pending Choice (trong lượt HOẶC phản ứng bí mật ngoài lượt như Wendigo/Undying):
+  if (privatePendingChoice) {
+    const contextBar = renderTacticalContextBar();
+    return (
+      <section
+        data-testid="bg-pending-choice-panel"
+        data-choice-kind={privatePendingChoice.kind}
+        className="rounded-2xl border-2 border-amber-400/75 bg-slate-900/95 px-3.5 py-2.5 shadow-[0_0_28px_rgba(251,191,36,0.22)] space-y-2"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="shrink-0 px-2 py-0.5 rounded-full bg-amber-500/25 border border-amber-300/60 text-amber-200 text-xs font-black">
+              {privatePendingChoice.isSecret ? '🔮 PHẢN ỨNG BÍ MẬT' : '⚡ LỰA CHỌN KỸ NĂNG'}
+            </span>
+            <p className="text-xs sm:text-sm font-black text-white truncate">
+              {privatePendingChoice.title}
+            </p>
+          </div>
+          <span className="text-[11px] font-bold text-amber-200 bg-amber-950/60 border border-amber-400/40 px-2 py-0.5 rounded-lg">
+            ⏱️ Có thời hạn tự chọn mặc định
+          </span>
+        </div>
+        <p className="text-xs text-slate-200 leading-snug">{privatePendingChoice.description}</p>
+        <div className="flex flex-wrap items-stretch gap-2">
+          {privatePendingChoice.options.map((opt, idx) => (
+            <button
+              key={opt.optionId}
+              type="button"
+              data-testid={`bg-choice-opt-${opt.optionId}`}
+              data-primary-cta={idx === 0 ? 'true' : undefined}
+              onClick={() =>
+                onAction({
+                  type: 'RESOLVE_CHOICE',
+                  choiceId: privatePendingChoice.choiceId,
+                  optionId: opt.optionId,
+                })
+              }
+              className={`flex-1 min-w-[160px] rounded-xl border px-3 py-2 text-left transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                idx === 0
+                  ? 'border-amber-300/80 bg-gradient-to-r from-amber-500/25 to-emerald-500/20 hover:from-amber-500/35 hover:to-emerald-500/30 text-white'
+                  : 'border-slate-600 bg-slate-800/90 hover:bg-slate-700 text-slate-100'
+              }`}
+            >
+              <span className="block text-xs font-black">{opt.label}</span>
+              {opt.detail && (
+                <span className="mt-0.5 block text-[11px] text-slate-300">{opt.detail}</span>
+              )}
+            </button>
+          ))}
+        </div>
+        {contextBar}
+      </section>
+    );
+  }
+
+  // Khi bàn đang chờ 1 Pending Choice của người khác (KHÔNG lộ danh tính nếu isSecret === true):
+  if (publicPendingChoice) {
+    const contextBar = renderTacticalContextBar();
+    return (
+      <section
+        data-testid="bg-waiting-choice-banner"
+        className="rounded-2xl border border-amber-500/45 bg-slate-900/95 px-3.5 py-2 space-y-1.5"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs sm:text-sm font-bold text-amber-100">
+            {publicPendingChoice.promptLabel}
+          </p>
+          <span className="text-xs font-semibold text-amber-200 bg-amber-500/15 border border-amber-400/35 px-2.5 py-0.5 rounded-xl">
+            ⏳ Tự động tiếp tục khi hết giờ
+          </span>
+        </div>
+        {contextBar}
+      </section>
+    );
+  }
+
   const isMyTurn =
     !publicGame.winnerLabel &&
     publicGame.turnPhase !== 'ENDED' &&

@@ -28,23 +28,38 @@ export type BoardGameMatchStatus =
 
 export const BOARD_GAME_RULESET_VERSION = 4 as const;
 export const BOARD_GAME_PROTOCOL_VERSION = 1 as const;
-export const BOARD_GAME_CATALOG_VERSION = '2026.11-p1' as const;
+export const BOARD_GAME_CATALOG_VERSION = '2026.11-p2a' as const;
 
-export type BoardGameRulesetId =
+export type BoardGameProductionRulesetId =
   | 'classic'
   | 'expansion-1'
   | 'expansion-2'
   | 'full-expansion';
 
-export type BoardGameRulesetAvailability = 'available' | 'coming-soon' | 'disabled';
+export type BoardGameExperimentalRulesetId = 'starter-four';
+
+export type BoardGameRulesetId =
+  | BoardGameProductionRulesetId
+  | BoardGameExperimentalRulesetId;
+
+export type BoardGameRulesetAvailability = 'available' | 'coming-soon' | 'disabled' | 'experimental';
 
 export const BOARD_GAME_DEFAULT_RULESET_ID: BoardGameRulesetId = 'classic';
 
-export const BOARD_GAME_VALID_RULESETS: readonly BoardGameRulesetId[] = [
+export const BOARD_GAME_VALID_RULESETS: readonly BoardGameProductionRulesetId[] = [
   'classic',
   'expansion-1',
   'expansion-2',
   'full-expansion',
+];
+
+export const BOARD_GAME_EXPERIMENTAL_RULESETS: readonly BoardGameExperimentalRulesetId[] = [
+  'starter-four',
+];
+
+export const BOARD_GAME_ALL_RULESETS: readonly BoardGameRulesetId[] = [
+  ...BOARD_GAME_VALID_RULESETS,
+  ...BOARD_GAME_EXPERIMENTAL_RULESETS,
 ];
 
 export const BOARD_GAME_MIN_PLAYERS = 4;
@@ -55,6 +70,9 @@ export const BOARD_GAME_MAX_DIRECTORY_MATCHES = 16;
 /** Mặc định 0 = thời gian suy nghĩ vô hạn khi người chơi đang online; chỉ tự kết thúc lượt nếu rớt mạng quá hạn. */
 export const BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS = 0;
 export const BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS = 12_000;
+/** Thời hạn mặc định cho lựa chọn kỹ năng / phản ứng ngoài lượt (chống treo ván tuyệt đối). */
+export const BOARD_GAME_CHOICE_TIMEOUT_MS = 12_000;
+export const BOARD_GAME_DISCONNECTED_CHOICE_TIMEOUT_MS = 2_500;
 export const BOARD_GAME_RECONNECT_HOLD_MS = 90_000;
 export const BOARD_GAME_ABANDONED_MATCH_TTL_MS = 5 * 60_000;
 export const BOARD_GAME_FINISHED_TTL_MS = 10 * 60_000;
@@ -81,7 +99,7 @@ const INVITE_CODE_RE = /^[A-HJ-NP-Z2-9]{6}$/;
 
 export type BoardGameFactionId = 'lantern-guard' | 'mist-order' | 'wanderer';
 
-export type BoardGameRoleId =
+export type ClassicBoardGameRoleId =
   | 'gac-ky-thuat'
   | 'gac-truc-ban'
   | 'gac-radio'
@@ -92,6 +110,14 @@ export type BoardGameRoleId =
   | 'lang-quan-sat'
   | 'lang-cuu-ho'
   | 'lang-tien-phong';
+
+export type Phase2ARoleId =
+  | 'exp1_wendigo'
+  | 'exp2_g43'
+  | 'exp2_fiona'
+  | 'exp2_wyvern';
+
+export type BoardGameRoleId = ClassicBoardGameRoleId | Phase2ARoleId;
 
 export type BoardGameLocationId =
   | 'lobby'
@@ -344,6 +370,54 @@ export interface BoardGameRevealRecord {
   woundsTaken: number;
 }
 
+export type BoardGamePendingChoiceKind =
+  | 'fiona_attack_roll'
+  | 'wendigo_reveal_heal'
+  | 'gayle_attack_reroll'
+  | 'felicia_draw_choice'
+  | 'victor_blood_boost'
+  | 'undying_reveal_reduce';
+
+export interface BoardGameChoiceOptionView {
+  optionId: string;
+  label: string;
+  detail?: string;
+  card?: BoardGameCardPublicMeta;
+  roll?: {
+    d6: number;
+    d4: number;
+    baseDmg: number;
+    totalDmg: number;
+    hasMasamune: boolean;
+  };
+  targetPlayerId?: string;
+}
+
+/**
+ * Thông tin công khai của Pending Choice.
+ * BẢO MẬT P0: Khi `isSecret === true` (vd. Wendigo / Undying chưa lộ vai),
+ * `ownerPlayerId` và `kind` BẮT BUỘC bằng `null` để tuyệt đối không rò rỉ danh tính ẩn!
+ */
+export interface BoardGamePublicPendingChoice {
+  choiceId: string;
+  isSecret: boolean;
+  ownerPlayerId: string | null;
+  kind: BoardGamePendingChoiceKind | null;
+  promptLabel: string;
+  deadlineMs: number;
+}
+
+export interface BoardGamePrivatePendingChoice {
+  choiceId: string;
+  kind: BoardGamePendingChoiceKind;
+  title: string;
+  description: string;
+  options: readonly BoardGameChoiceOptionView[];
+  defaultOptionId: string;
+  deadlineMs: number;
+  isSecret: boolean;
+}
+
 export interface BoardGamePublicGameView {
   rulesetVersion: 4;
   rulesetId?: BoardGameRulesetId;
@@ -357,6 +431,7 @@ export interface BoardGamePublicGameView {
   turnOrder: readonly string[];
   clusterPairs: readonly BoardGameClusterPair[];
   allowedMoveDestinations?: readonly BoardGameLocationId[];
+  pendingChoice?: BoardGamePublicPendingChoice | null;
   deadCount: number;
   players: readonly BoardGamePublicPlayerView[];
   deckCounts: Record<BoardGameDeckId, number>;
@@ -392,6 +467,7 @@ export interface BoardGamePrivateGameView {
   hand: readonly BoardGameCardPublicMeta[];
   equipped: readonly BoardGameCardPublicMeta[];
   privateClues: readonly BoardGamePrivateClueEntry[];
+  pendingChoice?: BoardGamePrivatePendingChoice | null;
 }
 
 export type BoardGameActionPayload =
@@ -421,6 +497,11 @@ export type BoardGameActionPayload =
       type: 'USE_SKILL';
       targetPlayerId?: string;
       targetLocation?: BoardGameLocationId;
+    }
+  | {
+      type: 'RESOLVE_CHOICE';
+      choiceId: string;
+      optionId: string;
     }
   | { type: 'END_TURN' };
 
@@ -694,7 +775,7 @@ export function sanitizeBoardGameTableId(raw: unknown): BoardGameTableId {
 export function isValidBoardGameRulesetId(raw: unknown): raw is BoardGameRulesetId {
   return (
     typeof raw === 'string' &&
-    (BOARD_GAME_VALID_RULESETS as readonly string[]).includes(raw)
+    (BOARD_GAME_ALL_RULESETS as readonly string[]).includes(raw)
   );
 }
 
@@ -803,6 +884,8 @@ const STRICT_PLAYER_ID_RE = /^[A-Za-z0-9_-]{2,48}$/;
 const STRICT_CARD_ID_RE = /^(?:inv|eq|ev)-[0-9]{2}$/;
 const STRICT_MATCH_ID_RE = /^[A-Za-z0-9_-]{4,48}$/;
 const STRICT_REQUEST_ID_RE = /^[A-Za-z0-9_.:-]{2,64}$/;
+const STRICT_CHOICE_ID_RE = /^[A-Za-z0-9_.:-]{2,64}$/;
+const STRICT_OPTION_ID_RE = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 export function isSafePlainObject(raw: unknown): raw is Record<string, unknown> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false;
@@ -878,6 +961,7 @@ const ACTION_ALLOWED_KEYS: Record<BoardGameActionPayload['type'], ReadonlySet<st
   ATTACK: new Set(['type', 'targetPlayerId']),
   REVEAL_ROLE: new Set(['type']),
   USE_SKILL: new Set(['type', 'targetPlayerId', 'targetLocation']),
+  RESOLVE_CHOICE: new Set(['type', 'choiceId', 'optionId']),
   END_TURN: new Set(['type']),
 };
 
@@ -1012,6 +1096,30 @@ export function validateBoardGameActionPayload(
           type: 'USE_SKILL',
           ...(raw.targetPlayerId !== undefined ? { targetPlayerId: raw.targetPlayerId } : {}),
           ...(raw.targetLocation !== undefined ? { targetLocation: raw.targetLocation } : {}),
+        },
+      };
+    }
+    case 'RESOLVE_CHOICE': {
+      if (
+        typeof raw.choiceId !== 'string' ||
+        !STRICT_CHOICE_ID_RE.test(raw.choiceId) ||
+        RESERVED_SYMBOL_IDS.has(raw.choiceId)
+      ) {
+        return { ok: false, error: 'Mã lựa chọn (choiceId) không hợp lệ.' };
+      }
+      if (
+        typeof raw.optionId !== 'string' ||
+        !STRICT_OPTION_ID_RE.test(raw.optionId) ||
+        RESERVED_SYMBOL_IDS.has(raw.optionId)
+      ) {
+        return { ok: false, error: 'Phương án lựa chọn (optionId) không hợp lệ.' };
+      }
+      return {
+        ok: true,
+        action: {
+          type: 'RESOLVE_CHOICE',
+          choiceId: raw.choiceId,
+          optionId: raw.optionId,
         },
       };
     }

@@ -286,7 +286,7 @@
       "implementationDifficulty": "tier-1",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-shadow-phien-ban-mo-rong-thu-1-phan-3-sh",
       "rulesStatus": "verified",
-      "implementationStatus": "not-started"
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp1_voodoo",
@@ -685,7 +685,7 @@
       "implementationDifficulty": "tier-1",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-hunter-cua-ban-mo-rong-thu-2-p",
       "rulesStatus": "verified",
-      "implementationStatus": "not-started"
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp2_eleanor",
@@ -748,7 +748,7 @@
       "implementationDifficulty": "tier-1",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-hunter-cua-ban-mo-rong-thu-2-p",
       "rulesStatus": "verified",
-      "implementationStatus": "not-started"
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp2_warlock",
@@ -811,7 +811,7 @@
       "implementationDifficulty": "tier-1",
       "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-shadow-cua-ban-mo-rong-thu-2-p",
       "rulesStatus": "verified",
-      "implementationStatus": "not-started"
+      "implementationStatus": "implemented"
     },
     {
       "id": "exp2_umibozu",

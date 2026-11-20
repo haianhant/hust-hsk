@@ -174,8 +174,8 @@ export const PROTOTYPE_CARD_ART: Readonly<Record<string, string>> = {
   'ev-01': '/assets/boardgame/prototype/card-ev-kiem-go-nguyen-rua.webp',
 };
 
-/** Thư viện đầy đủ 10/10 chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP). */
-export const MIDNIGHT_CHARACTER_ART: Readonly<Record<BoardGameRoleId, string>> = {
+/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP; tướng mở rộng dùng Noir Monogram fallback). */
+export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, string>>> = {
   'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
   'gac-truc-ban': '/assets/boardgame/roles/role-lan-truc-ban.webp',
   'gac-radio': '/assets/boardgame/prototype/role-vy-radio.webp',

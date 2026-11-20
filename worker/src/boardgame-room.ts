@@ -16,8 +16,10 @@
 import {
   BOARD_GAME_ABANDONED_MATCH_TTL_MS,
   BOARD_GAME_CATALOG_VERSION,
+  BOARD_GAME_CHOICE_TIMEOUT_MS,
   BOARD_GAME_DEFAULT_RULESET_ID,
   BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS,
+  BOARD_GAME_DISCONNECTED_CHOICE_TIMEOUT_MS,
   BOARD_GAME_DISCONNECTED_TURN_TIMEOUT_MS,
   BOARD_GAME_FINISHED_TTL_MS,
   BOARD_GAME_MAX_DIRECTORY_MATCHES,
@@ -65,12 +67,15 @@ import {
   DEFAULT_CLUSTER_PAIRS,
   DEFAULT_RULESET_REGISTRY,
   ROLES_BY_ID,
+  applyPendingChoiceTimeout,
   applyPlayerGameAction,
   applyTimeoutAutoTurn,
   createInitialGameState,
   getActivePlayer,
   getPrivateGameView,
   getPublicGameView,
+  getRoleDesign,
+  isKnownBoardGameRoleId,
   isValidLocationId,
   type AuthoritativeGameState,
   type AuthoritativePlayerState,
@@ -95,6 +100,10 @@ export interface BoardGameEnv {
   BOARD_GAME_ROOM?: DurableObjectNamespace;
   ENVIRONMENT?: string;
   ALLOW_SHORT_TURN_TIMEOUT?: string;
+  /** Chỉ bật trong test/alpha harness nội bộ — KHÔNG cấu hình trong production wrangler.toml. */
+  ALLOW_EXPERIMENTAL_RULESETS?: string;
+  /** Ghi đè thời hạn pending choice trong test (ms). */
+  CHOICE_TIMEOUT_OVERRIDE_MS?: string;
 }
 
 export function clampBoardGameTurnTimeoutMs(
@@ -564,6 +573,7 @@ export class BoardGameRoom {
       const hostName = sanitizeBoardGameName(body.hostName);
       const matchId = sanitizeBoardGameMatchId(body.matchId);
       const inviteCode = sanitizeInviteCode(body.inviteCode);
+      const rulesetId = sanitizeBoardGameRulesetId(body.rulesetId);
       if (!matchId || !inviteCode) {
         return Response.json({ ok: false, error: 'invalid-fields' }, { status: 400 });
       }
@@ -601,13 +611,14 @@ export class BoardGameRoom {
       }
       this.sql.exec(
         `INSERT INTO directory_matches (
-          match_id, invite_code, table_id, host_name, status, player_count, max_players, spectator_count, updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          match_id, invite_code, table_id, host_name, status, ruleset_id, player_count, max_players, spectator_count, updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         matchId,
         inviteCode,
         tableId,
         hostName,
         'CREATED',
+        rulesetId,
         0,
         BOARD_GAME_MAX_PLAYERS,
         0,
@@ -624,6 +635,7 @@ export class BoardGameRoom {
             tableId,
             hostName,
             status: 'CREATED' as BoardGameMatchStatus,
+            rulesetId,
             playerCount: 0,
             maxPlayers: BOARD_GAME_MAX_PLAYERS,
             spectatorCount: 0,
@@ -738,7 +750,7 @@ export class BoardGameRoom {
             ? item.faction
             : 'wanderer';
         const roleId =
-          typeof item.roleId === 'string' && item.roleId in ROLES_BY_ID
+          isKnownBoardGameRoleId(item.roleId)
             ? (item.roleId as BoardGameRoleId)
             : null;
         const alive = Boolean(item.alive);
@@ -915,7 +927,7 @@ export class BoardGameRoom {
         const winRatePct = matchesPlayed > 0 ? Math.round((wins * 100) / matchesPlayed) : 0;
         const isSelf = hashedSelfKey !== null && row.player_key === hashedSelfKey;
         const validLastRole =
-          row.last_role_id && row.last_role_id in ROLES_BY_ID
+          isKnownBoardGameRoleId(row.last_role_id)
             ? (row.last_role_id as BoardGameRoleId)
             : null;
         return {
@@ -967,6 +979,7 @@ export class BoardGameRoom {
       const rulesetCheck = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
         requestedRuleset,
         BOARD_GAME_MIN_PLAYERS,
+        { allowExperimental: this.env.ALLOW_EXPERIMENTAL_RULESETS === '1' },
       );
       if (!rulesetCheck.ok) {
         return Response.json(
@@ -1475,11 +1488,27 @@ export class BoardGameRoom {
       this.promoteNextConnectedHost(player.player_id);
     }
 
-    // If active turn holder disconnects mid-PLAYING, start/cap reconnect hold timer cleanly
+    // If active turn holder OR pending choice owner disconnects mid-PLAYING, start/cap timer cleanly
     if (match.status === 'PLAYING') {
       const engineState = this.loadEngineState(match);
       const active = engineState ? getActivePlayer(engineState) : null;
-      if (active && active.playerId === player.player_id) {
+      if (engineState?.pendingChoice?.ownerPlayerId === player.player_id) {
+        const disconnChoiceMs =
+          this.env.ALLOW_SHORT_TURN_TIMEOUT === '1'
+            ? Math.min(800, BOARD_GAME_DISCONNECTED_CHOICE_TIMEOUT_MS)
+            : BOARD_GAME_DISCONNECTED_CHOICE_TIMEOUT_MS;
+        const cappedChoiceDeadline = Math.min(
+          engineState.pendingChoice.deadlineMs,
+          nowMs + disconnChoiceMs,
+        );
+        engineState.pendingChoice.deadlineMs = cappedChoiceDeadline;
+        this.sql.exec(
+          'UPDATE matches SET turn_deadline_ms = ?, game_state_json = ? WHERE match_id = ?',
+          cappedChoiceDeadline,
+          JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
+          match.match_id,
+        );
+      } else if (active && active.playerId === player.player_id) {
         const holdWindow =
           match.turn_timeout_ms <= 0
             ? BOARD_GAME_RECONNECT_HOLD_MS
@@ -1569,7 +1598,7 @@ export class BoardGameRoom {
       }
     }
 
-    // Auto-advance expired turns during PLAYING so a disconnected/AFK player never stalls the table
+    // Auto-advance expired pending choices or turns during PLAYING so an AFK/disconnected player never stalls the table
     if (
       match.status === 'PLAYING' &&
       typeof match.turn_deadline_ms === 'number' &&
@@ -1578,9 +1607,17 @@ export class BoardGameRoom {
       const rows = this.listPlayerRows();
       const engineState = this.loadEngineState(match, rows);
       if (engineState && (!engineState.finished || match.status === 'PLAYING')) {
-        const timedOutPlayerId = getActivePlayer(engineState)?.playerId;
+        const timedOutPlayerId =
+          engineState.pendingChoice?.ownerPlayerId ?? getActivePlayer(engineState)?.playerId;
         if (!engineState.finished) {
-          applyTimeoutAutoTurn(engineState, nowMs);
+          if (
+            engineState.pendingChoice &&
+            nowMs >= engineState.pendingChoice.deadlineMs - 50
+          ) {
+            applyPendingChoiceTimeout(engineState, nowMs);
+          } else {
+            applyTimeoutAutoTurn(engineState, nowMs);
+          }
         }
         const nextStatus: BoardGameMatchStatus = engineState.finished ? 'FINISHED' : 'PLAYING';
         const nextDeadline = engineState.finished
@@ -2108,9 +2145,11 @@ export class BoardGameRoom {
       return;
     }
 
+    const allowExperimental = this.env.ALLOW_EXPERIMENTAL_RULESETS === '1';
     const validation = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
       rulesetId,
       BOARD_GAME_MIN_PLAYERS,
+      { allowExperimental },
     );
     if (!validation.ok) {
       this.sendError(ws, validation.code, validation.error, { requestId });
@@ -2181,11 +2220,13 @@ export class BoardGameRoom {
     }
 
     // Khóa và xác thực bộ luật & phiên bản catalog tại server trước khi khởi tạo ván
+    const allowExperimental = this.env.ALLOW_EXPERIMENTAL_RULESETS === '1';
     const requestedRulesetId =
       rulesetOverrideId ?? match.ruleset_id ?? BOARD_GAME_DEFAULT_RULESET_ID;
     const rulesetValidation = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
       requestedRulesetId,
       seated.length,
+      { allowExperimental },
     );
     if (!rulesetValidation.ok) {
       this.sendError(ws, rulesetValidation.code, rulesetValidation.error, { requestId });
@@ -2217,11 +2258,19 @@ export class BoardGameRoom {
     globalThis.crypto.getRandomValues(seedArr);
     const seed = (seedArr[0] >>> 0) || 1337;
 
+    const rawChoiceTimeout = Number(this.env.CHOICE_TIMEOUT_OVERRIDE_MS);
+    const choiceTimeoutMs =
+      Number.isFinite(rawChoiceTimeout) && rawChoiceTimeout >= 300
+        ? Math.floor(rawChoiceTimeout)
+        : BOARD_GAME_CHOICE_TIMEOUT_MS;
+
     const engineState = createInitialGameState({
       matchId: match.match_id,
       seed,
       nowMs,
       rulesetId: lockedRulesetId,
+      allowExperimental,
+      choiceTimeoutMs,
       players: seated.map((p) => ({
         playerId: p.player_id,
         displayName: p.display_name,
@@ -2466,12 +2515,15 @@ export class BoardGameRoom {
 
     const nextStatus: BoardGameMatchStatus = engineState.finished ? 'FINISHED' : 'PLAYING';
     const turnChanged = engineState.turnNumber !== prevTurnNumber;
+    const hasPendingChoice = Boolean(engineState.pendingChoice);
     const nextDeadline = engineState.finished
       ? null
-      : match.turn_timeout_ms <= 0 || turnChanged
-        ? this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs)
-        : match.turn_deadline_ms ??
-          this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs);
+      : hasPendingChoice
+        ? engineState.pendingChoice!.deadlineMs
+        : match.turn_timeout_ms <= 0 || turnChanged
+          ? this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs)
+          : match.turn_deadline_ms ??
+            this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs);
     const newRevision = match.revision + 1;
 
     if (engineState.finished) {
@@ -2583,7 +2635,23 @@ export class BoardGameRoom {
     }
     const engineState = this.loadEngineState(match);
     const active = engineState ? getActivePlayer(engineState) : null;
-    if (active && active.playerId === player.player_id) {
+    if (engineState?.pendingChoice?.ownerPlayerId === player.player_id) {
+      const disconnChoiceMs =
+        this.env.ALLOW_SHORT_TURN_TIMEOUT === '1'
+          ? Math.min(800, BOARD_GAME_DISCONNECTED_CHOICE_TIMEOUT_MS)
+          : BOARD_GAME_DISCONNECTED_CHOICE_TIMEOUT_MS;
+      const cappedChoiceDeadline = Math.min(
+        engineState.pendingChoice.deadlineMs,
+        nowMs + disconnChoiceMs,
+      );
+      engineState.pendingChoice.deadlineMs = cappedChoiceDeadline;
+      this.sql.exec(
+        'UPDATE matches SET turn_deadline_ms = ?, game_state_json = ? WHERE match_id = ?',
+        cappedChoiceDeadline,
+        JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
+        match.match_id,
+      );
+    } else if (active && active.playerId === player.player_id) {
       const holdWindow =
         match.turn_timeout_ms <= 0
           ? BOARD_GAME_RECONNECT_HOLD_MS
@@ -2757,11 +2825,8 @@ export class BoardGameRoom {
 
     rawPlayers.forEach((entry, idx) => {
       const p = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>;
-      const rawRoleId =
-        typeof p.roleId === 'string' && Object.hasOwn(ROLES_BY_ID, p.roleId)
-          ? p.roleId
-          : fallbackRole.id;
-      const roleDef = ROLES_BY_ID[rawRoleId as keyof typeof ROLES_BY_ID] ?? fallbackRole;
+      const rawRoleId = isKnownBoardGameRoleId(p.roleId) ? p.roleId : fallbackRole.id;
+      const roleDef = getRoleDesign(rawRoleId);
       const maxHp = typeof p.maxHp === 'number' && p.maxHp > 0 ? p.maxHp : roleDef.maxHp;
       const hp = typeof p.hp === 'number' ? Math.max(0, Math.min(maxHp, p.hp)) : maxHp;
       const woundsTaken =
@@ -2882,7 +2947,7 @@ export class BoardGameRoom {
       winReason: preservedWinReason,
       finalReveal: turnOrder.map((pid) => {
         const ep = playersRecord[pid];
-        const roleDef = ROLES_BY_ID[ep.roleId] ?? fallbackRole;
+        const roleDef = getRoleDesign(ep.roleId);
         return {
           playerId: ep.playerId,
           displayName: ep.displayName,
@@ -2967,6 +3032,9 @@ export class BoardGameRoom {
     nowMs: number,
   ): number | null {
     if (engineState.finished) return null;
+    if (engineState.pendingChoice) {
+      return engineState.pendingChoice.deadlineMs;
+    }
     const active = getActivePlayer(engineState);
     if (!active) return null;
     const row = playerRows.find((r) => r.player_id === active.playerId);

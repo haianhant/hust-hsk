@@ -11,7 +11,7 @@
 // - KHÔNG thay đổi thứ tự xử lý, kết quả hay RNG của 10 tướng Classic.
 // ---------------------------------------------------------------------------
 
-import type { BoardGameRoleId } from '../../../shared/contracts/boardgame';
+import type { ClassicBoardGameRoleId } from '../../../shared/contracts/boardgame';
 import { nextDeterministicRandom } from './rules';
 import type { AuthoritativeGameState, AuthoritativePlayerState } from './types';
 
@@ -415,7 +415,7 @@ export class SkillEngine {
  * để Registry xác thực độ hoàn thiện của Classic, KHÔNG thay đổi bất kỳ đường chạy Classic nào.
  */
 export interface ClassicSkillAdapterBinding {
-  readonly roleId: BoardGameRoleId;
+  readonly roleId: ClassicBoardGameRoleId;
   readonly handlerId: string;
   readonly trigger: SkillTrigger;
   readonly resolverSymbol: string;
@@ -423,7 +423,7 @@ export interface ClassicSkillAdapterBinding {
 }
 
 export const CLASSIC_SKILL_ADAPTER_BINDINGS: Readonly<
-  Record<BoardGameRoleId, ClassicSkillAdapterBinding>
+  Record<ClassicBoardGameRoleId, ClassicSkillAdapterBinding>
 > = {
   'gac-ky-thuat': {
     roleId: 'gac-ky-thuat',

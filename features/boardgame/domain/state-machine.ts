@@ -36,6 +36,8 @@ export interface CreateGameStateInput {
   seed: number;
   nowMs: number;
   rulesetId?: BoardGameRulesetId;
+  allowExperimental?: boolean;
+  choiceTimeoutMs?: number;
   players: readonly CreateGamePlayerInput[];
 }
 
@@ -47,6 +49,7 @@ export function createInitialGameState(
   const resolvedPool = DEFAULT_RULESET_REGISTRY.resolvePlayableRolePoolOrThrow(
     requestedRulesetId,
     orderedInputs.length,
+    { allowExperimental: Boolean(input.allowExperimental) },
   );
   let rngState = (input.seed >>> 0) || 135792468;
 
@@ -185,6 +188,26 @@ export function createInitialGameState(
     winReason: null,
     finalReveal: null,
   };
+
+  const isExpanded = resolvedPool.ruleset.id !== 'classic';
+  if (isExpanded) {
+    state.pendingChoice = null;
+    state.expansionState = {
+      eventSeq: 0,
+      processedEventIds: [],
+      resolvedChoiceIds: [],
+      pendingSteps: [],
+      ...(typeof input.choiceTimeoutMs === 'number' && input.choiceTimeoutMs >= 300
+        ? { choiceTimeoutMs: input.choiceTimeoutMs }
+        : {}),
+      stats: {
+        activationsByRole: {},
+        damagePreventedByRole: {},
+        healByRole: {},
+        bonusDamageByRole: {},
+      },
+    };
+  }
 
   appendPublicLog(
     state,

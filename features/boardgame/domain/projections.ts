@@ -8,7 +8,9 @@ import {
   BOARD_GAME_DEFAULT_RULESET_ID,
   type BoardGameCardPublicMeta,
   type BoardGamePrivateGameView,
+  type BoardGamePrivatePendingChoice,
   type BoardGamePublicGameView,
+  type BoardGamePublicPendingChoice,
   type BoardGamePublicPlayerView,
 } from '../../../shared/contracts/boardgame';
 import { getCardById, toCardPublicMeta } from './cards';
@@ -61,6 +63,18 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     .map((player) => getPublicPlayerView(player, state.finished));
   const deadCount = Object.values(state.players).filter((p) => !p.alive).length;
 
+  const publicPendingChoice: BoardGamePublicPendingChoice | null = state.pendingChoice
+    ? {
+        choiceId: state.pendingChoice.choiceId,
+        isSecret: state.pendingChoice.isSecret,
+        // BẢO MẬT P0: Tuyệt đối KHÔNG lộ chủ sở hữu hay loại phản ứng bí mật cho bàn công khai / Spectator!
+        ownerPlayerId: state.pendingChoice.isSecret ? null : state.pendingChoice.ownerPlayerId,
+        kind: state.pendingChoice.isSecret ? null : state.pendingChoice.kind,
+        promptLabel: state.pendingChoice.publicPromptLabel,
+        deadlineMs: state.pendingChoice.deadlineMs,
+      }
+    : null;
+
   return {
     rulesetVersion: 4,
     rulesetId: state.rulesetId ?? BOARD_GAME_DEFAULT_RULESET_ID,
@@ -74,6 +88,7 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     turnOrder: [...state.turnOrder],
     clusterPairs: state.clusterPairs ?? DEFAULT_CLUSTER_PAIRS,
     ...(state.allowedMoveDestinations ? { allowedMoveDestinations: [...state.allowedMoveDestinations] } : {}),
+    ...(publicPendingChoice ? { pendingChoice: publicPendingChoice } : {}),
     deadCount,
     players: orderedPlayers,
     deckCounts: {
@@ -104,6 +119,24 @@ export function getPrivateGameView(
   const protege =
     player.protegePlayerId ? state.players[player.protegePlayerId] ?? null : null;
 
+  const privatePendingChoice: BoardGamePrivatePendingChoice | null =
+    state.pendingChoice && state.pendingChoice.ownerPlayerId === player.playerId
+      ? {
+          choiceId: state.pendingChoice.choiceId,
+          kind: state.pendingChoice.kind,
+          title: state.pendingChoice.title,
+          description: state.pendingChoice.description,
+          options: state.pendingChoice.options.map((opt) => ({
+            ...opt,
+            ...(opt.card ? { card: { ...opt.card } } : {}),
+            ...(opt.roll ? { roll: { ...opt.roll } } : {}),
+          })),
+          defaultOptionId: state.pendingChoice.defaultOptionId,
+          deadlineMs: state.pendingChoice.deadlineMs,
+          isSecret: state.pendingChoice.isSecret,
+        }
+      : null;
+
   return {
     playerId: player.playerId,
     roleId: player.roleId,
@@ -123,5 +156,6 @@ export function getPrivateGameView(
     hand: mapCardIdsToMeta(player.hand),
     equipped: mapCardIdsToMeta(player.equipped),
     privateClues: [...player.privateClues],
+    ...(privatePendingChoice ? { pendingChoice: privatePendingChoice } : {}),
   };
 }

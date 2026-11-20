@@ -5,6 +5,7 @@ export * from './cards';
 export * from './expansion-catalog';
 export * from './skill-engine';
 export * from './victory-engine';
+export * from './expansion-skills';
 export * from './registry';
 export * from './effects';
 export * from './victory';

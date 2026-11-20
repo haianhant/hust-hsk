@@ -176,22 +176,37 @@ test('A1 — CharacterRegistry lookup, unique 66 IDs, and JSON catalog 1-to-1 sy
     assert.ok(entry.victoryImpl !== null);
   }
 
-  // Verify Expansion 56 lookup and strict non-playability in Phase 1
+  // Verify Expansion 56 lookup: implemented Phase 2 roles satisfy playability gate,
+  // while all remaining unimplemented roles MUST stay coming-soon / null / non-playable.
   const jsonPath = path.resolve(__dirname, '../docs/boardgame-expansion/character-catalog.json');
   const jsonCatalog = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
   assert.equal(jsonCatalog.characters.length, 56);
   assert.deepEqual(EXPANSION_CHARACTER_CATALOG, jsonCatalog.characters);
 
+  let implementedExpCount = 0;
   for (const rec of jsonCatalog.characters) {
     const entry = DEFAULT_CHARACTER_REGISTRY.get(rec.id);
     assert.ok(entry, `Missing expansion role ${rec.id}`);
     assert.equal(entry.metadata.sourceName, rec.sourceName);
     assert.equal(entry.metadata.maxHp, rec.maxHp);
-    assert.equal(entry.availability, 'coming-soon');
-    assert.equal(entry.skillImpl, null, `Expansion role ${rec.id} must not have executable skillImpl in Phase 1`);
-    assert.equal(entry.victoryImpl, null, `Expansion role ${rec.id} must not have executable victoryImpl in Phase 1`);
-    assert.equal(isCharacterPlayable(entry), false, `Expansion role ${rec.id} MUST NOT be playable in Phase 1`);
+    if (rec.implementationStatus === 'implemented') {
+      implementedExpCount += 1;
+      assert.equal(entry.availability, 'available');
+      assert.ok(entry.skillImpl !== null, `Implemented role ${rec.id} must have skillImpl`);
+      assert.ok(entry.victoryImpl !== null, `Implemented role ${rec.id} must have victoryImpl`);
+      assert.equal(
+        isCharacterPlayable(entry, { allowExperimentalHouseRules: rec.rulesStatus === 'house-rule-approved' }),
+        true,
+        `Implemented role ${rec.id} must satisfy playability gate`,
+      );
+    } else {
+      assert.equal(entry.availability, 'coming-soon');
+      assert.equal(entry.skillImpl, null, `Unimplemented role ${rec.id} must not have executable skillImpl`);
+      assert.equal(entry.victoryImpl, null, `Unimplemented role ${rec.id} must not have executable victoryImpl`);
+      assert.equal(isCharacterPlayable(entry), false, `Unimplemented role ${rec.id} MUST NOT be playable`);
+    }
   }
+  assert.ok(implementedExpCount <= 8, 'Phase 2 must never mark more than Starter Eight as implemented');
 
   assert.equal(DEFAULT_CHARACTER_REGISTRY.get('nonexistent_role'), null);
 });

@@ -39,11 +39,12 @@ function attachBgHibernationSupport(ws, matchId, isDirectory) {
   };
 }
 
-function createBoardGameNamespace() {
+function createBoardGameNamespace(envOverrides = {}) {
   const containers = new Map();
   const env = {
     ENVIRONMENT: 'test',
     ALLOW_SHORT_TURN_TIMEOUT: '1',
+    ...envOverrides,
   };
 
   function getOrCreateContainer(roomName) {
@@ -147,8 +148,8 @@ function readNodeRequestBody(req) {
   });
 }
 
-function createBoardGameHttpAndWsHandler() {
-  const { env, containers, getOrCreateContainer } = createBoardGameNamespace();
+function createBoardGameHttpAndWsHandler(envOverrides = {}) {
+  const { env, containers, getOrCreateContainer } = createBoardGameNamespace(envOverrides);
 
   async function tryHandleHttp(req, res) {
     const url = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
@@ -304,8 +305,8 @@ function createBoardGameHttpAndWsHandler() {
   };
 }
 
-async function startStandaloneBoardGameTestServer(port = 0) {
-  const bgHandler = createBoardGameHttpAndWsHandler();
+async function startStandaloneBoardGameTestServer(port = 0, envOverrides = {}) {
+  const bgHandler = createBoardGameHttpAndWsHandler(envOverrides);
   const wss = new WebSocketServer({ noServer: true });
   const server = http.createServer((req, res) => {
     void bgHandler.tryHandleHttp(req, res).then((handled) => {

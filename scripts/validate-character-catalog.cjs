@@ -106,7 +106,7 @@ const VALID_REVEAL_REQUIREMENTS = new Set([
 ]);
 const VALID_COMPLEXITY = new Set(['low', 'medium', 'high', 'very-high']);
 const VALID_DIFFICULTY = new Set(['tier-1', 'tier-2', 'tier-3', 'tier-4']);
-const VALID_RULES_STATUS = new Set(['verified', 'needs-clarification', 'unknown']);
+const VALID_RULES_STATUS = new Set(['verified', 'house-rule-approved', 'needs-clarification', 'unknown']);
 const VALID_IMPL_STATUS = new Set(['not-started', 'in-progress', 'implemented']);
 
 function fail(errors) {
@@ -155,7 +155,8 @@ function main() {
     'expansion-1': { hunter: 0, shadow: 0, neutral: 0 },
     'expansion-2': { hunter: 0, shadow: 0, neutral: 0 },
   };
-  const statusCounts = { verified: 0, 'needs-clarification': 0, unknown: 0 };
+  const statusCounts = { verified: 0, 'house-rule-approved': 0, 'needs-clarification': 0, unknown: 0 };
+  const implCounts = { 'not-started': 0, 'in-progress': 0, implemented: 0 };
 
   for (let i = 0; i < chars.length; i++) {
     const c = chars[i];
@@ -224,9 +225,17 @@ function main() {
     }
     if (!VALID_IMPL_STATUS.has(c.implementationStatus)) {
       errors.push(`${label} Invalid implementationStatus "${c.implementationStatus}"`);
+    } else {
+      implCounts[c.implementationStatus] += 1;
     }
-    if (c.implementationStatus !== 'not-started') {
-      errors.push(`${label} Phase 0/1 constraint violation: implementationStatus must be "not-started", got "${c.implementationStatus}"`);
+    if (
+      c.implementationStatus === 'implemented' &&
+      c.rulesStatus !== 'verified' &&
+      c.rulesStatus !== 'house-rule-approved'
+    ) {
+      errors.push(
+        `${label} Safety gate violation: cannot mark implementationStatus="implemented" while rulesStatus="${c.rulesStatus}"`,
+      );
     }
 
     if (
@@ -303,8 +312,9 @@ function main() {
   console.log(`   Total expansion characters : ${chars.length} (+ 10 Classic = ${chars.length + 10})`);
   console.log(`   Expansion 1 (26)           : Hunter=${counts['expansion-1'].hunter}, Shadow=${counts['expansion-1'].shadow}, Neutral=${counts['expansion-1'].neutral}`);
   console.log(`   Expansion 2 (30)           : Hunter=${counts['expansion-2'].hunter}, Shadow=${counts['expansion-2'].shadow}, Neutral=${counts['expansion-2'].neutral}`);
-  console.log(`   Rules status               : verified=${statusCounts.verified}, needs-clarification=${statusCounts['needs-clarification']}, unknown=${statusCounts.unknown}`);
-  console.log(`   Active in gameplay         : ${data.activeInGameplay} (all 56 implementationStatus="not-started")`);
+  console.log(`   Rules status               : verified=${statusCounts.verified}, house-rule-approved=${statusCounts['house-rule-approved']}, needs-clarification=${statusCounts['needs-clarification']}, unknown=${statusCounts.unknown}`);
+  console.log(`   Implementation status      : implemented=${implCounts.implemented}, in-progress=${implCounts['in-progress']}, not-started=${implCounts['not-started']}`);
+  console.log(`   Active in prod gameplay    : ${data.activeInGameplay}`);
 }
 
 main();

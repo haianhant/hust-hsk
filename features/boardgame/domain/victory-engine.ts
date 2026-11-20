@@ -19,6 +19,7 @@ import type {
   BoardGameFactionId,
   BoardGameRoleId,
   BoardGameRulesetId,
+  ClassicBoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
 import { BOARD_GAME_DEFAULT_RULESET_ID } from '../../../shared/contracts/boardgame';
 import type {
@@ -216,12 +217,18 @@ export class VictoryEngine {
     if (rulesetId === 'classic' && this.evaluators.size === 0) {
       return evaluateVictory(state);
     }
+    if (this.evaluators.size === 0) {
+      // Phase 2A/2B Starter pools: tất cả tướng mở rộng hiện tại thuộc Hunter hoặc Shadow
+      // (archetype 'faction'), còn Wanderer là 4 tướng Classic -> evaluateVictory hoạt động
+      // chính xác trên effective faction và roleId mở rộng qua getRoleDesign.
+      return evaluateVictory(state);
+    }
     return this.evaluateCustom(state, options);
   }
 }
 
 export const CLASSIC_VICTORY_DEFINITIONS: Readonly<
-  Record<BoardGameRoleId, VictoryConditionDefinition>
+  Record<ClassicBoardGameRoleId, VictoryConditionDefinition>
 > = {
   'gac-ky-thuat': {
     id: 'classic:victory:hunter-faction',

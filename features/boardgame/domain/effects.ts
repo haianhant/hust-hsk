@@ -31,11 +31,12 @@ import {
 import type {
   AuthoritativeGameState,
   AuthoritativePlayerState,
+  DamageSourceKind,
   EngineActionResult,
   GameCardDefinition,
 } from './types';
 
-export type DamageSourceKind = 'attack' | 'event' | 'location' | 'skill' | 'investigation';
+export type { DamageSourceKind };
 
 const MAX_PUBLIC_LOG = 40;
 const MAX_HIGHLIGHTS = 8;
@@ -110,7 +111,7 @@ export function discardCardId(state: AuthoritativeGameState, cardId: string): vo
   }
 }
 
-function takeOneCardFromDeck(
+export function takeOneCardFromDeck(
   state: AuthoritativeGameState,
   deckId: BoardGameDeckId,
 ): GameCardDefinition | null {
@@ -148,7 +149,7 @@ export function applyHeal(
   return actual;
 }
 
-function equipToPlayerSlot(
+export function equipToPlayerSlot(
   owner: AuthoritativePlayerState,
   cardId: string,
 ): void {
@@ -193,7 +194,7 @@ export function stealOneEquippedGear(
   return getCardById(stolenId);
 }
 
-function transferLowestEquippedGear(
+export function transferLowestEquippedGear(
   giver: AuthoritativePlayerState,
   receiver: AuthoritativePlayerState,
   preferredCardId?: string,
@@ -206,7 +207,7 @@ function transferLowestEquippedGear(
   return getCardById(movedId);
 }
 
-function stealAllEquippedGear(
+export function stealAllEquippedGear(
   thief: AuthoritativePlayerState,
   victim: AuthoritativePlayerState,
 ): GameCardDefinition[] {
@@ -221,7 +222,7 @@ function stealAllEquippedGear(
   return stolen;
 }
 
-function revealPlayerNow(
+export function revealPlayerNow(
   state: AuthoritativeGameState,
   player: AuthoritativePlayerState,
   reason: 'voluntary' | 'eliminated',
@@ -1008,7 +1009,8 @@ export function resolveUseCard(
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
       if (
-        (actor.roleId === 'suong-an-danh' || actor.roleId === 'suong-gac-cong') &&
+        actor.faction === 'mist-order' &&
+        actor.roleId !== 'suong-tin-gia' &&
         !actor.revealed
       ) {
         revealPlayerNow(state, actor, 'voluntary', nowMs);

@@ -24,6 +24,7 @@ import {
   type BoardGameRoleId,
   type BoardGameRulesetAvailability,
   type BoardGameRulesetId,
+  type ClassicBoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
 import {
   EXPANSION_CHARACTER_CATALOG,
@@ -35,6 +36,11 @@ import {
   type ExpansionPackId,
   type SourceFactionId,
 } from './expansion-catalog';
+import {
+  PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
+  PHASE2_SKILL_BINDINGS,
+  PHASE2_VICTORY_BINDINGS,
+} from './expansion-skills';
 import { ROLES_CATALOG, getRoleDistribution } from './roles';
 import {
   CLASSIC_SKILL_ADAPTER_BINDINGS,
@@ -100,9 +106,20 @@ export interface RulesetDefinition {
   readonly description: string;
   readonly availability: BoardGameRulesetAvailability;
   readonly enabledInProduction: boolean;
+  readonly isExperimental?: boolean;
+  readonly allowExperimentalHouseRules?: boolean;
   readonly includedExpansions: readonly CharacterExpansionId[];
+  readonly explicitCharacterIds?: readonly string[];
   readonly expectedCharacterCount: number;
   readonly catalogVersion: string;
+}
+
+export interface CharacterPlayabilityOptions {
+  readonly allowExperimentalHouseRules?: boolean;
+}
+
+export interface RulesetValidationOptions {
+  readonly allowExperimental?: boolean;
 }
 
 export interface PlayableRolePools {
@@ -162,12 +179,20 @@ export function mapBoardGameFactionToSourceFaction(
 
 /**
  * Cổng kiểm tra bắt buộc: chỉ cho phép nhân vật vào pool chơi thực tế khi toàn bộ
- * luật đã được xác minh, triển khai hoàn chỉnh, bật khả dụng và có cả skillImpl + victoryImpl.
+ * luật đã được xác minh (hoặc house-rule được chấp thuận trong experimental test pool),
+ * triển khai hoàn chỉnh, bật khả dụng và có cả skillImpl + victoryImpl.
  */
-export function isCharacterPlayable(entry: CharacterRegistryEntry): boolean {
+export function isCharacterPlayable(
+  entry: CharacterRegistryEntry,
+  options?: CharacterPlayabilityOptions,
+): boolean {
+  const rulesOk =
+    entry.metadata.rulesStatus === 'verified' ||
+    (Boolean(options?.allowExperimentalHouseRules) &&
+      entry.metadata.rulesStatus === 'house-rule-approved');
   return (
     entry.availability === 'available' &&
-    entry.metadata.rulesStatus === 'verified' &&
+    rulesOk &&
     entry.metadata.implementationStatus === 'implemented' &&
     entry.skillImpl !== null &&
     entry.victoryImpl !== null
@@ -199,8 +224,9 @@ function inferExpansionVictoryArchetype(rec: ExpansionCatalogRecord): VictoryArc
 
 function buildClassicCharacterEntries(): CharacterRegistryEntry[] {
   return ROLES_CATALOG.map((role) => {
-    const skillBinding = CLASSIC_SKILL_ADAPTER_BINDINGS[role.id];
-    const victoryDef = CLASSIC_VICTORY_DEFINITIONS[role.id];
+    const classicId = role.id as ClassicBoardGameRoleId;
+    const skillBinding = CLASSIC_SKILL_ADAPTER_BINDINGS[classicId];
+    const victoryDef = CLASSIC_VICTORY_DEFINITIONS[classicId];
     const sourceNameMatch = /^([A-Za-z0-9 &.'-]+)\s*·/.exec(role.title);
     const sourceName = sourceNameMatch ? sourceNameMatch[1].trim() : role.name;
 
@@ -264,9 +290,16 @@ function buildExpansionCharacterEntries(): CharacterRegistryEntry[] {
   return EXPANSION_CHARACTER_CATALOG.map((rec) => {
     const faction = mapSourceFactionToBoardGameFaction(rec.faction);
     const archetype = inferExpansionVictoryArchetype(rec);
+    const skillBinding = PHASE2_SKILL_BINDINGS[rec.id] ?? null;
+    const victoryBinding = PHASE2_VICTORY_BINDINGS[rec.id] ?? null;
+    const isImplemented =
+      rec.implementationStatus === 'implemented' &&
+      skillBinding !== null &&
+      victoryBinding !== null;
+
     return {
       id: rec.id,
-      availability: 'coming-soon',
+      availability: isImplemented ? 'available' : 'coming-soon',
       metadata: {
         id: rec.id,
         sourceName: rec.sourceName,
@@ -281,7 +314,7 @@ function buildExpansionCharacterEntries(): CharacterRegistryEntry[] {
         implementationDifficulty: rec.implementationDifficulty,
       },
       skillSpec: {
-        skillId: `${rec.id}:skill`,
+        skillId: skillBinding?.handlerId ?? `${rec.id}:skill`,
         name: rec.skillName,
         description: rec.skillDescription,
         trigger: rec.trigger,
@@ -291,17 +324,26 @@ function buildExpansionCharacterEntries(): CharacterRegistryEntry[] {
         cooldownRounds: 0,
         oncePerMatch: rec.usageLimit === 'once_per_match',
       },
-      // Phase 1: KHÔNG có executable handler cho 56 tướng mở rộng
-      skillImpl: null,
+      skillImpl: skillBinding
+        ? {
+            handlerId: skillBinding.handlerId,
+            trigger: skillBinding.trigger,
+            resolverSymbol: skillBinding.resolverSymbol,
+          }
+        : null,
       victorySpec: {
         id: `${rec.id}:victory`,
         archetype,
         summary: rec.victoryCondition,
         timing: archetype === 'faction' ? 'immediate' : 'both',
-        evaluatorId: null,
+        evaluatorId: victoryBinding?.evaluatorId ?? null,
       },
-      // Phase 1: KHÔNG có executable victory evaluator cho 56 tướng mở rộng
-      victoryImpl: null,
+      victoryImpl: victoryBinding
+        ? {
+            evaluatorId: victoryBinding.evaluatorId,
+            archetype: victoryBinding.archetype,
+          }
+        : null,
       uiMeta: {
         displayName: rec.sourceName,
         title: `${rec.sourceName} · ${rec.expansionId === 'expansion-1' ? 'Mở rộng 1' : 'Mở rộng 2'}`,
@@ -364,14 +406,20 @@ export class CharacterRegistry {
 
   listPlayableByExpansions(
     expansions: readonly CharacterExpansionId[],
+    options?: CharacterPlayabilityOptions,
   ): readonly CharacterRegistryEntry[] {
-    return this.listByExpansions(expansions).filter(isCharacterPlayable);
+    return this.listByExpansions(expansions).filter((entry) =>
+      isCharacterPlayable(entry, options),
+    );
   }
 
   listIncompleteByExpansions(
     expansions: readonly CharacterExpansionId[],
+    options?: CharacterPlayabilityOptions,
   ): readonly CharacterRegistryEntry[] {
-    return this.listByExpansions(expansions).filter((entry) => !isCharacterPlayable(entry));
+    return this.listByExpansions(expansions).filter(
+      (entry) => !isCharacterPlayable(entry, options),
+    );
   }
 }
 
@@ -426,14 +474,37 @@ export const DEFAULT_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
   },
 ];
 
+export const EXPERIMENTAL_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
+  {
+    id: 'starter-four',
+    label: 'Starter Four (Nội bộ · 10 Classic + 4 Phase 2A)',
+    shortLabel: 'Starter 4 (Test)',
+    description:
+      'Pool kiểm thử nội bộ gồm 10 tướng Classic + 4 tướng Phase 2A đã xác minh (Wendigo, G43, Fiona, Wyvern). Tắt trên production.',
+    availability: 'experimental',
+    enabledInProduction: false,
+    isExperimental: true,
+    allowExperimentalHouseRules: false,
+    includedExpansions: ['classic', 'expansion-1', 'expansion-2'],
+    explicitCharacterIds: [
+      ...ROLES_CATALOG.map((r) => r.id),
+      ...PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
+    ],
+    expectedCharacterCount: 14,
+    catalogVersion: BOARD_GAME_CATALOG_VERSION,
+  },
+];
+
 export class RulesetRegistry {
   private readonly rulesetsById = new Map<BoardGameRulesetId, RulesetDefinition>();
   private readonly orderedRulesets: RulesetDefinition[] = [];
+  private readonly experimentalRulesetsById = new Map<BoardGameRulesetId, RulesetDefinition>();
   private readonly characters: CharacterRegistry;
 
   constructor(
     characterRegistry: CharacterRegistry,
     rulesets: readonly RulesetDefinition[] = DEFAULT_RULESET_DEFINITIONS,
+    experimentalRulesets: readonly RulesetDefinition[] = EXPERIMENTAL_RULESET_DEFINITIONS,
   ) {
     this.characters = characterRegistry;
     for (const def of rulesets) {
@@ -443,38 +514,75 @@ export class RulesetRegistry {
       this.rulesetsById.set(def.id, def);
       this.orderedRulesets.push(def);
     }
+    for (const expDef of experimentalRulesets) {
+      if (this.rulesetsById.has(expDef.id) || this.experimentalRulesetsById.has(expDef.id)) {
+        throw new Error(`RulesetRegistry: duplicate experimental ruleset id "${expDef.id}".`);
+      }
+      this.experimentalRulesetsById.set(expDef.id, expDef);
+    }
   }
 
-  getRuleset(id: unknown): RulesetDefinition | null {
+  getRuleset(id: unknown, options?: RulesetValidationOptions): RulesetDefinition | null {
     if (!isValidBoardGameRulesetId(id)) return null;
-    return this.rulesetsById.get(id) ?? null;
+    const prod = this.rulesetsById.get(id);
+    if (prod) return prod;
+    if (options?.allowExperimental) {
+      return this.experimentalRulesetsById.get(id) ?? null;
+    }
+    return null;
   }
 
-  listRulesets(): readonly RulesetDefinition[] {
+  listRulesets(options?: RulesetValidationOptions): readonly RulesetDefinition[] {
+    if (options?.allowExperimental) {
+      return [...this.orderedRulesets, ...Array.from(this.experimentalRulesetsById.values())];
+    }
     return [...this.orderedRulesets];
+  }
+
+  private resolveEntriesForDefinition(def: RulesetDefinition): readonly CharacterRegistryEntry[] {
+    if (def.explicitCharacterIds && def.explicitCharacterIds.length > 0) {
+      const out: CharacterRegistryEntry[] = [];
+      for (const cid of def.explicitCharacterIds) {
+        const entry = this.characters.get(cid);
+        if (entry) out.push(entry);
+      }
+      return out;
+    }
+    return this.characters.listByExpansions(def.includedExpansions);
   }
 
   listCatalogCharactersForRuleset(
     rulesetId: BoardGameRulesetId,
+    options?: RulesetValidationOptions,
   ): readonly CharacterRegistryEntry[] {
-    const def = this.rulesetsById.get(rulesetId);
+    const def = this.getRuleset(rulesetId, options);
     if (!def) return [];
-    return this.characters.listByExpansions(def.includedExpansions);
+    return this.resolveEntriesForDefinition(def);
   }
 
   listPlayableCharactersForRuleset(
     rulesetId: BoardGameRulesetId,
+    options?: RulesetValidationOptions,
   ): readonly CharacterRegistryEntry[] {
-    const def = this.rulesetsById.get(rulesetId);
-    if (!def || !def.enabledInProduction || def.availability !== 'available') {
+    const def = this.getRuleset(rulesetId, options);
+    if (!def) return [];
+    const allowedByMode = def.isExperimental
+      ? Boolean(options?.allowExperimental)
+      : def.enabledInProduction && def.availability === 'available';
+    if (!allowedByMode) {
       return [];
     }
-    return this.characters.listPlayableByExpansions(def.includedExpansions);
+    return this.resolveEntriesForDefinition(def).filter((entry) =>
+      isCharacterPlayable(entry, {
+        allowExperimentalHouseRules: Boolean(def.allowExperimentalHouseRules),
+      }),
+    );
   }
 
   validateRulesetForMatch(
     rawRulesetId: unknown,
     playerCount: number = BOARD_GAME_MIN_PLAYERS,
+    options?: RulesetValidationOptions,
   ): RulesetValidationResult {
     if (!isValidBoardGameRulesetId(rawRulesetId)) {
       return {
@@ -484,7 +592,9 @@ export class RulesetRegistry {
       };
     }
 
-    const def = this.rulesetsById.get(rawRulesetId);
+    const def =
+      this.rulesetsById.get(rawRulesetId) ??
+      this.experimentalRulesetsById.get(rawRulesetId);
     if (!def) {
       return {
         ok: false,
@@ -493,7 +603,15 @@ export class RulesetRegistry {
       };
     }
 
-    if (!def.enabledInProduction || def.availability !== 'available') {
+    if (def.isExperimental) {
+      if (!options?.allowExperimental) {
+        return {
+          ok: false,
+          code: 'RULESET_UNAVAILABLE',
+          error: `Bộ luật thử nghiệm "${def.shortLabel}" bị khóa trên production — chỉ cho phép chế độ Classic.`,
+        };
+      }
+    } else if (!def.enabledInProduction || def.availability !== 'available') {
       return {
         ok: false,
         code: 'RULESET_UNAVAILABLE',
@@ -501,7 +619,7 @@ export class RulesetRegistry {
       };
     }
 
-    const allInRuleset = this.characters.listByExpansions(def.includedExpansions);
+    const allInRuleset = this.resolveEntriesForDefinition(def);
     if (allInRuleset.length < def.expectedCharacterCount) {
       return {
         ok: false,
@@ -509,7 +627,10 @@ export class RulesetRegistry {
         error: `Bộ luật "${def.shortLabel}" mới đăng ký ${allInRuleset.length}/${def.expectedCharacterCount} nhân vật theo quy chuẩn.`,
       };
     }
-    const incomplete = allInRuleset.filter((entry) => !isCharacterPlayable(entry));
+    const playabilityOpts: CharacterPlayabilityOptions = {
+      allowExperimentalHouseRules: Boolean(def.allowExperimentalHouseRules),
+    };
+    const incomplete = allInRuleset.filter((entry) => !isCharacterPlayable(entry, playabilityOpts));
     if (incomplete.length > 0) {
       return {
         ok: false,
@@ -560,8 +681,9 @@ export class RulesetRegistry {
   resolvePlayableRolePoolOrThrow(
     rawRulesetId: unknown,
     playerCount: number,
+    options?: RulesetValidationOptions,
   ): Extract<RulesetValidationResult, { ok: true }> {
-    const res = this.validateRulesetForMatch(rawRulesetId, playerCount);
+    const res = this.validateRulesetForMatch(rawRulesetId, playerCount, options);
     if (!res.ok) {
       throw new BoardGameRulesetError(res.code, res.error);
     }
@@ -578,8 +700,9 @@ export function createCharacterRegistry(
 export function createRulesetRegistry(
   characters: CharacterRegistry,
   rulesets?: readonly RulesetDefinition[],
+  experimentalRulesets?: readonly RulesetDefinition[],
 ): RulesetRegistry {
-  return new RulesetRegistry(characters, rulesets);
+  return new RulesetRegistry(characters, rulesets, experimentalRulesets);
 }
 
 export const DEFAULT_CHARACTER_REGISTRY = new CharacterRegistry([
@@ -590,12 +713,13 @@ export const DEFAULT_CHARACTER_REGISTRY = new CharacterRegistry([
 export const DEFAULT_RULESET_REGISTRY = new RulesetRegistry(
   DEFAULT_CHARACTER_REGISTRY,
   DEFAULT_RULESET_DEFINITIONS,
+  EXPERIMENTAL_RULESET_DEFINITIONS,
 );
 
 /**
  * Helper đọc metadata chuẩn cho bất kỳ roleId Classic nào (tương thích ngược).
  */
-export function isClassicRoleId(roleId: string): roleId is BoardGameRoleId {
+export function isClassicRoleId(roleId: string): roleId is ClassicBoardGameRoleId {
   const entry = DEFAULT_CHARACTER_REGISTRY.get(roleId);
   return entry !== null && entry.metadata.expansionId === 'classic';
 }
