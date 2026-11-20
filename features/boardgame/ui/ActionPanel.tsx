@@ -23,6 +23,7 @@ import type {
   BoardGameLocationId,
   BoardGamePrivateGameView,
   BoardGamePublicGameView,
+  BoardGameReactionPolicy,
 } from '@/shared/contracts/boardgame';
 import { MIDNIGHT_CARD_ART, type ActionCardZone } from './midnight-noir-tokens';
 import { playCardPlay } from './sound';
@@ -250,6 +251,21 @@ export function ActionPanel({
             {selfVisionsMarkedId === selectedPlayer.playerId && !isSelfCtx && (
               <span className="font-bold text-fuchsia-300 whitespace-nowrap">
                 👁️ Dấu ấn Visions (Cấm đánh)
+              </span>
+            )}
+            {publicGame.angelProtectedPlayerIds?.includes(selectedPlayer.playerId) && (
+              <span className="font-bold text-amber-200 whitespace-nowrap">
+                👼 Miễn ST (Angel)
+              </span>
+            )}
+            {publicGame.daltonActivatedPlayerIds?.includes(selectedPlayer.playerId) && (
+              <span className="font-bold text-orange-300 whitespace-nowrap">
+                🥊 Vòng 12 (Cấm tự hồi)
+              </span>
+            )}
+            {publicGame.usurperAuraActive && selectedPlayer.revealedRoleId === 'exp2_usurper' && (
+              <span className="font-bold text-fuchsia-200 whitespace-nowrap">
+                🚫 Hào quang cấm hồi
               </span>
             )}
             {gearNames.length > 0 && (
@@ -501,6 +517,42 @@ export function ActionPanel({
     (p) => p.playerId === publicGame.activePlayerId,
   );
 
+  const renderPrivateReactionPolicyBar = () => {
+    if (!privateView?.reactionPolicy) return null;
+    const currentPolicy = privateView.reactionPolicy;
+    const items: Array<{ id: BoardGameReactionPolicy; label: string }> = [
+      { id: 'ASK', label: 'Hỏi' },
+      { id: 'AUTO_DECLINE', label: 'Tự bỏ qua' },
+      { id: 'AUTO_ACTIVATE_WHEN_ELIGIBLE', label: 'Tự kích hoạt' },
+    ];
+    return (
+      <div
+        data-testid="bg-reaction-policy-bar"
+        className="flex flex-wrap items-center justify-between gap-1.5 rounded-xl border border-slate-700/75 bg-slate-950/75 px-2.5 py-1 text-[11px]"
+      >
+        <span className="font-bold text-slate-300">🔐 Phản ứng riêng tư:</span>
+        <div className="flex items-center gap-1">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              data-testid={`bg-reaction-policy-${item.id}`}
+              aria-pressed={currentPolicy === item.id}
+              onClick={() => onAction({ type: 'SET_REACTION_PREF', policy: item.id })}
+              className={`px-2 py-0.5 rounded-lg border font-bold transition cursor-pointer ${
+                currentPolicy === item.id
+                  ? 'border-amber-300/80 bg-amber-500/25 text-amber-100'
+                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   if (!isMyTurn) {
     const contextBar = renderTacticalContextBar();
     return (
@@ -519,6 +571,7 @@ export function ActionPanel({
             ∞ Tự do · Tự động tới lượt bạn ngay khi xong
           </span>
         </div>
+        {renderPrivateReactionPolicyBar()}
         {contextBar}
       </section>
     );
@@ -647,6 +700,56 @@ export function ActionPanel({
       );
       if (!hasNeutralAlly) {
         return 'Cần Neutral đã lộ diện đứng cùng Cụm';
+      }
+    }
+    if (privateView.roleId === 'exp2_elise') {
+      if (
+        publicGame.turnPhase !== 'ROLL_MOVE' &&
+        publicGame.turnPhase !== 'LOCATION_ACTION' &&
+        publicGame.turnPhase !== 'MAIN_ACTION'
+      ) {
+        return 'Chỉ kích hoạt trong lượt của bạn';
+      }
+      if (hasAnyHandCard) {
+        return 'Giải quyết thẻ vừa rút trước';
+      }
+    }
+    if (privateView.roleId === 'exp1_ernest') {
+      if (
+        publicGame.turnPhase !== 'ROLL_MOVE' &&
+        publicGame.turnPhase !== 'LOCATION_ACTION' &&
+        publicGame.turnPhase !== 'MAIN_ACTION'
+      ) {
+        return 'Chỉ kích hoạt trong lượt của bạn';
+      }
+      if (hasAnyHandCard) {
+        return 'Giải quyết thẻ vừa rút trước';
+      }
+      if (privateView.hp < 3) {
+        return 'Cần còn ít nhất 3 HP để hy sinh 2 máu';
+      }
+    }
+    if (privateView.roleId === 'exp2_warlord') {
+      if (publicGame.turnPhase !== 'ROLL_MOVE') {
+        return 'Chỉ kéo Chiến Tranh ở Pha 1 (trước khi tung xúc xắc)';
+      }
+      if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
+        return 'Đã bắt đầu tung xúc xắc trong lượt này';
+      }
+      if (aliveOthers.length === 0) {
+        return 'Không còn người chơi khác để kéo';
+      }
+    }
+    if (privateView.roleId === 'exp1_angel') {
+      if (
+        publicGame.turnPhase !== 'ROLL_MOVE' &&
+        publicGame.turnPhase !== 'LOCATION_ACTION' &&
+        publicGame.turnPhase !== 'MAIN_ACTION'
+      ) {
+        return 'Chỉ kích hoạt trong lượt của bạn';
+      }
+      if (hasAnyHandCard) {
+        return 'Giải quyết thẻ vừa rút trước';
       }
     }
     if (privateView.roleId === 'lang-cuu-ho') {

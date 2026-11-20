@@ -140,8 +140,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-1-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_elysia",
@@ -203,8 +203,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-1-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_fea",
@@ -602,8 +602,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-2-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_father_harrison",
@@ -686,8 +686,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-hunter-cua-ban-mo-rong-thu-2-p",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_gideon",
@@ -959,8 +959,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-shadow-cua-ban-mo-rong-thu-2-p",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_usurper",
@@ -980,8 +980,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-shadow-cua-ban-mo-rong-thu-2-p",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_cain",
@@ -1022,8 +1022,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_april_skipps",
@@ -1085,8 +1085,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "high",
     "implementationDifficulty": "tier-3",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_colt",

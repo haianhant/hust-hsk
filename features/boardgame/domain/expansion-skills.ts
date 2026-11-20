@@ -26,6 +26,8 @@ import {
   type Phase3RoleId,
   type Phase4RoleId,
   type Phase5BRoleId,
+  type Phase5CRoleId,
+  type Phase5RoleId,
 } from '../../../shared/contracts/boardgame';
 import {
   getCardById,
@@ -56,8 +58,10 @@ import {
 } from './heal-pipeline';
 import { FACTION_LABELS, getRoleDesign, isEligibleForChocolateHeal } from './roles';
 import {
+  areInSameCluster,
   BOARD_GAME_MAX_HAND,
   canPlayerAttackTarget,
+  DEFAULT_CLUSTER_PAIRS,
   getLocationDefinition,
   getRemainingHp,
   isPlayerAtExactLocationAlias,
@@ -115,7 +119,7 @@ export type ExpansionImplementedRoleId =
   | Phase2RoleId
   | Phase3RoleId
   | Phase4RoleId
-  | Phase5BRoleId;
+  | Phase5RoleId;
 
 export interface ExpansionSkillExecutableBinding {
   readonly roleId: ExpansionImplementedRoleId;
@@ -192,6 +196,27 @@ export const PHASE5B_ROLE_IDS: readonly Phase5BRoleId[] = [
   'exp2_umibozu',
   'exp2_urban_legend',
   'exp2_arlene',
+];
+
+export const PHASE5C_ROLE_IDS: readonly Phase5CRoleId[] = [
+  'exp1_ernest',
+  'exp1_gwendolen',
+  'exp2_freyja',
+  'exp2_warlord',
+  'exp2_usurper',
+  'exp1_angel',
+  'exp2_bianca',
+  'exp2_dalton',
+];
+
+export const PHASE5_ROLE_IDS: readonly Phase5RoleId[] = [
+  ...PHASE5B_ROLE_IDS,
+  ...PHASE5C_ROLE_IDS,
+];
+
+export const STARTER_THIRTY_EIGHT_EXPANSION_ROLE_IDS: readonly ExpansionImplementedRoleId[] = [
+  ...STARTER_TWENTY_SIX_EXPANSION_ROLE_IDS,
+  ...PHASE5_ROLE_IDS,
 ];
 
 export const PHASE2_SKILL_BINDINGS: Readonly<
@@ -564,6 +589,104 @@ export const PHASE5B_VICTORY_BINDINGS: Readonly<
   },
 };
 
+export const PHASE5C_SKILL_BINDINGS: Readonly<
+  Partial<Record<string, ExpansionSkillExecutableBinding>>
+> = {
+  exp1_ernest: {
+    roleId: 'exp1_ernest',
+    handlerId: 'exp:exp1_ernest:apostasy',
+    trigger: 'ACTIVE_SKILL',
+    resolverSymbol: 'expansion-skills.ts:ernestApostasyHandler',
+  },
+  exp1_gwendolen: {
+    roleId: 'exp1_gwendolen',
+    handlerId: 'exp:exp1_gwendolen:shelter',
+    trigger: 'AFTER_ATTACK',
+    resolverSymbol: 'expansion-skills.ts:gwendolenShelterHandler',
+  },
+  exp2_freyja: {
+    roleId: 'exp2_freyja',
+    handlerId: 'exp:exp2_freyja:reckless-assault',
+    trigger: 'AFTER_ATTACK',
+    resolverSymbol: 'expansion-skills.ts:freyjaRecklessAssaultHandler',
+  },
+  exp2_warlord: {
+    roleId: 'exp2_warlord',
+    handlerId: 'exp:exp2_warlord:war-pull',
+    trigger: 'ACTIVE_SKILL',
+    resolverSymbol: 'expansion-skills.ts:warlordWarPullHandler',
+  },
+  exp2_usurper: {
+    roleId: 'exp2_usurper',
+    handlerId: 'exp:exp2_usurper:usurp-heal',
+    trigger: 'ON_HEAL',
+    resolverSymbol: 'expansion-skills.ts:usurperHealBlockHandler',
+  },
+  exp1_angel: {
+    roleId: 'exp1_angel',
+    handlerId: 'exp:exp1_angel:guardian-wings',
+    trigger: 'ACTIVE_SKILL',
+    resolverSymbol: 'expansion-skills.ts:angelGuardianWingsHandler',
+  },
+  exp2_bianca: {
+    roleId: 'exp2_bianca',
+    handlerId: 'exp:exp2_bianca:scrap-shield',
+    trigger: 'BEFORE_DAMAGE',
+    resolverSymbol: 'expansion-skills.ts:biancaScrapShieldHandler',
+  },
+  exp2_dalton: {
+    roleId: 'exp2_dalton',
+    handlerId: 'exp:exp2_dalton:twelfth-round',
+    trigger: 'AFTER_DAMAGE',
+    resolverSymbol: 'expansion-skills.ts:daltonTwelfthRoundHandler',
+  },
+};
+
+export const PHASE5C_VICTORY_BINDINGS: Readonly<
+  Partial<Record<string, ExpansionVictoryExecutableBinding>>
+> = {
+  exp1_ernest: {
+    roleId: 'exp1_ernest',
+    evaluatorId: 'victory-engine.ts:faction#hunters',
+    archetype: 'faction',
+  },
+  exp1_gwendolen: {
+    roleId: 'exp1_gwendolen',
+    evaluatorId: 'victory-engine.ts:faction#hunters',
+    archetype: 'faction',
+  },
+  exp2_freyja: {
+    roleId: 'exp2_freyja',
+    evaluatorId: 'victory-engine.ts:faction#hunters',
+    archetype: 'faction',
+  },
+  exp2_warlord: {
+    roleId: 'exp2_warlord',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp2_usurper: {
+    roleId: 'exp2_usurper',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp1_angel: {
+    roleId: 'exp1_angel',
+    evaluatorId: 'victory-engine.ts:conditional#angel',
+    archetype: 'conditional',
+  },
+  exp2_bianca: {
+    roleId: 'exp2_bianca',
+    evaluatorId: 'victory-engine.ts:neutral#bianca',
+    archetype: 'individual',
+  },
+  exp2_dalton: {
+    roleId: 'exp2_dalton',
+    evaluatorId: 'victory-engine.ts:conditional#dalton',
+    archetype: 'conditional',
+  },
+};
+
 export const ALL_EXPANSION_SKILL_BINDINGS: Readonly<
   Partial<Record<string, ExpansionSkillExecutableBinding>>
 > = {
@@ -571,6 +694,7 @@ export const ALL_EXPANSION_SKILL_BINDINGS: Readonly<
   ...PHASE3_SKILL_BINDINGS,
   ...PHASE4_SKILL_BINDINGS,
   ...PHASE5B_SKILL_BINDINGS,
+  ...PHASE5C_SKILL_BINDINGS,
 };
 
 export const ALL_EXPANSION_VICTORY_BINDINGS: Readonly<
@@ -580,6 +704,7 @@ export const ALL_EXPANSION_VICTORY_BINDINGS: Readonly<
   ...PHASE3_VICTORY_BINDINGS,
   ...PHASE4_VICTORY_BINDINGS,
   ...PHASE5B_VICTORY_BINDINGS,
+  ...PHASE5C_VICTORY_BINDINGS,
 };
 
 export interface TurnContinuationCallbacks {
@@ -713,12 +838,113 @@ function createExpandedHealHooks(): HealPipelineHooks {
     hasProcessedEvent: hasProcessedExpansionEvent,
     markEventProcessed: markExpansionEventProcessed,
     getReactionPolicy: getPlayerReactionPolicy,
+    onHiddenUsurperAutoRevealBlock(state, usurper, target, req, nowMs) {
+      const justRevealed = revealPlayerNow(state, usurper, 'voluntary', nowMs);
+      const exp = ensureExpansionState(state);
+      incRoleStat(exp.stats.activationsByRole, 'exp2_usurper', 1);
+      appendHighlight(
+        state,
+        `Lộ vai: ${usurper.displayName}`,
+        `Usurper (${FACTION_LABELS[usurper.faction]}) — Soán Đoạt Hồi Máu`,
+        nowMs,
+      );
+      appendPublicLog(
+        state,
+        'reveal',
+        `🎭🚫 ${usurper.displayName} lật vai Usurper — chặn đứng hồi máu (${req.sourceLabel ?? req.sourceKind}) của ${target.displayName} và bật hào quang cấm hồi máu!`,
+        nowMs,
+        usurper.playerId,
+      );
+      if (justRevealed) {
+        enqueueRoleRevealedTrigger(state, usurper.playerId, 'reaction', 0);
+      }
+    },
+    onHiddenUsurperAskPrompt(state, usurper, target, potentialHeal, req, nowMs) {
+      const exp = ensureExpansionState(state);
+      // Đặt bước HEAL tạm dừng lên đầu hàng đợi để hoàn tất sau quyết định của Usurper!
+      exp.pendingSteps.unshift({
+        kind: 'HEAL',
+        healEventId: req.healEventId,
+        sourceCardId: req.sourceCardId,
+        actorPlayerId: req.actorPlayerId,
+        targetPlayerId: req.targetPlayerId,
+        rawAmount: req.rawAmount,
+        sourceKind: req.sourceKind,
+        sourceLabel: req.sourceLabel,
+        roleStatId: req.roleStatId,
+        usurperChecked: true,
+        usurperBlocked: false,
+        postLogKind: req.postLogKind,
+        postLogPrefix: req.postLogPrefix,
+        postLogSuffix: req.postLogSuffix,
+        postLogActorId: req.postLogActorId,
+        zeroLogText: req.zeroLogText,
+        blockedLogText: req.blockedLogText,
+      });
+
+      const choiceId = nextExpansionEventId(state, 'choice-usurper');
+      const timeoutMs = getChoiceTimeoutMs(state, usurper);
+      const sourceText = req.sourceKind === 'white-card' ? 'Thẻ Trắng' : 'Kỹ năng';
+      state.pendingChoice = {
+        choiceId,
+        eventId: req.healEventId,
+        ownerPlayerId: usurper.playerId,
+        kind: 'usurper_reveal_block_heal',
+        isSecret: true,
+        title: 'Soán Đoạt Hồi Máu (Usurper)',
+        description: `${target.displayName} sắp hồi ${potentialHeal} HP từ ${sourceText} (${req.sourceLabel ?? req.sourceKind}). Bạn có muốn lật vai Usurper ngay lúc này để chặn hoàn toàn lần hồi máu này và bật hào quang cấm hồi máu liên tục không?`,
+        publicPromptLabel: '⏳ Đang kiểm tra phản ứng trước hồi máu...',
+        options: [
+          {
+            optionId: 'reveal_and_block',
+            label: `Lật vai Usurper & Chặn hồi ${potentialHeal} HP của ${target.displayName}`,
+            detail: 'Công khai vai Usurper (Shadow), hủy hoàn toàn lần hồi máu này và bật hào quang chặn Kỹ năng / Thẻ Trắng.',
+          },
+          {
+            optionId: 'decline',
+            label: 'Giữ kín danh tính (Cho phép hồi máu)',
+            detail: 'Tiếp tục ẩn vai và không chặn lần hồi máu này.',
+          },
+        ],
+        defaultOptionId: 'decline',
+        createdAtMs: nowMs,
+        deadlineMs: nowMs + timeoutMs,
+        data: {
+          kind: 'usurper_reveal_block_heal',
+          usurperPlayerId: usurper.playerId,
+          healEventId: req.healEventId,
+          targetPlayerId: target.playerId,
+          sourceKind: req.sourceKind,
+          potentialHeal,
+        },
+      };
+      return true;
+    },
     onRecordHealStat(state, roleId, actualHealed) {
       const exp = ensureExpansionState(state);
       incRoleStat(exp.stats.healByRole, roleId, actualHealed);
     },
     onRecordHealBlockedStat: incRoleHealBlockedStat,
   };
+}
+
+/** Kiểm tra hào quang Angel (Thiên Sứ Bảo Hộ) đang kích hoạt cho một Neutral đã lộ diện. */
+export function isProtectedByAngelAura(
+  state: AuthoritativeGameState,
+  target: AuthoritativePlayerState,
+): boolean {
+  if (!target.alive || !target.revealed || target.faction !== 'wanderer') {
+    return false;
+  }
+  const auras = state.expansionState?.angelAuras;
+  if (!auras) return false;
+  for (const [angelId, aura] of Object.entries(auras)) {
+    const angel = state.players[angelId];
+    if (angel && angel.alive && angel.revealed && aura.phase === 'active') {
+      return true;
+    }
+  }
+  return false;
 }
 
 function enqueueRoleRevealedTrigger(
@@ -1882,6 +2108,201 @@ const arleneAffectationHandler: SkillHandlerDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Phase 5C Executable Skill Handlers (8 Tier-3 House-Rule Characters)
+// ---------------------------------------------------------------------------
+
+const ernestApostasyHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_ernest:apostasy',
+  roleId: 'exp1_ernest',
+  trigger: 'ACTIVE_SKILL',
+  priority: 10,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (ctx.owner.skillUsedOnce) return false;
+    if (getRemainingHp(ctx.owner) < 3) return false;
+    if (
+      ctx.state.turnPhase !== 'ROLL_MOVE' &&
+      ctx.state.turnPhase !== 'LOCATION_ACTION' &&
+      ctx.state.turnPhase !== 'MAIN_ACTION'
+    ) {
+      return false;
+    }
+    return ctx.owner.hand.length === 0 && !hasGloriaQueuedCards(ctx.state, ctx.owner.playerId);
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.ernestApproved = true;
+    return { applied: true, note: 'ernest-apostasy-approved' };
+  },
+};
+
+const gwendolenShelterHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_gwendolen:shelter',
+  roleId: 'exp1_gwendolen',
+  trigger: 'AFTER_ATTACK',
+  priority: 20,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload || payload.phase !== 'gwendolen_shelter_check') return false;
+    if (payload.isRetaliatoryAttack === true) return false;
+    const attackerId = typeof ctx.event.actorPlayerId === 'string' ? ctx.event.actorPlayerId : '';
+    if (!attackerId || attackerId === ctx.owner.playerId) return false;
+    const attacker = ctx.state.players[attackerId];
+    if (!attacker || !attacker.alive) return false;
+    return canExpandedPlayerAttackTarget(ctx.state, ctx.owner, attacker);
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    const list = Array.isArray(payload.eligibleGwendolenIds)
+      ? (payload.eligibleGwendolenIds as string[])
+      : [];
+    if (!list.includes(ctx.owner.playerId)) list.push(ctx.owner.playerId);
+    payload.eligibleGwendolenIds = list;
+    return { applied: true, note: 'gwendolen-eligible' };
+  },
+};
+
+const freyjaRecklessAssaultHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_freyja:reckless-assault',
+  roleId: 'exp2_freyja',
+  trigger: 'AFTER_ATTACK',
+  priority: 25,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload || payload.phase !== 'freyja_extra_check') return false;
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (payload.isBonusAttack === true || payload.isRetaliatoryAttack === true) return false;
+    return ctx.owner.equipped.some((cid) => cid !== MASAMUNE_CARD_ID);
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.freyjaEligible = true;
+    return { applied: true, note: 'freyja-extra-eligible' };
+  },
+};
+
+const warlordWarPullHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_warlord:war-pull',
+  roleId: 'exp2_warlord',
+  trigger: 'ACTIVE_SKILL',
+  priority: 10,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (ctx.owner.skillUsedOnce) return false;
+    if (ctx.state.turnPhase !== 'ROLL_MOVE' || ctx.owner.consecutiveSameZoneRolls > 0) {
+      return false;
+    }
+    return Object.values(ctx.state.players).some(
+      (p) => p.alive && p.playerId !== ctx.owner.playerId,
+    );
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.warlordApproved = true;
+    return { applied: true, note: 'warlord-pull-approved' };
+  },
+};
+
+const usurperHealBlockHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_usurper:usurp-heal',
+  roleId: 'exp2_usurper',
+  trigger: 'ON_HEAL',
+  priority: 10,
+  requiresRevealed: false,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload) return false;
+    if (ctx.event.targetPlayerId === ctx.owner.playerId) return false;
+    return payload.sourceKind === 'skill' || payload.sourceKind === 'white-card';
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.usurperPresent = true;
+    return { applied: true, note: 'usurper-heal-guard' };
+  },
+};
+
+const angelGuardianWingsHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_angel:guardian-wings',
+  roleId: 'exp1_angel',
+  trigger: 'ACTIVE_SKILL',
+  priority: 10,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (ctx.owner.skillUsedOnce) return false;
+    if (
+      ctx.state.turnPhase !== 'ROLL_MOVE' &&
+      ctx.state.turnPhase !== 'LOCATION_ACTION' &&
+      ctx.state.turnPhase !== 'MAIN_ACTION'
+    ) {
+      return false;
+    }
+    return ctx.owner.hand.length === 0 && !hasGloriaQueuedCards(ctx.state, ctx.owner.playerId);
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.angelApproved = true;
+    return { applied: true, note: 'angel-aura-arm-approved' };
+  },
+};
+
+const biancaScrapShieldHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_bianca:scrap-shield',
+  roleId: 'exp2_bianca',
+  trigger: 'BEFORE_DAMAGE',
+  priority: 35,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload || payload.phase !== 'bianca_scrap_check') return false;
+    if (ctx.event.targetPlayerId !== ctx.owner.playerId) return false;
+    if (payload.isSingleTarget !== true || payload.isHpCost || payload.unpreventable) return false;
+    const dmg = typeof payload.damageAmount === 'number' ? payload.damageAmount : 0;
+    return dmg > 0 && ctx.owner.equipped.some((cid) => cid !== MASAMUNE_CARD_ID);
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.biancaEligible = true;
+    return { applied: true, note: 'bianca-scrap-eligible' };
+  },
+};
+
+const daltonTwelfthRoundHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_dalton:twelfth-round',
+  roleId: 'exp2_dalton',
+  trigger: 'AFTER_DAMAGE',
+  priority: 5,
+  requiresRevealed: false,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload || payload.phase !== 'dalton_threshold_check') return false;
+    if (ctx.event.targetPlayerId !== ctx.owner.playerId) return false;
+    const exp = ensureExpansionState(ctx.state);
+    if (exp.daltonActivatedByPlayer?.[ctx.owner.playerId]) return false;
+    const actualDealt = typeof payload.actualDealt === 'number' ? payload.actualDealt : 0;
+    return actualDealt >= 1 && getRemainingHp(ctx.owner) <= 12;
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.daltonShouldActivate = true;
+    return { applied: true, note: 'dalton-12hp-threshold' };
+  },
+};
+
 export function createExpansionSkillEngine(): SkillEngine {
   const engine = createSkillEngine();
   engine.registerHandler(g43FortressHandler);
@@ -1917,6 +2338,15 @@ export function createExpansionSkillEngine(): SkillEngine {
   engine.registerHandler(umibozuRevealAoeHandler);
   engine.registerHandler(urbanLegendHorrorHandler);
   engine.registerHandler(arleneAffectationHandler);
+  // Phase 5C 8 Tier-3 handlers
+  engine.registerHandler(ernestApostasyHandler);
+  engine.registerHandler(gwendolenShelterHandler);
+  engine.registerHandler(freyjaRecklessAssaultHandler);
+  engine.registerHandler(warlordWarPullHandler);
+  engine.registerHandler(usurperHealBlockHandler);
+  engine.registerHandler(angelGuardianWingsHandler);
+  engine.registerHandler(biancaScrapShieldHandler);
+  engine.registerHandler(daltonTwelfthRoundHandler);
   return engine;
 }
 
@@ -1966,6 +2396,11 @@ function enqueueAttackResolution(
     elysiaBoosted?: boolean;
     victorChecked?: boolean;
     victorBoostTargetId?: string | null;
+    isBonusAttack?: boolean;
+    preserveTurnPhase?: boolean;
+    unshiftToFront?: boolean;
+    skipFinishAction?: boolean;
+    chainDepth?: number;
   },
 ): EngineActionResult {
   const target = state.players[primaryTargetId];
@@ -2155,13 +2590,21 @@ function enqueueAttackResolution(
   }
 
   actor.attacksMade += 1;
-  actor.attacksThisTurn += 1;
+  if (!options?.isBonusAttack) {
+    actor.attacksThisTurn += 1;
+  }
   actor.lastAttackTargetId = target.playerId;
 
   const exp = ensureExpansionState(state);
   const elysiaBonus = options?.elysiaBoosted ? 2 : 0;
   const effectiveBaseRaw = effectiveRoll.rawDmg + elysiaBonus;
   const effectiveRollDesc = elysiaBonus > 0 ? `${rollDesc} +2 Elysia` : rollDesc;
+  const gwendolenVictims = targets.map((v) => ({
+    playerId: v.playerId,
+    location: v.location,
+    faction: v.faction,
+    preRevealed: v.revealed,
+  }));
 
   const stepsToPush: PendingResolutionStep[] = [];
   for (const victim of targets) {
@@ -2206,6 +2649,8 @@ function enqueueAttackResolution(
       sourceType: 'attack',
       attackerPlayerId: actor.playerId,
       isSingleTarget: !hasMachineGun,
+      isBonusAttack: Boolean(options?.isBonusAttack),
+      chainDepth: options?.chainDepth ?? 0,
       preAttackTargetHp: getRemainingHp(victim),
       preAttackTargetRevealed: victim.revealed,
       ...(targets.length === 1
@@ -2235,15 +2680,25 @@ function enqueueAttackResolution(
     rollDesc: singleTargetBoosted ? `${effectiveRollDesc} +2 Victor` : effectiveRollDesc,
     totalDealt: 0,
     counterAttackerIds: [],
+    isBonusAttack: Boolean(options?.isBonusAttack),
+    isRetaliatoryAttack: false,
+    gwendolenVictims,
+    chainDepth: options?.chainDepth ?? 0,
   });
 
-  stepsToPush.push({
-    kind: 'FINISH_ACTION',
-    actorPlayerId: actor.playerId,
-    autoEndTurnMode: 'if-not-charles-feast',
-  });
+  if (!options?.skipFinishAction) {
+    stepsToPush.push({
+      kind: 'FINISH_ACTION',
+      actorPlayerId: actor.playerId,
+      autoEndTurnMode: options?.preserveTurnPhase ? 'never' : 'if-not-charles-feast',
+    });
+  }
 
-  exp.pendingSteps.push(...stepsToPush);
+  if (options?.unshiftToFront) {
+    exp.pendingSteps.unshift(...stepsToPush);
+  } else {
+    exp.pendingSteps.push(...stepsToPush);
+  }
   drainPendingSteps(state, nowMs, callbacks);
   return { ok: true };
 }
@@ -4376,6 +4831,35 @@ export function triggerExpandedTurnStart(
   if (state.finished || !actor.alive || state.pendingChoice) return;
   const exp = ensureExpansionState(state);
 
+  // 0. Angel (Thiên Sứ Bảo Hộ — Phase 5C): chuyển trạng thái hào quang armed -> active -> expired đúng đầu lượt của Angel!
+  const angelAura = exp.angelAuras?.[actor.playerId];
+  if (angelAura && actor.roleId === 'exp1_angel') {
+    if (angelAura.phase === 'armed' && state.turnNumber > angelAura.armedOnTurnNumber) {
+      angelAura.phase = 'active';
+      angelAura.activatedOnTurnNumber = state.turnNumber;
+      appendPublicLog(
+        state,
+        'skill',
+        `👼✨ Angel (${actor.displayName}) — Thiên Sứ Bảo Hộ KÍCH HOẠT: mọi Kẻ Độc Hành đã lộ diện miễn nhiễm sát thương cho tới đầu lượt tiếp theo của Angel!`,
+        nowMs,
+        actor.playerId,
+      );
+    } else if (
+      angelAura.phase === 'active' &&
+      angelAura.activatedOnTurnNumber !== undefined &&
+      state.turnNumber > angelAura.activatedOnTurnNumber
+    ) {
+      angelAura.phase = 'expired';
+      appendPublicLog(
+        state,
+        'skill',
+        `👼 Angel (${actor.displayName}) — Hào quang Thiên Sứ Bảo Hộ đã hết hiệu lực.`,
+        nowMs,
+        actor.playerId,
+      );
+    }
+  }
+
   const payload: Record<string, unknown> = {
     turnNumber: state.turnNumber,
   };
@@ -4659,6 +5143,123 @@ function openEliseDistributeHealChoice(
   };
 }
 
+function executeWarlordPullAttack(
+  state: AuthoritativeGameState,
+  warlord: AuthoritativePlayerState,
+  target: AuthoritativePlayerState,
+  nowMs: number,
+  callbacks: TurnContinuationCallbacks,
+): EngineActionResult {
+  if (!warlord.alive || !warlord.revealed || warlord.skillUsedOnce) {
+    return { ok: false, error: 'Chiến Tranh (Warlord) đã dùng hoặc không thể kích hoạt lúc này.' };
+  }
+  if (!target.alive || target.playerId === warlord.playerId) {
+    return { ok: false, error: 'Mục tiêu kéo không hợp lệ.' };
+  }
+  const exp = ensureExpansionState(state);
+  // Khóa 1 lần/trận TRƯỚC khi kéo & tấn công (chống nhân bản qua reconnect/replay!)
+  warlord.skillUsedOnce = true;
+  incRoleStat(exp.stats.activationsByRole, 'exp2_warlord', 1);
+
+  const locDef = getLocationDefinition(warlord.location);
+  target.location = warlord.location;
+  appendPublicLog(
+    state,
+    'skill',
+    `⛓️⚔️ Warlord (${warlord.displayName}) — Chiến Tranh: kéo ${target.displayName} tới Ô ${locDef.diceLabel} (${locDef.name}, không kích hoạt hiệu ứng ô) và lập tức tung đòn đánh thưởng!`,
+    nowMs,
+    warlord.playerId,
+  );
+
+  if (isUdiProtectedFromAttack(state, target)) {
+    incRoleStat(exp.stats.activationsByRole, 'exp1_udi', 1);
+    appendPublicLog(
+      state,
+      'skill',
+      `🫥 Ẩn Thân (Udi): ${target.displayName} có ≥ 2 người khác cùng Cụm tại ${locDef.name} nên né được đòn đánh thưởng của Warlord! Warlord tiếp tục pha Di chuyển.`,
+      nowMs,
+      target.playerId,
+    );
+    callbacks.finalizeIfFinished(state, nowMs);
+    return { ok: true };
+  }
+
+  if (isVisionsMarkedTarget(state, warlord.playerId, target.playerId)) {
+    callbacks.finalizeIfFinished(state, nowMs);
+    return { ok: true };
+  }
+
+  const hasMasamune = warlord.equipped.includes('ev-01');
+  const d6 = hasMasamune ? 0 : rollD6(state);
+  const d4 = rollD4(state);
+  const baseDmg = hasMasamune ? d4 : Math.abs(d6 - d4);
+  const rawDmg = computeRawAttackDamage(warlord, baseDmg);
+  const roll: AttackRollSample = { d6, d4, baseDmg, rawDmg, hasMasamune };
+
+  return enqueueAttackResolution(
+    state,
+    warlord,
+    target.playerId,
+    roll,
+    false, // Chỉ tấn công đúng mục tiêu vừa kéo (đơn mục tiêu, bonus attack, giữ nguyên pha ROLL_MOVE!)
+    nowMs,
+    callbacks,
+    {
+      isBonusAttack: true,
+      preserveTurnPhase: true,
+    },
+  );
+}
+
+function openWarlordPullChoice(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  candidates: readonly AuthoritativePlayerState[],
+  nowMs: number,
+): void {
+  const choiceId = nextExpansionEventId(state, 'choice-warlord');
+  const eventId = nextExpansionEventId(state, 'ev-warlord');
+  const timeoutMs = getChoiceTimeoutMs(state, actor);
+  const targetMap: Record<string, string> = {};
+  const locDef = getLocationDefinition(actor.location);
+  const options: BoardGameChoiceOptionView[] = candidates.map((p, idx) => {
+    const optId = `w_${idx}`;
+    targetMap[optId] = p.playerId;
+    const pLoc = getLocationDefinition(p.location);
+    return {
+      optionId: optId,
+      label: `Kéo & Tấn công ${p.displayName} (từ Ô ${pLoc.diceLabel} → Ô ${locDef.diceLabel})`,
+      detail: `Kéo ${p.displayName} tới ${locDef.name}, tung 1 đòn đánh thưởng ngay rồi tiếp tục lượt bình thường (1 lần/trận).`,
+      targetPlayerId: p.playerId,
+    };
+  });
+  options.push({
+    optionId: 'skip',
+    label: 'Hủy / Để dành (Giữ nguyên 1 lần/trận)',
+    detail: 'Không kích hoạt Chiến Tranh và tiếp tục pha Di chuyển.',
+  });
+
+  state.pendingChoice = {
+    choiceId,
+    eventId,
+    ownerPlayerId: actor.playerId,
+    kind: 'warlord_pull_attack',
+    isSecret: false,
+    title: 'Chiến Tranh (Warlord · 1 lần/trận)',
+    description: `Chọn 1 người chơi khác để kéo tới Ô ${locDef.diceLabel} (${locDef.name}) và tung ngay 1 đòn đánh thưởng trước khi bạn tung xúc xắc di chuyển (hủy/hết giờ không mất lượt dùng).`,
+    publicPromptLabel: `⛓️ Warlord (${actor.displayName}) đang chọn mục tiêu kéo Chiến Tranh...`,
+    options,
+    defaultOptionId: 'skip',
+    createdAtMs: nowMs,
+    deadlineMs: nowMs + timeoutMs,
+    data: {
+      kind: 'warlord_pull_attack',
+      warlordPlayerId: actor.playerId,
+      targetMap,
+    },
+  };
+}
+
 export function applyExpandedUseSkill(
   state: AuthoritativeGameState,
   actor: AuthoritativePlayerState,
@@ -4678,7 +5279,10 @@ export function applyExpandedUseSkill(
     actor.roleId !== 'exp1_wrath' &&
     actor.roleId !== 'exp2_visions' &&
     actor.roleId !== 'exp2_bryon' &&
-    actor.roleId !== 'exp2_elise'
+    actor.roleId !== 'exp2_elise' &&
+    actor.roleId !== 'exp1_ernest' &&
+    actor.roleId !== 'exp2_warlord' &&
+    actor.roleId !== 'exp1_angel'
   ) {
     return null;
   }
@@ -4930,6 +5534,185 @@ export function applyExpandedUseSkill(
       return { ok: false, error: 'Không thể kích hoạt Âm Hưởng Mềm Mại vào lúc này.' };
     }
     openEliseDistributeHealChoice(state, actor, nowMs);
+    return { ok: true };
+  }
+
+  // Ernest (Từ Đạo — Phase 5C house rule): trả 2 HP (cần còn >= 3 HP) để ép lộ toàn bộ Shadow sống & hủy sạch trang bị của họ!
+  if (actor.roleId === 'exp1_ernest') {
+    if (
+      state.turnPhase !== 'ROLL_MOVE' &&
+      state.turnPhase !== 'LOCATION_ACTION' &&
+      state.turnPhase !== 'MAIN_ACTION'
+    ) {
+      return { ok: false, error: 'Từ Đạo chỉ kích hoạt được trong lượt của bạn.' };
+    }
+    if (actor.hand.length > 0 || hasGloriaQueuedCards(state, actor.playerId)) {
+      return {
+        ok: false,
+        error: 'Hãy giải quyết hết thẻ bài đang cầm trên tay trước khi kích hoạt Từ Đạo.',
+      };
+    }
+    if (getRemainingHp(actor) < 3) {
+      return {
+        ok: false,
+        error: `Từ Đạo (Ernest): Cần còn ít nhất 3 HP để hy sinh 2 HP an toàn (hiện ${getRemainingHp(actor)}/${actor.maxHp} HP).`,
+      };
+    }
+    const ernestPayload: Record<string, unknown> = {};
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'ACTIVE_SKILL',
+      actorPlayerId: actor.playerId,
+      nowMs,
+      payload: ernestPayload,
+    });
+    if (ernestPayload.ernestApproved !== true) {
+      return { ok: false, error: 'Không thể kích hoạt Từ Đạo vào lúc này.' };
+    }
+
+    const paid = applyHpCost(state, actor, 2, 'Từ Đạo — Ernest', nowMs);
+    if (!paid) {
+      return { ok: false, error: 'Không đủ HP để hy sinh 2 máu cho Từ Đạo.' };
+    }
+    actor.skillUsedOnce = true;
+    const expErnest = ensureExpansionState(state);
+    incRoleStat(expErnest.stats.activationsByRole, 'exp1_ernest', 1);
+
+    const livingShadows = state.turnOrder
+      .map((id) => state.players[id])
+      .filter(
+        (p): p is AuthoritativePlayerState =>
+          Boolean(p && p.alive && p.faction === 'mist-order'),
+      );
+
+    let revealedCount = 0;
+    let destroyedGearCount = 0;
+    const revealSteps: PendingResolutionStep[] = [];
+    for (const shadow of livingShadows) {
+      while (shadow.equipped.length > 0) {
+        const eqId = shadow.equipped.shift();
+        if (eqId) {
+          discardCardId(state, eqId);
+          destroyedGearCount += 1;
+        }
+      }
+      if (!shadow.revealed) {
+        revealPlayerNow(state, shadow, 'voluntary', nowMs);
+        revealedCount += 1;
+        const sRole = getRoleDesign(shadow.roleId);
+        appendHighlight(
+          state,
+          `Ép lộ diện: ${shadow.displayName}`,
+          `${sRole.name} (${FACTION_LABELS[shadow.faction]}) bị Ernest vạch trần`,
+          nowMs,
+        );
+        revealSteps.push({
+          kind: 'ROLE_REVEALED_TRIGGERS',
+          revealEventId: nextExpansionEventId(state, 'rev-ernest'),
+          revealedPlayerId: shadow.playerId,
+          revealCause: 'forced-card',
+          umibozuChecked: false,
+          chainDepth: 1,
+        });
+      }
+    }
+
+    appendPublicLog(
+      state,
+      'skill',
+      `✝️🔥 Ernest (${actor.displayName}) — Từ Đạo: hy sinh 2 HP, ép lộ diện ${revealedCount} Shadow (tổng ${livingShadows.length} Shadow sống) & hủy ${destroyedGearCount} trang bị của phe Bóng Đêm!`,
+      nowMs,
+      actor.playerId,
+    );
+
+    if (revealSteps.length > 0) {
+      expErnest.pendingSteps.push(...revealSteps, {
+        kind: 'FINISH_ACTION',
+        actorPlayerId: actor.playerId,
+        autoEndTurnMode: 'never',
+      });
+      drainPendingSteps(state, nowMs, callbacks);
+    } else {
+      callbacks.finalizeIfFinished(state, nowMs);
+    }
+    return { ok: true };
+  }
+
+  // Warlord (Chiến Tranh — Phase 5C house rule): ở pha ROLL_MOVE trước khi tung xúc xắc, kéo 1 người tới ô mình & tấn công thưởng rồi chơi tiếp!
+  if (actor.roleId === 'exp2_warlord') {
+    if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
+      return {
+        ok: false,
+        error: 'Chiến Tranh (Warlord) chỉ kích hoạt được ở Pha 1 (ROLL_MOVE) trước khi tung xúc xắc di chuyển.',
+      };
+    }
+    const warlordPayload: Record<string, unknown> = {};
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'ACTIVE_SKILL',
+      actorPlayerId: actor.playerId,
+      nowMs,
+      payload: warlordPayload,
+    });
+    if (warlordPayload.warlordApproved !== true) {
+      return { ok: false, error: 'Không thể kích hoạt Chiến Tranh vào lúc này.' };
+    }
+    const candidates = state.turnOrder
+      .map((id) => state.players[id])
+      .filter((p): p is AuthoritativePlayerState => Boolean(p && p.alive && p.playerId !== actor.playerId));
+    if (candidates.length === 0) {
+      return { ok: false, error: 'Không còn người chơi khác để kéo.' };
+    }
+    if (targetPlayerId) {
+      const explicitTarget = candidates.find((p) => p.playerId === targetPlayerId);
+      if (!explicitTarget) {
+        return { ok: false, error: 'Mục tiêu kéo Chiến Tranh không hợp lệ.' };
+      }
+      return executeWarlordPullAttack(state, actor, explicitTarget, nowMs, callbacks);
+    }
+    openWarlordPullChoice(state, actor, candidates, nowMs);
+    return { ok: true };
+  }
+
+  // Angel (Thiên Sứ Bảo Hộ — Phase 5C house rule): nạp hào quang armed -> kích hoạt ở đầu lượt kế tiếp của Angel cho đến đầu lượt kế nữa!
+  if (actor.roleId === 'exp1_angel') {
+    if (
+      state.turnPhase !== 'ROLL_MOVE' &&
+      state.turnPhase !== 'LOCATION_ACTION' &&
+      state.turnPhase !== 'MAIN_ACTION'
+    ) {
+      return { ok: false, error: 'Thiên Sứ Bảo Hộ chỉ kích hoạt được trong lượt của bạn.' };
+    }
+    if (actor.hand.length > 0 || hasGloriaQueuedCards(state, actor.playerId)) {
+      return {
+        ok: false,
+        error: 'Hãy giải quyết hết thẻ bài đang cầm trên tay trước khi kích hoạt Thiên Sứ Bảo Hộ.',
+      };
+    }
+    const angelPayload: Record<string, unknown> = {};
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'ACTIVE_SKILL',
+      actorPlayerId: actor.playerId,
+      nowMs,
+      payload: angelPayload,
+    });
+    if (angelPayload.angelApproved !== true) {
+      return { ok: false, error: 'Không thể kích hoạt Thiên Sứ Bảo Hộ vào lúc này.' };
+    }
+    actor.skillUsedOnce = true;
+    const expAngel = ensureExpansionState(state);
+    if (!expAngel.angelAuras) expAngel.angelAuras = {};
+    expAngel.angelAuras[actor.playerId] = {
+      phase: 'armed',
+      armedOnTurnNumber: state.turnNumber,
+    };
+    incRoleStat(expAngel.stats.activationsByRole, 'exp1_angel', 1);
+    appendPublicLog(
+      state,
+      'skill',
+      `👼 Angel (${actor.displayName}) đã nạp Thiên Sứ Bảo Hộ! Từ đầu lượt tiếp theo của Angel, mọi Kẻ Độc Hành đã lộ diện sẽ miễn nhiễm sát thương.`,
+      nowMs,
+      actor.playerId,
+    );
+    callbacks.finalizeIfFinished(state, nowMs);
     return { ok: true };
   }
 
@@ -5228,14 +6011,31 @@ function executeDamageStep(
     }
   }
 
-  if (step.undyingChecked) {
+  if (step.biancaChecked) {
+    if (step.biancaPrevented) {
+      dmg = 0;
+    } else {
+      dmg = typeof step.postMitigationDmg === 'number' ? Math.max(0, step.postMitigationDmg) : dmg;
+    }
+  } else if (step.undyingChecked) {
     // Tiếp tục sau khi Undying đã đưa ra quyết định bí mật (tránh chạy lặp Holy Robe / G43)
     dmg = typeof step.preUndyingDmg === 'number' ? Math.max(0, step.preUndyingDmg) : dmg;
     if (step.undyingReduced && dmg >= 2) {
       dmg = Math.max(0, dmg - 1);
     }
   } else if (dmg > 0 && !step.isHpCost && !step.unpreventable) {
-    if (step.sourceType === 'attack' && target.guardianShieldActive) {
+    if (isProtectedByAngelAura(state, target)) {
+      const expAngel = ensureExpansionState(state);
+      incRoleStat(expAngel.stats.damagePreventedByRole, 'exp1_angel', dmg);
+      appendPublicLog(
+        state,
+        'skill',
+        `👼✨ Thiên Sứ Bảo Hộ (Angel) che chở ${target.displayName} (Kẻ Độc Hành đã lộ diện) — miễn nhiễm hoàn toàn ${dmg} sát thương!`,
+        nowMs,
+        target.playerId,
+      );
+      dmg = 0;
+    } else if (step.sourceType === 'attack' && target.guardianShieldActive) {
       appendPublicLog(
         state,
         'skill',
@@ -5381,12 +6181,152 @@ function executeDamageStep(
     }
   }
 
+  // Bianca (Mọi Thứ Phế Liệu — Phase 5C house rule):
+  // Đã lộ diện + sắp nhận dmg > 0 từ nguồn ĐƠN MỤC TIÊU (`isSingleTarget === true`, loại trừ AoE kể cả khi 1 nạn nhân!)
+  // + có ít nhất 1 trang bị hợp lệ (khác Masamune `ev-01`) -> mở lựa chọn bỏ 1 trang bị vô hiệu hóa sát thương!
+  if (
+    !step.biancaChecked &&
+    dmg > 0 &&
+    !step.isHpCost &&
+    !step.unpreventable &&
+    step.isSingleTarget === true &&
+    target.alive &&
+    target.revealed &&
+    target.roleId === 'exp2_bianca'
+  ) {
+    const biancaPayload: Record<string, unknown> = {
+      phase: 'bianca_scrap_check',
+      damageAmount: dmg,
+      isSingleTarget: true,
+      isHpCost: Boolean(step.isHpCost),
+      unpreventable: Boolean(step.unpreventable),
+    };
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'BEFORE_DAMAGE',
+      actorPlayerId: attacker?.playerId ?? target.playerId,
+      targetPlayerId: target.playerId,
+      nowMs,
+      payload: biancaPayload,
+    });
+    const discardable = target.equipped.filter((cid) => cid !== MASAMUNE_CARD_ID);
+    const policy = getPlayerReactionPolicy(state, target.playerId);
+    // CAP-05 guard: Bianca là lựa chọn hy sinh trang bị -> KHÔNG bao giờ tự kích hoạt mù với AUTO_ACTIVATE_WHEN_ELIGIBLE!
+    if (biancaPayload.biancaEligible === true && discardable.length > 0 && policy !== 'AUTO_DECLINE') {
+      const expBianca = ensureExpansionState(state);
+      expBianca.pendingSteps.unshift({
+        ...step,
+        biancaChecked: true,
+        biancaPrevented: false,
+        postMitigationDmg: dmg,
+        undyingChecked: true,
+      });
+
+      const cardMap: Record<string, string> = {};
+      const options: BoardGameChoiceOptionView[] = [];
+      const seenCardIds = new Set<string>();
+      let seq = 0;
+      for (const cid of discardable) {
+        if (seenCardIds.has(cid)) continue;
+        seenCardIds.add(cid);
+        const card = getCardById(cid);
+        const optId = `b_${seq++}`;
+        cardMap[optId] = cid;
+        options.push({
+          optionId: optId,
+          label: `Bỏ "${card?.title ?? cid}" → Chặn toàn bộ ${dmg} ST`,
+          detail: `Hủy "${card?.title ?? cid}" vào chồng bỏ để vô hiệu hóa nguồn sát thương đơn mục tiêu (${dmg} → 0 ST).`,
+          ...(card ? { card: toCardPublicMeta(card) } : {}),
+        });
+      }
+      options.push({
+        optionId: 'decline',
+        label: `Giữ trang bị (Nhận ${dmg} ST)`,
+        detail: `Không bỏ trang bị và chịu ${dmg} sát thương (còn ${Math.max(0, target.hp - dmg)}/${target.maxHp} HP).`,
+      });
+
+      const choiceId = nextExpansionEventId(state, 'choice-bianca');
+      const timeoutMs = getChoiceTimeoutMs(state, target);
+      state.pendingChoice = {
+        choiceId,
+        eventId: step.damageEventId,
+        ownerPlayerId: target.playerId,
+        kind: 'bianca_discard_prevent',
+        isSecret: false,
+        title: 'Mọi Thứ Phế Liệu (Bianca)',
+        description: `Bạn sắp chịu ${dmg} sát thương từ một nguồn đơn mục tiêu. Bạn có thể bỏ 1 trang bị (trừ Masamune) để vô hiệu hóa hoàn toàn đòn này (hết giờ tự từ chối).`,
+        publicPromptLabel: `🛡️ Bianca (${target.displayName}) đang cân nhắc bỏ 1 trang bị chặn ${dmg} ST...`,
+        options,
+        defaultOptionId: 'decline',
+        createdAtMs: nowMs,
+        deadlineMs: nowMs + timeoutMs,
+        data: {
+          kind: 'bianca_discard_prevent',
+          biancaPlayerId: target.playerId,
+          damageEventId: step.damageEventId,
+          incomingDmg: dmg,
+          sourceType: step.sourceType,
+          cardMap,
+        },
+      };
+      return false;
+    }
+  }
+
   const actual = dmg > 0 ? Math.min(target.hp, dmg) : 0;
   if (actual > 0) {
     target.woundsTaken += actual;
     target.hp = Math.max(0, target.maxHp - target.woundsTaken);
   }
   markExpansionEventProcessed(state, step.damageEventId);
+
+  // Dalton (Vòng Đấu Thứ 12 — Phase 5C house rule):
+  // Ngay ở lần mất HP thực sự (`actual >= 1`) đưa remaining HP xuống <= 12: kích hoạt Vòng Đấu Thứ 12,
+  // bắt buộc lộ diện & khóa mọi hành động tự hồi máu về sau! (Sát thương bị chặn về 0 KHÔNG kích hoạt.)
+  if (actual >= 1 && target.alive && target.hp > 0 && target.roleId === 'exp2_dalton') {
+    const expDalton = ensureExpansionState(state);
+    if (!expDalton.daltonActivatedByPlayer?.[target.playerId] && getRemainingHp(target) <= 12) {
+      const daltonPayload: Record<string, unknown> = {
+        phase: 'dalton_threshold_check',
+        actualDealt: actual,
+      };
+      EXPANSION_SKILL_ENGINE.dispatch(state, {
+        trigger: 'AFTER_DAMAGE',
+        actorPlayerId: attacker?.playerId ?? target.playerId,
+        targetPlayerId: target.playerId,
+        nowMs,
+        payload: daltonPayload,
+      });
+      if (daltonPayload.daltonShouldActivate === true) {
+        if (!expDalton.daltonActivatedByPlayer) expDalton.daltonActivatedByPlayer = {};
+        expDalton.daltonActivatedByPlayer[target.playerId] = {
+          activatedOnTurnNumber: state.turnNumber,
+          damageEventId: step.damageEventId,
+        };
+        incRoleStat(expDalton.stats.activationsByRole, 'exp2_dalton', 1);
+        const justRevealed = !target.revealed
+          ? revealPlayerNow(state, target, 'voluntary', nowMs)
+          : false;
+        appendPublicLog(
+          state,
+          justRevealed ? 'reveal' : 'skill',
+          justRevealed
+            ? `🥊🔔 Vòng Đấu Thứ 12! ${target.displayName} chạm ngưỡng ${getRemainingHp(target)} HP (≤ 12) — BẮT BUỘC lộ diện Dalton & không thể tự hồi máu nữa!`
+            : `🥊🔔 Vòng Đấu Thứ 12! Dalton (${target.displayName}) chạm ngưỡng ${getRemainingHp(target)} HP (≤ 12) — từ giờ không thể tự hồi máu nữa!`,
+          nowMs,
+          target.playerId,
+        );
+        if (justRevealed) {
+          appendHighlight(
+            state,
+            `Lộ vai bắt buộc: ${target.displayName}`,
+            `Dalton (Kẻ Độc Hành) — Vòng Đấu Thứ 12`,
+            nowMs,
+          );
+          enqueueRoleRevealedTrigger(state, target.playerId, 'reaction', step.chainDepth ?? 0);
+        }
+      }
+    }
+  }
 
   // Ghi log đơn mục tiêu hoặc log tùy chỉnh sau khi damage thực tế đã commit
   if (step.attackSingleTargetLog && attacker) {
@@ -5583,6 +6523,25 @@ function executeDamageStep(
       if (!exp.arleneHunterKillTriggeredIds.includes(target.playerId)) {
         exp.arleneHunterKillTriggeredIds.push(target.playerId);
       }
+    }
+
+    // Dalton (Phase 5C house rule): thắng cá nhân tức thì nếu tự tay hạ gục người khác SAU KHI đã kích hoạt Vòng Đấu Thứ 12!
+    if (
+      attacker &&
+      attacker.alive &&
+      attacker.playerId !== target.playerId &&
+      attacker.roleId === 'exp2_dalton' &&
+      Boolean(exp.daltonActivatedByPlayer?.[attacker.playerId])
+    ) {
+      if (!exp.daltonKillWinTriggeredIds) exp.daltonKillWinTriggeredIds = [];
+      if (!exp.daltonKillWinTriggeredIds.includes(attacker.playerId)) {
+        exp.daltonKillWinTriggeredIds.push(attacker.playerId);
+      }
+    }
+
+    // Nếu Angel bị loại, hào quang Thiên Sứ Bảo Hộ chấm dứt ngay lập tức!
+    if (target.roleId === 'exp1_angel' && exp.angelAuras?.[target.playerId]) {
+      exp.angelAuras[target.playerId].phase = 'expired';
     }
 
     // Chiến lợi phẩm khi hạ gục
@@ -6161,10 +7120,132 @@ export function drainPendingSteps(
         break;
       }
 
-      case 'GWENDOLEN_COUNTER':
+      case 'GWENDOLEN_COUNTER': {
+        const gwendolen = state.players[step.gwendolenPlayerId];
+        const origAttacker = state.players[step.attackerPlayerId];
+        if (
+          !gwendolen ||
+          !gwendolen.alive ||
+          !gwendolen.revealed ||
+          !origAttacker ||
+          !origAttacker.alive ||
+          (step.chainDepth ?? 0) >= MAX_REACTION_CHAIN_DEPTH ||
+          !canExpandedPlayerAttackTarget(state, gwendolen, origAttacker)
+        ) {
+          break;
+        }
+        const gwenPolicy = getPlayerReactionPolicy(state, gwendolen.playerId);
+        if (gwenPolicy === 'AUTO_DECLINE') {
+          break;
+        }
+        const victimNames = step.protectedVictimIds
+          .map((id) => state.players[id]?.displayName ?? id)
+          .join(', ');
+        const choiceId = nextExpansionEventId(state, 'choice-gwendolen');
+        const timeoutMs = getChoiceTimeoutMs(state, gwendolen);
+        state.pendingChoice = {
+          choiceId,
+          eventId: step.counterEventId,
+          ownerPlayerId: gwendolen.playerId,
+          kind: 'gwendolen_counter_attack',
+          isSecret: false,
+          title: 'Sự Che Chở (Gwendolen)',
+          description: `${origAttacker.displayName} vừa tấn công ${victimNames} (Hunter/Neutral đã lộ diện trong Cụm của bạn). Bạn có muốn tung đòn phản công vào ${origAttacker.displayName} không? (Hết giờ tự bỏ qua).`,
+          publicPromptLabel: `🛡️⚔️ Gwendolen (${gwendolen.displayName}) đang cân nhắc phản công bảo vệ ${victimNames}...`,
+          options: [
+            {
+              optionId: 'counter',
+              label: `Phản công ${origAttacker.displayName} ngay`,
+              detail: `Tung đòn tấn công trả đũa (${gwendolen.equipped.includes('ev-01') ? '1d4' : '|1d6 - 1d4|'}) lên ${origAttacker.displayName} (không gây vòng lặp).`,
+              targetPlayerId: origAttacker.playerId,
+            },
+            {
+              optionId: 'skip',
+              label: 'Bỏ qua phản công',
+              detail: 'Không phản công trong sự kiện này.',
+            },
+          ],
+          defaultOptionId: 'skip',
+          createdAtMs: nowMs,
+          deadlineMs: nowMs + timeoutMs,
+          data: {
+            kind: 'gwendolen_counter_attack',
+            gwendolenPlayerId: gwendolen.playerId,
+            attackerPlayerId: origAttacker.playerId,
+            protectedVictimIds: [...step.protectedVictimIds],
+            counterEventId: step.counterEventId,
+            chainDepth: step.chainDepth ?? 1,
+          },
+        };
+        return;
+      }
+
       case 'FREYJA_EXTRA_ATTACK_CHECK': {
-        // CAP-06 Phase 5A foundation stubs — handlers wired in Phase 5C.
-        break;
+        const freyja = state.players[step.freyjaPlayerId];
+        if (
+          !freyja ||
+          !freyja.alive ||
+          !freyja.revealed ||
+          step.usedExtraAttacksCount >= 8 ||
+          (step.chainDepth ?? 0) >= MAX_REACTION_CHAIN_DEPTH
+        ) {
+          break;
+        }
+        const discardable = freyja.equipped.filter((cid) => cid !== MASAMUNE_CARD_ID);
+        if (discardable.length === 0) break;
+        const targets = listExpandedReachableAttackTargets(state, freyja);
+        if (targets.length === 0) break;
+
+        const attackMap: Record<string, { discardCardId: string; targetPlayerId: string }> = {};
+        const options: BoardGameChoiceOptionView[] = [];
+        const seenCards = new Set<string>();
+        let seq = 0;
+        for (const cid of discardable) {
+          if (seenCards.has(cid)) continue;
+          seenCards.add(cid);
+          const card = getCardById(cid);
+          for (const tgt of targets) {
+            const optId = `f_${seq++}`;
+            attackMap[optId] = { discardCardId: cid, targetPlayerId: tgt.playerId };
+            options.push({
+              optionId: optId,
+              label: `Bỏ "${card?.title ?? cid}" → Đánh thêm ${tgt.displayName}`,
+              detail: `Hủy "${card?.title ?? cid}" vào chồng bỏ để thực hiện đòn tấn công thưởng #${step.usedExtraAttacksCount + 1} lên ${tgt.displayName}.`,
+              ...(card ? { card: toCardPublicMeta(card) } : {}),
+              targetPlayerId: tgt.playerId,
+            });
+          }
+        }
+        options.push({
+          optionId: 'done',
+          label: 'Dừng lại (Giữ nguyên trang bị còn lại)',
+          detail: 'Không bỏ thêm trang bị và kết thúc chuỗi tấn công.',
+        });
+
+        const choiceId = nextExpansionEventId(state, 'choice-freyja');
+        const timeoutMs = getChoiceTimeoutMs(state, freyja);
+        state.pendingChoice = {
+          choiceId,
+          eventId: nextExpansionEventId(state, 'ev-freyja'),
+          ownerPlayerId: freyja.playerId,
+          kind: 'freyja_extra_attack',
+          isSecret: false,
+          title: 'Tấn Công Liều Lĩnh (Freyja)',
+          description: `Bạn có thể bỏ 1 trang bị hợp lệ (trừ Masamune) để tung thêm 1 đòn tấn công thưởng (đã dùng ${step.usedExtraAttacksCount} đòn thưởng trong chuỗi này).`,
+          publicPromptLabel: `⚔️🔥 Freyja (${freyja.displayName}) đang cân nhắc bỏ 1 trang bị để tấn công thêm...`,
+          options,
+          defaultOptionId: 'done',
+          createdAtMs: nowMs,
+          deadlineMs: nowMs + timeoutMs,
+          data: {
+            kind: 'freyja_extra_attack',
+            freyjaPlayerId: freyja.playerId,
+            usedExtraAttacksCount: step.usedExtraAttacksCount,
+            attackMap,
+            chainDepth: step.chainDepth ?? 1,
+          },
+        };
+        return;
       }
 
       case 'AFTER_DAMAGE_TRIGGERS': {
@@ -6236,6 +7317,71 @@ export function drainPendingSteps(
               kind: 'COUNTER_ATTACK',
               defenderPlayerId: defId,
               attackerPlayerId: actor.playerId,
+            });
+          }
+        }
+
+        // Gwendolen (Sự Che Chở — Phase 5C): phản công nếu 1 Hunter/Neutral ĐÃ LỘ DIỆN cùng Cụm bị tấn công gốc!
+        if (!step.isRetaliatoryAttack && Array.isArray(step.gwendolenVictims) && step.gwendolenVictims.length > 0 && actor.alive) {
+          const gwenPayload: Record<string, unknown> = {
+            phase: 'gwendolen_shelter_check',
+            isRetaliatoryAttack: false,
+          };
+          EXPANSION_SKILL_ENGINE.dispatch(state, {
+            trigger: 'AFTER_ATTACK',
+            actorPlayerId: actor.playerId,
+            targetPlayerId: step.primaryTargetId,
+            nowMs,
+            payload: gwenPayload,
+          });
+          const eligibleGwenIds = Array.isArray(gwenPayload.eligibleGwendolenIds)
+            ? (gwenPayload.eligibleGwendolenIds as string[])
+            : [];
+          for (const gwenId of eligibleGwenIds) {
+            const gwen = state.players[gwenId];
+            if (!gwen || !gwen.alive || !gwen.revealed || gwen.playerId === actor.playerId) continue;
+            const protectedIds = step.gwendolenVictims
+              .filter(
+                (v) =>
+                  v.playerId !== gwen.playerId &&
+                  v.preRevealed === true &&
+                  (v.faction === 'lantern-guard' || v.faction === 'wanderer') &&
+                  areInSameCluster(gwen.location, v.location, state.clusterPairs ?? DEFAULT_CLUSTER_PAIRS),
+              )
+              .map((v) => v.playerId);
+            if (protectedIds.length > 0) {
+              postSubSteps.push({
+                kind: 'GWENDOLEN_COUNTER',
+                counterEventId: nextExpansionEventId(state, 'gwen-cnt'),
+                gwendolenPlayerId: gwen.playerId,
+                attackerPlayerId: actor.playerId,
+                protectedVictimIds: protectedIds,
+                chainDepth: (step.chainDepth ?? 0) + 1,
+              });
+            }
+          }
+        }
+
+        // Freyja (Tấn Công Liều Lĩnh — Phase 5C): sau đòn đánh gốc (không phải đòn thưởng/phản công), cho phép bỏ trang bị để đánh thêm!
+        if (!step.isBonusAttack && !step.isRetaliatoryAttack && actor.alive && actor.revealed && actor.roleId === 'exp2_freyja') {
+          const freyjaPayload: Record<string, unknown> = {
+            phase: 'freyja_extra_check',
+            isBonusAttack: false,
+            isRetaliatoryAttack: false,
+          };
+          EXPANSION_SKILL_ENGINE.dispatch(state, {
+            trigger: 'AFTER_ATTACK',
+            actorPlayerId: actor.playerId,
+            targetPlayerId: step.primaryTargetId,
+            nowMs,
+            payload: freyjaPayload,
+          });
+          if (freyjaPayload.freyjaEligible === true) {
+            postSubSteps.push({
+              kind: 'FREYJA_EXTRA_ATTACK_CHECK',
+              freyjaPlayerId: actor.playerId,
+              usedExtraAttacksCount: 0,
+              chainDepth: (step.chainDepth ?? 0) + 1,
             });
           }
         }
@@ -7307,6 +8453,248 @@ export function resolvePendingChoice(
         }
       }
       // Khi decline hoặc timeout: KHÔNG phát log công khai nhắc tên Urban Legend (zero secret leak!)
+      drainPendingSteps(state, nowMs, callbacks);
+      return { ok: true };
+    }
+
+    case 'gwendolen_counter_attack': {
+      const gwen = state.players[data.gwendolenPlayerId];
+      const origAttacker = state.players[data.attackerPlayerId];
+      if (
+        optionId !== 'counter' ||
+        options?.isTimeoutFallback ||
+        !gwen ||
+        !gwen.alive ||
+        !origAttacker ||
+        !origAttacker.alive ||
+        !canExpandedPlayerAttackTarget(state, gwen, origAttacker)
+      ) {
+        if (gwen && options?.isTimeoutFallback) {
+          appendPublicLog(
+            state,
+            'timeout',
+            `⏱️ Gwendolen (${gwen.displayName}) quá hạn Sự Che Chở — bỏ qua phản công.`,
+            nowMs,
+            gwen.playerId,
+          );
+        }
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+
+      const hasMasamune = gwen.equipped.includes('ev-01');
+      const gd6 = hasMasamune ? 0 : rollD6(state);
+      const gd4 = rollD4(state);
+      const gBase = hasMasamune ? gd4 : Math.abs(gd6 - gd4);
+      const gRaw = computeRawAttackDamage(gwen, gBase);
+      const gRollDesc = hasMasamune ? `1d4=${gd4}` : `|${gd6}-${gd4}|=${gBase}`;
+
+      incRoleStat(exp.stats.activationsByRole, 'exp1_gwendolen', 1);
+      exp.pendingSteps.unshift({
+        kind: 'DAMAGE',
+        damageEventId: nextExpansionEventId(state, 'dmg-gwendolen'),
+        causationId: data.counterEventId,
+        targetPlayerId: origAttacker.playerId,
+        rawAmount: gRaw,
+        sourceType: 'attack',
+        attackerPlayerId: gwen.playerId,
+        isSingleTarget: true,
+        isRetaliatoryAttack: true,
+        chainDepth: data.chainDepth + 1,
+        postLogKind: 'skill',
+        postLogPrefix: `🛡️⚔️ Gwendolen (${gwen.displayName}) — Sự Che Chở phản công (${gRollDesc}, tổng ${gRaw}) → ${origAttacker.displayName} chịu `,
+        postLogSuffix: ' sát thương!',
+        postLogActorId: gwen.playerId,
+      });
+      drainPendingSteps(state, nowMs, callbacks);
+      return { ok: true };
+    }
+
+    case 'freyja_extra_attack': {
+      const freyja = state.players[data.freyjaPlayerId];
+      if (
+        !freyja ||
+        !freyja.alive ||
+        optionId === 'done' ||
+        options?.isTimeoutFallback
+      ) {
+        if (freyja && options?.isTimeoutFallback) {
+          appendPublicLog(
+            state,
+            'timeout',
+            `⏱️ Freyja (${freyja.displayName}) quá hạn Tấn Công Liều Lĩnh — dừng chuỗi đánh thưởng.`,
+            nowMs,
+            freyja.playerId,
+          );
+        }
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+
+      const plan = data.attackMap[optionId];
+      if (!plan || plan.discardCardId === MASAMUNE_CARD_ID) {
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+      const eqIdx = freyja.equipped.indexOf(plan.discardCardId);
+      const tgt = state.players[plan.targetPlayerId];
+      if (
+        eqIdx === -1 ||
+        !tgt ||
+        !tgt.alive ||
+        !canExpandedPlayerAttackTarget(state, freyja, tgt)
+      ) {
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+
+      // Bỏ trang bị NGAY LẬP TỨC trước khi tung xúc xắc (không thể tái sử dụng sau reconnect!)
+      const [removedId] = freyja.equipped.splice(eqIdx, 1);
+      if (removedId) discardCardId(state, removedId);
+      const removedTitle = getCardById(plan.discardCardId)?.title ?? plan.discardCardId;
+      incRoleStat(exp.stats.activationsByRole, 'exp2_freyja', 1);
+
+      appendPublicLog(
+        state,
+        'skill',
+        `⚔️🔥 Freyja (${freyja.displayName}) — Tấn Công Liều Lĩnh: bỏ "${removedTitle}" để tung đòn đánh thưởng #${data.usedExtraAttacksCount + 1} vào ${tgt.displayName}!`,
+        nowMs,
+        freyja.playerId,
+      );
+
+      // Xếp bước kiểm tra tiếp theo TRƯỚC FINISH_ACTION để chuỗi đánh thưởng tiếp diễn nếu còn trang bị hợp lệ!
+      exp.pendingSteps.unshift({
+        kind: 'FREYJA_EXTRA_ATTACK_CHECK',
+        freyjaPlayerId: freyja.playerId,
+        usedExtraAttacksCount: data.usedExtraAttacksCount + 1,
+        chainDepth: data.chainDepth + 1,
+      });
+
+      const hasMasamune = freyja.equipped.includes('ev-01');
+      const hasMachineGun = freyja.equipped.includes('ev-06');
+      const d6 = hasMasamune ? 0 : rollD6(state);
+      const d4 = rollD4(state);
+      const baseDmg = hasMasamune ? d4 : Math.abs(d6 - d4);
+      const rawDmg = computeRawAttackDamage(freyja, baseDmg);
+      const roll: AttackRollSample = { d6, d4, baseDmg, rawDmg, hasMasamune };
+
+      return enqueueAttackResolution(
+        state,
+        freyja,
+        tgt.playerId,
+        roll,
+        hasMachineGun,
+        nowMs,
+        callbacks,
+        {
+          isBonusAttack: true,
+          unshiftToFront: true,
+          skipFinishAction: true,
+          chainDepth: data.chainDepth + 1,
+        },
+      );
+    }
+
+    case 'warlord_pull_attack': {
+      const warlord = state.players[data.warlordPlayerId];
+      if (
+        !warlord ||
+        !warlord.alive ||
+        optionId === 'skip' ||
+        options?.isTimeoutFallback
+      ) {
+        if (warlord && options?.isTimeoutFallback) {
+          appendPublicLog(
+            state,
+            'timeout',
+            `⏱️ Warlord (${warlord.displayName}) quá hạn Chiến Tranh — hủy kéo (giữ nguyên 1 lần/trận).`,
+            nowMs,
+            warlord.playerId,
+          );
+        }
+        return { ok: true };
+      }
+      const targetId = data.targetMap[optionId];
+      const target = targetId ? state.players[targetId] : null;
+      if (!target || !target.alive || target.playerId === warlord.playerId) {
+        return { ok: true };
+      }
+      return executeWarlordPullAttack(state, warlord, target, nowMs, callbacks);
+    }
+
+    case 'usurper_reveal_block_heal': {
+      const usurper = state.players[data.usurperPlayerId];
+      const healTarget = state.players[data.targetPlayerId];
+      if (optionId === 'reveal_and_block' && usurper && usurper.alive) {
+        const justRevealed = revealPlayerNow(state, usurper, 'voluntary', nowMs);
+        const pausedStep = exp.pendingSteps[0];
+        if (
+          pausedStep &&
+          pausedStep.kind === 'HEAL' &&
+          pausedStep.healEventId === data.healEventId
+        ) {
+          pausedStep.usurperBlocked = true;
+          pausedStep.blockedLogText = `🎭🚫 ${usurper.displayName} lật vai Usurper — chặn hoàn toàn hồi ${data.potentialHeal} HP của ${healTarget?.displayName ?? data.targetPlayerId} và bật hào quang cấm hồi máu!`;
+        }
+        incRoleStat(exp.stats.activationsByRole, 'exp2_usurper', 1);
+        appendHighlight(
+          state,
+          `Lộ vai: ${usurper.displayName}`,
+          `Usurper (${FACTION_LABELS[usurper.faction]}) — Soán Đoạt Hồi Máu`,
+          nowMs,
+        );
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, usurper.playerId, 'reaction', 0);
+        }
+      }
+      // Khi decline hoặc timeout: KHÔNG phát log công khai nhắc tên Usurper (zero secret leak!)
+      drainPendingSteps(state, nowMs, callbacks);
+      return { ok: true };
+    }
+
+    case 'bianca_discard_prevent': {
+      const bianca = state.players[data.biancaPlayerId];
+      const chosenCardId = data.cardMap[optionId];
+      if (
+        optionId !== 'decline' &&
+        !options?.isTimeoutFallback &&
+        bianca &&
+        bianca.alive &&
+        chosenCardId &&
+        chosenCardId !== MASAMUNE_CARD_ID
+      ) {
+        const eqIdx = bianca.equipped.indexOf(chosenCardId);
+        if (eqIdx >= 0) {
+          const [removedId] = bianca.equipped.splice(eqIdx, 1);
+          if (removedId) discardCardId(state, removedId);
+          const pausedStep = exp.pendingSteps[0];
+          if (
+            pausedStep &&
+            pausedStep.kind === 'DAMAGE' &&
+            pausedStep.damageEventId === data.damageEventId
+          ) {
+            pausedStep.biancaPrevented = true;
+          }
+          incRoleStat(exp.stats.activationsByRole, 'exp2_bianca', 1);
+          incRoleStat(exp.stats.damagePreventedByRole, 'exp2_bianca', data.incomingDmg);
+          const cardTitle = getCardById(chosenCardId)?.title ?? chosenCardId;
+          appendPublicLog(
+            state,
+            'skill',
+            `🛡️♻️ Bianca (${bianca.displayName}) — Mọi Thứ Phế Liệu: bỏ "${cardTitle}" vô hiệu hóa hoàn toàn ${data.incomingDmg} sát thương đơn mục tiêu!`,
+            nowMs,
+            bianca.playerId,
+          );
+        }
+      } else if (bianca && options?.isTimeoutFallback) {
+        appendPublicLog(
+          state,
+          'timeout',
+          `⏱️ Bianca (${bianca.displayName}) quá hạn Mọi Thứ Phế Liệu — giữ trang bị và nhận ${data.incomingDmg} sát thương.`,
+          nowMs,
+          bianca.playerId,
+        );
+      }
       drainPendingSteps(state, nowMs, callbacks);
       return { ok: true };
     }

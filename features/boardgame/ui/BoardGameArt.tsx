@@ -350,6 +350,62 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
     motif: 'Mặt Nạ Điệu Bộ',
     shortAbility: 'Phản ứng thẻ Xanh như Shadow (không lộ vai) · Thắng tức thì nếu bị Hunter hạ gục',
   },
+  exp1_ernest: {
+    codeName: 'Ernest',
+    title: 'Hunter MR1 · 10 HP',
+    accentHex: '#10b981',
+    motif: 'Huyết Ấn Từ Đạo',
+    shortAbility: '1 lần/trận (còn ≥ 3 HP): Trả 2 HP ép toàn bộ Shadow lộ diện & hủy sạch trang bị của họ',
+  },
+  exp1_gwendolen: {
+    codeName: 'Gwendolen',
+    title: 'Hunter MR1 · 14 HP',
+    accentHex: '#34d399',
+    motif: 'Khiên Thép Che Chở',
+    shortAbility: 'Nội tại sau lật vai: Phản công kẻ đánh Hunter/Neutral đã lộ diện trong cùng Cụm',
+  },
+  exp2_freyja: {
+    codeName: 'Freyja',
+    title: 'Hunter MR2 · 12 HP',
+    accentHex: '#2dd4bf',
+    motif: 'Chiến Kích Liều Lĩnh',
+    shortAbility: 'Sau khi tấn công: Bỏ từng trang bị (trừ Masamune) để tung thêm 1 đòn đánh thưởng',
+  },
+  exp2_warlord: {
+    codeName: 'Warlord',
+    title: 'Shadow MR2 · 14 HP',
+    accentHex: '#e11d48',
+    motif: 'Xích Sắt Chiến Tranh',
+    shortAbility: '1 lần/trận (Pha 1): Kéo 1 người tới ô bạn & tung đòn đánh thưởng, sau đó chơi tiếp bình thường',
+  },
+  exp2_usurper: {
+    codeName: 'Usurper',
+    title: 'Shadow MR2 · 11 HP',
+    accentHex: '#c084fc',
+    motif: 'Vương Miện Soán Ngôi',
+    shortAbility: 'Hào quang cấm người khác hồi máu bằng Kỹ năng/Thẻ Trắng · Có thể lật vai chặn ngay 1 lần hồi',
+  },
+  exp1_angel: {
+    codeName: 'Angel',
+    title: 'Neutral MR1 · 8 HP',
+    accentHex: '#fde047',
+    motif: 'Đôi Cánh Thiên Sứ',
+    shortAbility: '1 lần/trận: Đầu lượt sau bảo vệ miễn sát thương toàn bộ Neutral lộ diện · Thắng: đủ Neutral sống hoặc đứng Church',
+  },
+  exp2_bianca: {
+    codeName: 'Bianca',
+    title: 'Neutral MR2 · 10 HP',
+    accentHex: '#e2e8f0',
+    motif: 'Kho Phế Liệu Khiên Chắn',
+    shortAbility: 'Bỏ 1 trang bị (trừ Masamune) vô hiệu hóa nguồn ST đơn mục tiêu · Thắng khi có HP thấp nhất cuối trận',
+  },
+  exp2_dalton: {
+    codeName: 'Dalton',
+    title: 'Neutral MR2 · 13 HP',
+    accentHex: '#f59e0b',
+    motif: 'Găng Tay Vòng 12',
+    shortAbility: 'Bắt buộc lộ diện khi ≤ 12 HP & cấm tự hồi máu · Thắng tức thì nếu hạ gục sau kích hoạt hoặc nhiều máu nhất cuối trận',
+  },
 };
 
 export interface LocationVisualMeta {

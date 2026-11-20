@@ -28,7 +28,7 @@ export type BoardGameMatchStatus =
 
 export const BOARD_GAME_RULESET_VERSION = 4 as const;
 export const BOARD_GAME_PROTOCOL_VERSION = 1 as const;
-export const BOARD_GAME_CATALOG_VERSION = '2026.11-p4b' as const;
+export const BOARD_GAME_CATALOG_VERSION = '2026.11-p5c' as const;
 
 export type BoardGameProductionRulesetId =
   | 'classic'
@@ -40,7 +40,8 @@ export type BoardGameExperimentalRulesetId =
   | 'starter-four'
   | 'starter-eight'
   | 'starter-sixteen'
-  | 'starter-twenty-six';
+  | 'starter-twenty-six'
+  | 'starter-thirty-eight';
 
 export type BoardGameRulesetId =
   | BoardGameProductionRulesetId
@@ -62,6 +63,7 @@ export const BOARD_GAME_EXPERIMENTAL_RULESETS: readonly BoardGameExperimentalRul
   'starter-eight',
   'starter-sixteen',
   'starter-twenty-six',
+  'starter-thirty-eight',
 ];
 
 export const BOARD_GAME_ALL_RULESETS: readonly BoardGameRulesetId[] = [
@@ -160,12 +162,24 @@ export type Phase5BRoleId =
   | 'exp2_urban_legend'
   | 'exp2_arlene';
 
+export type Phase5CRoleId =
+  | 'exp1_ernest'
+  | 'exp1_gwendolen'
+  | 'exp2_freyja'
+  | 'exp2_warlord'
+  | 'exp2_usurper'
+  | 'exp1_angel'
+  | 'exp2_bianca'
+  | 'exp2_dalton';
+
+export type Phase5RoleId = Phase5BRoleId | Phase5CRoleId;
+
 export type BoardGameRoleId =
   | ClassicBoardGameRoleId
   | Phase2RoleId
   | Phase3RoleId
   | Phase4RoleId
-  | Phase5BRoleId;
+  | Phase5RoleId;
 
 export type BoardGameLocationId =
   | 'lobby'
@@ -446,7 +460,12 @@ export type BoardGamePendingChoiceKind =
   | 'cruz_black_redraw'
   | 'bryon_gift_equipment'
   | 'elise_distribute_heal'
-  | 'urban_legend_reveal_heal';
+  | 'urban_legend_reveal_heal'
+  | 'gwendolen_counter_attack'
+  | 'freyja_extra_attack'
+  | 'warlord_pull_attack'
+  | 'usurper_reveal_block_heal'
+  | 'bianca_discard_prevent';
 
 export interface BoardGameChoiceOptionView {
   optionId: string;

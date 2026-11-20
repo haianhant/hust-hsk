@@ -42,6 +42,7 @@ import {
   PHASE2A_ROLE_IDS,
   PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
   STARTER_SIXTEEN_EXPANSION_ROLE_IDS,
+  STARTER_THIRTY_EIGHT_EXPANSION_ROLE_IDS,
   STARTER_TWENTY_SIX_EXPANSION_ROLE_IDS,
 } from './expansion-skills';
 import { ROLES_CATALOG, getRoleDistribution } from './roles';
@@ -220,6 +221,8 @@ function inferExpansionVictoryArchetype(rec: ExpansionCatalogRecord): VictoryArc
     case 'exp2_bryon':
       return 'shared';
     case 'exp1_bipolar':
+    case 'exp1_angel':
+    case 'exp2_dalton':
       return 'conditional';
     default:
       return 'individual';
@@ -549,6 +552,24 @@ export const EXPERIMENTAL_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
       ...STARTER_TWENTY_SIX_EXPANSION_ROLE_IDS,
     ],
     expectedCharacterCount: 36,
+    catalogVersion: BOARD_GAME_CATALOG_VERSION,
+  },
+  {
+    id: 'starter-thirty-eight',
+    label: 'Starter Thirty-Eight (Thử nghiệm Wave 4 · 10 Classic + 38 Tướng Mở rộng)',
+    shortLabel: 'Starter 38 (Exp)',
+    description:
+      'Pool thử nghiệm nội bộ gồm 48 nhân vật (10 Classic + 38 Tướng Mở rộng: 18 Hunter · 18 Shadow · 12 Neutral). Tắt trên production.',
+    availability: 'experimental',
+    enabledInProduction: false,
+    isExperimental: true,
+    allowExperimentalHouseRules: true,
+    includedExpansions: ['classic', 'expansion-1', 'expansion-2'],
+    explicitCharacterIds: [
+      ...ROLES_CATALOG.map((r) => r.id),
+      ...STARTER_THIRTY_EIGHT_EXPANSION_ROLE_IDS,
+    ],
+    expectedCharacterCount: 48,
     catalogVersion: BOARD_GAME_CATALOG_VERSION,
   },
 ];

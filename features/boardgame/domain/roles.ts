@@ -212,7 +212,13 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
                 ? 'Không có Kẻ Độc Hành nào bị loại khi trận đấu kết thúc hợp lệ (bạn phải còn sống).'
                 : rec.id === 'exp2_arlene'
                   ? 'Bạn bị hạ gục bởi một nhân vật thuộc Đội Săn Đêm (Hunter).'
-                  : rec.victoryCondition;
+                  : rec.id === 'exp1_angel'
+                    ? 'Còn sống khi trận đấu kết thúc VÀ (tất cả Kẻ Độc Hành đều còn sống HOẶC bạn đứng tại chính xác Sảnh Tầng 1 / Church).'
+                    : rec.id === 'exp2_bianca'
+                      ? 'Còn sống khi trận đấu kết thúc và có lượng HP còn lại thấp nhất trong các người chơi còn sống (cho phép hòa).'
+                      : rec.id === 'exp2_dalton'
+                        ? 'Hạ gục một người chơi khác sau khi kích hoạt Vòng Đấu Thứ 12, HOẶC còn nhiều máu nhất khi trận đấu kết thúc (cho phép hòa).'
+                        : rec.victoryCondition;
 
   const targetMode: CharacterDesign['targetMode'] =
     rec.id === 'exp2_father_harrison' ||
@@ -221,7 +227,10 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
     rec.id === 'exp1_wrath' ||
     rec.id === 'exp2_visions' ||
     rec.id === 'exp2_bryon' ||
-    rec.id === 'exp2_elise'
+    rec.id === 'exp2_elise' ||
+    rec.id === 'exp1_ernest' ||
+    rec.id === 'exp2_warlord' ||
+    rec.id === 'exp1_angel'
       ? 'self'
       : 'passive';
 

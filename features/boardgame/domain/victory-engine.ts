@@ -289,6 +289,25 @@ function qualifiesClassicOrExpandedWanderer(
       // Thắng cá nhân tức thì khi bị hạ gục bởi một nhân vật phe Đội Săn Đêm (Hunter).
       return isArleneImmediateVictorySatisfied(state, player);
     }
+    case 'exp1_angel': {
+      // Angel (Phase 5C house rule — End-of-Match Only):
+      // Còn sống AND (tất cả Neutral còn sống OR đứng chính xác ô `lobby` / Church).
+      return isAngelEndOfMatchVictorySatisfied(player, allWanderers);
+    }
+    case 'exp2_bianca': {
+      // Bianca (Phase 5C house rule — End-of-Match Only):
+      // Còn sống và có lượng HP còn lại thấp nhất trong nhóm người chơi còn sống (cho phép hòa).
+      const alivePlayers = Object.values(state.players).filter((p) => p.alive);
+      return hasLowestRemainingHpAmongSurvivors(player, alivePlayers);
+    }
+    case 'exp2_dalton': {
+      // Dalton (Phase 5C house rule):
+      // Thắng tức thì nếu hạ gục 1 người sau khi kích hoạt Vòng Đấu Thứ 12,
+      // HOẶC thắng cuối trận nếu còn sống & có lượng HP còn lại cao nhất (cho phép hòa).
+      if (isDaltonImmediateVictorySatisfied(state, player)) return true;
+      const alivePlayers = Object.values(state.players).filter((p) => p.alive);
+      return hasHighestRemainingHpAmongSurvivors(player, alivePlayers);
+    }
     default:
       return false;
   }
@@ -350,6 +369,9 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
   );
   const arleneSoloWinners = wanderers.filter(
     (w) => w.roleId === 'exp2_arlene' && isArleneImmediateVictorySatisfied(state, w),
+  );
+  const daltonSoloWinners = wanderers.filter(
+    (w) => w.roleId === 'exp2_dalton' && isDaltonImmediateVictorySatisfied(state, w),
   );
 
   // 1. Đòn quyết tử đồng quy (Hunter & Shadow cùng kích hoạt)
@@ -430,6 +452,7 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
     ...cindySoloWinners,
     ...cruzSoloWinners,
     ...arleneSoloWinners,
+    ...daltonSoloWinners,
   ];
   if (soloTriggers.length > 0) {
     const lead = soloTriggers[0];
@@ -454,7 +477,9 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
                 ? `${lead.displayName} (Cruz) đã hạ gục mục tiêu trong lượt dùng thẻ Đột Kích đặc trưng — hoàn thành mục tiêu Độc Hành!`
                 : lead.roleId === 'exp2_arlene'
                   ? `${lead.displayName} (Arlene) đã bị một Đội Săn Đêm hạ gục — hoàn thành mục tiêu Độc Hành tức thì!`
-                  : `${lead.displayName} (Trang "Kiên Cường") trụ lại sống sót cuối cùng!`;
+                  : lead.roleId === 'exp2_dalton'
+                    ? `${lead.displayName} (Dalton) đã hạ gục mục tiêu sau khi kích hoạt Vòng Đấu Thứ 12 — hoàn thành mục tiêu Độc Hành tức thì!`
+                    : `${lead.displayName} (Trang "Kiên Cường") trụ lại sống sót cuối cùng!`;
     return {
       finished: true,
       winnerFaction: 'wanderer-solo',

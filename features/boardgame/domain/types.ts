@@ -215,6 +215,7 @@ export type PendingResolutionStep =
       isRetaliatoryAttack?: boolean;
       biancaChecked?: boolean;
       biancaPrevented?: boolean;
+      postMitigationDmg?: number;
       urbanLegendChecked?: boolean;
       urbanLegendConverted?: boolean;
       undyingChecked?: boolean;
@@ -302,7 +303,12 @@ export type PendingResolutionStep =
       counterAttackerIds: string[];
       isBonusAttack?: boolean;
       isRetaliatoryAttack?: boolean;
-      gwendolenVictimIds?: string[];
+      gwendolenVictims?: Array<{
+        playerId: string;
+        location: BoardGameLocationId;
+        faction: BoardGameFactionId;
+        preRevealed: boolean;
+      }>;
       chainDepth?: number;
     }
   | {
@@ -458,6 +464,42 @@ export type PendingChoiceContextData =
       damageEventId: string;
       sourceCardId: string;
       rawAmount: number;
+    }
+  | {
+      kind: 'gwendolen_counter_attack';
+      gwendolenPlayerId: string;
+      attackerPlayerId: string;
+      protectedVictimIds: string[];
+      counterEventId: string;
+      chainDepth: number;
+    }
+  | {
+      kind: 'freyja_extra_attack';
+      freyjaPlayerId: string;
+      usedExtraAttacksCount: number;
+      attackMap: Record<string, { discardCardId: string; targetPlayerId: string }>;
+      chainDepth: number;
+    }
+  | {
+      kind: 'warlord_pull_attack';
+      warlordPlayerId: string;
+      targetMap: Record<string, string>;
+    }
+  | {
+      kind: 'usurper_reveal_block_heal';
+      usurperPlayerId: string;
+      healEventId: string;
+      targetPlayerId: string;
+      sourceKind: HealSourceKind;
+      potentialHeal: number;
+    }
+  | {
+      kind: 'bianca_discard_prevent';
+      biancaPlayerId: string;
+      damageEventId: string;
+      incomingDmg: number;
+      sourceType: DamageSourceKind;
+      cardMap: Record<string, string>;
     };
 
 export interface AuthoritativePendingChoice {
