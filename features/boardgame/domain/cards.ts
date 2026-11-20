@@ -549,6 +549,30 @@ export const CRUZ_QUALIFYING_CARD_IDS: readonly string[] = [
   CANONICAL_SH_CARD_IDS.spiritual_doll,
 ];
 
+/**
+ * 5 lá Đen dùng một lần có hiệu ứng gây sát thương (CAP-10 / Phase 5 Urban Legend):
+ * Tuyệt đối loại trừ vũ khí Đen vĩnh viễn (`ev-01..ev-06`), Moody Goblin (`ev-11`) & Diabolic Ritual (`ev-13`).
+ */
+export const CONSUMABLE_DAMAGING_BLACK_CARD_IDS: readonly string[] = [
+  CANONICAL_SH_CARD_IDS.vampire_bat,
+  CANONICAL_SH_CARD_IDS.bloodthirsty_spider,
+  CANONICAL_SH_CARD_IDS.dynamite,
+  CANONICAL_SH_CARD_IDS.spiritual_doll,
+  CANONICAL_SH_CARD_IDS.banana_peel,
+];
+
+/**
+ * Các lá Trắng có khả năng hồi máu (CAP-10 / Phase 5 HealPipeline & Usurper):
+ * `eq-09` (First Aid) chỉ tính là hồi máu khi làm giảm thương tích (`woundsTaken > 7`).
+ */
+export const WHITE_HEAL_CARD_IDS: readonly string[] = [
+  CANONICAL_SH_CARD_IDS.holy_water,
+  CANONICAL_SH_CARD_IDS.blessing,
+  CANONICAL_SH_CARD_IDS.first_aid,
+  CANONICAL_SH_CARD_IDS.advent,
+  CANONICAL_SH_CARD_IDS.chocolate,
+];
+
 export function getCardIdByCanonicalShId(canonicalId: CanonicalShCardId): string {
   return CANONICAL_SH_CARD_IDS[canonicalId];
 }
@@ -559,6 +583,14 @@ export function isCardCanonicalShId(cardId: string, canonicalId: CanonicalShCard
 
 export function isCruzQualifyingCardId(cardId: string | null | undefined): boolean {
   return typeof cardId === 'string' && CRUZ_QUALIFYING_CARD_IDS.includes(cardId);
+}
+
+export function isConsumableDamagingBlackCardId(cardId: string | null | undefined): boolean {
+  return typeof cardId === 'string' && CONSUMABLE_DAMAGING_BLACK_CARD_IDS.includes(cardId);
+}
+
+export function isWhiteHealCardId(cardId: string | null | undefined): boolean {
+  return typeof cardId === 'string' && WHITE_HEAL_CARD_IDS.includes(cardId);
 }
 
 export function getCardById(cardId: string): GameCardDefinition | null {

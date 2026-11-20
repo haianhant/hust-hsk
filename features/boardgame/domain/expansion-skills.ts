@@ -13,10 +13,12 @@
 import {
   BOARD_GAME_CHOICE_TIMEOUT_MS,
   BOARD_GAME_DISCONNECTED_CHOICE_TIMEOUT_MS,
+  isValidBoardGameReactionPolicy,
   type BoardGameChoiceOptionView,
   type BoardGameDeckId,
   type BoardGameFactionId,
   type BoardGameLocationId,
+  type BoardGameReactionPolicy,
   type BoardGameRoleId,
   type Phase2ARoleId,
   type Phase2BRoleId,
@@ -26,6 +28,7 @@ import {
 } from '../../../shared/contracts/boardgame';
 import {
   getCardById,
+  isConsumableDamagingBlackCardId,
   isCruzQualifyingCardId,
   MASAMUNE_CARD_ID,
   toCardPublicMeta,
@@ -34,7 +37,6 @@ import {
   appendHighlight,
   appendPrivateClue,
   appendPublicLog,
-  applyHeal,
   discardCardId,
   equipToPlayerSlot,
   resolveDiceRollMove,
@@ -47,7 +49,11 @@ import {
   takeOneCardFromDeck,
   transferLowestEquippedGear,
 } from './effects';
-import { FACTION_LABELS, getRoleDesign } from './roles';
+import {
+  executeHealPipeline,
+  type HealPipelineHooks,
+} from './heal-pipeline';
+import { FACTION_LABELS, getRoleDesign, isEligibleForChocolateHeal } from './roles';
 import {
   BOARD_GAME_MAX_HAND,
   canPlayerAttackTarget,
@@ -83,6 +89,26 @@ import type { VictoryArchetype } from './victory-engine';
 
 const MAX_PROCESSED_EVENT_IDS = 256;
 const MAX_RESOLVED_CHOICE_IDS = 256;
+export const MAX_PENDING_STEPS_DRAIN = 96;
+export const MAX_REACTION_CHAIN_DEPTH = 6;
+
+/**
+ * Danh sách vai trò phản ứng bí mật nhị phân đơn quyết định được phép dùng
+ * `AUTO_ACTIVATE_WHEN_ELIGIBLE` (CAP-05). Các vai trò cần chọn mục tiêu/trang bị
+ * (`Bianca`, `Gwendolen`, `Freyja`, `Elise`) KHÔNG bao giờ tự kích hoạt mù.
+ */
+export const BINARY_SECRET_REACTION_ROLES: ReadonlySet<string> = new Set([
+  'exp1_wendigo',
+  'exp1_undying',
+  'exp1_cindy',
+  'exp2_urban_legend',
+  'exp2_usurper',
+  'exp2_arlene',
+]);
+
+export function canRoleAutoActivateSecretReaction(roleId: string): boolean {
+  return BINARY_SECRET_REACTION_ROLES.has(roleId);
+}
 
 export type ExpansionImplementedRoleId = Phase2RoleId | Phase3RoleId | Phase4RoleId;
 
@@ -566,6 +592,81 @@ function incRoleStat(bucket: Record<string, number>, roleId: string, delta: numb
   bucket[roleId] = (bucket[roleId] ?? 0) + delta;
 }
 
+function incRoleHealBlockedStat(
+  state: AuthoritativeGameState,
+  blockerRoleId: string,
+  delta: number,
+): void {
+  if (delta <= 0) return;
+  const exp = ensureExpansionState(state);
+  if (!exp.stats.healsBlockedByRole) exp.stats.healsBlockedByRole = {};
+  exp.stats.healsBlockedByRole[blockerRoleId] =
+    (exp.stats.healsBlockedByRole[blockerRoleId] ?? 0) + delta;
+}
+
+export function getPlayerReactionPolicy(
+  state: AuthoritativeGameState,
+  playerId: string,
+): BoardGameReactionPolicy {
+  const raw = state.expansionState?.reactionPolicyByPlayer?.[playerId];
+  return isValidBoardGameReactionPolicy(raw) ? raw : 'ASK';
+}
+
+export function setPlayerReactionPolicy(
+  state: AuthoritativeGameState,
+  playerId: string,
+  policy: BoardGameReactionPolicy,
+): EngineActionResult {
+  if (!isExpandedRuleset(state)) {
+    return {
+      ok: false,
+      error: 'Chính sách phản ứng mở rộng chỉ khả dụng ngoài chế độ Classic.',
+    };
+  }
+  const actor = state.players[playerId];
+  if (!actor || !actor.alive) {
+    return { ok: false, error: 'Người chơi không hợp lệ hoặc đã bị loại.' };
+  }
+  if (!isValidBoardGameReactionPolicy(policy)) {
+    return { ok: false, error: 'Chính sách phản ứng không hợp lệ.' };
+  }
+  const exp = ensureExpansionState(state);
+  if (!exp.reactionPolicyByPlayer) exp.reactionPolicyByPlayer = {};
+  exp.reactionPolicyByPlayer[playerId] = policy;
+  return { ok: true };
+}
+
+function createExpandedHealHooks(): HealPipelineHooks {
+  return {
+    hasProcessedEvent: hasProcessedExpansionEvent,
+    markEventProcessed: markExpansionEventProcessed,
+    getReactionPolicy: getPlayerReactionPolicy,
+    onRecordHealStat(state, roleId, actualHealed) {
+      const exp = ensureExpansionState(state);
+      incRoleStat(exp.stats.healByRole, roleId, actualHealed);
+    },
+    onRecordHealBlockedStat: incRoleHealBlockedStat,
+  };
+}
+
+function enqueueRoleRevealedTrigger(
+  state: AuthoritativeGameState,
+  revealedPlayerId: string,
+  revealCause: 'voluntary' | 'forced-card' | 'reaction',
+  chainDepth = 0,
+): void {
+  if (chainDepth >= MAX_REACTION_CHAIN_DEPTH) return;
+  const exp = ensureExpansionState(state);
+  exp.pendingSteps.unshift({
+    kind: 'ROLE_REVEALED_TRIGGERS',
+    revealEventId: nextExpansionEventId(state, 'rev-trig'),
+    revealedPlayerId,
+    revealCause,
+    umibozuChecked: false,
+    chainDepth: chainDepth + 1,
+  });
+}
+
 function getChoiceTimeoutMs(
   state: AuthoritativeGameState,
   owner: AuthoritativePlayerState,
@@ -731,23 +832,37 @@ const wyvernAbsorptionHandler: SkillHandlerDefinition = {
     const victimFaction = payload.victimFactionAtDeath as BoardGameFactionId;
     const isShadowVictim = victimFaction === 'mist-order';
     const healAmount = isShadowVictim ? ctx.owner.woundsTaken : 5;
-    const healed = applyHeal(ctx.state, ctx.owner, healAmount);
-    payload.wyvernAlreadyResolved = true;
+    const healEventId = `heal-wyvern-${String(payload.eliminationEventId ?? ctx.state.turnNumber)}-${ctx.owner.playerId}`;
 
     const exp = ensureExpansionState(ctx.state);
-    incRoleStat(exp.stats.activationsByRole, 'exp2_wyvern', 1);
-    incRoleStat(exp.stats.healByRole, 'exp2_wyvern', healed);
-
-    appendPublicLog(
+    const healRes = executeHealPipeline(
       ctx.state,
-      'skill',
-      isShadowVictim
-        ? `🐉 Wyvern (${ctx.owner.displayName}) — Hấp Thụ: hạ gục Shadow, hồi đầy máu (+${healed} HP → ${ctx.owner.hp}/${ctx.owner.maxHp})!`
-        : `🐉 Wyvern (${ctx.owner.displayName}) — Hấp Thụ: hồi ${healed} HP (hiện ${ctx.owner.hp}/${ctx.owner.maxHp})!`,
+      {
+        healEventId,
+        actorPlayerId: ctx.owner.playerId,
+        targetPlayerId: ctx.owner.playerId,
+        rawAmount: healAmount,
+        sourceKind: 'skill',
+        sourceLabel: 'Hấp Thụ (Wyvern)',
+        roleStatId: 'exp2_wyvern',
+        postLogKind: 'skill',
+        postLogPrefix: isShadowVictim
+          ? `🐉 Wyvern (${ctx.owner.displayName}) — Hấp Thụ: hạ gục Shadow, hồi đầy máu (+`
+          : `🐉 Wyvern (${ctx.owner.displayName}) — Hấp Thụ: hồi `,
+        postLogSuffix: ' HP)!',
+        postLogActorId: ctx.owner.playerId,
+      },
       ctx.event.nowMs,
-      ctx.owner.playerId,
+      createExpandedHealHooks(),
     );
-    return { applied: true, note: `healed=${healed}` };
+    if (healRes.pendingChoiceOpened) {
+      payload.pausedForHealChoice = true;
+      return { applied: false, stopPropagation: true, note: 'pending-heal-interception' };
+    }
+
+    payload.wyvernAlreadyResolved = true;
+    incRoleStat(exp.stats.activationsByRole, 'exp2_wyvern', 1);
+    return { applied: true, note: `healed=${healRes.actual}` };
   },
 };
 
@@ -773,27 +888,44 @@ const wendigoCannibalFeastHandler: SkillHandlerDefinition = {
     const checked = Array.isArray(payload.wendigoCheckedIds)
       ? (payload.wendigoCheckedIds as string[])
       : [];
+
+    if (ctx.owner.revealed) {
+      const healEventId = `heal-wendigo-${String(payload.eliminationEventId ?? ctx.state.turnNumber)}-${ctx.owner.playerId}`;
+      const healRes = executeHealPipeline(
+        ctx.state,
+        {
+          healEventId,
+          actorPlayerId: ctx.owner.playerId,
+          targetPlayerId: ctx.owner.playerId,
+          rawAmount: 1,
+          sourceKind: 'skill',
+          sourceLabel: 'Tiệc Thịt (Wendigo)',
+          roleStatId: 'exp1_wendigo',
+          postLogKind: 'skill',
+          postLogPrefix: `🩸 Wendigo (${ctx.owner.displayName}) — Tiệc Thịt: hồi `,
+          postLogSuffix: ' HP!',
+          postLogActorId: ctx.owner.playerId,
+          zeroLogText: `🩸 Wendigo (${ctx.owner.displayName}) — Tiệc Thịt: đã đầy máu (${ctx.owner.hp}/${ctx.owner.maxHp}).`,
+        },
+        ctx.event.nowMs,
+        createExpandedHealHooks(),
+      );
+      if (healRes.pendingChoiceOpened) {
+        payload.pausedForHealChoice = true;
+        return { applied: false, stopPropagation: true, note: 'pending-heal-interception' };
+      }
+
+      checked.push(ctx.owner.playerId);
+      payload.wendigoCheckedIds = checked;
+      const exp = ensureExpansionState(ctx.state);
+      incRoleStat(exp.stats.activationsByRole, 'exp1_wendigo', 1);
+      return { applied: true, note: `revealed-heal=${healRes.actual}` };
+    }
+
     checked.push(ctx.owner.playerId);
     payload.wendigoCheckedIds = checked;
 
-    if (ctx.owner.revealed) {
-      const healed = applyHeal(ctx.state, ctx.owner, 1);
-      const exp = ensureExpansionState(ctx.state);
-      incRoleStat(exp.stats.activationsByRole, 'exp1_wendigo', 1);
-      incRoleStat(exp.stats.healByRole, 'exp1_wendigo', healed);
-      appendPublicLog(
-        ctx.state,
-        'skill',
-        healed > 0
-          ? `🩸 Wendigo (${ctx.owner.displayName}) — Tiệc Thịt: hồi ${healed} HP (hiện ${ctx.owner.hp}/${ctx.owner.maxHp})!`
-          : `🩸 Wendigo (${ctx.owner.displayName}) — Tiệc Thịt: đã đầy máu (${ctx.owner.hp}/${ctx.owner.maxHp}).`,
-        ctx.event.nowMs,
-        ctx.owner.playerId,
-      );
-      return { applied: true, note: `revealed-heal=${healed}` };
-    }
-
-    // Wendigo chưa lộ vai: KHÔNG tự động lật vai -> mở Pending Choice riêng tư cho chủ sở hữu!
+    // Wendigo chưa lộ vai: KHÔNG tự động lật vai -> kiểm tra CAP-05 reactionPolicy ở bước executeEliminationTriggersStep!
     payload.pendingWendigoChoice = {
       wendigoPlayerId: ctx.owner.playerId,
       eliminationEventId: String(payload.eliminationEventId ?? ''),
@@ -1844,6 +1976,7 @@ function enqueueAttackResolution(
       rawAmount: victimRawDmg,
       sourceType: 'attack',
       attackerPlayerId: actor.playerId,
+      isSingleTarget: !hasMachineGun,
       preAttackTargetHp: getRemainingHp(victim),
       preAttackTargetRevealed: victim.revealed,
       ...(targets.length === 1
@@ -2077,6 +2210,7 @@ export function applyExpandedRevealRole(
   state: AuthoritativeGameState,
   actor: AuthoritativePlayerState,
   nowMs: number,
+  callbacks?: TurnContinuationCallbacks,
 ): EngineActionResult {
   if (actor.roleId === 'exp1_fallen' && !actor.revealed && getRemainingHp(actor) < 8) {
     return {
@@ -2084,7 +2218,20 @@ export function applyExpandedRevealRole(
       error: `Sự Chống Cự (Fallen): Bạn chỉ có thể tự nguyện lộ diện khi còn từ 8 HP trở lên (hiện ${getRemainingHp(actor)}/${actor.maxHp} HP).`,
     };
   }
-  return resolveRevealRole(state, actor, nowMs);
+  const res = resolveRevealRole(state, actor, nowMs);
+  if (!res.ok) return res;
+
+  if (callbacks) {
+    const exp = ensureExpansionState(state);
+    enqueueRoleRevealedTrigger(state, actor.playerId, 'voluntary', 0);
+    exp.pendingSteps.push({
+      kind: 'FINISH_ACTION',
+      actorPlayerId: actor.playerId,
+      autoEndTurnMode: 'never',
+    });
+    drainPendingSteps(state, nowMs, callbacks);
+  }
+  return { ok: true };
 }
 
 function commitFeaMovementTotal(
@@ -2755,15 +2902,28 @@ export function applyExpandedLocationPower(
     }
     state.turnPhase = 'MAIN_ACTION';
     if (chosenMode === 'heal') {
-      const healed = applyHeal(state, target, 1);
-      appendPublicLog(
-        state,
-        'equipment',
-        `💚 ${actor.displayName} dùng Hành Lang (9): hồi ${healed} thương tích cho ${target.displayName}.`,
-        nowMs,
-        actor.playerId,
+      const exp = ensureExpansionState(state);
+      exp.pendingSteps.push(
+        {
+          kind: 'HEAL',
+          healEventId: nextExpansionEventId(state, 'heal-loc'),
+          actorPlayerId: actor.playerId,
+          targetPlayerId: target.playerId,
+          rawAmount: 1,
+          sourceKind: 'location',
+          sourceLabel: 'Hành Lang (9)',
+          postLogKind: 'equipment',
+          postLogPrefix: `💚 ${actor.displayName} dùng Hành Lang (9): hồi `,
+          postLogSuffix: ` thương tích cho ${target.displayName}.`,
+          postLogActorId: actor.playerId,
+        },
+        {
+          kind: 'FINISH_ACTION',
+          actorPlayerId: actor.playerId,
+          autoEndTurnMode: 'never',
+        },
       );
-      callbacks.finalizeIfFinished(state, nowMs);
+      drainPendingSteps(state, nowMs, callbacks);
       return { ok: true };
     }
 
@@ -2776,6 +2936,7 @@ export function applyExpandedLocationPower(
         rawAmount: 2,
         sourceType: 'location',
         attackerPlayerId: actor.playerId,
+        isSingleTarget: true,
         postLogKind: 'event',
         postLogPrefix: `⚡ ${actor.displayName} kích hoạt Hành Lang (9): ${target.displayName} chịu `,
         postLogSuffix: ' sát thương!',
@@ -2835,15 +2996,23 @@ export function applyExpandedUseCard(
   skipEffect?: boolean,
 ): EngineActionResult {
   const card = getCardById(cardId);
-  if (
-    !card ||
-    (card.effectKind !== 'eq_flare' &&
-      card.effectKind !== 'ev_vampire_bat' &&
-      card.effectKind !== 'ev_spider' &&
-      card.effectKind !== 'ev_dynamite' &&
-      card.effectKind !== 'ev_spiritual_doll' &&
-      card.effectKind !== 'ev_banana_peel')
-  ) {
+  const handledInExpandedCardPipeline = Boolean(
+    card &&
+      (card.effectKind === 'eq_holy_water' ||
+        card.effectKind === 'eq_blessing' ||
+        card.effectKind === 'eq_first_aid' ||
+        card.effectKind === 'eq_mirror' ||
+        card.effectKind === 'eq_advent' ||
+        card.effectKind === 'eq_chocolate' ||
+        card.effectKind === 'ev_diabolic_ritual' ||
+        card.effectKind === 'eq_flare' ||
+        card.effectKind === 'ev_vampire_bat' ||
+        card.effectKind === 'ev_spider' ||
+        card.effectKind === 'ev_dynamite' ||
+        card.effectKind === 'ev_spiritual_doll' ||
+        card.effectKind === 'ev_banana_peel'),
+  );
+  if (!card || !handledInExpandedCardPipeline) {
     const res = resolveUseCard(
       state,
       actor,
@@ -2872,6 +3041,287 @@ export function applyExpandedUseCard(
   const exp = ensureExpansionState(state);
 
   switch (card.effectKind) {
+    case 'eq_holy_water': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      exp.pendingSteps.push(
+        {
+          kind: 'HEAL',
+          healEventId: nextExpansionEventId(state, 'heal-card'),
+          sourceCardId: card.id,
+          actorPlayerId: actor.playerId,
+          targetPlayerId: actor.playerId,
+          rawAmount: 2,
+          sourceKind: 'white-card',
+          sourceLabel: card.title,
+          postLogKind: 'equipment',
+          postLogPrefix: `💧 ${actor.displayName} uống "${card.title}": tự hồi `,
+          postLogSuffix: ' thương tích.',
+          postLogActorId: actor.playerId,
+        },
+        {
+          kind: 'FINISH_ACTION',
+          actorPlayerId: actor.playerId,
+          autoEndTurnMode: 'never',
+        },
+      );
+      drainPendingSteps(state, nowMs, callbacks);
+      return { ok: true };
+    }
+
+    case 'eq_blessing': {
+      const target = targetPlayerId ? state.players[targetPlayerId] : null;
+      if (!target || !target.alive || target.playerId === actor.playerId) {
+        return { ok: false, error: 'Lời Chúc Cứu Viện yêu cầu chọn 1 người chơi KHÁC còn sống.' };
+      }
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      const roll = rollD6(state);
+      exp.pendingSteps.push(
+        {
+          kind: 'HEAL',
+          healEventId: nextExpansionEventId(state, 'heal-card'),
+          sourceCardId: card.id,
+          actorPlayerId: actor.playerId,
+          targetPlayerId: target.playerId,
+          rawAmount: roll,
+          sourceKind: 'white-card',
+          sourceLabel: card.title,
+          postLogKind: 'equipment',
+          postLogPrefix: `✨ ${actor.displayName} dùng "${card.title}" cho ${target.displayName} (tung 1d6=${roll}) → hồi `,
+          postLogSuffix: ' thương tích!',
+          postLogActorId: actor.playerId,
+        },
+        {
+          kind: 'FINISH_ACTION',
+          actorPlayerId: actor.playerId,
+          autoEndTurnMode: 'never',
+        },
+      );
+      drainPendingSteps(state, nowMs, callbacks);
+      return { ok: true };
+    }
+
+    case 'eq_first_aid': {
+      const target = targetPlayerId ? state.players[targetPlayerId] : actor;
+      if (!target || !target.alive) {
+        return { ok: false, error: 'Mục tiêu Sơ Cứu Mốc 7 không hợp lệ.' };
+      }
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      const prevWounds = target.woundsTaken;
+      const targetWounds = Math.min(target.maxHp - 1, 7);
+      if (prevWounds > targetWounds) {
+        // Giảm thương tích -> định tuyến qua CAP-04 HealPipeline (White card heal!)
+        exp.pendingSteps.push(
+          {
+            kind: 'HEAL',
+            healEventId: nextExpansionEventId(state, 'heal-card'),
+            sourceCardId: card.id,
+            actorPlayerId: actor.playerId,
+            targetPlayerId: target.playerId,
+            rawAmount: prevWounds - targetWounds,
+            sourceKind: 'white-card',
+            sourceLabel: card.title,
+            postLogKind: 'equipment',
+            postLogPrefix: `🩺 ${actor.displayName} dùng "${card.title}" lên ${target.displayName}: hồi `,
+            postLogSuffix: ` thương tích (mốc 7 vết)!`,
+            postLogActorId: actor.playerId,
+          },
+          {
+            kind: 'FINISH_ACTION',
+            actorPlayerId: actor.playerId,
+            autoEndTurnMode: 'never',
+          },
+        );
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+      target.woundsTaken = targetWounds;
+      target.hp = target.maxHp - target.woundsTaken;
+      appendPublicLog(
+        state,
+        'equipment',
+        `🩺 ${actor.displayName} dùng "${card.title}" lên ${target.displayName}: thương tích chuyển từ ${prevWounds} → ${target.woundsTaken}!`,
+        nowMs,
+        actor.playerId,
+      );
+      deliverNextGloriaQueuedCard(state, actor, nowMs);
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+
+    case 'eq_mirror': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      if (
+        actor.faction === 'mist-order' &&
+        actor.roleId !== 'suong-tin-gia' &&
+        !actor.revealed
+      ) {
+        revealPlayerNow(state, actor, 'voluntary', nowMs);
+        const role = getRoleDesign(actor.roleId);
+        appendPublicLog(
+          state,
+          'reveal',
+          `🪞 ${actor.displayName} soi "${card.title}" và buộc phải lộ diện: ${role.name} (${FACTION_LABELS[actor.faction]})!`,
+          nowMs,
+          actor.playerId,
+        );
+        enqueueRoleRevealedTrigger(state, actor.playerId, 'forced-card', 0);
+        exp.pendingSteps.push({
+          kind: 'FINISH_ACTION',
+          actorPlayerId: actor.playerId,
+          autoEndTurnMode: 'never',
+        });
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+      appendPublicLog(
+        state,
+        'equipment',
+        `🪞 ${actor.displayName} soi "${card.title}" — không có phản ứng lộ diện.`,
+        nowMs,
+        actor.playerId,
+      );
+      deliverNextGloriaQueuedCard(state, actor, nowMs);
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+
+    case 'eq_advent': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      if (!skipEffect && actor.faction === 'lantern-guard') {
+        const justRevealed = revealPlayerNow(state, actor, 'voluntary', nowMs);
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, actor.playerId, 'voluntary', 0);
+        }
+        exp.pendingSteps.push(
+          {
+            kind: 'HEAL',
+            healEventId: nextExpansionEventId(state, 'heal-card'),
+            sourceCardId: card.id,
+            actorPlayerId: actor.playerId,
+            targetPlayerId: actor.playerId,
+            rawAmount: actor.woundsTaken,
+            sourceKind: 'white-card',
+            sourceLabel: card.title,
+            postLogKind: 'reveal',
+            postLogPrefix: `🔦 ${actor.displayName} kích hoạt "${card.title}" (Đội Săn Đêm): lộ vai & hồi sạch `,
+            postLogSuffix: ' thương tích về 0!',
+            postLogActorId: actor.playerId,
+          },
+          {
+            kind: 'FINISH_ACTION',
+            actorPlayerId: actor.playerId,
+            autoEndTurnMode: 'never',
+          },
+        );
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+      appendPublicLog(
+        state,
+        'equipment',
+        `🃏 ${actor.displayName} bỏ qua "${card.title}" (giữ kín / không kích hoạt).`,
+        nowMs,
+        actor.playerId,
+      );
+      deliverNextGloriaQueuedCard(state, actor, nowMs);
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+
+    case 'eq_chocolate': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      const qualifies = isEligibleForChocolateHeal(actor.roleId, true);
+      if (!skipEffect && qualifies) {
+        const justRevealed = revealPlayerNow(state, actor, 'voluntary', nowMs);
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, actor.playerId, 'voluntary', 0);
+        }
+        exp.pendingSteps.push(
+          {
+            kind: 'HEAL',
+            healEventId: nextExpansionEventId(state, 'heal-card'),
+            sourceCardId: card.id,
+            actorPlayerId: actor.playerId,
+            targetPlayerId: actor.playerId,
+            rawAmount: actor.woundsTaken,
+            sourceKind: 'white-card',
+            sourceLabel: card.title,
+            postLogKind: 'reveal',
+            postLogPrefix: `🍫 ${actor.displayName} dùng "${card.title}": lộ vai ${getRoleDesign(actor.roleId).name} & hồi sạch `,
+            postLogSuffix: ' thương tích về 0!',
+            postLogActorId: actor.playerId,
+          },
+          {
+            kind: 'FINISH_ACTION',
+            actorPlayerId: actor.playerId,
+            autoEndTurnMode: 'never',
+          },
+        );
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+      appendPublicLog(
+        state,
+        'equipment',
+        `🍫 ${actor.displayName} đặt xuống "${card.title}" (không kích hoạt).`,
+        nowMs,
+        actor.playerId,
+      );
+      deliverNextGloriaQueuedCard(state, actor, nowMs);
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+
+    case 'ev_diabolic_ritual': {
+      actor.hand.splice(idx, 1);
+      discardCardId(state, card.id);
+      if (!skipEffect && actor.faction === 'mist-order') {
+        const justRevealed = revealPlayerNow(state, actor, 'voluntary', nowMs);
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, actor.playerId, 'voluntary', 0);
+        }
+        exp.pendingSteps.push(
+          {
+            kind: 'HEAL',
+            healEventId: nextExpansionEventId(state, 'heal-card'),
+            sourceCardId: card.id,
+            actorPlayerId: actor.playerId,
+            targetPlayerId: actor.playerId,
+            rawAmount: actor.woundsTaken,
+            sourceKind: 'black-card',
+            sourceLabel: card.title,
+            postLogKind: 'reveal',
+            postLogPrefix: `🌑 ${actor.displayName} cử hành "${card.title}" (Hội Bóng Đêm): lộ vai & hồi sạch `,
+            postLogSuffix: ' thương tích về 0!',
+            postLogActorId: actor.playerId,
+          },
+          {
+            kind: 'FINISH_ACTION',
+            actorPlayerId: actor.playerId,
+            autoEndTurnMode: 'never',
+          },
+        );
+        drainPendingSteps(state, nowMs, callbacks);
+        return { ok: true };
+      }
+      appendPublicLog(
+        state,
+        'equipment',
+        `🌑 ${actor.displayName} gác lại "${card.title}" (giữ kín / không kích hoạt).`,
+        nowMs,
+        actor.playerId,
+      );
+      deliverNextGloriaQueuedCard(state, actor, nowMs);
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+
     case 'eq_flare': {
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
@@ -2889,10 +3339,12 @@ export function applyExpandedUseCard(
         exp.pendingSteps.push({
           kind: 'DAMAGE',
           damageEventId: nextExpansionEventId(state, 'dmg'),
+          sourceCardId: card.id,
           targetPlayerId: other.playerId,
           rawAmount: 2,
           sourceType: 'event',
           attackerPlayerId: actor.playerId,
+          isSingleTarget: false,
         });
       }
       exp.pendingSteps.push({
@@ -2925,6 +3377,8 @@ export function applyExpandedUseCard(
           sourceType: 'event',
           attackerPlayerId: actor.playerId,
           isTalismanWardable: true,
+          isSingleTarget: true,
+          isConsumableBlackCardDamage: isConsumableDamagingBlackCardId(card.id),
         },
         {
           kind: 'VAMPIRE_BAT_HEAL',
@@ -2964,6 +3418,8 @@ export function applyExpandedUseCard(
           sourceType: 'event',
           attackerPlayerId: actor.playerId,
           isTalismanWardable: true,
+          isSingleTarget: true,
+          isConsumableBlackCardDamage: isConsumableDamagingBlackCardId(card.id),
         },
         {
           kind: 'SPIDER_SELF_DAMAGE',
@@ -3055,6 +3511,8 @@ export function applyExpandedUseCard(
           sourceType: 'event',
           attackerPlayerId: actor.playerId,
           isTalismanWardable: true,
+          isSingleTarget: false,
+          isConsumableBlackCardDamage: isConsumableDamagingBlackCardId(card.id),
         });
       }
       exp.pendingSteps.push({
@@ -3087,6 +3545,8 @@ export function applyExpandedUseCard(
           rawAmount: 3,
           sourceType: 'event',
           attackerPlayerId: actor.playerId,
+          isSingleTarget: true,
+          isConsumableBlackCardDamage: isConsumableDamagingBlackCardId(card.id),
           postLogKind: 'event',
           postLogPrefix: `🪆 ${actor.displayName} gieo "${card.title}" (1d6=${d6}) → ${target.displayName} chịu `,
           postLogSuffix: ' ST!',
@@ -3101,6 +3561,8 @@ export function applyExpandedUseCard(
           rawAmount: 3,
           sourceType: 'event',
           attackerPlayerId: null,
+          isSingleTarget: true,
+          isConsumableBlackCardDamage: isConsumableDamagingBlackCardId(card.id),
           postLogKind: 'event',
           postLogPrefix: `🪆 ${actor.displayName} gieo "${card.title}" (1d6=${d6}) → PHẢN TÁC DỤNG! ${actor.displayName} tự chịu `,
           postLogSuffix: ' ST!',
@@ -3135,10 +3597,13 @@ export function applyExpandedUseCard(
         {
           kind: 'DAMAGE',
           damageEventId: nextExpansionEventId(state, 'dmg'),
+          sourceCardId: card.id,
           targetPlayerId: actor.playerId,
           rawAmount: 1,
           sourceType: 'event',
           attackerPlayerId: null,
+          isSingleTarget: true,
+          isConsumableBlackCardDamage: isConsumableDamagingBlackCardId(card.id),
           postLogKind: 'event',
           postLogPrefix: `🍌 ${actor.displayName} trượt "${card.title}" (không có Trang bị để giao) → tự chịu `,
           postLogSuffix: ' ST!',
@@ -3153,6 +3618,9 @@ export function applyExpandedUseCard(
       drainPendingSteps(state, nowMs, callbacks);
       return { ok: true };
     }
+
+    default:
+      return { ok: false, error: 'Thẻ bài không được hỗ trợ.' };
   }
 }
 
@@ -3309,8 +3777,21 @@ export function applyExpandedInvestigateCard(
       }
     } else if (isHealHermit) {
       if (target.woundsTaken > 0) {
-        const healed = applyHeal(state, target, 1);
-        effectNote = `Khớp điều kiện — hồi ${healed} thương tích.`;
+        const healRes = executeHealPipeline(
+          state,
+          {
+            healEventId: nextExpansionEventId(state, 'heal-inv'),
+            sourceCardId: card.id,
+            actorPlayerId: actor.playerId,
+            targetPlayerId: target.playerId,
+            rawAmount: 1,
+            sourceKind: 'investigation',
+            sourceLabel: card.title,
+          },
+          nowMs,
+          createExpandedHealHooks(),
+        );
+        effectNote = `Khớp điều kiện — hồi ${healRes.actual} thương tích.`;
       } else {
         queuedDamageAmount = 1;
         effectNote = 'Khớp điều kiện (đang 0 vết) — phải nhận 1 thương tích!';
@@ -3371,10 +3852,12 @@ export function applyExpandedInvestigateCard(
       {
         kind: 'DAMAGE',
         damageEventId: nextExpansionEventId(state, 'dmg'),
+        sourceCardId: card.id,
         targetPlayerId: target.playerId,
         rawAmount: queuedDamageAmount,
         sourceType: 'investigation',
         attackerPlayerId: actor.playerId,
+        isSingleTarget: true,
       },
       {
         kind: 'FINISH_ACTION',
@@ -3655,6 +4138,7 @@ export function triggerExpandedTurnStart(
           rawAmount: 1,
           sourceType: 'skill',
           attackerPlayerId: actor.playerId,
+          isSingleTarget: true,
           postLogKind: 'skill',
           postLogPrefix: `👁️ Visions (${actor.displayName}) — Dấu Ấn Đầu Lượt: ${markedVictim.displayName} mất `,
           postLogSuffix: ' HP!',
@@ -3724,10 +4208,11 @@ export function applyExpandedUseSkill(
   nowMs: number,
   callbacks: TurnContinuationCallbacks,
 ): EngineActionResult | null {
-  // Chặn các kỹ năng mở rộng & kỹ năng gây sát thương/chuỗi tấn công; các kỹ năng Classic đơn giản (Lan, Trang) trả null.
+  // Chặn các kỹ năng mở rộng & kỹ năng gây sát thương/hồi máu/chuỗi tấn công; Lan (gac-truc-ban) trả null.
   if (
     actor.roleId !== 'gac-ky-thuat' &&
     actor.roleId !== 'gac-radio' &&
+    actor.roleId !== 'lang-quan-sat' &&
     actor.roleId !== 'lang-cuu-ho' &&
     actor.roleId !== 'exp2_father_harrison' &&
     actor.roleId !== 'exp1_bipolar' &&
@@ -3959,6 +4444,40 @@ export function applyExpandedUseSkill(
 
   const exp = ensureExpansionState(state);
 
+  if (actor.roleId === 'lang-quan-sat') {
+    if (
+      state.turnPhase !== 'ROLL_MOVE' &&
+      state.turnPhase !== 'CHOOSE_MOVE' &&
+      state.turnPhase !== 'LOCATION_ACTION' &&
+      state.turnPhase !== 'MAIN_ACTION'
+    ) {
+      return { ok: false, error: 'Chưa thể kích hoạt kỹ năng lúc này.' };
+    }
+    actor.skillUsedOnce = true;
+    exp.pendingSteps.push(
+      {
+        kind: 'HEAL',
+        healEventId: nextExpansionEventId(state, 'heal-allie'),
+        actorPlayerId: actor.playerId,
+        targetPlayerId: actor.playerId,
+        rawAmount: actor.woundsTaken,
+        sourceKind: 'skill',
+        sourceLabel: 'Ý Chí Hồi Sinh (Trang)',
+        postLogKind: 'skill',
+        postLogPrefix: `💚 ${actor.displayName} kích hoạt Ý Chí Hồi Sinh: hồi sạch `,
+        postLogSuffix: ' thương tích về 0!',
+        postLogActorId: actor.playerId,
+      },
+      {
+        kind: 'FINISH_ACTION',
+        actorPlayerId: actor.playerId,
+        autoEndTurnMode: 'never',
+      },
+    );
+    drainPendingSteps(state, nowMs, callbacks);
+    return { ok: true };
+  }
+
   if (actor.roleId === 'gac-ky-thuat' || actor.roleId === 'gac-radio') {
     if (
       state.turnPhase !== 'ROLL_MOVE' &&
@@ -3986,6 +4505,7 @@ export function applyExpandedUseSkill(
         rawAmount: dmg,
         sourceType: 'skill',
         attackerPlayerId: actor.playerId,
+        isSingleTarget: true,
         postLogKind: 'skill',
         postLogPrefix: isD6
           ? `⚡ ${actor.displayName} phóng Xung Cao Áp (1d6=${dmg}) lên ${target.displayName} → `
@@ -4129,48 +4649,79 @@ function executeDamageStep(
           | undefined;
 
         if (pendingUndying && target.alive && !target.revealed && dmg >= 2) {
-          const expQueue = ensureExpansionState(state);
-          expQueue.pendingSteps.unshift({
-            ...step,
-            undyingChecked: true,
-            preUndyingDmg: dmg,
-            undyingReduced: false,
-          });
-          const choiceId = nextExpansionEventId(state, 'choice-undying');
-          const timeoutMs = getChoiceTimeoutMs(state, target);
-          state.pendingChoice = {
-            choiceId,
-            eventId: step.damageEventId,
-            ownerPlayerId: target.playerId,
-            kind: 'undying_reveal_reduce',
-            isSecret: true,
-            title: 'Mạ Sắt (Undying)',
-            description: `Bạn sắp chịu ${dmg} sát thương (sau giảm thương trang bị). Bạn có muốn lật vai Undying ngay lúc này để giảm 1 sát thương (${dmg} → ${dmg - 1}) không?`,
-            publicPromptLabel: '⏳ Đang kiểm tra phản ứng trước sát thương...',
-            options: [
-              {
-                optionId: 'reveal_and_reduce',
-                label: `Lật vai Undying & Giảm 1 ST (${dmg} → ${dmg - 1})`,
-                detail: `Công khai vai Undying (Shadow) và chỉ nhận ${dmg - 1} sát thương.`,
-              },
-              {
-                optionId: 'decline',
-                label: `Giữ kín danh tính (Nhận đủ ${dmg} ST)`,
-                detail: 'Tiếp tục ẩn vai và không giảm sát thương.',
-              },
-            ],
-            defaultOptionId: 'decline',
-            createdAtMs: nowMs,
-            deadlineMs: nowMs + timeoutMs,
-            data: {
-              kind: 'undying_reveal_reduce',
-              undyingPlayerId: target.playerId,
-              damageEventId: step.damageEventId,
+          const policy = getPlayerReactionPolicy(state, target.playerId);
+          if (policy === 'AUTO_DECLINE') {
+            // CAP-05: Bỏ qua tức thì (<1ms), không mở choice, không log công khai!
+          } else if (
+            policy === 'AUTO_ACTIVATE_WHEN_ELIGIBLE' &&
+            canRoleAutoActivateSecretReaction(target.roleId)
+          ) {
+            const justRevealed = revealPlayerNow(state, target, 'voluntary', nowMs);
+            const prevDmg = dmg;
+            dmg = Math.max(0, dmg - 1);
+            const expStat = ensureExpansionState(state);
+            incRoleStat(expStat.stats.activationsByRole, 'exp1_undying', 1);
+            incRoleStat(expStat.stats.damagePreventedByRole, 'exp1_undying', prevDmg - dmg);
+            appendPublicLog(
+              state,
+              'reveal',
+              `🎭🛡️ ${target.displayName} lật vai Undying — Mạ Sắt: giảm 1 sát thương (${prevDmg} → ${dmg})!`,
+              nowMs,
+              target.playerId,
+            );
+            appendHighlight(
+              state,
+              `Lộ vai: ${target.displayName}`,
+              `Undying (${FACTION_LABELS[target.faction]}) — Mạ Sắt`,
+              nowMs,
+            );
+            if (justRevealed) {
+              enqueueRoleRevealedTrigger(state, target.playerId, 'reaction', step.chainDepth ?? 0);
+            }
+          } else {
+            const expQueue = ensureExpansionState(state);
+            expQueue.pendingSteps.unshift({
+              ...step,
+              undyingChecked: true,
               preUndyingDmg: dmg,
-              sourceType: step.sourceType,
-            },
-          };
-          return false;
+              undyingReduced: false,
+            });
+            const choiceId = nextExpansionEventId(state, 'choice-undying');
+            const timeoutMs = getChoiceTimeoutMs(state, target);
+            state.pendingChoice = {
+              choiceId,
+              eventId: step.damageEventId,
+              ownerPlayerId: target.playerId,
+              kind: 'undying_reveal_reduce',
+              isSecret: true,
+              title: 'Mạ Sắt (Undying)',
+              description: `Bạn sắp chịu ${dmg} sát thương (sau giảm thương trang bị). Bạn có muốn lật vai Undying ngay lúc này để giảm 1 sát thương (${dmg} → ${dmg - 1}) không?`,
+              publicPromptLabel: '⏳ Đang kiểm tra phản ứng trước sát thương...',
+              options: [
+                {
+                  optionId: 'reveal_and_reduce',
+                  label: `Lật vai Undying & Giảm 1 ST (${dmg} → ${dmg - 1})`,
+                  detail: `Công khai vai Undying (Shadow) và chỉ nhận ${dmg - 1} sát thương.`,
+                },
+                {
+                  optionId: 'decline',
+                  label: `Giữ kín danh tính (Nhận đủ ${dmg} ST)`,
+                  detail: 'Tiếp tục ẩn vai và không giảm sát thương.',
+                },
+              ],
+              defaultOptionId: 'decline',
+              createdAtMs: nowMs,
+              deadlineMs: nowMs + timeoutMs,
+              data: {
+                kind: 'undying_reveal_reduce',
+                undyingPlayerId: target.playerId,
+                damageEventId: step.damageEventId,
+                preUndyingDmg: dmg,
+                sourceType: step.sourceType,
+              },
+            };
+            return false;
+          }
         }
       }
     }
@@ -4509,6 +5060,7 @@ function executeAfterDamageTriggersStep(
       sourceType: 'retaliation',
       attackerPlayerId: target.playerId,
       isRetaliation: true,
+      isSingleTarget: true,
       postLogKind: 'skill',
       postLogPrefix: `🌙 Cindy (${target.displayName}) — Con Ác Mộng: phản kích ${attacker.displayName} gây `,
       postLogSuffix: ' sát thương!',
@@ -4524,6 +5076,45 @@ function executeAfterDamageTriggersStep(
   if (pendingCindy && target.alive && !target.revealed) {
     const exp = ensureExpansionState(state);
     markExpansionEventProcessed(state, step.afterDamageEventId);
+    const policy = getPlayerReactionPolicy(state, target.playerId);
+    if (policy === 'AUTO_DECLINE') {
+      // CAP-05: Bỏ qua tức thì (<1ms), không mở choice, không log công khai!
+      return true;
+    }
+    if (
+      policy === 'AUTO_ACTIVATE_WHEN_ELIGIBLE' &&
+      canRoleAutoActivateSecretReaction(target.roleId)
+    ) {
+      const justRevealed = revealPlayerNow(state, target, 'voluntary', nowMs);
+      incRoleStat(exp.stats.activationsByRole, 'exp1_cindy', 1);
+      incRoleStat(exp.stats.bonusDamageByRole, 'exp1_cindy', 1);
+      appendHighlight(
+        state,
+        `Lộ vai: ${target.displayName}`,
+        `Cindy (${FACTION_LABELS[target.faction]}) — Con Ác Mộng`,
+        nowMs,
+      );
+      exp.pendingSteps.unshift({
+        kind: 'DAMAGE',
+        damageEventId: nextExpansionEventId(state, 'dmg-retaliate'),
+        causationId: step.sourceDamageEventId,
+        targetPlayerId: attacker.playerId,
+        rawAmount: 1,
+        sourceType: 'retaliation',
+        attackerPlayerId: target.playerId,
+        isRetaliation: true,
+        isSingleTarget: true,
+        postLogKind: 'reveal',
+        postLogPrefix: `🎭🌙 ${target.displayName} lật vai Cindy — Con Ác Mộng: phản kích ${attacker.displayName} gây `,
+        postLogSuffix: ' sát thương!',
+        postLogActorId: target.playerId,
+      });
+      if (justRevealed) {
+        enqueueRoleRevealedTrigger(state, target.playerId, 'reaction', 0);
+      }
+      return true;
+    }
+
     const choiceId = nextExpansionEventId(state, 'choice-cindy');
     const timeoutMs = getChoiceTimeoutMs(state, target);
     state.pendingChoice = {
@@ -4599,6 +5190,18 @@ function executeEliminationTriggersStep(
   step.wendigoCheckedIds = Array.isArray(payload.wendigoCheckedIds)
     ? [...(payload.wendigoCheckedIds as string[])]
     : [];
+
+  if (payload.pausedForHealChoice === true) {
+    const exp = ensureExpansionState(state);
+    // Giữ lại ELIMINATION_TRIGGERS ngay sau bước HEAL đang tạm dừng để tiếp tục Vengeance / Wendigo!
+    const firstIsHeal = exp.pendingSteps[0]?.kind === 'HEAL';
+    if (firstIsHeal) {
+      exp.pendingSteps.splice(1, 0, step);
+    } else {
+      exp.pendingSteps.unshift(step);
+    }
+    return false;
+  }
 
   // Vengeance (priority 15 — chạy sau Wyvern, trước Wendigo!)
   const pendingVengeance = payload.pendingVengeanceChoice as
@@ -4695,6 +5298,47 @@ function executeEliminationTriggersStep(
     const wendigo = state.players[pendingWendigo.wendigoPlayerId];
     if (wendigo && wendigo.alive && !wendigo.revealed) {
       const exp = ensureExpansionState(state);
+      const policy = getPlayerReactionPolicy(state, wendigo.playerId);
+      if (policy === 'AUTO_DECLINE') {
+        // CAP-05: Bỏ qua tức thì (<1ms), tiếp tục kiểm tra các phản ứng khác trên chính step này!
+        exp.pendingSteps.unshift(step);
+        return true;
+      }
+      if (
+        policy === 'AUTO_ACTIVATE_WHEN_ELIGIBLE' &&
+        canRoleAutoActivateSecretReaction(wendigo.roleId)
+      ) {
+        const justRevealed = revealPlayerNow(state, wendigo, 'voluntary', nowMs);
+        incRoleStat(exp.stats.activationsByRole, 'exp1_wendigo', 1);
+        appendHighlight(
+          state,
+          `Lộ vai: ${wendigo.displayName}`,
+          `Wendigo (${FACTION_LABELS[wendigo.faction]}) — Tiệc Thịt`,
+          nowMs,
+        );
+        exp.pendingSteps.unshift(
+          {
+            kind: 'HEAL',
+            healEventId: nextExpansionEventId(state, 'heal-wendigo'),
+            actorPlayerId: wendigo.playerId,
+            targetPlayerId: wendigo.playerId,
+            rawAmount: 1,
+            sourceKind: 'skill',
+            sourceLabel: 'Tiệc Thịt (Wendigo)',
+            roleStatId: 'exp1_wendigo',
+            postLogKind: 'reveal',
+            postLogPrefix: `🎭🩸 ${wendigo.displayName} lật vai Wendigo — Tiệc Thịt: hồi `,
+            postLogSuffix: ' HP!',
+            postLogActorId: wendigo.playerId,
+          },
+          step,
+        );
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, wendigo.playerId, 'reaction', 0);
+        }
+        return true;
+      }
+
       // Đặt lại step lên đầu hàng đợi để hoàn tất sau khi Wendigo quyết định
       exp.pendingSteps.unshift(step);
 
@@ -4741,6 +5385,79 @@ function executeEliminationTriggersStep(
   return true;
 }
 
+function executeHealStep(
+  state: AuthoritativeGameState,
+  step: Extract<PendingResolutionStep, { kind: 'HEAL' }>,
+  nowMs: number,
+): boolean {
+  const res = executeHealPipeline(
+    state,
+    {
+      healEventId: step.healEventId,
+      actorPlayerId: step.actorPlayerId,
+      targetPlayerId: step.targetPlayerId,
+      rawAmount: step.rawAmount,
+      sourceKind: step.sourceKind,
+      sourceCardId: step.sourceCardId,
+      sourceLabel: step.sourceLabel,
+      roleStatId: step.roleStatId,
+      usurperChecked: step.usurperChecked,
+      usurperBlocked: step.usurperBlocked,
+      postLogKind: step.postLogKind,
+      postLogPrefix: step.postLogPrefix,
+      postLogSuffix: step.postLogSuffix,
+      postLogActorId: step.postLogActorId,
+      zeroLogText: step.zeroLogText,
+      blockedLogText: step.blockedLogText,
+    },
+    nowMs,
+    createExpandedHealHooks(),
+  );
+  return !res.pendingChoiceOpened;
+}
+
+function executeRoleRevealedTriggersStep(
+  state: AuthoritativeGameState,
+  step: Extract<PendingResolutionStep, { kind: 'ROLE_REVEALED_TRIGGERS' }>,
+  nowMs: number,
+): boolean {
+  if (hasProcessedExpansionEvent(state, step.revealEventId)) {
+    return true;
+  }
+  const revealedPlayer = state.players[step.revealedPlayerId];
+  if (!revealedPlayer || !revealedPlayer.alive || !revealedPlayer.revealed) {
+    markExpansionEventProcessed(state, step.revealEventId);
+    return true;
+  }
+
+  // CAP-06: Dispatch ON_REVEAL cho các vai trò kích hoạt khi lộ diện (Phase 5B Umibozu, v.v.)
+  const payload: Record<string, unknown> = {
+    revealEventId: step.revealEventId,
+    revealedPlayerId: step.revealedPlayerId,
+    revealCause: step.revealCause,
+    umibozuChecked: Boolean(step.umibozuChecked),
+    chainDepth: step.chainDepth ?? 0,
+  };
+  EXPANSION_SKILL_ENGINE.dispatch(state, {
+    trigger: 'ON_ROLE_REVEAL',
+    actorPlayerId: revealedPlayer.playerId,
+    targetPlayerId: revealedPlayer.playerId,
+    nowMs,
+    payload,
+  });
+
+  const queuedSteps = Array.isArray(payload.queuedRevealSteps)
+    ? (payload.queuedRevealSteps as PendingResolutionStep[])
+    : [];
+  if (queuedSteps.length > 0) {
+    const exp = ensureExpansionState(state);
+    exp.pendingSteps.unshift(...queuedSteps);
+  }
+
+  markExpansionEventProcessed(state, step.revealEventId);
+  return true;
+}
+
 export function drainPendingSteps(
   state: AuthoritativeGameState,
   nowMs: number,
@@ -4749,7 +5466,12 @@ export function drainPendingSteps(
   const exp = ensureExpansionState(state);
   let guard = 0;
 
-  while (exp.pendingSteps.length > 0 && !state.pendingChoice && !state.finished && guard < 64) {
+  while (
+    exp.pendingSteps.length > 0 &&
+    !state.pendingChoice &&
+    !state.finished &&
+    guard < MAX_PENDING_STEPS_DRAIN
+  ) {
     guard += 1;
     const step = exp.pendingSteps.shift()!;
 
@@ -4757,6 +5479,24 @@ export function drainPendingSteps(
       case 'DAMAGE': {
         const completed = executeDamageStep(state, step, nowMs);
         if (!completed) return;
+        break;
+      }
+
+      case 'HEAL': {
+        const completed = executeHealStep(state, step, nowMs);
+        if (!completed) return;
+        break;
+      }
+
+      case 'ROLE_REVEALED_TRIGGERS': {
+        const completed = executeRoleRevealedTriggersStep(state, step, nowMs);
+        if (!completed) return;
+        break;
+      }
+
+      case 'GWENDOLEN_COUNTER':
+      case 'FREYJA_EXTRA_ATTACK_CHECK': {
+        // CAP-06 Phase 5A foundation stubs — handlers wired in Phase 5C.
         break;
       }
 
@@ -4803,28 +5543,38 @@ export function drainPendingSteps(
           damageDealt: step.totalDealt,
         };
 
-        // Nội tại Tú "Ẩn Danh" (Vampire)
+        const postSubSteps: PendingResolutionStep[] = [];
+
+        // Nội tại Tú "Ẩn Danh" (Vampire) -> định tuyến qua CAP-04 HealPipeline (`sourceKind: 'skill'`)!
         if (step.totalDealt > 0 && actor.alive && actor.revealed && actor.roleId === 'suong-an-danh') {
-          const healed = applyHeal(state, actor, 2);
-          if (healed > 0) {
-            appendPublicLog(
-              state,
-              'skill',
-              `🦇 Tú "Ẩn Danh" (${actor.displayName}) hút sinh lực hồi ${healed} thương tích!`,
-              nowMs,
-              actor.playerId,
-            );
-          }
+          postSubSteps.push({
+            kind: 'HEAL',
+            healEventId: nextExpansionEventId(state, 'heal-vampire'),
+            actorPlayerId: actor.playerId,
+            targetPlayerId: actor.playerId,
+            rawAmount: 2,
+            sourceKind: 'skill',
+            sourceLabel: 'Hút Sinh Lực (Tú "Ẩn Danh")',
+            postLogKind: 'skill',
+            postLogPrefix: `🦇 Tú "Ẩn Danh" (${actor.displayName}) hút sinh lực hồi `,
+            postLogSuffix: ' thương tích!',
+            postLogActorId: actor.playerId,
+          });
         }
 
         // Xếp hàng phản kích của Dũng "Gác Cổng" (Werewolf)
         if (step.counterAttackerIds.length > 0) {
-          const counterSteps: PendingResolutionStep[] = step.counterAttackerIds.map((defId) => ({
-            kind: 'COUNTER_ATTACK',
-            defenderPlayerId: defId,
-            attackerPlayerId: actor.playerId,
-          }));
-          exp.pendingSteps.unshift(...counterSteps);
+          for (const defId of step.counterAttackerIds) {
+            postSubSteps.push({
+              kind: 'COUNTER_ATTACK',
+              defenderPlayerId: defId,
+              attackerPlayerId: actor.playerId,
+            });
+          }
+        }
+
+        if (postSubSteps.length > 0) {
+          exp.pendingSteps.unshift(...postSubSteps);
         }
         break;
       }
@@ -4862,7 +5612,7 @@ export function drainPendingSteps(
         const cRollDesc = cStick ? `1d4=${cd4}` : `|${cd6}-${cd4}|=${cBase}`;
         const prevHp = origAttacker.hp;
 
-        // Phản kích cũng là nguồn 'attack' -> tôn trọng G43 / Holy Robe / Guardian Angel / Wendigo!
+        // Phản kích cũng là nguồn 'attack' -> tôn trọng G43 / Holy Robe / Guardian Angel / Wendigo / Bianca!
         const counterDmgStep: Extract<PendingResolutionStep, { kind: 'DAMAGE' }> = {
           kind: 'DAMAGE',
           damageEventId: nextExpansionEventId(state, 'dmg-counter'),
@@ -4870,6 +5620,8 @@ export function drainPendingSteps(
           rawAmount: cRaw,
           sourceType: 'attack',
           attackerPlayerId: dung.playerId,
+          isSingleTarget: true,
+          isRetaliatoryAttack: true,
           postLogKind: 'skill',
           postLogPrefix: `🥊 Dũng "Gác Cổng" (${dung.displayName}) phản kích (${cRollDesc}, tổng ${cRaw}) → ${origAttacker.displayName} chịu `,
           postLogSuffix: ' sát thương!',
@@ -4895,11 +5647,26 @@ export function drainPendingSteps(
         const actor = state.players[step.actorPlayerId];
         const target = state.players[step.targetPlayerId];
         if (!actor || !target) break;
-        const healed = actor.alive ? applyHeal(state, actor, 1) : 0;
+        const healRes = actor.alive
+          ? executeHealPipeline(
+              state,
+              {
+                healEventId: nextExpansionEventId(state, 'heal-vbat'),
+                sourceCardId: 'ev-07',
+                actorPlayerId: actor.playerId,
+                targetPlayerId: actor.playerId,
+                rawAmount: 1,
+                sourceKind: 'black-card',
+                sourceLabel: step.cardTitle,
+              },
+              nowMs,
+              createExpandedHealHooks(),
+            )
+          : { actual: 0 };
         appendPublicLog(
           state,
           'event',
-          `🦇 ${actor.displayName} dùng "${step.cardTitle}" lên ${target.displayName} (-${step.dealtToTarget} HP, bản thân +${healed} HP).`,
+          `🦇 ${actor.displayName} dùng "${step.cardTitle}" lên ${target.displayName} (-${step.dealtToTarget} HP, bản thân +${healRes.actual} HP).`,
           nowMs,
           actor.playerId,
         );
@@ -4914,11 +5681,14 @@ export function drainPendingSteps(
         exp.pendingSteps.unshift({
           kind: 'DAMAGE',
           damageEventId: nextExpansionEventId(state, 'dmg'),
+          sourceCardId: 'ev-08',
           targetPlayerId: actor.playerId,
           rawAmount: 2,
           sourceType: 'event',
           attackerPlayerId: null,
           isTalismanWardable: true,
+          isSingleTarget: true,
+          isConsumableBlackCardDamage: true,
           postLogKind: 'event',
           postLogPrefix: `🕷️ ${actor.displayName} tung "${step.cardTitle}": ${target.displayName} chịu ${step.dealtToTarget} ST, bản thân chịu `,
           postLogSuffix: ' ST!',
@@ -5037,23 +5807,31 @@ export function resolvePendingChoice(
     case 'wendigo_reveal_heal': {
       const wendigo = state.players[data.wendigoPlayerId];
       if (optionId === 'reveal_and_activate' && wendigo && wendigo.alive) {
-        revealPlayerNow(state, wendigo, 'voluntary', nowMs);
-        const healed = applyHeal(state, wendigo, 1);
+        const justRevealed = revealPlayerNow(state, wendigo, 'voluntary', nowMs);
         incRoleStat(exp.stats.activationsByRole, 'exp1_wendigo', 1);
-        incRoleStat(exp.stats.healByRole, 'exp1_wendigo', healed);
-        appendPublicLog(
-          state,
-          'reveal',
-          `🎭🩸 ${wendigo.displayName} lật vai Wendigo — Tiệc Thịt: hồi ${healed} HP (hiện ${wendigo.hp}/${wendigo.maxHp})!`,
-          nowMs,
-          wendigo.playerId,
-        );
         appendHighlight(
           state,
           `Lộ vai: ${wendigo.displayName}`,
           `Wendigo (${FACTION_LABELS[wendigo.faction]}) — Tiệc Thịt`,
           nowMs,
         );
+        exp.pendingSteps.unshift({
+          kind: 'HEAL',
+          healEventId: nextExpansionEventId(state, 'heal-wendigo'),
+          actorPlayerId: wendigo.playerId,
+          targetPlayerId: wendigo.playerId,
+          rawAmount: 1,
+          sourceKind: 'skill',
+          sourceLabel: 'Tiệc Thịt (Wendigo)',
+          roleStatId: 'exp1_wendigo',
+          postLogKind: 'reveal',
+          postLogPrefix: `🎭🩸 ${wendigo.displayName} lật vai Wendigo — Tiệc Thịt: hồi `,
+          postLogSuffix: ' HP!',
+          postLogActorId: wendigo.playerId,
+        });
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, wendigo.playerId, 'reaction', 0);
+        }
       }
       // Khi decline hoặc timeout: KHÔNG phát log công khai nhắc tên Wendigo (zero secret leak!)
       drainPendingSteps(state, nowMs, callbacks);
@@ -5265,7 +6043,7 @@ export function resolvePendingChoice(
         attacker &&
         attacker.alive
       ) {
-        revealPlayerNow(state, cindy, 'voluntary', nowMs);
+        const justRevealed = revealPlayerNow(state, cindy, 'voluntary', nowMs);
         incRoleStat(exp.stats.activationsByRole, 'exp1_cindy', 1);
         incRoleStat(exp.stats.bonusDamageByRole, 'exp1_cindy', 1);
         appendHighlight(
@@ -5283,11 +6061,15 @@ export function resolvePendingChoice(
           sourceType: 'retaliation',
           attackerPlayerId: cindy.playerId,
           isRetaliation: true,
+          isSingleTarget: true,
           postLogKind: 'reveal',
           postLogPrefix: `🎭🌙 ${cindy.displayName} lật vai Cindy — Con Ác Mộng: phản kích ${attacker.displayName} gây `,
           postLogSuffix: ' sát thương!',
           postLogActorId: cindy.playerId,
         });
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, cindy.playerId, 'reaction', 0);
+        }
       }
       // Khi decline hoặc timeout: KHÔNG phát log công khai nhắc tên Cindy (zero secret leak!)
       drainPendingSteps(state, nowMs, callbacks);
@@ -5332,16 +6114,28 @@ export function resolvePendingChoice(
       incRoleStat(exp.stats.activationsByRole, 'exp1_bipolar', 1);
 
       if (optionId === 'heal_self') {
-        const healed = applyHeal(state, actor, amount);
-        incRoleStat(exp.stats.healByRole, 'exp1_bipolar', healed);
-        appendPublicLog(
-          state,
-          'skill',
-          `🪙💚 Bipolar (${actor.displayName}) — Đồng Xu Định Mệnh (1d4=${d4} + 2 = ${amount}): hồi ${healed} HP (hiện ${actor.hp}/${actor.maxHp})!`,
-          nowMs,
-          actor.playerId,
+        exp.pendingSteps.push(
+          {
+            kind: 'HEAL',
+            healEventId: nextExpansionEventId(state, 'heal-bipolar'),
+            actorPlayerId: actor.playerId,
+            targetPlayerId: actor.playerId,
+            rawAmount: amount,
+            sourceKind: 'skill',
+            sourceLabel: 'Đồng Xu Định Mệnh (Bipolar)',
+            roleStatId: 'exp1_bipolar',
+            postLogKind: 'skill',
+            postLogPrefix: `🪙💚 Bipolar (${actor.displayName}) — Đồng Xu Định Mệnh (1d4=${d4} + 2 = ${amount}): hồi `,
+            postLogSuffix: ' HP!',
+            postLogActorId: actor.playerId,
+          },
+          {
+            kind: 'FINISH_ACTION',
+            actorPlayerId: actor.playerId,
+            autoEndTurnMode: 'never',
+          },
         );
-        callbacks.finalizeIfFinished(state, nowMs);
+        drainPendingSteps(state, nowMs, callbacks);
         return { ok: true };
       }
 
@@ -5356,6 +6150,7 @@ export function resolvePendingChoice(
             attackerPlayerId: null,
             isHpCost: true,
             unpreventable: true,
+            isSingleTarget: true,
             postLogKind: 'skill',
             postLogPrefix: `🪙🩸 Bipolar (${actor.displayName}) — Đồng Xu Định Mệnh (1d4=${d4} + 2 = ${amount}): tự nhận `,
             postLogSuffix: ' sát thương không thể chặn!',
@@ -5377,7 +6172,7 @@ export function resolvePendingChoice(
     case 'undying_reveal_reduce': {
       const undying = state.players[data.undyingPlayerId];
       if (optionId === 'reveal_and_reduce' && undying && undying.alive) {
-        revealPlayerNow(state, undying, 'voluntary', nowMs);
+        const justRevealed = revealPlayerNow(state, undying, 'voluntary', nowMs);
         const pausedStep = exp.pendingSteps[0];
         if (
           pausedStep &&
@@ -5401,6 +6196,9 @@ export function resolvePendingChoice(
           `Undying (${FACTION_LABELS[undying.faction]}) — Mạ Sắt`,
           nowMs,
         );
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, undying.playerId, 'reaction', 0);
+        }
       }
       // Khi decline hoặc timeout: KHÔNG phát log công khai nhắc tên Undying (zero secret leak!)
       drainPendingSteps(state, nowMs, callbacks);
@@ -5478,6 +6276,7 @@ export function resolvePendingChoice(
           rawAmount: 2,
           sourceType: 'skill',
           attackerPlayerId: actor.playerId,
+          isSingleTarget: false,
         });
       }
       exp.pendingSteps.push({
@@ -5551,6 +6350,7 @@ export function resolvePendingChoice(
         rawAmount: d4,
         sourceType: 'skill',
         attackerPlayerId: vengeance.playerId,
+        isSingleTarget: false,
       }));
       exp.pendingSteps.unshift(...chainSteps);
       drainPendingSteps(state, nowMs, callbacks);

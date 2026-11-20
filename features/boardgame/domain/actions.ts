@@ -37,6 +37,7 @@ import {
   listExpandedReachableAttackTargets,
   resolveExpiredPendingChoice,
   resolvePendingChoice,
+  setPlayerReactionPolicy,
   startExpandedAttack,
   triggerExpandedTurnStart,
   type TurnContinuationCallbacks,
@@ -224,6 +225,16 @@ export function applyPlayerGameAction(
     return { ok: false, error: 'Bạn không thể hành động khi đã bị loại.', reason: 'Bạn không thể hành động khi đã bị loại.' };
   }
 
+  // CAP-05: Cập nhật chính sách phản ứng riêng tư (`SET_REACTION_PREF`) hợp lệ ngoài lượt & kể cả khi đang mở choice!
+  if (action.type === 'SET_REACTION_PREF') {
+    const res = setPlayerReactionPolicy(state, playerId, action.policy);
+    if (!res.ok) {
+      const msg = res.reason ?? res.error ?? 'Không thể cập nhật chính sách phản ứng.';
+      return { ok: false, error: msg, reason: msg };
+    }
+    return { ok: true };
+  }
+
   // Khi đang có Pending Choice (trong lượt hoặc phản ứng bí mật ngoài lượt):
   // CHỈ cho phép chủ sở hữu choice gửi đúng `RESOLVE_CHOICE`, chặn mọi hành động khác!
   if (state.pendingChoice) {
@@ -406,9 +417,12 @@ export function applyPlayerGameAction(
       break;
     }
     case 'REVEAL_ROLE':
-      result = expanded
-        ? applyExpandedRevealRole(state, actor, nowMs)
-        : resolveRevealRole(state, actor, nowMs);
+      if (expanded) {
+        result = applyExpandedRevealRole(state, actor, nowMs, TURN_CONTINUATION_CALLBACKS);
+        continuationManaged = true;
+      } else {
+        result = resolveRevealRole(state, actor, nowMs);
+      }
       break;
     case 'USE_SKILL':
       if (expanded) {

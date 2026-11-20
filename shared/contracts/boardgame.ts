@@ -179,6 +179,17 @@ export type BoardGameTurnPhase =
   | 'MAIN_ACTION'
   | 'ENDED';
 
+export type BoardGameReactionPolicy =
+  | 'ASK'
+  | 'AUTO_DECLINE'
+  | 'AUTO_ACTIVATE_WHEN_ELIGIBLE';
+
+export const BOARD_GAME_VALID_REACTION_POLICIES: readonly BoardGameReactionPolicy[] = [
+  'ASK',
+  'AUTO_DECLINE',
+  'AUTO_ACTIVATE_WHEN_ELIGIBLE',
+];
+
 export type BoardGameEmoteId =
   | 'wave'
   | 'think'
@@ -484,6 +495,12 @@ export interface BoardGamePublicGameView {
   pendingChoice?: BoardGamePublicPendingChoice | null;
   /** Dấu ấn Visions công khai (CHỈ xuất cho Visions đã lộ vai & mục tiêu còn sống — zero hidden role leak). */
   visionsMarkedTargetByPlayer?: Readonly<Record<string, string>>;
+  /** Danh sách playerId Neutral đang được hào quang Angel đã lộ diện bảo vệ (zero hidden role leak). */
+  angelProtectedPlayerIds?: readonly string[];
+  /** True khi có ít nhất 1 Usurper đã lộ diện còn sống kích hoạt hào quang cấm hồi máu. */
+  usurperAuraActive?: boolean;
+  /** Danh sách playerId Dalton đã lộ diện & kích hoạt Vòng Đấu Thứ 12 (cấm tự hồi máu). */
+  daltonActivatedPlayerIds?: readonly string[];
   deadCount: number;
   players: readonly BoardGamePublicPlayerView[];
   deckCounts: Record<BoardGameDeckId, number>;
@@ -519,6 +536,8 @@ export interface BoardGamePrivateGameView {
   hand: readonly BoardGameCardPublicMeta[];
   equipped: readonly BoardGameCardPublicMeta[];
   privateClues: readonly BoardGamePrivateClueEntry[];
+  /** Chính sách phản ứng riêng tư trên server (CHỈ gửi unicast cho chủ sở hữu, tuyệt đối không xuất công khai). */
+  reactionPolicy?: BoardGameReactionPolicy;
   pendingChoice?: BoardGamePrivatePendingChoice | null;
 }
 
@@ -554,6 +573,10 @@ export type BoardGameActionPayload =
       type: 'RESOLVE_CHOICE';
       choiceId: string;
       optionId: string;
+    }
+  | {
+      type: 'SET_REACTION_PREF';
+      policy: BoardGameReactionPolicy;
     }
   | { type: 'END_TURN' };
 
@@ -877,6 +900,13 @@ export function isValidBoardGameEmote(raw: unknown): raw is BoardGameEmoteId {
   return typeof raw === 'string' && (VALID_BOARD_GAME_EMOTES as readonly string[]).includes(raw);
 }
 
+export function isValidBoardGameReactionPolicy(raw: unknown): raw is BoardGameReactionPolicy {
+  return (
+    typeof raw === 'string' &&
+    (BOARD_GAME_VALID_REACTION_POLICIES as readonly string[]).includes(raw)
+  );
+}
+
 export function sanitizeBoardGameToken(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const clean = raw.trim();
@@ -1014,6 +1044,7 @@ const ACTION_ALLOWED_KEYS: Record<BoardGameActionPayload['type'], ReadonlySet<st
   REVEAL_ROLE: new Set(['type']),
   USE_SKILL: new Set(['type', 'targetPlayerId', 'targetLocation']),
   RESOLVE_CHOICE: new Set(['type', 'choiceId', 'optionId']),
+  SET_REACTION_PREF: new Set(['type', 'policy']),
   END_TURN: new Set(['type']),
 };
 
@@ -1172,6 +1203,18 @@ export function validateBoardGameActionPayload(
           type: 'RESOLVE_CHOICE',
           choiceId: raw.choiceId,
           optionId: raw.optionId,
+        },
+      };
+    }
+    case 'SET_REACTION_PREF': {
+      if (!isValidBoardGameReactionPolicy(raw.policy)) {
+        return { ok: false, error: 'Chính sách phản ứng (policy) không hợp lệ.' };
+      }
+      return {
+        ok: true,
+        action: {
+          type: 'SET_REACTION_PREF',
+          policy: raw.policy,
         },
       };
     }

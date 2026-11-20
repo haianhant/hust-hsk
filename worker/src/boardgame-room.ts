@@ -2513,6 +2513,36 @@ export class BoardGameRoom {
       return;
     }
 
+    // CAP-05 Zero-Leak Private Preference Update:
+    // `SET_REACTION_PREF` chỉ ghi `game_state_json` xuống SQLite và unicast riêng cho
+    // chính chủ sở hữu — KHÔNG tăng revision công khai, KHÔNG broadcast sang người khác hay Spectator!
+    if (actionPayload.type === 'SET_REACTION_PREF') {
+      this.sql.exec(
+        `UPDATE matches SET game_state_json = ? WHERE match_id = ?`,
+        JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
+        match.match_id,
+      );
+      this.sql.exec(
+        `INSERT OR REPLACE INTO processed_requests (player_id, request_id, revision, created_at_ms)
+         VALUES (?, ?, ?, ?)`,
+        player.player_id,
+        reqId,
+        match.revision,
+        nowMs,
+      );
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId: reqId,
+        ok: true,
+        revision: match.revision,
+      });
+      const privateSync = this.buildStateSyncPayload(player.player_id, false);
+      if (privateSync) {
+        this.send(ws, privateSync);
+      }
+      return;
+    }
+
     const nextStatus: BoardGameMatchStatus = engineState.finished ? 'FINISHED' : 'PLAYING';
     const turnChanged = engineState.turnNumber !== prevTurnNumber;
     const hasPendingChoice = Boolean(engineState.pendingChoice);

@@ -17,6 +17,7 @@ import type {
   BoardGamePendingChoiceKind,
   BoardGamePrivateClueEntry,
   BoardGamePublicLogEntry,
+  BoardGameReactionPolicy,
   BoardGameRevealEvent,
   BoardGameRevealRecord,
   BoardGameRoleId,
@@ -151,6 +152,38 @@ export type DamageSourceKind =
   | 'retaliation'
   | 'hp-cost';
 
+/** Phân loại nguồn hồi máu chuẩn cho CAP-04 HealPipeline (mở rộng). */
+export type HealSourceKind =
+  | 'skill'
+  | 'white-card'
+  | 'black-card'
+  | 'location'
+  | 'investigation';
+
+export interface HealExecutionResult {
+  attempted: number;
+  actual: number;
+  blockedBy:
+    | 'none'
+    | 'dalton-self-heal'
+    | 'usurper-aura'
+    | 'usurper-reveal'
+    | 'target-dead'
+    | 'duplicate-event';
+  pendingChoiceOpened?: boolean;
+}
+
+export interface AngelAuraEntry {
+  phase: 'armed' | 'active' | 'expired';
+  armedOnTurnNumber: number;
+  activatedOnTurnNumber?: number;
+}
+
+export interface DaltonActivationEntry {
+  activatedOnTurnNumber: number;
+  damageEventId: string;
+}
+
 export interface AttackRollSample {
   d6: number;
   d4: number;
@@ -176,9 +209,18 @@ export type PendingResolutionStep =
       isHpCost?: boolean;
       unpreventable?: boolean;
       isRetaliation?: boolean;
+      isSingleTarget?: boolean;
+      isConsumableBlackCardDamage?: boolean;
+      isBonusAttack?: boolean;
+      isRetaliatoryAttack?: boolean;
+      biancaChecked?: boolean;
+      biancaPrevented?: boolean;
+      urbanLegendChecked?: boolean;
+      urbanLegendConverted?: boolean;
       undyingChecked?: boolean;
       undyingReduced?: boolean;
       preUndyingDmg?: number;
+      chainDepth?: number;
       /** Ngữ cảnh ghi log đòn tấn công đơn mục tiêu hoặc bài/kỹ năng */
       attackSingleTargetLog?: {
         rollDesc: string;
@@ -188,6 +230,49 @@ export type PendingResolutionStep =
       postLogPrefix?: string;
       postLogSuffix?: string;
       postLogActorId?: string | null;
+    }
+  | {
+      kind: 'HEAL';
+      healEventId: string;
+      causationId?: string;
+      sourceCardId?: string;
+      actorPlayerId: string | null;
+      targetPlayerId: string;
+      rawAmount: number;
+      sourceKind: HealSourceKind;
+      sourceLabel?: string;
+      roleStatId?: string;
+      usurperChecked?: boolean;
+      usurperBlocked?: boolean;
+      chainDepth?: number;
+      postLogKind?: BoardGamePublicLogEntry['kind'];
+      postLogPrefix?: string;
+      postLogSuffix?: string;
+      postLogActorId?: string | null;
+      zeroLogText?: string;
+      blockedLogText?: string;
+    }
+  | {
+      kind: 'ROLE_REVEALED_TRIGGERS';
+      revealEventId: string;
+      revealedPlayerId: string;
+      revealCause: 'voluntary' | 'forced-card' | 'reaction';
+      umibozuChecked?: boolean;
+      chainDepth?: number;
+    }
+  | {
+      kind: 'GWENDOLEN_COUNTER';
+      counterEventId: string;
+      gwendolenPlayerId: string;
+      attackerPlayerId: string;
+      protectedVictimIds: string[];
+      chainDepth?: number;
+    }
+  | {
+      kind: 'FREYJA_EXTRA_ATTACK_CHECK';
+      freyjaPlayerId: string;
+      usedExtraAttacksCount: number;
+      chainDepth?: number;
     }
   | {
       kind: 'AFTER_DAMAGE_TRIGGERS';
@@ -215,6 +300,10 @@ export type PendingResolutionStep =
       rollDesc: string;
       totalDealt: number;
       counterAttackerIds: string[];
+      isBonusAttack?: boolean;
+      isRetaliatoryAttack?: boolean;
+      gwendolenVictimIds?: string[];
+      chainDepth?: number;
     }
   | {
       kind: 'COUNTER_ATTACK';
@@ -380,6 +469,7 @@ export interface ExpansionRuntimeStats {
   damagePreventedByRole: Record<string, number>;
   healByRole: Record<string, number>;
   bonusDamageByRole: Record<string, number>;
+  healsBlockedByRole?: Record<string, number>;
 }
 
 export interface GloriaQueuedCardEntry {
@@ -410,6 +500,18 @@ export interface ExpansionRuntimeState {
   cruzQualifyingCardTurnByPlayer?: Record<string, number>;
   /** Danh sách playerId Cruz đã hoàn thành điều kiện thắng hạ gục trong lượt hợp lệ. */
   cruzWinTriggeredIds?: string[];
+  /** Chính sách phản ứng riêng tư theo từng người chơi (CAP-05 — tuyệt đối không xuất công khai). */
+  reactionPolicyByPlayer?: Record<string, BoardGameReactionPolicy>;
+  /** Hào quang Thiên sứ bảo hộ (Angel — Phase 5C): armed -> active -> expired. */
+  angelAuras?: Record<string, AngelAuraEntry>;
+  /** Ghi nhận kích hoạt Vòng Đấu Thứ 12 của Dalton (Phase 5C). */
+  daltonActivatedByPlayer?: Record<string, DaltonActivationEntry>;
+  /** Danh sách playerId Dalton đã hạ gục mục tiêu sau khi kích hoạt Vòng Đấu Thứ 12. */
+  daltonKillWinTriggeredIds?: string[];
+  /** Danh sách playerId Arlene đã bị một Hunter hạ gục. */
+  arleneHunterKillTriggeredIds?: string[];
+  /** Danh sách playerId Umibozu đã kích hoạt AoE lộ diện 1 lần/trận. */
+  umibozuTriggeredIds?: string[];
   choiceTimeoutMs?: number;
   stats: ExpansionRuntimeStats;
 }

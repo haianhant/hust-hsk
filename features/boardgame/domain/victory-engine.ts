@@ -23,12 +23,103 @@ import type {
 } from '../../../shared/contracts/boardgame';
 import { BOARD_GAME_DEFAULT_RULESET_ID } from '../../../shared/contracts/boardgame';
 import { FACTION_LABELS, getRoleDesign } from './roles';
+import { getRemainingHp, isPlayerAtExactLocationAlias } from './rules';
 import type {
   AuthoritativeGameState,
   AuthoritativePlayerState,
   VictoryEvaluation,
 } from './types';
 import { evaluateVictory } from './victory';
+
+// ---------------------------------------------------------------------------
+// CAP-07 — Reusable Extended Neutral Victory Primitives (Phase 5A)
+// Pure, deterministic, side-effect-free predicates shared across Wave 4+ roles.
+// ---------------------------------------------------------------------------
+
+export function getMinAliveRemainingHp(
+  alivePlayers: readonly AuthoritativePlayerState[],
+): number | null {
+  if (alivePlayers.length === 0) return null;
+  let minHp = Number.POSITIVE_INFINITY;
+  for (const p of alivePlayers) {
+    const hp = getRemainingHp(p);
+    if (hp < minHp) minHp = hp;
+  }
+  return Number.isFinite(minHp) ? minHp : null;
+}
+
+export function getMaxAliveRemainingHp(
+  alivePlayers: readonly AuthoritativePlayerState[],
+): number | null {
+  if (alivePlayers.length === 0) return null;
+  let maxHp = Number.NEGATIVE_INFINITY;
+  for (const p of alivePlayers) {
+    const hp = getRemainingHp(p);
+    if (hp > maxHp) maxHp = hp;
+  }
+  return Number.isFinite(maxHp) ? maxHp : null;
+}
+
+/** True khi người chơi còn sống và có lượng HP còn lại THẤP NHẤT trong nhóm sống sót (cho phép hòa). */
+export function hasLowestRemainingHpAmongSurvivors(
+  player: AuthoritativePlayerState,
+  alivePlayers: readonly AuthoritativePlayerState[],
+): boolean {
+  if (!player.alive) return false;
+  const minHp = getMinAliveRemainingHp(alivePlayers);
+  return minHp !== null && getRemainingHp(player) === minHp;
+}
+
+/** True khi người chơi còn sống và có lượng HP còn lại CAO NHẤT trong nhóm sống sót (cho phép hòa). */
+export function hasHighestRemainingHpAmongSurvivors(
+  player: AuthoritativePlayerState,
+  alivePlayers: readonly AuthoritativePlayerState[],
+): boolean {
+  if (!player.alive) return false;
+  const maxHp = getMaxAliveRemainingHp(alivePlayers);
+  return maxHp !== null && getRemainingHp(player) === maxHp;
+}
+
+/** True khi toàn bộ nhân vật Neutral trong trận đều đang còn sống. */
+export function areAllNeutralsAlive(
+  allWanderers: readonly AuthoritativePlayerState[],
+): boolean {
+  return allWanderers.length > 0 && allWanderers.every((w) => w.alive);
+}
+
+/** CAP-07: Điều kiện thắng tức thì khi bị phe chỉ định hạ gục (Arlene bị Hunter giết). */
+export function isArleneImmediateVictorySatisfied(
+  state: AuthoritativeGameState,
+  player: AuthoritativePlayerState,
+): boolean {
+  return Boolean(
+    !player.alive &&
+      state.expansionState?.arleneHunterKillTriggeredIds?.includes(player.playerId),
+  );
+}
+
+/** CAP-07: Điều kiện thắng tức thì sau kích hoạt Vòng Đấu Thứ 12 (Dalton hạ gục người khác). */
+export function isDaltonImmediateVictorySatisfied(
+  state: AuthoritativeGameState,
+  player: AuthoritativePlayerState,
+): boolean {
+  return Boolean(
+    player.alive &&
+      state.expansionState?.daltonKillWinTriggeredIds?.includes(player.playerId),
+  );
+}
+
+/** CAP-07: Điều kiện thắng cuối trận của Angel (còn sống AND [tất cả Neutral sống OR đứng chính xác ô `lobby` / Church]). */
+export function isAngelEndOfMatchVictorySatisfied(
+  player: AuthoritativePlayerState,
+  allWanderers: readonly AuthoritativePlayerState[],
+): boolean {
+  if (!player.alive) return false;
+  return (
+    areAllNeutralsAlive(allWanderers) ||
+    isPlayerAtExactLocationAlias(player, 'church')
+  );
+}
 
 export const VICTORY_ARCHETYPES = [
   'faction',

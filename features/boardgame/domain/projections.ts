@@ -86,6 +86,39 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     }
   }
 
+  // BẢO MẬT P0: Chỉ xuất hào quang công khai của các nhân vật ĐÃ LỘ DIỆN (tuyệt đối không lộ vai ẩn!).
+  const angelProtectedPlayerIds: string[] = [];
+  if (state.expansionState?.angelAuras) {
+    const hasActiveRevealedAngel = Object.entries(state.expansionState.angelAuras).some(
+      ([angelId, aura]) => {
+        const owner = state.players[angelId];
+        return Boolean(owner && owner.alive && owner.revealed && aura.phase === 'active');
+      },
+    );
+    if (hasActiveRevealedAngel) {
+      for (const pid of state.turnOrder) {
+        const p = state.players[pid];
+        if (p && p.alive && p.revealed && p.faction === 'wanderer') {
+          angelProtectedPlayerIds.push(p.playerId);
+        }
+      }
+    }
+  }
+
+  const usurperAuraActive = Object.values(state.players).some(
+    (p) => p.alive && p.revealed && (p.roleId as string) === 'exp2_usurper',
+  );
+
+  const daltonActivatedPlayerIds: string[] = [];
+  if (state.expansionState?.daltonActivatedByPlayer) {
+    for (const daltonId of Object.keys(state.expansionState.daltonActivatedByPlayer)) {
+      const owner = state.players[daltonId];
+      if (owner && (owner.revealed || state.finished)) {
+        daltonActivatedPlayerIds.push(daltonId);
+      }
+    }
+  }
+
   return {
     rulesetVersion: 4,
     rulesetId: state.rulesetId ?? BOARD_GAME_DEFAULT_RULESET_ID,
@@ -103,6 +136,9 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     ...(Object.keys(visionsMarkedTargetByPlayer).length > 0
       ? { visionsMarkedTargetByPlayer }
       : {}),
+    ...(angelProtectedPlayerIds.length > 0 ? { angelProtectedPlayerIds } : {}),
+    ...(usurperAuraActive ? { usurperAuraActive: true } : {}),
+    ...(daltonActivatedPlayerIds.length > 0 ? { daltonActivatedPlayerIds } : {}),
     deadCount,
     players: orderedPlayers,
     deckCounts: {
@@ -151,6 +187,11 @@ export function getPrivateGameView(
         }
       : null;
 
+  const isExpanded = Boolean(state.rulesetId && state.rulesetId !== 'classic');
+  const reactionPolicy = isExpanded
+    ? (state.expansionState?.reactionPolicyByPlayer?.[player.playerId] ?? 'ASK')
+    : undefined;
+
   return {
     playerId: player.playerId,
     roleId: player.roleId,
@@ -170,6 +211,7 @@ export function getPrivateGameView(
     hand: mapCardIdsToMeta(player.hand),
     equipped: mapCardIdsToMeta(player.equipped),
     privateClues: [...player.privateClues],
+    ...(reactionPolicy ? { reactionPolicy } : {}),
     ...(privatePendingChoice ? { pendingChoice: privatePendingChoice } : {}),
   };
 }
