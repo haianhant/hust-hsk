@@ -206,7 +206,7 @@ test('A1 — CharacterRegistry lookup, unique 66 IDs, and JSON catalog 1-to-1 sy
       assert.equal(isCharacterPlayable(entry), false, `Unimplemented role ${rec.id} MUST NOT be playable`);
     }
   }
-  assert.ok(implementedExpCount <= 26, 'Phase 4 must never mark more than Starter Twenty-Six as implemented');
+  assert.ok(implementedExpCount <= 38, 'Phase 5 must never mark more than Starter Thirty-Eight as implemented');
 
   assert.equal(DEFAULT_CHARACTER_REGISTRY.get('nonexistent_role'), null);
 });

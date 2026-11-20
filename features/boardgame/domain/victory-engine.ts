@@ -284,6 +284,11 @@ function qualifiesClassicOrExpandedWanderer(
       // thắng nếu Bryon còn sống VÀ toàn bộ các nhân vật Neutral trong ván đều còn sống.
       return player.alive && allWanderers.every((w) => w.alive);
     }
+    case 'exp2_arlene': {
+      // Arlene (Phase 5B house rule):
+      // Thắng cá nhân tức thì khi bị hạ gục bởi một nhân vật phe Đội Săn Đêm (Hunter).
+      return isArleneImmediateVictorySatisfied(state, player);
+    }
     default:
       return false;
   }
@@ -342,6 +347,9 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
       w.alive &&
       w.roleId === 'exp2_cruz' &&
       Boolean(state.expansionState?.cruzWinTriggeredIds?.includes(w.playerId)),
+  );
+  const arleneSoloWinners = wanderers.filter(
+    (w) => w.roleId === 'exp2_arlene' && isArleneImmediateVictorySatisfied(state, w),
   );
 
   // 1. Đòn quyết tử đồng quy (Hunter & Shadow cùng kích hoạt)
@@ -421,6 +429,7 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
     ...soleAllieWinners,
     ...cindySoloWinners,
     ...cruzSoloWinners,
+    ...arleneSoloWinners,
   ];
   if (soloTriggers.length > 0) {
     const lead = soloTriggers[0];
@@ -443,7 +452,9 @@ export function evaluateExpandedVictory(state: AuthoritativeGameState): VictoryE
               ? `${lead.displayName} (Cindy) là Kẻ Độc Hành duy nhất sống sót khi toàn bộ Neutral khác đã bị loại!`
               : lead.roleId === 'exp2_cruz'
                 ? `${lead.displayName} (Cruz) đã hạ gục mục tiêu trong lượt dùng thẻ Đột Kích đặc trưng — hoàn thành mục tiêu Độc Hành!`
-                : `${lead.displayName} (Trang "Kiên Cường") trụ lại sống sót cuối cùng!`;
+                : lead.roleId === 'exp2_arlene'
+                  ? `${lead.displayName} (Arlene) đã bị một Đội Săn Đêm hạ gục — hoàn thành mục tiêu Độc Hành tức thì!`
+                  : `${lead.displayName} (Trang "Kiên Cường") trụ lại sống sót cuối cùng!`;
     return {
       finished: true,
       winnerFaction: 'wanderer-solo',

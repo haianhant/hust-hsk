@@ -210,7 +210,9 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
               ? 'Hạ gục một người chơi khác khi dùng hoặc sau khi dùng Dơi Hút Điện, Nhện Chập Mạch, Kíp Nổ Tự Động hoặc Búp Bê Tâm Linh trong cùng lượt.'
               : rec.id === 'exp2_bryon'
                 ? 'Không có Kẻ Độc Hành nào bị loại khi trận đấu kết thúc hợp lệ (bạn phải còn sống).'
-                : rec.victoryCondition;
+                : rec.id === 'exp2_arlene'
+                  ? 'Bạn bị hạ gục bởi một nhân vật thuộc Đội Săn Đêm (Hunter).'
+                  : rec.victoryCondition;
 
   const targetMode: CharacterDesign['targetMode'] =
     rec.id === 'exp2_father_harrison' ||
@@ -218,7 +220,8 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
     rec.id === 'exp2_eleanor' ||
     rec.id === 'exp1_wrath' ||
     rec.id === 'exp2_visions' ||
-    rec.id === 'exp2_bryon'
+    rec.id === 'exp2_bryon' ||
+    rec.id === 'exp2_elise'
       ? 'self'
       : 'passive';
 

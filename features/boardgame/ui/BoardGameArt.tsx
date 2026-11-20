@@ -322,6 +322,34 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
     motif: 'Rương Trang Bị Hào Phóng',
     shortAbility: 'Trước khi đánh: Tặng trang bị (trừ Masamune) cho Neutral lộ diện cùng Cụm · Thắng khi không Neutral nào chết',
   },
+  exp2_elise: {
+    codeName: 'Elise',
+    title: 'Hunter MR2 · 10 HP',
+    accentHex: '#34d399',
+    motif: 'Âm Hưởng Hồi Phục',
+    shortAbility: '1 lần/trận: Phân bổ tổng 5 HP hồi máu cho người chơi cùng Cụm (gồm bản thân)',
+  },
+  exp2_umibozu: {
+    codeName: 'Umibozu',
+    title: 'Shadow MR2 · 11 HP',
+    accentHex: '#a855f7',
+    motif: 'Sóng Ngầm Lộ Diện',
+    shortAbility: '1 lần/trận khi lộ diện còn sống: Gây 3 ST kỹ năng lên mọi người chơi khác cùng Cụm',
+  },
+  exp2_urban_legend: {
+    codeName: 'Urban Legend',
+    title: 'Shadow MR2 · 11 HP',
+    accentHex: '#f43f5e',
+    motif: 'Chuyện Kinh Dị KTX',
+    shortAbility: 'Nội tại / Lật phản ứng: Sát thương từ thẻ Đen dùng 1 lần chuyển thành hồi máu',
+  },
+  exp2_arlene: {
+    codeName: 'Arlene',
+    title: 'Neutral MR2 · 8 HP',
+    accentHex: '#fbbf24',
+    motif: 'Mặt Nạ Điệu Bộ',
+    shortAbility: 'Phản ứng thẻ Xanh như Shadow (không lộ vai) · Thắng tức thì nếu bị Hunter hạ gục',
+  },
 };
 
 export interface LocationVisualMeta {

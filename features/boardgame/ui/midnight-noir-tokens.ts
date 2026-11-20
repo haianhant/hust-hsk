@@ -215,8 +215,8 @@ export const WAVE3_ROLE_IDS: readonly Phase4RoleId[] = [
   'exp2_bryon',
 ];
 
-/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — đầy đủ 36 vai: 10 Classic + 8 Starter Eight + 8 Wave 2 + 10 Wave 3). */
-export const MIDNIGHT_CHARACTER_ART: Readonly<Record<BoardGameRoleId, string>> = {
+/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — nâng cấp lên 48 vai ở Phase 5D). */
+export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, string>>> = {
   // 10 Classic Roles (preserved untouched)
   'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
   'gac-truc-ban': '/assets/boardgame/roles/role-lan-truc-ban.webp',

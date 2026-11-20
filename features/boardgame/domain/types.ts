@@ -446,6 +446,18 @@ export type PendingChoiceContextData =
       kind: 'bryon_gift_equipment';
       actorPlayerId: string;
       giftMap: Record<string, { recipientPlayerId: string; cardIds: string[] }>;
+    }
+  | {
+      kind: 'elise_distribute_heal';
+      actorPlayerId: string;
+      distributionMap: Record<string, Array<{ playerId: string; amount: number }>>;
+    }
+  | {
+      kind: 'urban_legend_reveal_heal';
+      urbanLegendPlayerId: string;
+      damageEventId: string;
+      sourceCardId: string;
+      rawAmount: number;
     };
 
 export interface AuthoritativePendingChoice {

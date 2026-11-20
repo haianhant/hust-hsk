@@ -154,11 +154,18 @@ export type Phase4RoleId =
   | 'exp2_cruz'
   | 'exp2_bryon';
 
+export type Phase5BRoleId =
+  | 'exp2_elise'
+  | 'exp2_umibozu'
+  | 'exp2_urban_legend'
+  | 'exp2_arlene';
+
 export type BoardGameRoleId =
   | ClassicBoardGameRoleId
   | Phase2RoleId
   | Phase3RoleId
-  | Phase4RoleId;
+  | Phase4RoleId
+  | Phase5BRoleId;
 
 export type BoardGameLocationId =
   | 'lobby'
@@ -437,7 +444,9 @@ export type BoardGamePendingChoiceKind =
   | 'vengeance_chain_strike'
   | 'visions_mark_target'
   | 'cruz_black_redraw'
-  | 'bryon_gift_equipment';
+  | 'bryon_gift_equipment'
+  | 'elise_distribute_heal'
+  | 'urban_legend_reveal_heal';
 
 export interface BoardGameChoiceOptionView {
   optionId: string;

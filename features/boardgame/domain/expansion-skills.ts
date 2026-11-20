@@ -25,6 +25,7 @@ import {
   type Phase2RoleId,
   type Phase3RoleId,
   type Phase4RoleId,
+  type Phase5BRoleId,
 } from '../../../shared/contracts/boardgame';
 import {
   getCardById,
@@ -110,7 +111,11 @@ export function canRoleAutoActivateSecretReaction(roleId: string): boolean {
   return BINARY_SECRET_REACTION_ROLES.has(roleId);
 }
 
-export type ExpansionImplementedRoleId = Phase2RoleId | Phase3RoleId | Phase4RoleId;
+export type ExpansionImplementedRoleId =
+  | Phase2RoleId
+  | Phase3RoleId
+  | Phase4RoleId
+  | Phase5BRoleId;
 
 export interface ExpansionSkillExecutableBinding {
   readonly roleId: ExpansionImplementedRoleId;
@@ -173,9 +178,20 @@ export const PHASE4B_ROLE_IDS: readonly Phase4RoleId[] = [
   'exp2_bryon',
 ];
 
-export const STARTER_TWENTY_SIX_EXPANSION_ROLE_IDS: readonly ExpansionImplementedRoleId[] = [
+export const STARTER_TWENTY_SIX_EXPANSION_ROLE_IDS: readonly (
+  | Phase2RoleId
+  | Phase3RoleId
+  | Phase4RoleId
+)[] = [
   ...STARTER_SIXTEEN_EXPANSION_ROLE_IDS,
   ...PHASE4B_ROLE_IDS,
+];
+
+export const PHASE5B_ROLE_IDS: readonly Phase5BRoleId[] = [
+  'exp2_elise',
+  'exp2_umibozu',
+  'exp2_urban_legend',
+  'exp2_arlene',
 ];
 
 export const PHASE2_SKILL_BINDINGS: Readonly<
@@ -494,12 +510,67 @@ export const PHASE4_VICTORY_BINDINGS: Readonly<
   },
 };
 
+export const PHASE5B_SKILL_BINDINGS: Readonly<
+  Partial<Record<string, ExpansionSkillExecutableBinding>>
+> = {
+  exp2_elise: {
+    roleId: 'exp2_elise',
+    handlerId: 'exp:exp2_elise:soft-harmony',
+    trigger: 'ACTIVE_SKILL',
+    resolverSymbol: 'expansion-skills.ts:eliseSoftHarmonyHandler',
+  },
+  exp2_umibozu: {
+    roleId: 'exp2_umibozu',
+    handlerId: 'exp:exp2_umibozu:reveal-surge',
+    trigger: 'ON_ROLE_REVEAL',
+    resolverSymbol: 'expansion-skills.ts:umibozuRevealAoeHandler',
+  },
+  exp2_urban_legend: {
+    roleId: 'exp2_urban_legend',
+    handlerId: 'exp:exp2_urban_legend:horror-story',
+    trigger: 'BEFORE_DAMAGE',
+    resolverSymbol: 'expansion-skills.ts:urbanLegendHorrorHandler',
+  },
+  exp2_arlene: {
+    roleId: 'exp2_arlene',
+    handlerId: 'exp:exp2_arlene:affectation',
+    trigger: 'ON_INVESTIGATE',
+    resolverSymbol: 'expansion-skills.ts:arleneAffectationHandler',
+  },
+};
+
+export const PHASE5B_VICTORY_BINDINGS: Readonly<
+  Partial<Record<string, ExpansionVictoryExecutableBinding>>
+> = {
+  exp2_elise: {
+    roleId: 'exp2_elise',
+    evaluatorId: 'victory-engine.ts:faction#hunters',
+    archetype: 'faction',
+  },
+  exp2_umibozu: {
+    roleId: 'exp2_umibozu',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp2_urban_legend: {
+    roleId: 'exp2_urban_legend',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp2_arlene: {
+    roleId: 'exp2_arlene',
+    evaluatorId: 'victory-engine.ts:neutral#arlene',
+    archetype: 'individual',
+  },
+};
+
 export const ALL_EXPANSION_SKILL_BINDINGS: Readonly<
   Partial<Record<string, ExpansionSkillExecutableBinding>>
 > = {
   ...PHASE2_SKILL_BINDINGS,
   ...PHASE3_SKILL_BINDINGS,
   ...PHASE4_SKILL_BINDINGS,
+  ...PHASE5B_SKILL_BINDINGS,
 };
 
 export const ALL_EXPANSION_VICTORY_BINDINGS: Readonly<
@@ -508,6 +579,7 @@ export const ALL_EXPANSION_VICTORY_BINDINGS: Readonly<
   ...PHASE2_VICTORY_BINDINGS,
   ...PHASE3_VICTORY_BINDINGS,
   ...PHASE4_VICTORY_BINDINGS,
+  ...PHASE5B_VICTORY_BINDINGS,
 };
 
 export interface TurnContinuationCallbacks {
@@ -1658,6 +1730,158 @@ const bryonGenerousServiceHandler: SkillHandlerDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Phase 5B Executable Skill Handlers (Final 4 Tier-2 House-Rule Characters)
+// ---------------------------------------------------------------------------
+
+const eliseSoftHarmonyHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_elise:soft-harmony',
+  roleId: 'exp2_elise',
+  trigger: 'ACTIVE_SKILL',
+  priority: 10,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (ctx.owner.skillUsedOnce) return false;
+    if (
+      ctx.state.turnPhase !== 'ROLL_MOVE' &&
+      ctx.state.turnPhase !== 'LOCATION_ACTION' &&
+      ctx.state.turnPhase !== 'MAIN_ACTION'
+    ) {
+      return false;
+    }
+    return ctx.owner.hand.length === 0 && !hasGloriaQueuedCards(ctx.state, ctx.owner.playerId);
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.eliseApproved = true;
+    return { applied: true, note: 'elise-distribute-heal-approved' };
+  },
+};
+
+const umibozuRevealAoeHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_umibozu:reveal-surge',
+  roleId: 'exp2_umibozu',
+  trigger: 'ON_ROLE_REVEAL',
+  priority: 10,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload) return false;
+    if (payload.revealedPlayerId !== ctx.owner.playerId) return false;
+    if (payload.umibozuChecked) return false;
+    if (ctx.owner.skillUsedOnce) return false;
+    const exp = ensureExpansionState(ctx.state);
+    if (exp.umibozuTriggeredIds?.includes(ctx.owner.playerId)) return false;
+    return ctx.owner.alive && ctx.owner.revealed;
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    const exp = ensureExpansionState(ctx.state);
+    // Khóa 1 lần/trận TRƯỚC khi đẩy bất kỳ DAMAGE nào (chống vòng lặp đệ quy tuyệt đối!)
+    ctx.owner.skillUsedOnce = true;
+    if (!exp.umibozuTriggeredIds) exp.umibozuTriggeredIds = [];
+    exp.umibozuTriggeredIds.push(ctx.owner.playerId);
+    payload.umibozuChecked = true;
+
+    const clusterOthers = listLivingPlayersInSameCluster(ctx.state, ctx.owner, {
+      includeSelf: false,
+    });
+    const orderedVictims = ctx.state.turnOrder
+      .map((id) => clusterOthers.find((p) => p.playerId === id))
+      .filter((p): p is AuthoritativePlayerState => Boolean(p));
+
+    incRoleStat(exp.stats.activationsByRole, 'exp2_umibozu', 1);
+    if (orderedVictims.length === 0) {
+      appendPublicLog(
+        ctx.state,
+        'skill',
+        `🌊 Umibozu (${ctx.owner.displayName}) — Sóng Ngầm Lộ Diện: không có người chơi khác cùng Cụm để giáng sát thương!`,
+        ctx.event.nowMs,
+        ctx.owner.playerId,
+      );
+      return { applied: true, note: 'umibozu-no-victims' };
+    }
+
+    incRoleStat(exp.stats.bonusDamageByRole, 'exp2_umibozu', 3 * orderedVictims.length);
+    appendPublicLog(
+      ctx.state,
+      'skill',
+      `🌊 Umibozu (${ctx.owner.displayName}) — Sóng Ngầm Lộ Diện: giáng 3 sát thương kỹ năng lên ${orderedVictims.length} người chơi khác cùng Cụm (${orderedVictims.map((v) => v.displayName).join(', ')})!`,
+      ctx.event.nowMs,
+      ctx.owner.playerId,
+    );
+
+    const depth = typeof payload.chainDepth === 'number' ? payload.chainDepth : 0;
+    const queued = Array.isArray(payload.queuedRevealSteps)
+      ? (payload.queuedRevealSteps as PendingResolutionStep[])
+      : [];
+    for (const v of orderedVictims) {
+      queued.push({
+        kind: 'DAMAGE',
+        damageEventId: nextExpansionEventId(ctx.state, 'dmg-umibozu'),
+        causationId: String(payload.revealEventId ?? ''),
+        targetPlayerId: v.playerId,
+        rawAmount: 3,
+        sourceType: 'skill',
+        attackerPlayerId: ctx.owner.playerId,
+        isSingleTarget: false,
+        chainDepth: depth + 1,
+      });
+    }
+    payload.queuedRevealSteps = queued;
+    return { applied: true, note: `umibozu-aoe=${orderedVictims.length}` };
+  },
+};
+
+const urbanLegendHorrorHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_urban_legend:horror-story',
+  roleId: 'exp2_urban_legend',
+  trigger: 'BEFORE_DAMAGE',
+  priority: 10,
+  requiresRevealed: false,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload || payload.phase !== 'urban_legend_convert') return false;
+    if (ctx.event.targetPlayerId !== ctx.owner.playerId) return false;
+    if (payload.isConsumableBlackCardDamage !== true) return false;
+    if (payload.isHpCost || payload.unpreventable || payload.urbanLegendAlreadyChecked) {
+      return false;
+    }
+    const dmg = typeof payload.damageAmount === 'number' ? payload.damageAmount : 0;
+    return dmg > 0 && ctx.owner.alive;
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.urbanLegendEligible = true;
+    return { applied: true, note: 'urban-legend-consumable-black-eligible' };
+  },
+};
+
+const arleneAffectationHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_arlene:affectation',
+  roleId: 'exp2_arlene',
+  trigger: 'ON_INVESTIGATE',
+  priority: 10,
+  requiresRevealed: false,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload) return false;
+    if (ctx.event.targetPlayerId !== ctx.owner.playerId) return false;
+    if (payload.isFactionCheck !== true) return false;
+    return getPlayerReactionPolicy(ctx.state, ctx.owner.playerId) !== 'AUTO_DECLINE';
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload as Record<string, unknown>;
+    payload.arleneImpersonateShadow = true;
+    return { applied: true, note: 'arlene-shadow-disguise' };
+  },
+};
+
 export function createExpansionSkillEngine(): SkillEngine {
   const engine = createSkillEngine();
   engine.registerHandler(g43FortressHandler);
@@ -1688,6 +1912,11 @@ export function createExpansionSkillEngine(): SkillEngine {
   engine.registerHandler(visionsCurseHandler);
   engine.registerHandler(cruzBlackRedrawHandler);
   engine.registerHandler(bryonGenerousServiceHandler);
+  // Phase 5B Final 4 Tier-2 handlers
+  engine.registerHandler(eliseSoftHarmonyHandler);
+  engine.registerHandler(umibozuRevealAoeHandler);
+  engine.registerHandler(urbanLegendHorrorHandler);
+  engine.registerHandler(arleneAffectationHandler);
   return engine;
 }
 
@@ -3695,35 +3924,69 @@ export function applyExpandedInvestigateCard(
     return { ok: true };
   }
 
+  const isFactionCheck =
+    card.effectKind === 'inv_anger' ||
+    card.effectKind === 'inv_blackmail' ||
+    card.effectKind === 'inv_greed' ||
+    card.effectKind === 'inv_slap' ||
+    card.effectKind === 'inv_spell' ||
+    card.effectKind === 'inv_exorcism' ||
+    card.effectKind === 'inv_aid' ||
+    card.effectKind === 'inv_nurturance' ||
+    card.effectKind === 'inv_huddle';
+
+  // Arlene (Điệu Bộ — Phase 5B house rule): giữ nguyên `target.faction === 'wanderer'`,
+  // phản ứng tức thì (<1ms, không mở prompt chống timing side-channel) như Shadow khi policy !== 'AUTO_DECLINE'.
+  let evaluatedFaction: BoardGameFactionId = target.faction;
+  let usedArleneDisguise = false;
+  if (isFactionCheck && target.roleId === 'exp2_arlene') {
+    const invPayload: Record<string, unknown> = {
+      cardId: card.id,
+      effectKind: card.effectKind,
+      isFactionCheck: true,
+    };
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'ON_INVESTIGATE',
+      actorPlayerId: actor.playerId,
+      targetPlayerId: target.playerId,
+      nowMs,
+      payload: invPayload,
+    });
+    if (invPayload.arleneImpersonateShadow === true) {
+      evaluatedFaction = 'mist-order';
+      usedArleneDisguise = true;
+    }
+  }
+
   let rawMatch = false;
   let isHealHermit = false;
   switch (card.effectKind) {
     case 'inv_anger':
-      rawMatch = target.faction === 'lantern-guard' || target.faction === 'mist-order';
+      rawMatch = evaluatedFaction === 'lantern-guard' || evaluatedFaction === 'mist-order';
       break;
     case 'inv_blackmail':
-      rawMatch = target.faction === 'lantern-guard' || target.faction === 'wanderer';
+      rawMatch = evaluatedFaction === 'lantern-guard' || evaluatedFaction === 'wanderer';
       break;
     case 'inv_greed':
-      rawMatch = target.faction === 'wanderer' || target.faction === 'mist-order';
+      rawMatch = evaluatedFaction === 'wanderer' || evaluatedFaction === 'mist-order';
       break;
     case 'inv_slap':
-      rawMatch = target.faction === 'lantern-guard';
+      rawMatch = evaluatedFaction === 'lantern-guard';
       break;
     case 'inv_spell':
     case 'inv_exorcism':
-      rawMatch = target.faction === 'mist-order';
+      rawMatch = evaluatedFaction === 'mist-order';
       break;
     case 'inv_aid':
-      rawMatch = target.faction === 'lantern-guard';
+      rawMatch = evaluatedFaction === 'lantern-guard';
       isHealHermit = true;
       break;
     case 'inv_nurturance':
-      rawMatch = target.faction === 'wanderer';
+      rawMatch = evaluatedFaction === 'wanderer';
       isHealHermit = true;
       break;
     case 'inv_huddle':
-      rawMatch = target.faction === 'mist-order';
+      rawMatch = evaluatedFaction === 'mist-order';
       isHealHermit = true;
       break;
     case 'inv_bully':
@@ -3734,6 +3997,11 @@ export function applyExpandedInvestigateCard(
       break;
     default:
       break;
+  }
+
+  if (usedArleneDisguise) {
+    const expArlene = ensureExpansionState(state);
+    incRoleStat(expArlene.stats.activationsByRole, 'exp2_arlene', 1);
   }
 
   const isUnrevealedUnknown = target.roleId === 'suong-tin-gia' && !target.revealed;
@@ -3821,7 +4089,9 @@ export function applyExpandedInvestigateCard(
     outcome,
     detail: usedDeceit
       ? `🎭 ${actor.displayName} đưa "${card.title}" [${condTag}] — Bạn đã Ngụy Trang Đa Tầng → ${effectNote}`
-      : `Bạn nhận "${card.title}" [${condTag}] từ ${actor.displayName} → ${effectNote}`,
+      : usedArleneDisguise
+        ? `🎭 ${actor.displayName} đưa "${card.title}" [${condTag}] — Điệu Bộ (Arlene giả dạng Shadow, giữ nguyên phe Neutral) → ${effectNote}`
+        : `Bạn nhận "${card.title}" [${condTag}] từ ${actor.displayName} → ${effectNote}`,
   });
 
   const publicEffectText = transferredGearName
@@ -4201,6 +4471,194 @@ export function triggerExpandedTurnStart(
   }
 }
 
+function openEliseDistributeHealChoice(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  nowMs: number,
+): void {
+  const clusterMembersRaw = listLivingPlayersInSameCluster(state, actor, { includeSelf: true });
+  const clusterMembers = state.turnOrder
+    .map((id) => clusterMembersRaw.find((p) => p.playerId === id))
+    .filter((p): p is AuthoritativePlayerState => Boolean(p));
+  const injured = clusterMembers.filter((p) => p.woundsTaken > 0);
+  const distributionMap: Record<string, Array<{ playerId: string; amount: number }>> = {};
+  const options: BoardGameChoiceOptionView[] = [];
+  const seenKeys = new Set<string>();
+  let seq = 0;
+
+  const pushPlan = (
+    allocs: Array<{ playerId: string; amount: number }>,
+    titlePrefix: string,
+  ): void => {
+    const cleaned = allocs
+      .filter((a) => a.amount > 0)
+      .sort(
+        (a, b) => state.turnOrder.indexOf(a.playerId) - state.turnOrder.indexOf(b.playerId),
+      );
+    const total = cleaned.reduce((sum, a) => sum + a.amount, 0);
+    if (total > 5) return;
+    const key = cleaned.map((a) => `${a.playerId}:${a.amount}`).join('|');
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+
+    const optId = `e_${seq++}`;
+    distributionMap[optId] = cleaned;
+    if (cleaned.length === 0) {
+      options.push({
+        optionId: optId,
+        label: `${titlePrefix} (0 HP hiệu lực — cả Cụm đang đầy máu)`,
+        detail: 'Tiêu hao 1 lần/trận mà không vượt quá Max HP của ai.',
+      });
+      return;
+    }
+    const parts = cleaned.map((a) => {
+      const p = state.players[a.playerId];
+      return `${p?.displayName ?? a.playerId} +${a.amount} HP`;
+    });
+    const unused = 5 - total;
+    options.push({
+      optionId: optId,
+      label: `${titlePrefix}: ${parts.join(', ')}`,
+      detail:
+        unused > 0
+          ? `Phân bổ ${total}/5 HP hiệu lực (không vượt Max HP · hủy ${unused} điểm dư).`
+          : `Phân bổ trọn 5/5 HP hiệu lực qua HealPipeline.`,
+      targetPlayerId: cleaned[0]?.playerId,
+    });
+  };
+
+  if (injured.length === 0) {
+    pushPlan([], 'Kích hoạt ngay');
+  } else {
+    // 1. Chia đều luân phiên (Balanced round-robin) cho tất cả người mất máu trong Cụm
+    if (injured.length >= 2) {
+      const counts = new Map<string, number>();
+      let rem = Math.min(
+        5,
+        injured.reduce((s, p) => s + p.woundsTaken, 0),
+      );
+      let idx = 0;
+      while (rem > 0) {
+        const p = injured[idx % injured.length];
+        const cur = counts.get(p.playerId) ?? 0;
+        if (cur < p.woundsTaken) {
+          counts.set(p.playerId, cur + 1);
+          rem -= 1;
+        }
+        idx += 1;
+        if (idx > 64) break;
+      }
+      pushPlan(
+        Array.from(counts.entries()).map(([playerId, amount]) => ({ playerId, amount })),
+        'Chia đều toàn Cụm',
+      );
+    }
+
+    // 2. Ưu tiên cứu người thấp máu nhất trước (Lowest HP greedy fill)
+    if (injured.length >= 2) {
+      const byLowest = [...injured].sort((a, b) => {
+        const d = getRemainingHp(a) - getRemainingHp(b);
+        return d !== 0
+          ? d
+          : state.turnOrder.indexOf(a.playerId) - state.turnOrder.indexOf(b.playerId);
+      });
+      const greedy: Array<{ playerId: string; amount: number }> = [];
+      let rem = 5;
+      for (const p of byLowest) {
+        if (rem <= 0) break;
+        const take = Math.min(rem, p.woundsTaken);
+        if (take > 0) {
+          greedy.push({ playerId: p.playerId, amount: take });
+          rem -= take;
+        }
+      }
+      pushPlan(greedy, 'Cứu nguy thấp máu nhất');
+    }
+
+    // 3. Dồn tối đa (tối đa 5 HP) cho từng mục tiêu mất máu (bao gồm Elise)
+    for (const p of injured) {
+      const take = Math.min(5, p.woundsTaken);
+      pushPlan(
+        [{ playerId: p.playerId, amount: take }],
+        p.playerId === actor.playerId ? 'Tự hồi bản thân' : `Tập trung ${p.displayName}`,
+      );
+    }
+
+    // 4. Nếu đúng 2 người mất máu & đều thiếu >= 3 HP: thêm các phương án lệch 3/2 và 2/3
+    if (injured.length === 2 && injured[0].woundsTaken >= 3 && injured[1].woundsTaken >= 3) {
+      pushPlan(
+        [
+          { playerId: injured[0].playerId, amount: 3 },
+          { playerId: injured[1].playerId, amount: 2 },
+        ],
+        'Chia 3 / 2',
+      );
+      pushPlan(
+        [
+          { playerId: injured[0].playerId, amount: 2 },
+          { playerId: injured[1].playerId, amount: 3 },
+        ],
+        'Chia 2 / 3',
+      );
+    }
+
+    // 5. Nếu Elise và đồng minh cùng mất máu: phương án chỉ hồi đồng minh
+    const injuredAllies = injured.filter((p) => p.playerId !== actor.playerId);
+    if (actor.woundsTaken > 0 && injuredAllies.length >= 1) {
+      const allyCounts = new Map<string, number>();
+      let rem = Math.min(
+        5,
+        injuredAllies.reduce((s, p) => s + p.woundsTaken, 0),
+      );
+      let idx = 0;
+      while (rem > 0) {
+        const p = injuredAllies[idx % injuredAllies.length];
+        const cur = allyCounts.get(p.playerId) ?? 0;
+        if (cur < p.woundsTaken) {
+          allyCounts.set(p.playerId, cur + 1);
+          rem -= 1;
+        }
+        idx += 1;
+        if (idx > 64) break;
+      }
+      pushPlan(
+        Array.from(allyCounts.entries()).map(([playerId, amount]) => ({ playerId, amount })),
+        'Chỉ hồi đồng minh',
+      );
+    }
+  }
+
+  options.push({
+    optionId: 'skip',
+    label: 'Hủy / Để dành (Giữ nguyên 1 lần/trận)',
+    detail: 'Không sử dụng Âm Hưởng Mềm Mại lúc này và không mất lượt dùng.',
+  });
+
+  const choiceId = nextExpansionEventId(state, 'choice-elise');
+  const eventId = nextExpansionEventId(state, 'ev-elise');
+  const timeoutMs = getChoiceTimeoutMs(state, actor);
+  state.pendingChoice = {
+    choiceId,
+    eventId,
+    ownerPlayerId: actor.playerId,
+    kind: 'elise_distribute_heal',
+    isSecret: false,
+    title: 'Âm Hưởng Mềm Mại (Elise · 1 lần/trận)',
+    description:
+      'Phân bổ tổng tối đa 5 điểm hồi máu cho các người chơi còn sống cùng Cụm với bạn (bao gồm cả bản thân). Điểm dư không dùng bị hủy; chọn Hủy hoặc hết giờ sẽ KHÔNG mất lượt dùng 1 lần/trận.',
+    publicPromptLabel: `🎶 Elise (${actor.displayName}) đang chọn phân bổ 5 điểm hồi máu cho Cụm...`,
+    options,
+    defaultOptionId: 'skip',
+    createdAtMs: nowMs,
+    deadlineMs: nowMs + timeoutMs,
+    data: {
+      kind: 'elise_distribute_heal',
+      actorPlayerId: actor.playerId,
+      distributionMap,
+    },
+  };
+}
+
 export function applyExpandedUseSkill(
   state: AuthoritativeGameState,
   actor: AuthoritativePlayerState,
@@ -4219,7 +4677,8 @@ export function applyExpandedUseSkill(
     actor.roleId !== 'exp2_eleanor' &&
     actor.roleId !== 'exp1_wrath' &&
     actor.roleId !== 'exp2_visions' &&
-    actor.roleId !== 'exp2_bryon'
+    actor.roleId !== 'exp2_bryon' &&
+    actor.roleId !== 'exp2_elise'
   ) {
     return null;
   }
@@ -4442,6 +4901,38 @@ export function applyExpandedUseSkill(
     return { ok: true };
   }
 
+  // Elise (Âm Hưởng Mềm Mại — Phase 5B house rule): phân bổ tổng tối đa 5 HP cho các người chơi cùng Cụm (gồm bản thân)
+  if (actor.roleId === 'exp2_elise') {
+    if (
+      state.turnPhase !== 'ROLL_MOVE' &&
+      state.turnPhase !== 'LOCATION_ACTION' &&
+      state.turnPhase !== 'MAIN_ACTION'
+    ) {
+      return {
+        ok: false,
+        error: 'Âm Hưởng Mềm Mại chỉ kích hoạt được trong lượt của bạn.',
+      };
+    }
+    if (actor.hand.length > 0 || hasGloriaQueuedCards(state, actor.playerId)) {
+      return {
+        ok: false,
+        error: 'Hãy giải quyết hết thẻ bài đang cầm trên tay trước khi kích hoạt Âm Hưởng Mềm Mại.',
+      };
+    }
+    const elisePayload: Record<string, unknown> = {};
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'ACTIVE_SKILL',
+      actorPlayerId: actor.playerId,
+      nowMs,
+      payload: elisePayload,
+    });
+    if (elisePayload.eliseApproved !== true) {
+      return { ok: false, error: 'Không thể kích hoạt Âm Hưởng Mềm Mại vào lúc này.' };
+    }
+    openEliseDistributeHealChoice(state, actor, nowMs);
+    return { ok: true };
+  }
+
   const exp = ensureExpansionState(state);
 
   if (actor.roleId === 'lang-quan-sat') {
@@ -4573,6 +5064,169 @@ function executeDamageStep(
   if (hasProcessedExpansionEvent(state, step.damageEventId)) return true;
 
   let dmg = Math.max(0, step.rawAmount);
+
+  // Urban Legend (Chuyện Kinh Dị — Phase 5B house rule):
+  // Chuyển hóa sát thương từ 5 lá Đen dùng 1 lần (`ev-07`, `ev-08`, `ev-09`, `ev-10`, `ev-12`) thành hồi máu (`sourceKind: 'black-card'`).
+  // Không kích hoạt AFTER_DAMAGE_TRIGGERS, không gây chết hay ON_ELIMINATION; hiệu ứng gốc lên người khác vẫn giữ nguyên!
+  if (step.urbanLegendChecked && step.urbanLegendConverted) {
+    markExpansionEventProcessed(state, step.damageEventId);
+    const expUl = ensureExpansionState(state);
+    incRoleStat(expUl.stats.activationsByRole, 'exp2_urban_legend', 1);
+    incRoleStat(expUl.stats.damagePreventedByRole, 'exp2_urban_legend', dmg);
+    expUl.pendingSteps.unshift({
+      kind: 'HEAL',
+      healEventId: nextExpansionEventId(state, 'heal-ul'),
+      causationId: step.damageEventId,
+      sourceCardId: step.sourceCardId,
+      actorPlayerId: target.playerId,
+      targetPlayerId: target.playerId,
+      rawAmount: dmg,
+      sourceKind: 'black-card',
+      sourceLabel: 'Chuyện Kinh Dị (Urban Legend)',
+      roleStatId: 'exp2_urban_legend',
+      postLogKind: 'skill',
+      postLogPrefix: `👻 Urban Legend (${target.displayName}) — Chuyện Kinh Dị: chuyển hóa sát thương thẻ Đen thành hồi `,
+      postLogSuffix: ' HP!',
+      postLogActorId: target.playerId,
+      zeroLogText: `👻 Urban Legend (${target.displayName}) — Chuyện Kinh Dị: vô hiệu hóa sát thương thẻ Đen (đã đầy máu ${target.hp}/${target.maxHp}).`,
+    });
+    return true;
+  }
+
+  if (
+    !step.urbanLegendChecked &&
+    step.isConsumableBlackCardDamage === true &&
+    target.roleId === 'exp2_urban_legend' &&
+    dmg > 0 &&
+    !step.isHpCost &&
+    !step.unpreventable
+  ) {
+    const ulPayload: Record<string, unknown> = {
+      phase: 'urban_legend_convert',
+      damageAmount: dmg,
+      isConsumableBlackCardDamage: true,
+      isHpCost: Boolean(step.isHpCost),
+      unpreventable: Boolean(step.unpreventable),
+      urbanLegendAlreadyChecked: false,
+    };
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'BEFORE_DAMAGE',
+      actorPlayerId: attacker?.playerId ?? target.playerId,
+      targetPlayerId: target.playerId,
+      nowMs,
+      payload: ulPayload,
+    });
+    if (ulPayload.urbanLegendEligible === true) {
+      if (target.revealed) {
+        markExpansionEventProcessed(state, step.damageEventId);
+        const expUl = ensureExpansionState(state);
+        incRoleStat(expUl.stats.activationsByRole, 'exp2_urban_legend', 1);
+        incRoleStat(expUl.stats.damagePreventedByRole, 'exp2_urban_legend', dmg);
+        expUl.pendingSteps.unshift({
+          kind: 'HEAL',
+          healEventId: nextExpansionEventId(state, 'heal-ul'),
+          causationId: step.damageEventId,
+          sourceCardId: step.sourceCardId,
+          actorPlayerId: target.playerId,
+          targetPlayerId: target.playerId,
+          rawAmount: dmg,
+          sourceKind: 'black-card',
+          sourceLabel: 'Chuyện Kinh Dị (Urban Legend)',
+          roleStatId: 'exp2_urban_legend',
+          postLogKind: 'skill',
+          postLogPrefix: `👻 Urban Legend (${target.displayName}) — Chuyện Kinh Dị: chuyển hóa sát thương thẻ Đen thành hồi `,
+          postLogSuffix: ' HP!',
+          postLogActorId: target.playerId,
+          zeroLogText: `👻 Urban Legend (${target.displayName}) — Chuyện Kinh Dị: vô hiệu hóa sát thương thẻ Đen (đã đầy máu ${target.hp}/${target.maxHp}).`,
+        });
+        return true;
+      }
+
+      const policy = getPlayerReactionPolicy(state, target.playerId);
+      if (policy === 'AUTO_DECLINE') {
+        // CAP-05: Bỏ qua tức thì (<1ms), nhận sát thương bình thường, zero log!
+      } else if (
+        policy === 'AUTO_ACTIVATE_WHEN_ELIGIBLE' &&
+        canRoleAutoActivateSecretReaction(target.roleId)
+      ) {
+        const justRevealed = revealPlayerNow(state, target, 'voluntary', nowMs);
+        markExpansionEventProcessed(state, step.damageEventId);
+        const expUl = ensureExpansionState(state);
+        incRoleStat(expUl.stats.activationsByRole, 'exp2_urban_legend', 1);
+        incRoleStat(expUl.stats.damagePreventedByRole, 'exp2_urban_legend', dmg);
+        appendHighlight(
+          state,
+          `Lộ vai: ${target.displayName}`,
+          `Urban Legend (${FACTION_LABELS[target.faction]}) — Chuyện Kinh Dị`,
+          nowMs,
+        );
+        expUl.pendingSteps.unshift({
+          kind: 'HEAL',
+          healEventId: nextExpansionEventId(state, 'heal-ul'),
+          causationId: step.damageEventId,
+          sourceCardId: step.sourceCardId,
+          actorPlayerId: target.playerId,
+          targetPlayerId: target.playerId,
+          rawAmount: dmg,
+          sourceKind: 'black-card',
+          sourceLabel: 'Chuyện Kinh Dị (Urban Legend)',
+          roleStatId: 'exp2_urban_legend',
+          postLogKind: 'reveal',
+          postLogPrefix: `🎭👻 ${target.displayName} lật vai Urban Legend — Chuyện Kinh Dị: chuyển hóa sát thương thẻ Đen thành hồi `,
+          postLogSuffix: ' HP!',
+          postLogActorId: target.playerId,
+          zeroLogText: `🎭👻 ${target.displayName} lật vai Urban Legend — Chuyện Kinh Dị: vô hiệu hóa sát thương thẻ Đen (đã đầy máu ${target.hp}/${target.maxHp}).`,
+        });
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, target.playerId, 'reaction', step.chainDepth ?? 0);
+        }
+        return true;
+      } else {
+        const expUl = ensureExpansionState(state);
+        expUl.pendingSteps.unshift({
+          ...step,
+          urbanLegendChecked: true,
+          urbanLegendConverted: false,
+        });
+        const cardTitle = (step.sourceCardId ? getCardById(step.sourceCardId)?.title : null) ?? 'thẻ Đột Kích';
+        const choiceId = nextExpansionEventId(state, 'choice-urban-legend');
+        const timeoutMs = getChoiceTimeoutMs(state, target);
+        state.pendingChoice = {
+          choiceId,
+          eventId: step.damageEventId,
+          ownerPlayerId: target.playerId,
+          kind: 'urban_legend_reveal_heal',
+          isSecret: true,
+          title: 'Chuyện Kinh Dị (Urban Legend)',
+          description: `Bạn sắp nhận ${dmg} sát thương từ "${cardTitle}" (thẻ Đen dùng 1 lần). Bạn có muốn lật vai Urban Legend ngay lúc này để biến sát thương này thành hồi ${dmg} HP không?`,
+          publicPromptLabel: '⏳ Đang kiểm tra phản ứng trước sát thương...',
+          options: [
+            {
+              optionId: 'reveal_and_heal',
+              label: `Lật vai Urban Legend & Hồi ${dmg} HP thay vì mất máu`,
+              detail: `Công khai vai Urban Legend (Shadow) và hồi tối đa ${dmg} HP (không vượt quá ${target.maxHp} HP).`,
+            },
+            {
+              optionId: 'decline',
+              label: `Giữ kín danh tính (Chịu ${dmg} ST bình thường)`,
+              detail: 'Tiếp tục ẩn vai và nhận sát thương như thông thường.',
+            },
+          ],
+          defaultOptionId: 'decline',
+          createdAtMs: nowMs,
+          deadlineMs: nowMs + timeoutMs,
+          data: {
+            kind: 'urban_legend_reveal_heal',
+            urbanLegendPlayerId: target.playerId,
+            damageEventId: step.damageEventId,
+            sourceCardId: step.sourceCardId ?? 'ev-07',
+            rawAmount: dmg,
+          },
+        };
+        return false;
+      }
+    }
+  }
 
   if (step.undyingChecked) {
     // Tiếp tục sau khi Undying đã đưa ra quyết định bí mật (tránh chạy lặp Holy Robe / G43)
@@ -4915,6 +5569,19 @@ function executeDamageStep(
       if (!exp.cruzWinTriggeredIds) exp.cruzWinTriggeredIds = [];
       if (!exp.cruzWinTriggeredIds.includes(attacker.playerId)) {
         exp.cruzWinTriggeredIds.push(attacker.playerId);
+      }
+    }
+
+    // Arlene (Phase 5B house rule): thắng cá nhân tức thì nếu bị hạ gục bởi một nhân vật phe Hunter (`lantern-guard`).
+    if (
+      target.roleId === 'exp2_arlene' &&
+      attacker &&
+      attacker.playerId !== target.playerId &&
+      attacker.faction === 'lantern-guard'
+    ) {
+      if (!exp.arleneHunterKillTriggeredIds) exp.arleneHunterKillTriggeredIds = [];
+      if (!exp.arleneHunterKillTriggeredIds.includes(target.playerId)) {
+        exp.arleneHunterKillTriggeredIds.push(target.playerId);
       }
     }
 
@@ -6518,6 +7185,129 @@ export function resolvePendingChoice(
         // Kiểm tra thắng ngay (vd. tặng đủ 5 trang bị cho Bob!)
         callbacks.finalizeIfFinished(state, nowMs);
       }
+      return { ok: true };
+    }
+
+    case 'elise_distribute_heal': {
+      const actor = state.players[data.actorPlayerId];
+      if (!actor || !actor.alive || optionId === 'skip' || options?.isTimeoutFallback) {
+        if (actor && options?.isTimeoutFallback) {
+          appendPublicLog(
+            state,
+            'timeout',
+            `⏱️ Elise (${actor.displayName}) quá hạn Âm Hưởng Mềm Mại — tự hủy (không mất lượt dùng 1 lần/trận).`,
+            nowMs,
+            actor.playerId,
+          );
+        } else if (actor) {
+          appendPublicLog(
+            state,
+            'skill',
+            `🎶 Elise (${actor.displayName}) tạm hoãn Âm Hưởng Mềm Mại (giữ nguyên 1 lần/trận).`,
+            nowMs,
+            actor.playerId,
+          );
+        }
+        return { ok: true };
+      }
+
+      if (actor.skillUsedOnce) {
+        return { ok: true };
+      }
+
+      const rawAllocs = data.distributionMap[optionId];
+      if (!Array.isArray(rawAllocs)) {
+        return { ok: true };
+      }
+
+      const clusterIds = new Set(
+        listLivingPlayersInSameCluster(state, actor, { includeSelf: true }).map((p) => p.playerId),
+      );
+      let budget = 5;
+      const validSteps: Extract<PendingResolutionStep, { kind: 'HEAL' }>[] = [];
+      const orderedAllocs = [...rawAllocs].sort(
+        (a, b) => state.turnOrder.indexOf(a.playerId) - state.turnOrder.indexOf(b.playerId),
+      );
+      for (const entry of orderedAllocs) {
+        if (budget <= 0) break;
+        if (!clusterIds.has(entry.playerId)) continue;
+        const recipient = state.players[entry.playerId];
+        if (!recipient || !recipient.alive) continue;
+        const amt = Math.max(0, Math.min(budget, Math.floor(entry.amount)));
+        if (amt <= 0) continue;
+        budget -= amt;
+        validSteps.push({
+          kind: 'HEAL',
+          healEventId: nextExpansionEventId(state, 'heal-elise'),
+          actorPlayerId: actor.playerId,
+          targetPlayerId: recipient.playerId,
+          rawAmount: amt,
+          sourceKind: 'skill',
+          sourceLabel: 'Âm Hưởng Mềm Mại (Elise)',
+          roleStatId: 'exp2_elise',
+          postLogKind: 'skill',
+          postLogPrefix: `🎶💚 Elise (${actor.displayName}) — Âm Hưởng Mềm Mại: hồi `,
+          postLogSuffix: ` HP cho ${recipient.displayName}!`,
+          postLogActorId: actor.playerId,
+        });
+      }
+
+      // Commit oncePerMatch nguyên tử TRƯỚC khi đẩy chuỗi HEAL vào HealPipeline!
+      actor.skillUsedOnce = true;
+      incRoleStat(exp.stats.activationsByRole, 'exp2_elise', 1);
+
+      if (validSteps.length === 0) {
+        appendPublicLog(
+          state,
+          'skill',
+          `🎶 Elise (${actor.displayName}) kích hoạt Âm Hưởng Mềm Mại (0 HP hiệu lực — cả Cụm đã đầy máu).`,
+          nowMs,
+          actor.playerId,
+        );
+        callbacks.finalizeIfFinished(state, nowMs);
+        return { ok: true };
+      }
+
+      exp.pendingSteps.push(...validSteps, {
+        kind: 'FINISH_ACTION',
+        actorPlayerId: actor.playerId,
+        autoEndTurnMode: 'never',
+      });
+      drainPendingSteps(state, nowMs, callbacks);
+      return { ok: true };
+    }
+
+    case 'urban_legend_reveal_heal': {
+      const ul = state.players[data.urbanLegendPlayerId];
+      if (optionId === 'reveal_and_heal' && ul && ul.alive) {
+        const justRevealed = revealPlayerNow(state, ul, 'voluntary', nowMs);
+        const pausedStep = exp.pendingSteps[0];
+        if (
+          pausedStep &&
+          pausedStep.kind === 'DAMAGE' &&
+          pausedStep.damageEventId === data.damageEventId
+        ) {
+          pausedStep.urbanLegendConverted = true;
+        }
+        appendHighlight(
+          state,
+          `Lộ vai: ${ul.displayName}`,
+          `Urban Legend (${FACTION_LABELS[ul.faction]}) — Chuyện Kinh Dị`,
+          nowMs,
+        );
+        appendPublicLog(
+          state,
+          'reveal',
+          `🎭👻 ${ul.displayName} lật vai Urban Legend — Chuyện Kinh Dị!`,
+          nowMs,
+          ul.playerId,
+        );
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, ul.playerId, 'reaction', 0);
+        }
+      }
+      // Khi decline hoặc timeout: KHÔNG phát log công khai nhắc tên Urban Legend (zero secret leak!)
+      drainPendingSteps(state, nowMs, callbacks);
       return { ok: true };
     }
 
