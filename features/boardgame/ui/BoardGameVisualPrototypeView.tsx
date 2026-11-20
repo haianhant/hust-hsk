@@ -43,6 +43,7 @@ import {
   STARTER_EIGHT_ROLE_IDS,
   WAVE2_ROLE_IDS,
   WAVE3_ROLE_IDS,
+  WAVE4_ROLE_IDS,
   resolveActionCardPresentation,
   resolveRoleCardPresentation,
   type ActionCardZone,
@@ -277,6 +278,7 @@ export default function BoardGameVisualPrototypeView() {
   >('all');
   const [wave2FactionFilter, setWave2FactionFilter] = useState<'all' | BoardGameFactionId>('all');
   const [wave3FactionFilter, setWave3FactionFilter] = useState<'all' | BoardGameFactionId>('all');
+  const [wave4FactionFilter, setWave4FactionFilter] = useState<'all' | BoardGameFactionId>('all');
   const [libraryDeckFilter, setLibraryDeckFilter] = useState<'all' | BoardGameDeckId>('all');
   const [pawnStep, setPawnStep] = useState<number>(0);
   const [pawnsRevealed, setPawnsRevealed] = useState<boolean>(false);
@@ -364,6 +366,19 @@ export default function BoardGameVisualPrototypeView() {
         ? wave3Roles
         : wave3Roles.filter((r) => r.faction === wave3FactionFilter),
     [wave3FactionFilter, wave3Roles],
+  );
+
+  const wave4Roles = useMemo(
+    () => WAVE4_ROLE_IDS.map((roleId) => getRoleDesign(roleId)),
+    [],
+  );
+
+  const filteredWave4Roles = useMemo(
+    () =>
+      wave4FactionFilter === 'all'
+        ? wave4Roles
+        : wave4Roles.filter((r) => r.faction === wave4FactionFilter),
+    [wave4FactionFilter, wave4Roles],
   );
 
   const filteredLibraryCards = useMemo(
@@ -941,7 +956,7 @@ export default function BoardGameVisualPrototypeView() {
             <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
               <p className="font-black text-white">Độ nhẹ Tài nguyên</p>
               <p className="mt-1 text-slate-400">
-                83 artwork AI WebP tối ưu (10 Classic 720×1080 + 8 Starter Eight 1024×1536 + 8 Wave 2 1024×1536 + 10 Wave 3 1024×1536 + 40 loại thẻ 600×900 + 6 địa điểm 960×540 + 1 mặt lưng), lazy-loading &amp; decoding async.
+                95 artwork AI WebP tối ưu (10 Classic 720×1080 + 8 Starter Eight 1024×1536 + 8 Wave 2 1024×1536 + 10 Wave 3 1024×1536 + 12 Wave 4 1024×1536 + 40 loại thẻ 600×900 + 6 địa điểm 960×540 + 1 mặt lưng), lazy-loading &amp; decoding async.
               </p>
             </div>
           </div>
@@ -1245,6 +1260,91 @@ export default function BoardGameVisualPrototypeView() {
                 <div key={role.id} className="mx-auto w-full max-w-[270px]">
                   <MidnightCharacterCard
                     testId={`proto-wave3-card-${role.id}`}
+                    roleId={role.id}
+                    revealed={eff.revealed}
+                    viewerMode={eff.viewerMode}
+                    woundsTaken={woundsTaken}
+                    foilEnabled={foilEnabled}
+                    reducedMotion={gfx.profile.reducedMotion}
+                    showGoalFooter={false}
+                    onFlipToggle={() => toggleFlipKey(role.id)}
+                    onZoom={() =>
+                      setZoomTarget({
+                        kind: 'role',
+                        roleId: role.id,
+                        revealed: eff.revealed,
+                        viewerMode: eff.viewerMode,
+                        woundsTaken,
+                      })
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* PHẦN 5E: WAVE 4 (STARTER THIRTY-EIGHT) — 12 NHÂN VẬT MỞ RỘNG ĐỢT 4 (PHASE 5D EXPERIMENTAL PREVIEW) */}
+        <section
+          data-testid="proto-section-wave4"
+          className="space-y-4 rounded-3xl border border-cyan-500/35 bg-gradient-to-b from-cyan-950/20 via-slate-900/55 to-slate-950/70 p-4 sm:p-6"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-cyan-400/60 bg-cyan-950/85 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-cyan-200">
+                  Phase 5D · Wave 4 Preview
+                </span>
+                <span className="rounded-full border border-emerald-400/45 bg-emerald-950/60 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-200">
+                  Experimental: starter-thirty-eight (48 Roles)
+                </span>
+                <span className="rounded-full border border-slate-600/60 bg-slate-900/80 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                  Production: Classic Only
+                </span>
+              </div>
+              <h2 className="text-lg font-black text-white sm:text-2xl">
+                5E. Wave 4 — 12 Nhân Vật Mở Rộng Đợt 4 Full-Art 2:3 ({wave4Roles.length}/12 Vai Trò)
+              </h2>
+              <p className="text-xs text-slate-400 sm:text-sm">
+                Nâng tổng bộ chân dung HUSTVerse Midnight — Anime Noir lên 48/48 (1024×1536 WebP) với 4 Hunter (Elise, Ernest, Gwendolen, Freyja), 4 Shadow (Umibozu, Urban Legend, Warlord, Usurper) &amp; 4 Neutral (Arlene, Angel, Bianca, Dalton); bảo mật P0, lật 3D &amp; phóng lớn 🔍.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['all', 'Tất cả (12)'],
+                  ['lantern-guard', 'Đội Săn Đêm (4)'],
+                  ['mist-order', 'Hội Bóng Đêm (4)'],
+                  ['wanderer', 'Kẻ Độc Hành (4)'],
+                ] as const
+              ).map(([fid, label]) => (
+                <button
+                  key={fid}
+                  type="button"
+                  data-testid={`proto-wave4-tab-${fid}`}
+                  onClick={() => setWave4FactionFilter(fid)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-extrabold transition cursor-pointer ${
+                    wave4FactionFilter === fid
+                      ? 'bg-cyan-400 text-slate-950 shadow'
+                      : 'border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div
+            data-testid="proto-wave4-grid"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            {filteredWave4Roles.map((role) => {
+              const eff = effectiveCharacterSecrecy(role.id);
+              return (
+                <div key={role.id} className="mx-auto w-full max-w-[270px]">
+                  <MidnightCharacterCard
+                    testId={`proto-wave4-card-${role.id}`}
                     roleId={role.id}
                     revealed={eff.revealed}
                     viewerMode={eff.viewerMode}

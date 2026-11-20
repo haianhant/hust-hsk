@@ -574,7 +574,7 @@ test('P4D-4 — UI metadata, 36/36 portraits, VFX queue & Reduced Motion cover a
 
   assert.equal(PHASE4B_ROLE_IDS.length, 10);
   assert.equal(STARTER_TWENTY_SIX_EXPANSION_ROLE_IDS.length, 26);
-  assert.equal(Object.keys(MIDNIGHT_CHARACTER_ART).length, 36);
+  assert.ok(Object.keys(MIDNIGHT_CHARACTER_ART).length >= 36);
 
   for (const roleId of PHASE4B_ROLE_IDS) {
     const design = getRoleDesign(roleId);

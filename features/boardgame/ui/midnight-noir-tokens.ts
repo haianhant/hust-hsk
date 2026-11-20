@@ -13,6 +13,7 @@ import type {
   Phase2RoleId,
   Phase3RoleId,
   Phase4RoleId,
+  Phase5RoleId,
 } from '../../../shared/contracts/boardgame';
 import { getCardById } from '../domain/cards';
 import { getRoleDesign } from '../domain/roles';
@@ -215,8 +216,24 @@ export const WAVE3_ROLE_IDS: readonly Phase4RoleId[] = [
   'exp2_bryon',
 ];
 
-/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — nâng cấp lên 48 vai ở Phase 5D). */
-export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, string>>> = {
+/** 12 tướng mở rộng Wave 4 (Starter Thirty-Eight · Phase 5 — 4 Hunter + 4 Shadow + 4 Neutral). */
+export const WAVE4_ROLE_IDS: readonly Phase5RoleId[] = [
+  'exp2_elise',
+  'exp1_ernest',
+  'exp1_gwendolen',
+  'exp2_freyja',
+  'exp2_umibozu',
+  'exp2_urban_legend',
+  'exp2_warlord',
+  'exp2_usurper',
+  'exp2_arlene',
+  'exp1_angel',
+  'exp2_bianca',
+  'exp2_dalton',
+];
+
+/** Thư viện đầy đủ 48 chân dung nhân vật full-art HUSTVerse Midnight (2:3 WebP — 10 Classic + 8 Starter Eight + 8 Wave 2 + 10 Wave 3 + 12 Wave 4). */
+export const MIDNIGHT_CHARACTER_ART: Readonly<Record<BoardGameRoleId, string>> = {
   // 10 Classic Roles (preserved untouched)
   'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
   'gac-truc-ban': '/assets/boardgame/roles/role-lan-truc-ban.webp',
@@ -257,6 +274,19 @@ export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, st
   exp2_visions: '/assets/boardgame/roles/role-exp2-visions.webp',
   exp2_cruz: '/assets/boardgame/roles/role-exp2-cruz.webp',
   exp2_bryon: '/assets/boardgame/roles/role-exp2-bryon.webp',
+  // 12 Wave 4 Expansion Roles (Phase 5D — 1024x1536 WebP)
+  exp2_elise: '/assets/boardgame/roles/role-exp2-elise.webp',
+  exp1_ernest: '/assets/boardgame/roles/role-exp1-ernest.webp',
+  exp1_gwendolen: '/assets/boardgame/roles/role-exp1-gwendolen.webp',
+  exp2_freyja: '/assets/boardgame/roles/role-exp2-freyja.webp',
+  exp2_umibozu: '/assets/boardgame/roles/role-exp2-umibozu.webp',
+  exp2_urban_legend: '/assets/boardgame/roles/role-exp2-urban-legend.webp',
+  exp2_warlord: '/assets/boardgame/roles/role-exp2-warlord.webp',
+  exp2_usurper: '/assets/boardgame/roles/role-exp2-usurper.webp',
+  exp2_arlene: '/assets/boardgame/roles/role-exp2-arlene.webp',
+  exp1_angel: '/assets/boardgame/roles/role-exp1-angel.webp',
+  exp2_bianca: '/assets/boardgame/roles/role-exp2-bianca.webp',
+  exp2_dalton: '/assets/boardgame/roles/role-exp2-dalton.webp',
 };
 
 /** Thư viện đầy đủ 40 loại thẻ riêng biệt (tổng 48 bản sao) phong cách HUSTVerse Midnight (2:3 WebP). */

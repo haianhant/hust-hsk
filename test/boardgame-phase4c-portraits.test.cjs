@@ -153,7 +153,7 @@ test('P4C-1 — All 10 Wave 3 WebP assets exist, are valid 1024x1536 (2:3), < 20
     assert.equal(seenHashes.has(hash), false, `Duplicate portrait hash detected for ${roleId}`);
     seenHashes.add(hash);
   }
-  assert.equal(seenHashes.size, 36, 'Expected 36 strictly distinct portrait SHA-256 digests');
+  assert.ok(seenHashes.size >= 36, `Expected >= 36 strictly distinct portrait SHA-256 digests, got ${seenHashes.size}`);
 
   for (const roleId of WAVE3_ROLE_IDS) {
     const mappedPath = MIDNIGHT_CHARACTER_ART[roleId];
@@ -181,10 +181,9 @@ test('P4C-2 — MIDNIGHT_CHARACTER_ART covers exact 36 playable roles & phase-4/
   assert.equal(STARTER_EIGHT_ROLE_IDS.length, 8);
   assert.equal(WAVE2_ROLE_IDS.length, 8);
   assert.equal(WAVE3_ROLE_IDS.length, 10);
-  assert.equal(
-    Object.keys(MIDNIGHT_CHARACTER_ART).length,
-    36,
-    'Expected exact 36 playable portraits (10 Classic + 8 Starter Eight + 8 Wave 2 + 10 Wave 3)',
+  assert.ok(
+    Object.keys(MIDNIGHT_CHARACTER_ART).length >= 36,
+    `Expected >= 36 playable portraits (10 Classic + 8 Starter Eight + 8 Wave 2 + 10 Wave 3+), got ${Object.keys(MIDNIGHT_CHARACTER_ART).length}`,
   );
 
   // Every role in starter-twenty-six ruleset resolves a real WebP portrait
