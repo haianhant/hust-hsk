@@ -3249,7 +3249,7 @@ export function useBoardGameVfxQueue({
   const qualityTier = graphicsProfile?.tier ?? 'high';
   const pawnGlideDurationMs =
     graphicsProfile?.pawnGlideDurationMs ??
-    (qualityTier === 'low' ? 0 : qualityTier === 'balanced' ? 340 : 520);
+    (qualityTier === 'low' ? 0 : qualityTier === 'balanced' ? 450 : 650);
   const dprCap = graphicsProfile?.dprCap ?? 2;
   const particleScale = graphicsProfile?.particleScale ?? (reducedMotion ? 0.25 : 1);
   const enableScreenShake = graphicsProfile

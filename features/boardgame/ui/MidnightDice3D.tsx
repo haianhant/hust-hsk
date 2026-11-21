@@ -46,8 +46,8 @@ export interface DiceRollChoreographyTimeline {
 }
 
 const DEFAULT_GLIDE_MS_BY_TIER: Record<DiceRollQualityTier, number> = {
-  high: 1650,
-  balanced: 1350,
+  high: 650,
+  balanced: 450,
   low: 0,
 };
 
@@ -123,15 +123,15 @@ export function buildDiceRollTimeline({
     0,
     Math.round(pawnGlideDurationMs ?? DEFAULT_GLIDE_MS_BY_TIER[qualityTier]),
   );
-  const highlightLeadMs = glideMs > 0 ? (qualityTier === 'high' ? 140 : 110) : 0;
+  const highlightLeadMs = glideMs > 0 ? (qualityTier === 'high' ? 90 : 70) : 0;
   const destHighlightStartMs = stageTimings.settleAtMs;
   const pawnGlideStartMs = destHighlightStartMs + highlightLeadMs;
   const pawnTouchdownAtMs = pawnGlideStartMs + glideMs;
-  const pawnCushionDurationMs = glideMs > 0 ? 260 : 0;
+  const pawnCushionDurationMs = glideMs > 0 ? 160 : 0;
   const destHighlightEndMs = hasDestinationMove
     ? Math.max(
-        stageTimings.totalMs + 340,
-        pawnTouchdownAtMs + pawnCushionDurationMs + 420,
+        stageTimings.totalMs + 260,
+        pawnTouchdownAtMs + pawnCushionDurationMs + 320,
       )
     : 0;
 
@@ -153,16 +153,16 @@ export function buildDiceRollTimeline({
  * Timeline đồng bộ cho di chuyển chọn trực tiếp không qua bước lăn xúc xắc (ví dụ tổng 7 / La Bàn).
  */
 export function buildDirectMoveTimeline({
-  pawnGlideDurationMs = 1650,
+  pawnGlideDurationMs = 650,
   reducedMotion = false,
 }: {
   pawnGlideDurationMs?: number;
   reducedMotion?: boolean;
 }): DiceRollChoreographyTimeline {
   const glideMs = reducedMotion ? 0 : Math.max(0, Math.round(pawnGlideDurationMs));
-  const pawnGlideStartMs = glideMs > 0 ? 110 : 0;
+  const pawnGlideStartMs = glideMs > 0 ? 70 : 0;
   const pawnTouchdownAtMs = pawnGlideStartMs + glideMs;
-  const pawnCushionDurationMs = glideMs > 0 ? 260 : 0;
+  const pawnCushionDurationMs = glideMs > 0 ? 160 : 0;
 
   return {
     windupEndMs: 0,
@@ -176,7 +176,7 @@ export function buildDirectMoveTimeline({
     diceOverlayEndMs: 0,
     destHighlightEndMs: reducedMotion
       ? 550
-      : Math.max(900, pawnTouchdownAtMs + pawnCushionDurationMs + 380),
+      : Math.max(700, pawnTouchdownAtMs + pawnCushionDurationMs + 300),
   };
 }
 

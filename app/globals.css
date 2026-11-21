@@ -399,7 +399,7 @@ canvas {
 }
 
 .mn-pawn-touchdown-ripple {
-  animation: mn-pawn-touchdown-ripple 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: mn-pawn-touchdown-ripple 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes bg-vfx-float-damage {

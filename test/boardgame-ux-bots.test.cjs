@@ -244,7 +244,10 @@ test('UX-3 — Animation mượt và chậm hơn (~+1.5s) nhưng giữ nguyên t
     prefersReducedMotion: true,
   });
 
-  assert.ok(highProfile.pawnGlideDurationMs >= 1500, 'Pawn glide must be smooth & >= 1.5s on High');
+  assert.ok(
+    highProfile.pawnGlideDurationMs >= 550 && highProfile.pawnGlideDurationMs <= 800,
+    'Pawn glide must be brisk & smooth (~0.65s) on High',
+  );
   assert.equal(reducedProfile.pawnGlideDurationMs, 0, 'Reduced motion keeps pawn glide instant');
 
   const dice = resolveDiceStageTimings(2800, false);
@@ -254,10 +257,10 @@ test('UX-3 — Animation mượt và chậm hơn (~+1.5s) nhưng giữ nguyên t
 
   const moveTl = buildDiceRollTimeline({ diceKind: 'move', qualityTier: 'high', reducedMotion: false });
   assert.ok(moveTl.diceOverlayEndMs >= 2500);
-  assert.ok(moveTl.pawnGlideDurationMs >= 1500);
+  assert.ok(moveTl.pawnGlideDurationMs >= 550 && moveTl.pawnGlideDurationMs <= 800);
 
   const directTl = buildDirectMoveTimeline({ reducedMotion: false });
-  assert.ok(directTl.pawnGlideDurationMs >= 1500);
+  assert.ok(directTl.pawnGlideDurationMs >= 550 && directTl.pawnGlideDurationMs <= 800);
 
   const combat = resolveCombatSequenceTimings(2400, 'SLASH', false, { qualityTier: 'high' });
   assert.ok(combat.recoveryEndMs >= 1900 && combat.recoveryEndMs <= 2600);

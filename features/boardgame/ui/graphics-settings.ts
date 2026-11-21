@@ -114,7 +114,7 @@ export function resolveGraphicsProfile(
   let enable3DTilt = !env.coarsePointer;
   let enableMistDrift = true;
   let enableScreenFlash = true;
-  let pawnGlideDurationMs = 1650;
+  let pawnGlideDurationMs = 650;
 
   if (tier === 'balanced') {
     dprCap = 1.5;
@@ -124,7 +124,7 @@ export function resolveGraphicsProfile(
     enable3DTilt = false;
     enableMistDrift = false;
     enableScreenFlash = true;
-    pawnGlideDurationMs = 1350;
+    pawnGlideDurationMs = 450;
   } else if (tier === 'low') {
     dprCap = 1;
     particleScale = 0;

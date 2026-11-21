@@ -28,7 +28,7 @@ export function useSmoothPawnGlide({
   matchId,
   reducedMotion,
   qualityTier = 'high',
-  durationMs = 1650,
+  durationMs = 650,
   diceRollSignature = '',
   skipGeneration = 0,
 }: {
@@ -275,7 +275,7 @@ export function useSmoothPawnGlide({
             rippleTimerId = window.setTimeout(() => {
               if (rippleTimerId !== null) landTimersRef.current.delete(rippleTimerId);
               el.classList.remove('mn-pawn-touchdown-ripple');
-            }, 680);
+            }, 420);
             landTimersRef.current.add(rippleTimerId);
           }, timeline.pawnTouchdownAtMs);
           landTimersRef.current.add(touchTimerId);
