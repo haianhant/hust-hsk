@@ -105,13 +105,13 @@ test('P5C-1 — starter-thirty-eight ruleset (48 playable: 18H/18S/12N; 18 remai
   assert.equal(expCheck.pools.mistOrder.length, 18);
   assert.equal(expCheck.pools.wanderer.length, 12);
 
-  // Verify remaining unimplemented expansion roles (18 in Phase 5 -> 8 Tier-4 in Phase 6) stay strictly locked
+  // Verify any remaining unimplemented expansion roles (18 in Phase 5 -> 8 in Phase 6 -> 0 in Phase 7) stay strictly locked
   const allExp = DEFAULT_CHARACTER_REGISTRY.listByExpansions(['expansion-1', 'expansion-2']);
   const remaining = allExp.filter((e) => e.metadata.implementationStatus !== 'implemented');
-  assert.ok(remaining.length >= 8 && remaining.length <= 18, `Expected 8..18 remaining roles, got ${remaining.length}`);
-  assert.ok(remaining.filter((e) => e.metadata.sourceFaction === 'hunter').length >= 1);
-  assert.equal(remaining.filter((e) => e.metadata.sourceFaction === 'shadow').length, 3);
-  assert.ok(remaining.filter((e) => e.metadata.sourceFaction === 'neutral').length >= 4);
+  assert.ok(remaining.length >= 0 && remaining.length <= 18, `Expected 0..18 remaining roles, got ${remaining.length}`);
+  assert.ok(remaining.filter((e) => e.metadata.sourceFaction === 'hunter').length <= 2);
+  assert.ok(remaining.filter((e) => e.metadata.sourceFaction === 'shadow').length <= 3);
+  assert.ok(remaining.filter((e) => e.metadata.sourceFaction === 'neutral').length <= 13);
   for (const rem of remaining) {
     assert.equal(rem.metadata.rulesStatus, 'needs-clarification');
     assert.equal(rem.metadata.implementationStatus, 'not-started');

@@ -1698,7 +1698,7 @@ export function extractVisualEventsFromDiff(
       next.winnerFaction === 'mist-order' ||
       next.winnerFaction === 'wanderer'
         ? next.winnerFaction
-        : next.winnerFaction === 'wanderer-solo'
+        : next.winnerFaction === 'wanderer-solo' || next.winnerFaction === 'multi-faction'
           ? 'wanderer'
           : null;
     const matchOutcome = resolveMatchOutcomeForViewer(next, ctx);

@@ -414,6 +414,7 @@ export type PendingResolutionStep =
       counterAttackerIds: string[];
       isBonusAttack?: boolean;
       isRetaliatoryAttack?: boolean;
+      isRecruitmentAttack?: boolean;
       gwendolenVictims?: Array<{
         playerId: string;
         location: BoardGameLocationId;
@@ -453,8 +454,12 @@ export type PendingResolutionStep =
       sourceType: DamageSourceKind;
       wyvernChecked?: boolean;
       vengeanceChecked?: boolean;
+      bonnieChecked?: boolean;
       wendigoCheckedIds?: string[];
       gideonCheckedIds?: string[];
+      antimonyCheckedIds?: string[];
+      vengefulSpiritCheckedIds?: string[];
+      batchVictimPlayerIds?: string[];
     }
   | {
       kind: 'FINISH_ACTION';
@@ -680,6 +685,28 @@ export type PendingChoiceContextData =
       rolledDamage: number;
       rollDesc: string;
       chainDepth: number;
+    }
+  | {
+      kind: 'lloyd_interrupt_attack';
+      lloydPlayerId: string;
+      attackId: string;
+      attackerPlayerId: string;
+      primaryTargetId: string;
+      targetPlayerIds: string[];
+      hasMachineGun: boolean;
+      isRecruitmentAttack?: boolean;
+    }
+  | {
+      kind: 'vengeful_spirit_copy_skill';
+      spiritPlayerId: string;
+      eliminationEventId: string;
+      victimMap: Record<string, string>;
+    }
+  | {
+      kind: 'voodoo_select_puppet';
+      voodooPlayerId: string;
+      turnNumber: number;
+      targetMap: Record<string, string>;
     };
 
 export interface AuthoritativePendingChoice {

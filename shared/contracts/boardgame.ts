@@ -28,7 +28,7 @@ export type BoardGameMatchStatus =
 
 export const BOARD_GAME_RULESET_VERSION = 4 as const;
 export const BOARD_GAME_PROTOCOL_VERSION = 1 as const;
-export const BOARD_GAME_CATALOG_VERSION = '2026.11-p6b' as const;
+export const BOARD_GAME_CATALOG_VERSION = '2026.11-p7b' as const;
 
 export type BoardGameProductionRulesetId =
   | 'classic'
@@ -42,7 +42,8 @@ export type BoardGameExperimentalRulesetId =
   | 'starter-sixteen'
   | 'starter-twenty-six'
   | 'starter-thirty-eight'
-  | 'starter-forty-eight';
+  | 'starter-forty-eight'
+  | 'starter-fifty-six';
 
 export type BoardGameRulesetId =
   | BoardGameProductionRulesetId
@@ -66,6 +67,7 @@ export const BOARD_GAME_EXPERIMENTAL_RULESETS: readonly BoardGameExperimentalRul
   'starter-twenty-six',
   'starter-thirty-eight',
   'starter-forty-eight',
+  'starter-fifty-six',
 ];
 
 export const BOARD_GAME_ALL_RULESETS: readonly BoardGameRulesetId[] = [
@@ -200,13 +202,24 @@ export type Phase6RoleId =
   | 'exp2_diana'
   | 'exp2_aaron';
 
+export type Phase7RoleId =
+  | 'exp1_lloyd'
+  | 'exp1_vengeful_spirit'
+  | 'exp1_voodoo'
+  | 'exp1_undead'
+  | 'exp1_antimony'
+  | 'exp2_cain'
+  | 'exp2_bonnie'
+  | 'exp2_nc_soldier';
+
 export type BoardGameRoleId =
   | ClassicBoardGameRoleId
   | Phase2RoleId
   | Phase3RoleId
   | Phase4RoleId
   | Phase5RoleId
-  | Phase6RoleId;
+  | Phase6RoleId
+  | Phase7RoleId;
 
 export type BoardGameLocationId =
   | 'lobby'
@@ -515,7 +528,10 @@ export type BoardGamePendingChoiceKind =
   | 'cassie_turn_heal'
   | 'clairvoyant_peek_copy'
   | 'colt_theft_counter'
-  | 'colt_recover_or_damage';
+  | 'colt_recover_or_damage'
+  | 'lloyd_interrupt_attack'
+  | 'vengeful_spirit_copy_skill'
+  | 'voodoo_select_puppet';
 
 export interface BoardGameChoiceOptionView {
   optionId: string;

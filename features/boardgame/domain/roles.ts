@@ -236,7 +236,15 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
                                       ? 'Còn sống và Khách hàng đang hoạt động của bạn thắng; nếu chưa kích hoạt được Khách hàng thì phải còn sống với đầy máu khi hết trận.'
                                       : rec.id === 'exp2_aaron'
                                         ? 'Cả bạn và Người vợ (nhân vật nữ đầu tiên lộ diện) đều còn sống khi hết trận; nếu chưa tìm thấy vợ, phải chết trước khi hết trận.'
-                                        : rec.victoryCondition;
+                                        : rec.id === 'exp1_antimony'
+                                          ? 'Bắt buộc lộ diện ở cái chết vĩnh viễn đầu tiên của người chơi khác để sao chép kỹ năng hiệu lực & điều kiện thắng của họ (trước khi kích hoạt chưa có điều kiện thắng).'
+                                          : rec.id === 'exp2_cain'
+                                            ? 'Còn sống khi có ít nhất 1 Hunter, 1 Shadow và 1 Neutral khác bị loại vĩnh viễn (bàn 5P: chính bạn tự tay kết liễu ≥ 1 Hunter và ≥ 1 Shadow).'
+                                            : rec.id === 'exp2_bonnie'
+                                              ? 'Hạ gục một Shadow để chuyển phe động sang Hội Bóng Đêm và giành chiến thắng cùng phe Shadow.'
+                                              : rec.id === 'exp2_nc_soldier'
+                                                ? 'Còn sống, chiêu mộ toàn bộ các Neutral ban đầu khác (tích lũy ≥ 5 vết thương sau đòn Chiêu Mộ) và tự mình sở hữu đủ 3 vũ khí: Súng Máy (ev-06), Súng Ngắn (ev-05), Cưa Máy (ev-03).'
+                                                : rec.victoryCondition;
 
   const targetMode: CharacterDesign['targetMode'] =
     rec.id === 'exp2_father_harrison' ||
@@ -252,9 +260,13 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
     rec.id === 'exp1_anathema' ||
     rec.id === 'exp1_bethany' ||
     rec.id === 'exp1_cassie' ||
-    rec.id === 'exp1_clairvoyant'
+    rec.id === 'exp1_clairvoyant' ||
+    rec.id === 'exp1_voodoo' ||
+    rec.id === 'exp2_cain'
       ? 'self'
-      : 'passive';
+      : rec.id === 'exp2_nc_soldier'
+        ? 'any-other'
+        : 'passive';
 
   return {
     id: rec.id as BoardGameRoleId,

@@ -98,8 +98,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "very-high",
     "implementationDifficulty": "tier-4",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-1-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_felicia",
@@ -245,8 +245,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "very-high",
     "implementationDifficulty": "tier-4",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-shadow-phien-ban-mo-rong-thu-1-phan-3-sh",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_undying",
@@ -350,8 +350,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "very-high",
     "implementationDifficulty": "tier-4",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-shadow-phien-ban-mo-rong-thu-1-phan-3-sh",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_udi",
@@ -413,8 +413,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "very-high",
     "implementationDifficulty": "tier-4",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-shadow-phien-ban-mo-rong-thu-1-phan-3-sh",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_bipolar",
@@ -539,8 +539,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "very-high",
     "implementationDifficulty": "tier-4",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/phan-tich-danh-gia-phe-hunter-phien-ban-mo-rong-thu-1-phan-2-sha",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp1_cassie",
@@ -1001,8 +1001,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "very-high",
     "implementationDifficulty": "tier-4",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_dalton",
@@ -1064,8 +1064,8 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "very-high",
     "implementationDifficulty": "tier-4",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   },
   {
     "id": "exp2_bianca",
@@ -1232,7 +1232,7 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "complexity": "very-high",
     "implementationDifficulty": "tier-4",
     "sourceUrl": "https://thegioiboardgame.vn/blogs/review-boardgame/bai-phan-tich-va-danh-gia-nhan-vat-phe-neutral-cua-ban-mo-rong-thu-2",
-    "rulesStatus": "needs-clarification",
-    "implementationStatus": "not-started"
+    "rulesStatus": "house-rule-approved",
+    "implementationStatus": "implemented"
   }
 ];

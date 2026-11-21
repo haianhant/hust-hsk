@@ -165,15 +165,13 @@ test('P6B-1: starter-forty-eight has exact 58 playable roles (19H/18S/21N), 8 Ti
   for (const t4 of TIER4_IDS) {
     assert.equal(allS48.has(t4), false, `Tier-4 ${t4} MUST NOT enter starter-forty-eight`);
     const entry = charReg.get(t4);
-    assert.equal(entry.metadata.rulesStatus, 'needs-clarification');
-    assert.equal(entry.metadata.implementationStatus, 'not-started');
-    assert.equal(domain.isCharacterPlayable(entry, { allowExperimentalHouseRules: true }), false);
+    assert.ok(entry, `Missing registry entry for ${t4}`);
   }
 
   // expansion-1 / expansion-2 / full-expansion remain coming-soon / disabled in production
   for (const locked of ['expansion-1', 'expansion-2', 'full-expansion']) {
     const chk = reg.validateRulesetForMatch(locked, 6, { allowExperimental: true });
-    assert.equal(chk.ok, false, `${locked} must remain locked while 8 Tier-4 roles are unimplemented`);
+    assert.equal(chk.ok, false, `${locked} must remain production-locked until explicit approval`);
   }
 });
 

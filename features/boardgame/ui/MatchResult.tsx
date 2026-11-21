@@ -79,6 +79,9 @@ export default function MatchResult({
   const selfWon = Boolean(
     selfPlayerId && publicGame.winnerPlayerIds.includes(selfPlayerId),
   );
+  const isMultiFactionWin =
+    publicGame.winnerFaction === 'multi-faction' ||
+    (Array.isArray(publicGame.winningFactions) && publicGame.winningFactions.length >= 2);
   const resolvedWinFaction =
     publicGame.winnerFaction === 'lantern-guard' ||
     publicGame.winnerFaction === 'mist-order' ||
@@ -86,10 +89,13 @@ export default function MatchResult({
       ? publicGame.winnerFaction
       : publicGame.winnerFaction === 'wanderer-solo'
         ? 'wanderer'
-        : null;
+        : isMultiFactionWin
+          ? 'wanderer'
+          : null;
   const winFactionTheme = resolvedWinFaction ? FACTION_THEME[resolvedWinFaction] : null;
-  const headerGradientClass =
-    resolvedWinFaction === 'mist-order'
+  const headerGradientClass = isMultiFactionWin
+    ? 'from-emerald-950/75 via-amber-950/60 to-rose-950/75'
+    : resolvedWinFaction === 'mist-order'
       ? 'from-rose-950/75 via-slate-900 to-purple-950/70'
       : resolvedWinFaction === 'wanderer'
         ? 'from-emerald-950/70 via-slate-900 to-amber-950/60'
@@ -100,7 +106,8 @@ export default function MatchResult({
   return (
     <div
       data-testid="bg-match-result-modal"
-      data-winner-faction={resolvedWinFaction ?? 'none'}
+      data-winner-faction={isMultiFactionWin ? 'multi-faction' : (resolvedWinFaction ?? 'none')}
+      data-winning-factions={publicGame.winningFactions?.join(',') ?? ''}
       data-outcome={viewerOutcome}
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-md"
     >

@@ -29,6 +29,7 @@ import {
   type Phase5CRoleId,
   type Phase5RoleId,
   type Phase6RoleId,
+  type Phase7RoleId,
 } from '../../../shared/contracts/boardgame';
 import {
   getCardById,
@@ -45,6 +46,45 @@ import {
   evaluateArnoldLethalReflection,
   recordDamageRedirectionTrace,
 } from './damage-redirection';
+import {
+  convertPlayerEffectiveFaction,
+  getEffectiveFaction,
+  isEffectiveNeutral,
+  isEligibleNcSoldierRecruitTarget,
+  recruitPlayerIntoNcSoldierAlliance,
+} from './dynamic-allegiance';
+import {
+  bindCopiedSkillFromElimination,
+  bindNcSoldierRecruitedSkill,
+  getCopiedSkillBinding,
+  getEffectiveSkillCooldown,
+  getEffectiveSkillRoleId,
+  hasEffectiveSkillUsedOnce,
+  markEffectiveSkillUsedOnce,
+} from './dynamic-skill-copy';
+import {
+  collectAttackInterruptCandidates,
+  commitPendingAttackCancellation,
+  createPendingDeclaredAttack,
+  isPendingAttackCancellable,
+  markAttackInterruptCandidateChecked,
+  markPendingAttackProceeding,
+  type PendingDeclaredAttack,
+} from './global-attack-interrupt';
+import {
+  UNDEAD_REVIVE_HP,
+  canPlayerEnterPendingResurrection,
+  commitFinalEliminationLifecycle,
+  enterDormantPendingRevive,
+  isPlayerDormantPendingRevive,
+  isPlayerFinallyEliminated,
+  isPlayerTargetable,
+  isUndeadPreLethalRevealRestricted,
+} from './pending-resurrection';
+import {
+  cancelTurnControlForPlayer,
+  scheduleDeferredTurnControl,
+} from './turn-ownership';
 import {
   appendHighlight,
   appendPrivateClue,
@@ -142,7 +182,8 @@ export type ExpansionImplementedRoleId =
   | Phase3RoleId
   | Phase4RoleId
   | Phase5RoleId
-  | Phase6RoleId;
+  | Phase6RoleId
+  | Phase7RoleId;
 
 export interface ExpansionSkillExecutableBinding {
   readonly roleId: ExpansionImplementedRoleId;
@@ -260,9 +301,31 @@ export const PHASE6_ROLE_IDS: readonly Phase6RoleId[] = [
   'exp2_aaron',
 ];
 
-export const STARTER_FORTY_EIGHT_EXPANSION_ROLE_IDS: readonly ExpansionImplementedRoleId[] = [
+export const STARTER_FORTY_EIGHT_EXPANSION_ROLE_IDS: readonly (
+  | Phase2RoleId
+  | Phase3RoleId
+  | Phase4RoleId
+  | Phase5RoleId
+  | Phase6RoleId
+)[] = [
   ...STARTER_THIRTY_EIGHT_EXPANSION_ROLE_IDS,
   ...PHASE6_ROLE_IDS,
+];
+
+export const PHASE7_ROLE_IDS: readonly Phase7RoleId[] = [
+  'exp1_lloyd',
+  'exp1_vengeful_spirit',
+  'exp1_voodoo',
+  'exp1_undead',
+  'exp1_antimony',
+  'exp2_cain',
+  'exp2_bonnie',
+  'exp2_nc_soldier',
+];
+
+export const STARTER_FIFTY_SIX_EXPANSION_ROLE_IDS: readonly ExpansionImplementedRoleId[] = [
+  ...STARTER_FORTY_EIGHT_EXPANSION_ROLE_IDS,
+  ...PHASE7_ROLE_IDS,
 ];
 
 export const PHASE2_SKILL_BINDINGS: Readonly<
@@ -853,6 +916,104 @@ export const PHASE6_VICTORY_BINDINGS: Readonly<
   },
 };
 
+export const PHASE7_SKILL_BINDINGS: Readonly<
+  Partial<Record<string, ExpansionSkillExecutableBinding>>
+> = {
+  exp1_lloyd: {
+    roleId: 'exp1_lloyd',
+    handlerId: 'exp:exp1_lloyd:lost-way',
+    trigger: 'REACTION_INTERRUPT',
+    resolverSymbol: 'expansion-skills.ts:lloydLostWayHandler',
+  },
+  exp1_vengeful_spirit: {
+    roleId: 'exp1_vengeful_spirit',
+    handlerId: 'exp:exp1_vengeful_spirit:immortal-power',
+    trigger: 'ON_ELIMINATION',
+    resolverSymbol: 'expansion-skills.ts:vengefulSpiritImmortalPowerHandler',
+  },
+  exp1_voodoo: {
+    roleId: 'exp1_voodoo',
+    handlerId: 'exp:exp1_voodoo:puppet',
+    trigger: 'ON_TURN_START',
+    resolverSymbol: 'expansion-skills.ts:voodooPuppetHandler',
+  },
+  exp1_undead: {
+    roleId: 'exp1_undead',
+    handlerId: 'exp:exp1_undead:undead-rise',
+    trigger: 'ON_ELIMINATION',
+    resolverSymbol: 'expansion-skills.ts:undeadRiseHandler',
+  },
+  exp1_antimony: {
+    roleId: 'exp1_antimony',
+    handlerId: 'exp:exp1_antimony:clone',
+    trigger: 'ON_ELIMINATION',
+    resolverSymbol: 'expansion-skills.ts:antimonyCloneHandler',
+  },
+  exp2_cain: {
+    roleId: 'exp2_cain',
+    handlerId: 'exp:exp2_cain:power-play',
+    trigger: 'ACTIVE_SKILL',
+    resolverSymbol: 'expansion-skills.ts:cainPowerPlayHandler',
+  },
+  exp2_bonnie: {
+    roleId: 'exp2_bonnie',
+    handlerId: 'exp:exp2_bonnie:succession-ritual',
+    trigger: 'ON_ELIMINATION',
+    resolverSymbol: 'expansion-skills.ts:bonnieSuccessionHandler',
+  },
+  exp2_nc_soldier: {
+    roleId: 'exp2_nc_soldier',
+    handlerId: 'exp:exp2_nc_soldier:recruitment',
+    trigger: 'ACTIVE_SKILL',
+    resolverSymbol: 'expansion-skills.ts:ncSoldierRecruitmentHandler',
+  },
+};
+
+export const PHASE7_VICTORY_BINDINGS: Readonly<
+  Partial<Record<string, ExpansionVictoryExecutableBinding>>
+> = {
+  exp1_lloyd: {
+    roleId: 'exp1_lloyd',
+    evaluatorId: 'victory-engine.ts:faction#hunters',
+    archetype: 'faction',
+  },
+  exp1_vengeful_spirit: {
+    roleId: 'exp1_vengeful_spirit',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp1_voodoo: {
+    roleId: 'exp1_voodoo',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp1_undead: {
+    roleId: 'exp1_undead',
+    evaluatorId: 'victory-engine.ts:faction#shadows',
+    archetype: 'faction',
+  },
+  exp1_antimony: {
+    roleId: 'exp1_antimony',
+    evaluatorId: 'copied-victory-graph.ts:copy-goal#antimony',
+    archetype: 'copied-victory',
+  },
+  exp2_cain: {
+    roleId: 'exp2_cain',
+    evaluatorId: 'victory-engine.ts:multi-faction#cain',
+    archetype: 'simultaneous-victory',
+  },
+  exp2_bonnie: {
+    roleId: 'exp2_bonnie',
+    evaluatorId: 'victory-engine.ts:dynamic-allegiance#bonnie',
+    archetype: 'dynamic-allegiance',
+  },
+  exp2_nc_soldier: {
+    roleId: 'exp2_nc_soldier',
+    evaluatorId: 'victory-engine.ts:alliance#nc-soldier',
+    archetype: 'dynamic-allegiance',
+  },
+};
+
 export const ALL_EXPANSION_SKILL_BINDINGS: Readonly<
   Partial<Record<string, ExpansionSkillExecutableBinding>>
 > = {
@@ -862,6 +1023,7 @@ export const ALL_EXPANSION_SKILL_BINDINGS: Readonly<
   ...PHASE5B_SKILL_BINDINGS,
   ...PHASE5C_SKILL_BINDINGS,
   ...PHASE6_SKILL_BINDINGS,
+  ...PHASE7_SKILL_BINDINGS,
 };
 
 export const ALL_EXPANSION_VICTORY_BINDINGS: Readonly<
@@ -873,6 +1035,7 @@ export const ALL_EXPANSION_VICTORY_BINDINGS: Readonly<
   ...PHASE5B_VICTORY_BINDINGS,
   ...PHASE5C_VICTORY_BINDINGS,
   ...PHASE6_VICTORY_BINDINGS,
+  ...PHASE7_VICTORY_BINDINGS,
 };
 
 export interface TurnContinuationCallbacks {
@@ -1101,7 +1264,7 @@ export function isProtectedByAngelAura(
   state: AuthoritativeGameState,
   target: AuthoritativePlayerState,
 ): boolean {
-  if (!target.alive || !target.revealed || target.faction !== 'wanderer') {
+  if (!isPlayerTargetable(state, target) || !target.revealed || !isEffectiveNeutral(state, target)) {
     return false;
   }
   const auras = state.expansionState?.angelAuras;
@@ -1823,7 +1986,7 @@ const bipolarFateCoinHandler: SkillHandlerDefinition = {
   requiresAlive: true,
   canTrigger(ctx) {
     if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
-    if (ctx.owner.skillUsedOnce) return false;
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)) return false;
     return ctx.state.turnPhase === 'ROLL_MOVE';
   },
   execute(ctx) {
@@ -1842,7 +2005,11 @@ export function isUdiProtectedFromAttack(
   state: AuthoritativeGameState,
   target: AuthoritativePlayerState,
 ): boolean {
-  if (!target.alive || !target.revealed || target.roleId !== 'exp1_udi') {
+  if (
+    !isPlayerTargetable(state, target) ||
+    !target.revealed ||
+    getEffectiveSkillRoleId(state, target) !== 'exp1_udi'
+  ) {
     return false;
   }
   return listLivingPlayersInSameCluster(state, target, { includeSelf: false }).length >= 2;
@@ -1877,6 +2044,7 @@ export function canExpandedPlayerAttackTarget(
   attacker: AuthoritativePlayerState,
   target: AuthoritativePlayerState,
 ): boolean {
+  if (!isPlayerTargetable(state, target)) return false;
   if (!canPlayerAttackTarget(state, attacker, target)) return false;
   if (isUdiProtectedFromAttack(state, target)) return false;
   if (isVisionsMarkedTarget(state, attacker.playerId, target.playerId)) return false;
@@ -1884,13 +2052,14 @@ export function canExpandedPlayerAttackTarget(
   return true;
 }
 
-/** Danh sách mục tiêu tấn công hợp lệ trong chế độ mở rộng (đã lọc Udi, Visions & vợ của Aaron). */
+/** Danh sách mục tiêu tấn công hợp lệ trong chế độ mở rộng (đã lọc ngủ đông, Udi, Visions & vợ của Aaron). */
 export function listExpandedReachableAttackTargets(
   state: AuthoritativeGameState,
   attacker: AuthoritativePlayerState,
 ): AuthoritativePlayerState[] {
   return listReachableAttackTargets(state, attacker).filter(
     (target) =>
+      isPlayerTargetable(state, target) &&
       !isUdiProtectedFromAttack(state, target) &&
       !isVisionsMarkedTarget(state, attacker.playerId, target.playerId) &&
       !isAaronSpouseTarget(state, attacker.playerId, target.playerId),
@@ -2064,7 +2233,7 @@ const vengeanceChainStrikeHandler: SkillHandlerDefinition = {
     const payload = ctx.event.payload;
     if (!payload) return false;
     if (payload.vengeanceAlreadyChecked) return false;
-    if (ctx.owner.skillUsedOnce) return false;
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)) return false;
     if (payload.killerPlayerId !== ctx.owner.playerId) return false;
     if (payload.victimPlayerId === ctx.owner.playerId) return false;
     return ctx.owner.alive && ctx.owner.revealed;
@@ -2112,7 +2281,7 @@ const visionsCurseHandler: SkillHandlerDefinition = {
           existingMark.lastTickTurnNumber !== ctx.state.turnNumber,
       );
     }
-    if (ctx.owner.skillUsedOnce || exp.visionsPromptedTurnNumber === ctx.state.turnNumber) {
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner) || exp.visionsPromptedTurnNumber === ctx.state.turnNumber) {
       return false;
     }
     return Object.values(ctx.state.players).some(
@@ -2189,7 +2358,7 @@ const eliseSoftHarmonyHandler: SkillHandlerDefinition = {
   requiresAlive: true,
   canTrigger(ctx) {
     if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
-    if (ctx.owner.skillUsedOnce) return false;
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)) return false;
     if (
       ctx.state.turnPhase !== 'ROLL_MOVE' &&
       ctx.state.turnPhase !== 'LOCATION_ACTION' &&
@@ -2218,7 +2387,7 @@ const umibozuRevealAoeHandler: SkillHandlerDefinition = {
     if (!payload) return false;
     if (payload.revealedPlayerId !== ctx.owner.playerId) return false;
     if (payload.umibozuChecked) return false;
-    if (ctx.owner.skillUsedOnce) return false;
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)) return false;
     const exp = ensureExpansionState(ctx.state);
     if (exp.umibozuTriggeredIds?.includes(ctx.owner.playerId)) return false;
     return ctx.owner.alive && ctx.owner.revealed;
@@ -2227,7 +2396,7 @@ const umibozuRevealAoeHandler: SkillHandlerDefinition = {
     const payload = ctx.event.payload as Record<string, unknown>;
     const exp = ensureExpansionState(ctx.state);
     // Khóa 1 lần/trận TRƯỚC khi đẩy bất kỳ DAMAGE nào (chống vòng lặp đệ quy tuyệt đối!)
-    ctx.owner.skillUsedOnce = true;
+    markEffectiveSkillUsedOnce(ctx.state, ctx.owner);
     if (!exp.umibozuTriggeredIds) exp.umibozuTriggeredIds = [];
     exp.umibozuTriggeredIds.push(ctx.owner.playerId);
     payload.umibozuChecked = true;
@@ -2341,7 +2510,7 @@ const ernestApostasyHandler: SkillHandlerDefinition = {
   requiresAlive: true,
   canTrigger(ctx) {
     if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
-    if (ctx.owner.skillUsedOnce) return false;
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)) return false;
     if (getRemainingHp(ctx.owner) < 3) return false;
     if (
       ctx.state.turnPhase !== 'ROLL_MOVE' &&
@@ -2417,7 +2586,7 @@ const warlordWarPullHandler: SkillHandlerDefinition = {
   requiresAlive: true,
   canTrigger(ctx) {
     if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
-    if (ctx.owner.skillUsedOnce) return false;
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)) return false;
     if (ctx.state.turnPhase !== 'ROLL_MOVE' || ctx.owner.consecutiveSameZoneRolls > 0) {
       return false;
     }
@@ -2461,7 +2630,7 @@ const angelGuardianWingsHandler: SkillHandlerDefinition = {
   requiresAlive: true,
   canTrigger(ctx) {
     if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
-    if (ctx.owner.skillUsedOnce) return false;
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)) return false;
     if (
       ctx.state.turnPhase !== 'ROLL_MOVE' &&
       ctx.state.turnPhase !== 'LOCATION_ACTION' &&
@@ -2569,7 +2738,7 @@ const anathemaCurseHandler: SkillHandlerDefinition = {
   requiresAlive: true,
   canTrigger(ctx) {
     if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
-    if (ctx.owner.skillUsedOnce) return false;
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)) return false;
     const exp = ensureExpansionState(ctx.state);
     return !exp.anathemaCurses?.[ctx.owner.playerId];
   },
@@ -2609,7 +2778,7 @@ const arnoldFateChangeHandler: SkillHandlerDefinition = {
     const payload = ctx.event.payload;
     if (!payload || payload.phase !== 'arnold_lethal_check') return false;
     if (ctx.event.targetPlayerId !== ctx.owner.playerId) return false;
-    return !ctx.owner.skillUsedOnce && Boolean(payload.arnoldEligible);
+    return !hasEffectiveSkillUsedOnce(ctx.state, ctx.owner) && Boolean(payload.arnoldEligible);
   },
   execute(ctx) {
     const payload = ctx.event.payload as Record<string, unknown>;
@@ -2644,9 +2813,9 @@ const clairvoyantProphecyHandler: SkillHandlerDefinition = {
   requiresAlive: true,
   canTrigger(ctx) {
     if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
-    if (ctx.owner.skillUsedOnce) return false;
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)) return false;
     return Object.values(ctx.state.players).some(
-      (p) => p.alive && !p.revealed && p.playerId !== ctx.owner.playerId,
+      (p) => isPlayerTargetable(ctx.state, p) && !p.revealed && p.playerId !== ctx.owner.playerId,
     );
   },
   execute(ctx) {
@@ -2827,6 +2996,208 @@ const aaronLoveAtFirstSightHandler: SkillHandlerDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Phase 7B Executable Skill Handlers (Wave 6 — Final 8 Tier-4 Characters)
+// ---------------------------------------------------------------------------
+
+const lloydLostWayHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_lloyd:lost-way',
+  roleId: 'exp1_lloyd',
+  trigger: 'REACTION_INTERRUPT',
+  priority: 5,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    return ctx.event.payload?.phase === 'global_attack_interrupt';
+  },
+  execute(ctx) {
+    if (ctx.event.payload) {
+      ctx.event.payload.lloydEligible = true;
+    }
+    return { applied: true, note: 'lloyd-interrupt-eligible' };
+  },
+};
+
+const vengefulSpiritImmortalPowerHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_vengeful_spirit:immortal-power',
+  roleId: 'exp1_vengeful_spirit',
+  trigger: 'ON_ELIMINATION',
+  priority: 30,
+  requiresRevealed: false,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload) return false;
+    if (ctx.owner.skillUsedOnce || getCopiedSkillBinding(ctx.state, ctx.owner.playerId)) {
+      return false;
+    }
+    const checked = Array.isArray(payload.vengefulSpiritCheckedIds)
+      ? (payload.vengefulSpiritCheckedIds as string[])
+      : [];
+    if (checked.includes(ctx.owner.playerId)) return false;
+    const victimId = typeof payload.victimPlayerId === 'string' ? payload.victimPlayerId : '';
+    return Boolean(victimId && victimId !== ctx.owner.playerId);
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload!;
+    const checked = Array.isArray(payload.vengefulSpiritCheckedIds)
+      ? (payload.vengefulSpiritCheckedIds as string[])
+      : [];
+    checked.push(ctx.owner.playerId);
+    payload.vengefulSpiritCheckedIds = checked;
+    payload.pendingVengefulSpiritChoice = {
+      spiritPlayerId: ctx.owner.playerId,
+      eliminationEventId: String(payload.eliminationEventId ?? ''),
+      victimPlayerId: String(payload.victimPlayerId ?? ''),
+    };
+    return { applied: true, stopPropagation: true, note: 'vengeful-spirit-choice-queued' };
+  },
+};
+
+const voodooPuppetHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_voodoo:puppet',
+  roleId: 'exp1_voodoo',
+  trigger: 'ON_TURN_START',
+  priority: 12,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    if (ctx.event.actorPlayerId !== ctx.owner.playerId) return false;
+    if (hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)) return false;
+    const exp = ensureExpansionState(ctx.state);
+    return exp.voodooPromptedTurnNumber !== ctx.state.turnNumber;
+  },
+  execute(ctx) {
+    if (ctx.event.payload) {
+      ctx.event.payload.voodooCanPrompt = true;
+    }
+    return { applied: true, note: 'voodoo-turn-start-prompt' };
+  },
+};
+
+const undeadRiseHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_undead:undead-rise',
+  roleId: 'exp1_undead',
+  trigger: 'ON_ELIMINATION',
+  priority: 1,
+  requiresRevealed: false,
+  requiresAlive: false,
+  canTrigger(ctx) {
+    return (
+      ctx.event.payload?.phase === 'pending_resurrection_check' &&
+      ctx.event.targetPlayerId === ctx.owner.playerId &&
+      canPlayerEnterPendingResurrection(ctx.state, ctx.owner)
+    );
+  },
+  execute(ctx) {
+    if (ctx.event.payload) {
+      ctx.event.payload.undeadCanDormant = true;
+    }
+    return { applied: true, note: 'undead-pending-revive' };
+  },
+};
+
+const antimonyCloneHandler: SkillHandlerDefinition = {
+  id: 'exp:exp1_antimony:clone',
+  roleId: 'exp1_antimony',
+  trigger: 'ON_ELIMINATION',
+  priority: 25,
+  requiresRevealed: false,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload) return false;
+    const exp = ensureExpansionState(ctx.state);
+    if (ctx.owner.skillUsedOnce || exp.antimonyCopiedGoalByPlayer?.[ctx.owner.playerId]) {
+      return false;
+    }
+    const checked = Array.isArray(payload.antimonyCheckedIds)
+      ? (payload.antimonyCheckedIds as string[])
+      : [];
+    if (checked.includes(ctx.owner.playerId)) return false;
+    const victimId = typeof payload.victimPlayerId === 'string' ? payload.victimPlayerId : '';
+    return Boolean(victimId && victimId !== ctx.owner.playerId);
+  },
+  execute(ctx) {
+    const payload = ctx.event.payload!;
+    const checked = Array.isArray(payload.antimonyCheckedIds)
+      ? (payload.antimonyCheckedIds as string[])
+      : [];
+    checked.push(ctx.owner.playerId);
+    payload.antimonyCheckedIds = checked;
+    const list = Array.isArray(payload.eligibleAntimonyIds)
+      ? (payload.eligibleAntimonyIds as string[])
+      : [];
+    list.push(ctx.owner.playerId);
+    payload.eligibleAntimonyIds = list;
+    return { applied: true, note: 'antimony-mandatory-copy-queued' };
+  },
+};
+
+const cainPowerPlayHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_cain:power-play',
+  roleId: 'exp2_cain',
+  trigger: 'ACTIVE_SKILL',
+  priority: 10,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    return (
+      ctx.event.actorPlayerId === ctx.owner.playerId &&
+      !hasEffectiveSkillUsedOnce(ctx.state, ctx.owner)
+    );
+  },
+  execute(ctx) {
+    if (ctx.event.payload) {
+      ctx.event.payload.cainApproved = true;
+    }
+    return { applied: true, note: 'cain-power-play-approved' };
+  },
+};
+
+const bonnieSuccessionHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_bonnie:succession-ritual',
+  roleId: 'exp2_bonnie',
+  trigger: 'ON_ELIMINATION',
+  priority: 2,
+  requiresRevealed: false,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    const payload = ctx.event.payload;
+    if (!payload) return false;
+    return (
+      payload.killerPlayerId === ctx.owner.playerId &&
+      payload.victimPlayerId !== ctx.owner.playerId &&
+      payload.victimFactionAtDeath === 'mist-order' &&
+      getEffectiveFaction(ctx.state, ctx.owner) !== 'mist-order'
+    );
+  },
+  execute(ctx) {
+    if (ctx.event.payload) {
+      ctx.event.payload.bonnieConvertApproved = true;
+    }
+    return { applied: true, note: 'bonnie-shadow-succession' };
+  },
+};
+
+const ncSoldierRecruitmentHandler: SkillHandlerDefinition = {
+  id: 'exp:exp2_nc_soldier:recruitment',
+  roleId: 'exp2_nc_soldier',
+  trigger: 'ACTIVE_SKILL',
+  priority: 10,
+  requiresRevealed: true,
+  requiresAlive: true,
+  canTrigger(ctx) {
+    return ctx.event.actorPlayerId === ctx.owner.playerId;
+  },
+  execute(ctx) {
+    if (ctx.event.payload) {
+      ctx.event.payload.ncSoldierApproved = true;
+    }
+    return { applied: true, note: 'nc-soldier-recruitment-approved' };
+  },
+};
+
 export function createExpansionSkillEngine(): SkillEngine {
   const engine = createSkillEngine();
   engine.registerHandler(g43FortressHandler);
@@ -2882,6 +3253,15 @@ export function createExpansionSkillEngine(): SkillEngine {
   engine.registerHandler(coltStreetJusticeHandler);
   engine.registerHandler(dianaForHireHandler);
   engine.registerHandler(aaronLoveAtFirstSightHandler);
+  // Phase 7B Final 8 Tier-4 handlers (Full 66-Character Catalog)
+  engine.registerHandler(lloydLostWayHandler);
+  engine.registerHandler(vengefulSpiritImmortalPowerHandler);
+  engine.registerHandler(voodooPuppetHandler);
+  engine.registerHandler(undeadRiseHandler);
+  engine.registerHandler(antimonyCloneHandler);
+  engine.registerHandler(cainPowerPlayHandler);
+  engine.registerHandler(bonnieSuccessionHandler);
+  engine.registerHandler(ncSoldierRecruitmentHandler);
   return engine;
 }
 
@@ -3098,6 +3478,7 @@ function enqueueAttackResolution(
     victorChecked?: boolean;
     victorBoostTargetId?: string | null;
     isBonusAttack?: boolean;
+    isRecruitmentAttack?: boolean;
     preserveTurnPhase?: boolean;
     unshiftToFront?: boolean;
     skipFinishAction?: boolean;
@@ -3105,7 +3486,7 @@ function enqueueAttackResolution(
   },
 ): EngineActionResult {
   const target = state.players[primaryTargetId];
-  if (!target || !target.alive) {
+  if (!target || !isPlayerTargetable(state, target)) {
     return { ok: false, error: 'Mục tiêu tấn công không còn hợp lệ.' };
   }
 
@@ -3303,7 +3684,7 @@ function enqueueAttackResolution(
   const gwendolenVictims = targets.map((v) => ({
     playerId: v.playerId,
     location: v.location,
-    faction: v.faction,
+    faction: getEffectiveFaction(state, v),
     preRevealed: v.revealed,
   }));
 
@@ -3395,6 +3776,7 @@ function enqueueAttackResolution(
     counterAttackerIds: [],
     isBonusAttack: Boolean(options?.isBonusAttack),
     isRetaliatoryAttack: false,
+    ...(options?.isRecruitmentAttack ? { isRecruitmentAttack: true } : {}),
     gwendolenVictims,
     chainDepth: options?.chainDepth ?? 0,
   });
@@ -3416,51 +3798,20 @@ function enqueueAttackResolution(
   return { ok: true };
 }
 
-export function startExpandedAttack(
+function proceedDeclaredAttackToRoll(
   state: AuthoritativeGameState,
-  actor: AuthoritativePlayerState,
-  targetPlayerId: string,
+  declared: PendingDeclaredAttack,
   nowMs: number,
   callbacks: TurnContinuationCallbacks,
 ): EngineActionResult {
-  if (state.turnPhase !== 'MAIN_ACTION') {
-    return { ok: false, error: 'Chỉ được tấn công khi đang ở pha Hành động chính.' };
-  }
-  const target = state.players[targetPlayerId];
-  if (!target || !target.alive || target.playerId === actor.playerId) {
-    return { ok: false, error: 'Mục tiêu tấn công không hợp lệ.' };
-  }
-  if (!canPlayerAttackTarget(state, actor, target)) {
-    return {
-      ok: false,
-      error: actor.equipped.includes('ev-05')
-        ? 'Súng Bắn Đinh (Handgun) chỉ bắn được các Cụm KHÁC ngoài Cụm bạn đang đứng!'
-        : 'Mục tiêu phải đứng cùng Cụm Khu Vực với bạn.',
-    };
-  }
-  if (isUdiProtectedFromAttack(state, target)) {
-    const exp = ensureExpansionState(state);
-    incRoleStat(exp.stats.activationsByRole, 'exp1_udi', 1);
-    return {
-      ok: false,
-      error: `Ẩn Thân (Udi): ${target.displayName} đang ở cùng Cụm với ≥ 2 người chơi khác nên không thể bị tấn công trực tiếp!`,
-    };
-  }
-  if (isVisionsMarkedTarget(state, actor.playerId, target.playerId)) {
-    return {
-      ok: false,
-      error: `Dấu ấn Visions: Bạn không thể tấn công trực tiếp ${target.displayName} trong suốt phần còn lại của trận đấu!`,
-    };
-  }
-  if (isAaronSpouseTarget(state, actor.playerId, target.playerId)) {
-    return {
-      ok: false,
-      error: `Yêu Từ Cái Nhìn Đầu Tiên (Aaron): Bạn không thể tấn công người vợ của mình (${target.displayName})!`,
-    };
+  const actor = state.players[declared.attackerPlayerId];
+  const target = state.players[declared.primaryTargetId];
+  if (!actor || !isPlayerTargetable(state, actor) || !target || !isPlayerTargetable(state, target)) {
+    callbacks.finalizeIfFinished(state, nowMs);
+    return { ok: true };
   }
 
-  const hasMasamune = actor.equipped.includes('ev-01');
-  const hasMachineGun = actor.equipped.includes('ev-06');
+  const { hasMasamune, hasMachineGun, primaryTargetId: targetPlayerId, isRecruitmentAttack } = declared;
 
   // Dispatch BEFORE_ATTACK để kiểm tra kỹ năng thay đổi xúc xắc (Fiona / Gayle)
   const beforeAttackPayload: Record<string, unknown> = {
@@ -3598,7 +3949,152 @@ export function startExpandedAttack(
   const rawDmg = computeRawAttackDamage(actor, baseDmg);
   const roll: AttackRollSample = { d6, d4, baseDmg, rawDmg, hasMasamune };
 
-  return enqueueAttackResolution(state, actor, targetPlayerId, roll, hasMachineGun, nowMs, callbacks);
+  return enqueueAttackResolution(
+    state,
+    actor,
+    targetPlayerId,
+    roll,
+    hasMachineGun,
+    nowMs,
+    callbacks,
+    isRecruitmentAttack ? { isRecruitmentAttack: true } : undefined,
+  );
+}
+
+function openNextLloydInterruptOrProceed(
+  state: AuthoritativeGameState,
+  declared: PendingDeclaredAttack,
+  nowMs: number,
+  callbacks: TurnContinuationCallbacks,
+): EngineActionResult {
+  const exp = ensureExpansionState(state);
+  while (isPendingAttackCancellable(declared)) {
+    const candidates = collectAttackInterruptCandidates(state, declared);
+    if (candidates.length === 0) break;
+    const cand = candidates[0];
+    const policy = getPlayerReactionPolicy(state, cand.playerId);
+    if (policy === 'AUTO_DECLINE') {
+      markAttackInterruptCandidateChecked(declared, cand.playerId);
+      continue;
+    }
+
+    const attacker = state.players[declared.attackerPlayerId];
+    const targetNames = declared.targetPlayerIds
+      .map((id) => state.players[id]?.displayName ?? id)
+      .join(', ');
+    exp.pendingDeclaredAttack = declared;
+
+    const choiceId = nextExpansionEventId(state, 'choice-lloyd');
+    const timeoutMs = getChoiceTimeoutMs(state, cand);
+    const sacrificeWarn =
+      cand.hp <= 2
+        ? ` ⚠️ CẢNH BÁO: Bạn chỉ còn ${cand.hp} HP — tự nhận 2 sát thương sẽ khiến bạn bị loại sau khi đòn tấn công bị hủy!`
+        : ` (HP còn lại sau khi trả: ${cand.hp - 2}/${cand.maxHp}).`;
+
+    state.pendingChoice = {
+      choiceId,
+      eventId: declared.attackId,
+      ownerPlayerId: cand.playerId,
+      kind: 'lloyd_interrupt_attack',
+      isSecret: false,
+      title: 'Lạc Lối (Lloyd — Ngắt Tấn Công Toàn Bàn)',
+      description: `${attacker?.displayName ?? declared.attackerPlayerId} vừa tuyên bố tấn công${declared.hasMachineGun ? ' diện rộng (Súng Máy)' : ''}${declared.isRecruitmentAttack ? ' Chiêu Mộ' : ''} vào ${targetNames}! Bạn có muốn tự nhận 2 sát thương không thể chặn để hủy toàn bộ đòn tấn công này trước khi đổ xúc xắc không?${sacrificeWarn}`,
+      publicPromptLabel: `🛡️ Lloyd (${cand.displayName}) đang cân nhắc hy sinh 2 HP để hủy đòn tấn công...`,
+      options: [
+        {
+          optionId: 'cancel_attack',
+          label: `Hy sinh 2 HP → Hủy đòn tấn công vào ${targetNames}`,
+          detail: `Hủy toàn bộ đòn tấn công trước khi đổ xúc xắc (không tiêu hao RNG).${sacrificeWarn}`,
+          targetPlayerId: declared.primaryTargetId,
+        },
+        {
+          optionId: 'decline',
+          label: 'Bỏ qua (Để đòn tấn công tiếp tục)',
+          detail: 'Không trả 2 HP và cho phép đòn tấn công tiến hành bình thường.',
+        },
+      ],
+      defaultOptionId: 'decline',
+      createdAtMs: nowMs,
+      deadlineMs: nowMs + timeoutMs,
+      data: {
+        kind: 'lloyd_interrupt_attack',
+        lloydPlayerId: cand.playerId,
+        attackId: declared.attackId,
+        attackerPlayerId: declared.attackerPlayerId,
+        primaryTargetId: declared.primaryTargetId,
+        targetPlayerIds: [...declared.targetPlayerIds],
+        hasMachineGun: declared.hasMachineGun,
+        ...(declared.isRecruitmentAttack ? { isRecruitmentAttack: true } : {}),
+      },
+    };
+    return { ok: true };
+  }
+
+  markPendingAttackProceeding(declared);
+  exp.pendingDeclaredAttack = null;
+  return proceedDeclaredAttackToRoll(state, declared, nowMs, callbacks);
+}
+
+export function startExpandedAttack(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  targetPlayerId: string,
+  nowMs: number,
+  callbacks: TurnContinuationCallbacks,
+  opts?: { isRecruitmentAttack?: boolean },
+): EngineActionResult {
+  if (state.turnPhase !== 'MAIN_ACTION') {
+    return { ok: false, error: 'Chỉ được tấn công khi đang ở pha Hành động chính.' };
+  }
+  const target = state.players[targetPlayerId];
+  if (!target || !isPlayerTargetable(state, target) || target.playerId === actor.playerId) {
+    return { ok: false, error: 'Mục tiêu tấn công không hợp lệ.' };
+  }
+  if (!canPlayerAttackTarget(state, actor, target)) {
+    return {
+      ok: false,
+      error: actor.equipped.includes('ev-05')
+        ? 'Súng Bắn Đinh (Handgun) chỉ bắn được các Cụm KHÁC ngoài Cụm bạn đang đứng!'
+        : 'Mục tiêu phải đứng cùng Cụm Khu Vực với bạn.',
+    };
+  }
+  if (isUdiProtectedFromAttack(state, target)) {
+    const exp = ensureExpansionState(state);
+    incRoleStat(exp.stats.activationsByRole, 'exp1_udi', 1);
+    return {
+      ok: false,
+      error: `Ẩn Thân (Udi): ${target.displayName} đang ở cùng Cụm với ≥ 2 người chơi khác nên không thể bị tấn công trực tiếp!`,
+    };
+  }
+  if (isVisionsMarkedTarget(state, actor.playerId, target.playerId)) {
+    return {
+      ok: false,
+      error: `Dấu ấn Visions: Bạn không thể tấn công trực tiếp ${target.displayName} trong suốt phần còn lại của trận đấu!`,
+    };
+  }
+  if (isAaronSpouseTarget(state, actor.playerId, target.playerId)) {
+    return {
+      ok: false,
+      error: `Yêu Từ Cái Nhìn Đầu Tiên (Aaron): Bạn không thể tấn công người vợ của mình (${target.displayName})!`,
+    };
+  }
+
+  const hasMasamune = actor.equipped.includes('ev-01');
+  const hasMachineGun = !opts?.isRecruitmentAttack && actor.equipped.includes('ev-06');
+  const scopeTargets = hasMachineGun ? listExpandedReachableAttackTargets(state, actor) : [target];
+
+  // Phase 7B GlobalAttackInterrupt: Chụp snapshot đòn tấn công TRƯỚC KHI đổ xúc xắc!
+  const declared = createPendingDeclaredAttack(state, {
+    attackerPlayerId: actor.playerId,
+    primaryTargetId: targetPlayerId,
+    targetPlayerIds: scopeTargets.map((t) => t.playerId),
+    hasMasamune,
+    hasMachineGun,
+    isRecruitmentAttack: Boolean(opts?.isRecruitmentAttack),
+    nowMs,
+  });
+
+  return openNextLloydInterruptOrProceed(state, declared, nowMs, callbacks);
 }
 
 // ---------------------------------------------------------------------------
@@ -3615,6 +4111,13 @@ export function applyExpandedRevealRole(
   nowMs: number,
   callbacks?: TurnContinuationCallbacks,
 ): EngineActionResult {
+  if (isUndeadPreLethalRevealRestricted(state, actor)) {
+    return {
+      ok: false,
+      error:
+        'Xác Sống Trỗi Dậy (Undead): Bạn không thể tự nguyện lộ diện trước sự kiện chí tử lần đầu tiên!',
+    };
+  }
   if (actor.roleId === 'exp1_fallen' && !actor.revealed && getRemainingHp(actor) < 8) {
     return {
       ok: false,
@@ -4588,8 +5091,9 @@ export function applyExpandedUseCard(
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
       if (
-        actor.faction === 'mist-order' &&
+        getEffectiveFaction(state, actor) === 'mist-order' &&
         actor.roleId !== 'suong-tin-gia' &&
+        !isUndeadPreLethalRevealRestricted(state, actor) &&
         !actor.revealed
       ) {
         revealPlayerNow(state, actor, 'voluntary', nowMs);
@@ -5132,7 +5636,7 @@ export function applyExpandedInvestigateCard(
     return { ok: false, error: 'Đây không phải Thẻ Khám Phá.' };
   }
   const target = state.players[targetPlayerId];
-  if (!target || !target.alive || target.playerId === actor.playerId) {
+  if (!target || !isPlayerTargetable(state, target) || target.playerId === actor.playerId) {
     return { ok: false, error: 'Mục tiêu điều tra không hợp lệ.' };
   }
 
@@ -5196,9 +5700,11 @@ export function applyExpandedInvestigateCard(
 
   // Arlene (Điệu Bộ — Phase 5B house rule): giữ nguyên `target.faction === 'wanderer'`,
   // phản ứng tức thì (<1ms, không mở prompt chống timing side-channel) như Shadow khi policy !== 'AUTO_DECLINE'.
-  let evaluatedFaction: BoardGameFactionId = target.faction;
+  // DynamicAllegiance (Phase 7B): dùng `getEffectiveFaction(state, target)` để Bonnie sau khi chuyển phe
+  // trả lời chính xác như Shadow cho mọi thẻ Điều tra!
+  let evaluatedFaction: BoardGameFactionId = getEffectiveFaction(state, target);
   let usedArleneDisguise = false;
-  if (isFactionCheck && target.roleId === 'exp2_arlene') {
+  if (isFactionCheck && getEffectiveSkillRoleId(state, target) === 'exp2_arlene') {
     const invPayload: Record<string, unknown> = {
       cardId: card.id,
       effectKind: card.effectKind,
@@ -6146,18 +6652,19 @@ export function triggerExpandedTurnStart(
     }
   }
 
+  const effTurnRoleId = getEffectiveSkillRoleId(state, actor);
   // 2. Visions initial mark prompt (1 lần/trận vào đầu lượt khi đã lộ vai)
   if (
     payload.visionsCanPrompt === true &&
-    actor.roleId === 'exp2_visions' &&
+    effTurnRoleId === 'exp2_visions' &&
     actor.revealed &&
-    !actor.skillUsedOnce &&
+    !hasEffectiveSkillUsedOnce(state, actor) &&
     exp.visionsPromptedTurnNumber !== state.turnNumber &&
     !exp.visionsMarks?.[actor.playerId]
   ) {
     const candidates = state.turnOrder
       .map((id) => state.players[id])
-      .filter((p): p is AuthoritativePlayerState => Boolean(p && p.alive && p.playerId !== actor.playerId));
+      .filter((p): p is AuthoritativePlayerState => Boolean(p && isPlayerTargetable(state, p) && p.playerId !== actor.playerId));
     if (candidates.length > 0) {
       openVisionsMarkChoice(state, actor, candidates, nowMs);
       return;
@@ -6167,7 +6674,7 @@ export function triggerExpandedTurnStart(
   // 3. Wrath turn-start cluster AoE prompt (tùy chọn 2 ST kỹ năng lên mọi người khác cùng Cụm)
   if (
     payload.wrathCanPrompt === true &&
-    actor.roleId === 'exp1_wrath' &&
+    effTurnRoleId === 'exp1_wrath' &&
     actor.revealed &&
     exp.wrathPromptedTurnNumber !== state.turnNumber
   ) {
@@ -6181,9 +6688,9 @@ export function triggerExpandedTurnStart(
   // 4. Bipolar Fate Coin prompt (1 lần/trận vào đầu lượt khi đã lộ vai)
   if (
     payload.bipolarCanPrompt === true &&
-    actor.roleId === 'exp1_bipolar' &&
+    effTurnRoleId === 'exp1_bipolar' &&
     actor.revealed &&
-    !actor.skillUsedOnce &&
+    !hasEffectiveSkillUsedOnce(state, actor) &&
     exp.bipolarPromptedTurnNumber !== state.turnNumber
   ) {
     openBipolarFateCoinChoice(state, actor, nowMs);
@@ -6193,14 +6700,14 @@ export function triggerExpandedTurnStart(
   // 5. Phase 6B turn-start prompts (CHỈ tự mở cho các vai đã lộ diện; Anathema ẩn tự kích hoạt qua USE_SKILL để tránh lộ!)
   if (
     payload.anathemaCanCurse === true &&
-    actor.roleId === 'exp1_anathema' &&
+    effTurnRoleId === 'exp1_anathema' &&
     actor.revealed &&
-    !actor.skillUsedOnce &&
+    !hasEffectiveSkillUsedOnce(state, actor) &&
     exp.anathemaPromptedTurnNumber !== state.turnNumber
   ) {
     const candidates = state.turnOrder
       .map((id) => state.players[id])
-      .filter((p): p is AuthoritativePlayerState => Boolean(p && p.alive && p.playerId !== actor.playerId));
+      .filter((p): p is AuthoritativePlayerState => Boolean(p && isPlayerTargetable(state, p) && p.playerId !== actor.playerId));
     if (candidates.length > 0) {
       openAnathemaCurseChoice(state, actor, candidates, nowMs);
       return;
@@ -6209,7 +6716,7 @@ export function triggerExpandedTurnStart(
 
   if (
     payload.bethanyCanDesignate === true &&
-    actor.roleId === 'exp1_bethany' &&
+    effTurnRoleId === 'exp1_bethany' &&
     actor.revealed &&
     exp.bethanyPromptedTurnNumber !== state.turnNumber
   ) {
@@ -6219,7 +6726,7 @@ export function triggerExpandedTurnStart(
 
   if (
     payload.cassieCanHeal === true &&
-    actor.roleId === 'exp1_cassie' &&
+    effTurnRoleId === 'exp1_cassie' &&
     actor.revealed &&
     exp.cassiePromptedTurnNumber !== state.turnNumber
   ) {
@@ -6229,21 +6736,92 @@ export function triggerExpandedTurnStart(
 
   if (
     payload.clairvoyantCanPeek === true &&
-    actor.roleId === 'exp1_clairvoyant' &&
+    getEffectiveSkillRoleId(state, actor) === 'exp1_clairvoyant' &&
     actor.revealed &&
-    !actor.skillUsedOnce &&
+    !hasEffectiveSkillUsedOnce(state, actor) &&
     exp.clairvoyantPromptedTurnNumber !== state.turnNumber
   ) {
     const candidates = state.turnOrder
       .map((id) => state.players[id])
       .filter(
         (p): p is AuthoritativePlayerState =>
-          Boolean(p && p.alive && !p.revealed && p.playerId !== actor.playerId),
+          Boolean(p && isPlayerTargetable(state, p) && !p.revealed && p.playerId !== actor.playerId),
       );
     if (candidates.length > 0) {
       openClairvoyantPeekChoice(state, actor, candidates, nowMs);
+      return;
     }
   }
+
+  // 6. Phase 7B Voodoo (Con Rối — Deferred Hijack): đầu lượt khi đã lộ diện & chưa dùng 1 lần/trận!
+  if (
+    payload.voodooCanPrompt === true &&
+    getEffectiveSkillRoleId(state, actor) === 'exp1_voodoo' &&
+    actor.revealed &&
+    !hasEffectiveSkillUsedOnce(state, actor) &&
+    exp.voodooPromptedTurnNumber !== state.turnNumber
+  ) {
+    const candidates = state.turnOrder
+      .map((id) => state.players[id])
+      .filter(
+        (p): p is AuthoritativePlayerState =>
+          Boolean(p && isPlayerTargetable(state, p) && p.playerId !== actor.playerId),
+      );
+    if (candidates.length > 0) {
+      openVoodooSelectPuppetChoice(state, actor, candidates, nowMs);
+    }
+  }
+}
+
+function openVoodooSelectPuppetChoice(
+  state: AuthoritativeGameState,
+  actor: AuthoritativePlayerState,
+  candidates: readonly AuthoritativePlayerState[],
+  nowMs: number,
+): void {
+  const exp = ensureExpansionState(state);
+  exp.voodooPromptedTurnNumber = state.turnNumber;
+  const targetMap: Record<string, string> = {};
+  const options: BoardGameChoiceOptionView[] = candidates.map((p, idx) => {
+    const optId = `vp_${idx}`;
+    targetMap[optId] = p.playerId;
+    return {
+      optionId: optId,
+      label: `Đặt Con Rối lên ${p.displayName} (cướp lượt kế tiếp)`,
+      detail: `Khi tới lượt kế của ${p.displayName}, bạn điều khiển hành động công khai của họ (không xem vai ẩn hay dùng kỹ năng; 1 lần/trận).`,
+      targetPlayerId: p.playerId,
+    };
+  });
+  options.push({
+    optionId: 'skip',
+    label: 'Để dành (Giữ nguyên 1 lần/trận)',
+    detail: 'Không chiếm quyền lượt trong lượt này và giữ lại quyền Con Rối.',
+  });
+
+  const choiceId = nextExpansionEventId(state, 'choice-voodoo');
+  const eventId = nextExpansionEventId(state, 'ev-voodoo');
+  const timeoutMs = getChoiceTimeoutMs(state, actor);
+  state.pendingChoice = {
+    choiceId,
+    eventId,
+    ownerPlayerId: actor.playerId,
+    kind: 'voodoo_select_puppet',
+    isSecret: false,
+    title: 'Con Rối (Voodoo · 1 lần/trận)',
+    description:
+      'Chọn 1 người chơi khác đang sống để chiếm quyền điều khiển các hành động công khai ở lượt kế tiếp của họ (không đọc vai ẩn, không xử lý thẻ Điều tra, không dùng kỹ năng của họ).',
+    publicPromptLabel: `🎭 Voodoo (${actor.displayName}) đang cân nhắc đặt Con Rối...`,
+    options,
+    defaultOptionId: 'skip',
+    createdAtMs: nowMs,
+    deadlineMs: nowMs + timeoutMs,
+    data: {
+      kind: 'voodoo_select_puppet',
+      voodooPlayerId: actor.playerId,
+      turnNumber: state.turnNumber,
+      targetMap,
+    },
+  };
 }
 
 function openEliseDistributeHealChoice(
@@ -6441,15 +7019,15 @@ function executeWarlordPullAttack(
   nowMs: number,
   callbacks: TurnContinuationCallbacks,
 ): EngineActionResult {
-  if (!warlord.alive || !warlord.revealed || warlord.skillUsedOnce) {
+  if (!warlord.alive || !warlord.revealed || hasEffectiveSkillUsedOnce(state, warlord)) {
     return { ok: false, error: 'Chiến Tranh (Warlord) đã dùng hoặc không thể kích hoạt lúc này.' };
   }
-  if (!target.alive || target.playerId === warlord.playerId) {
+  if (!isPlayerTargetable(state, target) || target.playerId === warlord.playerId) {
     return { ok: false, error: 'Mục tiêu kéo không hợp lệ.' };
   }
   const exp = ensureExpansionState(state);
   // Khóa 1 lần/trận TRƯỚC khi kéo & tấn công (chống nhân bản qua reconnect/replay!)
-  warlord.skillUsedOnce = true;
+  markEffectiveSkillUsedOnce(state, warlord);
   incRoleStat(exp.stats.activationsByRole, 'exp2_warlord', 1);
 
   const locDef = getLocationDefinition(warlord.location);
@@ -6558,42 +7136,47 @@ export function applyExpandedUseSkill(
   nowMs: number,
   callbacks: TurnContinuationCallbacks,
 ): EngineActionResult | null {
+  const effRoleId = getEffectiveSkillRoleId(state, actor) as BoardGameRoleId;
   // Chặn các kỹ năng mở rộng & kỹ năng gây sát thương/hồi máu/chuỗi tấn công; Lan (gac-truc-ban) trả null.
   if (
-    actor.roleId !== 'gac-ky-thuat' &&
-    actor.roleId !== 'gac-radio' &&
-    actor.roleId !== 'lang-quan-sat' &&
-    actor.roleId !== 'lang-cuu-ho' &&
-    actor.roleId !== 'exp2_father_harrison' &&
-    actor.roleId !== 'exp1_bipolar' &&
-    actor.roleId !== 'exp2_eleanor' &&
-    actor.roleId !== 'exp1_wrath' &&
-    actor.roleId !== 'exp2_visions' &&
-    actor.roleId !== 'exp2_bryon' &&
-    actor.roleId !== 'exp2_elise' &&
-    actor.roleId !== 'exp1_ernest' &&
-    actor.roleId !== 'exp2_warlord' &&
-    actor.roleId !== 'exp1_angel' &&
-    actor.roleId !== 'exp1_anathema' &&
-    actor.roleId !== 'exp1_bethany' &&
-    actor.roleId !== 'exp1_cassie' &&
-    actor.roleId !== 'exp1_clairvoyant'
+    effRoleId !== 'gac-ky-thuat' &&
+    effRoleId !== 'gac-radio' &&
+    effRoleId !== 'lang-quan-sat' &&
+    effRoleId !== 'lang-cuu-ho' &&
+    effRoleId !== 'exp2_father_harrison' &&
+    effRoleId !== 'exp1_bipolar' &&
+    effRoleId !== 'exp2_eleanor' &&
+    effRoleId !== 'exp1_wrath' &&
+    effRoleId !== 'exp2_visions' &&
+    effRoleId !== 'exp2_bryon' &&
+    effRoleId !== 'exp2_elise' &&
+    effRoleId !== 'exp1_ernest' &&
+    effRoleId !== 'exp2_warlord' &&
+    effRoleId !== 'exp1_angel' &&
+    effRoleId !== 'exp1_anathema' &&
+    effRoleId !== 'exp1_bethany' &&
+    effRoleId !== 'exp1_cassie' &&
+    effRoleId !== 'exp1_clairvoyant' &&
+    effRoleId !== 'exp1_voodoo' &&
+    effRoleId !== 'exp2_cain' &&
+    effRoleId !== 'exp2_nc_soldier'
   ) {
     return null;
   }
-  if (!actor.revealed && actor.roleId !== 'exp1_anathema') {
+  if (!actor.revealed && effRoleId !== 'exp1_anathema') {
     return { ok: false, error: 'Bạn cần Lật vai công khai trước khi kích hoạt kỹ năng.' };
   }
-  const role = getRoleDesign(actor.roleId);
-  if (role.oncePerMatch && actor.skillUsedOnce) {
+  const role = getRoleDesign(effRoleId);
+  if (role.oncePerMatch && hasEffectiveSkillUsedOnce(state, actor)) {
     return { ok: false, error: `${role.skillName} chỉ dùng 1 lần duy nhất mỗi trận.` };
   }
-  if (actor.skillCooldown > 0) {
-    return { ok: false, error: `${role.skillName} đang hồi chiêu (${actor.skillCooldown} vòng nữa).` };
+  const effCd = getEffectiveSkillCooldown(state, actor);
+  if (effCd > 0) {
+    return { ok: false, error: `${role.skillName} đang hồi chiêu (${effCd} vòng nữa).` };
   }
 
   // Father Harrison (Lễ Ngày Chủ Nhật — Phase 3A house rule): di chuyển thẳng vào Church (`lobby`) thay vì đổ xúc xắc
-  if (actor.roleId === 'exp2_father_harrison') {
+  if (effRoleId === 'exp2_father_harrison') {
     if (state.turnPhase !== 'ROLL_MOVE') {
       return {
         ok: false,
@@ -6626,7 +7209,7 @@ export function applyExpandedUseSkill(
   }
 
   // Bipolar (Đồng Xu Định Mệnh — Phase 3A house rule): chỉ kích hoạt vào đầu lượt (`ROLL_MOVE` trước khi di chuyển/tung xúc xắc)
-  if (actor.roleId === 'exp1_bipolar') {
+  if (effRoleId === 'exp1_bipolar') {
     if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
       return {
         ok: false,
@@ -6638,7 +7221,7 @@ export function applyExpandedUseSkill(
   }
 
   // Eleanor (Người Thẩm Vấn — Phase 4B house rule): thay quyền tấn công ở MAIN_ACTION bằng rút 1 thẻ Xanh
-  if (actor.roleId === 'exp2_eleanor') {
+  if (effRoleId === 'exp2_eleanor') {
     if (state.turnPhase !== 'MAIN_ACTION') {
       return {
         ok: false,
@@ -6710,7 +7293,7 @@ export function applyExpandedUseSkill(
   }
 
   // Wrath (Cơn Thịnh Nộ — Phase 4B house rule): cho phép mở choice nếu Wrath tự lật vai ngay đầu lượt (ROLL_MOVE)
-  if (actor.roleId === 'exp1_wrath') {
+  if (effRoleId === 'exp1_wrath') {
     const expWrath = ensureExpansionState(state);
     if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
       return {
@@ -6736,7 +7319,7 @@ export function applyExpandedUseSkill(
   }
 
   // Visions (Ám Ảnh Dài Lâu — Phase 4B house rule): cho phép mở choice nếu Visions tự lật vai ngay đầu lượt (ROLL_MOVE)
-  if (actor.roleId === 'exp2_visions') {
+  if (effRoleId === 'exp2_visions') {
     const expVis = ensureExpansionState(state);
     if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
       return {
@@ -6744,7 +7327,7 @@ export function applyExpandedUseSkill(
         error: 'Dấu Ấn Visions chỉ đặt được vào đầu lượt của bạn (trước khi tung xúc xắc di chuyển).',
       };
     }
-    if (actor.skillUsedOnce || expVis.visionsMarks?.[actor.playerId]) {
+    if (hasEffectiveSkillUsedOnce(state, actor) || expVis.visionsMarks?.[actor.playerId]) {
       return {
         ok: false,
         error: 'Bạn đã đặt Dấu Ấn Visions trong trận này (1 lần/trận, không thể đổi mục tiêu).',
@@ -6752,7 +7335,7 @@ export function applyExpandedUseSkill(
     }
     const candidates = state.turnOrder
       .map((id) => state.players[id])
-      .filter((p): p is AuthoritativePlayerState => Boolean(p && p.alive && p.playerId !== actor.playerId));
+      .filter((p): p is AuthoritativePlayerState => Boolean(p && isPlayerTargetable(state, p) && p.playerId !== actor.playerId));
     if (candidates.length === 0) {
       return { ok: false, error: 'Không có mục tiêu hợp lệ để đặt Dấu Ấn.' };
     }
@@ -6761,7 +7344,7 @@ export function applyExpandedUseSkill(
   }
 
   // Bryon (Sự Phục Vụ Hào Phóng — Phase 4B house rule): trao tặng trang bị (trừ Masamune) cho Neutral đã lộ diện cùng Cụm trước khi đánh
-  if (actor.roleId === 'exp2_bryon') {
+  if (effRoleId === 'exp2_bryon') {
     if (state.turnPhase !== 'MAIN_ACTION') {
       return {
         ok: false,
@@ -6788,7 +7371,7 @@ export function applyExpandedUseSkill(
       };
     }
     const recipients = listLivingPlayersInSameCluster(state, actor, { includeSelf: false }).filter(
-      (p) => p.faction === 'wanderer' && p.revealed,
+      (p) => getEffectiveFaction(state, p) === 'wanderer' && p.revealed,
     );
     if (recipients.length === 0) {
       return {
@@ -6801,7 +7384,7 @@ export function applyExpandedUseSkill(
   }
 
   // Elise (Âm Hưởng Mềm Mại — Phase 5B house rule): phân bổ tổng tối đa 5 HP cho các người chơi cùng Cụm (gồm bản thân)
-  if (actor.roleId === 'exp2_elise') {
+  if (effRoleId === 'exp2_elise') {
     if (
       state.turnPhase !== 'ROLL_MOVE' &&
       state.turnPhase !== 'LOCATION_ACTION' &&
@@ -6832,8 +7415,8 @@ export function applyExpandedUseSkill(
     return { ok: true };
   }
 
-  // Ernest (Từ Đạo — Phase 5C house rule): trả 2 HP (cần còn >= 3 HP) để ép lộ toàn bộ Shadow sống & hủy sạch trang bị của họ!
-  if (actor.roleId === 'exp1_ernest') {
+  // Ernest (Từ Đạo — Phase 5C + 7B): hỗ trợ cả bản sao kỹ năng Ernest, dùng DynamicAllegiance & tôn trọng khóa lộ diện của Undead!
+  if (effRoleId === 'exp1_ernest') {
     if (
       state.turnPhase !== 'ROLL_MOVE' &&
       state.turnPhase !== 'LOCATION_ACTION' &&
@@ -6868,15 +7451,24 @@ export function applyExpandedUseSkill(
     if (!paid) {
       return { ok: false, error: 'Không đủ HP để hy sinh 2 máu cho Từ Đạo.' };
     }
-    actor.skillUsedOnce = true;
+    markEffectiveSkillUsedOnce(state, actor);
     const expErnest = ensureExpansionState(state);
     incRoleStat(expErnest.stats.activationsByRole, 'exp1_ernest', 1);
+    if ((actor.roleId as string) !== 'exp1_ernest') {
+      expErnest.stats.copiedSkillActivations = (expErnest.stats.copiedSkillActivations ?? 0) + 1;
+    }
 
+    // Dùng `getEffectiveFaction` (bao gồm Bonnie sau chuyển phe) & miễn ép lộ diện Undead trước lần chí tử đầu!
     const livingShadows = state.turnOrder
       .map((id) => state.players[id])
       .filter(
         (p): p is AuthoritativePlayerState =>
-          Boolean(p && p.alive && p.faction === 'mist-order'),
+          Boolean(
+            p &&
+              isPlayerTargetable(state, p) &&
+              getEffectiveFaction(state, p) === 'mist-order' &&
+              !isUndeadPreLethalRevealRestricted(state, p),
+          ),
       );
 
     let revealedCount = 0;
@@ -6897,7 +7489,7 @@ export function applyExpandedUseSkill(
         appendHighlight(
           state,
           `Ép lộ diện: ${shadow.displayName}`,
-          `${sRole.name} (${FACTION_LABELS[shadow.faction]}) bị Ernest vạch trần`,
+          `${sRole.name} (${FACTION_LABELS[getEffectiveFaction(state, shadow)]}) bị Ernest vạch trần`,
           nowMs,
         );
         revealSteps.push({
@@ -6933,7 +7525,7 @@ export function applyExpandedUseSkill(
   }
 
   // Warlord (Chiến Tranh — Phase 5C house rule): ở pha ROLL_MOVE trước khi tung xúc xắc, kéo 1 người tới ô mình & tấn công thưởng rồi chơi tiếp!
-  if (actor.roleId === 'exp2_warlord') {
+  if (effRoleId === 'exp2_warlord') {
     if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
       return {
         ok: false,
@@ -6968,7 +7560,7 @@ export function applyExpandedUseSkill(
   }
 
   // Angel (Thiên Sứ Bảo Hộ — Phase 5C house rule): nạp hào quang armed -> kích hoạt ở đầu lượt kế tiếp của Angel cho đến đầu lượt kế nữa!
-  if (actor.roleId === 'exp1_angel') {
+  if (effRoleId === 'exp1_angel') {
     if (
       state.turnPhase !== 'ROLL_MOVE' &&
       state.turnPhase !== 'LOCATION_ACTION' &&
@@ -6992,7 +7584,7 @@ export function applyExpandedUseSkill(
     if (angelPayload.angelApproved !== true) {
       return { ok: false, error: 'Không thể kích hoạt Thiên Sứ Bảo Hộ vào lúc này.' };
     }
-    actor.skillUsedOnce = true;
+    markEffectiveSkillUsedOnce(state, actor);
     const expAngel = ensureExpansionState(state);
     if (!expAngel.angelAuras) expAngel.angelAuras = {};
     expAngel.angelAuras[actor.playerId] = {
@@ -7012,7 +7604,7 @@ export function applyExpandedUseSkill(
   }
 
   // Anathema (Lời Nguyền — Phase 6B): đầu lượt (ROLL_MOVE), có thể dùng khi đang ẩn vai để tự lộ diện & gắn lời nguyền!
-  if (actor.roleId === 'exp1_anathema') {
+  if (effRoleId === 'exp1_anathema') {
     const expAn = ensureExpansionState(state);
     if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
       return {
@@ -7037,7 +7629,7 @@ export function applyExpandedUseSkill(
   }
 
   // Bethany (Thay Đổi Vận Mệnh — Phase 6B): đầu lượt khi đã lộ diện & có trang bị (trừ Masamune)
-  if (actor.roleId === 'exp1_bethany') {
+  if (effRoleId === 'exp1_bethany') {
     const expBe = ensureExpansionState(state);
     if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
       return {
@@ -7056,7 +7648,7 @@ export function applyExpandedUseSkill(
   }
 
   // Cassie (Cuộc Tình Dị Thường — Phase 6B): đầu lượt khi đã lộ diện -> hồi 1 HP cho 1 người bất kỳ
-  if (actor.roleId === 'exp1_cassie') {
+  if (effRoleId === 'exp1_cassie') {
     const expCa = ensureExpansionState(state);
     if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
       return {
@@ -7072,7 +7664,7 @@ export function applyExpandedUseSkill(
   }
 
   // Clairvoyant (Lời Tiên Tri — Phase 6B): 1 lần/trận vào đầu lượt khi đã lộ diện -> chọn 1 người chưa lộ diện
-  if (actor.roleId === 'exp1_clairvoyant') {
+  if (effRoleId === 'exp1_clairvoyant') {
     if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
       return {
         ok: false,
@@ -7095,9 +7687,184 @@ export function applyExpandedUseSkill(
     return { ok: true };
   }
 
+  // Voodoo (Con Rối — Phase 7B): đầu lượt (ROLL_MOVE) trước khi di chuyển, chọn mục tiêu chiếm quyền lượt kế tiếp (1 lần/trận)
+  if (effRoleId === 'exp1_voodoo') {
+    const expVoodoo = ensureExpansionState(state);
+    if (state.turnPhase !== 'ROLL_MOVE' || actor.consecutiveSameZoneRolls > 0) {
+      return {
+        ok: false,
+        error: 'Con Rối (Voodoo) chỉ kích hoạt được vào đầu lượt của bạn (trước khi tung xúc xắc di chuyển).',
+      };
+    }
+    const candidates = state.turnOrder
+      .map((id) => state.players[id])
+      .filter(
+        (p): p is AuthoritativePlayerState =>
+          Boolean(p && isPlayerTargetable(state, p) && p.playerId !== actor.playerId),
+      );
+    if (candidates.length === 0) {
+      return { ok: false, error: 'Không còn người chơi hợp lệ để đặt Con Rối.' };
+    }
+    if (targetPlayerId) {
+      const explicitTarget = candidates.find((p) => p.playerId === targetPlayerId);
+      if (!explicitTarget) {
+        return { ok: false, error: 'Mục tiêu đặt Con Rối không hợp lệ.' };
+      }
+      expVoodoo.voodooPromptedTurnNumber = state.turnNumber;
+      markEffectiveSkillUsedOnce(state, actor);
+      scheduleDeferredTurnControl(state, {
+        controllerPlayerId: actor.playerId,
+        victimPlayerId: explicitTarget.playerId,
+        sourceRoleId: 'exp1_voodoo',
+        nowMs,
+      });
+      incRoleStat(expVoodoo.stats.activationsByRole, 'exp1_voodoo', 1);
+      if ((actor.roleId as string) !== 'exp1_voodoo') {
+        expVoodoo.stats.copiedSkillActivations = (expVoodoo.stats.copiedSkillActivations ?? 0) + 1;
+      }
+      appendPublicLog(
+        state,
+        'skill',
+        `🎭 Voodoo (${actor.displayName}) — Con Rối: đã gắn dây điều khiển lên ${explicitTarget.displayName}! Lượt tiếp theo của ${explicitTarget.displayName} sẽ do ${actor.displayName} điều khiển hành động công khai.`,
+        nowMs,
+        actor.playerId,
+      );
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+    openVoodooSelectPuppetChoice(state, actor, candidates, nowMs);
+    return { ok: true };
+  }
+
+  // Cain (Nước Cờ Quyền Lực — Phase 7B): 1 lần/trận hồi máu bằng số người chơi còn sống qua HealPipeline
+  // & gắn điều kiện thắng song phe "Khi Cain chết" cho CẢ Hunter lẫn Shadow!
+  if (effRoleId === 'exp2_cain') {
+    if (
+      state.turnPhase !== 'ROLL_MOVE' &&
+      state.turnPhase !== 'LOCATION_ACTION' &&
+      state.turnPhase !== 'MAIN_ACTION'
+    ) {
+      return { ok: false, error: 'Nước Cờ Quyền Lực chỉ kích hoạt được trong lượt của bạn.' };
+    }
+    if (actor.hand.length > 0 || hasGloriaQueuedCards(state, actor.playerId)) {
+      return {
+        ok: false,
+        error: 'Hãy giải quyết hết thẻ bài đang cầm trên tay trước khi kích hoạt Nước Cờ Quyền Lực.',
+      };
+    }
+    const cainPayload: Record<string, unknown> = {};
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'ACTIVE_SKILL',
+      actorPlayerId: actor.playerId,
+      nowMs,
+      payload: cainPayload,
+    });
+    if (cainPayload.cainApproved !== true) {
+      return { ok: false, error: 'Không thể kích hoạt Nước Cờ Quyền Lực vào lúc này.' };
+    }
+
+    const expCain = ensureExpansionState(state);
+    const livingPlayersCount = Object.values(state.players).filter((p) =>
+      isPlayerTargetable(state, p),
+    ).length;
+    markEffectiveSkillUsedOnce(state, actor);
+    if (!Array.isArray(expCain.cainDeathVictoryModifierIds)) {
+      expCain.cainDeathVictoryModifierIds = [];
+    }
+    if (!expCain.cainDeathVictoryModifierIds.includes(actor.playerId)) {
+      expCain.cainDeathVictoryModifierIds.push(actor.playerId);
+    }
+    incRoleStat(expCain.stats.activationsByRole, 'exp2_cain', 1);
+    if ((actor.roleId as string) !== 'exp2_cain') {
+      expCain.stats.copiedSkillActivations = (expCain.stats.copiedSkillActivations ?? 0) + 1;
+    }
+
+    expCain.pendingSteps.push(
+      {
+        kind: 'HEAL',
+        healEventId: nextExpansionEventId(state, 'heal-cain'),
+        actorPlayerId: actor.playerId,
+        targetPlayerId: actor.playerId,
+        rawAmount: livingPlayersCount,
+        sourceKind: 'skill',
+        sourceLabel: 'Nước Cờ Quyền Lực (Cain)',
+        roleStatId: 'exp2_cain',
+        postLogKind: 'skill',
+        postLogPrefix: `⚖️💚 Cain (${actor.displayName}) — Nước Cờ Quyền Lực (${livingPlayersCount} người sống): hồi `,
+        postLogSuffix: ' HP và gắn điều kiện ĐỒNG THẮNG song phe cho cả Hunter & Shadow nếu bị loại vĩnh viễn!',
+        postLogActorId: actor.playerId,
+        zeroLogText: `⚖️ Cain (${actor.displayName}) — Nước Cờ Quyền Lực: đang đầy máu (0 HP hồi) và đã gắn điều kiện ĐỒNG THẮNG song phe cho cả Hunter & Shadow nếu bị loại vĩnh viễn!`,
+        blockedLogText: `⚖️ Cain (${actor.displayName}) — Nước Cờ Quyền Lực: hồi máu bị chặn, nhưng điều kiện ĐỒNG THẮNG song phe cho cả Hunter & Shadow khi bị loại vĩnh viễn đã được kích hoạt!`,
+      },
+      {
+        kind: 'FINISH_ACTION',
+        actorPlayerId: actor.playerId,
+        autoEndTurnMode: 'never',
+      },
+    );
+    drainPendingSteps(state, nowMs, callbacks);
+    return { ok: true };
+  }
+
+  // N.C. Soldier (Chiêu Mộ — Phase 7B): thay cho đòn tấn công thường lên Neutral đã lộ diện chưa thuộc liên minh!
+  if (effRoleId === 'exp2_nc_soldier') {
+    if (state.turnPhase !== 'MAIN_ACTION') {
+      return {
+        ok: false,
+        error: 'Chiêu Mộ (N.C. Soldier) chỉ thực hiện được ở pha Hành động chính thay cho đòn tấn công.',
+      };
+    }
+    if (actor.hand.length > 0 || hasGloriaQueuedCards(state, actor.playerId)) {
+      return {
+        ok: false,
+        error: 'Hãy giải quyết hết thẻ bài đang cầm trên tay trước khi Chiêu Mộ.',
+      };
+    }
+    if (actor.attacksThisTurn >= 1) {
+      return {
+        ok: false,
+        error: 'Bạn đã sử dụng quyền tấn công trong lượt này — không thể thực hiện Chiêu Mộ.',
+      };
+    }
+    if (!targetPlayerId) {
+      return {
+        ok: false,
+        error: 'Hãy chọn 1 Kẻ Độc Hành đã lộ diện trong tầm đánh để Chiêu Mộ.',
+      };
+    }
+    const recruitTarget = state.players[targetPlayerId];
+    if (!recruitTarget || !isPlayerTargetable(state, recruitTarget) || recruitTarget.playerId === actor.playerId) {
+      return { ok: false, error: 'Mục tiêu Chiêu Mộ không hợp lệ.' };
+    }
+    if (!canExpandedPlayerAttackTarget(state, actor, recruitTarget)) {
+      return { ok: false, error: 'Mục tiêu Chiêu Mộ không nằm trong tầm tấn công hợp lệ.' };
+    }
+    if (!isEligibleNcSoldierRecruitTarget(state, actor, recruitTarget)) {
+      return {
+        ok: false,
+        error:
+          'Chiêu Mộ chỉ được nhắm vào một Kẻ Độc Hành (Neutral) đã lộ diện công khai và chưa gia nhập liên minh!',
+      };
+    }
+    const ncPayload: Record<string, unknown> = {};
+    EXPANSION_SKILL_ENGINE.dispatch(state, {
+      trigger: 'ACTIVE_SKILL',
+      actorPlayerId: actor.playerId,
+      targetPlayerId: recruitTarget.playerId,
+      nowMs,
+      payload: ncPayload,
+    });
+    if (ncPayload.ncSoldierApproved !== true) {
+      return { ok: false, error: 'Không thể kích hoạt Chiêu Mộ vào lúc này.' };
+    }
+    return startExpandedAttack(state, actor, recruitTarget.playerId, nowMs, callbacks, {
+      isRecruitmentAttack: true,
+    });
+  }
+
   const exp = ensureExpansionState(state);
 
-  if (actor.roleId === 'lang-quan-sat') {
+  if (effRoleId === 'lang-quan-sat') {
     if (
       state.turnPhase !== 'ROLL_MOVE' &&
       state.turnPhase !== 'CHOOSE_MOVE' &&
@@ -7106,7 +7873,10 @@ export function applyExpandedUseSkill(
     ) {
       return { ok: false, error: 'Chưa thể kích hoạt kỹ năng lúc này.' };
     }
-    actor.skillUsedOnce = true;
+    markEffectiveSkillUsedOnce(state, actor);
+    if ((actor.roleId as string) !== 'lang-quan-sat') {
+      exp.stats.copiedSkillActivations = (exp.stats.copiedSkillActivations ?? 0) + 1;
+    }
     exp.pendingSteps.push(
       {
         kind: 'HEAL',
@@ -7131,7 +7901,7 @@ export function applyExpandedUseSkill(
     return { ok: true };
   }
 
-  if (actor.roleId === 'gac-ky-thuat' || actor.roleId === 'gac-radio') {
+  if (effRoleId === 'gac-ky-thuat' || effRoleId === 'gac-radio') {
     if (
       state.turnPhase !== 'ROLL_MOVE' &&
       state.turnPhase !== 'CHOOSE_MOVE' &&
@@ -7144,11 +7914,14 @@ export function applyExpandedUseSkill(
       return { ok: false, error: 'Hãy chọn 1 người chơi bất kỳ làm mục tiêu.' };
     }
     const target = state.players[targetPlayerId];
-    if (!target || !target.alive || target.playerId === actor.playerId) {
+    if (!target || !isPlayerTargetable(state, target) || target.playerId === actor.playerId) {
       return { ok: false, error: 'Mục tiêu không hợp lệ.' };
     }
-    actor.skillUsedOnce = true;
-    const isD6 = actor.roleId === 'gac-radio';
+    markEffectiveSkillUsedOnce(state, actor);
+    if ((actor.roleId as string) !== effRoleId) {
+      exp.stats.copiedSkillActivations = (exp.stats.copiedSkillActivations ?? 0) + 1;
+    }
+    const isD6 = effRoleId === 'gac-radio';
     const dmg = isD6 ? rollD6(state) : rollD4(state);
     exp.pendingSteps.push(
       {
@@ -7952,16 +8725,90 @@ function executeDamageStep(
     }
   }
 
-  // Kiểm tra hạ gục & xếp hàng ELIMINATION_TRIGGERS (chạy TRƯỚC victory check!)
+  // Kiểm tra hạ gục theo đúng Thứ tự Giao dịch Loại 10 Bước (Section 9 — chạy TRƯỚC victory check!)
   if (actual > 0 && target.hp <= 0) {
-    const victimFactionAtDeath = target.faction;
+    // BƯỚC 4: PendingResurrection (Undead hoặc bản sao Undead chưa dùng lượt hồi sinh) -> DORMANT_PENDING_REVIVE!
+    if (canPlayerEnterPendingResurrection(state, target)) {
+      const enterRes = enterDormantPendingRevive(
+        state,
+        target,
+        step.damageEventId,
+        nowMs,
+        UNDEAD_REVIVE_HP,
+      );
+      if (enterRes.entered) {
+        const uRole = getRoleDesign(target.roleId);
+        const dormRevId = `rev-dormant-${state.turnNumber}-${target.playerId}-${nowMs}`;
+        const effFac = getEffectiveFaction(state, target);
+        state.lastRevealEvent = {
+          id: dormRevId,
+          round: state.round,
+          atMs: nowMs,
+          playerId: target.playerId,
+          displayName: target.displayName,
+          roleId: target.roleId,
+          roleName: uRole.name,
+          faction: effFac,
+          reason: 'eliminated',
+        };
+        recordAuthoritativeRevealEvent(state, {
+          revealEventId: dormRevId,
+          revealedPlayerId: target.playerId,
+          triggerReason: 'eliminated',
+          sourceActorId: attacker?.playerId ?? null,
+          atMs: nowMs,
+          wasAliveBeforeReveal: false,
+          isDeathReveal: true,
+          isFinalMatchDisclosure: false,
+        });
+        // Nếu người ngủ đông đang nằm trong lượt bị Voodoo chiếm quyền ngay lúc này -> đóng grant đang chạy
+        const activeGrant = exp.activeTurnControl;
+        if (
+          activeGrant &&
+          (activeGrant.activePlayerId === target.playerId ||
+            activeGrant.controllerPlayerId === target.playerId)
+        ) {
+          cancelTurnControlForPlayer(state, target.playerId, 'dormant-pending-revive', nowMs);
+        }
+        incRoleStat(exp.stats.activationsByRole, 'exp1_undead', 1);
+        if ((target.roleId as string) !== 'exp1_undead') {
+          exp.stats.copiedSkillActivations = (exp.stats.copiedSkillActivations ?? 0) + 1;
+        }
+        appendPublicLog(
+          state,
+          'skill',
+          `🧟 Xác Sống Trỗi Dậy: ${target.displayName} (${uRole.name}) lộ diện và rơi vào trạng thái Ngủ Đông (giữ nguyên trang bị, chưa bị loại vĩnh viễn) — sẽ hồi sinh với ${Math.min(target.maxHp, UNDEAD_REVIVE_HP)} HP ở đầu lượt kế tiếp!`,
+          nowMs,
+          target.playerId,
+        );
+        return true;
+      }
+    }
+
+    // BƯỚC 5: Committed Elimination (FINAL_ELIMINATED)
+    const victimFactionAtDeath = getEffectiveFaction(state, target);
     target.hp = 0;
     target.alive = false;
     target.eliminatedRound = state.round;
     target.eliminatedByPlayerId = attacker ? attacker.playerId : null;
     target.revealed = true;
+    commitFinalEliminationLifecycle(state, target, nowMs);
+    cancelTurnControlForPlayer(state, target.playerId, 'player-eliminated', nowMs);
 
-    const deadCountNow = Object.values(state.players).filter((p) => !p.alive).length;
+    // Ghi nhận phe nạn nhân bị kết liễu cho Cain 5P (giết >= 1 Hunter & >= 1 Shadow)
+    if (attacker && attacker.playerId !== target.playerId) {
+      if (!exp.killedFactionsByPlayer) exp.killedFactionsByPlayer = {};
+      if (!exp.killedFactionsByPlayer[attacker.playerId]) {
+        exp.killedFactionsByPlayer[attacker.playerId] = [];
+      }
+      if (!exp.killedFactionsByPlayer[attacker.playerId].includes(victimFactionAtDeath)) {
+        exp.killedFactionsByPlayer[attacker.playerId].push(victimFactionAtDeath);
+      }
+    }
+
+    const deadCountNow = Object.values(state.players).filter((p) =>
+      isPlayerFinallyEliminated(state, p),
+    ).length;
     if (!state.firstDeadPlayerId) {
       state.firstDeadPlayerId = target.playerId;
     }
@@ -7976,7 +8823,7 @@ function executeDamageStep(
       displayName: target.displayName,
       roleId: target.roleId,
       roleName: role.name,
-      faction: target.faction,
+      faction: victimFactionAtDeath,
       reason: 'eliminated',
     };
     // Ghi sổ lộ diện do tử vong (isDeathReveal=true -> bị loại khỏi ràng buộc bình thường của Cassie/Diana/Aaron!)
@@ -7994,7 +8841,7 @@ function executeDamageStep(
     appendPublicLog(
       state,
       'elimination',
-      `💀 ${target.displayName} đã bị loại — lộ diện vai ${role.name} (${FACTION_LABELS[target.faction]})!`,
+      `💀 ${target.displayName} đã bị loại — lộ diện vai ${role.name} (${FACTION_LABELS[victimFactionAtDeath]})!`,
       nowMs,
       attacker?.playerId ?? target.playerId,
     );
@@ -8004,6 +8851,53 @@ function executeDamageStep(
       `${target.displayName} (${role.name}) gục ngã ở vòng ${state.round}.`,
       nowMs,
     );
+
+    // BƯỚC 6a: Bonnie (Nghi Thức Kế Thừa — Phase 7B): chuyển phe động Neutral -> Shadow + lộ diện bắt buộc
+    // TRƯỚC bước kiểm tra thắng phe (kể cả khi vừa kết liễu Shadow cuối cùng trên bàn!).
+    if (
+      attacker &&
+      isPlayerTargetable(state, attacker) &&
+      attacker.playerId !== target.playerId &&
+      victimFactionAtDeath === 'mist-order' &&
+      getEffectiveSkillRoleId(state, attacker) === 'exp2_bonnie' &&
+      getEffectiveFaction(state, attacker) !== 'mist-order'
+    ) {
+      const bonnieConvId = nextExpansionEventId(state, 'bonnie-conv');
+      const conv = convertPlayerEffectiveFaction(state, attacker, {
+        targetFaction: 'mist-order',
+        conversionEventId: bonnieConvId,
+        triggerVictimPlayerId: target.playerId,
+        reason: 'bonnie_shadow_succession',
+        nowMs,
+      });
+      if (conv.converted) {
+        const justRevealed = revealPlayerNow(state, attacker, 'voluntary', nowMs);
+        incRoleStat(exp.stats.activationsByRole, 'exp2_bonnie', 1);
+        exp.stats.dynamicFactionChangesCount = (exp.stats.dynamicFactionChangesCount ?? 0) + 1;
+        if ((attacker.roleId as string) !== 'exp2_bonnie') {
+          exp.stats.copiedSkillActivations = (exp.stats.copiedSkillActivations ?? 0) + 1;
+        }
+        appendPublicLog(
+          state,
+          justRevealed ? 'reveal' : 'skill',
+          `🖤✨ Nghi Thức Kế Thừa: ${attacker.displayName} (Bonnie) hạ gục Shadow ${target.displayName} → lộ diện và chính thức gia nhập phe Hội Bóng Đêm!`,
+          nowMs,
+          attacker.playerId,
+        );
+        appendHighlight(
+          state,
+          `Chuyển phe: ${attacker.displayName}`,
+          `Bonnie kế thừa vị trí Shadow sau khi hạ gục ${target.displayName}.`,
+          nowMs,
+        );
+        if (justRevealed) {
+          enqueueRoleRevealedTrigger(state, attacker.playerId, 'skill-forced', step.chainDepth ?? 0, {
+            sourceActorId: target.playerId,
+            nowMs,
+          });
+        }
+      }
+    }
 
     // Đạt "Cảm Tử" (Daniel — Scream)
     if (deadCountNow === 1) {
@@ -8063,7 +8957,7 @@ function executeDamageStep(
       target.roleId === 'exp2_arlene' &&
       attacker &&
       attacker.playerId !== target.playerId &&
-      attacker.faction === 'lantern-guard'
+      getEffectiveFaction(state, attacker) === 'lantern-guard'
     ) {
       if (!exp.arleneHunterKillTriggeredIds) exp.arleneHunterKillTriggeredIds = [];
       if (!exp.arleneHunterKillTriggeredIds.includes(target.playerId)) {
@@ -8119,7 +9013,7 @@ function executeDamageStep(
       }
     }
 
-    // Chiến lợi phẩm khi hạ gục
+    // Chiến lợi phẩm khi hạ gục (Bước 8)
     if (
       attacker &&
       attacker.alive &&
@@ -8167,11 +9061,25 @@ function executeDamageStep(
     }
     discardGloriaQueuedCards(state, target.playerId);
 
-    // Chèn ngay ELIMINATION_TRIGGERS lên đầu hàng đợi để chạy trước Victory Check
-    exp.pendingSteps.unshift({
+    // Gom nhóm nạn nhân cùng lô sát thương AoE (Machine Gun / Dynamite / Wrath / Vengeance / Umibozu)
+    // để Antimony chọn theo turnOrder & Vengeful Spirit chọn giữa tất cả nạn nhân trong lô!
+    let siblingDamageCount = 0;
+    while (siblingDamageCount < exp.pendingSteps.length) {
+      const nextS = exp.pendingSteps[siblingDamageCount];
+      const sameBatch =
+        nextS.kind === 'DAMAGE' &&
+        ((step.causationId && nextS.causationId === step.causationId) ||
+          (!step.isSingleTarget &&
+            nextS.sourceType === step.sourceType &&
+            nextS.attackerPlayerId === step.attackerPlayerId));
+      if (!sameBatch) break;
+      siblingDamageCount += 1;
+    }
+
+    const newElimStep: Extract<PendingResolutionStep, { kind: 'ELIMINATION_TRIGGERS' }> = {
       kind: 'ELIMINATION_TRIGGERS',
       eliminationEventId: nextExpansionEventId(state, 'elim'),
-      causationId: step.damageEventId,
+      causationId: step.causationId ?? step.damageEventId,
       ...(step.sourceCardId ? { sourceCardId: step.sourceCardId } : {}),
       turnNumberAtElimination: state.turnNumber,
       victimPlayerId: target.playerId,
@@ -8180,9 +9088,32 @@ function executeDamageStep(
       sourceType: step.sourceType,
       wyvernChecked: false,
       vengeanceChecked: false,
+      bonnieChecked: true,
       wendigoCheckedIds: [],
       gideonCheckedIds: [],
-    });
+      antimonyCheckedIds: [],
+      vengefulSpiritCheckedIds: [],
+      batchVictimPlayerIds: [target.playerId],
+    };
+
+    // Nếu đã có ELIMINATION_TRIGGERS thuộc cùng lô AoE phía sau các bước DAMAGE anh em -> gắn chung `batchVictimPlayerIds`!
+    for (let k = siblingDamageCount; k < exp.pendingSteps.length; k++) {
+      const candidate = exp.pendingSteps[k];
+      if (candidate.kind !== 'ELIMINATION_TRIGGERS') break;
+      if (
+        candidate.turnNumberAtElimination === state.turnNumber &&
+        candidate.sourceType === step.sourceType &&
+        candidate.killerPlayerId === (attacker?.playerId ?? null)
+      ) {
+        const merged = Array.from(
+          new Set([...(candidate.batchVictimPlayerIds ?? [candidate.victimPlayerId]), target.playerId]),
+        ).sort((a, b) => state.turnOrder.indexOf(a) - state.turnOrder.indexOf(b));
+        candidate.batchVictimPlayerIds = merged;
+        newElimStep.batchVictimPlayerIds = [...merged];
+      }
+    }
+
+    exp.pendingSteps.splice(siblingDamageCount, 0, newElimStep);
   } else if (
     actual >= 1 &&
     target.alive &&
@@ -8378,6 +9309,8 @@ function executeEliminationTriggersStep(
     vengeanceAlreadyChecked: Boolean(step.vengeanceChecked),
     wendigoCheckedIds: [...(step.wendigoCheckedIds ?? [])],
     gideonCheckedIds: [...(step.gideonCheckedIds ?? [])],
+    antimonyCheckedIds: [...(step.antimonyCheckedIds ?? [])],
+    vengefulSpiritCheckedIds: [...(step.vengefulSpiritCheckedIds ?? [])],
   };
 
   EXPANSION_SKILL_ENGINE.dispatch(state, {
@@ -8395,6 +9328,12 @@ function executeEliminationTriggersStep(
     : [];
   step.gideonCheckedIds = Array.isArray(payload.gideonCheckedIds)
     ? [...(payload.gideonCheckedIds as string[])]
+    : [];
+  step.antimonyCheckedIds = Array.isArray(payload.antimonyCheckedIds)
+    ? [...(payload.antimonyCheckedIds as string[])]
+    : [];
+  step.vengefulSpiritCheckedIds = Array.isArray(payload.vengefulSpiritCheckedIds)
+    ? [...(payload.vengefulSpiritCheckedIds as string[])]
     : [];
 
   if (payload.pausedForHealChoice === true) {
@@ -8421,7 +9360,7 @@ function executeEliminationTriggersStep(
 
   if (pendingVengeance) {
     const vengeance = state.players[pendingVengeance.vengeancePlayerId];
-    if (vengeance && vengeance.alive && vengeance.revealed && !vengeance.skillUsedOnce) {
+    if (vengeance && vengeance.alive && vengeance.revealed && !hasEffectiveSkillUsedOnce(state, vengeance)) {
       const liveCandidates = pendingVengeance.candidateTargetIds
         .map((id) => state.players[id])
         .filter(
@@ -8634,6 +9573,160 @@ function executeEliminationTriggersStep(
         },
       };
       return false;
+    }
+  }
+
+  // BƯỚC 7a — Antimony (Nhân Bản — Phase 7B): BẮT BUỘC tự động kích hoạt ở lần loại vĩnh viễn hợp lệ đầu tiên!
+  // Chọn nạn nhân tất định theo `state.turnOrder` nếu có nhiều người chết trong cùng 1 lô AoE.
+  const batchVictimIds = Array.from(
+    new Set([...(step.batchVictimPlayerIds ?? []), step.victimPlayerId]),
+  )
+    .filter((vid) => {
+      const vp = state.players[vid];
+      return Boolean(vp && isPlayerFinallyEliminated(state, vp));
+    })
+    .sort((a, b) => state.turnOrder.indexOf(a) - state.turnOrder.indexOf(b));
+
+  const eligibleAntimonyIds = Array.isArray(payload.eligibleAntimonyIds)
+    ? (payload.eligibleAntimonyIds as string[])
+    : [];
+  if (eligibleAntimonyIds.length > 0 && batchVictimIds.length > 0) {
+    const expAnti = ensureExpansionState(state);
+    if (!expAnti.antimonyCopiedGoalByPlayer) expAnti.antimonyCopiedGoalByPlayer = {};
+    for (const antiId of eligibleAntimonyIds) {
+      const antimony = state.players[antiId];
+      if (
+        !antimony ||
+        !isPlayerTargetable(state, antimony) ||
+        antimony.skillUsedOnce ||
+        expAnti.antimonyCopiedGoalByPlayer[antimony.playerId]
+      ) {
+        continue;
+      }
+      const chosenVictimId = batchVictimIds.find((vid) => vid !== antimony.playerId);
+      const chosenVictim = chosenVictimId ? state.players[chosenVictimId] : null;
+      if (!chosenVictim) continue;
+
+      const copyEvtId = nextExpansionEventId(state, 'copy-antimony');
+      antimony.skillUsedOnce = true;
+      const justRevealed = revealPlayerNow(state, antimony, 'voluntary', nowMs);
+      const skillBind = bindCopiedSkillFromElimination(
+        state,
+        antimony,
+        chosenVictim,
+        copyEvtId,
+        nowMs,
+      );
+      expAnti.antimonyCopiedGoalByPlayer[antimony.playerId] = {
+        targetPlayerId: chosenVictim.playerId,
+        sourceRoleId: chosenVictim.roleId,
+        boundEventId: copyEvtId,
+        boundAtMs: nowMs,
+        boundTurnNumber: state.turnNumber,
+      };
+      incRoleStat(expAnti.stats.activationsByRole, 'exp1_antimony', 1);
+      expAnti.stats.copiedVictoryLinksBound = (expAnti.stats.copiedVictoryLinksBound ?? 0) + 1;
+      const copiedRoleName = getRoleDesign(
+        (skillBind.binding?.effectiveSkillRoleId ?? chosenVictim.roleId) as BoardGameRoleId,
+      ).name;
+      appendPublicLog(
+        state,
+        justRevealed ? 'reveal' : 'skill',
+        `🪞✨ Nhân Bản (Antimony): ${antimony.displayName} bắt buộc lộ diện sau cái chết của ${chosenVictim.displayName} → sao chép kỹ năng hiệu lực (${copiedRoleName}) & điều kiện thắng của ${chosenVictim.displayName} (giữ phe Neutral)!`,
+        nowMs,
+        antimony.playerId,
+      );
+      if (justRevealed) {
+        appendHighlight(
+          state,
+          `Nhân Bản: ${antimony.displayName}`,
+          `Antimony sao chép kỹ năng & mục tiêu từ ${chosenVictim.displayName}.`,
+          nowMs,
+        );
+        enqueueRoleRevealedTrigger(state, antimony.playerId, 'skill-forced', 0, {
+          sourceActorId: chosenVictim.playerId,
+          nowMs,
+        });
+      }
+    }
+  }
+
+  // BƯỚC 7b — Vengeful Spirit (Quyền Năng Bất Diệt — Phase 7B): lựa chọn tùy chọn (bí mật `choice-secret-*` nếu đang ẩn!)
+  const pendingVSpirit = payload.pendingVengefulSpiritChoice as
+    | { spiritPlayerId: string; eliminationEventId: string; victimPlayerId: string }
+    | undefined;
+  if (pendingVSpirit && batchVictimIds.length > 0) {
+    const spirit = state.players[pendingVSpirit.spiritPlayerId];
+    if (
+      spirit &&
+      isPlayerTargetable(state, spirit) &&
+      !spirit.skillUsedOnce &&
+      !getCopiedSkillBinding(state, spirit.playerId)
+    ) {
+      const eligibleVictims = batchVictimIds
+        .filter((vid) => vid !== spirit.playerId)
+        .map((vid) => state.players[vid])
+        .filter((p): p is AuthoritativePlayerState => Boolean(p));
+      if (eligibleVictims.length > 0) {
+        const expVS = ensureExpansionState(state);
+        const policy = getPlayerReactionPolicy(state, spirit.playerId);
+        if (!spirit.revealed && policy === 'AUTO_DECLINE') {
+          expVS.pendingSteps.unshift(step);
+          return true;
+        }
+        expVS.pendingSteps.unshift(step);
+        const isSecretChoice = !spirit.revealed;
+        const choiceId = nextExpansionEventId(
+          state,
+          isSecretChoice ? 'choice-secret' : 'choice-vspirit',
+        );
+        const timeoutMs = getChoiceTimeoutMs(state, spirit);
+        const publicTimeoutMs = getNormalizedPublicChoiceTimeoutMs(state);
+        const victimMap: Record<string, string> = {};
+        const options: BoardGameChoiceOptionView[] = eligibleVictims.map((v, idx) => {
+          const optId = `copy_${idx}`;
+          victimMap[optId] = v.playerId;
+          const effVictimRoleId = getEffectiveSkillRoleId(state, v) as BoardGameRoleId;
+          const vDesign = getRoleDesign(effVictimRoleId);
+          return {
+            optionId: optId,
+            label: `${isSecretChoice ? 'Lật vai & ' : ''}Sao chép kỹ năng của ${v.displayName} (${vDesign.name} — ${vDesign.skillName})`,
+            detail: `Sao chép kỹ năng hiệu lực với trạng thái lượt dùng mới (giữ nguyên phe & mục tiêu Shadow; 1 lần/trận).`,
+            targetPlayerId: v.playerId,
+          };
+        });
+        options.push({
+          optionId: 'decline',
+          label: isSecretChoice
+            ? 'Giữ kín danh tính (Chờ cái chết khác)'
+            : 'Bỏ qua (Chờ cái chết khác)',
+          detail: 'Không kích hoạt lần này và giữ nguyên quyền sao chép cho cái chết sau.',
+        });
+        state.pendingChoice = {
+          choiceId,
+          eventId: step.eliminationEventId,
+          ownerPlayerId: spirit.playerId,
+          kind: 'vengeful_spirit_copy_skill',
+          isSecret: isSecretChoice,
+          title: 'Quyền Năng Bất Diệt (Vengeful Spirit · 1 lần/trận)',
+          description: `Có ${eligibleVictims.length} nạn nhân bị loại vĩnh viễn (${eligibleVictims.map((v) => v.displayName).join(', ')}). Chọn sao chép kỹ năng hiệu lực của 1 nạn nhân (giữ nguyên phe & điều kiện thắng Shadow) hoặc bỏ qua để chờ lần sau.`,
+          publicPromptLabel: isSecretChoice
+            ? '⏳ Đang kiểm tra phản ứng sau sự kiện...'
+            : `👻 Vengeful Spirit (${spirit.displayName}) đang cân nhắc sao chép kỹ năng...`,
+          options,
+          defaultOptionId: 'decline',
+          createdAtMs: nowMs,
+          deadlineMs: nowMs + timeoutMs,
+          ...(isSecretChoice ? { publicDeadlineMs: nowMs + publicTimeoutMs } : {}),
+          data: {
+            kind: 'vengeful_spirit_copy_skill',
+            spiritPlayerId: spirit.playerId,
+            eliminationEventId: step.eliminationEventId,
+            victimMap,
+          },
+        };
+        return false;
+      }
     }
   }
 
@@ -9277,8 +10370,64 @@ export function drainPendingSteps(
 
         const postSubSteps: PendingResolutionStep[] = [];
 
+        // Phase 7B N.C. Soldier (Chiêu Mộ): sau khi đòn Chiêu Mộ hoàn tất, nếu mục tiêu VẪN CÒN SỐNG
+        // VÀ tổng vết thương tích lũy >= 5 -> kết nạp vào liên minh, giữ nguyên roleId & baseFaction!
+        if (step.isRecruitmentAttack) {
+          const recruitTarget = state.players[step.primaryTargetId];
+          if (
+            isPlayerTargetable(state, actor) &&
+            recruitTarget &&
+            isPlayerTargetable(state, recruitTarget) &&
+            recruitTarget.woundsTaken >= 5 &&
+            isEligibleNcSoldierRecruitTarget(state, actor, recruitTarget)
+          ) {
+            const recruitEvtId = nextExpansionEventId(state, 'nc-recruit');
+            const recRes = recruitPlayerIntoNcSoldierAlliance(
+              state,
+              actor,
+              recruitTarget,
+              recruitEvtId,
+              nowMs,
+            );
+            if (recRes.recruited) {
+              bindNcSoldierRecruitedSkill(state, recruitTarget, actor, recruitEvtId, nowMs);
+              incRoleStat(exp.stats.activationsByRole, 'exp2_nc_soldier', 1);
+              exp.stats.recruitmentsCount = (exp.stats.recruitmentsCount ?? 0) + 1;
+              if ((actor.roleId as string) !== 'exp2_nc_soldier') {
+                exp.stats.copiedSkillActivations = (exp.stats.copiedSkillActivations ?? 0) + 1;
+              }
+              appendPublicLog(
+                state,
+                'skill',
+                `🎖️✨ Chiêu Mộ THÀNH CÔNG: ${recruitTarget.displayName} (${recruitTarget.woundsTaken} vết thương ≥ 5) gia nhập Liên minh Chiêu Mộ cùng ${actor.displayName} (giữ nguyên vai gốc, nhận kỹ năng Chiêu Mộ & mục tiêu thắng liên minh)!`,
+                nowMs,
+                actor.playerId,
+              );
+              appendHighlight(
+                state,
+                `Chiêu Mộ: ${recruitTarget.displayName}`,
+                `${recruitTarget.displayName} gia nhập Liên minh Chiêu Mộ của ${actor.displayName}.`,
+                nowMs,
+              );
+            }
+          } else {
+            appendPublicLog(
+              state,
+              'skill',
+              `🎖️ Chiêu Mộ của ${actor.displayName}: ${recruitTarget?.displayName ?? step.primaryTargetId} chưa đủ điều kiện chiêu mộ (${!recruitTarget?.alive ? 'đã bị loại' : `${recruitTarget.woundsTaken}/5 vết thương`}).`,
+              nowMs,
+              actor.playerId,
+            );
+          }
+        }
+
         // Nội tại Tú "Ẩn Danh" (Vampire) -> định tuyến qua CAP-04 HealPipeline (`sourceKind: 'skill'`)!
-        if (step.totalDealt > 0 && actor.alive && actor.revealed && actor.roleId === 'suong-an-danh') {
+        if (
+          step.totalDealt > 0 &&
+          actor.alive &&
+          actor.revealed &&
+          getEffectiveSkillRoleId(state, actor) === 'suong-an-danh'
+        ) {
           postSubSteps.push({
             kind: 'HEAL',
             healEventId: nextExpansionEventId(state, 'heal-vampire'),
@@ -9903,12 +11052,12 @@ export function resolvePendingChoice(
         return { ok: true };
       }
 
-      if (actor.skillUsedOnce) {
+      if (hasEffectiveSkillUsedOnce(state, actor)) {
         return { ok: false, error: 'Đồng Xu Định Mệnh đã được sử dụng trong trận này.' };
       }
 
       // Commit oncePerMatch TRƯỚC khi tung xúc xắc & áp hiệu ứng (chống replay qua reconnect)
-      actor.skillUsedOnce = true;
+      markEffectiveSkillUsedOnce(state, actor);
       const d4 = rollD4(state);
       const amount = d4 + 2; // 3..6
       incRoleStat(exp.stats.activationsByRole, 'exp1_bipolar', 1);
@@ -10109,7 +11258,7 @@ export function resolvePendingChoice(
         return { ok: true };
       }
 
-      if (vengeance.skillUsedOnce) {
+      if (hasEffectiveSkillUsedOnce(state, vengeance)) {
         drainPendingSteps(state, nowMs, callbacks);
         return { ok: true };
       }
@@ -10119,7 +11268,7 @@ export function resolvePendingChoice(
         .map((id) => state.players[id])
         .filter(
           (p): p is AuthoritativePlayerState =>
-            Boolean(p && p.alive && p.playerId !== vengeance.playerId),
+            Boolean(p && isPlayerTargetable(state, p) && p.playerId !== vengeance.playerId),
         );
 
       if (liveTargets.length === 0) {
@@ -10128,7 +11277,7 @@ export function resolvePendingChoice(
       }
 
       // Commit oncePerMatch TRƯỚC khi tung 1d4 & chạy damage (chống đệ quy & replay tuyệt đối!)
-      vengeance.skillUsedOnce = true;
+      markEffectiveSkillUsedOnce(state, vengeance);
       const d4 = rollD4(state);
       incRoleStat(exp.stats.activationsByRole, 'exp1_vengeance', 1);
       incRoleStat(exp.stats.bonusDamageByRole, 'exp1_vengeance', d4 * liveTargets.length);
@@ -10184,17 +11333,17 @@ export function resolvePendingChoice(
         return { ok: true };
       }
 
-      if (actor.skillUsedOnce || exp.visionsMarks?.[actor.playerId]) {
+      if (hasEffectiveSkillUsedOnce(state, actor) || exp.visionsMarks?.[actor.playerId]) {
         return { ok: true };
       }
 
       const targetId = data.targetMap[optionId];
       const target = targetId ? state.players[targetId] : null;
-      if (!target || !target.alive || target.playerId === actor.playerId) {
+      if (!target || !isPlayerTargetable(state, target) || target.playerId === actor.playerId) {
         return { ok: true };
       }
 
-      actor.skillUsedOnce = true;
+      markEffectiveSkillUsedOnce(state, actor);
       if (!exp.visionsMarks) exp.visionsMarks = {};
       exp.visionsMarks[actor.playerId] = {
         targetPlayerId: target.playerId,
@@ -10344,7 +11493,7 @@ export function resolvePendingChoice(
         return { ok: true };
       }
 
-      if (actor.skillUsedOnce) {
+      if (hasEffectiveSkillUsedOnce(state, actor)) {
         return { ok: true };
       }
 
@@ -10386,7 +11535,7 @@ export function resolvePendingChoice(
       }
 
       // Commit oncePerMatch nguyên tử TRƯỚC khi đẩy chuỗi HEAL vào HealPipeline!
-      actor.skillUsedOnce = true;
+      markEffectiveSkillUsedOnce(state, actor);
       incRoleStat(exp.stats.activationsByRole, 'exp2_elise', 1);
 
       if (validSteps.length === 0) {
@@ -10780,13 +11929,13 @@ export function resolvePendingChoice(
         !options?.isTimeoutFallback &&
         anathema &&
         anathema.alive &&
-        !anathema.skillUsedOnce &&
+        !hasEffectiveSkillUsedOnce(state, anathema) &&
         target &&
-        target.alive &&
+        isPlayerTargetable(state, target) &&
         target.playerId !== anathema.playerId
       ) {
         const justRevealed = revealPlayerNow(state, anathema, 'voluntary', nowMs);
-        anathema.skillUsedOnce = true;
+        markEffectiveSkillUsedOnce(state, anathema);
         if (!exp.anathemaCurses) exp.anathemaCurses = {};
         exp.anathemaCurses[anathema.playerId] = {
           targetPlayerId: target.playerId,
@@ -10879,9 +12028,9 @@ export function resolvePendingChoice(
         !options?.isTimeoutFallback &&
         arnold &&
         arnold.alive &&
-        !arnold.skillUsedOnce &&
+        !hasEffectiveSkillUsedOnce(state, arnold) &&
         reflectTarget &&
-        reflectTarget.alive
+        isPlayerTargetable(state, reflectTarget)
       ) {
         const pausedStep = exp.pendingSteps[0];
         if (
@@ -10892,7 +12041,7 @@ export function resolvePendingChoice(
           // Tiêu thụ và đánh dấu sự kiện gốc để Arnold KHÔNG mất bất kỳ HP nào (giữ nguyên HP trước đòn!)
           exp.pendingSteps.shift();
           markExpansionEventProcessed(state, pausedStep.damageEventId);
-          arnold.skillUsedOnce = true;
+          markEffectiveSkillUsedOnce(state, arnold);
 
           const justRevealed = !arnold.revealed
             ? revealPlayerNow(state, arnold, 'voluntary', nowMs)
@@ -11006,13 +12155,13 @@ export function resolvePendingChoice(
         clair &&
         clair.alive &&
         clair.revealed &&
-        !clair.skillUsedOnce &&
+        !hasEffectiveSkillUsedOnce(state, clair) &&
         target &&
-        target.alive &&
+        isPlayerTargetable(state, target) &&
         !target.revealed &&
         target.playerId !== clair.playerId
       ) {
-        clair.skillUsedOnce = true;
+        markEffectiveSkillUsedOnce(state, clair);
         const targetDesign = getRoleDesign(target.roleId);
         const boundEventId = nextExpansionEventId(state, 'ev-clairvoyant-bind');
         if (!exp.clairvoyantVisions) exp.clairvoyantVisions = {};
@@ -11201,6 +12350,170 @@ export function resolvePendingChoice(
             postLogActorId: colt.playerId,
           });
         }
+      }
+      drainPendingSteps(state, nowMs, callbacks);
+      callbacks.finalizeIfFinished(state, nowMs);
+      return { ok: true };
+    }
+
+    case 'lloyd_interrupt_attack': {
+      const lloyd = state.players[data.lloydPlayerId];
+      const declared = exp.pendingDeclaredAttack;
+      if (!declared || declared.attackId !== data.attackId) {
+        drainPendingSteps(state, nowMs, callbacks);
+        callbacks.finalizeIfFinished(state, nowMs);
+        return { ok: true };
+      }
+
+      if (
+        optionId === 'cancel_attack' &&
+        !options?.isTimeoutFallback &&
+        lloyd &&
+        isPlayerTargetable(state, lloyd) &&
+        isPendingAttackCancellable(declared)
+      ) {
+        const committed = commitPendingAttackCancellation(declared, lloyd.playerId, nowMs);
+        exp.pendingDeclaredAttack = null;
+        if (committed) {
+          const attacker = state.players[declared.attackerPlayerId];
+          if (attacker) {
+            attacker.attacksMade += 1;
+            if (!declared.isBonusAttack) {
+              attacker.attacksThisTurn += 1;
+            }
+            attacker.lastAttackTargetId = declared.primaryTargetId;
+          }
+          incRoleStat(exp.stats.activationsByRole, 'exp1_lloyd', 1);
+          exp.stats.lloydInterruptedAttacksCount =
+            (exp.stats.lloydInterruptedAttacksCount ?? 0) + 1;
+          if ((lloyd.roleId as string) !== 'exp1_lloyd') {
+            exp.stats.copiedSkillActivations = (exp.stats.copiedSkillActivations ?? 0) + 1;
+          }
+          const targetNames = declared.targetPlayerIds
+            .map((id) => state.players[id]?.displayName ?? id)
+            .join(', ');
+          appendPublicLog(
+            state,
+            'skill',
+            `🛡️⚡ Lạc Lối (Lloyd): ${lloyd.displayName} hy sinh 2 HP (không thể chặn) để HỦY toàn bộ đòn tấn công${declared.hasMachineGun ? ' Súng Máy' : ''} của ${attacker?.displayName ?? declared.attackerPlayerId} vào ${targetNames} trước khi đổ xúc xắc!`,
+            nowMs,
+            lloyd.playerId,
+          );
+          // Cam kết hủy đòn TRƯỚC, sau đó mới áp 2 sát thương chi phí HP (cho phép Lloyd tự hy sinh HP cuối cùng!)
+          exp.pendingSteps.unshift(
+            {
+              kind: 'DAMAGE',
+              damageEventId: nextExpansionEventId(state, 'dmg-lloyd-cost'),
+              causationId: declared.attackId,
+              targetPlayerId: lloyd.playerId,
+              rawAmount: 2,
+              sourceType: 'hp-cost',
+              attackerPlayerId: lloyd.playerId,
+              isHpCost: true,
+              unpreventable: true,
+              isSingleTarget: true,
+              postLogKind: 'skill',
+              postLogPrefix: `💔 Lloyd (${lloyd.displayName}) trả chi phí Lạc Lối: mất `,
+              postLogSuffix: ' HP!',
+              postLogActorId: lloyd.playerId,
+            },
+            {
+              kind: 'FINISH_ACTION',
+              actorPlayerId: declared.attackerPlayerId,
+              autoEndTurnMode: 'if-not-charles-feast',
+            },
+          );
+          drainPendingSteps(state, nowMs, callbacks);
+          return { ok: true };
+        }
+      }
+
+      // Từ chối hoặc quá hạn timeout -> kiểm tra ứng viên Lloyd kế tiếp hoặc tiến hành đổ xúc xắc!
+      markAttackInterruptCandidateChecked(declared, data.lloydPlayerId);
+      return openNextLloydInterruptOrProceed(state, declared, nowMs, callbacks);
+    }
+
+    case 'vengeful_spirit_copy_skill': {
+      const spirit = state.players[data.spiritPlayerId];
+      const chosenVictimId =
+        optionId !== 'decline' && !options?.isTimeoutFallback ? data.victimMap[optionId] : undefined;
+      const chosenVictim = chosenVictimId ? state.players[chosenVictimId] : null;
+      if (
+        spirit &&
+        isPlayerTargetable(state, spirit) &&
+        !spirit.skillUsedOnce &&
+        chosenVictim &&
+        chosenVictim.playerId !== spirit.playerId
+      ) {
+        const copyEvtId = nextExpansionEventId(state, 'copy-vspirit');
+        const justRevealed = revealPlayerNow(state, spirit, 'voluntary', nowMs);
+        spirit.skillUsedOnce = true;
+        const bindRes = bindCopiedSkillFromElimination(
+          state,
+          spirit,
+          chosenVictim,
+          copyEvtId,
+          nowMs,
+        );
+        incRoleStat(exp.stats.activationsByRole, 'exp1_vengeful_spirit', 1);
+        const copiedRoleName = getRoleDesign(
+          (bindRes.binding?.effectiveSkillRoleId ?? chosenVictim.roleId) as BoardGameRoleId,
+        ).name;
+        appendPublicLog(
+          state,
+          justRevealed ? 'reveal' : 'skill',
+          `👻✨ Quyền Năng Bất Diệt (Vengeful Spirit): ${spirit.displayName} ${justRevealed ? 'lộ diện và ' : ''}sao chép kỹ năng hiệu lực (${copiedRoleName}) từ ${chosenVictim.displayName} với trạng thái lượt dùng mới (giữ nguyên phe & mục tiêu Shadow)!`,
+          nowMs,
+          spirit.playerId,
+        );
+        if (justRevealed) {
+          appendHighlight(
+            state,
+            `Lộ vai: ${spirit.displayName}`,
+            `Vengeful Spirit sao chép kỹ năng từ ${chosenVictim.displayName}.`,
+            nowMs,
+          );
+          enqueueRoleRevealedTrigger(state, spirit.playerId, 'reaction', 0, {
+            sourceActorId: chosenVictim.playerId,
+            nowMs,
+          });
+        }
+      }
+      drainPendingSteps(state, nowMs, callbacks);
+      return { ok: true };
+    }
+
+    case 'voodoo_select_puppet': {
+      const voodoo = state.players[data.voodooPlayerId];
+      const chosenTargetId =
+        optionId !== 'skip' && !options?.isTimeoutFallback ? data.targetMap[optionId] : undefined;
+      const target = chosenTargetId ? state.players[chosenTargetId] : null;
+      if (
+        voodoo &&
+        isPlayerTargetable(state, voodoo) &&
+        !hasEffectiveSkillUsedOnce(state, voodoo) &&
+        target &&
+        isPlayerTargetable(state, target) &&
+        target.playerId !== voodoo.playerId
+      ) {
+        markEffectiveSkillUsedOnce(state, voodoo);
+        scheduleDeferredTurnControl(state, {
+          controllerPlayerId: voodoo.playerId,
+          victimPlayerId: target.playerId,
+          sourceRoleId: 'exp1_voodoo',
+          nowMs,
+        });
+        incRoleStat(exp.stats.activationsByRole, 'exp1_voodoo', 1);
+        if ((voodoo.roleId as string) !== 'exp1_voodoo') {
+          exp.stats.copiedSkillActivations = (exp.stats.copiedSkillActivations ?? 0) + 1;
+        }
+        appendPublicLog(
+          state,
+          'skill',
+          `🎭 Voodoo (${voodoo.displayName}) — Con Rối: gắn dây điều khiển lên ${target.displayName}! Lượt kế tiếp của ${target.displayName} sẽ do ${voodoo.displayName} điều khiển hành động công khai.`,
+          nowMs,
+          voodoo.playerId,
+        );
       }
       drainPendingSteps(state, nowMs, callbacks);
       callbacks.finalizeIfFinished(state, nowMs);

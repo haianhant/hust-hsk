@@ -124,8 +124,8 @@ test('P5A-1 — CAP-10 Canonical card metadata & Phase 5 scope partition invaria
     }
   }
   assert.ok(
-    rem.hunter >= 1 && rem.hunter <= 2 && rem.shadow === 3 && rem.neutral >= 4 && rem.neutral <= 13,
-    `Expected post-Phase 5/6 remaining unimplemented partition (1..2H / 3S / 4..13N), got ${JSON.stringify(rem)}`,
+    rem.hunter >= 0 && rem.hunter <= 2 && rem.shadow >= 0 && rem.shadow <= 3 && rem.neutral >= 0 && rem.neutral <= 13,
+    `Expected post-Phase 5/6/7 remaining unimplemented partition (0..2H / 0..3S / 0..13N), got ${JSON.stringify(rem)}`,
   );
 });
 

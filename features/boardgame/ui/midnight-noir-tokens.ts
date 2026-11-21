@@ -15,6 +15,7 @@ import type {
   Phase4RoleId,
   Phase5RoleId,
   Phase6RoleId,
+  Phase7RoleId,
 } from '../../../shared/contracts/boardgame';
 import { getCardById } from '../domain/cards';
 import { getRoleDesign } from '../domain/roles';
@@ -247,8 +248,20 @@ export const WAVE5_ROLE_IDS: readonly Phase6RoleId[] = [
   'exp2_aaron',
 ];
 
-/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (58/58 playable: 10 Classic + 48 Expansion). */
-export const MIDNIGHT_CHARACTER_ART: Readonly<Record<BoardGameRoleId, string>> = {
+/** 8 tướng mở rộng Wave 6 cuối cùng (Starter Fifty-Six · Phase 7 — 1 Hunter + 3 Shadow + 4 Neutral · Tier-4 Completion). */
+export const WAVE6_ROLE_IDS: readonly Phase7RoleId[] = [
+  'exp1_lloyd',
+  'exp1_vengeful_spirit',
+  'exp1_voodoo',
+  'exp1_undead',
+  'exp1_antimony',
+  'exp2_cain',
+  'exp2_bonnie',
+  'exp2_nc_soldier',
+];
+
+/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (tạm nới Partial trong Phase 7B với 58/58 WebP thật; Phase 7C hoàn tất strict 66/66). */
+export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, string>>> = {
   // 10 Classic Roles (preserved untouched)
   'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
   'gac-truc-ban': '/assets/boardgame/roles/role-lan-truc-ban.webp',

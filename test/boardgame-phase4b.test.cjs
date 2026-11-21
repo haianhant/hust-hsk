@@ -196,10 +196,10 @@ test('P4B-1 — starter-twenty-six exposes 36 playable roles (14H/14S/8N), block
     assert.equal(isCharacterPlayable(entry, { allowExperimentalHouseRules: false }), false);
   }
 
-  // Remaining unimplemented expansion roles stay strictly needs-clarification & not-started
+  // Any remaining unimplemented expansion roles (0 once Phase 7 completes all 56) stay strictly needs-clarification & not-started
   const allExp = DEFAULT_CHARACTER_REGISTRY.listByExpansions(['expansion-1', 'expansion-2']);
   const remaining = allExp.filter((e) => e.metadata.implementationStatus !== 'implemented');
-  assert.ok(remaining.length >= 8 && remaining.length <= 30, `Expected 8..30 remaining unimplemented roles, got ${remaining.length}`);
+  assert.ok(remaining.length >= 0 && remaining.length <= 30, `Expected 0..30 remaining unimplemented roles, got ${remaining.length}`);
   for (const rem of remaining) {
     assert.equal(rem.metadata.rulesStatus, 'needs-clarification');
     assert.equal(rem.metadata.implementationStatus, 'not-started');

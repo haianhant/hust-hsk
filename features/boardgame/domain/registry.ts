@@ -41,6 +41,7 @@ import {
   ALL_EXPANSION_VICTORY_BINDINGS,
   PHASE2A_ROLE_IDS,
   PHASE2_IMPLEMENTED_EXPANSION_ROLE_IDS,
+  STARTER_FIFTY_SIX_EXPANSION_ROLE_IDS,
   STARTER_FORTY_EIGHT_EXPANSION_ROLE_IDS,
   STARTER_SIXTEEN_EXPANSION_ROLE_IDS,
   STARTER_THIRTY_EIGHT_EXPANSION_ROLE_IDS,
@@ -104,6 +105,11 @@ export interface CharacterRegistryEntry {
   readonly uiMeta: CharacterUiPresentation;
 }
 
+export type RulesetReleaseStatus =
+  | 'IMPLEMENTED'
+  | 'INTERNAL_VALIDATED'
+  | 'PUBLIC_RELEASE_APPROVED';
+
 export interface RulesetDefinition {
   readonly id: BoardGameRulesetId;
   readonly label: string;
@@ -111,6 +117,8 @@ export interface RulesetDefinition {
   readonly description: string;
   readonly availability: BoardGameRulesetAvailability;
   readonly enabledInProduction: boolean;
+  /** Phase 7 (Section 28): Phân tách rõ trạng thái hoàn thiện kỹ thuật vs kiểm chứng nội bộ vs mở rộng public. */
+  readonly releaseStatus?: RulesetReleaseStatus;
   readonly isExperimental?: boolean;
   readonly allowExperimentalHouseRules?: boolean;
   readonly includedExpansions: readonly CharacterExpansionId[];
@@ -440,6 +448,7 @@ export const DEFAULT_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
       '10 nhân vật chuẩn hộp cơ bản Shadow Hunters (3 Đội Săn Đêm · 3 Hội Bóng Đêm · 4 Kẻ Độc Hành). Đã kiểm thử đầy đủ.',
     availability: 'available',
     enabledInProduction: true,
+    releaseStatus: 'PUBLIC_RELEASE_APPROVED',
     includedExpansions: ['classic'],
     expectedCharacterCount: 10,
     catalogVersion: BOARD_GAME_CATALOG_VERSION,
@@ -449,9 +458,11 @@ export const DEFAULT_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
     label: 'Expansion 1 (Classic + 26 tướng)',
     shortLabel: 'Expansion 1',
     description:
-      'Bổ sung 26 nhân vật Mở rộng 1 (8 Hunter · 9 Shadow · 9 Neutral). Đang ở giai đoạn hoàn thiện kỹ năng.',
+      'Bổ sung 26 nhân vật Mở rộng 1 (8 Hunter · 9 Shadow · 9 Neutral). Đã hoàn thiện kỹ thuật (IMPLEMENTED), khóa trên production chờ Human Beta Playtest.',
     availability: 'coming-soon',
     enabledInProduction: false,
+    releaseStatus: 'IMPLEMENTED',
+    allowExperimentalHouseRules: true,
     includedExpansions: ['classic', 'expansion-1'],
     expectedCharacterCount: 36,
     catalogVersion: BOARD_GAME_CATALOG_VERSION,
@@ -461,9 +472,11 @@ export const DEFAULT_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
     label: 'Expansion 2 (Classic + 30 tướng)',
     shortLabel: 'Expansion 2',
     description:
-      'Bổ sung 30 nhân vật Mở rộng 2 (9 Hunter · 9 Shadow · 12 Neutral). Đang ở giai đoạn hoàn thiện kỹ năng.',
+      'Bổ sung 30 nhân vật Mở rộng 2 (9 Hunter · 9 Shadow · 12 Neutral). Đã hoàn thiện kỹ thuật (IMPLEMENTED), khóa trên production chờ Human Beta Playtest.',
     availability: 'coming-soon',
     enabledInProduction: false,
+    releaseStatus: 'IMPLEMENTED',
+    allowExperimentalHouseRules: true,
     includedExpansions: ['classic', 'expansion-2'],
     expectedCharacterCount: 40,
     catalogVersion: BOARD_GAME_CATALOG_VERSION,
@@ -473,9 +486,11 @@ export const DEFAULT_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
     label: 'Full Expansion (Toàn bộ 66 tướng)',
     shortLabel: 'Full 66',
     description:
-      'Tổng hợp toàn bộ 66 nhân vật (10 Classic + 26 MR1 + 30 MR2). Chỉ mở khi toàn bộ kỹ năng & điều kiện thắng được kiểm chứng.',
+      'Tổng hợp toàn bộ 66 nhân vật (10 Classic + 26 MR1 + 30 MR2). Đã hoàn thiện kỹ thuật (IMPLEMENTED), khóa cứng trên production chờ phê duyệt sau Human Beta Playtest.',
     availability: 'coming-soon',
     enabledInProduction: false,
+    releaseStatus: 'IMPLEMENTED',
+    allowExperimentalHouseRules: true,
     includedExpansions: ['classic', 'expansion-1', 'expansion-2'],
     expectedCharacterCount: 66,
     catalogVersion: BOARD_GAME_CATALOG_VERSION,
@@ -589,6 +604,25 @@ export const EXPERIMENTAL_RULESET_DEFINITIONS: readonly RulesetDefinition[] = [
       ...STARTER_FORTY_EIGHT_EXPANSION_ROLE_IDS,
     ],
     expectedCharacterCount: 58,
+    catalogVersion: BOARD_GAME_CATALOG_VERSION,
+  },
+  {
+    id: 'starter-fifty-six',
+    label: 'Starter Fifty-Six (Thử nghiệm Full Catalog · 10 Classic + 56 Tướng Mở rộng)',
+    shortLabel: 'Starter 56 (Full Exp)',
+    description:
+      'Pool thử nghiệm nội bộ hoàn thiện toàn bộ 66 nhân vật (10 Classic + 56 Tướng Mở rộng: 20 Hunter · 21 Shadow · 25 Neutral; đủ Tier-4). Tắt hoàn toàn trên production.',
+    availability: 'experimental',
+    enabledInProduction: false,
+    releaseStatus: 'INTERNAL_VALIDATED',
+    isExperimental: true,
+    allowExperimentalHouseRules: true,
+    includedExpansions: ['classic', 'expansion-1', 'expansion-2'],
+    explicitCharacterIds: [
+      ...ROLES_CATALOG.map((r) => r.id),
+      ...STARTER_FIFTY_SIX_EXPANSION_ROLE_IDS,
+    ],
+    expectedCharacterCount: 66,
     catalogVersion: BOARD_GAME_CATALOG_VERSION,
   },
 ];
@@ -773,6 +807,71 @@ export class RulesetRegistry {
         mistOrder,
         wanderer,
       },
+    };
+  }
+
+  /**
+   * Kiểm định nội bộ cho các gói mở rộng (`expansion-1`, `expansion-2`, `full-expansion`)
+   * trong bộ kiểm thử QA — TUYỆT ĐỐI KHÔNG mở khóa production (`enabledInProduction` vẫn = false!).
+   */
+  validatePackInternally(
+    packId: 'expansion-1' | 'expansion-2' | 'full-expansion',
+    playerCount: number = BOARD_GAME_MIN_PLAYERS,
+  ): {
+    readonly ok: boolean;
+    readonly releaseStatus: RulesetReleaseStatus;
+    readonly enabledInProduction: boolean;
+    readonly totalPlayable: number;
+    readonly expectedCharacterCount: number;
+    readonly missingIds: readonly string[];
+    readonly pools: PlayableRolePools;
+  } {
+    const def = this.rulesetsById.get(packId);
+    if (!def) {
+      return {
+        ok: false,
+        releaseStatus: 'IMPLEMENTED',
+        enabledInProduction: false,
+        totalPlayable: 0,
+        expectedCharacterCount: 0,
+        missingIds: [],
+        pools: { lanternGuard: [], mistOrder: [], wanderer: [] },
+      };
+    }
+    const allInRuleset = this.resolveEntriesForDefinition(def);
+    const playabilityOpts: CharacterPlayabilityOptions = { allowExperimentalHouseRules: true };
+    const playable = allInRuleset.filter((entry) => isCharacterPlayable(entry, playabilityOpts));
+    const missing = allInRuleset
+      .filter((entry) => !isCharacterPlayable(entry, playabilityOpts))
+      .map((e) => e.id);
+    const clampedCount = Math.max(
+      BOARD_GAME_MIN_PLAYERS,
+      Math.min(BOARD_GAME_MAX_PLAYERS, Math.floor(playerCount)),
+    );
+    const split = getRoleDistribution(clampedCount);
+    const lanternGuard = playable
+      .filter((c) => c.metadata.faction === 'lantern-guard')
+      .map((c) => c.id);
+    const mistOrder = playable
+      .filter((c) => c.metadata.faction === 'mist-order')
+      .map((c) => c.id);
+    const wanderer = playable
+      .filter((c) => c.metadata.faction === 'wanderer')
+      .map((c) => c.id);
+    const ok =
+      playable.length === def.expectedCharacterCount &&
+      missing.length === 0 &&
+      lanternGuard.length >= split.lanternGuard &&
+      mistOrder.length >= split.mistOrder &&
+      wanderer.length >= split.wanderer;
+    return {
+      ok,
+      releaseStatus: def.releaseStatus ?? 'IMPLEMENTED',
+      enabledInProduction: def.enabledInProduction,
+      totalPlayable: playable.length,
+      expectedCharacterCount: def.expectedCharacterCount,
+      missingIds: missing,
+      pools: { lanternGuard, mistOrder, wanderer },
     };
   }
 

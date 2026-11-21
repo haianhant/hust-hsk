@@ -476,6 +476,62 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
     motif: 'Song Quang Định Mệnh',
     shortAbility: 'Nhân vật nữ đầu tiên lộ diện trở thành Vợ (cấm tấn công vợ · cùng sống cuối trận; không có vợ thì chết trước hết trận)',
   },
+  exp1_lloyd: {
+    codeName: 'Lloyd',
+    title: 'Hunter MR1 · 12 HP',
+    accentHex: '#22d3ee',
+    motif: 'Khiên Hy Sinh Xuyên Bàn',
+    shortAbility: 'Lặp lại (khi đã lộ diện): Tự nhận 2 sát thương không thể chặn để hủy bất kỳ đòn tấn công nào trên toàn bàn trước khi đổ xúc xắc',
+  },
+  exp1_vengeful_spirit: {
+    codeName: 'Vengeful Spirit',
+    title: 'Shadow MR1 · 13 HP',
+    accentHex: '#a855f7',
+    motif: 'Hồn Bóng Kế Thừa',
+    shortAbility: '1 lần/trận (tùy chọn): Lộ diện sau 1 cái chết vĩnh viễn để sao chép kỹ năng hiệu lực của nạn nhân (trạng thái lượt dùng mới)',
+  },
+  exp1_voodoo: {
+    codeName: 'Voodoo',
+    title: 'Shadow MR1 · 13 HP',
+    accentHex: '#9333ea',
+    motif: 'Sợi Chỉ Con Rối',
+    shortAbility: '1 lần/trận (đầu lượt, đã lộ diện): Chọn 1 người chơi khác để chiếm quyền hành động công khai ở lượt kế của họ (không xem vai hay dùng kỹ năng)',
+  },
+  exp1_undead: {
+    codeName: 'Undead',
+    title: 'Shadow MR1 · 11 HP',
+    accentHex: '#4ade80',
+    motif: 'Mộ Thạch Hồi Sinh',
+    shortAbility: 'Chỉ lộ diện khi chịu đòn chí tử lần đầu → Ngủ đông giữ nguyên đồ & hồi sinh với 6 HP vào đầu lượt kế tiếp của chính mình (1 lần/trận)',
+  },
+  exp1_antimony: {
+    codeName: 'Antimony',
+    title: 'Neutral MR1 · 8 HP',
+    accentHex: '#38bdf8',
+    motif: 'Gương Nhân Bản Song Sắc',
+    shortAbility: 'Bắt buộc ở cái chết vĩnh viễn đầu tiên của người khác: Lộ diện, sao chép cả kỹ năng hiệu lực lẫn điều kiện thắng của nạn nhân (giữ phe Neutral)',
+  },
+  exp2_cain: {
+    codeName: 'Cain',
+    title: 'Neutral MR2 · 11 HP',
+    accentHex: '#f59e0b',
+    motif: 'Thiên Bình Song Phe',
+    shortAbility: '1 lần/trận: Hồi máu bằng số người đang sống & thêm điều kiện thắng "Khi Cain chết" cho CẢ Hunter lẫn Shadow · Tự thắng khi đủ phe bị loại',
+  },
+  exp2_bonnie: {
+    codeName: 'Bonnie',
+    title: 'Neutral MR2 · 10 HP',
+    accentHex: '#e11d48',
+    motif: 'Nghi Thức Kế Thừa',
+    shortAbility: 'Khi kết liễu 1 Shadow: Lộ diện & chuyển phe động sang Hội Bóng Đêm ngay trước bước kiểm tra thắng (kể cả khi đó là Shadow cuối cùng)',
+  },
+  exp2_nc_soldier: {
+    codeName: 'N.C. Soldier',
+    title: 'Neutral MR2 · 13 HP',
+    accentHex: '#eab308',
+    motif: 'Liên Minh Chiêu Mộ',
+    shortAbility: 'Thay đòn đánh lên Neutral đã lộ diện: Nếu mục tiêu sống & có ≥ 5 vết thương → gia nhập liên minh · Thắng khi chiêu mộ hết Neutral & cầm 3 vũ khí',
+  },
 };
 
 export interface LocationVisualMeta {

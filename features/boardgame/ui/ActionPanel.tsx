@@ -305,6 +305,43 @@ export function ActionPanel({
                 🚨 Đếm ngược ô 7 (April)
               </span>
             )}
+            {selectedPlayer.lifecycleState === 'DORMANT_PENDING_REVIVE' && (
+              <span className="font-bold text-emerald-300 whitespace-nowrap">
+                🧟 Ngủ đông (Hồi sinh 6 HP lượt sau)
+              </span>
+            )}
+            {selectedPlayer.lifecycleState === 'REVIVED' && (
+              <span className="font-bold text-lime-300 whitespace-nowrap">
+                🧟 Đã hồi sinh
+              </span>
+            )}
+            {selectedPlayer.effectiveFaction &&
+              selectedPlayer.revealedFaction &&
+              selectedPlayer.effectiveFaction !== selectedPlayer.revealedFaction && (
+                <span className="font-bold text-rose-300 whitespace-nowrap">
+                  🖤 Đổi phe → {FACTION_LABELS[selectedPlayer.effectiveFaction]}
+                </span>
+              )}
+            {selectedPlayer.copiedSkillRoleId && (
+              <span className="font-bold text-cyan-300 whitespace-nowrap">
+                🪞 Sao chép: {getRoleDesign(selectedPlayer.copiedSkillRoleId as Parameters<typeof getRoleDesign>[0]).name}
+              </span>
+            )}
+            {selectedPlayer.allianceId && (
+              <span className="font-bold text-amber-300 whitespace-nowrap">
+                🎖️ Liên minh Chiêu Mộ
+              </span>
+            )}
+            {publicGame.cainDeathModifierActivePlayerIds?.includes(selectedPlayer.playerId) && (
+              <span className="font-bold text-amber-200 whitespace-nowrap">
+                ⚖️ Nước cờ Cain (Chết = Đồng thắng 2 phe)
+              </span>
+            )}
+            {publicGame.controlledTurn?.activePlayerId === selectedPlayer.playerId && (
+              <span className="font-bold text-purple-300 whitespace-nowrap">
+                🎭 Lượt bị điều khiển (Con Rối)
+              </span>
+            )}
             {gearNames.length > 0 && (
               <span className="font-semibold text-sky-200 truncate max-w-[260px]">
                 🎒 {gearNames.slice(0, 2).join(', ')}
@@ -545,14 +582,31 @@ export function ActionPanel({
     );
   }
 
-  const isMyTurn =
-    !publicGame.winnerLabel &&
-    publicGame.turnPhase !== 'ENDED' &&
-    publicGame.activePlayerId === selfPlayer.playerId;
-
   const activePlayer = publicGame.players.find(
     (p) => p.playerId === publicGame.activePlayerId,
   );
+  const controlledTurn = publicGame.controlledTurn ?? null;
+  const isVoodooControllingActiveTurn = Boolean(
+    controlledTurn &&
+      controlledTurn.activePlayerId === publicGame.activePlayerId &&
+      controlledTurn.controllerPlayerId === selfPlayer.playerId &&
+      controlledTurn.controllerPlayerId !== controlledTurn.activePlayerId &&
+      !controlledTurn.pausedForOwnerDecision,
+  );
+  const isHijackedByVoodoo = Boolean(
+    controlledTurn &&
+      controlledTurn.activePlayerId === selfPlayer.playerId &&
+      controlledTurn.controllerPlayerId !== selfPlayer.playerId &&
+      !controlledTurn.pausedForOwnerDecision,
+  );
+  const isMyTurn =
+    !publicGame.winnerLabel &&
+    publicGame.turnPhase !== 'ENDED' &&
+    ((publicGame.activePlayerId === selfPlayer.playerId && !isHijackedByVoodoo) ||
+      isVoodooControllingActiveTurn);
+  // Khi Voodoo điều khiển lượt nạn nhân, mọi vị trí/trang bị/phạm vi hiển thị dựa trên trạng thái công khai của nạn nhân (KHÔNG lộ bài kín của nạn nhân)
+  const effectiveActorPlayer =
+    isVoodooControllingActiveTurn && activePlayer ? activePlayer : selfPlayer;
 
   const renderPrivateReactionPolicyBar = () => {
     const hasClairvoyantReveals = Boolean(
@@ -623,6 +677,9 @@ export function ActionPanel({
 
   if (!isMyTurn) {
     const contextBar = renderTacticalContextBar();
+    const controllerPlayer = controlledTurn
+      ? publicGame.players.find((p) => p.playerId === controlledTurn.controllerPlayerId) ?? null
+      : null;
     return (
       <section
         data-testid="bg-waiting-turn-banner"
@@ -630,10 +687,22 @@ export function ActionPanel({
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs sm:text-sm font-bold text-slate-100">
-            ⏳ Đang chờ lượt của{' '}
-            <span className="text-amber-300">
-              {activePlayer?.displayName ?? 'người chơi khác'}
-            </span>
+            {isHijackedByVoodoo ? (
+              <>
+                🎭 Lượt của bạn đang bị{' '}
+                <span className="text-purple-300">
+                  {controllerPlayer?.displayName ?? 'Voodoo'}
+                </span>{' '}
+                điều khiển (Con Rối — bài kín và kỹ năng của bạn vẫn được bảo vệ)
+              </>
+            ) : (
+              <>
+                ⏳ Đang chờ lượt của{' '}
+                <span className="text-amber-300">
+                  {activePlayer?.displayName ?? 'người chơi khác'}
+                </span>
+              </>
+            )}
           </p>
           <span className="text-xs font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/35 px-2.5 py-0.5 rounded-xl">
             ∞ Tự do · Tự động tới lượt bạn ngay khi xong
@@ -645,9 +714,9 @@ export function ActionPanel({
     );
   }
 
-  const currentLoc = getLocationDefinition(selfPlayer.location);
+  const currentLoc = getLocationDefinition(effectiveActorPlayer.location);
   const pairedLoc = getLocationDefinition(
-    getPairedLocationInCluster(selfPlayer.location, clusterPairs),
+    getPairedLocationInCluster(effectiveActorPlayer.location, clusterPairs),
   );
   const roleDesign = getRoleDesign(privateView.roleId);
   const {
@@ -657,19 +726,28 @@ export function ActionPanel({
     validHealCardTarget,
     validStealTarget,
   } = resolveActionTargets({
-    selfPlayer,
+    selfPlayer: effectiveActorPlayer,
     alivePlayers,
-    aliveOthers,
-    attackableTargets,
+    aliveOthers: alivePlayers.filter((p) => p.playerId !== effectiveActorPlayer.playerId),
+    attackableTargets: isVoodooControllingActiveTurn
+      ? alivePlayers.filter((p) => {
+          if (p.playerId === effectiveActorPlayer.playerId) return false;
+          const actorHasHandgun = effectiveActorPlayer.equipped.some((eq) => eq.id === 'ev-05');
+          const same = areInSameCluster(effectiveActorPlayer.location, p.location, clusterPairs);
+          if (!(actorHasHandgun ? !same : same)) return false;
+          if (isPlayerProtectedAsUdi(p)) return false;
+          return true;
+        })
+      : attackableTargets,
     selectedTargetId,
     healTargetId,
   });
   const equippedTargets = aliveOthers.filter((p) => p.equipped.length > 0);
-  const hasAnyHandCard = privateView.hand.length > 0;
-  const hasMasamune = selfPlayer.equipped.some((eq) => eq.id === 'ev-01');
-  const hasMachineGun = selfPlayer.equipped.some((eq) => eq.id === 'ev-06');
-  const hasHandgun = selfPlayer.equipped.some((eq) => eq.id === 'ev-05');
-  const attacksThisTurn = selfPlayer.attacksThisTurn ?? 0;
+  const hasAnyHandCard = isVoodooControllingActiveTurn ? false : privateView.hand.length > 0;
+  const hasMasamune = effectiveActorPlayer.equipped.some((eq) => eq.id === 'ev-01');
+  const hasMachineGun = effectiveActorPlayer.equipped.some((eq) => eq.id === 'ev-06');
+  const hasHandgun = effectiveActorPlayer.equipped.some((eq) => eq.id === 'ev-05');
+  const attacksThisTurn = effectiveActorPlayer.attacksThisTurn ?? 0;
 
   const charlesFeastTarget = selfPlayer.lastAttackTargetId
     ? attackableTargets.find((p) => p.playerId === selfPlayer.lastAttackTargetId) ?? null
@@ -1308,11 +1386,17 @@ export function ActionPanel({
 
   const fallenRevealBlocked =
     !privateView.revealed && privateView.roleId === 'exp1_fallen' && privateView.hp < 8;
+  const undeadRevealBlocked =
+    !privateView.revealed &&
+    privateView.roleId === 'exp1_undead' &&
+    selfPlayer.lifecycleState !== 'REVIVED';
   const canManualReveal =
+    !isVoodooControllingActiveTurn &&
     !privateView.revealed &&
     privateView.roleId !== 'lang-tien-phong' &&
-    !fallenRevealBlocked;
-  const secondaryActionAvailable = canManualReveal || canUseSkillNow;
+    !fallenRevealBlocked &&
+    !undeadRevealBlocked;
+  const secondaryActionAvailable = !isVoodooControllingActiveTurn && (canManualReveal || canUseSkillNow);
 
   // Render nội dung Pha 2 (LOCATION_ACTION) với đúng 1 Primary CTA
   const renderLocationPhaseContent = () => {
@@ -1606,9 +1690,18 @@ export function ActionPanel({
       {/* HÀNG 1: HƯỚNG DẪN NGẮN THEO PHA + NÚT MENU HÀNH ĐỘNG PHỤ (LẬT VAI / KỸ NĂNG) */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="shrink-0 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs font-black">
-            🎯 LƯỢT CỦA BẠN
-          </span>
+          {isVoodooControllingActiveTurn ? (
+            <span
+              data-testid="bg-voodoo-control-badge"
+              className="shrink-0 px-2 py-0.5 rounded-full bg-purple-500/25 border border-purple-400/60 text-purple-100 text-xs font-black"
+            >
+              🎭 ĐIỀU KHIỂN LƯỢT {effectiveActorPlayer.displayName.toUpperCase()}
+            </span>
+          ) : (
+            <span className="shrink-0 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs font-black">
+              🎯 LƯỢT CỦA BẠN
+            </span>
+          )}
           <p
             data-testid="bg-action-guidance"
             className="text-xs sm:text-sm font-semibold text-slate-200 truncate"
@@ -1618,7 +1711,8 @@ export function ActionPanel({
           </p>
         </div>
 
-        {/* MENU MỞ RỘNG CHO HÀNH ĐỘNG PHỤ */}
+        {/* MENU MỞ RỘNG CHO HÀNH ĐỘNG PHỤ (ẩn khi Voodoo đang điều khiển lượt nạn nhân để cấm REVEAL/USE_SKILL/TRANSFER!) */}
+        {!isVoodooControllingActiveTurn && (
         <div ref={secondaryWrapRef} className="relative shrink-0">
           <button
             type="button"
@@ -1708,7 +1802,9 @@ export function ActionPanel({
                       ? `✅ Đã lật vai: ${roleDesign.name}`
                       : fallenRevealBlocked
                         ? `🔒 Fallen chỉ được tự lật vai khi còn ≥ 8 HP (hiện ${privateView.hp}/${privateView.maxHp} HP)`
-                        : '🔒 Nội tại Đạt "Cảm Tử": tự lộ khi có người đầu tiên gục'}
+                        : undeadRevealBlocked
+                          ? '🔒 Undead không thể tự lật vai trước khi kích hoạt hồi sinh lần đầu'
+                          : '🔒 Nội tại Đạt "Cảm Tử": tự lộ khi có người đầu tiên gục'}
                   </p>
                 )}
               </div>
@@ -1828,6 +1924,7 @@ export function ActionPanel({
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* THANH THÔNG TIN CHIẾN THUẬT KHI CHỌN NGƯỜI CHƠI HOẶC ĐỊA ĐIỂM */}
