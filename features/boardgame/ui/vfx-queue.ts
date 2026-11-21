@@ -16,6 +16,7 @@ import type {
   BoardGamePublicPlayerView,
   BoardGamePrivateGameView,
   BoardGameRoleId,
+  BoardGameStructuredVisualEvent,
 } from '../../../shared/contracts/boardgame';
 import { getRoleDesign } from '../domain/roles';
 import { MIDNIGHT_CHARACTER_ART } from './midnight-noir-tokens';
@@ -31,7 +32,25 @@ export type CombatVfxEffectKind =
   | 'COUNTER_STRIKE'
   | 'HEAL_AURA'
   | 'SHIELD_GUARD'
-  | 'STEAL_TETHER';
+  | 'STEAL_TETHER'
+  // Phase 8C — Tier-4 Signature VFX (8 nhân vật biểu tượng)
+  | 'LLOYD_INTERCEPT'
+  | 'VENGEFUL_ECHO'
+  | 'VOODOO_PUPPET'
+  | 'UNDEAD_SHROUD'
+  | 'UNDEAD_REVIVE'
+  | 'ANTIMONY_MIRROR'
+  | 'CAIN_POWER_PLAY'
+  | 'BONNIE_SUCCESSION'
+  | 'NC_SOLDIER_RECRUIT'
+  // Phase 8C — Tier-3 & Reusable Effect Families
+  | 'REDIRECT_ARC'
+  | 'SHADOW_NOVA'
+  | 'MARK_SEAL'
+  | 'BOND_TETHER'
+  | 'CARD_CASCADE'
+  | 'FINISHER_SLASH'
+  | 'ANGEL_SANCTUARY';
 
 export type FloatingTextVariant =
   | 'damage'
@@ -168,6 +187,11 @@ export interface CombatVfxVisualEvent {
   isCritical?: boolean;
   isMiss?: boolean;
   damageAmount?: number;
+  /** Phase 8C: Khóa hiệu ứng có cấu trúc từ server (VD: 'lloyd_interrupt', 'arnold_reflect', 'nc_soldier_recruit'). */
+  effectKey?: string;
+  outcome?: 'success' | 'failed' | 'blocked' | 'cancelled';
+  copiedRoleName?: string | null;
+  cardCount?: number;
 }
 
 export type FloatingTextSyncGroup = 'attack' | 'counter' | 'shield' | 'heal' | 'steal';
@@ -201,6 +225,8 @@ export interface CinematicCutInVisualEvent {
   matchOutcome?: MatchOutcomeView | null;
   winnerFactionLabel?: string | null;
   winReason?: string | null;
+  /** Phase 8C — Hỗ trợ hiển thị MultiFactionVictory song phe (Cain: Hunter + Shadow đồng thắng) */
+  winningFactions?: BoardGameFactionId[];
   /** Phase 4 — Opening & Secret Role Deal metadata (tuyệt đối chỉ chứa vai riêng của chính người xem, null với Spectator) */
   openingPlayerCount?: number;
   openingFirstPlayerName?: string | null;
@@ -622,7 +648,21 @@ export function resolveCombatSequenceTimings(
   const hitStopStartMs = travelEndMs;
 
   const isNonOffensive =
-    effect === 'HEAL_AURA' || effect === 'SHIELD_GUARD' || effect === 'STEAL_TETHER';
+    effect === 'HEAL_AURA' ||
+    effect === 'SHIELD_GUARD' ||
+    effect === 'STEAL_TETHER' ||
+    effect === 'LLOYD_INTERCEPT' ||
+    effect === 'VENGEFUL_ECHO' ||
+    effect === 'VOODOO_PUPPET' ||
+    effect === 'UNDEAD_SHROUD' ||
+    effect === 'UNDEAD_REVIVE' ||
+    effect === 'ANTIMONY_MIRROR' ||
+    effect === 'CAIN_POWER_PLAY' ||
+    effect === 'BONNIE_SUCCESSION' ||
+    effect === 'ANGEL_SANCTUARY' ||
+    effect === 'BOND_TETHER' ||
+    effect === 'CARD_CASCADE' ||
+    effect === 'MARK_SEAL';
   const isMiss = Boolean(options?.isMiss);
   const hitStopDurationMs =
     isNonOffensive || isMiss
@@ -752,9 +792,23 @@ export function resolveNonOverlappingPopupPos(
   return bestPos;
 }
 
+function collectNewStructuredVisualEvents(
+  prev: BoardGamePublicGameView,
+  next: BoardGamePublicGameView,
+): readonly BoardGameStructuredVisualEvent[] {
+  const nextList = next.visualEvents;
+  if (!Array.isArray(nextList) || nextList.length === 0) return [];
+  const prevList = prev.visualEvents;
+  if (!Array.isArray(prevList) || prevList.length === 0) return nextList;
+  const prevMaxSeq = prevList.reduce((mx, e) => (e.seq > mx ? e.seq : mx), 0);
+  return nextList.filter((e) => e.seq > prevMaxSeq);
+}
+
 /**
  * Suy xuất danh sách hiệu ứng có ID duy nhất và thứ tự rõ ràng từ 2 ảnh chụp liên tiếp
  * của state trên server (`prev` -> `next`), tôn trọng tuyệt đối bảo mật vai ẩn & bài kín.
+ * Phase 8C: Ưu tiên tiêu thụ `next.visualEvents` (typed structured visual events) trước,
+ * chỉ rơi về suy diễn log cũ khi snapshot không có `visualEvents` hoặc cho sự kiện chưa phủ.
  */
 export function extractVisualEventsFromDiff(
   prev: BoardGamePublicGameView,
@@ -769,6 +823,7 @@ export function extractVisualEventsFromDiff(
   for (const p of prev.players) prevById.set(p.playerId, p);
 
   const newLogs = collectNewLogs(prev, next);
+  const newStructured = collectNewStructuredVisualEvents(prev, next);
   const watermark = newLogs.length > 0 ? newLogs[newLogs.length - 1].id : `t${next.turnNumber}-p${next.turnPhase}`;
   const mkId = (suffix: string) => `${next.matchId}::${next.turnNumber}::${watermark}::${suffix}`;
 
@@ -795,11 +850,687 @@ export function extractVisualEventsFromDiff(
     }
   }
 
-  // Theo dõi liệu log đã tạo Combat VFX chưa để tránh trùng hoặc bổ sung hợp lý
+  // Theo dõi liệu sự kiện cấu trúc / log đã tạo hiệu ứng tương ứng chưa để chống trùng tuyệt đối
   let hasAttackOrExplosionVfx = false;
+  let structuredCancelledAttack = false;
   const blockedTargets = new Set<string>();
   const counterDamagedIds = new Set<string>();
   const revealedActorIdsThisTick = new Set<string>();
+  const structuredDormantOrElimIds = new Set<string>();
+  const structuredHealedIds = new Set<string>();
+  const structuredSkillActorIds = new Set<string>();
+
+  // 1B. PHASE 8C: TIÊU THỤ SỰ KIỆN HÌNH ẢNH CÓ CẤU TRÚC TỪ SERVER (ƯU TIÊN SỐ 1)
+  for (const se of newStructured) {
+    const actorId = se.actorPlayerId;
+    const actorPub = actorId ? nextById.get(actorId) : undefined;
+    const safeRoleId =
+      se.publicRoleId && (actorPub?.revealedRoleId || next.winnerLabel)
+        ? se.publicRoleId
+        : null;
+    const safeFaction =
+      se.publicFaction && (actorPub?.revealedFaction || next.winnerLabel)
+        ? se.publicFaction
+        : (actorPub?.revealedFaction ?? null);
+    const targets = se.targetPlayerIds.length > 0 ? [...se.targetPlayerIds] : actorId ? [actorId] : [];
+
+    switch (se.kind) {
+      case 'ATTACK_CANCELLED': {
+        structuredCancelledAttack = true;
+        hasAttackOrExplosionVfx = true;
+        if (actorId) structuredSkillActorIds.add(actorId);
+        events.push({
+          id: `${se.id}::lloyd-intercept`,
+          kind: 'COMBAT_VFX',
+          order: 38,
+          durationMs: scaleDuration(1040, reduced),
+          effect: 'LLOYD_INTERCEPT',
+          sourcePlayerId: actorId,
+          targetPlayerIds: targets,
+          shake: 'light',
+          roleId: safeRoleId ?? 'exp1_lloyd',
+          effectKey: se.effectKey,
+          outcome: 'cancelled',
+          damageAmount: se.amount ?? 2,
+        });
+        if (actorId && actorPub?.revealedRoleId) {
+          const rDesign = getRoleDesign(actorPub.revealedRoleId);
+          events.push({
+            id: `${se.id}::lloyd-cutin`,
+            kind: 'CINEMATIC_CUTIN',
+            order: 32,
+            durationMs: scaleDuration(1180, reduced),
+            bannerType: 'ULTIMATE_SKILL',
+            title: 'NGẮT ĐÒN',
+            subtitle: `${actorPub.displayName} hy sinh ${se.amount ?? 2} HP hủy toàn bộ đòn tấn công!`,
+            faction: safeFaction,
+            roleId: actorPub.revealedRoleId,
+            roleName: rDesign.name,
+            portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
+            skillName: 'LẠC LỐI · HỦY ĐÒN',
+            actorId,
+          });
+        }
+        const primaryCancelledTarget = targets[0] ?? actorId;
+        if (primaryCancelledTarget) {
+          events.push({
+            id: `${se.id}::cancelled-txt`,
+            kind: 'FLOATING_TEXT',
+            order: 49,
+            durationMs: scaleDuration(920, reduced),
+            targetPlayerId: primaryCancelledTarget,
+            label: se.label ?? 'CANCELLED',
+            variant: 'block',
+            syncGroup: 'shield',
+          });
+        }
+        break;
+      }
+
+      case 'COPY_SKILL_APPLIED': {
+        if (!actorId || !actorPub?.revealedRoleId) break;
+        structuredSkillActorIds.add(actorId);
+        const isAntimony = se.effectKey === 'antimony_copy' || safeRoleId === 'exp1_antimony';
+        const copiedName =
+          se.publicCopiedRoleId ? getRoleDesign(se.publicCopiedRoleId).name : (se.label ?? 'Kỹ năng');
+        const rDesign = getRoleDesign(actorPub.revealedRoleId);
+        events.push({
+          id: `${se.id}::copy-fx`,
+          kind: 'COMBAT_VFX',
+          order: 41,
+          durationMs: scaleDuration(1040, reduced),
+          effect: isAntimony ? 'ANTIMONY_MIRROR' : 'VENGEFUL_ECHO',
+          sourcePlayerId: targets[0] ?? actorId,
+          targetPlayerIds: [actorId],
+          shake: 'light',
+          roleId: actorPub.revealedRoleId,
+          effectKey: se.effectKey,
+          copiedRoleName: copiedName,
+        });
+        events.push({
+          id: `${se.id}::copy-cutin`,
+          kind: 'CINEMATIC_CUTIN',
+          order: 33,
+          durationMs: scaleDuration(1220, reduced),
+          bannerType: 'ULTIMATE_SKILL',
+          title: isAntimony ? 'NHÂN BẢN' : 'LINH HỒN BẤT DIỆT',
+          subtitle: `${actorPub.displayName} kế thừa kỹ năng công khai: ${copiedName}`,
+          faction: safeFaction,
+          roleId: actorPub.revealedRoleId,
+          roleName: rDesign.name,
+          portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
+          skillName: isAntimony ? 'ANTIMONY · PHẢN CHIẾU' : 'VENGEFUL SPIRIT · ĐỒNG VỌNG',
+          actorId,
+        });
+        events.push({
+          id: `${se.id}::copy-txt`,
+          kind: 'FLOATING_TEXT',
+          order: 52,
+          durationMs: scaleDuration(900, reduced),
+          targetPlayerId: actorId,
+          label: `SAO CHÉP`,
+          variant: 'counter',
+          syncGroup: 'counter',
+        });
+        break;
+      }
+
+      case 'TURN_HIJACK_STARTED': {
+        if (actorId) structuredSkillActorIds.add(actorId);
+        const victimId = targets[0] ?? actorId;
+        events.push({
+          id: `${se.id}::voodoo-puppet`,
+          kind: 'COMBAT_VFX',
+          order: 36,
+          durationMs: scaleDuration(1020, reduced),
+          effect: 'VOODOO_PUPPET',
+          sourcePlayerId: actorId,
+          targetPlayerIds: victimId ? [victimId] : [],
+          shake: 'none',
+          roleId: safeRoleId ?? 'exp1_voodoo',
+          effectKey: se.effectKey,
+        });
+        if (victimId) {
+          events.push({
+            id: `${se.id}::voodoo-txt`,
+            kind: 'FLOATING_TEXT',
+            order: 51,
+            durationMs: scaleDuration(920, reduced),
+            targetPlayerId: victimId,
+            label: se.label ?? 'CON RỐI',
+            variant: 'counter',
+            syncGroup: 'counter',
+          });
+        }
+        break;
+      }
+
+      case 'TURN_HIJACK_ENDED': {
+        // Kết thúc sạch trạng thái con rối (UI tự gỡ overlay từ controlledTurn === null)
+        break;
+      }
+
+      case 'PLAYER_DORMANT': {
+        if (actorId) {
+          structuredDormantOrElimIds.add(actorId);
+          structuredSkillActorIds.add(actorId);
+          // Undead ngủ đông là trạng thái tách biệt hoàn toàn khỏi HẠ GỤC — không phát ELIMINATION hay LOOT VFX!
+          events.push({
+            id: `${se.id}::undead-shroud`,
+            kind: 'COMBAT_VFX',
+            order: 44,
+            durationMs: scaleDuration(1080, reduced),
+            effect: 'UNDEAD_SHROUD',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [actorId],
+            shake: 'light',
+            roleId: safeRoleId ?? 'exp1_undead',
+            effectKey: se.effectKey,
+          });
+          events.push({
+            id: `${se.id}::dormant-txt`,
+            kind: 'FLOATING_TEXT',
+            order: 53,
+            durationMs: scaleDuration(980, reduced),
+            targetPlayerId: actorId,
+            label: se.label ?? 'NGỦ ĐÔNG',
+            variant: 'counter',
+            syncGroup: 'shield',
+          });
+          if (actorPub?.revealedRoleId) {
+            const rDesign = getRoleDesign(actorPub.revealedRoleId);
+            events.push({
+              id: `${se.id}::dormant-cutin`,
+              kind: 'CINEMATIC_CUTIN',
+              order: 56,
+              durationMs: scaleDuration(1300, reduced),
+              bannerType: 'ULTIMATE_SKILL',
+              title: 'NGỦ ĐÔNG CHỜ HỒI SINH',
+              subtitle: `${actorPub.displayName} giữ nguyên trang bị — sẽ trỗi dậy ${se.amount ?? 6} HP đầu lượt kế!`,
+              faction: safeFaction ?? 'mist-order',
+              roleId: actorPub.revealedRoleId,
+              roleName: rDesign.name,
+              portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
+              skillName: 'XÁC SỐNG TRỖI DẬY',
+              actorId,
+            });
+          }
+        }
+        break;
+      }
+
+      case 'PLAYER_REVIVED': {
+        if (actorId) {
+          structuredHealedIds.add(actorId);
+          structuredSkillActorIds.add(actorId);
+          events.push({
+            id: `${se.id}::undead-revive`,
+            kind: 'COMBAT_VFX',
+            order: 39,
+            durationMs: scaleDuration(1040, reduced),
+            effect: 'UNDEAD_REVIVE',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [actorId],
+            shake: 'light',
+            roleId: safeRoleId ?? 'exp1_undead',
+            effectKey: se.effectKey,
+            damageAmount: se.amount ?? 6,
+          });
+          events.push({
+            id: `${se.id}::revive-txt`,
+            kind: 'FLOATING_TEXT',
+            order: 50,
+            durationMs: scaleDuration(940, reduced),
+            targetPlayerId: actorId,
+            label: se.label ?? `+${se.amount ?? 6} HP`,
+            variant: 'heal',
+            syncGroup: 'heal',
+          });
+        }
+        break;
+      }
+
+      case 'FACTION_CHANGED': {
+        if (actorId) {
+          structuredSkillActorIds.add(actorId);
+          events.push({
+            id: `${se.id}::bonnie-convert`,
+            kind: 'COMBAT_VFX',
+            order: 43,
+            durationMs: scaleDuration(1080, reduced),
+            effect: 'BONNIE_SUCCESSION',
+            sourcePlayerId: actorId,
+            targetPlayerIds: targets,
+            shake: 'heavy',
+            roleId: safeRoleId ?? 'exp2_bonnie',
+            effectKey: se.effectKey,
+          });
+          events.push({
+            id: `${se.id}::bonnie-txt`,
+            kind: 'FLOATING_TEXT',
+            order: 52,
+            durationMs: scaleDuration(940, reduced),
+            targetPlayerId: actorId,
+            label: se.label ?? 'GIA NHẬP SHADOW',
+            variant: 'counter',
+            syncGroup: 'counter',
+          });
+          if (actorPub?.revealedRoleId) {
+            const rDesign = getRoleDesign(actorPub.revealedRoleId);
+            events.push({
+              id: `${se.id}::bonnie-cutin`,
+              kind: 'CINEMATIC_CUTIN',
+              order: 34,
+              durationMs: scaleDuration(1350, reduced),
+              bannerType: 'ULTIMATE_SKILL',
+              title: 'CHUYỂN PHE · HỘI BÓNG ĐÊM',
+              subtitle: `${actorPub.displayName} kế thừa vị trí Shadow!`,
+              faction: 'mist-order',
+              roleId: actorPub.revealedRoleId,
+              roleName: rDesign.name,
+              portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
+              skillName: 'NGHI THỨC KẾ THỪA',
+              actorId,
+            });
+          }
+        }
+        break;
+      }
+
+      case 'PLAYER_RECRUITED': {
+        if (actorId) structuredSkillActorIds.add(actorId);
+        const isSuccess = se.outcome !== 'failed';
+        events.push({
+          id: `${se.id}::nc-recruit`,
+          kind: 'COMBAT_VFX',
+          order: 43,
+          durationMs: scaleDuration(isSuccess ? 1020 : 820, reduced),
+          effect: 'NC_SOLDIER_RECRUIT',
+          sourcePlayerId: actorId,
+          targetPlayerIds: targets,
+          shake: isSuccess ? 'light' : 'none',
+          roleId: safeRoleId ?? 'exp2_nc_soldier',
+          effectKey: se.effectKey,
+          outcome: se.outcome ?? 'success',
+        });
+        for (const tid of targets) {
+          events.push({
+            id: `${se.id}::nc-txt::${tid}`,
+            kind: 'FLOATING_TEXT',
+            order: 52,
+            durationMs: scaleDuration(900, reduced),
+            targetPlayerId: tid,
+            label: se.label ?? (isSuccess ? 'CHIÊU MỘ!' : 'TRƯỢT'),
+            variant: isSuccess ? 'steal' : 'miss',
+            syncGroup: 'steal',
+          });
+        }
+        break;
+      }
+
+      case 'DAMAGE_REDIRECTED': {
+        if (actorId) structuredSkillActorIds.add(actorId);
+        const isArnold = se.effectKey === 'arnold_reflect';
+        hasAttackOrExplosionVfx = true;
+        events.push({
+          id: `${se.id}::redirect-arc`,
+          kind: 'COMBAT_VFX',
+          order: 41,
+          durationMs: scaleDuration(isArnold ? 1040 : 940, reduced),
+          effect: 'REDIRECT_ARC',
+          sourcePlayerId: actorId,
+          targetPlayerIds: targets,
+          shake: isArnold ? 'heavy' : 'light',
+          roleId: safeRoleId ?? (isArnold ? 'exp1_arnold' : 'exp1_anathema'),
+          effectKey: se.effectKey,
+          isCritical: Boolean(se.isCritical),
+          damageAmount: se.amount,
+        });
+        if (actorId) {
+          events.push({
+            id: `${se.id}::redirect-txt`,
+            kind: 'FLOATING_TEXT',
+            order: 51,
+            durationMs: scaleDuration(880, reduced),
+            targetPlayerId: actorId,
+            label: se.label ?? (isArnold ? 'PHẢN CHÍ MẠNG!' : 'CHUYỂN NGUYỀN'),
+            variant: 'counter',
+            syncGroup: 'counter',
+          });
+        }
+        break;
+      }
+
+      case 'DAMAGE_PREVENTED': {
+        for (const tid of targets) {
+          blockedTargets.add(tid);
+          const isAngel = se.effectKey === 'angel_sanctuary';
+          events.push({
+            id: `${se.id}::prevent-fx::${tid}`,
+            kind: 'COMBAT_VFX',
+            order: 42,
+            durationMs: scaleDuration(860, reduced),
+            effect: isAngel ? 'ANGEL_SANCTUARY' : 'SHIELD_GUARD',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [tid],
+            shake: 'none',
+            roleId: safeRoleId,
+            effectKey: se.effectKey,
+          });
+          events.push({
+            id: `${se.id}::prevent-txt::${tid}`,
+            kind: 'FLOATING_TEXT',
+            order: 50,
+            durationMs: scaleDuration(840, reduced),
+            targetPlayerId: tid,
+            label: se.label ?? 'BLOCK',
+            variant: 'block',
+            syncGroup: 'shield',
+          });
+        }
+        break;
+      }
+
+      case 'HEAL_BLOCKED': {
+        for (const tid of targets) {
+          events.push({
+            id: `${se.id}::heal-block-fx::${tid}`,
+            kind: 'COMBAT_VFX',
+            order: 42,
+            durationMs: scaleDuration(860, reduced),
+            effect: 'MARK_SEAL',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [tid],
+            shake: 'none',
+            roleId: safeRoleId,
+            effectKey: se.effectKey,
+            outcome: 'blocked',
+          });
+          events.push({
+            id: `${se.id}::heal-block-txt::${tid}`,
+            kind: 'FLOATING_TEXT',
+            order: 51,
+            durationMs: scaleDuration(860, reduced),
+            targetPlayerId: tid,
+            label: se.label ?? 'CẤM HỒI',
+            variant: 'block',
+            syncGroup: 'shield',
+          });
+        }
+        break;
+      }
+
+      case 'HEAL_APPLIED': {
+        for (const tid of targets) {
+          if (structuredHealedIds.has(tid)) continue;
+          structuredHealedIds.add(tid);
+          events.push({
+            id: `${se.id}::heal-fx::${tid}`,
+            kind: 'COMBAT_VFX',
+            order: 41,
+            durationMs: scaleDuration(860, reduced),
+            effect: 'HEAL_AURA',
+            sourcePlayerId: actorId,
+            targetPlayerIds: [tid],
+            shake: 'none',
+            roleId: safeRoleId,
+            effectKey: se.effectKey,
+          });
+          if (typeof se.amount === 'number' && se.amount > 0) {
+            events.push({
+              id: `${se.id}::heal-txt::${tid}`,
+              kind: 'FLOATING_TEXT',
+              order: 50,
+              durationMs: scaleDuration(840, reduced),
+              targetPlayerId: tid,
+              label: `+${se.amount}`,
+              variant: 'heal',
+              syncGroup: 'heal',
+            });
+          }
+        }
+        break;
+      }
+
+      case 'EQUIPMENT_TRANSFERRED': {
+        if (actorId) structuredSkillActorIds.add(actorId);
+        const isBond = se.effectKey === 'bethany_chosen_bond';
+        events.push({
+          id: `${se.id}::equip-tx`,
+          kind: 'COMBAT_VFX',
+          order: 43,
+          durationMs: scaleDuration(900, reduced),
+          effect: isBond ? 'BOND_TETHER' : 'STEAL_TETHER',
+          sourcePlayerId: actorId,
+          targetPlayerIds: targets,
+          shake: 'none',
+          roleId: safeRoleId,
+          effectKey: se.effectKey,
+        });
+        for (const tid of targets) {
+          events.push({
+            id: `${se.id}::equip-txt::${tid}`,
+            kind: 'FLOATING_TEXT',
+            order: 52,
+            durationMs: scaleDuration(860, reduced),
+            targetPlayerId: tid,
+            label: se.label ?? 'STEAL',
+            variant: 'steal',
+            syncGroup: 'steal',
+          });
+        }
+        break;
+      }
+
+      case 'SKILL_ACTIVATED': {
+        if (actorId) structuredSkillActorIds.add(actorId);
+        const key = se.effectKey;
+        if (key === 'cain_power_play') {
+          events.push({
+            id: `${se.id}::cain-fx`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(1080, reduced),
+            effect: 'CAIN_POWER_PLAY',
+            sourcePlayerId: actorId,
+            targetPlayerIds: targets,
+            shake: 'light',
+            roleId: safeRoleId ?? 'exp2_cain',
+            effectKey: key,
+            damageAmount: se.amount,
+          });
+          if (actorId && actorPub?.revealedRoleId) {
+            const rDesign = getRoleDesign(actorPub.revealedRoleId);
+            events.push({
+              id: `${se.id}::cain-cutin`,
+              kind: 'CINEMATIC_CUTIN',
+              order: 32,
+              durationMs: scaleDuration(1320, reduced),
+              bannerType: 'ULTIMATE_SKILL',
+              title: 'TUYỆT KỸ · CAIN',
+              subtitle: `${actorPub.displayName} kích hoạt Nước Cờ Quyền Lực — kích hoạt đồng thắng song phe nếu bị loại!`,
+              faction: safeFaction ?? 'wanderer',
+              roleId: actorPub.revealedRoleId,
+              roleName: rDesign.name,
+              portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
+              skillName: 'NƯỚC CỜ QUYỀN LỰC',
+              actorId,
+            });
+          }
+        } else if (key === 'voodoo_mark_puppet') {
+          events.push({
+            id: `${se.id}::voodoo-mark`,
+            kind: 'COMBAT_VFX',
+            order: 41,
+            durationMs: scaleDuration(960, reduced),
+            effect: 'VOODOO_PUPPET',
+            sourcePlayerId: actorId,
+            targetPlayerIds: targets,
+            shake: 'none',
+            roleId: safeRoleId ?? 'exp1_voodoo',
+            effectKey: key,
+          });
+        } else if (key === 'wrath_nova' || key === 'umibozu_wave') {
+          hasAttackOrExplosionVfx = true;
+          events.push({
+            id: `${se.id}::nova`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(1020, reduced),
+            effect: 'SHADOW_NOVA',
+            sourcePlayerId: actorId,
+            targetPlayerIds: targets,
+            shake: 'heavy',
+            roleId: safeRoleId,
+            effectKey: key,
+            damageAmount: se.amount,
+          });
+        } else if (key === 'vengeance_chain') {
+          hasAttackOrExplosionVfx = true;
+          events.push({
+            id: `${se.id}::vengeance-chain`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(1020, reduced),
+            effect: 'LIGHTNING_STRIKE',
+            sourcePlayerId: actorId,
+            targetPlayerIds: targets,
+            shake: 'heavy',
+            roleId: safeRoleId ?? 'exp1_vengeance',
+            effectKey: key,
+            damageAmount: se.amount,
+          });
+        } else if (key === 'fujiko_execute') {
+          hasAttackOrExplosionVfx = true;
+          events.push({
+            id: `${se.id}::fujiko-finisher`,
+            kind: 'COMBAT_VFX',
+            order: 41,
+            durationMs: scaleDuration(1020, reduced),
+            effect: 'FINISHER_SLASH',
+            sourcePlayerId: actorId,
+            targetPlayerIds: targets,
+            shake: 'heavy',
+            roleId: safeRoleId ?? 'exp2_fujiko',
+            effectKey: key,
+            isCritical: true,
+            damageAmount: se.amount,
+          });
+        } else if (key === 'gideon_reward' || key === 'eleanor_interrogator') {
+          events.push({
+            id: `${se.id}::card-cascade`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(960, reduced),
+            effect: 'CARD_CASCADE',
+            sourcePlayerId: actorId,
+            targetPlayerIds: targets,
+            shake: 'none',
+            roleId: safeRoleId,
+            effectKey: key,
+            cardCount: se.cardCount ?? 3,
+          });
+        } else if (key === 'warlord_pull_strike' || key === 'diana_contract_active') {
+          events.push({
+            id: `${se.id}::bond-tether`,
+            kind: 'COMBAT_VFX',
+            order: 40,
+            durationMs: scaleDuration(940, reduced),
+            effect: 'BOND_TETHER',
+            sourcePlayerId: actorId,
+            targetPlayerIds: targets,
+            shake: key === 'warlord_pull_strike' ? 'light' : 'none',
+            roleId: safeRoleId,
+            effectKey: key,
+          });
+        } else if (key === 'angel_sanctuary_activate') {
+          events.push({
+            id: `${se.id}::angel-dome`,
+            kind: 'COMBAT_VFX',
+            order: 41,
+            durationMs: scaleDuration(960, reduced),
+            effect: 'ANGEL_SANCTUARY',
+            sourcePlayerId: actorId,
+            targetPlayerIds: targets,
+            shake: 'none',
+            roleId: safeRoleId ?? 'exp1_angel',
+            effectKey: key,
+          });
+        } else if (key === 'visions_mark' || key === 'april_skipps_countdown') {
+          events.push({
+            id: `${se.id}::mark-seal`,
+            kind: 'COMBAT_VFX',
+            order: 41,
+            durationMs: scaleDuration(920, reduced),
+            effect: 'MARK_SEAL',
+            sourcePlayerId: actorId,
+            targetPlayerIds: targets,
+            shake: 'none',
+            roleId: safeRoleId,
+            effectKey: key,
+          });
+        }
+        break;
+      }
+
+      case 'ROLE_REVEALED': {
+        if (
+          actorId &&
+          actorPub?.revealedRoleId &&
+          actorPub.revealedFaction &&
+          !revealedActorIdsThisTick.has(actorId)
+        ) {
+          revealedActorIdsThisTick.add(actorId);
+          const roleDesign = getRoleDesign(actorPub.revealedRoleId);
+          events.push({
+            id: `${se.id}::reveal`,
+            kind: 'CINEMATIC_CUTIN',
+            order: 30,
+            durationMs: scaleDuration(1720, reduced),
+            bannerType: 'ROLE_REVEAL',
+            title: 'LỘ DIỆN',
+            subtitle: `${actorPub.displayName} lật vai ${roleDesign.name}!`,
+            faction: safeFaction ?? actorPub.revealedFaction,
+            roleId: actorPub.revealedRoleId,
+            roleName: roleDesign.name,
+            portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
+            skillName: roleDesign.skillName,
+            actorId,
+          });
+        }
+        break;
+      }
+
+      case 'ELIMINATION': {
+        if (actorId && !structuredDormantOrElimIds.has(actorId)) {
+          structuredDormantOrElimIds.add(actorId);
+          const roleIdForKo = actorPub?.revealedRoleId ?? safeRoleId ?? null;
+          const roleDesign = roleIdForKo ? getRoleDesign(roleIdForKo) : null;
+          events.push({
+            id: `${se.id}::ko`,
+            kind: 'CINEMATIC_CUTIN',
+            order: 58,
+            durationMs: scaleDuration(1450, reduced),
+            bannerType: 'ELIMINATION',
+            title: 'HẠ GỤC',
+            subtitle: roleDesign
+              ? `${actorPub?.displayName ?? actorId} đã gục — Lộ vai ${roleDesign.name}`
+              : `${actorPub?.displayName ?? actorId} đã bị loại khỏi KTX`,
+            faction: safeFaction ?? actorPub?.revealedFaction ?? null,
+            roleId: roleIdForKo,
+            roleName: roleDesign?.name ?? null,
+            portraitSrc: getRevealPortrait(roleIdForKo),
+            skillName: null,
+            actorId,
+          });
+        }
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
 
   // 2. Xử lý lần lượt từng dòng log mới được server xác nhận
   for (let i = 0; i < newLogs.length; i++) {
@@ -851,12 +1582,13 @@ export function extractVisualEventsFromDiff(
     }
 
     // 2B. Lộ diện (voluntary hoặc từ hiệu ứng như Tiếng Hét, Gương, Advent, Chocolate) (order: 30)
-    // Chỉ kích hoạt khi server đã công khai cả role & faction trên public view (P0 safety)
+    // Chỉ kích hoạt khi server đã công khai cả role & faction trên public view (P0 safety) và chưa phát qua structured event
     if (
       log.kind === 'reveal' &&
       actorId &&
       actorPub?.revealedRoleId &&
-      actorPub.revealedFaction
+      actorPub.revealedFaction &&
+      !revealedActorIdsThisTick.has(actorId)
     ) {
       const roleDesign = getRoleDesign(actorPub.revealedRoleId);
       revealedActorIdsThisTick.add(actorId);
@@ -882,6 +1614,7 @@ export function extractVisualEventsFromDiff(
       if (log.text.includes('Lá Chắn Thiên Thần che chở')) {
         const defenderIds = findPlayersByNameMention(log.text, next.players);
         for (const tid of defenderIds) {
+          if (blockedTargets.has(tid)) continue;
           blockedTargets.add(tid);
           events.push({
             id: `${next.matchId}::shield::${log.id}::${tid}`,
@@ -951,7 +1684,8 @@ export function extractVisualEventsFromDiff(
       }
 
       // Chỉ kích hoạt Cut-in Tuyệt Kỹ kèm chân dung khi actor đã lộ vai công khai (P0 safety)
-      if (actorId && actorPub?.revealedRoleId) {
+      // và chưa được phát qua sự kiện cấu trúc `visualEvents` trong cùng tick để chống trùng tuyệt đối.
+      if (actorId && actorPub?.revealedRoleId && !structuredSkillActorIds.has(actorId)) {
         const roleDesign = getRoleDesign(actorPub.revealedRoleId);
         const targetMentions = findPlayersByNameMention(log.text, next.players, actorId);
         const skillTargets =
@@ -1364,7 +2098,8 @@ export function extractVisualEventsFromDiff(
     }
 
     // 2D. Đòn tấn công (kind === 'attack') — phân loại theo trang bị công khai
-    if (log.kind === 'attack' && actorId) {
+    // Nếu Lloyd vừa hủy đòn (`structuredCancelledAttack`), tuyệt đối không phát hiệu ứng trúng đòn!
+    if (log.kind === 'attack' && actorId && !structuredCancelledAttack) {
       const equippedIds = new Set((actorPub?.equipped ?? []).map((c) => c.id));
       const mentions = findPlayersByNameMention(log.text, next.players, actorId);
       const rollTarget =
@@ -1450,6 +2185,7 @@ export function extractVisualEventsFromDiff(
       if (log.text.includes('Ghim Cài May Mắn bảo vệ') || log.text.includes('Bùa Hộ Mệnh bảo vệ')) {
         const guarded = findPlayersByNameMention(log.text, next.players);
         for (const tid of guarded) {
+          if (blockedTargets.has(tid)) continue;
           blockedTargets.add(tid);
           events.push({
             id: `${next.matchId}::ward-fx::${log.id}::${tid}`,
@@ -1505,8 +2241,8 @@ export function extractVisualEventsFromDiff(
       }
     }
 
-    // 2F. Cướp trang bị (Bob / Sân bóng 10 / Yêu tinh)
-    if (log.kind === 'steal' && actorId) {
+    // 2F. Cướp trang bị (Bob / Sân bóng 10 / Yêu tinh) — bỏ qua nếu đã phát qua EQUIPMENT_TRANSFERRED
+    if (log.kind === 'steal' && actorId && !structuredSkillActorIds.has(actorId)) {
       const victims = findPlayersByNameMention(log.text, next.players, actorId);
       if (victims.length > 0) {
         events.push({
@@ -1621,7 +2357,7 @@ export function extractVisualEventsFromDiff(
         variant: isCritHit ? 'critical' : 'damage',
         syncGroup: fromCounter ? 'counter' : 'attack',
       });
-    } else if (delta < 0) {
+    } else if (delta < 0 && !structuredHealedIds.has(np.playerId)) {
       const healed = Math.abs(delta);
       events.push({
         id: mkId(`heal-fx-${np.playerId}-${np.woundsTaken}`),
@@ -1668,8 +2404,9 @@ export function extractVisualEventsFromDiff(
       });
     }
 
-    // 4. HẠ GỤC (order: 58)
-    if (pp.alive && !np.alive) {
+    // 4. HẠ GỤC (order: 58) — bỏ qua nếu đã phát qua structured event HOẶC đang ngủ đông chờ hồi sinh (Undead)!
+    const isNowDormant = np.lifecycleState === 'DORMANT_PENDING_REVIVE';
+    if (pp.alive && !np.alive && !isNowDormant && !structuredDormantOrElimIds.has(np.playerId)) {
       const roleDesign = np.revealedRoleId ? getRoleDesign(np.revealedRoleId) : null;
       events.push({
         id: `${next.matchId}::ko::${np.playerId}`,
@@ -1726,6 +2463,9 @@ export function extractVisualEventsFromDiff(
       matchOutcome,
       winnerFactionLabel: next.winnerLabel,
       winReason: next.winReason ?? null,
+      ...(Array.isArray(next.winningFactions) && next.winningFactions.length > 0
+        ? { winningFactions: [...next.winningFactions] }
+        : {}),
     });
   }
 
@@ -1906,6 +2646,17 @@ export class VisualEventTracker {
     if (existingVictoryId && !this.seenIds.has(existingVictoryId)) {
       this.markSeen([existingVictoryId]);
     }
+    // Phase 8C: Khóa ngay toàn bộ structured visualEvents đã tồn tại trước khi client vào/F5
+    // để reconnect giữa trận tuyệt đối phát 0 VFX cũ và 0 âm thanh cũ!
+    if (Array.isArray(publicGame.visualEvents) && publicGame.visualEvents.length > 0) {
+      const seedIds: string[] = [];
+      for (const se of publicGame.visualEvents) {
+        if (!this.seenIds.has(se.id)) seedIds.push(se.id);
+      }
+      if (seedIds.length > 0) {
+        this.markSeen(seedIds);
+      }
+    }
 
     const initialEvents: BoardGameVisualEvent[] = [];
 
@@ -1947,6 +2698,8 @@ export class VisualEventTracker {
 
     for (const ev of rawEvents) {
       if (this.seenIds.has(ev.id)) continue;
+      const sepIdx = ev.id.indexOf('::');
+      if (sepIdx > 0 && this.seenIds.has(ev.id.slice(0, sepIdx))) continue;
       fresh.push(ev);
       freshIds.push(ev.id);
     }

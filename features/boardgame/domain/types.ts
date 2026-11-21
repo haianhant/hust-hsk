@@ -862,6 +862,8 @@ export interface AuthoritativeGameState {
   lastRevealEvent: BoardGameRevealEvent | null;
   logSeq?: number;
   publicLog: BoardGamePublicLogEntry[];
+  visualEventSeq?: number;
+  visualEvents?: import('../../../shared/contracts/boardgame').BoardGameStructuredVisualEvent[];
   highlights: BoardGameHighlightEntry[];
   finished: boolean;
   winnerFaction: BoardGameWinnerFaction | null;

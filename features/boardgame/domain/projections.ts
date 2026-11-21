@@ -38,6 +38,7 @@ import {
   isTurnControlPausedForOwnerDecision,
 } from './turn-ownership';
 import type { AuthoritativeGameState, AuthoritativePlayerState } from './types';
+import { projectPublicVisualEvents } from './visual-events';
 
 function mapCardIdsToMeta(cardIds: readonly string[]): BoardGameCardPublicMeta[] {
   const metas: BoardGameCardPublicMeta[] = [];
@@ -265,6 +266,7 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     }
   }
 
+  const publicVisualEvents = projectPublicVisualEvents(state);
   return {
     rulesetVersion: 4,
     rulesetId: state.rulesetId ?? BOARD_GAME_DEFAULT_RULESET_ID,
@@ -313,6 +315,7 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     lastDiceRoll: state.lastDiceRoll,
     lastInvestigation: state.lastInvestigation,
     lastRevealEvent: state.lastRevealEvent,
+    ...(publicVisualEvents ? { visualEvents: publicVisualEvents } : {}),
     publicLog: [...state.publicLog],
     highlights: [...state.highlights],
     winnerLabel: state.winnerLabel,

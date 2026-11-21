@@ -424,6 +424,30 @@ function checkGameStateInvariants(state, options = {}) {
           }
         }
       }
+      // Phase 8C: Verify public structured visualEvents stay bounded, monotonic, and NEVER leak hidden identities!
+      if (Array.isArray(pub.visualEvents)) {
+        if (pub.visualEvents.length > 48) {
+          fail('PRIVACY', 'VISUAL_EVENTS_UNBOUNDED', '<= 48', pub.visualEvents.length, 'publicGame.visualEvents exceeded max bound 48');
+        }
+        let prevSeq = 0;
+        for (const ve of pub.visualEvents) {
+          if (ve.visibility !== 'public') {
+            fail('PRIVACY', 'VISUAL_EVENT_NON_PUBLIC', 'public', ve.visibility, `VisualEvent ${ve.id} has non-public visibility`);
+          }
+          if (typeof ve.seq !== 'number' || ve.seq <= prevSeq) {
+            fail('PRIVACY', 'VISUAL_EVENT_SEQ_NON_MONOTONIC', `>${prevSeq}`, ve.seq, `VisualEvent ${ve.id} seq not strictly increasing`);
+          }
+          prevSeq = ve.seq;
+          if (ve.actorPlayerId && ve.kind !== 'MATCH_FINISHED') {
+            const authActor = state.players[ve.actorPlayerId];
+            if (authActor && !authActor.revealed) {
+              if (ve.publicRoleId !== undefined || ve.publicFaction !== undefined || ve.publicCopiedRoleId !== undefined) {
+                fail('PRIVACY', 'VISUAL_EVENT_HIDDEN_ROLE_LEAK', 'undefined', { id: ve.id, publicRoleId: ve.publicRoleId, publicFaction: ve.publicFaction }, `VisualEvent ${ve.id} leaked hidden role/faction for unrevealed actor ${ve.actorPlayerId}`);
+              }
+            }
+          }
+        }
+      }
     }
 
     // Verify privateView isolation across players (including Voodoo controller vs victim!)

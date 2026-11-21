@@ -436,6 +436,60 @@ export interface BoardGameRevealEvent {
   reason: 'voluntary' | 'eliminated';
 }
 
+export const BOARD_GAME_MAX_VISUAL_EVENTS = 48 as const;
+
+export type BoardGameStructuredVisualEventKind =
+  | 'ATTACK_DECLARED'
+  | 'ATTACK_HIT'
+  | 'ATTACK_MISSED'
+  | 'ATTACK_CANCELLED'
+  | 'DAMAGE_APPLIED'
+  | 'DAMAGE_PREVENTED'
+  | 'DAMAGE_REDIRECTED'
+  | 'HEAL_APPLIED'
+  | 'HEAL_BLOCKED'
+  | 'EQUIPMENT_TRANSFERRED'
+  | 'ROLE_REVEALED'
+  | 'SKILL_ACTIVATED'
+  | 'COPY_SKILL_APPLIED'
+  | 'TURN_HIJACK_STARTED'
+  | 'TURN_HIJACK_ENDED'
+  | 'PLAYER_DORMANT'
+  | 'PLAYER_REVIVED'
+  | 'FACTION_CHANGED'
+  | 'PLAYER_RECRUITED'
+  | 'ELIMINATION'
+  | 'MATCH_FINISHED';
+
+/**
+ * Sự kiện hình ảnh công khai có cấu trúc từ máy chủ (Phase 8C).
+ * BẢO MẬT P0: CHỈ chứa dữ liệu công khai hợp pháp — tuyệt đối không chứa vai ẩn,
+ * thẻ điều tra kín, hay gợi ý phản ứng bí mật bị từ chối.
+ */
+export interface BoardGameStructuredVisualEvent {
+  readonly id: string;
+  readonly seq: number;
+  readonly matchId: string;
+  readonly round: number;
+  readonly turnNumber: number;
+  readonly atMs: number;
+  readonly kind: BoardGameStructuredVisualEventKind;
+  readonly effectKey: string;
+  readonly actorPlayerId: string | null;
+  readonly targetPlayerIds: readonly string[];
+  readonly visibility: 'public';
+  readonly publicRoleId?: BoardGameRoleId | null;
+  readonly publicFaction?: BoardGameFactionId | null;
+  readonly publicCopiedRoleId?: BoardGameRoleId | null;
+  readonly amount?: number;
+  readonly isCritical?: boolean;
+  readonly isMultiTarget?: boolean;
+  readonly outcome?: 'success' | 'failed' | 'blocked' | 'cancelled';
+  readonly winningFactions?: readonly BoardGameFactionId[];
+  readonly cardCount?: number;
+  readonly label?: string;
+}
+
 export interface BoardGamePrivateClueEntry {
   id: string;
   round: number;
@@ -730,6 +784,8 @@ export interface BoardGamePublicGameView {
   lastDiceRoll: BoardGameDiceRollEvent | null;
   lastInvestigation: BoardGameInvestigationOutcome | null;
   lastRevealEvent: BoardGameRevealEvent | null;
+  /** Phase 8C: Hàng đợi sự kiện hình ảnh công khai có cấu trúc (tùy chọn để tương thích ngược client cũ). */
+  visualEvents?: readonly BoardGameStructuredVisualEvent[];
   publicLog: readonly BoardGamePublicLogEntry[];
   highlights: readonly BoardGameHighlightEntry[];
   winnerLabel: string | null;

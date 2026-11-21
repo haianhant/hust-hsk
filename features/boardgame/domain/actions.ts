@@ -76,6 +76,7 @@ import type {
 } from './types';
 import { buildFinalRevealSummary } from './victory';
 import { evaluateVictoryWithEngine } from './victory-engine';
+import { appendStructuredVisualEvent } from './visual-events';
 
 export function getActivePlayer(
   state: AuthoritativeGameState,
@@ -143,6 +144,20 @@ function finalizeIfFinished(state: AuthoritativeGameState, nowMs: number): boole
     victory.winReason ?? 'Cuộc săn đêm KTX khép lại.',
     nowMs,
   );
+  appendStructuredVisualEvent(state, {
+    kind: 'MATCH_FINISHED',
+    effectKey:
+      victory.winningFactions && victory.winningFactions.length >= 2
+        ? 'multi_faction_victory'
+        : victory.winnerFaction === 'wanderer-solo'
+          ? 'wanderer_solo_victory'
+          : 'faction_victory',
+    actorPlayerId: victory.winnerPlayerIds[0] ?? null,
+    targetPlayerIds: victory.winnerPlayerIds,
+    atMs: nowMs,
+    winningFactions: victory.winningFactions,
+    label: victory.winnerLabel ?? undefined,
+  });
   return true;
 }
 
@@ -154,7 +169,17 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
   const expanded = isExpandedRuleset(state);
   if (expanded) {
     // Kết thúc dứt điểm mọi grant chiếm quyền điều khiển lượt trước khi chuyển lượt mới
+    const endingGrant = getActiveTurnControlGrant(state);
     expireActiveTurnControl(state, 'turn-completed', nowMs);
+    if (endingGrant) {
+      appendStructuredVisualEvent(state, {
+        kind: 'TURN_HIJACK_ENDED',
+        effectKey: 'voodoo_hijack_end',
+        actorPlayerId: endingGrant.controllerPlayerId,
+        targetPlayerIds: [endingGrant.activePlayerId],
+        atMs: nowMs,
+      });
+    }
   }
 
   // Lượt đi phụ từ Sổ Tay Bí Truyền (eq-15 / Concealed Knowledge)
@@ -249,6 +274,17 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
         `${nextPlayer.displayName} trỗi dậy với ${rev.restoredHp} HP ở đầu vòng ${state.round}.`,
         nowMs,
       );
+      appendStructuredVisualEvent(state, {
+        kind: 'PLAYER_REVIVED',
+        effectKey: 'undead_revive',
+        actorPlayerId: nextPlayer.playerId,
+        targetPlayerIds: [nextPlayer.playerId],
+        atMs: nowMs,
+        publicRoleId: nextPlayer.roleId,
+        publicFaction: getEffectiveFaction(state, nextPlayer),
+        amount: rev.restoredHp,
+        label: `HỒI SINH +${rev.restoredHp}`,
+      });
     }
   }
 
@@ -268,6 +304,15 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
         nowMs,
         activatedGrant.controllerPlayerId,
       );
+      appendStructuredVisualEvent(state, {
+        kind: 'TURN_HIJACK_STARTED',
+        effectKey: 'voodoo_hijack_start',
+        actorPlayerId: activatedGrant.controllerPlayerId,
+        targetPlayerIds: [nextPlayer.playerId],
+        atMs: nowMs,
+        publicRoleId: controller?.revealed ? controller.roleId : null,
+        label: 'CON RỐI',
+      });
     }
   }
 

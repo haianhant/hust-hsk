@@ -35,6 +35,7 @@ import type {
   EngineActionResult,
   GameCardDefinition,
 } from './types';
+import { appendStructuredVisualEvent } from './visual-events';
 
 export type { DamageSourceKind };
 
@@ -245,6 +246,16 @@ export function revealPlayerNow(
     faction: effectiveFaction,
     reason,
   };
+  appendStructuredVisualEvent(state, {
+    kind: 'ROLE_REVEALED',
+    effectKey: reason === 'eliminated' ? 'role_reveal_eliminated' : 'role_reveal_voluntary',
+    actorPlayerId: player.playerId,
+    targetPlayerIds: [player.playerId],
+    atMs: nowMs,
+    publicRoleId: player.roleId,
+    publicFaction: effectiveFaction,
+    label: role.name,
+  });
   return true;
 }
 
@@ -268,6 +279,16 @@ export function applyDamage(
       nowMs,
       target.playerId,
     );
+    appendStructuredVisualEvent(state, {
+      kind: 'DAMAGE_PREVENTED',
+      effectKey: 'guardian_shield_block',
+      actorPlayerId: target.playerId,
+      targetPlayerIds: [target.playerId],
+      atMs: nowMs,
+      amount: rawAmount,
+      outcome: 'blocked',
+      label: 'BLOCK',
+    });
     return 0;
   }
 
@@ -280,6 +301,16 @@ export function applyDamage(
       nowMs,
       target.playerId,
     );
+    appendStructuredVisualEvent(state, {
+      kind: 'DAMAGE_PREVENTED',
+      effectKey: 'lucky_brooch_block',
+      actorPlayerId: target.playerId,
+      targetPlayerIds: [target.playerId],
+      atMs: nowMs,
+      amount: rawAmount,
+      outcome: 'blocked',
+      label: 'BLOCK',
+    });
     return 0;
   }
 
@@ -292,6 +323,16 @@ export function applyDamage(
       nowMs,
       target.playerId,
     );
+    appendStructuredVisualEvent(state, {
+      kind: 'DAMAGE_PREVENTED',
+      effectKey: 'talisman_ward_block',
+      actorPlayerId: target.playerId,
+      targetPlayerIds: [target.playerId],
+      atMs: nowMs,
+      amount: rawAmount,
+      outcome: 'blocked',
+      label: 'BLOCK',
+    });
     return 0;
   }
 
@@ -306,6 +347,18 @@ export function applyDamage(
   const actual = Math.min(target.hp, finalDmg);
   target.woundsTaken += actual;
   target.hp -= actual;
+
+  if (actual > 0) {
+    appendStructuredVisualEvent(state, {
+      kind: 'DAMAGE_APPLIED',
+      effectKey: sourceType === 'attack' ? 'attack_damage' : `damage_${sourceType}`,
+      actorPlayerId: attacker?.playerId ?? null,
+      targetPlayerIds: [target.playerId],
+      atMs: nowMs,
+      amount: actual,
+      isCritical: actual >= 4,
+    });
+  }
 
   if (target.hp <= 0) {
     target.hp = 0;
@@ -345,6 +398,16 @@ export function applyDamage(
       `${target.displayName} (${role.name}) gục ngã ở vòng ${state.round}.`,
       nowMs,
     );
+    appendStructuredVisualEvent(state, {
+      kind: 'ELIMINATION',
+      effectKey: 'final_elimination',
+      actorPlayerId: target.playerId,
+      targetPlayerIds: [target.playerId],
+      atMs: nowMs,
+      publicRoleId: target.roleId,
+      publicFaction: target.faction,
+      label: role.name,
+    });
 
     // Đạt "Cảm Tử" (Daniel — Scream): nếu còn sống khi người khác ĐẦU TIÊN chết -> buộc lộ diện ngay!
     if (deadCountNow === 1) {

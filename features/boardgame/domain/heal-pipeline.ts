@@ -22,6 +22,7 @@ import type {
 } from '../../../shared/contracts/boardgame';
 import { getEffectiveSkillRoleId } from './dynamic-skill-copy';
 import { appendPublicLog, applyHeal } from './effects';
+import { appendStructuredVisualEvent } from './visual-events';
 import type {
   AuthoritativeGameState,
   AuthoritativePlayerState,
@@ -184,6 +185,16 @@ export function executeHealPipeline(
       nowMs,
       target.playerId,
     );
+    appendStructuredVisualEvent(state, {
+      kind: 'HEAL_BLOCKED',
+      effectKey: 'dalton_self_heal_blocked',
+      actorPlayerId: target.playerId,
+      targetPlayerIds: [target.playerId],
+      atMs: nowMs,
+      publicRoleId: target.revealed ? target.roleId : null,
+      outcome: 'blocked',
+      label: 'CẤM HỒI',
+    });
     return { attempted, actual: 0, blockedBy: 'dalton-self-heal' };
   }
 
@@ -202,6 +213,15 @@ export function executeHealPipeline(
         req.postLogActorId ?? target.playerId,
       );
     }
+    appendStructuredVisualEvent(state, {
+      kind: 'HEAL_BLOCKED',
+      effectKey: 'usurper_heal_blocked',
+      actorPlayerId: req.postLogActorId ?? target.playerId,
+      targetPlayerIds: [target.playerId],
+      atMs: nowMs,
+      outcome: 'blocked',
+      label: 'CẤM HỒI',
+    });
     return { attempted, actual: 0, blockedBy: 'usurper-reveal' };
   }
 
@@ -220,6 +240,16 @@ export function executeHealPipeline(
       nowMs,
       revealedUsurper.playerId,
     );
+    appendStructuredVisualEvent(state, {
+      kind: 'HEAL_BLOCKED',
+      effectKey: 'usurper_heal_blocked',
+      actorPlayerId: revealedUsurper.playerId,
+      targetPlayerIds: [target.playerId],
+      atMs: nowMs,
+      publicRoleId: revealedUsurper.roleId,
+      outcome: 'blocked',
+      label: 'CẤM HỒI',
+    });
     return { attempted, actual: 0, blockedBy: 'usurper-aura' };
   }
 
@@ -264,8 +294,19 @@ export function executeHealPipeline(
   // Bước 6: Áp hồi máu cắt trần theo Max HP & ghi nhận sự kiện
   const actual = attempted > 0 ? applyHeal(state, target, attempted) : 0;
   hooks?.markEventProcessed?.(state, req.healEventId);
-  if (actual > 0 && req.roleStatId) {
-    hooks?.onRecordHealStat?.(state, req.roleStatId, actual);
+  if (actual > 0) {
+    if (req.roleStatId) {
+      hooks?.onRecordHealStat?.(state, req.roleStatId, actual);
+    }
+    appendStructuredVisualEvent(state, {
+      kind: 'HEAL_APPLIED',
+      effectKey: req.roleStatId ? `heal_${req.roleStatId}` : `heal_${req.sourceKind}`,
+      actorPlayerId: req.actorPlayerId ?? target.playerId,
+      targetPlayerIds: [target.playerId],
+      atMs: nowMs,
+      amount: actual,
+      label: `+${actual}`,
+    });
   }
 
   if (actual === 0 && req.zeroLogText) {

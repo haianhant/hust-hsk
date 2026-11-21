@@ -2050,3 +2050,378 @@ test('Cinematic V2 Phase 4 (25) — Fresh Opening Deal, Strict Spectator P0 Isol
   );
   stopAllBoardGameSounds();
 });
+
+test('Phase 8C Structured Visual Events (26) — P0 Hidden-Role Redaction, 48-Event Ring Buffer Cap & Classic RNG Invariance', () => {
+  const {
+    appendStructuredVisualEvent,
+    projectPublicVisualEvents,
+    BOARD_GAME_MAX_VISUAL_EVENTS,
+  } = {
+    ...require('../features/boardgame/domain/index.ts'),
+    ...require('../shared/contracts/boardgame.ts'),
+  };
+
+  const players = Array.from({ length: 4 }, (_, idx) => ({
+    playerId: `p_${idx + 1}`,
+    displayName: `SV ${idx + 1}`,
+    seatIndex: idx,
+    appearance: {
+      gender: 'male',
+      topStyle: 'jacket',
+      hairColor: '#1f2937',
+      skinTone: '#f1c27d',
+    },
+    connected: true,
+  }));
+  const authState = createInitialGameState({
+    matchId: 'p8c-privacy-ring-match',
+    seed: 9091,
+    nowMs: 1_750_500_000_000,
+    players,
+  });
+  const rngBefore = authState.rngState;
+
+  // 1) Hidden actor (revealed=false): publicRoleId, publicFaction, publicCopiedRoleId MUST be stripped!
+  authState.players.p_1.revealed = false;
+  const hiddenEv = appendStructuredVisualEvent(authState, {
+    kind: 'SKILL_ACTIVATED',
+    effectKey: 'secret_probe',
+    actorPlayerId: 'p_1',
+    targetPlayerIds: ['p_2'],
+    atMs: 1_750_500_001_000,
+    publicRoleId: authState.players.p_1.roleId,
+    publicFaction: authState.players.p_1.faction,
+    publicCopiedRoleId: 'exp1_lloyd',
+  });
+  assert.equal(hiddenEv.visibility, 'public');
+  assert.equal(hiddenEv.publicRoleId, undefined, 'Unrevealed actor MUST NOT expose publicRoleId');
+  assert.equal(hiddenEv.publicFaction, undefined, 'Unrevealed actor MUST NOT expose publicFaction');
+  assert.equal(hiddenEv.publicCopiedRoleId, undefined, 'Unrevealed actor MUST NOT expose publicCopiedRoleId');
+
+  // 2) Revealed actor: publicRoleId & publicFaction preserved cleanly
+  authState.players.p_2.revealed = true;
+  const revealedEv = appendStructuredVisualEvent(authState, {
+    kind: 'ROLE_REVEALED',
+    effectKey: 'role_reveal',
+    actorPlayerId: 'p_2',
+    atMs: 1_750_500_002_000,
+    publicRoleId: authState.players.p_2.roleId,
+    publicFaction: authState.players.p_2.faction,
+  });
+  assert.equal(revealedEv.publicRoleId, authState.players.p_2.roleId);
+  assert.equal(revealedEv.publicFaction, authState.players.p_2.faction);
+
+  // 3) Ring buffer bounded strictly at BOARD_GAME_MAX_VISUAL_EVENTS (48) with monotonic seq
+  for (let i = 0; i < 60; i++) {
+    appendStructuredVisualEvent(authState, {
+      kind: 'DAMAGE_APPLIED',
+      effectKey: 'slash',
+      actorPlayerId: 'p_2',
+      targetPlayerIds: ['p_3'],
+      atMs: 1_750_500_003_000 + i,
+      amount: 1,
+    });
+  }
+  const projected = projectPublicVisualEvents(authState);
+  assert.equal(projected.length, BOARD_GAME_MAX_VISUAL_EVENTS);
+  assert.equal(projected[projected.length - 1].seq, 62);
+  for (let i = 1; i < projected.length; i++) {
+    assert.ok(projected[i].seq > projected[i - 1].seq, 'visualEvents seq must stay strictly monotonic');
+  }
+  // 4) Zero PRNG drift
+  assert.equal(authState.rngState, rngBefore, 'Structured visual events must NEVER consume PRNG state');
+});
+
+test('Phase 8C Structured Visual Events (27) — All 8 Tier-4 Mappings, Lloyd Cancel Suppresses Hit, Undead Dormant != Elimination & Reconnect Non-Replay', () => {
+  const base = makePubState({
+    matchId: 'p8c-tier4-mapping',
+    turnNumber: 12,
+    players: makePubState().players.map((p) => {
+      if (p.playerId === 'p1') {
+        return { ...p, revealedRoleId: 'exp1_lloyd', revealedFaction: 'lantern-guard', revealedMaxHp: 13 };
+      }
+      if (p.playerId === 'p2') {
+        return { ...p, revealedRoleId: 'exp1_undead', revealedFaction: 'mist-order', revealedMaxHp: 11 };
+      }
+      if (p.playerId === 'p3') {
+        return { ...p, revealedRoleId: 'exp2_bonnie', revealedFaction: 'wanderer', revealedMaxHp: 11 };
+      }
+      if (p.playerId === 'p4') {
+        return { ...p, revealedRoleId: 'exp2_cain', revealedFaction: 'wanderer', revealedMaxHp: 13 };
+      }
+      return p;
+    }),
+    visualEvents: [],
+  });
+
+  // 1) Lloyd ATTACK_CANCELLED suppresses legacy attack hit VFX even if an attack log is present
+  const afterLloyd = {
+    ...base,
+    turnNumber: 13,
+    players: base.players.map((p) => (p.playerId === 'p1' ? { ...p, woundsTaken: 2 } : p)),
+    publicLog: [
+      {
+        id: 'log-lloyd-1',
+        round: 3,
+        atMs: 5000,
+        kind: 'attack',
+        actorId: 'p3',
+        text: '⚔️ Dũng Kiên tấn công Vy Hà nhưng bị Lloyd ngắt đòn!',
+      },
+    ],
+    visualEvents: [
+      {
+        id: 'p8c-tier4-mapping:ve:1',
+        seq: 1,
+        matchId: 'p8c-tier4-mapping',
+        round: 3,
+        turnNumber: 13,
+        atMs: 5000,
+        kind: 'ATTACK_CANCELLED',
+        effectKey: 'lloyd_intercept',
+        actorPlayerId: 'p1',
+        targetPlayerIds: ['p3', 'p2'],
+        visibility: 'public',
+        publicRoleId: 'exp1_lloyd',
+        publicFaction: 'lantern-guard',
+        amount: 2,
+        outcome: 'cancelled',
+        label: 'CANCELLED',
+      },
+    ],
+  };
+  const lloydEvents = extractVisualEventsFromDiff(base, afterLloyd, {
+    selfPlayerId: 'p2',
+    isSpectator: false,
+  });
+  assert.ok(
+    lloydEvents.some((e) => e.kind === 'COMBAT_VFX' && e.effect === 'LLOYD_INTERCEPT'),
+    'Lloyd must emit LLOYD_INTERCEPT VFX',
+  );
+  assert.equal(
+    lloydEvents.some((e) => e.kind === 'COMBAT_VFX' && (e.effect === 'SLASH' || e.effect === 'MASAMUNE_SLASH')),
+    false,
+    'Lloyd ATTACK_CANCELLED must suppress offensive SLASH/hit VFX',
+  );
+  assert.ok(
+    lloydEvents.some((e) => e.kind === 'FLOATING_TEXT' && e.label === 'CANCELLED'),
+    'Lloyd must show CANCELLED floating badge',
+  );
+
+  // 2) Undead PLAYER_DORMANT -> UNDEAD_SHROUD without ELIMINATION, then PLAYER_REVIVED -> UNDEAD_REVIVE +6 HP
+  const afterDormant = {
+    ...afterLloyd,
+    turnNumber: 14,
+    players: afterLloyd.players.map((p) =>
+      p.playerId === 'p2' ? { ...p, alive: false, lifecycleState: 'DORMANT_PENDING_REVIVE' } : p,
+    ),
+    visualEvents: [
+      ...afterLloyd.visualEvents,
+      {
+        id: 'p8c-tier4-mapping:ve:2',
+        seq: 2,
+        matchId: 'p8c-tier4-mapping',
+        round: 3,
+        turnNumber: 14,
+        atMs: 6000,
+        kind: 'PLAYER_DORMANT',
+        effectKey: 'undead_dormant',
+        actorPlayerId: 'p2',
+        targetPlayerIds: ['p2'],
+        visibility: 'public',
+        publicRoleId: 'exp1_undead',
+        publicFaction: 'mist-order',
+        amount: 6,
+        label: 'NGỦ ĐÔNG',
+      },
+    ],
+  };
+  const dormantEvents = extractVisualEventsFromDiff(afterLloyd, afterDormant, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  assert.ok(
+    dormantEvents.some((e) => e.kind === 'COMBAT_VFX' && e.effect === 'UNDEAD_SHROUD'),
+    'Undead dormancy must emit UNDEAD_SHROUD',
+  );
+  assert.equal(
+    dormantEvents.some((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'ELIMINATION'),
+    false,
+    'Undead dormancy must NEVER fire ELIMINATION cut-in',
+  );
+
+  const afterRevive = {
+    ...afterDormant,
+    turnNumber: 15,
+    players: afterDormant.players.map((p) =>
+      p.playerId === 'p2'
+        ? { ...p, alive: true, lifecycleState: 'ACTIVE', woundsTaken: 5 }
+        : p,
+    ),
+    visualEvents: [
+      ...afterDormant.visualEvents,
+      {
+        id: 'p8c-tier4-mapping:ve:3',
+        seq: 3,
+        matchId: 'p8c-tier4-mapping',
+        round: 4,
+        turnNumber: 15,
+        atMs: 7000,
+        kind: 'PLAYER_REVIVED',
+        effectKey: 'undead_revive',
+        actorPlayerId: 'p2',
+        targetPlayerIds: ['p2'],
+        visibility: 'public',
+        publicRoleId: 'exp1_undead',
+        publicFaction: 'mist-order',
+        amount: 6,
+        label: '+6 HP',
+      },
+    ],
+  };
+  const reviveEvents = extractVisualEventsFromDiff(afterDormant, afterRevive, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  assert.ok(
+    reviveEvents.some((e) => e.kind === 'COMBAT_VFX' && e.effect === 'UNDEAD_REVIVE'),
+    'Undead revival must emit UNDEAD_REVIVE',
+  );
+  assert.equal(
+    reviveEvents.filter((e) => e.kind === 'COMBAT_VFX' && e.effect === 'HEAL_AURA').length,
+    0,
+    'Undead revival must NOT double-emit generic HEAL_AURA',
+  );
+
+  // 3) Bonnie FACTION_CHANGED, Cain CAIN_POWER_PLAY + MultiFactionVictory, N.C. Soldier recruit, Voodoo puppet, Antimony & Vengeful Spirit copy
+  const afterOthers = {
+    ...afterRevive,
+    turnNumber: 16,
+    winnerLabel: 'Đồng thắng: Đội Săn Đêm & Hội Bóng Đêm',
+    winnerFaction: 'multi-faction',
+    winningFactions: ['lantern-guard', 'mist-order'],
+    winnerPlayerIds: ['p1', 'p2', 'p4'],
+    winReason: 'Nước Cờ Quyền Lực của Cain kích hoạt đồng thắng song phe!',
+    visualEvents: [
+      ...afterRevive.visualEvents,
+      {
+        id: 'p8c-tier4-mapping:ve:4',
+        seq: 4,
+        matchId: 'p8c-tier4-mapping',
+        round: 4,
+        turnNumber: 16,
+        atMs: 8000,
+        kind: 'FACTION_CHANGED',
+        effectKey: 'bonnie_succession',
+        actorPlayerId: 'p3',
+        targetPlayerIds: ['p3'],
+        visibility: 'public',
+        publicRoleId: 'exp2_bonnie',
+        publicFaction: 'mist-order',
+        label: 'GIA NHẬP SHADOW',
+      },
+      {
+        id: 'p8c-tier4-mapping:ve:5',
+        seq: 5,
+        matchId: 'p8c-tier4-mapping',
+        round: 4,
+        turnNumber: 16,
+        atMs: 8010,
+        kind: 'SKILL_ACTIVATED',
+        effectKey: 'cain_power_play',
+        actorPlayerId: 'p4',
+        targetPlayerIds: ['p4'],
+        visibility: 'public',
+        publicRoleId: 'exp2_cain',
+        publicFaction: 'wanderer',
+      },
+      {
+        id: 'p8c-tier4-mapping:ve:6',
+        seq: 6,
+        matchId: 'p8c-tier4-mapping',
+        round: 4,
+        turnNumber: 16,
+        atMs: 8020,
+        kind: 'PLAYER_RECRUITED',
+        effectKey: 'nc_soldier_recruit',
+        actorPlayerId: 'p3',
+        targetPlayerIds: ['p2'],
+        visibility: 'public',
+        outcome: 'failed',
+        label: 'TRƯỢT',
+      },
+      {
+        id: 'p8c-tier4-mapping:ve:7',
+        seq: 7,
+        matchId: 'p8c-tier4-mapping',
+        round: 4,
+        turnNumber: 16,
+        atMs: 8030,
+        kind: 'TURN_HIJACK_STARTED',
+        effectKey: 'voodoo_hijack',
+        actorPlayerId: 'p2',
+        targetPlayerIds: ['p1'],
+        visibility: 'public',
+        label: 'CON RỐI',
+      },
+      {
+        id: 'p8c-tier4-mapping:ve:8',
+        seq: 8,
+        matchId: 'p8c-tier4-mapping',
+        round: 4,
+        turnNumber: 16,
+        atMs: 8040,
+        kind: 'COPY_SKILL_APPLIED',
+        effectKey: 'antimony_copy',
+        actorPlayerId: 'p4',
+        targetPlayerIds: ['p1'],
+        visibility: 'public',
+        publicRoleId: 'exp1_antimony',
+        publicCopiedRoleId: 'exp1_lloyd',
+      },
+      {
+        id: 'p8c-tier4-mapping:ve:9',
+        seq: 9,
+        matchId: 'p8c-tier4-mapping',
+        round: 4,
+        turnNumber: 16,
+        atMs: 8050,
+        kind: 'COPY_SKILL_APPLIED',
+        effectKey: 'vengeful_spirit_copy',
+        actorPlayerId: 'p2',
+        targetPlayerIds: ['p1'],
+        visibility: 'public',
+        publicRoleId: 'exp1_vengeful_spirit',
+        publicCopiedRoleId: 'exp1_lloyd',
+      },
+    ],
+  };
+  const comboEvents = extractVisualEventsFromDiff(afterRevive, afterOthers, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  const effects = new Set(comboEvents.filter((e) => e.kind === 'COMBAT_VFX').map((e) => e.effect));
+  assert.ok(effects.has('BONNIE_SUCCESSION'));
+  assert.ok(effects.has('CAIN_POWER_PLAY'));
+  assert.ok(effects.has('NC_SOLDIER_RECRUIT'));
+  assert.ok(effects.has('VOODOO_PUPPET'));
+  assert.ok(effects.has('ANTIMONY_MIRROR'));
+  assert.ok(effects.has('VENGEFUL_ECHO'));
+
+  const victoryCutIn = comboEvents.find((e) => e.kind === 'CINEMATIC_CUTIN' && e.bannerType === 'VICTORY');
+  assert.ok(victoryCutIn, 'Expected VICTORY cut-in');
+  assert.deepEqual(victoryCutIn.winningFactions, ['lantern-guard', 'mist-order']);
+
+  // 4) F5 Reconnect with historical structured visualEvents MUST replay 0 VFX and 0 sounds
+  const reconnectTracker = new VisualEventTracker();
+  const seeded = reconnectTracker.seedBaseline(afterOthers, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  assert.equal(seeded.length, 0, 'F5 Reconnect mid/post match with visualEvents must replay 0 events');
+  const dup = reconnectTracker.ingestSnapshot(afterOthers, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  assert.equal(dup.length, 0, 'Duplicate snapshot after reconnect must emit 0 events');
+});

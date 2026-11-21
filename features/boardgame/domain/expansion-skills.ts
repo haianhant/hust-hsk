@@ -119,6 +119,7 @@ import {
   recordAuthoritativeRevealEvent,
   type AuthoritativeRevealTriggerReason,
 } from './reveal-events';
+import { appendStructuredVisualEvent } from './visual-events';
 import { FACTION_LABELS, getRoleDesign, isEligibleForChocolateHeal } from './roles';
 import {
   areInSameCluster,
@@ -2466,6 +2467,17 @@ const umibozuRevealAoeHandler: SkillHandlerDefinition = {
       ctx.event.nowMs,
       ctx.owner.playerId,
     );
+    appendStructuredVisualEvent(ctx.state, {
+      kind: 'SKILL_ACTIVATED',
+      effectKey: 'umibozu_wave',
+      actorPlayerId: ctx.owner.playerId,
+      targetPlayerIds: orderedVictims.map((v) => v.playerId),
+      atMs: ctx.event.nowMs,
+      publicRoleId: ctx.owner.roleId,
+      amount: 3,
+      isMultiTarget: orderedVictims.length > 1,
+      label: 'SÓNG NGẦM',
+    });
 
     const depth = typeof payload.chainDepth === 'number' ? payload.chainDepth : 0;
     const queued = Array.isArray(payload.queuedRevealSteps)
@@ -3461,6 +3473,15 @@ function checkAprilSkippsWoundSevenTrigger(
     nowMs,
     target.playerId,
   );
+  appendStructuredVisualEvent(state, {
+    kind: 'SKILL_ACTIVATED',
+    effectKey: 'april_skipps_countdown',
+    actorPlayerId: target.playerId,
+    targetPlayerIds: [target.playerId],
+    atMs: nowMs,
+    publicRoleId: target.roleId,
+    label: 'ĐẾM NGƯỢC 7',
+  });
   if (justRevealed) {
     appendHighlight(
       state,
@@ -6485,6 +6506,15 @@ export function applyExpandedTransferToBethany(
     nowMs,
     actor.playerId,
   );
+  appendStructuredVisualEvent(state, {
+    kind: 'EQUIPMENT_TRANSFERRED',
+    effectKey: 'bethany_chosen_bond',
+    actorPlayerId: bethany.playerId,
+    targetPlayerIds: [actor.playerId],
+    atMs: nowMs,
+    publicRoleId: bethany.revealed ? bethany.roleId : null,
+    label: 'NGƯỜI ĐƯỢC CHỌN',
+  });
   callbacks.finalizeIfFinished(state, nowMs);
   return { ok: true };
 }
@@ -6601,6 +6631,15 @@ export function triggerExpandedTurnStart(
         nowMs,
         diana.playerId,
       );
+      appendStructuredVisualEvent(state, {
+        kind: 'SKILL_ACTIVATED',
+        effectKey: 'diana_contract_active',
+        actorPlayerId: diana.playerId,
+        targetPlayerIds: [actor.playerId],
+        atMs: nowMs,
+        publicRoleId: diana.roleId,
+        label: 'HỢP ĐỒNG',
+      });
       if (justRevealed) {
         appendHighlight(
           state,
@@ -6634,6 +6673,15 @@ export function triggerExpandedTurnStart(
         nowMs,
         actor.playerId,
       );
+      appendStructuredVisualEvent(state, {
+        kind: 'SKILL_ACTIVATED',
+        effectKey: 'angel_sanctuary_activate',
+        actorPlayerId: actor.playerId,
+        targetPlayerIds: [actor.playerId],
+        atMs: nowMs,
+        publicRoleId: actor.roleId,
+        label: 'THIÊN SỨ',
+      });
     } else if (
       angelAura.phase === 'active' &&
       angelAura.activatedOnTurnNumber !== undefined &&
@@ -7088,6 +7136,15 @@ function executeWarlordPullAttack(
     nowMs,
     warlord.playerId,
   );
+  appendStructuredVisualEvent(state, {
+    kind: 'SKILL_ACTIVATED',
+    effectKey: 'warlord_pull_strike',
+    actorPlayerId: warlord.playerId,
+    targetPlayerIds: [target.playerId],
+    atMs: nowMs,
+    publicRoleId: warlord.roleId,
+    label: 'CHIẾN TRANH',
+  });
 
   if (isUdiProtectedFromAttack(state, target)) {
     incRoleStat(exp.stats.activationsByRole, 'exp1_udi', 1);
@@ -7337,6 +7394,16 @@ export function applyExpandedUseSkill(
       nowMs,
       actor.playerId,
     );
+    appendStructuredVisualEvent(state, {
+      kind: 'SKILL_ACTIVATED',
+      effectKey: 'eleanor_interrogator',
+      actorPlayerId: actor.playerId,
+      targetPlayerIds: [actor.playerId],
+      atMs: nowMs,
+      publicRoleId: actor.roleId,
+      cardCount: 1,
+      label: 'THẨM VẤN',
+    });
     callbacks.finalizeIfFinished(state, nowMs);
     return { ok: true };
   }
@@ -7827,6 +7894,16 @@ export function applyExpandedUseSkill(
     if ((actor.roleId as string) !== 'exp2_cain') {
       expCain.stats.copiedSkillActivations = (expCain.stats.copiedSkillActivations ?? 0) + 1;
     }
+    appendStructuredVisualEvent(state, {
+      kind: 'SKILL_ACTIVATED',
+      effectKey: 'cain_power_play',
+      actorPlayerId: actor.playerId,
+      targetPlayerIds: [actor.playerId],
+      atMs: nowMs,
+      publicRoleId: actor.roleId,
+      amount: livingPlayersCount,
+      label: 'NƯỚC CỜ QUYỀN LỰC',
+    });
 
     expCain.pendingSteps.push(
       {
@@ -8087,6 +8164,16 @@ function executeDamageStep(
         target.displayName,
         cursedVictim.displayName,
       );
+      appendStructuredVisualEvent(state, {
+        kind: 'DAMAGE_REDIRECTED',
+        effectKey: 'anathema_redirect',
+        actorPlayerId: target.playerId,
+        targetPlayerIds: [cursedVictim.playerId],
+        atMs: nowMs,
+        publicRoleId: target.roleId,
+        amount: dmg,
+        label: 'CHUYỂN NGUYỀN',
+      });
       expRedir.pendingSteps.unshift(redirectedStep);
       return true;
     }
@@ -8280,6 +8367,16 @@ function executeDamageStep(
         nowMs,
         target.playerId,
       );
+      appendStructuredVisualEvent(state, {
+        kind: 'DAMAGE_PREVENTED',
+        effectKey: 'angel_sanctuary',
+        actorPlayerId: target.playerId,
+        targetPlayerIds: [target.playerId],
+        atMs: nowMs,
+        amount: dmg,
+        outcome: 'blocked',
+        label: 'THIÊN SỨ',
+      });
       dmg = 0;
     } else if (step.sourceType === 'attack' && target.guardianShieldActive) {
       appendPublicLog(
@@ -8757,6 +8854,17 @@ function executeDamageStep(
         nowMs,
         attacker.playerId,
       );
+      appendStructuredVisualEvent(state, {
+        kind: 'SKILL_ACTIVATED',
+        effectKey: 'fujiko_execute',
+        actorPlayerId: attacker.playerId,
+        targetPlayerIds: [target.playerId],
+        atMs: nowMs,
+        publicRoleId: attacker.roleId,
+        amount: fujikoExecExtra,
+        isCritical: true,
+        label: 'KẾT LIỄU!',
+      });
     }
   }
 
@@ -8847,6 +8955,17 @@ function executeDamageStep(
           nowMs,
           target.playerId,
         );
+        appendStructuredVisualEvent(state, {
+          kind: 'PLAYER_DORMANT',
+          effectKey: 'undead_dormant',
+          actorPlayerId: target.playerId,
+          targetPlayerIds: [target.playerId],
+          atMs: nowMs,
+          publicRoleId: target.roleId,
+          publicFaction: effFac,
+          amount: Math.min(target.maxHp, UNDEAD_REVIVE_HP),
+          label: 'NGỦ ĐÔNG',
+        });
         return true;
       }
     }
@@ -8892,6 +9011,16 @@ function executeDamageStep(
       faction: victimFactionAtDeath,
       reason: 'eliminated',
     };
+    appendStructuredVisualEvent(state, {
+      kind: 'ELIMINATION',
+      effectKey: 'final_elimination',
+      actorPlayerId: target.playerId,
+      targetPlayerIds: [target.playerId],
+      atMs: nowMs,
+      publicRoleId: target.roleId,
+      publicFaction: victimFactionAtDeath,
+      label: role.name,
+    });
     // Ghi sổ lộ diện do tử vong (isDeathReveal=true -> bị loại khỏi ràng buộc bình thường của Cassie/Diana/Aaron!)
     recordAuthoritativeRevealEvent(state, {
       revealEventId: deathRevealId,
@@ -8956,6 +9085,16 @@ function executeDamageStep(
           `Bonnie kế thừa vị trí Shadow sau khi hạ gục ${target.displayName}.`,
           nowMs,
         );
+        appendStructuredVisualEvent(state, {
+          kind: 'FACTION_CHANGED',
+          effectKey: 'bonnie_shadow_succession',
+          actorPlayerId: attacker.playerId,
+          targetPlayerIds: [attacker.playerId, target.playerId],
+          atMs: nowMs,
+          publicRoleId: attacker.roleId,
+          publicFaction: 'mist-order',
+          label: 'GIA NHẬP SHADOW',
+        });
         if (justRevealed) {
           enqueueRoleRevealedTrigger(state, attacker.playerId, 'skill-forced', step.chainDepth ?? 0, {
             sourceActorId: target.playerId,
@@ -9702,6 +9841,16 @@ function executeEliminationTriggersStep(
         nowMs,
         antimony.playerId,
       );
+      appendStructuredVisualEvent(state, {
+        kind: 'COPY_SKILL_APPLIED',
+        effectKey: 'antimony_copy',
+        actorPlayerId: antimony.playerId,
+        targetPlayerIds: [chosenVictim.playerId],
+        atMs: nowMs,
+        publicRoleId: antimony.roleId,
+        publicCopiedRoleId: (skillBind.binding?.effectiveSkillRoleId ?? chosenVictim.roleId) as BoardGameRoleId,
+        label: copiedRoleName,
+      });
       if (justRevealed) {
         appendHighlight(
           state,
@@ -10475,6 +10624,16 @@ export function drainPendingSteps(
                 `${recruitTarget.displayName} gia nhập Liên minh Chiêu Mộ của ${actor.displayName}.`,
                 nowMs,
               );
+              appendStructuredVisualEvent(state, {
+                kind: 'PLAYER_RECRUITED',
+                effectKey: 'nc_soldier_recruit',
+                actorPlayerId: actor.playerId,
+                targetPlayerIds: [recruitTarget.playerId],
+                atMs: nowMs,
+                publicRoleId: actor.roleId,
+                outcome: 'success',
+                label: 'CHIÊU MỘ!',
+              });
             }
           } else {
             appendPublicLog(
@@ -10484,6 +10643,16 @@ export function drainPendingSteps(
               nowMs,
               actor.playerId,
             );
+            appendStructuredVisualEvent(state, {
+              kind: 'PLAYER_RECRUITED',
+              effectKey: 'nc_soldier_recruit',
+              actorPlayerId: actor.playerId,
+              targetPlayerIds: recruitTarget ? [recruitTarget.playerId] : [],
+              atMs: nowMs,
+              publicRoleId: actor.roleId,
+              outcome: 'failed',
+              label: 'CHƯA ĐỦ 5 VẾT',
+            });
           }
         }
 
@@ -11289,6 +11458,17 @@ export function resolvePendingChoice(
         nowMs,
         actor.playerId,
       );
+      appendStructuredVisualEvent(state, {
+        kind: 'SKILL_ACTIVATED',
+        effectKey: 'wrath_nova',
+        actorPlayerId: actor.playerId,
+        targetPlayerIds: victims.map((v) => v.playerId),
+        atMs: nowMs,
+        publicRoleId: actor.roleId,
+        amount: 2,
+        isMultiTarget: victims.length > 1,
+        label: 'CƠN THỊNH NỘ',
+      });
       for (const victim of victims) {
         exp.pendingSteps.push({
           kind: 'DAMAGE',
@@ -11353,6 +11533,17 @@ export function resolvePendingChoice(
       const d4 = rollD4(state);
       incRoleStat(exp.stats.activationsByRole, 'exp1_vengeance', 1);
       incRoleStat(exp.stats.bonusDamageByRole, 'exp1_vengeance', d4 * liveTargets.length);
+      appendStructuredVisualEvent(state, {
+        kind: 'SKILL_ACTIVATED',
+        effectKey: 'vengeance_chain',
+        actorPlayerId: vengeance.playerId,
+        targetPlayerIds: liveTargets.map((t) => t.playerId),
+        atMs: nowMs,
+        publicRoleId: vengeance.roleId,
+        amount: d4,
+        isMultiTarget: liveTargets.length > 1,
+        label: `BÁO THÙ ${d4} ST`,
+      });
 
       appendPublicLog(
         state,
@@ -11429,6 +11620,15 @@ export function resolvePendingChoice(
         nowMs,
         actor.playerId,
       );
+      appendStructuredVisualEvent(state, {
+        kind: 'SKILL_ACTIVATED',
+        effectKey: 'visions_mark',
+        actorPlayerId: actor.playerId,
+        targetPlayerIds: [target.playerId],
+        atMs: nowMs,
+        publicRoleId: actor.roleId,
+        label: 'DẤU ẤN',
+      });
       return { ok: true };
     }
 
@@ -11918,6 +12118,16 @@ export function resolvePendingChoice(
           nowMs,
           gideon.playerId,
         );
+        appendStructuredVisualEvent(state, {
+          kind: 'SKILL_ACTIVATED',
+          effectKey: 'gideon_reward',
+          actorPlayerId: gideon.playerId,
+          targetPlayerIds: [gideon.playerId],
+          atMs: nowMs,
+          publicRoleId: gideon.roleId,
+          cardCount: 3,
+          label: '3 THẺ TRẮNG',
+        });
         exp.pendingSteps.unshift({
           kind: 'GIDEON_DRAW_WHITE_CARD',
           gideonPlayerId: gideon.playerId,
@@ -12163,6 +12373,17 @@ export function resolvePendingChoice(
             reflectTarget.displayName,
             justRevealed,
           );
+          appendStructuredVisualEvent(state, {
+            kind: 'DAMAGE_REDIRECTED',
+            effectKey: 'arnold_reflect',
+            actorPlayerId: arnold.playerId,
+            targetPlayerIds: [reflectTarget.playerId],
+            atMs: nowMs,
+            publicRoleId: arnold.roleId,
+            amount: data.reflectedAmount,
+            isCritical: true,
+            label: `PHẢN ${data.reflectedAmount} ST!`,
+          });
           exp.pendingSteps.unshift(reflectedStep);
 
           if (justRevealed) {
@@ -12383,6 +12604,15 @@ export function resolvePendingChoice(
       if (optionId === 'recover_item' && !options?.isTimeoutFallback && colt && colt.alive) {
         const reclaimed = reclaimStolenEquipmentTransaction(state, data.txId, nowMs);
         if (reclaimed.ok) {
+          appendStructuredVisualEvent(state, {
+            kind: 'EQUIPMENT_TRANSFERRED',
+            effectKey: 'colt_reclaim',
+            actorPlayerId: colt.playerId,
+            targetPlayerIds: thief ? [thief.playerId] : [colt.playerId],
+            atMs: nowMs,
+            publicRoleId: colt.roleId,
+            label: 'THU HỒI',
+          });
           if (!exp.stats.equipmentReclaimedByRole) exp.stats.equipmentReclaimedByRole = {};
           incRoleStat(exp.stats.equipmentReclaimedByRole, 'exp2_colt', 1);
           appendPublicLog(
@@ -12471,6 +12701,18 @@ export function resolvePendingChoice(
             nowMs,
             lloyd.playerId,
           );
+          appendStructuredVisualEvent(state, {
+            kind: 'ATTACK_CANCELLED',
+            effectKey: 'lloyd_interrupt',
+            actorPlayerId: lloyd.playerId,
+            targetPlayerIds: [declared.attackerPlayerId, ...declared.targetPlayerIds],
+            atMs: nowMs,
+            publicRoleId: lloyd.roleId,
+            amount: 2,
+            outcome: 'cancelled',
+            isMultiTarget: declared.hasMachineGun || declared.targetPlayerIds.length > 1,
+            label: 'CANCELLED',
+          });
           // Cam kết hủy đòn TRƯỚC, sau đó mới áp 2 sát thương chi phí HP (cho phép Lloyd tự hy sinh HP cuối cùng!)
           exp.pendingSteps.unshift(
             {
@@ -12538,6 +12780,16 @@ export function resolvePendingChoice(
           nowMs,
           spirit.playerId,
         );
+        appendStructuredVisualEvent(state, {
+          kind: 'COPY_SKILL_APPLIED',
+          effectKey: 'vengeful_spirit_copy',
+          actorPlayerId: spirit.playerId,
+          targetPlayerIds: [chosenVictim.playerId],
+          atMs: nowMs,
+          publicRoleId: spirit.roleId,
+          publicCopiedRoleId: (bindRes.binding?.effectiveSkillRoleId ?? chosenVictim.roleId) as BoardGameRoleId,
+          label: copiedRoleName,
+        });
         if (justRevealed) {
           appendHighlight(
             state,
@@ -12586,6 +12838,15 @@ export function resolvePendingChoice(
           nowMs,
           voodoo.playerId,
         );
+        appendStructuredVisualEvent(state, {
+          kind: 'SKILL_ACTIVATED',
+          effectKey: 'voodoo_mark_puppet',
+          actorPlayerId: voodoo.playerId,
+          targetPlayerIds: [target.playerId],
+          atMs: nowMs,
+          publicRoleId: voodoo.roleId,
+          label: 'DÂY RỐI',
+        });
       }
       drainPendingSteps(state, nowMs, callbacks);
       callbacks.finalizeIfFinished(state, nowMs);

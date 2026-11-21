@@ -20,6 +20,7 @@ export * from './expansion-skills';
 export * from './registry';
 export * from './effects';
 export * from './victory';
+export * from './visual-events';
 export * from './projections';
 export * from './actions';
 export * from './state-machine';
