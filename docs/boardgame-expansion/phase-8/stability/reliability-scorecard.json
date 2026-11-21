@@ -1,0 +1,213 @@
+{
+  "schemaVersion": "1.0.0",
+  "phase": "8E",
+  "generatedAt": "2026-11-21T14:03:35.862Z",
+  "baselineHead": "7ff5c257327e4aa4d16ba8f752df4a58e678fa09",
+  "roles": {
+    "totalCatalog": 66,
+    "audited": 66,
+    "verified": 66,
+    "partial": 0,
+    "untested": 0,
+    "positiveSkillTests": 66,
+    "negativeSkillTests": 66,
+    "neutralIndependentVictoryTotal": 25,
+    "neutralVictoryPositiveAndNegative": 25,
+    "expansionRolesActivatedInFuzz": 56,
+    "expansionRolesTotal": 56,
+    "totalExpansionSkillActivationsMeasured": 3187
+  },
+  "cards": {
+    "distinctCardIds": 40,
+    "canonicalCopies": 48,
+    "verifiedDistinctIds": 40,
+    "partialDistinctIds": 0,
+    "untestedDistinctIds": 0,
+    "previouslyUntestedClosed": [
+      "inv-03",
+      "inv-04",
+      "inv-10",
+      "eq-10"
+    ]
+  },
+  "interactions": {
+    "totalUnorderedPairs": 2145,
+    "eligibleOverlappingPairs": 598,
+    "criticalPairsTotal": 6,
+    "criticalPairsCovered": 6,
+    "highRiskPairsTotal": 72,
+    "highRiskCoveredExisting": 30,
+    "highRiskNewlyCoveredPhase8E": 26,
+    "highRiskTotalCovered": 56,
+    "highRiskUncovered": 16,
+    "mandatoryCriticalFamiliesVerified": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ]
+  },
+  "statefulFuzzing": {
+    "ok": true,
+    "validMatches": 400,
+    "validSteps": 76161,
+    "targetedMatches": 120,
+    "targetedSteps": 21040,
+    "targetedRostersCount": 12,
+    "totalStepsExecuted": 97201,
+    "adversarialMatches": 150,
+    "adversarialProbesRejected": 56763,
+    "adversarialProbesTotal": 56763,
+    "deterministicReplaysVerified": 76,
+    "deterministicReplayFailures": 0,
+    "uniquePairsCoOccurred": 1746,
+    "violations": 0
+  },
+  "doChaosAndPersistence": {
+    "suiteFile": "test/boardgame-phase8e-do-chaos.test.cjs",
+    "testGroupsPassed": 5,
+    "testGroupsTotal": 5,
+    "roomSizesVerified": [
+      "4P",
+      "5P",
+      "6P",
+      "7P",
+      "8P"
+    ],
+    "persistenceRecoverySuccess": true,
+    "zeroDuplicatedVictoryRewards": true,
+    "betaRollbackBackwardCompatible": true
+  },
+  "concurrencyAndSoak": {
+    "environment": "isolated-local-sqlite-do-harness (non-production)",
+    "levelsTested": [
+      {
+        "concurrentRooms": 5,
+        "totalPlayers": 30,
+        "wallTimeMs": 615,
+        "actionAckP50Ms": 15.05,
+        "actionAckP95Ms": 21.49,
+        "reconnectSuccessRatePct": 100,
+        "errors": 0,
+        "invariantFailures": 0,
+        "logBoundBreaches": 0,
+        "rssMb": 223.79
+      },
+      {
+        "concurrentRooms": 10,
+        "totalPlayers": 60,
+        "wallTimeMs": 1219.2,
+        "actionAckP50Ms": 29.5,
+        "actionAckP95Ms": 48.2,
+        "reconnectSuccessRatePct": 100,
+        "errors": 0,
+        "invariantFailures": 0,
+        "logBoundBreaches": 0,
+        "rssMb": 233.16
+      },
+      {
+        "concurrentRooms": 25,
+        "totalPlayers": 150,
+        "wallTimeMs": 2731,
+        "actionAckP50Ms": 27.72,
+        "actionAckP95Ms": 45.28,
+        "reconnectSuccessRatePct": 100,
+        "errors": 0,
+        "invariantFailures": 0,
+        "logBoundBreaches": 0,
+        "rssMb": 250.8
+      },
+      {
+        "concurrentRooms": 50,
+        "totalPlayers": 300,
+        "wallTimeMs": 4992.8,
+        "actionAckP50Ms": 27.29,
+        "actionAckP95Ms": 38.37,
+        "reconnectSuccessRatePct": 100,
+        "errors": 0,
+        "invariantFailures": 0,
+        "logBoundBreaches": 0,
+        "rssMb": 271.26
+      }
+    ],
+    "soak": {
+      "cycles": 12,
+      "totalRoomsProcessed": 48,
+      "hibernationsVerified": 36,
+      "abandonedRoomsHandled": 12,
+      "invariantFailures": 0,
+      "logBoundBreaches": 0,
+      "errors": 0,
+      "earlyAvgAckP50Ms": 7.25,
+      "lateAvgAckP50Ms": 7.83,
+      "earlyAvgHeapMb": 79.69,
+      "lateAvgHeapMb": 45.62,
+      "peakRssMb": 271.95
+    }
+  },
+  "mutationTesting": {
+    "predicatesCovered": [
+      "victory-eligibility",
+      "pending-choice-ownership",
+      "turn-control-authorization",
+      "deadline-expiration",
+      "resurrection-status",
+      "damage-redirection",
+      "effective-faction",
+      "equipment-conservation"
+    ],
+    "nonEquivalentMutantsTotal": 12,
+    "nonEquivalentMutantsKilled": 12,
+    "nonEquivalentMutantsSurvived": 0,
+    "equivalentDefenseInDepthGuardsDocumented": 2,
+    "initialGapClosedByNewTest": [
+      "MUT-08 (Undead last-Shadow dormancy -> 8E2-B)"
+    ]
+  },
+  "defects": {
+    "confirmedBySeverity": {
+      "P0": 0,
+      "P1": 2,
+      "P2": 1,
+      "P3": 0
+    },
+    "fixedBySeverity": {
+      "P0": 0,
+      "P1": 2,
+      "P2": 1,
+      "P3": 0
+    },
+    "openBySeverity": {
+      "P0": 0,
+      "P1": 0,
+      "P2": 0,
+      "P3": 0
+    },
+    "register": [
+      {
+        "id": "BUG-8E-01",
+        "severity": "P1",
+        "status": "FIXED",
+        "summary": "ev-12 Banana Peel with equipped gear skipped Gloria queued-card delivery & immediate Colt/Bob victory finalization"
+      },
+      {
+        "id": "BUG-8E-02",
+        "severity": "P1",
+        "status": "FIXED",
+        "summary": "Copied Gideon GIDEON_DRAW_WHITE_CARD unconditionally healed non-Hunter on eq-13 Advent and ignored A/E/U eq-14 Chocolate"
+      },
+      {
+        "id": "BUG-8E-03",
+        "severity": "P2",
+        "status": "FIXED",
+        "summary": "Phase 8B targeted fuzzer rosters had invalid role IDs exp2_felicia/exp2_ernest silently falling back to George"
+      }
+    ]
+  },
+  "residualRisks": [
+    "16 high-risk role pairs (score>=15) lack standalone deterministic pairwise assertions (covered only via risk-weighted fuzzer co-occurrence).",
+    "Load/soak tests ran against isolated local SQLite DO harness; Cloudflare edge isolate CPU limits, WAN WebSocket jitter, and regional DO cold starts are not replicated identically locally.",
+    "Expansion 1, Expansion 2 and Full Expansion remain Production Beta pending ongoing human playtest balance telemetry."
+  ]
+}
