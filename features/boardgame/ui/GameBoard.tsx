@@ -1076,7 +1076,7 @@ export function GameBoard({
                     <div
                       key={p.playerId}
                       data-testid={`bg-player-strip-card-${p.seatIndex}`}
-                      data-lifecycle-state={p.lifecycleState ?? (p.alive ? 'ACTIVE' : 'ELIMINATED')}
+                      data-lifecycle-state={p.lifecycleState ?? (p.alive ? 'ALIVE' : 'FINAL_ELIMINATED')}
                       className={`min-w-0 rounded-xl border px-2 py-1 flex items-center justify-between gap-1.5 transition ${
                         isDormantCard
                           ? 'border-emerald-400/75 bg-purple-950/65 ring-1 ring-purple-400/50'

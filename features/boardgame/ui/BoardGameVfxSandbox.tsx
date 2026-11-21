@@ -930,6 +930,428 @@ export function BoardGameVfxSandbox() {
     ]);
   };
 
+  // -------------------------------------------------------------------------
+  // PHASE 8C SHOWCASE: ALL 8 TIER-4 SIGNATURE VFX + MULTI-FACTION VICTORY + TIER-3 FAMILIES
+  // -------------------------------------------------------------------------
+  const triggerPhase8CLloydIntercept = () => {
+    vfx.skipAllAnimations();
+    const id = nextLogId('p8c-lloyd');
+    setLastDemoLabel('Phase 8C Tier-4 · Lloyd: Kết giới Lạc Lối chặn & hủy hoàn toàn đòn đánh (CANCELLED)');
+    vfx.enqueueEvents([
+      {
+        id: `${id}-fx`,
+        kind: 'COMBAT_VFX',
+        order: 38,
+        durationMs: vfx.reducedMotion ? 220 : 1040,
+        effect: 'LLOYD_INTERCEPT',
+        sourcePlayerId: 'sb-minh',
+        targetPlayerIds: ['sb-dung', 'sb-vy'],
+        shake: 'light',
+        roleId: 'exp1_lloyd',
+        effectKey: 'lloyd_intercept',
+        outcome: 'cancelled',
+      },
+      {
+        id: `${id}-cutin`,
+        kind: 'CINEMATIC_CUTIN',
+        order: 32,
+        durationMs: vfx.reducedMotion ? 240 : 1220,
+        bannerType: 'ULTIMATE_SKILL',
+        title: 'NGẮT ĐÒN',
+        subtitle: 'Minh An (Lloyd) hy sinh 2 HP hủy hoàn toàn đòn tấn công!',
+        faction: 'lantern-guard',
+        roleId: 'exp1_lloyd',
+        roleName: 'Lloyd',
+        portraitSrc: MIDNIGHT_CHARACTER_ART.exp1_lloyd ?? null,
+        skillName: 'LẠC LỐI · HỦY ĐÒN',
+        actorId: 'sb-minh',
+      },
+      {
+        id: `${id}-txt`,
+        kind: 'FLOATING_TEXT',
+        order: 49,
+        durationMs: vfx.reducedMotion ? 220 : 900,
+        targetPlayerId: 'sb-vy',
+        label: 'CANCELLED',
+        variant: 'block',
+        syncGroup: 'shield',
+      },
+    ]);
+  };
+
+  const triggerPhase8CVengefulEcho = () => {
+    vfx.skipAllAnimations();
+    const id = nextLogId('p8c-vengeful');
+    setLastDemoLabel('Phase 8C Tier-4 · Vengeful Spirit: Hấp thụ linh hồn & kế thừa kỹ năng công khai');
+    vfx.enqueueEvents([
+      {
+        id: `${id}-fx`,
+        kind: 'COMBAT_VFX',
+        order: 40,
+        durationMs: vfx.reducedMotion ? 220 : 1040,
+        effect: 'VENGEFUL_ECHO',
+        sourcePlayerId: 'sb-vy',
+        targetPlayerIds: ['sb-dung'],
+        shake: 'light',
+        roleId: 'exp1_vengeful_spirit',
+        effectKey: 'vengeful_spirit_copy',
+      },
+      {
+        id: `${id}-txt`,
+        kind: 'FLOATING_TEXT',
+        order: 51,
+        durationMs: vfx.reducedMotion ? 220 : 900,
+        targetPlayerId: 'sb-dung',
+        label: 'SAO CHÉP',
+        variant: 'counter',
+        syncGroup: 'counter',
+      },
+    ]);
+  };
+
+  const triggerPhase8CVoodooPuppet = () => {
+    vfx.skipAllAnimations();
+    const id = nextLogId('p8c-voodoo');
+    setLastDemoLabel('Phase 8C Tier-4 · Voodoo: Điều khiển con rối (🧵) & trạng thái tạm dừng bài kín (🔒)');
+    setGame((prev) => ({
+      ...prev,
+      controlledTurn: {
+        controlGrantId: 'sb-voodoo-grant-1',
+        activePlayerId: 'sb-vy',
+        controllerPlayerId: 'sb-dung',
+        pausedForOwnerDecision: true,
+        publicDrawnCards: [],
+      },
+    }));
+    vfx.enqueueEvents([
+      {
+        id: `${id}-fx`,
+        kind: 'COMBAT_VFX',
+        order: 38,
+        durationMs: vfx.reducedMotion ? 220 : 1040,
+        effect: 'VOODOO_PUPPET',
+        sourcePlayerId: 'sb-dung',
+        targetPlayerIds: ['sb-vy'],
+        shake: 'none',
+        roleId: 'exp1_voodoo',
+        effectKey: 'voodoo_hijack',
+      },
+      {
+        id: `${id}-txt`,
+        kind: 'FLOATING_TEXT',
+        order: 50,
+        durationMs: vfx.reducedMotion ? 220 : 900,
+        targetPlayerId: 'sb-vy',
+        label: 'CON RỐI',
+        variant: 'counter',
+        syncGroup: 'counter',
+      },
+    ]);
+  };
+
+  const triggerPhase8CUndeadDormant = () => {
+    vfx.skipAllAnimations();
+    const id = nextLogId('p8c-undead-dormant');
+    setLastDemoLabel('Phase 8C Tier-4 · Undead: Ngủ Đông (💤) tách biệt hoàn toàn với Hạ Gục đỏ!');
+    setGame((prev) => ({
+      ...prev,
+      players: prev.players.map((p) =>
+        p.playerId === 'sb-dung'
+          ? { ...p, alive: false, lifecycleState: 'DORMANT_PENDING_REVIVE' }
+          : p,
+      ),
+    }));
+    vfx.enqueueEvents([
+      {
+        id: `${id}-fx`,
+        kind: 'COMBAT_VFX',
+        order: 42,
+        durationMs: vfx.reducedMotion ? 220 : 1060,
+        effect: 'UNDEAD_SHROUD',
+        sourcePlayerId: 'sb-dung',
+        targetPlayerIds: ['sb-dung'],
+        shake: 'light',
+        roleId: 'exp1_undead',
+        effectKey: 'undead_dormant',
+      },
+      {
+        id: `${id}-txt`,
+        kind: 'FLOATING_TEXT',
+        order: 52,
+        durationMs: vfx.reducedMotion ? 220 : 900,
+        targetPlayerId: 'sb-dung',
+        label: 'NGỦ ĐÔNG',
+        variant: 'counter',
+        syncGroup: 'shield',
+      },
+    ]);
+  };
+
+  const triggerPhase8CUndeadRevive = () => {
+    vfx.skipAllAnimations();
+    const id = nextLogId('p8c-undead-revive');
+    setLastDemoLabel('Phase 8C Tier-4 · Undead: Trỗi Dậy +6 HP đầu lượt kế!');
+    setGame((prev) => ({
+      ...prev,
+      players: prev.players.map((p) =>
+        p.playerId === 'sb-dung'
+          ? { ...p, alive: true, lifecycleState: 'REVIVED' }
+          : p,
+      ),
+    }));
+    vfx.enqueueEvents([
+      {
+        id: `${id}-fx`,
+        kind: 'COMBAT_VFX',
+        order: 40,
+        durationMs: vfx.reducedMotion ? 220 : 1040,
+        effect: 'UNDEAD_REVIVE',
+        sourcePlayerId: 'sb-dung',
+        targetPlayerIds: ['sb-dung'],
+        shake: 'light',
+        roleId: 'exp1_undead',
+        effectKey: 'undead_revive',
+        damageAmount: 6,
+      },
+      {
+        id: `${id}-txt`,
+        kind: 'FLOATING_TEXT',
+        order: 50,
+        durationMs: vfx.reducedMotion ? 220 : 900,
+        targetPlayerId: 'sb-dung',
+        label: '+6 HP',
+        variant: 'heal',
+        syncGroup: 'heal',
+      },
+    ]);
+  };
+
+  const triggerPhase8CAntimonyMirror = () => {
+    vfx.skipAllAnimations();
+    const id = nextLogId('p8c-antimony');
+    setLastDemoLabel('Phase 8C Tier-4 · Antimony: Phản chiếu gương tinh thể công khai (0 lộ vai ẩn)');
+    vfx.enqueueEvents([
+      {
+        id: `${id}-fx`,
+        kind: 'COMBAT_VFX',
+        order: 40,
+        durationMs: vfx.reducedMotion ? 220 : 1040,
+        effect: 'ANTIMONY_MIRROR',
+        sourcePlayerId: 'sb-vy',
+        targetPlayerIds: ['sb-tu'],
+        shake: 'light',
+        roleId: 'exp1_antimony',
+        effectKey: 'antimony_copy',
+      },
+      {
+        id: `${id}-txt`,
+        kind: 'FLOATING_TEXT',
+        order: 51,
+        durationMs: vfx.reducedMotion ? 220 : 900,
+        targetPlayerId: 'sb-tu',
+        label: 'NHÂN BẢN',
+        variant: 'counter',
+        syncGroup: 'counter',
+      },
+    ]);
+  };
+
+  const triggerPhase8CBonnieSuccession = () => {
+    vfx.skipAllAnimations();
+    const id = nextLogId('p8c-bonnie');
+    setLastDemoLabel('Phase 8C Tier-4 · Bonnie: Nghi thức Kế Thừa chuyển phe sang Hội Bóng Đêm');
+    vfx.enqueueEvents([
+      {
+        id: `${id}-fx`,
+        kind: 'COMBAT_VFX',
+        order: 42,
+        durationMs: vfx.reducedMotion ? 220 : 1060,
+        effect: 'BONNIE_SUCCESSION',
+        sourcePlayerId: 'sb-tu',
+        targetPlayerIds: ['sb-tu'],
+        shake: 'heavy',
+        roleId: 'exp2_bonnie',
+        effectKey: 'bonnie_succession',
+      },
+      {
+        id: `${id}-cutin`,
+        kind: 'CINEMATIC_CUTIN',
+        order: 34,
+        durationMs: vfx.reducedMotion ? 240 : 1320,
+        bannerType: 'ULTIMATE_SKILL',
+        title: 'CHUYỂN PHE · HỘI BÓNG ĐÊM',
+        subtitle: 'Tú Linh (Bonnie) kế thừa vị trí Shadow!',
+        faction: 'mist-order',
+        roleId: 'exp2_bonnie',
+        roleName: 'Bonnie',
+        portraitSrc: MIDNIGHT_CHARACTER_ART.exp2_bonnie ?? null,
+        skillName: 'NGHI THỨC KẾ THỪA',
+        actorId: 'sb-tu',
+      },
+    ]);
+  };
+
+  const triggerPhase8CCainMultiFactionVictory = () => {
+    vfx.skipAllAnimations();
+    const id = nextLogId('p8c-cain-mfv');
+    setLastDemoLabel('Phase 8C Tier-4 · Cain: Nước Cờ Quyền Lực → Đồng Thắng Song Phe (Hunter & Shadow)!');
+    vfx.enqueueEvents([
+      {
+        id: `${id}-power`,
+        kind: 'COMBAT_VFX',
+        order: 36,
+        durationMs: vfx.reducedMotion ? 220 : 980,
+        effect: 'CAIN_POWER_PLAY',
+        sourcePlayerId: 'sb-minh',
+        targetPlayerIds: ['sb-minh'],
+        shake: 'light',
+        roleId: 'exp2_cain',
+        effectKey: 'cain_power_play',
+      },
+      {
+        id: `${id}-win`,
+        kind: 'CINEMATIC_CUTIN',
+        order: 62,
+        durationMs: vfx.reducedMotion ? 260 : 2300,
+        bannerType: 'VICTORY',
+        title: 'CHIẾN THẮNG',
+        subtitle: 'Đồng thắng song phe: Đội Săn Đêm & Hội Bóng Đêm',
+        faction: 'wanderer',
+        roleId: null,
+        roleName: null,
+        portraitSrc: null,
+        skillName: null,
+        actorId: null,
+        matchOutcome: 'victory',
+        winnerFactionLabel: 'Đội Săn Đêm & Hội Bóng Đêm',
+        winReason: 'Nước Cờ Quyền Lực của Cain kích hoạt Đồng Thắng Song Phe!',
+        winningFactions: ['lantern-guard', 'mist-order'],
+      },
+    ]);
+  };
+
+  const triggerPhase8CNcSoldierRecruit = (failed: boolean) => {
+    vfx.skipAllAnimations();
+    const id = nextLogId(failed ? 'p8c-nc-fail' : 'p8c-nc-ok');
+    setLastDemoLabel(
+      failed
+        ? 'Phase 8C Tier-4 · N.C. Soldier: Chiêu mộ trượt (TRƯỢT — fizzle xám gọn)'
+        : 'Phase 8C Tier-4 · N.C. Soldier: Chiêu mộ thành công (CHIÊU MỘ! — cấp hiệu vàng)',
+    );
+    vfx.enqueueEvents([
+      {
+        id: `${id}-fx`,
+        kind: 'COMBAT_VFX',
+        order: 42,
+        durationMs: vfx.reducedMotion ? 220 : 980,
+        effect: 'NC_SOLDIER_RECRUIT',
+        sourcePlayerId: 'sb-minh',
+        targetPlayerIds: ['sb-vy'],
+        shake: failed ? 'none' : 'light',
+        roleId: 'exp2_nc_soldier',
+        effectKey: 'nc_soldier_recruit',
+        outcome: failed ? 'failed' : 'success',
+      },
+      {
+        id: `${id}-txt`,
+        kind: 'FLOATING_TEXT',
+        order: 52,
+        durationMs: vfx.reducedMotion ? 220 : 880,
+        targetPlayerId: 'sb-vy',
+        label: failed ? 'TRƯỢT' : 'CHIÊU MỘ!',
+        variant: failed ? 'miss' : 'steal',
+        syncGroup: 'steal',
+      },
+    ]);
+  };
+
+  const triggerPhase8CTier3Showcase = (mode: 'redirect' | 'combo') => {
+    vfx.skipAllAnimations();
+    const id = nextLogId(`p8c-t3-${mode}`);
+    if (mode === 'redirect') {
+      setLastDemoLabel('Phase 8C Tier-3 · Anathema / Arnold: Phản xạ & Chuyển hướng sát thương (REDIRECT_ARC)');
+      vfx.enqueueEvents([
+        {
+          id: `${id}-fx`,
+          kind: 'COMBAT_VFX',
+          order: 41,
+          durationMs: vfx.reducedMotion ? 220 : 1020,
+          effect: 'REDIRECT_ARC',
+          sourcePlayerId: 'sb-vy',
+          targetPlayerIds: ['sb-dung'],
+          shake: 'heavy',
+          roleId: 'exp1_arnold',
+          effectKey: 'arnold_reflect',
+          isCritical: true,
+        },
+        {
+          id: `${id}-txt`,
+          kind: 'FLOATING_TEXT',
+          order: 51,
+          durationMs: vfx.reducedMotion ? 220 : 880,
+          targetPlayerId: 'sb-vy',
+          label: 'PHẢN CHÍ MẠNG!',
+          variant: 'counter',
+          syncGroup: 'counter',
+        },
+      ]);
+      return;
+    }
+    setLastDemoLabel('Phase 8C Tier-3 · Combo: Wrath Nova + Gideon 3-Card Cascade + Angel Sanctuary + Fujiko Finisher');
+    vfx.enqueueEvents([
+      {
+        id: `${id}-nova`,
+        kind: 'COMBAT_VFX',
+        order: 40,
+        durationMs: vfx.reducedMotion ? 220 : 1020,
+        effect: 'SHADOW_NOVA',
+        sourcePlayerId: 'sb-dung',
+        targetPlayerIds: ['sb-minh', 'sb-vy', 'sb-tu'],
+        shake: 'heavy',
+        roleId: 'exp1_wrath',
+        effectKey: 'wrath_nova',
+      },
+      {
+        id: `${id}-cards`,
+        kind: 'COMBAT_VFX',
+        order: 41,
+        durationMs: vfx.reducedMotion ? 220 : 960,
+        effect: 'CARD_CASCADE',
+        sourcePlayerId: 'sb-minh',
+        targetPlayerIds: ['sb-minh'],
+        shake: 'none',
+        roleId: 'exp2_gideon',
+        effectKey: 'gideon_reward',
+        cardCount: 3,
+      },
+      {
+        id: `${id}-angel`,
+        kind: 'COMBAT_VFX',
+        order: 42,
+        durationMs: vfx.reducedMotion ? 220 : 960,
+        effect: 'ANGEL_SANCTUARY',
+        sourcePlayerId: 'sb-vy',
+        targetPlayerIds: ['sb-vy'],
+        shake: 'none',
+        roleId: 'exp1_angel',
+        effectKey: 'angel_sanctuary',
+      },
+      {
+        id: `${id}-finisher`,
+        kind: 'COMBAT_VFX',
+        order: 43,
+        durationMs: vfx.reducedMotion ? 220 : 1020,
+        effect: 'FINISHER_SLASH',
+        sourcePlayerId: 'sb-tu',
+        targetPlayerIds: ['sb-dung'],
+        shake: 'heavy',
+        roleId: 'exp2_fujiko',
+        effectKey: 'fujiko_execute',
+        isCritical: true,
+      },
+    ]);
+  };
+
   return (
     <section
       data-testid="proto-section-vfx-sandbox"
@@ -1162,6 +1584,124 @@ export function BoardGameVfxSandbox() {
         </button>
       </div>
 
+      {/* Phase 8C Showcase: All 8 Tier-4 Signature VFX + MultiFactionVictory + Tier-3 Reusable Families */}
+      <div
+        data-testid="proto-vfx-phase8c-bar"
+        className="rounded-2xl border border-cyan-500/35 bg-slate-950/75 p-2.5 space-y-2"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[11px] font-black uppercase tracking-wider text-cyan-300">
+            ✦ Phase 8C · Tier-4 Signature VFX (8/8) &amp; Tier-3 Families
+          </span>
+          <button
+            type="button"
+            data-testid="proto-vfx-skip-btn"
+            onClick={() => vfx.skipAllAnimations()}
+            className="rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-slate-200 hover:bg-slate-800 cursor-pointer"
+          >
+            ⏭️ Skip VFX
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-lloyd"
+            onClick={triggerPhase8CLloydIntercept}
+            className="rounded-lg border border-sky-400/65 bg-sky-950/80 px-2.5 py-1.5 text-xs font-bold text-sky-100 hover:bg-sky-900 cursor-pointer"
+          >
+            🛡️ Lloyd · Ngắt Đòn
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-vengeful"
+            onClick={triggerPhase8CVengefulEcho}
+            className="rounded-lg border border-purple-400/65 bg-purple-950/80 px-2.5 py-1.5 text-xs font-bold text-purple-100 hover:bg-purple-900 cursor-pointer"
+          >
+            👻 Vengeful Spirit · Đồng Vọng
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-voodoo"
+            onClick={triggerPhase8CVoodooPuppet}
+            className="rounded-lg border border-fuchsia-400/65 bg-fuchsia-950/80 px-2.5 py-1.5 text-xs font-bold text-fuchsia-100 hover:bg-fuchsia-900 cursor-pointer"
+          >
+            🧵 Voodoo · Con Rối
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-undead-dormant"
+            onClick={triggerPhase8CUndeadDormant}
+            className="rounded-lg border border-emerald-400/65 bg-purple-950/80 px-2.5 py-1.5 text-xs font-bold text-emerald-100 hover:bg-purple-900 cursor-pointer"
+          >
+            💤 Undead · Ngủ Đông
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-undead-revive"
+            onClick={triggerPhase8CUndeadRevive}
+            className="rounded-lg border border-emerald-300/75 bg-emerald-950/80 px-2.5 py-1.5 text-xs font-bold text-emerald-100 hover:bg-emerald-900 cursor-pointer"
+          >
+            ✨ Undead · Hồi Sinh +6 HP
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-antimony"
+            onClick={triggerPhase8CAntimonyMirror}
+            className="rounded-lg border border-cyan-300/70 bg-cyan-950/80 px-2.5 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-900 cursor-pointer"
+          >
+            🪞 Antimony · Gương Tinh Thể
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-bonnie"
+            onClick={triggerPhase8CBonnieSuccession}
+            className="rounded-lg border border-rose-400/70 bg-rose-950/80 px-2.5 py-1.5 text-xs font-bold text-rose-100 hover:bg-rose-900 cursor-pointer"
+          >
+            🌒 Bonnie · Chuyển Phe Shadow
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-cain-victory"
+            onClick={triggerPhase8CCainMultiFactionVictory}
+            className="rounded-lg border border-amber-300/75 bg-gradient-to-r from-emerald-950/85 to-rose-950/85 px-2.5 py-1.5 text-xs font-bold text-amber-100 hover:brightness-110 cursor-pointer"
+          >
+            ⚖️ Cain · Đồng Thắng Song Phe
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-nc-success"
+            onClick={() => triggerPhase8CNcSoldierRecruit(false)}
+            className="rounded-lg border border-amber-400/70 bg-amber-950/80 px-2.5 py-1.5 text-xs font-bold text-amber-100 hover:bg-amber-900 cursor-pointer"
+          >
+            🎖️ N.C. Soldier · Chiêu Mộ
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-nc-fail"
+            onClick={() => triggerPhase8CNcSoldierRecruit(true)}
+            className="rounded-lg border border-slate-500/70 bg-slate-900/85 px-2.5 py-1.5 text-xs font-bold text-slate-200 hover:bg-slate-800 cursor-pointer"
+          >
+            💨 N.C. Soldier · Trượt
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-redirect"
+            onClick={() => triggerPhase8CTier3Showcase('redirect')}
+            className="rounded-lg border border-cyan-400/65 bg-slate-900/85 px-2.5 py-1.5 text-xs font-bold text-cyan-200 hover:bg-slate-800 cursor-pointer"
+          >
+            ↩️ Tier-3 · Phản Đòn (Arnold/Anathema)
+          </button>
+          <button
+            type="button"
+            data-testid="proto-vfx-8c-tier3-combo"
+            onClick={() => triggerPhase8CTier3Showcase('combo')}
+            className="rounded-lg border border-orange-400/65 bg-orange-950/80 px-2.5 py-1.5 text-xs font-bold text-orange-100 hover:bg-orange-900 cursor-pointer"
+          >
+            🔥 Tier-3 · Nova + 3-Card + Angel + Finisher
+          </button>
+        </div>
+      </div>
+
       <p
         data-testid="proto-vfx-status-label"
         className="rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs font-semibold text-cyan-200"
@@ -1197,21 +1737,35 @@ export function BoardGameVfxSandbox() {
           <div className={game.players.length > 4 ? 'grid grid-cols-2 gap-2 sm:grid-cols-4' : 'grid grid-cols-2 gap-3 sm:grid-cols-4'}>
           {game.players.map((p) => {
             const isTarget = selectedTargetId === p.playerId;
+            const isDormant = p.lifecycleState === 'DORMANT_PENDING_REVIVE';
+            const isPuppet = Boolean(
+              game.controlledTurn &&
+                game.controlledTurn.activePlayerId === p.playerId &&
+                game.controlledTurn.controllerPlayerId !== p.playerId,
+            );
+            const isPuppetPaused = Boolean(isPuppet && game.controlledTurn?.pausedForOwnerDecision);
             return (
               <button
                 key={p.playerId}
                 type="button"
                 data-vfx-player={p.playerId}
                 data-pawn-glide={p.playerId}
+                data-lifecycle-state={p.lifecycleState ?? (p.alive ? 'ALIVE' : 'FINAL_ELIMINATED')}
+                data-puppet-controlled={isPuppet ? 'true' : 'false'}
+                data-puppet-paused={isPuppetPaused ? 'true' : 'false'}
                 onClick={() => setSelectedTargetId((prev) => (prev === p.playerId ? null : p.playerId))}
                 className={`flex flex-col items-start rounded-2xl border text-left transition cursor-pointer ${
                   game.players.length > 4 ? 'gap-1.5 p-2' : 'gap-2 p-3'
                 } ${
-                  !p.alive
-                    ? 'opacity-45 border-slate-800 bg-slate-900/50'
-                    : isTarget
-                      ? 'border-rose-400 bg-rose-950/40 ring-2 ring-rose-400/50'
-                      : 'border-slate-700/80 bg-slate-900/90 hover:border-cyan-400/60'
+                  isDormant
+                    ? 'border-emerald-400/80 bg-purple-950/75 ring-1 ring-purple-400/70'
+                    : !p.alive
+                      ? 'opacity-45 border-slate-800 bg-slate-900/50'
+                      : isPuppet
+                        ? 'border-fuchsia-400/85 bg-purple-950/60 ring-1 ring-fuchsia-400/60'
+                        : isTarget
+                          ? 'border-rose-400 bg-rose-950/40 ring-2 ring-rose-400/50'
+                          : 'border-slate-700/80 bg-slate-900/90 hover:border-cyan-400/60'
                 }`}
               >
                 <div className="flex w-full items-center justify-between gap-2">
@@ -1220,7 +1774,7 @@ export function BoardGameVfxSandbox() {
                       compact
                       displayName={p.displayName}
                       seatIndex={p.seatIndex}
-                      alive={p.alive}
+                      alive={p.alive || isDormant}
                       isActive={game.activePlayerId === p.playerId}
                       isSelf={p.playerId === 'sb-minh'}
                       revealedFaction={p.revealedFaction}
@@ -1229,11 +1783,23 @@ export function BoardGameVfxSandbox() {
                       {p.displayName}
                     </span>
                   </div>
-                  {p.guardianShieldActive && (
-                    <span className="rounded bg-sky-500/25 px-1.5 py-0.5 text-[10px] font-bold text-sky-200">
-                      🛡️ Khiên
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isDormant && (
+                      <span className="rounded bg-purple-500/30 border border-emerald-400/60 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">
+                        💤 Ngủ Đông
+                      </span>
+                    )}
+                    {isPuppet && (
+                      <span className="rounded bg-fuchsia-500/30 border border-fuchsia-400/60 px-1.5 py-0.5 text-[10px] font-bold text-fuchsia-100">
+                        {isPuppetPaused ? '🔒 Bài kín' : '🧵 Con rối'}
+                      </span>
+                    )}
+                    {p.guardianShieldActive && (
+                      <span className="rounded bg-sky-500/25 px-1.5 py-0.5 text-[10px] font-bold text-sky-200">
+                        🛡️ Khiên
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 text-[11px] font-bold">

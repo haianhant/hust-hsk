@@ -2255,7 +2255,7 @@ test('Phase 8C Structured Visual Events (27) — All 8 Tier-4 Mappings, Lloyd Ca
     turnNumber: 15,
     players: afterDormant.players.map((p) =>
       p.playerId === 'p2'
-        ? { ...p, alive: true, lifecycleState: 'ACTIVE', woundsTaken: 5 }
+        ? { ...p, alive: true, lifecycleState: 'REVIVED', woundsTaken: 5 }
         : p,
     ),
     visualEvents: [
@@ -2486,4 +2486,145 @@ test('Phase 8C Tier-4 Signature Audio (28) — All 9 Tier-4 WebAudio Cues Dispat
   );
   stopAllBoardGameSounds();
   setBoardGameSoundMuted(false);
+});
+
+test('Phase 8C Tier-3 Reusable Effect Families (29) — Structured Mapping & Audio Dispatch for All 7 Families', () => {
+  const prev = makePubState({
+    matchId: 'p8c-tier3-families',
+    turnNumber: 18,
+    visualEvents: [],
+  });
+  const next = {
+    ...prev,
+    turnNumber: 19,
+    visualEvents: [
+      {
+        id: 'p8c-tier3-families:ve:1',
+        seq: 1,
+        matchId: 'p8c-tier3-families',
+        round: 4,
+        turnNumber: 19,
+        atMs: 9100,
+        kind: 'DAMAGE_REDIRECTED',
+        effectKey: 'arnold_reflect',
+        actorPlayerId: 'p1',
+        targetPlayerIds: ['p2'],
+        visibility: 'public',
+        isCritical: true,
+        amount: 4,
+      },
+      {
+        id: 'p8c-tier3-families:ve:2',
+        seq: 2,
+        matchId: 'p8c-tier3-families',
+        round: 4,
+        turnNumber: 19,
+        atMs: 9110,
+        kind: 'SKILL_ACTIVATED',
+        effectKey: 'wrath_nova',
+        actorPlayerId: 'p2',
+        targetPlayerIds: ['p1', 'p3', 'p4'],
+        visibility: 'public',
+        isMultiTarget: true,
+      },
+      {
+        id: 'p8c-tier3-families:ve:3',
+        seq: 3,
+        matchId: 'p8c-tier3-families',
+        round: 4,
+        turnNumber: 19,
+        atMs: 9120,
+        kind: 'HEAL_BLOCKED',
+        effectKey: 'usurper_block_heal',
+        actorPlayerId: 'p3',
+        targetPlayerIds: ['p1'],
+        visibility: 'public',
+        outcome: 'blocked',
+      },
+      {
+        id: 'p8c-tier3-families:ve:4',
+        seq: 4,
+        matchId: 'p8c-tier3-families',
+        round: 4,
+        turnNumber: 19,
+        atMs: 9130,
+        kind: 'EQUIPMENT_TRANSFERRED',
+        effectKey: 'bethany_chosen_bond',
+        actorPlayerId: 'p4',
+        targetPlayerIds: ['p1'],
+        visibility: 'public',
+      },
+      {
+        id: 'p8c-tier3-families:ve:5',
+        seq: 5,
+        matchId: 'p8c-tier3-families',
+        round: 4,
+        turnNumber: 19,
+        atMs: 9140,
+        kind: 'SKILL_ACTIVATED',
+        effectKey: 'gideon_reward',
+        actorPlayerId: 'p1',
+        targetPlayerIds: ['p1'],
+        visibility: 'public',
+        cardCount: 3,
+      },
+      {
+        id: 'p8c-tier3-families:ve:6',
+        seq: 6,
+        matchId: 'p8c-tier3-families',
+        round: 4,
+        turnNumber: 19,
+        atMs: 9150,
+        kind: 'SKILL_ACTIVATED',
+        effectKey: 'fujiko_execute',
+        actorPlayerId: 'p2',
+        targetPlayerIds: ['p3'],
+        visibility: 'public',
+      },
+      {
+        id: 'p8c-tier3-families:ve:7',
+        seq: 7,
+        matchId: 'p8c-tier3-families',
+        round: 4,
+        turnNumber: 19,
+        atMs: 9160,
+        kind: 'DAMAGE_PREVENTED',
+        effectKey: 'angel_sanctuary',
+        actorPlayerId: 'p4',
+        targetPlayerIds: ['p4'],
+        visibility: 'public',
+      },
+    ],
+  };
+
+  const emitted = extractVisualEventsFromDiff(prev, next, {
+    selfPlayerId: 'p1',
+    isSpectator: false,
+  });
+  const combatEffects = emitted.filter((e) => e.kind === 'COMBAT_VFX');
+  const expected = [
+    'REDIRECT_ARC',
+    'SHADOW_NOVA',
+    'MARK_SEAL',
+    'BOND_TETHER',
+    'CARD_CASCADE',
+    'FINISHER_SLASH',
+    'ANGEL_SANCTUARY',
+  ];
+  for (const fx of expected) {
+    assert.ok(
+      combatEffects.some((e) => e.effect === fx),
+      `Expected Tier-3 reusable effect ${fx}`,
+    );
+  }
+
+  resetBoardGameAudioForTests();
+  setBoardGameSoundMuted(false);
+  let now = 70000;
+  for (const ev of combatEffects) {
+    assert.equal(playSoundForVisualEvent(ev, now), true, `Expected audio for ${ev.effect}`);
+    assert.equal(playSoundForVisualEvent(ev, now + 300), false, `Duplicate audio for ${ev.effect} must dedupe`);
+    now += 250;
+  }
+  stopAllBoardGameSounds();
 });

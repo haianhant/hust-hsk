@@ -206,6 +206,21 @@ function getCombatAccentColor(ev: CombatVfxVisualEvent): { primary: string; seco
       ? { primary: '#94a3b8', secondary: '#cbd5e1' }
       : { primary: '#f59e0b', secondary: '#fef08a' };
   }
+  if (ev.effect === 'REDIRECT_ARC') {
+    return ev.effectKey === 'arnold_reflect'
+      ? { primary: '#67e8f9', secondary: '#fb7185' }
+      : { primary: '#f43f5e', secondary: '#c084fc' };
+  }
+  if (ev.effect === 'SHADOW_NOVA') {
+    return ev.effectKey === 'umibozu_wave'
+      ? { primary: '#38bdf8', secondary: '#6366f1' }
+      : { primary: '#fb7185', secondary: '#f97316' };
+  }
+  if (ev.effect === 'MARK_SEAL') return { primary: '#e11d48', secondary: '#fbbf24' };
+  if (ev.effect === 'BOND_TETHER') return { primary: '#fbbf24', secondary: '#34d399' };
+  if (ev.effect === 'CARD_CASCADE') return { primary: '#fde047', secondary: '#38bdf8' };
+  if (ev.effect === 'FINISHER_SLASH') return { primary: '#e11d48', secondary: '#fef08a' };
+  if (ev.effect === 'ANGEL_SANCTUARY') return { primary: '#fde047', secondary: '#bae6fd' };
   if (ev.effect === 'COUNTER_STRIKE') return { primary: '#c084fc', secondary: '#f43f5e' };
   if (ev.effect === 'SHIELD_GUARD') return { primary: '#38bdf8', secondary: '#bae6fd' };
   if (ev.effect === 'HEAL_AURA') return { primary: '#34d399', secondary: '#fde047' };
@@ -2877,6 +2892,272 @@ function drawCombatAnimation(
       }
       break;
     }
+
+    // -----------------------------------------------------------------------
+    // PHASE 8C: 7 TIER-3 & REUSABLE EFFECT FAMILIES
+    // -----------------------------------------------------------------------
+    case 'REDIRECT_ARC': {
+      // Anathema (nguyền chuyển hướng đỏ-tím) / Arnold (lăng kính phản xạ chí mạng cyan-đỏ)
+      const isArnold = anim.event.effectKey === 'arnold_reflect';
+      const primary = isArnold ? '#67e8f9' : '#f43f5e';
+      const secondary = isArnold ? '#fb7185' : '#c084fc';
+      const bell = Math.sin(p * Math.PI);
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        const mx = (source.x + tgt.x) * 0.5;
+        const my = Math.min(source.y, tgt.y) - 52 * multiScale;
+        const curT = Math.min(1, p * 1.3);
+        const ptAt = (t: number) => ({
+          x: (1 - t) * (1 - t) * source.x + 2 * (1 - t) * t * mx + t * t * tgt.x,
+          y: (1 - t) * (1 - t) * source.y + 2 * (1 - t) * t * my + t * t * tgt.y,
+        });
+        const tip = ptAt(curT);
+        const grad = ctx.createLinearGradient(source.x, source.y, tip.x, tip.y);
+        grad.addColorStop(0, primary);
+        grad.addColorStop(0.65, secondary);
+        grad.addColorStop(1, '#ffffff');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = isArnold ? 5.6 : 4.4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(source.x, source.y);
+        ctx.quadraticCurveTo(mx, my, tip.x, tip.y);
+        ctx.stroke();
+
+        // Mặt phản xạ tại điểm nguồn
+        ctx.strokeStyle = primary;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(source.x, source.y, (18 + p * 16) * multiScale, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Xung kích tại đích phản đòn
+        if (curT >= 0.78) {
+          const hitP = (curT - 0.78) / 0.22;
+          ctx.strokeStyle = secondary;
+          ctx.lineWidth = 3.6 * (1 - hitP * 0.4);
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, (14 + hitP * 38) * multiScale, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      break;
+    }
+
+    case 'SHADOW_NOVA': {
+      // Wrath (bùng nổ nộ hỏa) / Umibozu (sóng triều hắc ám đa mục tiêu)
+      const isWave = anim.event.effectKey === 'umibozu_wave';
+      const primary = isWave ? '#38bdf8' : '#fb7185';
+      const secondary = isWave ? '#6366f1' : '#f97316';
+      const bell = Math.sin(p * Math.PI);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+      const waveR = (24 + p * 118) * multiScale;
+      ctx.strokeStyle = primary;
+      ctx.lineWidth = 5 * (1 - p * 0.45);
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, waveR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = secondary;
+      ctx.lineWidth = 2.8 * (1 - p * 0.45);
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, waveR * 0.72, 0, Math.PI * 2);
+      ctx.stroke();
+
+      for (const tgt of targets) {
+        const rad = ctx.createRadialGradient(tgt.x, tgt.y, 2, tgt.x, tgt.y, (28 + p * 20) * multiScale);
+        rad.addColorStop(0, '#fef08a');
+        rad.addColorStop(0.45, primary);
+        rad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+        ctx.fillStyle = rad;
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, (28 + p * 20) * multiScale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      break;
+    }
+
+    case 'MARK_SEAL': {
+      // Visions (Ấn mắt tiên tri) / Usurper & Dalton (Ấn cấm hồi) / April & Skipps (7 vết thương)
+      const bell = Math.sin(p * Math.PI);
+      const isBlocked = anim.event.outcome === 'blocked';
+      const primary = isBlocked ? '#e11d48' : '#a855f7';
+      const secondary = isBlocked ? '#fbbf24' : '#f472b6';
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        const r = (24 + p * 14) * multiScale;
+        ctx.strokeStyle = primary;
+        ctx.lineWidth = 3.2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, r, p * 2, p * 2 + Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.strokeStyle = secondary;
+        ctx.lineWidth = 2.6;
+        if (isBlocked) {
+          // Dấu cấm hồi máu (vòng tròn gạch chéo)
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, r * 0.65, 0, Math.PI * 2);
+          ctx.moveTo(tgt.x - r * 0.46, tgt.y - r * 0.46);
+          ctx.lineTo(tgt.x + r * 0.46, tgt.y + r * 0.46);
+          ctx.stroke();
+        } else {
+          // Biểu tượng con mắt ấn ký
+          ctx.beginPath();
+          ctx.ellipse(tgt.x, tgt.y, r * 0.72, r * 0.36, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = secondary;
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, 4.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+      break;
+    }
+
+    case 'BOND_TETHER': {
+      // Bethany / Diana / Aaron / Warlord dây liên kết định mệnh
+      const isWarlord = anim.event.effectKey === 'warlord_pull_strike';
+      const primary = isWarlord ? '#fb923c' : '#fbbf24';
+      const secondary = isWarlord ? '#f43f5e' : '#34d399';
+      const bell = Math.sin(p * Math.PI);
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        ctx.strokeStyle = primary;
+        ctx.lineWidth = isWarlord ? 4.2 : 3.2;
+        if (isWarlord) ctx.setLineDash([10, 5]);
+        ctx.beginPath();
+        ctx.moveTo(source.x, source.y);
+        ctx.lineTo(tgt.x, tgt.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Nút ánh sáng chạy qua lại giữa 2 điểm liên kết
+        const pulseX = source.x + (tgt.x - source.x) * p;
+        const pulseY = source.y + (tgt.y - source.y) * p;
+        ctx.fillStyle = secondary;
+        ctx.beginPath();
+        ctx.arc(pulseX, pulseY, 6.5 * multiScale, 0, Math.PI * 2);
+        ctx.fill();
+
+        for (const endPt of [source, tgt]) {
+          ctx.strokeStyle = secondary;
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.arc(endPt.x, endPt.y, (16 + p * 14) * multiScale, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      break;
+    }
+
+    case 'CARD_CASCADE': {
+      // Gideon (3 lá bài Trắng thưởng) / Eleanor (xác minh thẻ bài)
+      const count = Math.max(2, Math.min(4, anim.event.cardCount ?? 3));
+      const bell = Math.sin(p * Math.PI);
+      const center = targets[0] ?? source;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+      for (let i = 0; i < count; i++) {
+        const spread = (i - (count - 1) * 0.5) * 26 * multiScale;
+        const ang = (i - (count - 1) * 0.5) * 0.24;
+        const cx = center.x + spread * Math.min(1, p * 1.5);
+        const cy = center.y - 16 - p * 28 * multiScale;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(ang);
+        ctx.fillStyle = 'rgba(254, 249, 195, 0.92)';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.2;
+        ctx.fillRect(-10 * multiScale, -14 * multiScale, 20 * multiScale, 28 * multiScale);
+        ctx.strokeRect(-10 * multiScale, -14 * multiScale, 20 * multiScale, 28 * multiScale);
+        ctx.restore();
+      }
+      ctx.restore();
+      break;
+    }
+
+    case 'FINISHER_SLASH': {
+      // Fujiko: đường chém kết liễu chữ X đỏ thẫm-vàng rực rỡ
+      const bell = Math.sin(p * Math.PI);
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        const span = (44 + p * 22) * multiScale;
+        ctx.strokeStyle = '#e11d48';
+        ctx.lineWidth = 9 * bell;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(tgt.x - span, tgt.y - span * 0.78);
+        ctx.lineTo(tgt.x + span, tgt.y + span * 0.78);
+        ctx.moveTo(tgt.x + span, tgt.y - span * 0.78);
+        ctx.lineTo(tgt.x - span, tgt.y + span * 0.78);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 3.4 * bell;
+        ctx.beginPath();
+        ctx.moveTo(tgt.x - span * 0.85, tgt.y - span * 0.66);
+        ctx.lineTo(tgt.x + span * 0.85, tgt.y + span * 0.66);
+        ctx.moveTo(tgt.x + span * 0.85, tgt.y - span * 0.66);
+        ctx.lineTo(tgt.x - span * 0.85, tgt.y + span * 0.66);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#fb7185';
+        ctx.lineWidth = 2.6 * (1 - p * 0.4);
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, (22 + p * 48) * multiScale, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      break;
+    }
+
+    case 'ANGEL_SANCTUARY': {
+      // Angel: vòm thánh quang vàng-trắng & đôi cánh bảo hộ
+      const bell = Math.sin(p * Math.PI);
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        const r = (28 + p * 18) * multiScale;
+        const grad = ctx.createRadialGradient(tgt.x, tgt.y, 4, tgt.x, tgt.y, r);
+        grad.addColorStop(0, 'rgba(254, 240, 138, 0.36)');
+        grad.addColorStop(0.6, 'rgba(186, 230, 253, 0.24)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Đôi cánh thánh quang đối xứng
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.arc(tgt.x - r * 0.52, tgt.y - 4, r * 0.68, Math.PI * 0.6, Math.PI * 1.45);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(tgt.x + r * 0.52, tgt.y - 4, r * 0.68, -Math.PI * 0.45, Math.PI * 0.4);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, r * 0.92, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      break;
+    }
   }
 
   ctx.restore();
@@ -4997,9 +5278,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
               <div
                 data-testid="bg-vfx-victory-stage"
                 data-multi-faction={String(isMultiFactionVictory)}
-                className={`relative flex w-full max-w-xl flex-col items-center overflow-visible rounded-3xl border-2 px-6 py-6 sm:px-8 sm:py-7 text-center shadow-2xl ${blurCls} ${
-                  isDefeat ? 'bg-slate-950/95' : 'bg-slate-950/92'
-                } ${
+                className={`relative flex w-full max-w-xl flex-col items-center overflow-visible rounded-3xl border-2 px-6 py-6 sm:px-8 sm:py-7 text-center shadow-2xl ${blurCls} bg-slate-950/95 ${
                   vfx.reducedMotion
                     ? ''
                     : isDefeat

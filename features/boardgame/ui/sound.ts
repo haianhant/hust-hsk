@@ -1309,6 +1309,72 @@ export function playNcSoldierRecruit(failed = false): void {
   ]);
 }
 
+// ---------------------------------------------------------------------------
+// PHASE 8C: 7 TIER-3 & REUSABLE EFFECT FAMILY WEBAUDIO CUES
+// ---------------------------------------------------------------------------
+
+export function playRedirectArc(isReflect = false): void {
+  playLayeredCue(
+    [
+      { freq: isReflect ? 880 : 320, endFreq: isReflect ? 1480 : 520, startOffsetSec: 0, durationSec: 0.14, type: 'triangle', gainPeak: 0.05 },
+      { freq: isReflect ? 1320 : 480, endFreq: isReflect ? 660 : 240, startOffsetSec: 0.12, durationSec: 0.16, type: 'sawtooth', gainPeak: 0.04, filterType: 'bandpass', filterFreq: 1900 },
+    ],
+    [{ bufferKey: 'blade', startOffsetSec: 0.04, durationSec: 0.14, playbackRate: isReflect ? 1.45 : 1.05, gainPeak: 0.048, filterType: 'bandpass', filterFreq: 2100 }],
+  );
+}
+
+export function playShadowNova(isWave = false): void {
+  playLayeredCue(
+    [
+      { freq: isWave ? 160 : 120, endFreq: 42, startOffsetSec: 0, durationSec: 0.32, type: 'sawtooth', gainPeak: 0.068, filterType: 'lowpass', filterFreq: isWave ? 760 : 560 },
+      { freq: isWave ? 320 : 220, endFreq: 90, startOffsetSec: 0.04, durationSec: 0.26, type: 'triangle', gainPeak: 0.052 },
+    ],
+    [{ bufferKey: 'arcCrackle', startOffsetSec: 0.02, durationSec: 0.28, playbackRate: isWave ? 0.85 : 0.72, gainPeak: 0.072, filterType: 'lowpass', filterFreq: 1400 }],
+  );
+}
+
+export function playMarkSeal(isBlocked = false): void {
+  playLayeredCue([
+    { freq: isBlocked ? 520 : 660, endFreq: isBlocked ? 260 : 493.88, startOffsetSec: 0, durationSec: 0.16, type: 'triangle', gainPeak: 0.046 },
+    { freq: isBlocked ? 310 : 784, endFreq: isBlocked ? 185 : 587.33, startOffsetSec: 0.08, durationSec: 0.18, type: 'sine', gainPeak: 0.038 },
+  ]);
+}
+
+export function playBondTether(): void {
+  playLayeredCue([
+    { freq: 440, startOffsetSec: 0, durationSec: 0.16, type: 'sine', gainPeak: 0.042 },
+    { freq: 554.37, startOffsetSec: 0.07, durationSec: 0.18, type: 'triangle', gainPeak: 0.044 },
+    { freq: 659.25, startOffsetSec: 0.14, durationSec: 0.22, type: 'sine', gainPeak: 0.042 },
+  ]);
+}
+
+export function playCardCascade(): void {
+  playLayeredCue(
+    [
+      { freq: 587.33, startOffsetSec: 0, durationSec: 0.09, type: 'sine', gainPeak: 0.034 },
+      { freq: 739.99, startOffsetSec: 0.065, durationSec: 0.09, type: 'sine', gainPeak: 0.038 },
+      { freq: 880, startOffsetSec: 0.13, durationSec: 0.14, type: 'triangle', gainPeak: 0.042 },
+    ],
+    [
+      { bufferKey: 'paper', startOffsetSec: 0, durationSec: 0.07, playbackRate: 1.15, gainPeak: 0.044, filterType: 'bandpass', filterFreq: 2100 },
+      { bufferKey: 'paper', startOffsetSec: 0.07, durationSec: 0.07, playbackRate: 1.3, gainPeak: 0.044, filterType: 'bandpass', filterFreq: 2400 },
+    ],
+  );
+}
+
+export function playFinisherSlash(opts: CombatAudioCueOptions = {}): void {
+  playSlashHit(true, { ...opts, isCritical: true });
+}
+
+export function playAngelSanctuary(): void {
+  playLayeredCue([
+    { freq: 523.25, startOffsetSec: 0, durationSec: 0.22, type: 'sine', gainPeak: 0.044 },
+    { freq: 659.25, startOffsetSec: 0.05, durationSec: 0.24, type: 'sine', gainPeak: 0.046 },
+    { freq: 1046.5, startOffsetSec: 0.11, durationSec: 0.3, type: 'triangle', gainPeak: 0.044 },
+    { freq: 1567.98, startOffsetSec: 0.18, durationSec: 0.26, type: 'sine', gainPeak: 0.028 },
+  ]);
+}
+
 /** Lộ diện nhân vật (1.48s 5-pha) — anticipation, lật thẻ 3D, lộ phe & impact theo phe công khai */
 export function playRoleReveal(faction?: BoardGameFactionId | null): void {
   const isMist = faction === 'mist-order';
@@ -1779,6 +1845,27 @@ export function playSoundForVisualEvent(
           return true;
         case 'NC_SOLDIER_RECRUIT':
           playNcSoldierRecruit(event.outcome === 'failed');
+          return true;
+        case 'REDIRECT_ARC':
+          playRedirectArc(event.effectKey === 'arnold_reflect');
+          return true;
+        case 'SHADOW_NOVA':
+          playShadowNova(event.effectKey === 'umibozu_wave');
+          return true;
+        case 'MARK_SEAL':
+          playMarkSeal(event.outcome === 'blocked');
+          return true;
+        case 'BOND_TETHER':
+          playBondTether();
+          return true;
+        case 'CARD_CASCADE':
+          playCardCascade();
+          return true;
+        case 'FINISHER_SLASH':
+          playFinisherSlash(schedule);
+          return true;
+        case 'ANGEL_SANCTUARY':
+          playAngelSanctuary();
           return true;
         case 'LIGHTNING_STRIKE':
           playLightningStrike(schedule);
