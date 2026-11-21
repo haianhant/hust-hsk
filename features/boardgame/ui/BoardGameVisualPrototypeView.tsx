@@ -44,6 +44,7 @@ import {
   WAVE2_ROLE_IDS,
   WAVE3_ROLE_IDS,
   WAVE4_ROLE_IDS,
+  WAVE5_ROLE_IDS,
   resolveActionCardPresentation,
   resolveRoleCardPresentation,
   type ActionCardZone,
@@ -279,6 +280,9 @@ export default function BoardGameVisualPrototypeView() {
   const [wave2FactionFilter, setWave2FactionFilter] = useState<'all' | BoardGameFactionId>('all');
   const [wave3FactionFilter, setWave3FactionFilter] = useState<'all' | BoardGameFactionId>('all');
   const [wave4FactionFilter, setWave4FactionFilter] = useState<'all' | BoardGameFactionId>('all');
+  const [wave5FactionFilter, setWave5FactionFilter] = useState<
+    'all' | 'lantern-guard' | 'wanderer'
+  >('all');
   const [libraryDeckFilter, setLibraryDeckFilter] = useState<'all' | BoardGameDeckId>('all');
   const [pawnStep, setPawnStep] = useState<number>(0);
   const [pawnsRevealed, setPawnsRevealed] = useState<boolean>(false);
@@ -379,6 +383,19 @@ export default function BoardGameVisualPrototypeView() {
         ? wave4Roles
         : wave4Roles.filter((r) => r.faction === wave4FactionFilter),
     [wave4FactionFilter, wave4Roles],
+  );
+
+  const wave5Roles = useMemo(
+    () => WAVE5_ROLE_IDS.map((roleId) => getRoleDesign(roleId)),
+    [],
+  );
+
+  const filteredWave5Roles = useMemo(
+    () =>
+      wave5FactionFilter === 'all'
+        ? wave5Roles
+        : wave5Roles.filter((r) => r.faction === wave5FactionFilter),
+    [wave5FactionFilter, wave5Roles],
   );
 
   const filteredLibraryCards = useMemo(
@@ -956,7 +973,7 @@ export default function BoardGameVisualPrototypeView() {
             <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
               <p className="font-black text-white">Độ nhẹ Tài nguyên</p>
               <p className="mt-1 text-slate-400">
-                95 artwork AI WebP tối ưu (10 Classic 720×1080 + 8 Starter Eight 1024×1536 + 8 Wave 2 1024×1536 + 10 Wave 3 1024×1536 + 12 Wave 4 1024×1536 + 40 loại thẻ 600×900 + 6 địa điểm 960×540 + 1 mặt lưng), lazy-loading &amp; decoding async.
+                105 artwork AI WebP tối ưu (10 Classic 720×1080 + 8 Starter Eight 1024×1536 + 8 Wave 2 1024×1536 + 10 Wave 3 1024×1536 + 12 Wave 4 1024×1536 + 10 Wave 5 1024×1536 + 40 loại thẻ 600×900 + 6 địa điểm 960×540 + 1 mặt lưng), lazy-loading &amp; decoding async.
               </p>
             </div>
           </div>
@@ -1345,6 +1362,90 @@ export default function BoardGameVisualPrototypeView() {
                 <div key={role.id} className="mx-auto w-full max-w-[270px]">
                   <MidnightCharacterCard
                     testId={`proto-wave4-card-${role.id}`}
+                    roleId={role.id}
+                    revealed={eff.revealed}
+                    viewerMode={eff.viewerMode}
+                    woundsTaken={woundsTaken}
+                    foilEnabled={foilEnabled}
+                    reducedMotion={gfx.profile.reducedMotion}
+                    showGoalFooter={false}
+                    onFlipToggle={() => toggleFlipKey(role.id)}
+                    onZoom={() =>
+                      setZoomTarget({
+                        kind: 'role',
+                        roleId: role.id,
+                        revealed: eff.revealed,
+                        viewerMode: eff.viewerMode,
+                        woundsTaken,
+                      })
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* PHẦN 5F: WAVE 5 (STARTER FORTY-EIGHT) — 10 NHÂN VẬT MỞ RỘNG ĐỢT 5 / TIER-3 COMPLETION (PHASE 6C) */}
+        <section
+          data-testid="proto-section-wave5"
+          className="space-y-4 rounded-3xl border border-amber-500/40 bg-gradient-to-b from-amber-950/20 via-slate-900/55 to-slate-950/70 p-4 sm:p-6"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-amber-400/60 bg-amber-950/85 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-amber-200">
+                  Phase 6C · Wave 5 Preview
+                </span>
+                <span className="rounded-full border border-emerald-400/45 bg-emerald-950/60 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-200">
+                  Experimental: starter-forty-eight (58 Roles)
+                </span>
+                <span className="rounded-full border border-slate-600/60 bg-slate-900/80 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                  Production: Classic Only
+                </span>
+              </div>
+              <h2 className="text-lg font-black text-white sm:text-2xl">
+                5F. Wave 5 — 10 Nhân Vật Tier-3 Completion Full-Art 2:3 ({wave5Roles.length}/10 Vai Trò)
+              </h2>
+              <p className="text-xs text-slate-400 sm:text-sm">
+                Hoàn tất toàn bộ nhóm Tier-3 và nâng thư viện chân dung HUSTVerse Midnight — Anime Noir lên 58/58 (1024×1536 WebP) với 1 Hunter (Gideon) &amp; 9 Neutral (Anathema, Bethany, Arnold, Cassie, Clairvoyant, April &amp; Skipps, Colt, Diana, Aaron); bảo mật P0, lật 3D &amp; phóng lớn 🔍.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['all', 'Tất cả (10)'],
+                  ['lantern-guard', 'Đội Săn Đêm (1)'],
+                  ['wanderer', 'Kẻ Độc Hành (9)'],
+                ] as const
+              ).map(([fid, label]) => (
+                <button
+                  key={fid}
+                  type="button"
+                  data-testid={`proto-wave5-tab-${fid}`}
+                  onClick={() => setWave5FactionFilter(fid)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-extrabold transition cursor-pointer ${
+                    wave5FactionFilter === fid
+                      ? 'bg-amber-400 text-slate-950 shadow'
+                      : 'border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div
+            data-testid="proto-wave5-grid"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5"
+          >
+            {filteredWave5Roles.map((role) => {
+              const eff = effectiveCharacterSecrecy(role.id);
+              return (
+                <div key={role.id} className="mx-auto w-full max-w-[270px]">
+                  <MidnightCharacterCard
+                    testId={`proto-wave5-card-${role.id}`}
                     roleId={role.id}
                     revealed={eff.revealed}
                     viewerMode={eff.viewerMode}

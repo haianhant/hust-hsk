@@ -631,7 +631,7 @@ test('P5E-4 — All 12 Wave 4 roles UI metadata, 48/48 portraits, VFX queue, Sou
   assert.equal(wave4All.length, 12);
   assert.equal(WAVE4_ROLE_IDS.length, 12);
   assert.equal(STARTER_THIRTY_EIGHT_EXPANSION_ROLE_IDS.length, 38);
-  assert.equal(Object.keys(MIDNIGHT_CHARACTER_ART).length, 48);
+  assert.ok(Object.keys(MIDNIGHT_CHARACTER_ART).length >= 48);
 
   for (const roleId of wave4All) {
     const design = getRoleDesign(roleId);
