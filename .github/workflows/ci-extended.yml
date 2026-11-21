@@ -8,7 +8,7 @@ on:
 
 jobs:
   extended-stability:
-    name: Extended Stability — Deep Fuzzing, Replay, Mutation & DO Chaos
+    name: Extended Stability — Deep Fuzzing, Replay, Mutation, Phase 8F & DO Chaos
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -28,13 +28,19 @@ jobs:
       - name: Create artifact output directory
         run: mkdir -p .ci-stability-artifacts
 
-      - name: Interaction Risk Graph Snapshot
-        run: node scripts/phase8e-interaction-matrix.cjs --json > .ci-stability-artifacts/interaction-matrix.json
+      - name: Phase 8F 16 High-Risk Pairs, Eligibility & DO Reconnect Suite
+        run: node --test test/boardgame-phase8f-16-pairs.test.cjs
+
+      - name: Phase 8F Card Continuation, Copied Skill & Immediate Victory Suite
+        run: node --test test/boardgame-phase8f-continuation-copy.test.cjs
 
       - name: Deep Stateful Fuzzing, Risk-Weighted Rosters, Adversarial & Replay
         run: node scripts/fuzz-boardgame-stateful.cjs --valid=400 --targeted=120 --adversarial=150 --replay=60 --json > .ci-stability-artifacts/fuzz-report.json
 
-      - name: Targeted 8-Predicate Mutation Testing
+      - name: Evidence-Based Interaction Risk Graph & Legal Eligibility Snapshot
+        run: node scripts/phase8e-interaction-matrix.cjs --fuzz-json=.ci-stability-artifacts/fuzz-report.json --json > .ci-stability-artifacts/interaction-coverage-recalculated.json
+
+      - name: Targeted 16-Mutant Mutation Testing (Phase 8E + Phase 8F)
         run: node scripts/phase8e-mutation-test.cjs --json > .ci-stability-artifacts/mutation-report.json
 
       - name: Real SQLite DO Chaos & Persistence Suite

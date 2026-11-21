@@ -752,6 +752,15 @@ function runValidFuzzMatch(seed, rulesetId, playerCount, maxSteps = 450, forcedR
     }
   }
 
+  const activationsByRole = { ...(state.expansionState?.stats?.activationsByRole ?? {}) };
+  const activeRolesInMatch = Object.values(state.players)
+    .filter((p) => {
+      const isExp = p.roleId.startsWith('exp1_') || p.roleId.startsWith('exp2_');
+      if (isExp) return (activationsByRole[p.roleId] || 0) > 0;
+      return p.revealed || p.skillUsedOnce || p.attacksMade > 0 || p.eliminatedRound !== null;
+    })
+    .map((p) => p.roleId);
+
   return {
     ok: true,
     seed,
@@ -764,7 +773,8 @@ function runValidFuzzMatch(seed, rulesetId, playerCount, maxSteps = 450, forcedR
     winnerPlayerIds: [...state.winnerPlayerIds],
     finalHash: sha256(JSON.stringify(state)),
     dealtRoles: Object.values(state.players).map((p) => p.roleId),
-    activationsByRole: { ...(state.expansionState?.stats?.activationsByRole ?? {}) },
+    activeRolesInMatch,
+    activationsByRole,
     config,
     trace,
   };
@@ -1024,14 +1034,19 @@ function main() {
   const rolesDealtCount = Object.create(null);
   const runtimeActivationsByRole = Object.create(null);
   const observedPairs = new Set();
+  const executedInteractionPairs = new Set();
 
   const recordCoverage = (res) => {
     const roles = Array.isArray(res.dealtRoles) ? res.dealtRoles : [];
+    const activeSet = new Set(Array.isArray(res.activeRolesInMatch) ? res.activeRolesInMatch : []);
     for (const r of roles) rolesDealtCount[r] = (rolesDealtCount[r] || 0) + 1;
     for (let a = 0; a < roles.length; a++) {
       for (let b = a + 1; b < roles.length; b++) {
         const pair = roles[a] < roles[b] ? `${roles[a]}::${roles[b]}` : `${roles[b]}::${roles[a]}`;
         observedPairs.add(pair);
+        if (activeSet.has(roles[a]) && activeSet.has(roles[b])) {
+          executedInteractionPairs.add(pair);
+        }
       }
     }
     for (const [r, cnt] of Object.entries(res.activationsByRole || {})) {
@@ -1162,6 +1177,9 @@ function main() {
       uniqueExpansionRolesActivated: Object.keys(runtimeActivationsByRole).filter((k) => runtimeActivationsByRole[k] > 0).length,
       totalExpansionSkillActivations: Object.values(runtimeActivationsByRole).reduce((a, b) => a + b, 0),
       uniquePairsCoOccurred: observedPairs.size,
+      uniquePairsBothActivatedInSameMatch: executedInteractionPairs.size,
+      observedPairIds: [...observedPairs].sort(),
+      executedInteractionPairIds: [...executedInteractionPairs].sort(),
       activationsByRole: runtimeActivationsByRole,
     },
   };

@@ -127,6 +127,7 @@ import {
   canPlayerAttackTarget,
   DEFAULT_CLUSTER_PAIRS,
   getLocationDefinition,
+  getPairedLocationInCluster,
   getRemainingHp,
   isPlayerAtExactLocationAlias,
   listLivingPlayersInSameCluster,
@@ -5192,7 +5193,12 @@ export function applyExpandedUseCard(
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
       // BUG-8B-01 fix (P0): Voodoo (controller !== victim) KHÔNG được ép lộ diện hay dò phe ẩn của nạn nhân!
-      const effectiveSkip = Boolean(skipEffect || (isControlledByOther && !actor.revealed));
+      // BUG-8F-01b fix (P1): Fallen ẩn vai ở < 8 HP KHÔNG được vượt rào hạn chế tự lộ diện qua Advent (`eq-13`)!
+      const fallenRevealBlocked =
+        actor.roleId === 'exp1_fallen' && !actor.revealed && getRemainingHp(actor) < 8;
+      const effectiveSkip = Boolean(
+        skipEffect || (isControlledByOther && !actor.revealed) || fallenRevealBlocked,
+      );
       if (!effectiveSkip && getEffectiveFaction(state, actor) === 'lantern-guard') {
         const justRevealed = revealPlayerNow(state, actor, 'voluntary', nowMs);
         if (justRevealed) {
@@ -5237,7 +5243,12 @@ export function applyExpandedUseCard(
     case 'eq_chocolate': {
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
-      const effectiveSkip = Boolean(skipEffect || (isControlledByOther && !actor.revealed));
+      const effectiveSkip = Boolean(
+        skipEffect ||
+          (isControlledByOther && !actor.revealed) ||
+          // BUG-8F-01a fix (P1): Undead ẩn vai trước lần chí tử đầu KHÔNG được tự lộ diện qua Chocolate (`eq-14`)!
+          isUndeadPreLethalRevealRestricted(state, actor),
+      );
       const qualifies = isEligibleForChocolateHeal(actor.roleId, true);
       if (!effectiveSkip && qualifies) {
         const justRevealed = revealPlayerNow(state, actor, 'voluntary', nowMs);
@@ -5479,6 +5490,8 @@ export function applyExpandedUseCard(
           nowMs,
           actor.playerId,
         );
+        // BUG-8F-03 fix (P1): Bảo đảm đồng nhất continuation pipeline khi ev-09 nổ xịt (tổng 7)
+        deliverNextGloriaQueuedCard(state, actor, nowMs);
         callbacks.finalizeIfFinished(state, nowMs);
         return { ok: true };
       }
@@ -7248,9 +7261,10 @@ export function applyExpandedUseSkill(
   callbacks: TurnContinuationCallbacks,
 ): EngineActionResult | null {
   const effRoleId = getEffectiveSkillRoleId(state, actor) as BoardGameRoleId;
-  // Chặn các kỹ năng mở rộng & kỹ năng gây sát thương/hồi máu/chuỗi tấn công; Lan (gac-truc-ban) trả null.
+  // Xử lý kỹ năng mở rộng & toàn bộ kỹ năng kích hoạt Classic (bao gồm cả bản sao Lan `gac-truc-ban` — BUG-8F-02).
   if (
     effRoleId !== 'gac-ky-thuat' &&
+    effRoleId !== 'gac-truc-ban' &&
     effRoleId !== 'gac-radio' &&
     effRoleId !== 'lang-quan-sat' &&
     effRoleId !== 'lang-cuu-ho' &&
@@ -7284,6 +7298,38 @@ export function applyExpandedUseSkill(
   const effCd = getEffectiveSkillCooldown(state, actor);
   if (effCd > 0) {
     return { ok: false, error: `${role.skillName} đang hồi chiêu (${effCd} vòng nữa).` };
+  }
+
+  // BUG-8F-02 fix (P1): Hỗ trợ Lan "Trực Ban" (Emi — `gac-truc-ban`) và mọi bản sao kỹ năng Emi qua DynamicSkillCopy!
+  if (effRoleId === 'gac-truc-ban') {
+    if (state.turnPhase !== 'ROLL_MOVE') {
+      return {
+        ok: false,
+        error: 'Bước Nhảy Tắt chỉ dùng được ở Pha 1 (thay thế việc tung xúc xắc di chuyển).',
+      };
+    }
+    const destId = getPairedLocationInCluster(
+      actor.location,
+      state.clusterPairs ?? DEFAULT_CLUSTER_PAIRS,
+    );
+    const destDef = getLocationDefinition(destId);
+    actor.location = destId;
+    actor.consecutiveSameZoneRolls = 0;
+    state.allowedMoveDestinations = undefined;
+    state.turnPhase = 'LOCATION_ACTION';
+    if ((actor.roleId as string) !== 'gac-truc-ban') {
+      const expEmi = ensureExpansionState(state);
+      expEmi.stats.copiedSkillActivations = (expEmi.stats.copiedSkillActivations ?? 0) + 1;
+    }
+    appendPublicLog(
+      state,
+      'skill',
+      `✨ Lan "Trực Ban" (${actor.displayName}) dùng Bước Nhảy Tắt sang Ô ${destDef.diceLabel} (${destDef.name}) không cần tung xúc xắc!`,
+      nowMs,
+      actor.playerId,
+    );
+    callbacks.finalizeIfFinished(state, nowMs);
+    return { ok: true };
   }
 
   // Father Harrison (Lễ Ngày Chủ Nhật — Phase 3A house rule): di chuyển thẳng vào Church (`lobby`) thay vì đổ xúc xắc

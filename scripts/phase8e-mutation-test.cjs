@@ -138,6 +138,43 @@ const MUTANTS = [
     replace: 'const movedCardId = fromPlayer.equipped[idx];',
     testFiles: ['test/boardgame-phase6a.test.cjs'],
   },
+  // Phase 8F targeted mutants proving BUG-8F-01, BUG-8F-02, BUG-8F-03 regressions are caught
+  {
+    id: 'MUT-13',
+    predicate: 'reveal-restriction-cards',
+    file: 'features/boardgame/domain/expansion-skills.ts',
+    description: 'Revert BUG-8F-01a: allow unrevealed Undead to bypass pre-lethal guard via eq-14 Chocolate',
+    find: 'isUndeadPreLethalRevealRestricted(state, actor),',
+    replace: 'false /* MUT-13 */ && isUndeadPreLethalRevealRestricted(state, actor),',
+    testFiles: ['test/boardgame-phase8f-continuation-copy.test.cjs'],
+  },
+  {
+    id: 'MUT-14',
+    predicate: 'reveal-restriction-cards',
+    file: 'features/boardgame/domain/expansion-skills.ts',
+    description: 'Revert BUG-8F-01b: allow unrevealed Fallen (<8 HP) to bypass voluntary reveal guard via eq-13 Advent',
+    find: "actor.roleId === 'exp1_fallen' && !actor.revealed && getRemainingHp(actor) < 8;",
+    replace: "false /* MUT-14 */ && actor.roleId === 'exp1_fallen' && !actor.revealed && getRemainingHp(actor) < 8;",
+    testFiles: ['test/boardgame-phase8f-continuation-copy.test.cjs'],
+  },
+  {
+    id: 'MUT-15',
+    predicate: 'copied-skill-dispatch',
+    file: 'features/boardgame/domain/expansion-skills.ts',
+    description: 'Revert BUG-8F-02: drop gac-truc-ban from applyExpandedUseSkill so copied Emi fails',
+    find: "    effRoleId !== 'gac-truc-ban' &&",
+    replace: "    /* MUT-15 */ true &&",
+    testFiles: ['test/boardgame-phase8f-continuation-copy.test.cjs'],
+  },
+  {
+    id: 'MUT-16',
+    predicate: 'card-continuation-pipeline',
+    file: 'features/boardgame/domain/expansion-skills.ts',
+    description: 'Revert BUG-8F-03: skip deliverNextGloriaQueuedCard on ev-09 Dynamite roll-7 dud',
+    find: '        // BUG-8F-03 fix (P1): Bảo đảm đồng nhất continuation pipeline khi ev-09 nổ xịt (tổng 7)\n        deliverNextGloriaQueuedCard(state, actor, nowMs);',
+    replace: '        // MUT-16: skipped deliverNextGloriaQueuedCard on ev-09 roll-7 dud',
+    testFiles: ['test/boardgame-phase8f-continuation-copy.test.cjs'],
+  },
 ];
 
 // Build temporary preloader hook inside OS tmpdir (zero writes inside repo!)
