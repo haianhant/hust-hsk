@@ -28,6 +28,11 @@ import {
 } from '../domain/roles';
 import { FACTION_THEME, RolePortraitSvg } from './BoardGameArt';
 import type { BoardGameSeatOccupant } from '../world/BoardGameSeats';
+import {
+  formatRulesetDisplayLabel,
+  formatRulesetReleaseBadge,
+  isRulesetLockedForMatchStatus,
+} from './ruleset-selector-helpers';
 
 export interface BoardGameLobbyProps {
   open: boolean;
@@ -46,6 +51,7 @@ export interface BoardGameLobbyProps {
   matchStatus?: BoardGameMatchStatus | null;
   matchStatusLabel?: string | null;
   rulesetId?: BoardGameRulesetId;
+  pendingRulesetId?: BoardGameRulesetId | null;
   serverRulesets?: readonly BoardGameServerRulesetCapability[];
   isHost?: boolean;
   localReady?: boolean;
@@ -85,6 +91,7 @@ export default function BoardGameLobby({
   matchStatus = null,
   matchStatusLabel = null,
   rulesetId = 'classic',
+  pendingRulesetId = null,
   serverRulesets,
   isHost = false,
   localReady = false,
@@ -120,7 +127,8 @@ export default function BoardGameLobby({
     serverRulesets && serverRulesets.length > 0
       ? serverRulesets
       : DEFAULT_RULESET_REGISTRY.getPublicServerCapabilities().rulesets;
-  const rulesetLockedByMatch = matchStatus === 'STARTING' || matchStatus === 'PLAYING';
+  const rulesetLockedByMatch = isRulesetLockedForMatchStatus(matchStatus);
+  const rulesetPending = Boolean(pendingRulesetId);
   const activeRulesetMeta =
     effectiveRulesets.find((r) => r.id === rulesetId) ?? effectiveRulesets[0];
   const anyBetaEnabled = effectiveRulesets.some((r) => r.isBeta && r.selectable);
@@ -132,7 +140,7 @@ export default function BoardGameLobby({
   const rulesetBadgeLabel = (id?: BoardGameRulesetId): string => {
     const found = effectiveRulesets.find((r) => r.id === id);
     if (!found || found.id === 'classic') return 'Classic';
-    return `${found.shortLabel}${found.isBeta ? ' · Beta' : ''}`;
+    return `${formatRulesetDisplayLabel(found)}${found.isBeta ? ' · Beta' : ''}`;
   };
 
   const occupiedMap = new Map<string, BoardGameSeatOccupant>();
@@ -371,15 +379,16 @@ export default function BoardGameLobby({
                       <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                         {effectiveRulesets.map((rs) => {
                           const selected = rulesetId === rs.id;
+                          const isPendingTarget = pendingRulesetId === rs.id;
                           const playable = rs.selectable;
                           const interactive =
-                            isHost && playable && !rulesetLockedByMatch && Boolean(onSelectRuleset);
-                          const badgeText =
-                            rs.status === 'stable'
-                              ? 'Stable'
-                              : rs.status === 'beta'
-                                ? 'Beta'
-                                : 'Unavailable';
+                            isHost &&
+                            playable &&
+                            !rulesetLockedByMatch &&
+                            !rulesetPending &&
+                            Boolean(onSelectRuleset);
+                          const badgeText = formatRulesetReleaseBadge(rs.status);
+                          const displayLabel = formatRulesetDisplayLabel(rs);
                           return (
                             <button
                               key={rs.id}
@@ -403,7 +412,10 @@ export default function BoardGameLobby({
                               }`}
                             >
                               <div className="flex w-full items-center justify-between gap-1">
-                                <span className="text-[11px] font-bold">{rs.shortLabel}</span>
+                                <span className="text-[11px] font-bold">
+                                  {isPendingTarget ? '⏳ ' : ''}
+                                  {displayLabel}
+                                </span>
                                 <span
                                   data-testid={`bg-ruleset-badge-${rs.id}`}
                                   className={`rounded px-1 py-0.5 text-[9px] font-semibold uppercase ${
@@ -559,7 +571,7 @@ export default function BoardGameLobby({
                                 }`}
                               >
                                 <div className="flex w-full items-center justify-between gap-1">
-                                  <span className="font-bold">{rs.shortLabel}</span>
+                                  <span className="font-bold">{formatRulesetDisplayLabel(rs)}</span>
                                   <span
                                     className={`rounded px-1 py-0.5 text-[8px] font-semibold uppercase ${
                                       rs.status === 'stable'

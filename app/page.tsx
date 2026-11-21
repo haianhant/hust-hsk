@@ -108,6 +108,7 @@ import {
   boardGameClient,
   useBoardGameClientSnapshot,
 } from '../features/boardgame/network/client';
+import { formatRulesetChangedNotice } from '../features/boardgame/ui/ruleset-selector-helpers';
 import type { BoardGameSeatOccupant } from '../features/boardgame/world/BoardGameSeats';
 import {
   BOARD_GAME_MIN_PLAYERS,
@@ -345,6 +346,16 @@ export default function HomePage() {
   const [boardGameLeaderboardOpen, setBoardGameLeaderboardOpen] = useState(false);
   const [boardGameExitConfirmOpen, setBoardGameExitConfirmOpen] = useState(false);
   const bgSnap = useBoardGameClientSnapshot();
+  const [bgRulesetNotice, setBgRulesetNotice] = useState<string | null>(null);
+  const prevBgRulesetRef = useRef<{
+    matchId: string | null;
+    rulesetId: BoardGameRulesetId;
+    synced: boolean;
+  }>({
+    matchId: null,
+    rulesetId: 'classic',
+    synced: false,
+  });
   const bgSessionRestoredRef = useRef(false);
   const cancelBgHookSyncRef = useRef<(() => void) | null>(null);
   const pendingBgInviteRef = useRef<string | null>(null);
@@ -1829,8 +1840,52 @@ export default function HomePage() {
   useEffect(() => {
     if (bgSnap.status === 'PLAYING') {
       setBoardGameLobbyOpen(false);
+      setBgRulesetNotice(null);
     }
   }, [bgSnap.status]);
+
+  // Thông báo gọn cho toàn bộ người chơi/khán giả trong phòng khi máy chủ xác nhận chủ bàn đổi chế độ chơi
+  useEffect(() => {
+    const prev = prevBgRulesetRef.current;
+    const isSynced = bgSnap.revision > 0;
+    if (!bgSnap.matchId) {
+      prevBgRulesetRef.current = { matchId: null, rulesetId: bgSnap.rulesetId, synced: false };
+      setBgRulesetNotice(null);
+      return;
+    }
+    if (
+      prev.synced &&
+      isSynced &&
+      prev.matchId === bgSnap.matchId &&
+      prev.rulesetId !== bgSnap.rulesetId
+    ) {
+      const cap =
+        bgSnap.serverRulesets.find((r) => r.id === bgSnap.rulesetId) ?? {
+          id: bgSnap.rulesetId,
+          shortLabel: bgSnap.rulesetId,
+          expectedCharacterCount:
+            bgSnap.rulesetId === 'full-expansion'
+              ? 66
+              : bgSnap.rulesetId === 'expansion-2'
+                ? 40
+                : bgSnap.rulesetId === 'expansion-1'
+                  ? 36
+                  : 10,
+          status: bgSnap.rulesetId === 'classic' ? ('stable' as const) : ('beta' as const),
+        };
+      setBgRulesetNotice(formatRulesetChangedNotice(cap));
+      prevBgRulesetRef.current = { matchId: bgSnap.matchId, rulesetId: bgSnap.rulesetId, synced: true };
+      const timer = window.setTimeout(() => {
+        setBgRulesetNotice(null);
+      }, 4500);
+      return () => window.clearTimeout(timer);
+    }
+    prevBgRulesetRef.current = {
+      matchId: bgSnap.matchId,
+      rulesetId: bgSnap.rulesetId,
+      synced: isSynced,
+    };
+  }, [bgSnap.matchId, bgSnap.rulesetId, bgSnap.revision, bgSnap.serverRulesets]);
 
   // Đồng bộ ghế được server chỉ định về avatar 3D local trong CLB
   useEffect(() => {
@@ -3146,7 +3201,14 @@ export default function HomePage() {
             leaderboardOpen={boardGameLeaderboardOpen}
             hasActiveMatch={Boolean(boardGameSeatId || bgSnap.matchId)}
             inviteCode={bgSnap.inviteCode}
+            matchStatus={bgSnap.status}
             matchStatusLabel={bgStatusLabel}
+            rulesetId={bgSnap.rulesetId}
+            pendingRulesetId={bgSnap.pendingRulesetId}
+            serverRulesets={bgSnap.serverRulesets}
+            connectionState={bgSnap.connectionState}
+            rulesetNotice={bgRulesetNotice}
+            rulesetError={bgSnap.lastError}
             isSpectator={bgSnap.isSpectator}
             isHost={isBgHost}
             localReady={Boolean(selfBgPlayer?.ready)}
@@ -3158,6 +3220,7 @@ export default function HomePage() {
             onToggleRules={() => setBoardGameRulesOpen((v) => !v)}
             onToggleLeaderboard={() => setBoardGameLeaderboardOpen((v) => !v)}
             onStandUpSeat={handleStandUpBoardGameSeat}
+            onSelectRuleset={(nextRulesetId) => boardGameClient.setRuleset(nextRulesetId)}
             onToggleReady={() => boardGameClient.setReady(!selfBgPlayer?.ready)}
             onStartMatch={() => boardGameClient.startMatch()}
             onRequestExit={handleRequestExitBoardGameClub}
@@ -3180,6 +3243,7 @@ export default function HomePage() {
               matchStatus={bgSnap.status}
               matchStatusLabel={bgStatusLabel}
               rulesetId={bgSnap.rulesetId}
+              pendingRulesetId={bgSnap.pendingRulesetId}
               serverRulesets={bgSnap.serverRulesets}
               isHost={isBgHost}
               localReady={Boolean(selfBgPlayer?.ready)}

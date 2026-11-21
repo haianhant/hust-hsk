@@ -127,6 +127,7 @@ export interface BoardGameClientSnapshot {
   tableId: BoardGameTableId | null;
   status: BoardGameMatchStatus | null;
   rulesetId: BoardGameRulesetId;
+  pendingRulesetId: BoardGameRulesetId | null;
   catalogVersion: string | null;
   revision: number;
   playerId: string | null;
@@ -155,6 +156,7 @@ const EMPTY_SNAPSHOT: BoardGameClientSnapshot = {
   tableId: null,
   status: null,
   rulesetId: BOARD_GAME_DEFAULT_RULESET_ID,
+  pendingRulesetId: null,
   catalogVersion: null,
   revision: 0,
   playerId: null,
@@ -193,6 +195,7 @@ export class BoardGameClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reqCounter = 0;
   private opSeq = 0;
+  private rulesetReqSeq = 0;
   private recordedLocalMatches = new Set<string>();
   private pendingAck = new Map<
     string,
@@ -620,7 +623,10 @@ export class BoardGameClient {
         const delay =
           RECONNECT_BACKOFF_MS[Math.min(this.reconnectAttempts, RECONNECT_BACKOFF_MS.length - 1)];
         this.reconnectAttempts += 1;
-        this.emit({ connectionState: 'reconnecting' });
+        this.emit({
+          connectionState: 'reconnecting',
+          pendingRulesetId: null,
+        });
         this.clearReconnectTimer();
         this.reconnectTimer = setTimeout(() => {
           this.openMatchSocket(true);
@@ -685,13 +691,23 @@ export class BoardGameClient {
         ) {
           this.recordLocalMatchFromSync(msg.matchId, msg.players, msg.publicGame, msg.privateView);
         }
+        const syncedRulesetId = sanitizeBoardGameRulesetId(
+          msg.rulesetId ?? msg.publicGame?.rulesetId,
+        );
+        const clearPendingRuleset =
+          this.snap.pendingRulesetId !== null &&
+          (syncedRulesetId === this.snap.pendingRulesetId ||
+            msg.status === 'STARTING' ||
+            msg.status === 'PLAYING' ||
+            msg.status === 'CLOSED');
         this.emit({
           connectionState: 'connected',
           matchId: msg.matchId,
           inviteCode: msg.inviteCode,
           tableId: msg.tableId,
           status: msg.status,
-          rulesetId: sanitizeBoardGameRulesetId(msg.rulesetId ?? msg.publicGame?.rulesetId),
+          rulesetId: syncedRulesetId,
+          ...(clearPendingRuleset ? { pendingRulesetId: null } : {}),
           catalogVersion: msg.catalogVersion ?? msg.publicGame?.catalogVersion ?? null,
           ...(Array.isArray(msg.availableRulesets) && msg.availableRulesets.length > 0
             ? {
@@ -774,8 +790,81 @@ export class BoardGameClient {
     this.rawSend({ type: 'BG_SET_READY', ready, requestId: this.nextRequestId() });
   }
 
-  setRuleset(rulesetId: BoardGameRulesetId): void {
-    this.rawSend({ type: 'BG_SET_RULESET', rulesetId, requestId: this.nextRequestId() });
+  setRuleset(
+    rulesetId: BoardGameRulesetId,
+  ): Promise<{ ok: boolean; reason?: string }> {
+    const snap = this.snap;
+    if (!snap.matchId) {
+      return Promise.resolve({ ok: false, reason: 'Chưa vào phòng đấu.' });
+    }
+    if (snap.status === 'STARTING' || snap.status === 'PLAYING' || snap.status === 'CLOSED') {
+      const reason = 'Không thể đổi chế độ chơi khi ván đấu đã bắt đầu hoặc đã đóng.';
+      this.emit({ lastError: reason });
+      return Promise.resolve({ ok: false, reason });
+    }
+    if (!snap.playerId || snap.hostPlayerId !== snap.playerId || snap.isSpectator) {
+      const reason = 'Chỉ chủ bàn (Host) mới được thay đổi chế độ chơi.';
+      this.emit({ lastError: reason });
+      return Promise.resolve({ ok: false, reason });
+    }
+    const capability = snap.serverRulesets.find((r) => r.id === rulesetId);
+    if (!capability || !capability.selectable) {
+      const reason = 'Chế độ chơi này hiện chưa được bật trên máy chủ.';
+      this.emit({ lastError: reason });
+      return Promise.resolve({ ok: false, reason });
+    }
+    if (rulesetId === snap.rulesetId && !snap.pendingRulesetId) {
+      return Promise.resolve({ ok: true });
+    }
+    if (snap.pendingRulesetId === rulesetId) {
+      return Promise.resolve({ ok: false, reason: 'Đang đồng bộ chế độ chơi với máy chủ...' });
+    }
+    if (!this.ws || this.ws.readyState !== 1) {
+      const reason = 'Chưa kết nối tới phòng đấu — vui lòng thử lại sau khi kết nối ổn định.';
+      this.emit({ lastError: reason, pendingRulesetId: null });
+      return Promise.resolve({ ok: false, reason });
+    }
+
+    const seq = ++this.rulesetReqSeq;
+    const requestId = this.nextRequestId();
+    this.emit({ pendingRulesetId: rulesetId, lastError: null });
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingAck.delete(requestId);
+        if (seq === this.rulesetReqSeq) {
+          const reason = 'Hết thời gian chờ máy chủ xác nhận đổi chế độ chơi.';
+          this.emit({ pendingRulesetId: null, lastError: reason });
+          resolve({ ok: false, reason });
+        } else {
+          resolve({ ok: false, reason: 'Yêu cầu đổi chế độ cũ đã được thay thế.' });
+        }
+      }, 6000);
+
+      this.pendingAck.set(requestId, {
+        resolve: (ok, reason) => {
+          if (seq === this.rulesetReqSeq) {
+            this.emit({
+              pendingRulesetId: null,
+              ...(ok ? {} : reason ? { lastError: reason } : {}),
+            });
+          }
+          resolve({ ok, reason });
+        },
+        timer,
+      });
+
+      const sent = this.rawSend({ type: 'BG_SET_RULESET', rulesetId, requestId });
+      if (!sent) {
+        clearTimeout(timer);
+        this.pendingAck.delete(requestId);
+        const reason = 'Không thể gửi yêu cầu đổi chế độ tới máy chủ.';
+        if (seq === this.rulesetReqSeq) {
+          this.emit({ pendingRulesetId: null, lastError: reason });
+        }
+        resolve({ ok: false, reason });
+      }
+    });
   }
 
   startMatch(turnTimeoutMs?: number): void {
@@ -822,6 +911,7 @@ export class BoardGameClient {
 
   leaveMatch(): void {
     this.opSeq += 1;
+    this.rulesetReqSeq += 1;
     const currentId = this.snap.matchId ?? this.joinCtx?.matchId ?? null;
     this.intentionalClose = true;
     this.clearReconnectTimer();
