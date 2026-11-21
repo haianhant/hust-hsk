@@ -21,7 +21,32 @@ function log(s) {
   const server = spawn('node', ['test/ws-shim/server.js', String(PORT)], { cwd: ROOT });
   server.stdout.on('data', (d) => log('[shim] ' + d.toString().trim()));
   server.stderr.on('data', (d) => log('[shim:err] ' + d.toString().trim()));
-  await new Promise((r) => setTimeout(r, 800));
+
+  // Poll /health until the TS-transpiled shim is listening (avoids fixed-delay flakes on slower CI runners).
+  const healthUrl = `http://127.0.0.1:${PORT}/health`;
+  const waitStart = Date.now();
+  let ready = false;
+  while (Date.now() - waitStart < 15000) {
+    if (server.exitCode !== null) {
+      log(`[shim] exited early with code ${server.exitCode}`);
+      process.exit(1);
+    }
+    try {
+      const res = await fetch(healthUrl);
+      if (res.ok) {
+        ready = true;
+        break;
+      }
+    } catch {
+      // Wait for shim socket bind
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!ready) {
+    log('[shim] timed out waiting for /health after 15000ms');
+    server.kill('SIGTERM');
+    process.exit(1);
+  }
 
   const test = spawn('node', ['test/ws-shim/test-clients.js', String(PORT)], { cwd: ROOT });
   let out = '';
