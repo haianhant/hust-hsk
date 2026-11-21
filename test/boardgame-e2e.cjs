@@ -750,7 +750,28 @@ async function enterCampusAndWaitHook(page, targetUrl, diagAudit) {
   }
 }
 
+async function dismissGreenCardPopupIfOpen(page) {
+  for (let i = 0; i < 6; i++) {
+    const popup = page.locator('[data-testid="bg-green-card-popup"]');
+    const visible = await popup.isVisible().catch(() => false);
+    if (!visible) break;
+    const text = (await popup.innerText().catch(() => '')) || '';
+    assert.ok(
+      /thẻ xanh bí mật/i.test(text) && /chỉ riêng bạn thấy/i.test(text),
+      `Green card secret popup must display privacy header, got: ${text.slice(0, 140)}`,
+    );
+    const btn = page.locator('[data-testid="bg-green-card-popup-dismiss"]');
+    if (await btn.isVisible().catch(() => false)) {
+      await btn.click({ timeout: 2500 }).catch(() => undefined);
+    } else {
+      await page.keyboard.press('Escape').catch(() => undefined);
+    }
+    await page.waitForTimeout(80);
+  }
+}
+
 async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(), options = {}) {
+  await dismissGreenCardPopupIfOpen(page);
   const snap = await page
     .evaluate(() => {
       const confirmBtn = document.querySelector('[data-testid="bg-confirm-reveal-btn"]');
@@ -868,6 +889,7 @@ async function playFirstValidStepOnPage(page, stepIndex = 0, triedSet = new Set(
 }
 
 async function clickControlViaSettingsIfCollapsed(page, testId, options = {}) {
+  await dismissGreenCardPopupIfOpen(page);
   const settingsBtn = page.locator('[data-testid="bg-graphics-settings-btn"]');
   const target = page.locator(`[data-testid="${testId}"]`).first();
   const visibleAlready = await target.isVisible().catch(() => false);
@@ -894,6 +916,7 @@ async function clickControlViaSettingsIfCollapsed(page, testId, options = {}) {
 }
 
 async function ensureSecondaryMenuOpen(page) {
+  await dismissGreenCardPopupIfOpen(page);
   const menu = page.locator('[data-testid="bg-secondary-actions-menu"]');
   if ((await menu.count()) === 0) {
     await page.locator('[data-testid="bg-secondary-actions-btn"]').click();
@@ -978,9 +1001,10 @@ async function verifyTilePopoverAndKeyboardA11y(page, options = {}) {
 }
 
 async function settleBoardLayoutAnimations(page, minWaitMs = 180) {
+  await dismissGreenCardPopupIfOpen(page);
   await page.waitForTimeout(minWaitMs);
   await page.evaluate(async () => {
-    const deadline = Date.now() + 2600;
+    const deadline = Date.now() + 3600;
     while (Date.now() < deadline) {
       const els = Array.from(document.querySelectorAll('[data-pawn-glide]'));
       const busy = els.some(
@@ -2208,6 +2232,7 @@ async function runE2E01AndE2E04(chromium, launchOpts, peerBrowser, outUrl, shim)
             assert.ok(m.left >= -1 && m.right <= 391, `Mobile action button ${m.id} off-screen: ${m.right}`);
           }
           // RC Mobile Check: Auto quality resolves to balanced & settings panel does not overflow 390x844
+          await dismissGreenCardPopupIfOpen(p4.page);
           const mobTier = await p4.page.locator('[data-testid="bg-vfx-stage"]').getAttribute('data-quality-tier');
           assert.equal(mobTier, 'balanced', 'Mobile 390x844 Auto quality tier must resolve to balanced');
           await p4.page.locator('[data-testid="bg-graphics-settings-btn"]').click();
@@ -2928,6 +2953,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
 
     const finishP1TurnPassively = async () => {
       for (let step = 0; step < 35; step++) {
+        await dismissGreenCardPopupIfOpen(p1.page);
         const ownTurn = await p1.page
           .evaluate(() => Boolean(document.querySelector('[data-testid="bg-action-panel"]')))
           .catch(() => false);
@@ -3082,7 +3108,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
           ).map((el) => el.getAttribute('data-testid').replace('bg-loc-', ''));
 
           const isIdleFallbackHeadline =
-            headline === 'Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)' ||
+            headline.startsWith('Khay Xúc Xắc Bóng Đêm') ||
             headline.startsWith('⚡ Lượt của bạn!');
           if (
             !state.rollStarted &&
@@ -3161,6 +3187,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
         window.__bgRealBoardProbe = state;
       });
 
+      await dismissGreenCardPopupIfOpen(p1.page);
       await p1.page.locator('[data-testid="bg-roll-dice-btn"]').click();
       await p1.page.waitForFunction(
         () => Boolean(window.__bgRealBoardProbe?.firstUnsettledAt),
@@ -3271,6 +3298,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       null,
       { timeout: 8000, polling: 40 },
     );
+    await dismissGreenCardPopupIfOpen(p1.page);
     await p1.page.locator('[data-testid="bg-roll-dice-btn"]').click();
     // Wait and trigger Skip Animation atomically inside the browser tick so a slow 2-vCPU CI runner
     // cannot miss the ~1s unsettled dice window between sequential Playwright IPC roundtrips.
@@ -3329,7 +3357,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
         const ov = document.querySelector('[data-testid="bg-vfx-dice-overlay"]');
         const hl = tr?.querySelector('p')?.textContent?.trim() || '';
         const isIdleFallbackHeadline =
-          hl === 'Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)' || hl.startsWith('⚡ Lượt của bạn!');
+          hl.startsWith('Khay Xúc Xắc Bóng Đêm') || hl.startsWith('⚡ Lượt của bạn!');
         if ((hl !== rmProbe.initialHeadline && !isIdleFallbackHeadline) || ov) {
           rmProbe.headlineChanged = true;
         }
@@ -3346,6 +3374,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       });
       window.__bgRmRollProbe = rmProbe;
     });
+    await dismissGreenCardPopupIfOpen(p1.page);
     await p1.page.locator('[data-testid="bg-roll-dice-btn"]').click();
     await p1.page.waitForFunction(
       () => Boolean(window.__bgRmRollProbe?.headlineChanged),
@@ -3377,6 +3406,7 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       if ((await p1.page.locator('[data-testid="bg-reveal-role-btn"]').count()) > 0) break;
       await p1.page.keyboard.press('Escape');
       if ((await p1.page.locator('[data-testid="bg-roll-dice-btn"]').count()) > 0) {
+        await dismissGreenCardPopupIfOpen(p1.page);
         await p1.page.locator('[data-testid="bg-roll-dice-btn"]').click();
       } else if ((await p1.page.locator('[data-testid^="bg-choose-dest-"]').count()) > 0) {
         await p1.page.locator('[data-testid^="bg-choose-dest-"]').first().click();

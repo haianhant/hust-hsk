@@ -170,7 +170,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
             }
           : undefined
       }
-      className={`group/tile relative h-full rounded-2xl border bg-slate-950 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+      className={`group/tile relative h-full min-w-0 rounded-2xl border bg-slate-950 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
         onSelectLocation && !canChooseMoveHere ? 'cursor-pointer' : ''
       } ${
         ruleOpen ? 'z-30' : ''
@@ -217,9 +217,9 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
       </div>
 
       {/* NỘI DUNG TACTICAL SCALING TRÊN BỀ MẶT TILE */}
-      <div className="relative z-10 h-full p-2 sm:p-2.5 flex flex-col justify-between min-h-[112px] lg:min-h-[clamp(128px,calc(19.2vh_-_22px),182px)]">
+      <div className="relative z-10 h-full min-w-0 p-2 sm:p-2.5 flex flex-col justify-between min-h-[112px] lg:min-h-[clamp(128px,calc(19.2vh_-_22px),182px)]">
         {/* CỤM TIÊU ĐỀ + ACTION CHIP GỌN Ở ĐỈNH (CHỪA KHOẢNG ARTWORK SÁNG Ở GIỮA) */}
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           {/* HÀNG 1: GIÁ TRỊ XÚC XẮC + TÊN ĐỊA ĐIỂM (14–16PX) + BADGE VỊ TRÍ BẢN THÂN */}
           <div className="flex items-center justify-between gap-1.5 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -275,7 +275,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                   e.stopPropagation();
                 }
               }}
-              className={`inline-flex items-center gap-1 min-w-0 max-w-full rounded-md border px-1.5 py-0.5 text-xs font-bold whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+              className={`inline-flex items-center gap-1 min-w-0 max-w-full overflow-hidden rounded-md border px-1.5 py-0.5 text-xs font-bold whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                 ruleOpen
                   ? 'border-amber-300 bg-slate-900/95 text-amber-200'
                   : 'border-white/25 bg-slate-950/80 text-slate-100 hover:border-cyan-300/70'
@@ -348,7 +348,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
         {/* KHAY QUÂN CỜ ĐẾ NỔI ĐỨNG TRONG KHU VỰC (HỖ TRỢ 1–8 QUÂN CÙNG Ô KHÔNG TRÀN) */}
         <div
           data-testid={`bg-tile-pawns-${locId}`}
-          className={`mt-auto pt-1.5 border-t border-white/15 min-h-[30px] ${
+          className={`mt-auto pt-1.5 border-t border-white/15 min-h-[30px] min-w-0 ${
             occupants.length >= 4
               ? 'grid grid-cols-4 gap-1 items-center'
               : occupants.length === 3

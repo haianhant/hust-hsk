@@ -235,9 +235,18 @@ export function GameBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicGame.matchId]);
 
+  const isMatchFinished = Boolean(publicGame.winnerLabel);
+
+  // Khi ván đấu đã kết thúc, tự động đóng popup Thẻ Xanh để không che modal Kết quả / Postcard
+  useEffect(() => {
+    if (isMatchFinished) {
+      setPendingGreenClues([]);
+    }
+  }, [isMatchFinished]);
+
   // Phát hiện Thẻ Xanh bí mật mới được người chơi khác đưa cho MÌNH để bật popup riêng tư (chống lặp khi F5)
   useEffect(() => {
-    if (isSpectator || !privateView) return;
+    if (isSpectator || !privateView || isMatchFinished) return;
     if (seenReceivedClueIdsRef.current.matchId !== publicGame.matchId) {
       seenReceivedClueIdsRef.current = {
         matchId: publicGame.matchId,
@@ -1624,17 +1633,21 @@ export function GameBoard({
       />
 
       {/* POPUP THÔNG BÁO THẺ XANH BÍ MẬT (CHỈ HIỆN CHO RIÊNG NGƯỜI ĐƯỢC NHẬN THẺ) */}
-      {activeGreenClue && (
+      {activeGreenClue && !isMatchFinished && (
         <div
           data-testid="bg-green-card-popup"
           role="dialog"
           aria-modal="true"
           aria-label="Thông báo nhận Thẻ Xanh bí mật"
+          onClick={dismissActiveGreenClue}
           className={`fixed inset-0 z-[56] flex items-center justify-center p-4 ${
             gfx.profile.enableBackdropBlur ? 'bg-slate-950/75 backdrop-blur-sm' : 'bg-slate-950/90'
           }`}
         >
-          <div className="w-full max-w-md rounded-2xl border-2 border-emerald-400/75 bg-gradient-to-b from-slate-900 via-slate-900 to-emerald-950/95 p-5 space-y-4 shadow-[0_24px_64px_rgba(16,185,129,0.35)]">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border-2 border-emerald-400/75 bg-gradient-to-b from-slate-900 via-slate-900 to-emerald-950/95 p-5 space-y-4 shadow-[0_24px_64px_rgba(16,185,129,0.35)]"
+          >
             <div className="flex items-start justify-between gap-3 border-b border-emerald-500/30 pb-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
