@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { getCardById } from '@/features/boardgame/domain/cards';
-import { FACTION_LABELS, getRoleDesign } from '@/features/boardgame/domain/roles';
+import { getRoleDesign } from '@/features/boardgame/domain/roles';
 import type {
   BoardGamePrivateGameView,
   BoardGamePublicGameView,
@@ -16,7 +16,6 @@ import type {
 import {
   FACTION_THEME,
   FactionCrestSvg,
-  LOCATION_VISUAL_META,
   PlayerPawnToken,
   ROLE_VISUAL_META,
   RolePortraitSvg,
@@ -56,15 +55,16 @@ export const RoleCard = React.memo(function RoleCard({
 }: RoleCardProps) {
   const renderTableEquipmentOverview = () => (
     <div className="rounded-xl bg-slate-950/85 border border-slate-800 p-2.5 space-y-2">
-      <p className="text-[11px] font-extrabold uppercase tracking-wider text-cyan-300">
-        🧾 Trang bị &amp; Sinh tồn toàn bàn ({publicGame.players.length})
+      <p
+        data-testid="bg-table-equipment-heading"
+        className="text-[11px] font-extrabold uppercase tracking-wider text-cyan-300"
+      >
+        🎒 Trang bị toàn bàn ({publicGame.players.length})
       </p>
       <div className="space-y-1.5">
         {publicGame.players.map((p) => {
           const isSelf = p.playerId === selfPlayerId;
           const isActive = p.playerId === publicGame.activePlayerId;
-          const locMeta = LOCATION_VISUAL_META[p.location];
-          const pFactionTheme = p.revealedFaction ? FACTION_THEME[p.revealedFaction] : null;
           return (
             <div
               key={p.playerId}
@@ -91,49 +91,25 @@ export const RoleCard = React.memo(function RoleCard({
                     revealedFaction={p.revealedFaction}
                     revealedRoleId={p.revealedRoleId}
                   />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-white truncate">
-                      {p.displayName}
-                      {isSelf ? ' (Bạn)' : ''}
-                    </p>
-                    <p
-                      className={`text-[10px] font-semibold truncate ${
-                        pFactionTheme ? pFactionTheme.textClass : 'text-slate-400'
-                      }`}
-                    >
-                      {p.revealedFaction
-                        ? `${FACTION_LABELS[p.revealedFaction]} · Ô ${locMeta.diceLabel}`
-                        : `Vai ẩn · Ô ${locMeta.diceLabel}`}
-                    </p>
-                  </div>
+                  <p className="text-xs font-bold text-white truncate">
+                    {p.isBot ? '🤖 ' : ''}
+                    {p.displayName}
+                    {isSelf ? ' (Bạn)' : ''}
+                  </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0 text-[10px] font-bold">
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-rose-200">
-                    🩸 {p.woundsTaken}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">
-                    🃏 {p.handCount}
-                  </span>
-                </div>
+                <span className="text-[10px] font-bold text-sky-300 shrink-0">
+                  {p.equipped.length} món
+                </span>
               </div>
 
-              {(p.revealedRoleId || p.equipped.length > 0 || p.guardianShieldActive) && (
-                <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                  {p.guardianShieldActive && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-400/35">
-                      🛡️ Khiên bảo vệ
-                    </span>
-                  )}
-                  {p.revealedRoleId && onZoomRevealedRole && (
-                    <button
-                      type="button"
-                      onClick={() => onZoomRevealedRole(p)}
-                      className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-950/75 border border-amber-400/45 text-amber-200 hover:bg-amber-900/75 cursor-pointer"
-                    >
-                      🔍 Soi vai
-                    </button>
-                  )}
-                  {p.equipped.map((eq, idx) => (
+              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                {p.guardianShieldActive && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-400/35">
+                    🛡️ Khiên bảo vệ
+                  </span>
+                )}
+                {p.equipped.length > 0 ? (
+                  p.equipped.map((eq, idx) => (
                     <button
                       key={`${eq.id}-${idx}`}
                       type="button"
@@ -143,9 +119,20 @@ export const RoleCard = React.memo(function RoleCard({
                     >
                       🎒 {eq.title}
                     </button>
-                  ))}
-                </div>
-              )}
+                  ))
+                ) : (
+                  <span className="text-[10px] text-slate-500 italic">Chưa có trang bị</span>
+                )}
+                {p.revealedRoleId && onZoomRevealedRole && (
+                  <button
+                    type="button"
+                    onClick={() => onZoomRevealedRole(p)}
+                    className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-950/75 border border-amber-400/45 text-amber-200 hover:bg-amber-900/75 cursor-pointer"
+                  >
+                    🔍 Soi vai
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
@@ -226,7 +213,7 @@ export const RoleCard = React.memo(function RoleCard({
                 : privateView.roleId === 'exp1_vengeance'
                   ? privateView.skillUsedOnce
                     ? 'Đã dùng (1 lần/trận)'
-                    : 'Sẵn sàng khi hạ gục (1d4 x2)'
+                    : 'Sẵn sàng khi hạ gục (xs 4 mặt × 2)'
                   : privateView.roleId === 'exp2_visions'
                     ? privateView.skillUsedOnce
                       ? 'Dấu ấn đang trừ 1 HP/lượt'
@@ -246,13 +233,13 @@ export const RoleCard = React.memo(function RoleCard({
         : privateView.roleId === 'exp1_felicia'
           ? 'Sẵn sàng khi rút Trắng/Đen'
           : privateView.roleId === 'exp2_gloria'
-            ? 'Sẵn sàng khi vào Sảnh (6)'
+            ? 'Sẵn sàng khi vào Church (6)'
             : privateView.roleId === 'exp2_father_harrison'
-              ? 'Pha di chuyển → Sảnh (6)'
+              ? 'Pha di chuyển → Church (6)'
               : privateView.roleId === 'exp1_bipolar'
                 ? privateView.skillUsedOnce
                   ? 'Đã dùng (1 lần/trận)'
-                  : 'Đầu lượt (d4+2 hồi/ST)'
+                  : 'Đầu lượt (xs 4 mặt + 2 hồi/ST)'
                 : privateView.roleId === 'exp2_g43' ||
                     privateView.roleId === 'exp2_wyvern' ||
                     privateView.roleId === 'exp1_wendigo' ||
@@ -280,7 +267,7 @@ export const RoleCard = React.memo(function RoleCard({
         <p className="text-xs sm:text-sm text-slate-100 leading-snug">{privateView.secretGoalText}</p>
         {privateView.roleId === 'lang-anh-san' && (
           <p className="text-xs font-bold text-amber-300 mt-1.5">
-            Tiến độ thắng (Hải): {privateView.equipped.length} / 5 món
+            Tiến độ thắng (Bob): {privateView.equipped.length} / 5 món
           </p>
         )}
         {privateView.roleId === 'lang-cuu-ho' && (
@@ -373,22 +360,90 @@ export const RoleCard = React.memo(function RoleCard({
             Chưa có mật báo. Đưa Thẻ Khám Phá Kín để suy luận phe thật!
           </p>
         ) : (
-          <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-            {[...privateView.privateClues].reverse().map((clue) => (
-              <div
-                key={clue.id}
-                className={`rounded-lg px-2.5 py-2 border text-xs ${
-                  clue.outcome === 'condition-met'
-                    ? 'bg-amber-950/50 border-amber-500/40 text-amber-100'
-                    : 'bg-slate-900 border-slate-700/70 text-slate-300'
-                }`}
-              >
-                <p className="font-bold">
-                  Vòng {clue.round} · {clue.targetName}
-                </p>
-                <p className="leading-snug mt-0.5">{clue.detail}</p>
-              </div>
-            ))}
+          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+            {[...privateView.privateClues].reverse().map((clue) => {
+              const hasStructured = Boolean(
+                clue.effectCategory ||
+                  clue.cardShortName ||
+                  clue.ruleDetail ||
+                  clue.progression ||
+                  clue.resultSummary,
+              );
+              const headerTarget =
+                clue.direction === 'received'
+                  ? `Nhận từ ${clue.senderName ?? clue.targetName}`
+                  : clue.direction === 'sent'
+                    ? `Gửi tới ${clue.targetName}`
+                    : clue.targetName;
+              return (
+                <div
+                  key={clue.id}
+                  data-testid="bg-private-clue-item"
+                  className={`rounded-lg px-2.5 py-2 border text-xs space-y-1 ${
+                    clue.outcome === 'condition-met'
+                      ? 'bg-amber-950/50 border-amber-500/45 text-amber-50'
+                      : 'bg-slate-900 border-slate-700/75 text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1.5 border-b border-white/10 pb-1">
+                    <span className="font-extrabold text-white truncate">
+                      Vòng {clue.round} · {headerTarget}
+                    </span>
+                    {clue.direction === 'received' && (
+                      <span className="shrink-0 rounded bg-emerald-500/20 border border-emerald-400/40 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">
+                        Thẻ xanh nhận
+                      </span>
+                    )}
+                  </div>
+                  {hasStructured ? (
+                    <dl className="space-y-0.5 text-[11px] leading-snug">
+                      <div>
+                        <dt className="inline font-bold text-slate-400">Hiệu ứng: </dt>
+                        <dd className="inline font-bold text-emerald-300">
+                          {clue.effectCategory ?? 'Thăm dò'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="inline font-bold text-slate-400">Tên: </dt>
+                        <dd className="inline font-extrabold text-amber-200">
+                          {clue.cardShortName ?? clue.cardTitle}
+                        </dd>
+                      </div>
+                      {clue.ruleDetail && (
+                        <div>
+                          <dt className="inline font-bold text-slate-400">Chi tiết: </dt>
+                          <dd className="inline text-slate-100">{clue.ruleDetail}</dd>
+                        </div>
+                      )}
+                      {clue.progression && (
+                        <div>
+                          <dt className="inline font-bold text-slate-400">Diễn biến: </dt>
+                          <dd className="inline text-cyan-100">{clue.progression}</dd>
+                        </div>
+                      )}
+                      {clue.resultSummary && (
+                        <div>
+                          <dt className="inline font-bold text-slate-400">Kết quả: </dt>
+                          <dd
+                            className={`inline font-black ${
+                              clue.resultSummary.startsWith('-')
+                                ? 'text-rose-300'
+                                : clue.resultSummary.startsWith('+')
+                                  ? 'text-emerald-300'
+                                  : 'text-amber-300'
+                            }`}
+                          >
+                            {clue.resultSummary}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  ) : (
+                    <p className="leading-snug mt-0.5">{clue.detail}</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

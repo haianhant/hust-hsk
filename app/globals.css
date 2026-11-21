@@ -40,7 +40,7 @@ canvas {
 
 .mn-card-flip-stage {
   transform-style: preserve-3d;
-  transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 960ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .mn-card-face {
@@ -200,15 +200,15 @@ canvas {
 }
 
 .bg-vfx-float-pop {
-  animation: bg-vfx-float-pop 840ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: bg-vfx-float-pop 2200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-cutin-enter {
-  animation: bg-vfx-cutin-enter 1350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: bg-vfx-cutin-enter var(--bg-cutin-duration, 2550ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-dice-roll {
-  animation: bg-vfx-dice-roll 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: bg-vfx-dice-roll 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes bg-tile-mist-drift {
@@ -231,7 +231,7 @@ canvas {
  * --------------------------------------------------------------------------- */
 .mn-die-cube {
   transform-style: preserve-3d;
-  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 
@@ -332,27 +332,27 @@ canvas {
   100% { transform: scaleX(1); opacity: 0.72; }
 }
 
-.mn-die-hop-windup { animation: mn-die-hop-windup 200ms ease-out forwards; }
-.mn-die-hop-tumble { animation: mn-die-hop-tumble 720ms cubic-bezier(0.37, 0, 0.63, 1) infinite; }
-.mn-die-hop-decel  { animation: mn-die-hop-decel 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-.mn-die-hop-settled { animation: mn-die-hop-settled 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.mn-die-hop-windup { animation: mn-die-hop-windup 320ms ease-out forwards; }
+.mn-die-hop-tumble { animation: mn-die-hop-tumble 980ms cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+.mn-die-hop-decel  { animation: mn-die-hop-decel 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.mn-die-hop-settled { animation: mn-die-hop-settled 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 
-.mn-die-hop-windup-d4 { animation: mn-die-hop-windup 200ms 40ms ease-out forwards; }
-.mn-die-hop-tumble-d4 { animation: mn-die-hop-tumble 690ms 45ms cubic-bezier(0.37, 0, 0.63, 1) infinite; }
-.mn-die-hop-decel-d4  { animation: mn-die-hop-decel 290ms 30ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.mn-die-hop-windup-d4 { animation: mn-die-hop-windup 320ms 50ms ease-out forwards; }
+.mn-die-hop-tumble-d4 { animation: mn-die-hop-tumble 940ms 55ms cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+.mn-die-hop-decel-d4  { animation: mn-die-hop-decel 540ms 40ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
-.mn-die-cube-windup { animation: mn-die-cube-windup 200ms ease-out forwards; }
-.mn-die-cube-tumble { animation: mn-die-cube-tumble 680ms linear infinite; }
-.mn-die-cube-decel  { animation: mn-die-cube-decel 270ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.mn-die-cube-windup { animation: mn-die-cube-windup 320ms ease-out forwards; }
+.mn-die-cube-tumble { animation: mn-die-cube-tumble 940ms linear infinite; }
+.mn-die-cube-decel  { animation: mn-die-cube-decel 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
-.mn-d4-pyramid-windup { animation: mn-d4-pyramid-windup 200ms ease-out forwards; }
-.mn-d4-pyramid-tumble { animation: mn-d4-pyramid-tumble 640ms linear infinite; }
-.mn-d4-pyramid-decel  { animation: mn-d4-pyramid-decel 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.mn-d4-pyramid-windup { animation: mn-d4-pyramid-windup 320ms ease-out forwards; }
+.mn-d4-pyramid-tumble { animation: mn-d4-pyramid-tumble 900ms linear infinite; }
+.mn-d4-pyramid-decel  { animation: mn-d4-pyramid-decel 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
 .mn-die-shadow-windup  { transform: scaleX(0.92); opacity: 0.65; }
-.mn-die-shadow-tumble  { animation: mn-die-shadow-tumble 720ms ease-in-out infinite; }
-.mn-die-shadow-decel   { animation: mn-die-shadow-decel 280ms ease-out forwards; }
-.mn-die-shadow-settled { transform: scaleX(1.04); opacity: 0.78; transition: transform 180ms ease-out; }
+.mn-die-shadow-tumble  { animation: mn-die-shadow-tumble 980ms ease-in-out infinite; }
+.mn-die-shadow-decel   { animation: mn-die-shadow-decel 520ms ease-out forwards; }
+.mn-die-shadow-settled { transform: scaleX(1.04); opacity: 0.78; transition: transform 300ms ease-out; }
 
 @keyframes mn-dice-tray-spotlight {
   0%, 100% {
@@ -399,7 +399,7 @@ canvas {
 }
 
 .mn-pawn-touchdown-ripple {
-  animation: mn-pawn-touchdown-ripple 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: mn-pawn-touchdown-ripple 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes bg-vfx-float-damage {
@@ -447,12 +447,12 @@ canvas {
   100% { opacity: 0; transform: translate(-10%, -94%) scale(0.92); }
 }
 
-.bg-vfx-float-damage   { animation: bg-vfx-float-damage 840ms cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.bg-vfx-float-critical { animation: bg-vfx-float-critical 880ms cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.bg-vfx-float-heal     { animation: bg-vfx-float-heal 840ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-.bg-vfx-float-counter  { animation: bg-vfx-float-counter 860ms cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.bg-vfx-float-block    { animation: bg-vfx-float-block 840ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-.bg-vfx-float-miss     { animation: bg-vfx-float-miss 780ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.bg-vfx-float-damage   { animation: bg-vfx-float-damage 2240ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.bg-vfx-float-critical { animation: bg-vfx-float-critical 2320ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.bg-vfx-float-heal     { animation: bg-vfx-float-heal 2240ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.bg-vfx-float-counter  { animation: bg-vfx-float-counter 2280ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.bg-vfx-float-block    { animation: bg-vfx-float-block 2240ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.bg-vfx-float-miss     { animation: bg-vfx-float-miss 2180ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
 /* Cinematic Role Reveal 5-stage animations (anticipation -> card-flip -> faction-reveal -> impact -> settle) */
 @keyframes bg-vfx-reveal-vignette {
@@ -501,11 +501,11 @@ canvas {
 }
 
 .bg-vfx-reveal-vignette {
-  animation: bg-vfx-reveal-vignette 1720ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bg-vfx-reveal-vignette var(--bg-reveal-duration, 3120ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-reveal-push {
-  animation: bg-vfx-reveal-push 1720ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bg-vfx-reveal-push var(--bg-reveal-duration, 3120ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-faction-crest-pop {
@@ -585,11 +585,11 @@ canvas {
 }
 
 .bg-vfx-card-flight {
-  animation: bg-vfx-card-flight 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: bg-vfx-card-flight 920ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .bg-vfx-card-draw-ring {
-  animation: bg-vfx-card-draw-ring 780ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bg-vfx-card-draw-ring 1400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* Phase 2 — Victory / Defeat / Spectator Cinematic V2 (1.5-2.5s, 4 stages) */
@@ -647,15 +647,15 @@ canvas {
 }
 
 .bg-vfx-victory-vignette {
-  animation: bg-vfx-victory-vignette var(--bg-victory-duration, 2200ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bg-vfx-victory-vignette var(--bg-victory-duration, 3600ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-victory-stage-push {
-  animation: bg-vfx-victory-stage-push var(--bg-victory-duration, 2200ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bg-vfx-victory-stage-push var(--bg-victory-duration, 3600ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-defeat-stage-push {
-  animation: bg-vfx-defeat-stage-push var(--bg-victory-duration, 2200ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: bg-vfx-defeat-stage-push var(--bg-victory-duration, 3600ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .bg-vfx-victory-crest-reveal {

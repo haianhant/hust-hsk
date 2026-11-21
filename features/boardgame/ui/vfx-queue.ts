@@ -307,7 +307,7 @@ export function buildDiceRollEventFromSnapshot(
     id,
     kind: 'DICE_ROLL',
     order: 10,
-    durationMs: scaleDuration(r.kind === 'attack' ? 1320 : 1420, reducedMotion),
+    durationMs: scaleDuration(r.kind === 'attack' ? 1320 : 1420, reducedMotion, 1380),
     diceKind: r.kind,
     actorId: r.playerId,
     actorName: r.displayName,
@@ -371,12 +371,16 @@ function getRevealPortrait(roleId: BoardGameRoleId | null): string | null {
   return MIDNIGHT_CHARACTER_ART[roleId] ?? null;
 }
 
-function scaleDuration(baseMs: number, reducedMotion: boolean): number {
-  return reducedMotion ? Math.min(260, Math.round(baseMs * 0.4)) : baseMs;
+function scaleDuration(
+  baseMs: number,
+  reducedMotion: boolean,
+  extraSmoothMs = 1400,
+): number {
+  return reducedMotion ? Math.min(260, Math.round(baseMs * 0.4)) : baseMs + extraSmoothMs;
 }
 
 /**
- * Chia 5 giai đoạn Cinematic Role Reveal (1.2–1.8s, mặc định 1720ms):
+ * Chia 5 giai đoạn Cinematic Role Reveal (2.4–3.3s mượt mà, mặc định 3120ms):
  *   anticipation -> card-flip -> faction-reveal -> impact -> settle.
  * Điều chỉnh nhẹ theo chất lượng đồ họa (`high`/`balanced`/`low`) và rút gọn `<= 260ms`
  * khi bật Reduced Motion.
@@ -397,12 +401,12 @@ export function resolveRoleRevealTimeline(
       totalMs: Math.min(260, safeTotal),
     };
   }
-  const clamped = Math.max(1200, Math.min(1800, safeTotal));
+  const clamped = Math.max(2400, Math.min(3300, safeTotal));
   const totalMs =
     qualityTier === 'low'
-      ? Math.min(clamped, 1440)
+      ? Math.min(clamped, 2600)
       : qualityTier === 'balanced'
-        ? Math.min(clamped, 1620)
+        ? Math.min(clamped, 2900)
         : clamped;
   const anticipationEndMs = Math.round(totalMs * 0.24);
   const cardFlipEndMs = Math.round(totalMs * 0.44);
@@ -419,7 +423,7 @@ export function resolveRoleRevealTimeline(
 }
 
 /**
- * Chia 4 giai đoạn Victory / Defeat / Spectator Cinematic (1.5–2.5s, mặc định 2200ms):
+ * Chia 4 giai đoạn Victory / Defeat / Spectator Cinematic (2.8–3.9s mượt mà, mặc định 3600ms):
  *   anticipation -> faction-reveal -> impact -> settle.
  * Tôn trọng cấu hình đồ họa (`high`/`balanced`/`low`) và rút gọn `<= 280ms` khi bật Reduced Motion.
  */
@@ -437,12 +441,12 @@ export function resolveVictoryCinematicTimeline(
       totalMs: Math.min(280, safeTotal),
     };
   }
-  const clamped = Math.max(1500, Math.min(2500, safeTotal));
+  const clamped = Math.max(2800, Math.min(3900, safeTotal));
   const totalMs =
     qualityTier === 'low'
-      ? Math.min(clamped, 1750)
+      ? Math.min(clamped, 3000)
       : qualityTier === 'balanced'
-        ? Math.min(clamped, 2000)
+        ? Math.min(clamped, 3300)
         : clamped;
   const anticipationEndMs = Math.round(totalMs * 0.22);
   const factionRevealEndMs = Math.round(totalMs * 0.5);
@@ -509,7 +513,7 @@ export function buildOpeningDealEvent(
     id: openingId,
     kind: 'CINEMATIC_CUTIN',
     order: 5,
-    durationMs: scaleDuration(baseDuration, reduced),
+    durationMs: scaleDuration(baseDuration, reduced, 900),
     bannerType: 'OPENING_DEAL',
     title: 'ĐÊM XUỐNG TẠI KTX…',
     subtitle: ctx.isSpectator
@@ -583,12 +587,12 @@ export function resolveOpeningDealTimeline(
       totalMs,
     };
   }
-  const clamped = Math.max(2500, Math.min(4000, safeTotal));
+  const clamped = Math.max(3200, Math.min(4800, safeTotal));
   const totalMs =
     qualityTier === 'low'
-      ? Math.max(2500, Math.min(clamped, 2750))
+      ? Math.max(3200, Math.min(clamped, 3500))
       : qualityTier === 'balanced'
-        ? Math.max(2500, Math.min(clamped, 3200))
+        ? Math.max(3200, Math.min(clamped, 4000))
         : clamped;
   const startStingerEndMs = Math.round(totalMs * 0.2);
   const shuffleDealEndMs = Math.round(totalMs * 0.44);
@@ -604,12 +608,12 @@ export function resolveOpeningDealTimeline(
 }
 
 /**
- * Chia chuỗi 5 pha Combat Impact V2 (tổng 750–1.100ms):
- *   1. Target Lock (0–150ms)
- *   2. Anticipation (150–300ms)
- *   3. Attack Travel (300–500ms)
- *   4. Impact (500–700ms, gồm Hit-Stop 60–90ms)
- *   5. Recovery (700–1.100ms — Floating Damage chỉ xuất hiện từ sau Impact)
+ * Chia chuỗi 5 pha Combat Impact V2 mượt mà (tổng 1.900–2.600ms):
+ *   1. Target Lock (0–15%)
+ *   2. Anticipation (15–30%)
+ *   3. Attack Travel (30–50%)
+ *   4. Impact (50–70%, gồm Hit-Stop 110–145ms)
+ *   5. Recovery (70–100% — Floating Damage chỉ xuất hiện từ sau Impact)
  */
 export function resolveCombatSequenceTimings(
   durationMs: number,
@@ -633,12 +637,12 @@ export function resolveCombatSequenceTimings(
     };
   }
   const tier = options?.qualityTier ?? 'high';
-  const clamped = Math.max(750, Math.min(1100, safeTotal));
+  const clamped = Math.max(1900, Math.min(2600, safeTotal));
   const totalMs =
     tier === 'low'
-      ? Math.min(clamped, 840)
+      ? Math.min(clamped, 2050)
       : tier === 'balanced'
-        ? Math.min(clamped, 960)
+        ? Math.min(clamped, 2300)
         : clamped;
 
   const targetLockEndMs = Math.round(totalMs * 0.15);
@@ -668,16 +672,16 @@ export function resolveCombatSequenceTimings(
     isNonOffensive || isMiss
       ? 0
       : options?.isCritical
-        ? 85
+        ? 140
         : effect === 'COUNTER_STRIKE'
-          ? 80
-          : 75;
+          ? 125
+          : 115;
   const hitStopEndMs = hitStopStartMs + hitStopDurationMs;
   const impactEndMs = Math.max(
-    hitStopEndMs + (hitStopDurationMs > 0 ? 55 : 40),
+    hitStopEndMs + (hitStopDurationMs > 0 ? 110 : 80),
     Math.round(totalMs * 0.7),
   );
-  const recoveryEndMs = Math.max(impactEndMs + 160, totalMs);
+  const recoveryEndMs = Math.max(impactEndMs + 340, totalMs);
   // Sát thương tuyệt đối KHÔNG xuất hiện trước Impact (chỉ bật ngay sau pha Impact/Hit-Stop)
   const damagePopAtMs = impactEndMs;
 
@@ -1706,7 +1710,7 @@ export function extractVisualEventsFromDiff(
             roleId: actorPub.revealedRoleId,
             roleName: roleDesign.name,
             portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
-            skillName: 'XUNG CAO ÁP 1D6',
+            skillName: 'XUNG CAO ÁP (XS 6 MẶT)',
             actorId,
           });
           if (skillTargets.length > 0) {
@@ -1742,7 +1746,7 @@ export function extractVisualEventsFromDiff(
             roleId: actorPub.revealedRoleId,
             roleName: roleDesign.name,
             portraitSrc: getRevealPortrait(actorPub.revealedRoleId),
-            skillName: 'ĐÒN PHÁ VÂY 1D4',
+            skillName: 'ĐÒN PHÁ VÂY (XS 4 MẶT)',
             actorId,
           });
           if (skillTargets.length > 0) {
@@ -2211,6 +2215,7 @@ export function extractVisualEventsFromDiff(
       } else if (
         log.text.includes('Kíp Nổ Tự Động') ||
         log.text.includes('Pháo Sáng Phán Quyết') ||
+        log.text.includes('Weird Woods') ||
         log.text.includes('Hành Lang (9)') ||
         log.text.includes('Dơi Hút Điện') ||
         log.text.includes('Nhện Chập Mạch')
@@ -2490,7 +2495,7 @@ export function extractVisualEventsFromDiff(
         subtitle:
           selfPub.revealedRoleId === 'gac-truc-ban'
             ? 'Tung xúc xắc hoặc dùng Bước Nhảy Tắt cùng Cụm!'
-            : 'Tung xúc xắc 1d6 + 1d4 để bắt đầu hành động!',
+            : 'Tung xs 6 mặt + xs 4 mặt để bắt đầu hành động!',
         faction: selfPub.revealedFaction,
         roleId: selfPub.revealedRoleId,
         roleName: null,

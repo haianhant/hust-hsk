@@ -21,13 +21,13 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   // -------------------- ĐỘI SĂN ĐÊM (3 Hunter gốc) --------------------
   {
     id: 'gac-ky-thuat',
-    name: 'Minh "Kỹ Thuật"',
-    title: 'George · Đội trưởng Phá Vây',
+    name: 'George',
+    title: 'Đội trưởng Phá Vây',
     faction: 'lantern-guard',
     maxHp: 14,
-    skillName: 'Đòn Phá Vây 1d4',
+    skillName: 'Đòn Phá Vây (xs 4 mặt)',
     skillSummary:
-      '1 lần/trận (sau khi lật vai): Chọn 1 người chơi bất kỳ trên bàn, tung 1d4 gây sát thương trực tiếp bằng số nút xúc xắc.',
+      '1 lần/trận (sau khi lật vai): Chọn 1 người chơi bất kỳ trên bàn, tung xs 4 mặt gây sát thương trực tiếp bằng số nút xúc xắc.',
     cooldownRounds: 0,
     oncePerMatch: true,
     targetMode: 'any-other',
@@ -36,8 +36,8 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   },
   {
     id: 'gac-truc-ban',
-    name: 'Lan "Trực Ban"',
-    title: 'Emi · Bước Nhảy Tắt',
+    name: 'Emi',
+    title: 'Bước Nhảy Tắt',
     faction: 'lantern-guard',
     maxHp: 10,
     skillName: 'Bước Nhảy Tắt',
@@ -51,13 +51,13 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   },
   {
     id: 'gac-radio',
-    name: 'Vy "Radio"',
-    title: 'Franklin · Sét Cao Áp',
+    name: 'Franklin',
+    title: 'Sét Cao Áp',
     faction: 'lantern-guard',
     maxHp: 12,
-    skillName: 'Xung Cao Áp 1d6',
+    skillName: 'Xung Cao Áp (xs 6 mặt)',
     skillSummary:
-      '1 lần/trận (sau khi lật vai): Chọn 1 người chơi bất kỳ trên bàn, tung 1d6 gây sát thương trực tiếp bằng số nút xúc xắc.',
+      '1 lần/trận (sau khi lật vai): Chọn 1 người chơi bất kỳ trên bàn, tung xs 6 mặt gây sát thương trực tiếp bằng số nút xúc xắc.',
     cooldownRounds: 0,
     oncePerMatch: true,
     targetMode: 'any-other',
@@ -68,8 +68,8 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   // -------------------- HỘI BÓNG ĐÊM (3 Shadow gốc) --------------------
   {
     id: 'suong-an-danh',
-    name: 'Tú "Ẩn Danh"',
-    title: 'Vampire · Hấp Thụ Đêm Khuya',
+    name: 'Vampire',
+    title: 'Hấp Thụ Đêm Khuya',
     faction: 'mist-order',
     maxHp: 13,
     skillName: 'Hấp Thụ Đêm Khuya',
@@ -83,8 +83,8 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   },
   {
     id: 'suong-tin-gia',
-    name: 'Khánh "Tin Giả"',
-    title: 'Unknown · Ngụy Trang Đa Tầng',
+    name: 'Unknown',
+    title: 'Ngụy Trang Đa Tầng',
     faction: 'mist-order',
     maxHp: 11,
     skillName: 'Ngụy Trang Đa Tầng',
@@ -98,13 +98,13 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   },
   {
     id: 'suong-gac-cong',
-    name: 'Dũng "Gác Cổng"',
-    title: 'Werewolf · Phản Kích Tức Thì',
+    name: 'Werewolf',
+    title: 'Phản Kích Tức Thì',
     faction: 'mist-order',
     maxHp: 14,
     skillName: 'Phản Kích Tức Thì',
     skillSummary:
-      'Nội tại sau khi lật vai: Mỗi khi bị đánh thường mà còn sống, lập tức tung đòn đánh trả (|1d6 - 1d4|) ngược lại kẻ tấn công (kể cả từ Cụm khác).',
+      'Nội tại sau khi lật vai: Mỗi khi bị đánh thường mà còn sống, lập tức tung đòn đánh trả (|xs 6 mặt - xs 4 mặt|) ngược lại kẻ tấn công (kể cả từ Cụm khác).',
     cooldownRounds: 0,
     oncePerMatch: false,
     targetMode: 'passive',
@@ -115,8 +115,8 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   // -------------------- KẺ ĐỘC HÀNH (4 Neutral gốc) --------------------
   {
     id: 'lang-anh-san',
-    name: 'Hải "Sưu Tầm"',
-    title: 'Bob · Thợ Săn Trang Bị',
+    name: 'Bob',
+    title: 'Thợ Săn Trang Bị',
     faction: 'wanderer',
     maxHp: 10,
     skillName: 'Cướp Đồ Thay Đòn',
@@ -130,8 +130,8 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   },
   {
     id: 'lang-quan-sat',
-    name: 'Trang "Kiên Cường"',
-    title: 'Allie · Người Sống Sót Bền Bỉ',
+    name: 'Allie',
+    title: 'Người Sống Sót Bền Bỉ',
     faction: 'wanderer',
     maxHp: 8,
     skillName: 'Ý Chí Hồi Sinh',
@@ -145,8 +145,8 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   },
   {
     id: 'lang-cuu-ho',
-    name: 'Bách "Cuồng Chiến"',
-    title: 'Charles · Yến Tiệc Đẫm Máu',
+    name: 'Charles',
+    title: 'Yến Tiệc Đẫm Máu',
     faction: 'wanderer',
     maxHp: 11,
     skillName: 'Đòn Đánh Đẫm Máu',
@@ -160,8 +160,8 @@ export const ROLES_CATALOG: readonly CharacterDesign[] = [
   },
   {
     id: 'lang-tien-phong',
-    name: 'Đạt "Cảm Tử"',
-    title: 'Daniel · Tiếng Hét Tử Thần',
+    name: 'Daniel',
+    title: 'Tiếng Hét Tử Thần',
     faction: 'wanderer',
     maxHp: 13,
     skillName: 'Tiếng Hét Lộ Diện',
@@ -213,7 +213,7 @@ function buildExpansionRoleDesign(rec: ExpansionCatalogRecord): CharacterDesign 
                 : rec.id === 'exp2_arlene'
                   ? 'Bạn bị hạ gục bởi một nhân vật thuộc Đội Săn Đêm (Hunter).'
                   : rec.id === 'exp1_angel'
-                    ? 'Còn sống khi trận đấu kết thúc VÀ (tất cả Kẻ Độc Hành đều còn sống HOẶC bạn đứng tại chính xác Sảnh Tầng 1 / Church).'
+                    ? 'Còn sống khi trận đấu kết thúc VÀ (tất cả Kẻ Độc Hành đều còn sống HOẶC bạn đứng tại chính xác Church).'
                     : rec.id === 'exp2_bianca'
                       ? 'Còn sống khi trận đấu kết thúc và có lượng HP còn lại thấp nhất trong các người chơi còn sống (cho phép hòa).'
                     : rec.id === 'exp2_dalton'

@@ -540,7 +540,7 @@ export function ActionPanel({
                     {opt.roll && (
                       <span className="inline-block text-[10px] font-extrabold text-amber-200 bg-slate-950/75 border border-amber-400/40 rounded px-1.5 py-0.5 mr-1">
                         {opt.roll.hasMasamune
-                          ? `🎲 1d4=${opt.roll.d4}`
+                          ? `🎲 xs 4 mặt = ${opt.roll.d4}`
                           : `🎲 ${opt.roll.d6} & ${opt.roll.d4} → ${opt.roll.totalDmg} ST`}
                       </span>
                     )}
@@ -775,7 +775,7 @@ export function ActionPanel({
         return 'Chỉ kích hoạt ở Pha 1 trước khi tung xúc xắc';
       }
       if (selfPlayer.location === 'lobby') {
-        return 'Đang đứng tại Sảnh Tầng 1 (Church) — không thể đứng yên';
+        return 'Đang đứng tại Church (6) — không thể đứng yên';
       }
       if (publicGame.lastDiceRoll?.rerollRequired && publicGame.lastDiceRoll.playerId === selfPlayer.playerId) {
         return 'Đã bắt đầu tung xúc xắc trong lượt này';
@@ -1002,7 +1002,7 @@ export function ActionPanel({
     if (eq.id === 'eq-01') return sum - 1;
     return sum;
   }, 0);
-  const attackDiceFormula = `${hasMasamune ? '1d4' : '|1d6-1d4|'}${
+  const attackDiceFormula = `${hasMasamune ? 'xs 4 mặt' : '|xs 6 mặt - xs 4 mặt|'}${
     attackWeaponBonus > 0 ? `+${attackWeaponBonus}` : attackWeaponBonus < 0 ? `${attackWeaponBonus}` : ''
   }`;
   const attackTargetWarning = effectiveAttackTarget
@@ -1062,7 +1062,7 @@ export function ActionPanel({
       case 'ROLL_MOVE':
         return rerollPrompt
           ? `Vừa trùng Ô ${currentLoc.diceLabel} — tung lại xúc xắc để di chuyển`
-          : `Ô ${currentLoc.diceLabel} ${currentLoc.shortName} · Tung 1d6 + 1d4 để di chuyển`;
+          : `Ô ${currentLoc.diceLabel} ${currentLoc.shortName} · Tung xs 6 mặt + xs 4 mặt để di chuyển`;
       case 'CHOOSE_MOVE':
         return isCompassChoice
           ? `La Bàn · Chọn 1 trong ${allowedMoveList.length} khu vực hợp lệ`
@@ -1622,7 +1622,7 @@ export function ActionPanel({
                 value={chosenStealEquipId}
                 onChange={(e) => setStealEquipId(e.target.value)}
                 className="rounded-lg bg-slate-950 border border-sky-500/50 px-2.5 py-1 text-xs font-bold text-sky-100"
-                aria-label="Chọn Trang bị muốn cướp tại Sân Bóng"
+                aria-label="Chọn Trang bị muốn cướp tại Erstwhile Altar"
               >
                 {validStealTarget.equipped.map((eq, i) => (
                   <option key={`${eq.id}-${i}`} value={eq.id}>
@@ -1804,7 +1804,7 @@ export function ActionPanel({
                         ? `🔒 Fallen chỉ được tự lật vai khi còn ≥ 8 HP (hiện ${privateView.hp}/${privateView.maxHp} HP)`
                         : undeadRevealBlocked
                           ? '🔒 Undead không thể tự lật vai trước khi kích hoạt hồi sinh lần đầu'
-                          : '🔒 Nội tại Đạt "Cảm Tử": tự lộ khi có người đầu tiên gục'}
+                          : '🔒 Nội tại Daniel: tự lộ khi có người đầu tiên gục'}
                   </p>
                 )}
               </div>
@@ -1948,10 +1948,10 @@ export function ActionPanel({
             className="w-full sm:w-auto shrink-0 px-4 py-1.5 min-h-[38px] min-w-[44px] rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 text-xs sm:text-sm font-black shadow-lg transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
           >
             {rerollPrompt
-              ? '🎲 ĐỔ LẠI XÚC XẮC (1d6 + 1d4)'
+              ? '🎲 ĐỔ LẠI XÚC XẮC (xs 6 mặt + xs 4 mặt)'
               : selfPlayer.equipped.some((e) => e.id === 'eq-05')
                 ? '🧭 TUNG XÚC XẮC x2 (LA BÀN)'
-                : '🎲 TUNG XÚC XẮC (1d6 + 1d4)'}
+                : '🎲 TUNG XÚC XẮC (xs 6 mặt + xs 4 mặt)'}
           </button>
         </div>
       )}

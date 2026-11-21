@@ -49,8 +49,8 @@ export const ZONE_CLUSTERS: readonly ZoneClusterDefinition[] = [
 export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
   {
     id: 'radio',
-    name: 'Trạm Radio KTX',
-    shortName: 'Radio (2–3)',
+    name: "Hermit's Cabin",
+    shortName: "Hermit's Cabin (2–3)",
     clusterId: 'north',
     diceNumbers: [2, 3],
     diceLabel: '2–3',
@@ -61,8 +61,8 @@ export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
   },
   {
     id: 'breaker',
-    name: 'Cổng Hầm KTX',
-    shortName: 'Cổng Hầm (4–5)',
+    name: 'Underworld Gate',
+    shortName: 'Underworld Gate (4–5)',
     clusterId: 'north',
     diceNumbers: [4, 5],
     diceLabel: '4–5',
@@ -73,8 +73,8 @@ export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
   },
   {
     id: 'lobby',
-    name: 'Sảnh Tầng 1',
-    shortName: 'Sảnh (6)',
+    name: 'Church',
+    shortName: 'Church (6)',
     clusterId: 'central',
     diceNumbers: [6],
     diceLabel: '6',
@@ -85,8 +85,8 @@ export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
   },
   {
     id: 'canteen',
-    name: 'Khu Sân Cũ Đêm',
-    shortName: 'Sân Cũ (8)',
+    name: 'Cemetery',
+    shortName: 'Cemetery (8)',
     clusterId: 'central',
     diceNumbers: [8],
     diceLabel: '8',
@@ -97,8 +97,8 @@ export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
   },
   {
     id: 'corridor',
-    name: 'Hành Lang Tầng 4',
-    shortName: 'Hành Lang (9)',
+    name: 'Weird Woods',
+    shortName: 'Weird Woods (9)',
     clusterId: 'south',
     diceNumbers: [9],
     diceLabel: '9',
@@ -109,8 +109,8 @@ export const LOCATIONS_CATALOG: readonly LocationDefinition[] = [
   },
   {
     id: 'court',
-    name: 'Sân Bóng Rổ Đêm',
-    shortName: 'Sân Bóng (10)',
+    name: 'Erstwhile Altar',
+    shortName: 'Erstwhile Altar (10)',
     clusterId: 'south',
     diceNumbers: [10],
     diceLabel: '10',

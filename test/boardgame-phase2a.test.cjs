@@ -400,7 +400,7 @@ test('P2A-3 — G43 reduces attack by 2 only when revealed, floors at 0, ignores
   applyPlayerGameAction(sNonAtk, 'p1', { type: 'USE_SKILL', targetPlayerId: 'p2' }, now + 30);
   assert.ok(sNonAtk.players.p2.woundsTaken > wBeforeSkill, 'G43 must NOT reduce skill damage');
   const skillLog = sNonAtk.publicLog[sNonAtk.publicLog.length - 1].text;
-  const rollMatch = /1d6=(\d)/.exec(skillLog);
+  const rollMatch = /(?:1d6|xs 6 mặt)\s*=\s*(\d)/.exec(skillLog);
   assert.ok(rollMatch);
   assert.equal(sNonAtk.players.p2.woundsTaken - wBeforeSkill, Number(rollMatch[1]));
 

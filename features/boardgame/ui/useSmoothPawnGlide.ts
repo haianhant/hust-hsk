@@ -28,7 +28,7 @@ export function useSmoothPawnGlide({
   matchId,
   reducedMotion,
   qualityTier = 'high',
-  durationMs = 520,
+  durationMs = 1650,
   diceRollSignature = '',
   skipGeneration = 0,
 }: {
@@ -169,11 +169,14 @@ export function useSmoothPawnGlide({
 
           const totalMs = holdDelay + flightMs + cushionMs;
           const holdFrac = Math.min(0.84, holdDelay / totalMs);
-          const midFrac = holdFrac + (flightMs / totalMs) * 0.48;
-          const touchFrac = Math.min(0.97, (holdDelay + flightMs) / totalMs);
+          const spanFrac = Math.max(0.08, (flightMs / totalMs));
+          const liftFrac = holdFrac + spanFrac * 0.24;
+          const midFrac = holdFrac + spanFrac * 0.52;
+          const descFrac = holdFrac + spanFrac * 0.78;
+          const touchFrac = Math.min(0.96, (holdDelay + flightMs) / totalMs);
 
           // QUAN TRỌNG: easing tổng phải là 'linear' để pha giữ chân (holdFrac) không bị trượt sớm;
-          // easing mượt chỉ gắn vào đoạn bay [holdFrac -> touchFrac -> 1].
+          // quỹ đạo parabol đa điểm mượt (lift -> apex -> descend -> touchdown -> settle) loại bỏ giật khung.
           const frames: Keyframe[] =
             holdFrac > 0.005
               ? [
@@ -184,22 +187,34 @@ export function useSmoothPawnGlide({
                     easing: 'linear',
                   },
                   {
-                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.07)`,
-                    filter: 'drop-shadow(0 6px 8px rgba(56,189,248,0.42))',
+                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.05, 0.96)`,
+                    filter: 'drop-shadow(0 5px 8px rgba(56,189,248,0.42))',
                     offset: holdFrac,
-                    easing: 'ease-out',
+                    easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',
                   },
                   {
-                    transform: `translate3d(${dx * 0.45}px, ${dy * 0.45 - 26}px, 0) scale(1.22)`,
-                    filter: 'drop-shadow(0 16px 14px rgba(2,6,23,0.72))',
+                    transform: `translate3d(${dx * 0.76}px, ${dy * 0.76 - 19}px, 0) scale(1.13)`,
+                    filter: 'drop-shadow(0 12px 12px rgba(2,6,23,0.62))',
+                    offset: liftFrac,
+                    easing: 'cubic-bezier(0.33, 1, 0.68, 1)',
+                  },
+                  {
+                    transform: `translate3d(${dx * 0.46}px, ${dy * 0.46 - 30}px, 0) scale(1.2)`,
+                    filter: 'drop-shadow(0 18px 16px rgba(2,6,23,0.74))',
                     offset: midFrac,
+                    easing: 'cubic-bezier(0.37, 0, 0.63, 1)',
+                  },
+                  {
+                    transform: `translate3d(${dx * 0.16}px, ${dy * 0.16 - 14}px, 0) scale(1.1)`,
+                    filter: 'drop-shadow(0 10px 10px rgba(2,6,23,0.58))',
+                    offset: descFrac,
                     easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                   },
                   {
-                    transform: 'translate3d(0, 3px, 0) scale(1.08, 0.92)',
-                    filter: 'drop-shadow(0 3px 5px rgba(56,189,248,0.5))',
+                    transform: 'translate3d(0, 3px, 0) scale(1.07, 0.93)',
+                    filter: 'drop-shadow(0 3px 5px rgba(56,189,248,0.52))',
                     offset: touchFrac,
-                    easing: 'ease-out',
+                    easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                   },
                   {
                     transform: 'translate3d(0, 0, 0) scale(1)',
@@ -209,22 +224,34 @@ export function useSmoothPawnGlide({
                 ]
               : [
                   {
-                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.06)`,
+                    transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.05, 0.96)`,
                     filter: 'drop-shadow(0 5px 8px rgba(56,189,248,0.4))',
                     offset: 0,
-                    easing: 'ease-out',
+                    easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',
                   },
                   {
-                    transform: `translate3d(${dx * 0.45}px, ${dy * 0.45 - 24}px, 0) scale(1.2)`,
-                    filter: 'drop-shadow(0 16px 14px rgba(2,6,23,0.72))',
-                    offset: 0.46,
+                    transform: `translate3d(${dx * 0.74}px, ${dy * 0.74 - 18}px, 0) scale(1.12)`,
+                    filter: 'drop-shadow(0 12px 12px rgba(2,6,23,0.62))',
+                    offset: 0.24,
+                    easing: 'cubic-bezier(0.33, 1, 0.68, 1)',
+                  },
+                  {
+                    transform: `translate3d(${dx * 0.45}px, ${dy * 0.45 - 28}px, 0) scale(1.18)`,
+                    filter: 'drop-shadow(0 18px 16px rgba(2,6,23,0.74))',
+                    offset: 0.5,
+                    easing: 'cubic-bezier(0.37, 0, 0.63, 1)',
+                  },
+                  {
+                    transform: `translate3d(${dx * 0.15}px, ${dy * 0.15 - 12}px, 0) scale(1.09)`,
+                    filter: 'drop-shadow(0 9px 10px rgba(2,6,23,0.56))',
+                    offset: 0.74,
                     easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                   },
                   {
-                    transform: 'translate3d(0, 3px, 0) scale(1.07, 0.93)',
+                    transform: 'translate3d(0, 3px, 0) scale(1.06, 0.94)',
                     filter: 'drop-shadow(0 3px 5px rgba(56,189,248,0.5))',
-                    offset: 0.84,
-                    easing: 'ease-out',
+                    offset: 0.87,
+                    easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                   },
                   {
                     transform: 'translate3d(0, 0, 0) scale(1)',
@@ -248,7 +275,7 @@ export function useSmoothPawnGlide({
             rippleTimerId = window.setTimeout(() => {
               if (rippleTimerId !== null) landTimersRef.current.delete(rippleTimerId);
               el.classList.remove('mn-pawn-touchdown-ripple');
-            }, 440);
+            }, 680);
             landTimersRef.current.add(rippleTimerId);
           }, timeline.pawnTouchdownAtMs);
           landTimersRef.current.add(touchTimerId);

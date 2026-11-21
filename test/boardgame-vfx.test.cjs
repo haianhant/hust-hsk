@@ -339,7 +339,7 @@ test('VFX Queue (2) — Masamune + Dũng COUNTER + Vy Radio Tuyệt Kỹ chân d
   assert.ok(cutIn, 'Expected Vy Radio ULTIMATE_SKILL cut-in');
   assert.equal(cutIn.roleId, 'gac-radio');
   assert.equal(cutIn.portraitSrc, PROTOTYPE_CHARACTER_ART['gac-radio']);
-  assert.equal(cutIn.skillName, 'XUNG CAO ÁP 1D6');
+  assert.equal(cutIn.skillName, 'XUNG CAO ÁP (XS 6 MẶT)');
   assert.ok(evB.some((e) => e.kind === 'COMBAT_VFX' && e.effect === 'LIGHTNING_STRIKE' && e.targetPlayerIds.includes('p4')));
 });
 
@@ -706,8 +706,8 @@ test('Game Feel P1 (7) — 3D Dice 4 giai đoạn (1.2–1.5s), chống lộ k�
   const moveDice = fullEvents.find((e) => e.kind === 'DICE_ROLL');
   assert.ok(moveDice, 'Move roll must emit DICE_ROLL');
   assert.ok(
-    moveDice.durationMs >= 1200 && moveDice.durationMs <= 1500,
-    `Normal dice roll duration (${moveDice.durationMs}ms) must be within 1200..1500ms`,
+    moveDice.durationMs >= 2200 && moveDice.durationMs <= 2900,
+    `Normal dice roll duration (${moveDice.durationMs}ms) must be within 2200..2900ms`,
   );
   assert.equal(moveDice.d6, 5);
   assert.equal(moveDice.d4, 3);
@@ -1119,9 +1119,9 @@ test('Dice Roll Regression (11) — ROLL_DICE -> SKIP_LOC -> END_TURN increments
   );
 });
 
-test('AAA Polish (12) — Cinematic Role Reveal 5 phases (1.2-1.8s), Quality Tiers & Reduced Motion', () => {
-  const high = resolveRoleRevealTimeline(1720, false, 'high');
-  assert.ok(high.totalMs >= 1200 && high.totalMs <= 1800, 'Role reveal duration must stay within 1.2-1.8s');
+test('AAA Polish (12) — Cinematic Role Reveal 5 phases (2.4-3.3s smooth), Quality Tiers & Reduced Motion', () => {
+  const high = resolveRoleRevealTimeline(3120, false, 'high');
+  assert.ok(high.totalMs >= 2400 && high.totalMs <= 3300, 'Role reveal duration must stay within 2.4-3.3s');
   assert.ok(
     high.anticipationEndMs > 0 &&
       high.anticipationEndMs < high.cardFlipEndMs &&
@@ -1132,17 +1132,17 @@ test('AAA Polish (12) — Cinematic Role Reveal 5 phases (1.2-1.8s), Quality Tie
   );
   assert.equal(high.revealEndMs, high.factionRevealEndMs);
 
-  const balanced = resolveRoleRevealTimeline(1720, false, 'balanced');
-  assert.ok(balanced.totalMs >= 1200 && balanced.totalMs <= 1620);
-  const low = resolveRoleRevealTimeline(1720, false, 'low');
-  assert.ok(low.totalMs >= 1200 && low.totalMs <= 1440);
+  const balanced = resolveRoleRevealTimeline(3120, false, 'balanced');
+  assert.ok(balanced.totalMs >= 2400 && balanced.totalMs <= 2900);
+  const low = resolveRoleRevealTimeline(3120, false, 'low');
+  assert.ok(low.totalMs >= 2400 && low.totalMs <= 2600);
 
   const clampedLow = resolveRoleRevealTimeline(900, false, 'high');
-  assert.equal(clampedLow.totalMs, 1200);
-  const clampedHigh = resolveRoleRevealTimeline(2400, false, 'high');
-  assert.equal(clampedHigh.totalMs, 1800);
+  assert.equal(clampedLow.totalMs, 2400);
+  const clampedHigh = resolveRoleRevealTimeline(4200, false, 'high');
+  assert.equal(clampedHigh.totalMs, 3300);
 
-  const reduced = resolveRoleRevealTimeline(1720, true, 'high');
+  const reduced = resolveRoleRevealTimeline(3120, true, 'high');
   assert.equal(reduced.anticipationEndMs, 0);
   assert.equal(reduced.cardFlipEndMs, 0);
   assert.equal(reduced.factionRevealEndMs, 0);
@@ -1150,10 +1150,10 @@ test('AAA Polish (12) — Cinematic Role Reveal 5 phases (1.2-1.8s), Quality Tie
   assert.ok(reduced.totalMs <= 260, 'Reduced Motion must clamp Role Reveal to <= 260ms');
 });
 
-test('AAA Polish (13) — Combat 5 phases (750-1100ms) + 60-90ms Hit-Stop for strikes vs 0ms for heal/shield/miss', () => {
+test('AAA Polish (13) — Combat 5 phases (1900-2600ms smooth) + Hit-Stop for strikes vs 0ms for heal/shield/miss', () => {
   for (const eff of ['SLASH', 'MASAMUNE_SLASH', 'SPEAR_THRUST', 'HANDGUN_SHOT', 'MACHINE_GUN_BARRAGE', 'LIGHTNING_STRIKE', 'EXPLOSION', 'COUNTER_STRIKE']) {
-    const t = resolveCombatSequenceTimings(960, eff, false);
-    assert.ok(t.recoveryEndMs >= 750 && t.recoveryEndMs <= 1100, `${eff} total must be 750-1100ms`);
+    const t = resolveCombatSequenceTimings(2360, eff, false);
+    assert.ok(t.recoveryEndMs >= 1900 && t.recoveryEndMs <= 2600, `${eff} total must be 1900-2600ms`);
     assert.ok(
       t.targetLockEndMs > 0 &&
         t.targetLockEndMs < t.anticipationEndMs &&
@@ -1162,24 +1162,24 @@ test('AAA Polish (13) — Combat 5 phases (750-1100ms) + 60-90ms Hit-Stop for st
     );
     assert.equal(t.impactStartMs, t.travelEndMs);
     assert.equal(t.hitStopStartMs, t.travelEndMs);
-    assert.ok(t.hitStopDurationMs >= 60 && t.hitStopDurationMs <= 90, `${eff} hitStopDurationMs must be 60-90ms`);
+    assert.ok(t.hitStopDurationMs >= 100 && t.hitStopDurationMs <= 150, `${eff} hitStopDurationMs must be 100-150ms`);
     assert.equal(t.hitStopEndMs, t.hitStopStartMs + t.hitStopDurationMs);
     assert.ok(t.damagePopAtMs >= t.hitStopEndMs && t.damagePopAtMs >= t.impactEndMs, `${eff} damage must NEVER pop before impact/hit-stop`);
     assert.ok(t.impactEndMs < t.recoveryEndMs);
   }
 
   for (const eff of ['HEAL_AURA', 'SHIELD_GUARD', 'STEAL_TETHER']) {
-    const t = resolveCombatSequenceTimings(840, eff, false);
+    const t = resolveCombatSequenceTimings(2240, eff, false);
     assert.equal(t.hitStopDurationMs, 0);
   }
 
-  const missT = resolveCombatSequenceTimings(820, 'SLASH', false, { isMiss: true });
+  const missT = resolveCombatSequenceTimings(2220, 'SLASH', false, { isMiss: true });
   assert.equal(missT.hitStopDurationMs, 0, 'MISS must have 0ms hit-stop');
 
-  const critT = resolveCombatSequenceTimings(1020, 'SPEAR_THRUST', false, { isCritical: true });
-  assert.equal(critT.hitStopDurationMs, 85, 'Critical strike must have 85ms hit-stop (within 60-90ms)');
+  const critT = resolveCombatSequenceTimings(2420, 'SPEAR_THRUST', false, { isCritical: true });
+  assert.equal(critT.hitStopDurationMs, 140, 'Critical strike must have 140ms hit-stop');
 
-  const reduced = resolveCombatSequenceTimings(960, 'COUNTER_STRIKE', true);
+  const reduced = resolveCombatSequenceTimings(2360, 'COUNTER_STRIKE', true);
   assert.equal(reduced.hitStopDurationMs, 0);
   assert.equal(reduced.targetLockEndMs, 0);
   assert.equal(reduced.anticipationEndMs, 0);
@@ -1375,7 +1375,7 @@ test('Cinematic V2 Phase 1 (16) — Multiplayer Role Reveal sync, strict pre-rev
     assert.equal(reveals[0].roleId, 'suong-gac-cong');
     assert.equal(reveals[0].faction, 'mist-order');
     assert.ok(reveals[0].portraitSrc && reveals[0].portraitSrc.includes('role-dung-gac-cong.webp'));
-    assert.ok(reveals[0].durationMs >= 1200 && reveals[0].durationMs <= 1800);
+    assert.ok(reveals[0].durationMs >= 2400 && reveals[0].durationMs <= 3300);
 
     // 3) Reconnect / F5 baseline seed with already-revealed state must NOT replay ROLE_REVEAL
     const reconnectTracker = new VisualEventTracker();
@@ -1409,9 +1409,9 @@ test('Cinematic V2 Phase 1 (16) — Multiplayer Role Reveal sync, strict pre-rev
   assert.equal(fbRev.faction, 'lantern-guard');
 });
 
-test('Cinematic V2 Phase 2 (17) — Victory/Defeat 4-stage timeline (1.5-2.5s), Quality Tiers & Reduced Motion', () => {
-  const high = resolveVictoryCinematicTimeline(2200, false, 'high');
-  assert.ok(high.totalMs >= 1500 && high.totalMs <= 2500, 'Victory cinematic duration must stay within 1.5-2.5s');
+test('Cinematic V2 Phase 2 (17) — Victory/Defeat 4-stage timeline (2.8-3.9s smooth), Quality Tiers & Reduced Motion', () => {
+  const high = resolveVictoryCinematicTimeline(3600, false, 'high');
+  assert.ok(high.totalMs >= 2800 && high.totalMs <= 3900, 'Victory cinematic duration must stay within 2.8-3.9s');
   assert.ok(
     high.anticipationEndMs > 0 &&
       high.anticipationEndMs < high.factionRevealEndMs &&
@@ -1420,16 +1420,16 @@ test('Cinematic V2 Phase 2 (17) — Victory/Defeat 4-stage timeline (1.5-2.5s), 
     'Victory cinematic must strictly follow anticipation -> faction-reveal -> impact -> settle',
   );
 
-  const balanced = resolveVictoryCinematicTimeline(2200, false, 'balanced');
-  assert.ok(balanced.totalMs >= 1500 && balanced.totalMs <= 2000);
+  const balanced = resolveVictoryCinematicTimeline(3600, false, 'balanced');
+  assert.ok(balanced.totalMs >= 2800 && balanced.totalMs <= 3300);
 
-  const low = resolveVictoryCinematicTimeline(2200, false, 'low');
-  assert.ok(low.totalMs >= 1500 && low.totalMs <= 1750);
+  const low = resolveVictoryCinematicTimeline(3600, false, 'low');
+  assert.ok(low.totalMs >= 2800 && low.totalMs <= 3000);
 
-  assert.equal(resolveVictoryCinematicTimeline(900, false, 'high').totalMs, 1500);
-  assert.equal(resolveVictoryCinematicTimeline(4000, false, 'high').totalMs, 2500);
+  assert.equal(resolveVictoryCinematicTimeline(900, false, 'high').totalMs, 2800);
+  assert.equal(resolveVictoryCinematicTimeline(5000, false, 'high').totalMs, 3900);
 
-  const reduced = resolveVictoryCinematicTimeline(2200, true, 'high');
+  const reduced = resolveVictoryCinematicTimeline(3600, true, 'high');
   assert.equal(reduced.anticipationEndMs, 0);
   assert.equal(reduced.factionRevealEndMs, 0);
   assert.equal(reduced.impactEndMs, 0);
@@ -1497,7 +1497,7 @@ test('Cinematic V2 Phase 2 (18) — All 3 factions x Victory/Defeat/Spectator ou
     assert.equal(winEv.title, 'CHIẾN THẮNG');
     assert.equal(winEv.faction, c.expectedFaction);
     assert.equal(winEv.winnerFactionLabel, c.label);
-    assert.ok(winEv.durationMs >= 1500 && winEv.durationMs <= 2500);
+    assert.ok(winEv.durationMs >= 2800 && winEv.durationMs <= 3900);
 
     const loseEv = extractVisualEventsFromDiff(activeMatch, finishedSnap, {
       selfPlayerId: loserId,
@@ -1587,40 +1587,40 @@ test('Cinematic V2 Phase 2 (19) — Frame-1 pendingVictory guard, Skip acknowled
   stopAllBoardGameSounds();
 });
 
-test('Cinematic V2 Phase 3 (20) — 5-Stage Combat Timeline (750-1100ms), Phase Transitions, Quality Tiers & Strict Damage-After-Impact', () => {
-  const high = resolveCombatSequenceTimings(1000, 'SLASH', false, { qualityTier: 'high' });
-  assert.equal(high.targetLockEndMs, 150);
-  assert.equal(high.anticipationEndMs, 300);
-  assert.equal(high.travelEndMs, 500);
-  assert.equal(high.impactStartMs, 500);
-  assert.equal(high.hitStopDurationMs, 75);
-  assert.equal(high.impactEndMs, 700);
-  assert.equal(high.damagePopAtMs, 700);
-  assert.equal(high.recoveryEndMs, 1000);
+test('Cinematic V2 Phase 3 (20) — 5-Stage Combat Timeline (1900-2600ms smooth), Phase Transitions, Quality Tiers & Strict Damage-After-Impact', () => {
+  const high = resolveCombatSequenceTimings(2400, 'SLASH', false, { qualityTier: 'high' });
+  assert.equal(high.targetLockEndMs, 360);
+  assert.equal(high.anticipationEndMs, 720);
+  assert.equal(high.travelEndMs, 1200);
+  assert.equal(high.impactStartMs, 1200);
+  assert.equal(high.hitStopDurationMs, 115);
+  assert.equal(high.impactEndMs, 1680);
+  assert.equal(high.damagePopAtMs, 1680);
+  assert.equal(high.recoveryEndMs, 2400);
 
   // Kiểm chứng resolveCombatPhaseAt chạy đúng thứ tự 5 pha
   assert.equal(resolveCombatPhaseAt(0, high), 'target-lock');
-  assert.equal(resolveCombatPhaseAt(149, high), 'target-lock');
-  assert.equal(resolveCombatPhaseAt(150, high), 'anticipation');
-  assert.equal(resolveCombatPhaseAt(299, high), 'anticipation');
-  assert.equal(resolveCombatPhaseAt(300, high), 'travel');
-  assert.equal(resolveCombatPhaseAt(499, high), 'travel');
-  assert.equal(resolveCombatPhaseAt(500, high), 'impact');
-  assert.equal(resolveCombatPhaseAt(699, high), 'impact');
-  assert.equal(resolveCombatPhaseAt(700, high), 'recovery');
-  assert.equal(resolveCombatPhaseAt(999, high), 'recovery');
+  assert.equal(resolveCombatPhaseAt(359, high), 'target-lock');
+  assert.equal(resolveCombatPhaseAt(360, high), 'anticipation');
+  assert.equal(resolveCombatPhaseAt(719, high), 'anticipation');
+  assert.equal(resolveCombatPhaseAt(720, high), 'travel');
+  assert.equal(resolveCombatPhaseAt(1199, high), 'travel');
+  assert.equal(resolveCombatPhaseAt(1200, high), 'impact');
+  assert.equal(resolveCombatPhaseAt(1679, high), 'impact');
+  assert.equal(resolveCombatPhaseAt(1680, high), 'recovery');
+  assert.equal(resolveCombatPhaseAt(2399, high), 'recovery');
 
-  // Quality tiers tôn trọng biên 750-1100ms & damagePopAtMs luôn >= impactEndMs > impactStartMs
+  // Quality tiers tôn trọng biên 1900-2600ms & damagePopAtMs luôn >= impactEndMs > impactStartMs
   for (const tier of ['high', 'balanced', 'low']) {
-    const t = resolveCombatSequenceTimings(1040, 'MASAMUNE_SLASH', false, { qualityTier: tier, isCritical: true });
-    assert.ok(t.recoveryEndMs >= 750 && t.recoveryEndMs <= 1100, `${tier} total must stay in 750-1100ms`);
+    const t = resolveCombatSequenceTimings(2440, 'MASAMUNE_SLASH', false, { qualityTier: tier, isCritical: true });
+    assert.ok(t.recoveryEndMs >= 1900 && t.recoveryEndMs <= 2600, `${tier} total must stay in 1900-2600ms`);
     assert.ok(t.damagePopAtMs >= t.impactEndMs && t.impactEndMs > t.impactStartMs, `${tier} damage must pop strictly after impact`);
   }
-  assert.equal(resolveCombatSequenceTimings(500, 'SLASH', false).recoveryEndMs, 750);
-  assert.equal(resolveCombatSequenceTimings(1800, 'SLASH', false).recoveryEndMs, 1100);
+  assert.equal(resolveCombatSequenceTimings(500, 'SLASH', false).recoveryEndMs, 1900);
+  assert.equal(resolveCombatSequenceTimings(3500, 'SLASH', false).recoveryEndMs, 2600);
 });
 
-test('Cinematic V2 Phase 3 (21) — Combat Variants (Critical, Counter syncGroup, Miss, Shield, Heal, Skill) & 0.6-0.9s Popup Readability', () => {
+test('Cinematic V2 Phase 3 (21) — Combat Variants (Critical, Counter syncGroup, Miss, Shield, Heal, Skill) & 2.0-2.5s Smooth Popup Readability', () => {
   const base = makePubState({
     players: makePubState().players.map((p) =>
       p.playerId === 'p1'
@@ -1682,8 +1682,8 @@ test('Cinematic V2 Phase 3 (21) — Combat Variants (Critical, Counter syncGroup
   });
   const atkFx = ctrEvents.find((e) => e.kind === 'COMBAT_VFX' && e.effect === 'MASAMUNE_SLASH');
   const ctrFx = ctrEvents.find((e) => e.kind === 'COMBAT_VFX' && e.effect === 'COUNTER_STRIKE');
-  assert.ok(atkFx && atkFx.isCritical === true && atkFx.durationMs >= 750 && atkFx.durationMs <= 1100);
-  assert.ok(ctrFx && ctrFx.durationMs >= 750 && ctrFx.durationMs <= 1100 && ctrFx.targetPlayerIds.includes('p1'));
+  assert.ok(atkFx && atkFx.isCritical === true && atkFx.durationMs >= 1900 && atkFx.durationMs <= 2600);
+  assert.ok(ctrFx && ctrFx.durationMs >= 1900 && ctrFx.durationMs <= 2600 && ctrFx.targetPlayerIds.includes('p1'));
 
   const critPop = ctrEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.targetPlayerId === 'p3');
   const counterDmgPop = ctrEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.targetPlayerId === 'p1');
@@ -1693,7 +1693,7 @@ test('Cinematic V2 Phase 3 (21) — Combat Variants (Critical, Counter syncGroup
   assert.ok(counterTagPop && counterTagPop.syncGroup === 'counter');
 
   for (const pop of ctrEvents.filter((e) => e.kind === 'FLOATING_TEXT')) {
-    assert.ok(pop.durationMs >= 600 && pop.durationMs <= 900, `Floating popup ${pop.label} (${pop.durationMs}ms) must stay in 600-900ms`);
+    assert.ok(pop.durationMs >= 2000 && pop.durationMs <= 2500, `Floating popup ${pop.label} (${pop.durationMs}ms) must stay in 2000-2500ms`);
   }
 
   // 2) Miss (ĐÁNH HỤT): isMiss=true, shake='none', 0ms hit-stop, MISS popup synced to attack
@@ -1715,7 +1715,7 @@ test('Cinematic V2 Phase 3 (21) — Combat Variants (Critical, Counter syncGroup
   const missFx = missEvents.find((e) => e.kind === 'COMBAT_VFX');
   const missPop = missEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.variant === 'miss');
   assert.ok(missFx && missFx.isMiss === true && missFx.shake === 'none');
-  assert.ok(missPop && missPop.label === 'MISS' && missPop.syncGroup === 'attack' && missPop.durationMs >= 600 && missPop.durationMs <= 900);
+  assert.ok(missPop && missPop.label === 'MISS' && missPop.syncGroup === 'attack' && missPop.durationMs >= 2000 && missPop.durationMs <= 2500);
 
   // 3) Shield & Healing syncGroup + durations
   const afterHealShield = {
@@ -1730,8 +1730,8 @@ test('Cinematic V2 Phase 3 (21) — Combat Variants (Critical, Counter syncGroup
   const hsEvents = extractVisualEventsFromDiff(base, afterHealShield, { selfPlayerId: 'p1', isSpectator: false });
   const healPop = hsEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.variant === 'heal');
   const blockPop = hsEvents.find((e) => e.kind === 'FLOATING_TEXT' && e.variant === 'block');
-  assert.ok(healPop && healPop.syncGroup === 'heal' && healPop.durationMs >= 600 && healPop.durationMs <= 900);
-  assert.ok(blockPop && blockPop.syncGroup === 'shield' && blockPop.durationMs >= 600 && blockPop.durationMs <= 900);
+  assert.ok(healPop && healPop.syncGroup === 'heal' && healPop.durationMs >= 2000 && healPop.durationMs <= 2500);
+  assert.ok(blockPop && blockPop.syncGroup === 'shield' && blockPop.durationMs >= 2000 && blockPop.durationMs <= 2500);
 });
 
 test('Cinematic V2 Phase 3 (22) — 8-Player Same-Tile Barrage, F5 Reconnect Combat Non-Replay & Synced Audio Dispatch', () => {
@@ -1878,10 +1878,10 @@ test('Cinematic V2 Phase 3.1 (23) — Multi-Target Stagger, 8-Pawn Crowded Anti-
   stopAllBoardGameSounds();
 });
 
-test('Cinematic V2 Phase 4 (24) — Opening & Secret Role Deal 4-Beat Timeline (2.5-4.0s), Quality Tiers & Reduced Motion', () => {
-  // High tier default 3550ms -> strictly within 2500..4000ms with monotonically increasing 4 beats
-  const high = resolveOpeningDealTimeline(3550, false, 'high');
-  assert.ok(high.totalMs >= 2500 && high.totalMs <= 4000, `High opening totalMs=${high.totalMs} must be 2.5-4.0s`);
+test('Cinematic V2 Phase 4 (24) — Opening & Secret Role Deal 4-Beat Timeline (3.2-4.8s smooth), Quality Tiers & Reduced Motion', () => {
+  // High tier default 4450ms -> strictly within 3200..4800ms with monotonically increasing 4 beats
+  const high = resolveOpeningDealTimeline(4450, false, 'high');
+  assert.ok(high.totalMs >= 3200 && high.totalMs <= 4800, `High opening totalMs=${high.totalMs} must be 3.2-4.8s`);
   assert.ok(
     high.startStingerEndMs > 0 &&
       high.startStingerEndMs < high.shuffleDealEndMs &&
@@ -1891,18 +1891,18 @@ test('Cinematic V2 Phase 4 (24) — Opening & Secret Role Deal 4-Beat Timeline (
     'Opening 4 beats + 3D flip timing must be strictly ordered',
   );
 
-  // Balanced & Low tiers remain concise within 2500..4000ms
-  const balanced = resolveOpeningDealTimeline(3550, false, 'balanced');
-  const low = resolveOpeningDealTimeline(3550, false, 'low');
-  assert.ok(balanced.totalMs >= 2500 && balanced.totalMs <= high.totalMs);
-  assert.ok(low.totalMs >= 2500 && low.totalMs <= balanced.totalMs);
+  // Balanced & Low tiers remain concise within 3200..4800ms
+  const balanced = resolveOpeningDealTimeline(4450, false, 'balanced');
+  const low = resolveOpeningDealTimeline(4450, false, 'low');
+  assert.ok(balanced.totalMs >= 3200 && balanced.totalMs <= high.totalMs);
+  assert.ok(low.totalMs >= 3200 && low.totalMs <= balanced.totalMs);
 
   // Extreme input clamping
-  assert.equal(resolveOpeningDealTimeline(900, false, 'high').totalMs, 2500);
-  assert.equal(resolveOpeningDealTimeline(9999, false, 'high').totalMs, 4000);
+  assert.equal(resolveOpeningDealTimeline(900, false, 'high').totalMs, 3200);
+  assert.equal(resolveOpeningDealTimeline(9999, false, 'high').totalMs, 4800);
 
   // Reduced Motion collapses opening <= 280ms with instant stinger/deal skip
-  const rm = resolveOpeningDealTimeline(3550, true, 'high');
+  const rm = resolveOpeningDealTimeline(4450, true, 'high');
   assert.ok(rm.totalMs <= 280, `Reduced motion opening must be <= 280ms, got ${rm.totalMs}`);
   assert.equal(rm.startStingerEndMs, 0);
   assert.equal(rm.shuffleDealEndMs, 0);

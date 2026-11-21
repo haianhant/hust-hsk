@@ -17,6 +17,7 @@ import {
   type BoardGameChatEmoteServerMessage,
   type BoardGameEmoteId,
   type BoardGameLocationId,
+  type BoardGamePrivateClueEntry,
   type BoardGamePrivateGameView,
   type BoardGamePublicGameView,
 } from '../network/contracts';
@@ -29,6 +30,7 @@ import {
   LOCATION_VISUAL_META,
   PlayerPawnToken,
 } from './BoardGameArt';
+import { MIDNIGHT_CARD_ART } from './midnight-noir-tokens';
 import { MidnightDicePair3D } from './MidnightDice3D';
 import RoleCard from './RoleCard';
 import ActionPanel from './ActionPanel';
@@ -131,6 +133,11 @@ export function GameBoard({
   const [seenClueCount, setSeenClueCount] = useState(0);
   const [seenLogCount, setSeenLogCount] = useState(() => publicGame.publicLog.length);
   const [zoomTarget, setZoomTarget] = useState<MidnightZoomTarget | null>(null);
+  const [pendingGreenClues, setPendingGreenClues] = useState<BoardGamePrivateClueEntry[]>([]);
+  const seenReceivedClueIdsRef = useRef<{ matchId: string; ids: Set<string> }>({
+    matchId: publicGame.matchId,
+    ids: new Set((privateView?.privateClues ?? []).map((c) => c.id)),
+  });
   const boardStageRef = useRef<HTMLDivElement>(null);
 
   const gfx = useBoardGameGraphicsSettings();
@@ -214,20 +221,60 @@ export function GameBoard({
   }, []);
 
   useEffect(() => {
-    setSeenClueCount(0);
+    setSeenClueCount(privateView?.privateClues.length ?? 0);
     setSeenLogCount(publicGame.publicLog.length);
     setSelectedTargetId(null);
     setSelectedLocationId(null);
     setDamageTrackExpanded(false);
     setZoomTarget(null);
+    setPendingGreenClues([]);
+    seenReceivedClueIdsRef.current = {
+      matchId: publicGame.matchId,
+      ids: new Set((privateView?.privateClues ?? []).map((c) => c.id)),
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicGame.matchId]);
+
+  // Phát hiện Thẻ Xanh bí mật mới được người chơi khác đưa cho MÌNH để bật popup riêng tư (chống lặp khi F5)
+  useEffect(() => {
+    if (isSpectator || !privateView) return;
+    if (seenReceivedClueIdsRef.current.matchId !== publicGame.matchId) {
+      seenReceivedClueIdsRef.current = {
+        matchId: publicGame.matchId,
+        ids: new Set(privateView.privateClues.map((c) => c.id)),
+      };
+      return;
+    }
+    const newlyReceived: BoardGamePrivateClueEntry[] = [];
+    for (const clue of privateView.privateClues) {
+      if (seenReceivedClueIdsRef.current.ids.has(clue.id)) continue;
+      seenReceivedClueIdsRef.current.ids.add(clue.id);
+      const isReceivedGreenCard =
+        clue.direction === 'received' ||
+        (clue.direction === undefined &&
+          (clue.detail.startsWith('Bạn nhận') || clue.detail.includes('đã đưa')));
+      if (isReceivedGreenCard) {
+        newlyReceived.push(clue);
+      }
+    }
+    if (newlyReceived.length > 0) {
+      setPendingGreenClues((prev) => [...prev, ...newlyReceived]);
+    }
+  }, [isSpectator, privateView, publicGame.matchId]);
+
+  const activeGreenClue = !isSpectator && privateView ? pendingGreenClues[0] ?? null : null;
+  const dismissActiveGreenClue = useCallback(() => {
+    setPendingGreenClues((prev) => prev.slice(1));
+    setSeenClueCount((prev) => Math.max(prev, privateView?.privateClues.length ?? 0));
+  }, [privateView?.privateClues.length]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (zoomTarget !== null) return;
-      if (leaveConfirmOpen) {
+      if (activeGreenClue) {
+        dismissActiveGreenClue();
+      } else if (leaveConfirmOpen) {
         setLeaveConfirmOpen(false);
       } else if (settingsPanelOpen) {
         setSettingsPanelOpen(false);
@@ -237,7 +284,7 @@ export function GameBoard({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [zoomTarget, leaveConfirmOpen, settingsPanelOpen, damageTrackExpanded]);
+  }, [zoomTarget, activeGreenClue, dismissActiveGreenClue, leaveConfirmOpen, settingsPanelOpen, damageTrackExpanded]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -956,7 +1003,7 @@ export function GameBoard({
                                 : `${publicGame.lastDiceRoll.displayName} tung đòn đánh (${
                                     publicGame.lastDiceRoll.d6 > 0
                                       ? `|${publicGame.lastDiceRoll.d6} - ${publicGame.lastDiceRoll.d4}|`
-                                      : `1d4=${publicGame.lastDiceRoll.d4}`
+                                      : `xs 4 mặt = ${publicGame.lastDiceRoll.d4}`
                                   } → gây ${publicGame.lastDiceRoll.damageDealt ?? 0} sát thương)`}
                             </p>
                             <p className="text-xs text-cyan-200 font-semibold truncate">
@@ -980,7 +1027,7 @@ export function GameBoard({
                                   🥊 {publicGame.lastDiceRoll.counterRoll.displayName} phản kích (
                                   {publicGame.lastDiceRoll.counterRoll.d6 > 0
                                     ? `|${publicGame.lastDiceRoll.counterRoll.d6} - ${publicGame.lastDiceRoll.counterRoll.d4}|`
-                                    : `1d4=${publicGame.lastDiceRoll.counterRoll.d4}`}
+                                    : `xs 4 mặt = ${publicGame.lastDiceRoll.counterRoll.d4}`}
                                   ) → trả đòn {publicGame.lastDiceRoll.counterRoll.damageDealt} sát thương!
                                 </p>
                               )}
@@ -1000,11 +1047,8 @@ export function GameBoard({
                       <div className="min-w-0 flex-1 text-left">
                         <p className="text-xs sm:text-sm font-black text-white truncate">
                           {canRollOnBoard
-                            ? '⚡ Lượt của bạn! Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)'
-                            : 'Khay Xúc Xắc Bóng Đêm (1d6 + 1d4)'}
-                        </p>
-                        <p className="text-xs text-slate-300 truncate">
-                          Tung xúc xắc di chuyển · Tổng 7 chọn bất kỳ · Trùng chỗ được đổ lại
+                            ? '⚡ Lượt của bạn! Khay Xúc Xắc Bóng Đêm (xs 6 mặt + xs 4 mặt)'
+                            : 'Khay Xúc Xắc Bóng Đêm (xs 6 mặt + xs 4 mặt)'}
                         </p>
                       </div>
                     </>
@@ -1123,6 +1167,7 @@ export function GameBoard({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1">
                               <p className="text-xs font-black text-white truncate">
+                                {p.isBot ? '🤖 ' : ''}
                                 {p.displayName}
                               </p>
                               {inAttackRange && (
@@ -1577,6 +1622,115 @@ export function GameBoard({
         enableBackdropBlur={gfx.profile.enableBackdropBlur}
         onClose={handleCloseZoom}
       />
+
+      {/* POPUP THÔNG BÁO THẺ XANH BÍ MẬT (CHỈ HIỆN CHO RIÊNG NGƯỜI ĐƯỢC NHẬN THẺ) */}
+      {activeGreenClue && (
+        <div
+          data-testid="bg-green-card-popup"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Thông báo nhận Thẻ Xanh bí mật"
+          className={`fixed inset-0 z-[56] flex items-center justify-center p-4 ${
+            gfx.profile.enableBackdropBlur ? 'bg-slate-950/75 backdrop-blur-sm' : 'bg-slate-950/90'
+          }`}
+        >
+          <div className="w-full max-w-md rounded-2xl border-2 border-emerald-400/75 bg-gradient-to-b from-slate-900 via-slate-900 to-emerald-950/95 p-5 space-y-4 shadow-[0_24px_64px_rgba(16,185,129,0.35)]">
+            <div className="flex items-start justify-between gap-3 border-b border-emerald-500/30 pb-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="rounded-full bg-emerald-500/20 border border-emerald-400/50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-200">
+                    🕵️ Thẻ Xanh Bí Mật
+                  </span>
+                  <span className="rounded-full bg-amber-500/15 border border-amber-400/40 px-2 py-0.5 text-[10px] font-bold text-amber-200">
+                    🔒 Chỉ riêng bạn thấy
+                  </span>
+                </div>
+                <h3 className="mt-1.5 text-base font-black text-white leading-snug">
+                  {activeGreenClue.senderName ?? activeGreenClue.targetName} vừa đưa Thẻ Xanh cho bạn
+                </h3>
+              </div>
+              {activeGreenClue.cardId && MIDNIGHT_CARD_ART[activeGreenClue.cardId] && (
+                <img
+                  src={MIDNIGHT_CARD_ART[activeGreenClue.cardId]}
+                  alt={activeGreenClue.cardTitle}
+                  width={56}
+                  height={84}
+                  className="h-20 w-14 shrink-0 rounded-lg border border-emerald-400/55 object-cover shadow-lg"
+                />
+              )}
+            </div>
+
+            {activeGreenClue.effectCategory ||
+            activeGreenClue.cardShortName ||
+            activeGreenClue.ruleDetail ||
+            activeGreenClue.progression ||
+            activeGreenClue.resultSummary ? (
+              <dl className="rounded-xl border border-slate-700/80 bg-slate-950/85 p-3.5 space-y-2 text-xs sm:text-sm">
+                <div className="flex gap-2">
+                  <dt className="w-20 shrink-0 font-bold text-slate-400">Hiệu ứng:</dt>
+                  <dd className="font-extrabold text-emerald-300">
+                    {activeGreenClue.effectCategory ?? 'Thăm dò'}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-20 shrink-0 font-bold text-slate-400">Tên:</dt>
+                  <dd className="font-black text-amber-200">
+                    {activeGreenClue.cardShortName ?? activeGreenClue.cardTitle}
+                  </dd>
+                </div>
+                {activeGreenClue.ruleDetail && (
+                  <div className="flex gap-2">
+                    <dt className="w-20 shrink-0 font-bold text-slate-400">Chi tiết:</dt>
+                    <dd className="text-slate-100 leading-snug">{activeGreenClue.ruleDetail}</dd>
+                  </div>
+                )}
+                {activeGreenClue.progression && (
+                  <div className="flex gap-2">
+                    <dt className="w-20 shrink-0 font-bold text-slate-400">Diễn biến:</dt>
+                    <dd className="text-cyan-100 leading-snug">{activeGreenClue.progression}</dd>
+                  </div>
+                )}
+                {activeGreenClue.resultSummary && (
+                  <div className="flex gap-2 border-t border-slate-800 pt-2">
+                    <dt className="w-20 shrink-0 font-bold text-slate-400">Kết quả:</dt>
+                    <dd
+                      className={`font-black ${
+                        activeGreenClue.resultSummary.startsWith('-')
+                          ? 'text-rose-300'
+                          : activeGreenClue.resultSummary.startsWith('+')
+                            ? 'text-emerald-300'
+                            : 'text-amber-300'
+                      }`}
+                    >
+                      {activeGreenClue.resultSummary}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            ) : (
+              <p className="rounded-xl border border-slate-700/80 bg-slate-950/85 p-3.5 text-sm text-slate-100 leading-relaxed">
+                {activeGreenClue.detail}
+              </p>
+            )}
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-slate-400">
+                Vòng {activeGreenClue.round} · Đã lưu trong Mật báo riêng
+              </span>
+              <button
+                type="button"
+                data-testid="bg-green-card-popup-dismiss"
+                onClick={dismissActiveGreenClue}
+                className="px-4 py-2 min-h-[38px] rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs sm:text-sm font-black shadow-lg transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+              >
+                {pendingGreenClues.length > 1
+                  ? `Tiếp theo (còn ${pendingGreenClues.length - 1})`
+                  : 'Đã hiểu'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* HỘP THOẠI XÁC NHẬN RỜI VÁN */}
       {leaveConfirmOpen && (

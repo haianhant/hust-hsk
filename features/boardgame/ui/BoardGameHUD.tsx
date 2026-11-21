@@ -46,6 +46,7 @@ export interface BoardGameHUDProps {
   canStartMatch?: boolean;
   seatedPlayerCount?: number;
   readyPlayerCount?: number;
+  botCount?: number;
   gameActive?: boolean;
   onToggleLobby: () => void;
   onToggleRules: () => void;
@@ -55,6 +56,8 @@ export interface BoardGameHUDProps {
   onSelectRuleset?: (
     rulesetId: BoardGameRulesetId,
   ) => void | Promise<{ ok: boolean; reason?: string }>;
+  onAddBot?: () => void;
+  onRemoveBot?: () => void;
   onToggleReady?: () => void;
   onStartMatch?: () => void;
   onRequestExit: () => void;
@@ -83,12 +86,15 @@ export default function BoardGameHUD({
   canStartMatch = false,
   seatedPlayerCount = 0,
   readyPlayerCount = 0,
+  botCount = 0,
   gameActive = false,
   onToggleLobby,
   onToggleRules,
   onToggleLeaderboard,
   onStandUpSeat,
   onSelectRuleset,
+  onAddBot,
+  onRemoveBot,
   onToggleReady,
   onStartMatch,
   onRequestExit,
@@ -617,6 +623,29 @@ export default function BoardGameHUD({
               <span className="rounded-lg bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300 ring-1 ring-amber-400/35">
                 👑 Chủ bàn
               </span>
+              {!selectorState.lockedByMatch && onAddBot && (
+                <button
+                  type="button"
+                  data-testid="bg-hud-add-bot-btn"
+                  disabled={seatedPlayerCount >= 8}
+                  title="Thêm 1 Bot AI chơi cùng bàn (tối đa 8 ghế)"
+                  onClick={onAddBot}
+                  className="rounded-xl border border-cyan-400/60 bg-cyan-950/80 px-2.5 py-1 text-[11px] font-bold text-cyan-100 shadow transition hover:bg-cyan-900/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  🤖 + Bot
+                </button>
+              )}
+              {!selectorState.lockedByMatch && botCount > 0 && onRemoveBot && (
+                <button
+                  type="button"
+                  data-testid="bg-hud-remove-bot-btn"
+                  title={`Bớt 1 Bot (đang có ${botCount} Bot)`}
+                  onClick={onRemoveBot}
+                  className="rounded-xl border border-slate-600 bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-200 transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 cursor-pointer"
+                >
+                  🤖 -{botCount}
+                </button>
+              )}
               <button
                 type="button"
                 data-testid="bg-hud-start-btn"

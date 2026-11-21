@@ -3215,12 +3215,19 @@ export default function HomePage() {
             canStartMatch={canStartBgMatch}
             seatedPlayerCount={bgSeatedPlayers.length}
             readyPlayerCount={bgReadyCount}
+            botCount={bgSeatedPlayers.filter((p) => p.isBot).length}
             gameActive={bgGameActive}
             onToggleLobby={() => setBoardGameLobbyOpen((v) => !v)}
             onToggleRules={() => setBoardGameRulesOpen((v) => !v)}
             onToggleLeaderboard={() => setBoardGameLeaderboardOpen((v) => !v)}
             onStandUpSeat={handleStandUpBoardGameSeat}
             onSelectRuleset={(nextRulesetId) => boardGameClient.setRuleset(nextRulesetId)}
+            onAddBot={() => {
+              void boardGameClient.addBot();
+            }}
+            onRemoveBot={() => {
+              void boardGameClient.removeBot();
+            }}
             onToggleReady={() => boardGameClient.setReady(!selfBgPlayer?.ready)}
             onStartMatch={() => boardGameClient.startMatch()}
             onRequestExit={handleRequestExitBoardGameClub}
@@ -3261,6 +3268,12 @@ export default function HomePage() {
               onJoinByCode={handleJoinBoardGameByCode}
               onJoinDirectoryMatch={handleJoinDirectoryBoardGameMatch}
               onSelectRuleset={(nextRulesetId) => boardGameClient.setRuleset(nextRulesetId)}
+              onAddBot={() => {
+                void boardGameClient.addBot();
+              }}
+              onRemoveBot={(botPlayerId) => {
+                void boardGameClient.removeBot(botPlayerId);
+              }}
               onToggleReady={() => boardGameClient.setReady(!selfBgPlayer?.ready)}
               onStartMatch={() => boardGameClient.startMatch()}
               onLeaveMatch={() => {

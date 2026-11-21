@@ -1017,7 +1017,7 @@ export function evaluateExpandedVictoryWithDiagnostics(
         : leadRoleStr === 'lang-cuu-ho'
           ? `${lead.displayName} đã hạ gục mục tiêu khi có ${deadCount} người ngã xuống (≥ 3)!`
           : leadRoleStr === 'lang-tien-phong'
-            ? `${lead.displayName} (Đạt "Cảm Tử") là người ĐẦU TIÊN ngã xuống — hoàn thành mục tiêu tức thì!`
+            ? `${lead.displayName} (Daniel) là người ĐẦU TIÊN ngã xuống — hoàn thành mục tiêu tức thì!`
             : leadRoleStr === 'exp1_cindy'
               ? `${lead.displayName} (Cindy) là Kẻ Độc Hành duy nhất sống sót khi toàn bộ Neutral khác đã bị loại!`
               : leadRoleStr === 'exp2_cruz'

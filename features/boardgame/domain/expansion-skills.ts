@@ -40,6 +40,11 @@ import {
 } from './cards';
 import { isEligibleFemaleRole } from './character-metadata';
 import {
+  buildClairvoyantSkillClue,
+  buildPredictionClues,
+  buildStandardInvestigationClues,
+} from './clue-format';
+import {
   buildAnathemaRedirectedDamageStep,
   buildArnoldReflectedDamageStep,
   evaluateAnathemaRedirection,
@@ -1434,8 +1439,8 @@ export function computeRawAttackDamage(
 
 function formatAttackRollDesc(roll: AttackRollSample): string {
   return roll.hasMasamune
-    ? `1d4=${roll.d4}`
-    : `|${roll.d6}-${roll.d4}|=${roll.baseDmg}`;
+    ? `xs 4 mặt = ${roll.d4}`
+    : `|${roll.d6} - ${roll.d4}| = ${roll.baseDmg}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1913,7 +1918,7 @@ const witchNoPlaceLikeHomeHandler: SkillHandlerDefinition = {
     appendPublicLog(
       ctx.state,
       'skill',
-      `🧙‍♀️ Witch (${ctx.owner.displayName}) — Không Nơi Đâu Bằng Nhà: đứng tại Hành Lang Tầng 4 (Weird Woods), miễn hoàn toàn ${prevDmg} sát thương!`,
+      `🧙‍♀️ Witch (${ctx.owner.displayName}) — Không Nơi Đâu Bằng Nhà: đứng tại Weird Woods (9), miễn hoàn toàn ${prevDmg} sát thương!`,
       ctx.event.nowMs,
       ctx.owner.playerId,
     );
@@ -3785,7 +3790,7 @@ function enqueueAttackResolution(
         appendPublicLog(
           state,
           'steal',
-          `🧲 Hải "Sưu Tầm" (${actor.displayName}) chọn Cướp Đồ Thay Đòn (${effectiveRollDesc}) → lấy "${theft.cardTitle}" từ ${victim.displayName} (0 sát thương)!`,
+          `🧲 Bob (${actor.displayName}) chọn Cướp Đồ Thay Đòn (${effectiveRollDesc}) → lấy "${theft.cardTitle}" từ ${victim.displayName} (0 sát thương)!`,
           nowMs,
           actor.playerId,
         );
@@ -3967,8 +3972,8 @@ function proceedDeclaredAttackToRoll(
         optionId: 'reroll',
         label: 'Đổ lại xúc xắc tấn công (1 lần)',
         detail: gayleFirstRoll.hasMasamune
-          ? 'Đổ lại 1d4 (Masamune) — BẮT BUỘC dùng kết quả lần 2 kể cả khi thấp hơn!'
-          : 'Đổ lại |1d6 - 1d4| — BẮT BUỘC dùng kết quả lần 2 kể cả khi thấp hơn!',
+          ? 'Đổ lại xs 4 mặt (Masamune) — BẮT BUỘC dùng kết quả lần 2 kể cả khi thấp hơn!'
+          : 'Đổ lại |xs 6 mặt - xs 4 mặt| — BẮT BUỘC dùng kết quả lần 2 kể cả khi thấp hơn!',
       },
     ];
 
@@ -4855,7 +4860,7 @@ export function applyExpandedLocationPower(
   if (actor.location === 'corridor') {
     const target = targetPlayerId ? state.players[targetPlayerId] : actor;
     if (!target || !target.alive) {
-      return { ok: false, error: 'Mục tiêu Hành Lang (9) không hợp lệ hoặc đã bị loại.' };
+      return { ok: false, error: 'Mục tiêu Weird Woods (9) không hợp lệ hoặc đã bị loại.' };
     }
     const chosenMode =
       mode === 'damage'
@@ -4866,7 +4871,7 @@ export function applyExpandedLocationPower(
             ? 'heal'
             : 'damage';
     if (chosenMode === 'damage' && target.playerId === actor.playerId) {
-      return { ok: false, error: 'Không thể tự gây sát thương lên chính mình tại Hành Lang (9).' };
+      return { ok: false, error: 'Không thể tự gây sát thương lên chính mình tại Weird Woods (9).' };
     }
     state.turnPhase = 'MAIN_ACTION';
     if (chosenMode === 'heal') {
@@ -4879,9 +4884,9 @@ export function applyExpandedLocationPower(
           targetPlayerId: target.playerId,
           rawAmount: 1,
           sourceKind: 'location',
-          sourceLabel: 'Hành Lang (9)',
+          sourceLabel: 'Weird Woods (9)',
           postLogKind: 'equipment',
-          postLogPrefix: `💚 ${actor.displayName} dùng Hành Lang (9): hồi `,
+          postLogPrefix: `💚 ${actor.displayName} dùng Weird Woods (9): hồi `,
           postLogSuffix: ` thương tích cho ${target.displayName}.`,
           postLogActorId: actor.playerId,
         },
@@ -4906,7 +4911,7 @@ export function applyExpandedLocationPower(
         attackerPlayerId: actor.playerId,
         isSingleTarget: true,
         postLogKind: 'event',
-        postLogPrefix: `⚡ ${actor.displayName} kích hoạt Hành Lang (9): ${target.displayName} chịu `,
+        postLogPrefix: `⚡ ${actor.displayName} kích hoạt Weird Woods (9): ${target.displayName} chịu `,
         postLogSuffix: ' sát thương!',
         postLogActorId: actor.playerId,
       },
@@ -4929,7 +4934,7 @@ export function applyExpandedLocationPower(
     }
     const victim = state.players[targetPlayerId];
     if (!victim || !victim.alive || victim.playerId === actor.playerId) {
-      return { ok: false, error: 'Mục tiêu Sân Bóng (10) không hợp lệ.' };
+      return { ok: false, error: 'Mục tiêu Erstwhile Altar (10) không hợp lệ.' };
     }
     if (victim.equipped.length === 0) {
       return { ok: false, error: `${victim.displayName} chưa đeo Trang bị nào để cướp.` };
@@ -4948,7 +4953,7 @@ export function applyExpandedLocationPower(
       appendPublicLog(
         state,
         'steal',
-        `🧤 ${actor.displayName} dùng Sân Bóng (10): cướp "${theft.cardTitle}" từ ${victim.displayName}!`,
+        `🧤 ${actor.displayName} dùng Erstwhile Altar (10): cướp "${theft.cardTitle}" từ ${victim.displayName}!`,
         nowMs,
         actor.playerId,
       );
@@ -5077,7 +5082,7 @@ export function applyExpandedUseCard(
           sourceKind: 'white-card',
           sourceLabel: card.title,
           postLogKind: 'equipment',
-          postLogPrefix: `✨ ${actor.displayName} dùng "${card.title}" cho ${target.displayName} (tung 1d6=${roll}) → hồi `,
+          postLogPrefix: `✨ ${actor.displayName} dùng "${card.title}" cho ${target.displayName} (tung xs 6 mặt = ${roll}) → hồi `,
           postLogSuffix: ' thương tích!',
           postLogActorId: actor.playerId,
         },
@@ -5568,7 +5573,7 @@ export function applyExpandedUseCard(
           isSingleTarget: true,
           isConsumableBlackCardDamage: isConsumableDamagingBlackCardId(card.id),
           postLogKind: 'event',
-          postLogPrefix: `🪆 ${actor.displayName} gieo "${card.title}" (1d6=${d6}) → ${target.displayName} chịu `,
+          postLogPrefix: `🪆 ${actor.displayName} gieo "${card.title}" (xs 6 mặt = ${d6}) → ${target.displayName} chịu `,
           postLogSuffix: ' ST!',
           postLogActorId: actor.playerId,
         });
@@ -5584,7 +5589,7 @@ export function applyExpandedUseCard(
           isSingleTarget: true,
           isConsumableBlackCardDamage: isConsumableDamagingBlackCardId(card.id),
           postLogKind: 'event',
-          postLogPrefix: `🪆 ${actor.displayName} gieo "${card.title}" (1d6=${d6}) → PHẢN TÁC DỤNG! ${actor.displayName} tự chịu `,
+          postLogPrefix: `🪆 ${actor.displayName} gieo "${card.title}" (xs 6 mặt = ${d6}) → PHẢN TÁC DỤNG! ${actor.displayName} tự chịu `,
           postLogSuffix: ' ST!',
           postLogActorId: actor.playerId,
         });
@@ -5737,24 +5742,16 @@ export function applyExpandedInvestigateCard(
 
   if (card.effectKind === 'inv_prediction') {
     const targetRole = getRoleDesign(target.roleId);
-    appendPrivateClue(actor, {
+    const { actorClue, targetClue } = buildPredictionClues({
       round: state.round,
       atMs: nowMs,
-      cardTitle: card.title,
-      targetPlayerId: target.playerId,
-      targetName: target.displayName,
-      outcome: 'condition-met',
-      detail: `🔮 Tiên Tri: ${target.displayName} chính là ${targetRole.name} (${FACTION_LABELS[target.faction]}, ${target.maxHp} HP).`,
+      card,
+      actor,
+      target,
+      targetRole,
     });
-    appendPrivateClue(target, {
-      round: state.round,
-      atMs: nowMs,
-      cardTitle: card.title,
-      targetPlayerId: actor.playerId,
-      targetName: actor.displayName,
-      outcome: 'condition-met',
-      detail: `🔮 ${actor.displayName} đã đưa "Thăm Dò: Tiên Tri" và nhìn thấy vai thật của bạn (${targetRole.name}).`,
-    });
+    appendPrivateClue(actor, actorClue);
+    appendPrivateClue(target, targetClue);
     const pubMsg = `🔍 ${actor.displayName} đưa Thẻ Thăm Dò Kín cho ${target.displayName}: trao đổi mật tín bí mật.`;
     state.lastInvestigation = {
       id: `inv-${state.turnNumber}-${nowMs}`,
@@ -5871,10 +5868,14 @@ export function applyExpandedInvestigateCard(
   }
 
   const outcome = effectiveMatch ? 'condition-met' : 'no-reaction';
-  const condTag = card.conditionText ?? card.title;
   let effectNote = 'Không phản ứng.';
   let transferredGearName: string | null = null;
   let queuedDamageAmount = 0;
+  let healedAmount = 0;
+  let healBlocked = false;
+  let hadZeroWoundsOnHealCard = false;
+  let hadNoGearOnDemandCard = false;
+  let keptGearOverDamage = false;
 
   if (effectiveMatch) {
     if (
@@ -5882,8 +5883,9 @@ export function applyExpandedInvestigateCard(
       card.effectKind === 'inv_blackmail' ||
       card.effectKind === 'inv_greed'
     ) {
+      const hadAnyGear = target.equipped.length > 0;
       const preferGear =
-        target.equipped.length > 0 &&
+        hadAnyGear &&
         target.hp <= 3 &&
         !(target.roleId === 'lang-anh-san' && target.hp >= 2);
       if (preferGear) {
@@ -5894,6 +5896,8 @@ export function applyExpandedInvestigateCard(
           : 'Khớp điều kiện nhưng không có đồ để giao.';
       } else {
         queuedDamageAmount = 1;
+        hadNoGearOnDemandCard = !hadAnyGear;
+        keptGearOverDamage = hadAnyGear;
         effectNote = 'Khớp điều kiện — nhận 1 thương tích.';
       }
     } else if (isHealHermit) {
@@ -5912,9 +5916,12 @@ export function applyExpandedInvestigateCard(
           nowMs,
           createExpandedHealHooks(),
         );
+        healedAmount = healRes.actual;
+        healBlocked = healRes.actual <= 0;
         effectNote = `Khớp điều kiện — hồi ${healRes.actual} thương tích.`;
       } else {
         queuedDamageAmount = 1;
+        hadZeroWoundsOnHealCard = true;
         effectNote = 'Khớp điều kiện (đang 0 vết) — phải nhận 1 thương tích!';
       }
     } else {
@@ -5924,28 +5931,26 @@ export function applyExpandedInvestigateCard(
     }
   }
 
-  appendPrivateClue(actor, {
+  const { actorClue, targetClue } = buildStandardInvestigationClues({
     round: state.round,
     atMs: nowMs,
-    cardTitle: card.title,
-    targetPlayerId: target.playerId,
-    targetName: target.displayName,
+    card,
+    actor,
+    target,
     outcome,
-    detail: `[${condTag}] ${target.displayName} → ${effectNote}`,
+    usedDeceit,
+    usedArleneDisguise,
+    transferredGearName,
+    damageDealt: queuedDamageAmount,
+    healedAmount,
+    healBlocked,
+    hadZeroWoundsOnHealCard,
+    hadNoGearOnDemandCard,
+    keptGearOverDamage,
+    effectNote,
   });
-  appendPrivateClue(target, {
-    round: state.round,
-    atMs: nowMs,
-    cardTitle: card.title,
-    targetPlayerId: actor.playerId,
-    targetName: actor.displayName,
-    outcome,
-    detail: usedDeceit
-      ? `🎭 ${actor.displayName} đưa "${card.title}" [${condTag}] — Bạn đã Ngụy Trang Đa Tầng → ${effectNote}`
-      : usedArleneDisguise
-        ? `🎭 ${actor.displayName} đưa "${card.title}" [${condTag}] — Điệu Bộ (Arlene giả dạng Shadow, giữ nguyên phe Neutral) → ${effectNote}`
-        : `Bạn nhận "${card.title}" [${condTag}] từ ${actor.displayName} → ${effectNote}`,
-  });
+  appendPrivateClue(actor, actorClue);
+  appendPrivateClue(target, targetClue);
 
   const publicEffectText = transferredGearName
     ? `${target.displayName} phải chuyển "${transferredGearName}" cho ${actor.displayName}!`
@@ -6013,17 +6018,17 @@ function openBipolarFateCoinChoice(
     kind: 'bipolar_fate_coin',
     isSecret: false,
     title: 'Đồng Xu Định Mệnh (Bipolar · 1 lần/trận)',
-    description: `Đầu lượt của bạn (${actor.hp}/${actor.maxHp} HP). Bạn có thể tung đồng xu (d4 + 2 = 3–6) để TỰ HỒI MÁU hoặc TỰ NHẬN SÁT THƯƠNG không thể chặn (có thể tự loại bản thân), hoặc bỏ qua lượt này (hết giờ tự bỏ qua, không mất lượt dùng).`,
+    description: `Đầu lượt của bạn (${actor.hp}/${actor.maxHp} HP). Bạn có thể tung đồng xu (xs 4 mặt + 2 = 3–6) để TỰ HỒI MÁU hoặc TỰ NHẬN SÁT THƯƠNG không thể chặn (có thể tự loại bản thân), hoặc bỏ qua lượt này (hết giờ tự bỏ qua, không mất lượt dùng).`,
     publicPromptLabel: `🪙 Bipolar (${actor.displayName}) đang cân nhắc tung Đồng Xu Định Mệnh (đầu lượt)...`,
     options: [
       {
         optionId: 'heal_self',
-        label: 'Hồi máu cho bản thân (d4 + 2 = 3–6 HP)',
+        label: 'Hồi máu cho bản thân (xs 4 mặt + 2 = 3–6 HP)',
         detail: `Dùng 1 lần/trận: hồi 3–6 HP (tối đa ${actor.maxHp} HP).`,
       },
       {
         optionId: 'damage_self',
-        label: 'Tự nhận sát thương (d4 + 2 = 3–6 HP · Không thể chặn)',
+        label: 'Tự nhận sát thương (xs 4 mặt + 2 = 3–6 HP · Không thể chặn)',
         detail: `Dùng 1 lần/trận: tự chịu 3–6 ST xuyên giáp/khiên (có thể tự loại bản thân!).`,
       },
       {
@@ -7324,7 +7329,7 @@ export function applyExpandedUseSkill(
     appendPublicLog(
       state,
       'skill',
-      `✨ Lan "Trực Ban" (${actor.displayName}) dùng Bước Nhảy Tắt sang Ô ${destDef.diceLabel} (${destDef.name}) không cần tung xúc xắc!`,
+      `✨ Emi (${actor.displayName}) dùng Bước Nhảy Tắt sang Ô ${destDef.diceLabel} (${destDef.name}) không cần tung xúc xắc!`,
       nowMs,
       actor.playerId,
     );
@@ -7349,7 +7354,7 @@ export function applyExpandedUseSkill(
     if (isPlayerAtExactLocationAlias(actor, 'church')) {
       return {
         ok: false,
-        error: 'Bạn đang đứng tại Sảnh Tầng 1 (Church) — không thể dùng Lễ Ngày Chủ Nhật để đứng yên tại chỗ.',
+        error: 'Bạn đang đứng tại Church (6) — không thể dùng Lễ Ngày Chủ Nhật để đứng yên tại chỗ.',
       };
     }
     const moveRes = EXPANSION_SKILL_ENGINE.dispatch(state, {
@@ -8068,7 +8073,7 @@ export function applyExpandedUseSkill(
         targetPlayerId: actor.playerId,
         rawAmount: actor.woundsTaken,
         sourceKind: 'skill',
-        sourceLabel: 'Ý Chí Hồi Sinh (Trang)',
+        sourceLabel: 'Ý Chí Hồi Sinh (Allie)',
         postLogKind: 'skill',
         postLogPrefix: `💚 ${actor.displayName} kích hoạt Ý Chí Hồi Sinh: hồi sạch `,
         postLogSuffix: ' thương tích về 0!',
@@ -8117,8 +8122,8 @@ export function applyExpandedUseSkill(
         isSingleTarget: true,
         postLogKind: 'skill',
         postLogPrefix: isD6
-          ? `⚡ ${actor.displayName} phóng Xung Cao Áp (1d6=${dmg}) lên ${target.displayName} → `
-          : `⚡ ${actor.displayName} tung Đòn Phá Vây (1d4=${dmg}) lên ${target.displayName} → `,
+          ? `⚡ ${actor.displayName} phóng Xung Cao Áp (xs 6 mặt = ${dmg}) lên ${target.displayName} → `
+          : `⚡ ${actor.displayName} tung Đòn Phá Vây (xs 4 mặt = ${dmg}) lên ${target.displayName} → `,
         postLogSuffix: ' sát thương!',
         postLogActorId: actor.playerId,
       },
@@ -9168,7 +9173,7 @@ function executeDamageStep(
           appendPublicLog(
             state,
             'reveal',
-            `🗣️ Tiếng Hét Lộ Diện: ${other.displayName} (Đạt "Cảm Tử") buộc phải lật vai khi có người đầu tiên gục ngã!`,
+            `🗣️ Tiếng Hét Lộ Diện: ${other.displayName} (Daniel) buộc phải lật vai khi có người đầu tiên gục ngã!`,
             nowMs,
             other.playerId,
           );
@@ -9638,8 +9643,8 @@ function executeEliminationTriggersStep(
           targetMap.v_0 = [sole.playerId];
           options.push({
             optionId: 'v_0',
-            label: `Kích hoạt 1d4 lên ${sole.displayName} (1 mục tiêu còn lại)`,
-            detail: `Dùng 1 lần/trận: tung 1d4 gây sát thương kỹ năng lên ${sole.displayName}.`,
+            label: `Kích hoạt xs 4 mặt lên ${sole.displayName} (1 mục tiêu còn lại)`,
+            detail: `Dùng 1 lần/trận: tung xs 4 mặt gây sát thương kỹ năng lên ${sole.displayName}.`,
             targetPlayerId: sole.playerId,
           });
         } else {
@@ -9651,8 +9656,8 @@ function executeEliminationTriggersStep(
               targetMap[optId] = [a.playerId, b.playerId];
               options.push({
                 optionId: optId,
-                label: `1d4 → ${a.displayName} & ${b.displayName}`,
-                detail: `Dùng 1 lần/trận: tung 1 xúc xắc 1d4 duy nhất áp dụng cho cả ${a.displayName} và ${b.displayName}.`,
+                label: `xs 4 mặt → ${a.displayName} & ${b.displayName}`,
+                detail: `Dùng 1 lần/trận: tung 1 xs 4 mặt duy nhất áp dụng cho cả ${a.displayName} và ${b.displayName}.`,
                 targetPlayerId: a.playerId,
               });
             }
@@ -9672,8 +9677,8 @@ function executeEliminationTriggersStep(
           kind: 'vengeance_chain_strike',
           isSecret: false,
           title: 'Báo Thù Liên Hoàn (Vengeance · 1 lần/trận)',
-          description: `Bạn vừa hạ gục ${victimName}! Chọn ${liveCandidates.length >= 2 ? '2 người chơi khác' : 'người chơi còn lại'} để cùng nhận 1d4 sát thương kỹ năng (1 lần/trận; bỏ qua không mất lượt dùng).`,
-          publicPromptLabel: `⚡ Vengeance (${vengeance.displayName}) đang cân nhắc tung Báo Thù Liên Hoàn (1d4)...`,
+          description: `Bạn vừa hạ gục ${victimName}! Chọn ${liveCandidates.length >= 2 ? '2 người chơi khác' : 'người chơi còn lại'} để cùng nhận xs 4 mặt sát thương kỹ năng (1 lần/trận; bỏ qua không mất lượt dùng).`,
+          publicPromptLabel: `⚡ Vengeance (${vengeance.displayName}) đang cân nhắc tung Báo Thù Liên Hoàn (xs 4 mặt)...`,
           options,
           defaultOptionId: 'skip',
           createdAtMs: nowMs,
@@ -10364,7 +10369,7 @@ function executeGideonDrawWhiteCardStep(
           optionId: optId,
           label:
             card.effectKind === 'eq_blessing'
-              ? `Hồi 1d6 HP cho ${cand.displayName}`
+              ? `Hồi xs 6 mặt HP cho ${cand.displayName}`
               : `Đưa thương tích ${cand.displayName} về mốc 7 (hiện ${cand.woundsTaken} vết)`,
           detail: card.summary,
           card: toCardPublicMeta(card),
@@ -10544,7 +10549,7 @@ export function drainPendingSteps(
             {
               optionId: 'counter',
               label: `Phản công ${origAttacker.displayName} ngay`,
-              detail: `Tung đòn tấn công trả đũa (${gwendolen.equipped.includes('ev-01') ? '1d4' : '|1d6 - 1d4|'}) lên ${origAttacker.displayName} (không gây vòng lặp).`,
+              detail: `Tung đòn tấn công trả đũa (${gwendolen.equipped.includes('ev-01') ? 'xs 4 mặt' : '|xs 6 mặt - xs 4 mặt|'}) lên ${origAttacker.displayName} (không gây vòng lặp).`,
               targetPlayerId: origAttacker.playerId,
             },
             {
@@ -10766,9 +10771,9 @@ export function drainPendingSteps(
             targetPlayerId: actor.playerId,
             rawAmount: 2,
             sourceKind: 'skill',
-            sourceLabel: 'Hút Sinh Lực (Tú "Ẩn Danh")',
+            sourceLabel: 'Hút Sinh Lực (Vampire)',
             postLogKind: 'skill',
-            postLogPrefix: `🦇 Tú "Ẩn Danh" (${actor.displayName}) hút sinh lực hồi `,
+            postLogPrefix: `🦇 Vampire (${actor.displayName}) hút sinh lực hồi `,
             postLogSuffix: ' thương tích!',
             postLogActorId: actor.playerId,
           });
@@ -10892,7 +10897,7 @@ export function drainPendingSteps(
           if (dung.equipped.includes('ev-04')) cRaw += 1;
           if (dung.equipped.includes('eq-01')) cRaw = Math.max(0, cRaw - 1);
         }
-        const cRollDesc = cStick ? `1d4=${cd4}` : `|${cd6}-${cd4}|=${cBase}`;
+        const cRollDesc = cStick ? `xs 4 mặt = ${cd4}` : `|${cd6} - ${cd4}| = ${cBase}`;
         const prevHp = origAttacker.hp;
 
         // Phản kích cũng là nguồn 'attack' -> tôn trọng G43 / Holy Robe / Guardian Angel / Wendigo / Bianca!
@@ -10906,7 +10911,7 @@ export function drainPendingSteps(
           isSingleTarget: true,
           isRetaliatoryAttack: true,
           postLogKind: 'skill',
-          postLogPrefix: `🥊 Dũng "Gác Cổng" (${dung.displayName}) phản kích (${cRollDesc}, tổng ${cRaw}) → ${origAttacker.displayName} chịu `,
+          postLogPrefix: `🥊 Werewolf (${dung.displayName}) phản kích (${cRollDesc}, tổng ${cRaw}) → ${origAttacker.displayName} chịu `,
           postLogSuffix: ' sát thương!',
           postLogActorId: dung.playerId,
         };
@@ -11411,7 +11416,7 @@ export function resolvePendingChoice(
             sourceLabel: 'Đồng Xu Định Mệnh (Bipolar)',
             roleStatId: 'exp1_bipolar',
             postLogKind: 'skill',
-            postLogPrefix: `🪙💚 Bipolar (${actor.displayName}) — Đồng Xu Định Mệnh (1d4=${d4} + 2 = ${amount}): hồi `,
+            postLogPrefix: `🪙💚 Bipolar (${actor.displayName}) — Đồng Xu Định Mệnh (xs 4 mặt = ${d4} + 2 = ${amount}): hồi `,
             postLogSuffix: ' HP!',
             postLogActorId: actor.playerId,
           },
@@ -11438,7 +11443,7 @@ export function resolvePendingChoice(
             unpreventable: true,
             isSingleTarget: true,
             postLogKind: 'skill',
-            postLogPrefix: `🪙🩸 Bipolar (${actor.displayName}) — Đồng Xu Định Mệnh (1d4=${d4} + 2 = ${amount}): tự nhận `,
+            postLogPrefix: `🪙🩸 Bipolar (${actor.displayName}) — Đồng Xu Định Mệnh (xs 4 mặt = ${d4} + 2 = ${amount}): tự nhận `,
             postLogSuffix: ' sát thương không thể chặn!',
             postLogActorId: actor.playerId,
           },
@@ -11644,7 +11649,7 @@ export function resolvePendingChoice(
       appendPublicLog(
         state,
         'skill',
-        `⚡💀 Vengeance (${vengeance.displayName}) — Báo Thù Liên Hoàn (1d4=${d4}): giáng ${d4} sát thương kỹ năng lên ${liveTargets.map((t) => t.displayName).join(' & ')}!`,
+        `⚡💀 Vengeance (${vengeance.displayName}) — Báo Thù Liên Hoàn (xs 4 mặt = ${d4}): giáng ${d4} sát thương kỹ năng lên ${liveTargets.map((t) => t.displayName).join(' & ')}!`,
         nowMs,
         vengeance.playerId,
       );
@@ -11991,7 +11996,7 @@ export function resolvePendingChoice(
       const gd4 = rollD4(state);
       const gBase = hasMasamune ? gd4 : Math.abs(gd6 - gd4);
       const gRaw = computeRawAttackDamage(gwen, gBase);
-      const gRollDesc = hasMasamune ? `1d4=${gd4}` : `|${gd6}-${gd4}|=${gBase}`;
+      const gRollDesc = hasMasamune ? `xs 4 mặt = ${gd4}` : `|${gd6} - ${gd4}| = ${gBase}`;
 
       incRoleStat(exp.stats.activationsByRole, 'exp1_gwendolen', 1);
       exp.pendingSteps.unshift({
@@ -12258,7 +12263,7 @@ export function resolvePendingChoice(
             sourceKind: 'white-card',
             sourceLabel: card.title,
             postLogKind: 'equipment',
-            postLogPrefix: `✨ Gideon (${gideon.displayName}) [Thẻ Trắng #${data.drawIndex}/3] dùng "${card.title}" cho ${target.displayName} (1d6=${roll}) → hồi `,
+            postLogPrefix: `✨ Gideon (${gideon.displayName}) [Thẻ Trắng #${data.drawIndex}/3] dùng "${card.title}" cho ${target.displayName} (xs 6 mặt = ${roll}) → hồi `,
             postLogSuffix: ' HP!',
             postLogActorId: gideon.playerId,
           });
@@ -12567,15 +12572,15 @@ export function resolvePendingChoice(
           boundTurnNumber: state.turnNumber,
         };
         // BẢO MẬT P0: Chỉ ghi manh mối bí mật vào `privateClues` của RIÊNG Clairvoyant!
-        appendPrivateClue(clair, {
-          round: state.round,
-          atMs: nowMs,
-          cardTitle: 'Lời Tiên Tri (Clairvoyant)',
-          targetPlayerId: target.playerId,
-          targetName: target.displayName,
-          outcome: 'condition-met',
-          detail: `🔮 Lời Tiên Tri: ${target.displayName} là ${targetDesign.name} (${FACTION_LABELS[target.faction]}, ${target.maxHp} HP). Bạn đã sao chép điều kiện thắng của vai này!`,
-        });
+        appendPrivateClue(
+          clair,
+          buildClairvoyantSkillClue({
+            round: state.round,
+            atMs: nowMs,
+            target,
+            targetDesign,
+          }),
+        );
         incRoleStat(exp.stats.activationsByRole, 'exp1_clairvoyant', 1);
         exp.stats.clairvoyantInspections = (exp.stats.clairvoyantInspections ?? 0) + 1;
         exp.stats.copiedVictoryLinksBound = (exp.stats.copiedVictoryLinksBound ?? 0) + 1;
@@ -12613,7 +12618,7 @@ export function resolvePendingChoice(
         const d4 = rollD4(state);
         const baseDmg = hasMasamune ? d4 : Math.abs(d6 - d4);
         const rawDmg = computeRawAttackDamage(colt, baseDmg);
-        const rollDesc = hasMasamune ? `1d4=${d4}` : `|${d6}-${d4}|=${baseDmg}`;
+        const rollDesc = hasMasamune ? `xs 4 mặt = ${d4}` : `|${d6} - ${d4}| = ${baseDmg}`;
         const expectedDealt = predictExpectedAttackDealt(state, thief, rawDmg);
         incRoleStat(exp.stats.activationsByRole, 'exp2_colt', 1);
 

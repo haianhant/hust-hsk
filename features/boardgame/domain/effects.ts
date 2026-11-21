@@ -12,6 +12,10 @@ import type {
   BoardGamePublicLogEntry,
 } from '../../../shared/contracts/boardgame';
 import { getCardById } from './cards';
+import {
+  buildPredictionClues,
+  buildStandardInvestigationClues,
+} from './clue-format';
 import { FACTION_LABELS, getRoleDesign, isEligibleForChocolateHeal } from './roles';
 import {
   BOARD_GAME_MAX_EQUIPPED,
@@ -422,7 +426,7 @@ export function applyDamage(
           appendPublicLog(
             state,
             'reveal',
-            `🗣️ Tiếng Hét Lộ Diện: ${other.displayName} (Đạt "Cảm Tử") buộc phải lật vai khi có người đầu tiên gục ngã!`,
+            `🗣️ Tiếng Hét Lộ Diện: ${other.displayName} (Daniel) buộc phải lật vai khi có người đầu tiên gục ngã!`,
             nowMs,
             other.playerId,
           );
@@ -841,7 +845,7 @@ export function resolveLocationPower(
   if (actor.location === 'corridor') {
     const target = targetPlayerId ? state.players[targetPlayerId] : actor;
     if (!target || !target.alive) {
-      return { ok: false, error: 'Mục tiêu Hành Lang (9) không hợp lệ hoặc đã bị loại.' };
+      return { ok: false, error: 'Mục tiêu Weird Woods (9) không hợp lệ hoặc đã bị loại.' };
     }
     const chosenMode =
       mode === 'damage'
@@ -852,14 +856,14 @@ export function resolveLocationPower(
             ? 'heal'
             : 'damage';
     if (chosenMode === 'damage' && target.playerId === actor.playerId) {
-      return { ok: false, error: 'Không thể tự gây sát thương lên chính mình tại Hành Lang (9).' };
+      return { ok: false, error: 'Không thể tự gây sát thương lên chính mình tại Weird Woods (9).' };
     }
     if (chosenMode === 'heal') {
       const healed = applyHeal(state, target, 1);
       appendPublicLog(
         state,
         'equipment',
-        `💚 ${actor.displayName} dùng Hành Lang (9): hồi ${healed} thương tích cho ${target.displayName}.`,
+        `💚 ${actor.displayName} dùng Weird Woods (9): hồi ${healed} thương tích cho ${target.displayName}.`,
         nowMs,
         actor.playerId,
       );
@@ -868,7 +872,7 @@ export function resolveLocationPower(
       appendPublicLog(
         state,
         'event',
-        `⚡ ${actor.displayName} kích hoạt Hành Lang (9): ${target.displayName} chịu ${dealt} sát thương!`,
+        `⚡ ${actor.displayName} kích hoạt Weird Woods (9): ${target.displayName} chịu ${dealt} sát thương!`,
         nowMs,
         actor.playerId,
       );
@@ -886,7 +890,7 @@ export function resolveLocationPower(
     }
     const victim = state.players[targetPlayerId];
     if (!victim || !victim.alive || victim.playerId === actor.playerId) {
-      return { ok: false, error: 'Mục tiêu Sân Bóng (10) không hợp lệ.' };
+      return { ok: false, error: 'Mục tiêu Erstwhile Altar (10) không hợp lệ.' };
     }
     if (victim.equipped.length === 0) {
       return { ok: false, error: `${victim.displayName} chưa đeo Trang bị nào để cướp.` };
@@ -896,7 +900,7 @@ export function resolveLocationPower(
       appendPublicLog(
         state,
         'steal',
-        `🧤 ${actor.displayName} dùng Sân Bóng (10): cướp "${stolen.title}" từ ${victim.displayName}!`,
+        `🧤 ${actor.displayName} dùng Erstwhile Altar (10): cướp "${stolen.title}" từ ${victim.displayName}!`,
         nowMs,
         actor.playerId,
       );
@@ -1011,7 +1015,7 @@ export function resolveUseCard(
       appendPublicLog(
         state,
         'equipment',
-        `✨ ${actor.displayName} dùng "${card.title}" cho ${target.displayName} (tung 1d6=${roll}) → hồi ${healed} thương tích!`,
+        `✨ ${actor.displayName} dùng "${card.title}" cho ${target.displayName} (tung xs 6 mặt = ${roll}) → hồi ${healed} thương tích!`,
         nowMs,
         actor.playerId,
       );
@@ -1288,7 +1292,7 @@ export function resolveUseCard(
         appendPublicLog(
           state,
           'event',
-          `🪆 ${actor.displayName} gieo "${card.title}" (1d6=${d6}) → ${target.displayName} chịu ${dealt} ST!`,
+          `🪆 ${actor.displayName} gieo "${card.title}" (xs 6 mặt = ${d6}) → ${target.displayName} chịu ${dealt} ST!`,
           nowMs,
           actor.playerId,
         );
@@ -1297,7 +1301,7 @@ export function resolveUseCard(
         appendPublicLog(
           state,
           'event',
-          `🪆 ${actor.displayName} gieo "${card.title}" (1d6=${d6}) → PHẢN TÁC DỤNG! ${actor.displayName} tự chịu ${dealtSelf} ST!`,
+          `🪆 ${actor.displayName} gieo "${card.title}" (xs 6 mặt = ${d6}) → PHẢN TÁC DỤNG! ${actor.displayName} tự chịu ${dealtSelf} ST!`,
           nowMs,
           actor.playerId,
         );
@@ -1434,24 +1438,16 @@ export function resolveInvestigateCard(
   // Trường hợp đặc biệt: inv-12 Tiên Tri (Hermit's Prediction) soi thẳng vai thật 1-đối-1
   if (card.effectKind === 'inv_prediction') {
     const targetRole = getRoleDesign(target.roleId);
-    appendPrivateClue(actor, {
+    const { actorClue, targetClue } = buildPredictionClues({
       round: state.round,
       atMs: nowMs,
-      cardTitle: card.title,
-      targetPlayerId: target.playerId,
-      targetName: target.displayName,
-      outcome: 'condition-met',
-      detail: `🔮 Tiên Tri: ${target.displayName} chính là ${targetRole.name} (${FACTION_LABELS[target.faction]}, ${target.maxHp} HP).`,
+      card,
+      actor,
+      target,
+      targetRole,
     });
-    appendPrivateClue(target, {
-      round: state.round,
-      atMs: nowMs,
-      cardTitle: card.title,
-      targetPlayerId: actor.playerId,
-      targetName: actor.displayName,
-      outcome: 'condition-met',
-      detail: `🔮 ${actor.displayName} đã đưa "Thăm Dò: Tiên Tri" và nhìn thấy vai thật của bạn (${targetRole.name}).`,
-    });
+    appendPrivateClue(actor, actorClue);
+    appendPrivateClue(target, targetClue);
     const pubMsg = `🔍 ${actor.displayName} đưa Thẻ Thăm Dò Kín cho ${target.displayName}: trao đổi mật tín bí mật.`;
     state.lastInvestigation = {
       id: `inv-${state.turnNumber}-${nowMs}`,
@@ -1528,9 +1524,13 @@ export function resolveInvestigateCard(
   }
 
   const outcome = effectiveMatch ? 'condition-met' : 'no-reaction';
-  const condTag = card.conditionText ?? card.title;
   let effectNote = 'Không phản ứng.';
   let transferredGearName: string | null = null;
+  let dealtDamageAmount = 0;
+  let healedAmount = 0;
+  let hadZeroWoundsOnHealCard = false;
+  let hadNoGearOnDemandCard = false;
+  let keptGearOverDamage = false;
 
   if (effectiveMatch) {
     if (
@@ -1539,9 +1539,10 @@ export function resolveInvestigateCard(
       card.effectKind === 'inv_greed'
     ) {
       // Thực tế Shadow Hunters: người còn > 3 máu thường giữ Trang bị & chọn chịu 1 ST;
-      // chỉ nộp đồ khi máu chạm mức nguy kịch (<= 3 HP; riêng Hải chỉ chịu giao khi HP === 1).
+      // chỉ nộp đồ khi máu chạm mức nguy kịch (<= 3 HP; riêng Bob chỉ chịu giao khi HP === 1).
+      const hadAnyGear = target.equipped.length > 0;
       const preferGear =
-        target.equipped.length > 0 &&
+        hadAnyGear &&
         target.hp <= 3 &&
         !(target.roleId === 'lang-anh-san' && target.hp >= 2);
       if (preferGear) {
@@ -1552,46 +1553,50 @@ export function resolveInvestigateCard(
           : 'Khớp điều kiện nhưng không có đồ để giao.';
       } else {
         const dealt = applyDamage(state, target, 1, 'investigation', actor, nowMs);
+        dealtDamageAmount = dealt;
+        hadNoGearOnDemandCard = !hadAnyGear;
+        keptGearOverDamage = hadAnyGear;
         effectNote = `Khớp điều kiện — nhận ${dealt} thương tích.`;
       }
     } else if (isHealHermit) {
       if (target.woundsTaken > 0) {
         const healed = applyHeal(state, target, 1);
+        healedAmount = healed;
         effectNote = `Khớp điều kiện — hồi ${healed} thương tích.`;
       } else {
         // Chuẩn Shadow Hunters (Aid/Nurturance/Huddle): đang 0 thương tích phải nhận 1 thương tích!
         const dealt = applyDamage(state, target, 1, 'investigation', actor, nowMs);
+        dealtDamageAmount = dealt;
+        hadZeroWoundsOnHealCard = true;
         effectNote = `Khớp điều kiện (đang 0 vết) — phải nhận ${dealt} thương tích!`;
       }
     } else {
       const dmgAmount =
         card.effectKind === 'inv_exorcism' || card.effectKind === 'inv_tough_lesson' ? 2 : 1;
       const dealt = applyDamage(state, target, dmgAmount, 'investigation', actor, nowMs);
+      dealtDamageAmount = dealt;
       effectNote = `Khớp điều kiện — nhận ${dealt} thương tích.`;
     }
   }
 
-  appendPrivateClue(actor, {
+  const { actorClue, targetClue } = buildStandardInvestigationClues({
     round: state.round,
     atMs: nowMs,
-    cardTitle: card.title,
-    targetPlayerId: target.playerId,
-    targetName: target.displayName,
+    card,
+    actor,
+    target,
     outcome,
-    detail: `[${condTag}] ${target.displayName} → ${effectNote}`,
+    usedDeceit,
+    transferredGearName,
+    damageDealt: dealtDamageAmount,
+    healedAmount,
+    hadZeroWoundsOnHealCard,
+    hadNoGearOnDemandCard,
+    keptGearOverDamage,
+    effectNote,
   });
-
-  appendPrivateClue(target, {
-    round: state.round,
-    atMs: nowMs,
-    cardTitle: card.title,
-    targetPlayerId: actor.playerId,
-    targetName: actor.displayName,
-    outcome,
-    detail: usedDeceit
-      ? `🎭 ${actor.displayName} đưa "${card.title}" [${condTag}] — Bạn đã Ngụy Trang Đa Tầng → ${effectNote}`
-      : `Bạn nhận "${card.title}" [${condTag}] từ ${actor.displayName} → ${effectNote}`,
-  });
+  appendPrivateClue(actor, actorClue);
+  appendPrivateClue(target, targetClue);
 
   const publicEffectText = transferredGearName
     ? `${target.displayName} phải chuyển "${transferredGearName}" cho ${actor.displayName}!`
@@ -1667,7 +1672,7 @@ export function resolveAttack(
   const targets = hasMachineGun ? listReachableAttackTargets(state, actor) : [target];
   let totalDealt = 0;
   const counterAttackers: AuthoritativePlayerState[] = [];
-  const rollDesc = hasMasamune ? `1d4=${d4}` : `|${d6}-${d4}|=${baseDmg}`;
+  const rollDesc = hasMasamune ? `xs 4 mặt = ${d4}` : `|${d6}-${d4}|=${baseDmg}`;
 
   for (const victim of targets) {
     const expectedDealt = victim.guardianShieldActive
@@ -1699,7 +1704,7 @@ export function resolveAttack(
         appendPublicLog(
           state,
           'steal',
-          `🧲 Hải "Sưu Tầm" (${actor.displayName}) chọn Cướp Đồ Thay Đòn (${rollDesc}) → lấy "${stolen.title}" từ ${victim.displayName} (0 sát thương)!`,
+          `🧲 Bob (${actor.displayName}) chọn Cướp Đồ Thay Đòn (${rollDesc}) → lấy "${stolen.title}" từ ${victim.displayName} (0 sát thương)!`,
           nowMs,
           actor.playerId,
         );
@@ -1759,7 +1764,7 @@ export function resolveAttack(
       appendPublicLog(
         state,
         'skill',
-        `🦇 Tú "Ẩn Danh" (${actor.displayName}) hút sinh lực hồi ${healed} thương tích!`,
+        `🦇 Vampire (${actor.displayName}) hút sinh lực hồi ${healed} thương tích!`,
         nowMs,
         actor.playerId,
       );
@@ -1791,13 +1796,13 @@ export function resolveAttack(
         damageDealt: cDealt,
       };
     }
-    const cRollDesc = cStick ? `1d4=${cd4}` : `|${cd6}-${cd4}|=${cBase}`;
+    const cRollDesc = cStick ? `xs 4 mặt = ${cd4}` : `|${cd6}-${cd4}|=${cBase}`;
     appendPublicLog(
       state,
       'skill',
       cDealt > 0
-        ? `🥊 Dũng "Gác Cổng" (${dung.displayName}) phản kích tức thì (${cRollDesc}, tổng ${cRaw}) → ${actor.displayName} chịu ${cDealt} sát thương!`
-        : `🥊 Dũng "Gác Cổng" (${dung.displayName}) phản kích (${cRollDesc}) nhưng không gây sát thương cho ${actor.displayName}!`,
+        ? `🥊 Werewolf (${dung.displayName}) phản kích tức thì (${cRollDesc}, tổng ${cRaw}) → ${actor.displayName} chịu ${cDealt} sát thương!`
+        : `🥊 Werewolf (${dung.displayName}) phản kích (${cRollDesc}) nhưng không gây sát thương cho ${actor.displayName}!`,
       nowMs,
       dung.playerId,
     );
@@ -1825,7 +1830,7 @@ export function resolveRevealRole(
   if (actor.roleId === 'lang-tien-phong') {
     return {
       ok: false,
-      error: 'Đạt "Cảm Tử" không thể tự ý lật vai; sẽ tự động lộ diện khi có người khác đầu tiên gục ngã.',
+      error: 'Daniel không thể tự ý lật vai; sẽ tự động lộ diện khi có người khác đầu tiên gục ngã.',
     };
   }
   revealPlayerNow(state, actor, 'voluntary', nowMs);
@@ -1887,7 +1892,7 @@ export function resolveUseSkill(
       appendPublicLog(
         state,
         'skill',
-        `✨ Lan "Trực Ban" (${actor.displayName}) dùng Bước Nhảy Tắt sang Ô ${destDef.diceLabel} (${destDef.name}) không cần tung xúc xắc!`,
+        `✨ Emi (${actor.displayName}) dùng Bước Nhảy Tắt sang Ô ${destDef.diceLabel} (${destDef.name}) không cần tung xúc xắc!`,
         nowMs,
         actor.playerId,
       );
@@ -1916,7 +1921,7 @@ export function resolveUseSkill(
       appendPublicLog(
         state,
         'skill',
-        `⚡ ${actor.displayName} tung Đòn Phá Vây (1d4=${dmg}) lên ${target.displayName} → ${dealt} sát thương!`,
+        `⚡ ${actor.displayName} tung Đòn Phá Vây (xs 4 mặt = ${dmg}) lên ${target.displayName} → ${dealt} sát thương!`,
         nowMs,
         actor.playerId,
       );
@@ -1945,7 +1950,7 @@ export function resolveUseSkill(
       appendPublicLog(
         state,
         'skill',
-        `⚡ ${actor.displayName} phóng Xung Cao Áp (1d6=${dmg}) lên ${target.displayName} → ${dealt} sát thương!`,
+        `⚡ ${actor.displayName} phóng Xung Cao Áp (xs 6 mặt = ${dmg}) lên ${target.displayName} → ${dealt} sát thương!`,
         nowMs,
         actor.playerId,
       );
@@ -2005,7 +2010,7 @@ export function resolveUseSkill(
       appendPublicLog(
         state,
         'skill',
-        `🩸 Bách "Cuồng Chiến" (${actor.displayName}) tự nhận 2 thương tích kích hoạt Đòn Đánh Đẫm Máu lên ${target.displayName}!`,
+        `🩸 Charles (${actor.displayName}) tự nhận 2 thương tích kích hoạt Đòn Đánh Đẫm Máu lên ${target.displayName}!`,
         nowMs,
         actor.playerId,
       );

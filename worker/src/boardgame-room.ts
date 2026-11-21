@@ -71,6 +71,7 @@ import {
   applyPendingChoiceTimeout,
   applyPlayerGameAction,
   applyTimeoutAutoTurn,
+  chooseBotAction,
   createInitialGameState,
   getActivePlayer,
   getEffectiveTurnControllerId,
@@ -96,6 +97,31 @@ const PROD_MIN_TURN_TIMEOUT_MS = 15_000;
 const PROD_MAX_TURN_TIMEOUT_MS = 90_000;
 const TEST_MIN_TURN_TIMEOUT_MS = 1_500;
 const TEST_MAX_TURN_TIMEOUT_MS = 120_000;
+const BOT_PLAYER_ID_PREFIX = 'bgbot_';
+const BOT_STEP_DELAY_MS = 1_850;
+const BOT_CHOICE_DELAY_MS = 1_100;
+const TEST_BOT_STEP_DELAY_MS = 120;
+const TEST_BOT_CHOICE_DELAY_MS = 80;
+const BOT_ROSTER_NAMES = [
+  'Bot An',
+  'Bot Minh',
+  'Bot Linh',
+  'Bot Hùng',
+  'Bot Hà',
+  'Bot Tuấn',
+  'Bot Chi',
+  'Bot Nam',
+] as const;
+const BOT_APPEARANCE_PRESETS = [
+  { gender: 'male', outfit: 'hust-jacket' },
+  { gender: 'female', outfit: 'hust-bomber-red', bottomStyle: 'skirt' },
+  { gender: 'male', outfit: 'hust-polo-red' },
+  { gender: 'female', outfit: 'hust-hoodie-red' },
+  { gender: 'male', outfit: 'hust-tee-blue' },
+  { gender: 'female', outfit: 'hust-sweater-cream', bottomStyle: 'skirt' },
+  { gender: 'male', outfit: 'hust-bomber-navy' },
+  { gender: 'female', outfit: 'hust-shirt-white' },
+] as const;
 const utf8Encoder = new TextEncoder();
 
 export interface BoardGameEnv {
@@ -158,6 +184,7 @@ interface MatchPlayerDbRow {
   reconnect_token_hash: string;
   last_seen_ms: number;
   leaderboard_key?: string | null;
+  is_bot?: number;
 }
 
 interface BoardGameLeaderboardDbRow {
@@ -363,11 +390,17 @@ export class BoardGameRoom {
         connected INTEGER NOT NULL DEFAULT 1,
         reconnect_token_hash TEXT NOT NULL,
         last_seen_ms INTEGER NOT NULL,
-        leaderboard_key TEXT
+        leaderboard_key TEXT,
+        is_bot INTEGER NOT NULL DEFAULT 0
       )
     `);
     try {
       sql.exec('ALTER TABLE match_players ADD COLUMN leaderboard_key TEXT');
+    } catch {
+      // already migrated
+    }
+    try {
+      sql.exec('ALTER TABLE match_players ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0');
     } catch {
       // already migrated
     }
@@ -1438,6 +1471,39 @@ export class BoardGameRoom {
     return `lb_${digest.slice(0, 24)}`;
   }
 
+  private isBotRow(row: Pick<MatchPlayerDbRow, 'player_id' | 'is_bot'> | null | undefined): boolean {
+    return Boolean(row && (row.is_bot === 1 || row.player_id.startsWith(BOT_PLAYER_ID_PREFIX)));
+  }
+
+  private getPendingBotActorId(
+    engineState: AuthoritativeGameState | null,
+    playerRows: readonly MatchPlayerDbRow[],
+  ): string | null {
+    if (!engineState || engineState.finished) return null;
+    const isBotId = (pid: string): boolean => {
+      if (pid.startsWith(BOT_PLAYER_ID_PREFIX)) return true;
+      const row = playerRows.find((r) => r.player_id === pid);
+      return this.isBotRow(row);
+    };
+    if (engineState.pendingChoice) {
+      const ownerId = engineState.pendingChoice.ownerPlayerId;
+      return isBotId(ownerId) ? ownerId : null;
+    }
+    const controllerId = getEffectiveTurnControllerId(engineState);
+    if (controllerId && isBotId(controllerId)) {
+      return controllerId;
+    }
+    return null;
+  }
+
+  private getBotActionDelayMs(hasPendingChoice: boolean): number {
+    const allowShort = this.env.ALLOW_SHORT_TURN_TIMEOUT === '1';
+    if (hasPendingChoice) {
+      return allowShort ? TEST_BOT_CHOICE_DELAY_MS : BOT_CHOICE_DELAY_MS;
+    }
+    return allowShort ? TEST_BOT_STEP_DELAY_MS : BOT_STEP_DELAY_MS;
+  }
+
   private async recordFinishedMatchToLeaderboard(nowMs: number): Promise<void> {
     const ns = this.env.BOARD_GAME_ROOM;
     const match = this.getMatchRow();
@@ -1446,13 +1512,25 @@ export class BoardGameRoom {
     const engineState = this.loadEngineState(match, playerRows);
     if (!engineState || !engineState.finished) return;
 
+    const allEnginePlayers = Object.values(engineState.players);
+    const hasBotParticipant =
+      playerRows.some((r) => this.isBotRow(r)) ||
+      allEnginePlayers.some((ep) => ep.playerId.startsWith(BOT_PLAYER_ID_PREFIX));
+    if (hasBotParticipant) {
+      // Trận có Bot không ghi điểm bảng xếp hạng người chơi thật và không làm lệch telemetry human-playtest
+      this.sql.exec(
+        'UPDATE matches SET leaderboard_recorded = 1 WHERE match_id = ?',
+        match.match_id,
+      );
+      return;
+    }
+
     const rowByPlayerId = new Map<string, MatchPlayerDbRow>();
     for (const r of playerRows) {
       rowByPlayerId.set(r.player_id, r);
     }
 
     const winnerSet = new Set(engineState.winnerPlayerIds);
-    const allEnginePlayers = Object.values(engineState.players);
     const participants: LeaderboardParticipantPayload[] = [];
     for (const ep of allEnginePlayers) {
       const row = rowByPlayerId.get(ep.playerId);
@@ -1795,6 +1873,14 @@ export class BoardGameRoom {
         await this.handleSetRuleset(ws, player, validatedMsg.rulesetId, reqId);
         return;
       }
+      case 'BG_ADD_BOT': {
+        await this.handleAddBot(ws, player, reqId);
+        return;
+      }
+      case 'BG_REMOVE_BOT': {
+        await this.handleRemoveBot(ws, player, validatedMsg.playerId, reqId);
+        return;
+      }
       case 'BG_START_MATCH': {
         const timeoutOverride =
           typeof validatedMsg.turnTimeoutMs === 'number'
@@ -1938,20 +2024,21 @@ export class BoardGameRoom {
       return;
     }
 
-    // Expire abandoned PLAYING matches when every seated player has disconnected past TTL
+    // Expire abandoned PLAYING matches when every seated HUMAN player has disconnected past TTL
+    let connectedHumans = 0;
     if (match.status === 'PLAYING') {
       const disconnAgg = this.sql
         .exec<{ connected_count: number | null; max_seen: number | null }>(
           `SELECT
-             SUM(CASE WHEN connected = 1 AND is_spectator = 0 THEN 1 ELSE 0 END) AS connected_count,
-             MAX(CASE WHEN is_spectator = 0 THEN last_seen_ms ELSE NULL END) AS max_seen
+             SUM(CASE WHEN connected = 1 AND is_spectator = 0 AND is_bot = 0 THEN 1 ELSE 0 END) AS connected_count,
+             MAX(CASE WHEN is_spectator = 0 AND is_bot = 0 THEN last_seen_ms ELSE NULL END) AS max_seen
            FROM match_players`,
         )
         .one();
-      const connectedPlayers = Number(disconnAgg?.connected_count ?? 0);
+      connectedHumans = Number(disconnAgg?.connected_count ?? 0);
       const maxLastSeen = disconnAgg?.max_seen;
       if (
-        connectedPlayers === 0 &&
+        connectedHumans === 0 &&
         typeof maxLastSeen === 'number' &&
         nowMs - maxLastSeen >= BOARD_GAME_ABANDONED_MATCH_TTL_MS
       ) {
@@ -1981,7 +2068,7 @@ export class BoardGameRoom {
       }
     }
 
-    // Auto-advance expired pending choices or turns during PLAYING so an AFK/disconnected player never stalls the table
+    // Auto-advance bot steps OR expired human pending choices / turns during PLAYING
     if (
       match.status === 'PLAYING' &&
       typeof match.turn_deadline_ms === 'number' &&
@@ -1990,6 +2077,74 @@ export class BoardGameRoom {
       const rows = this.listPlayerRows();
       const engineState = this.loadEngineState(match, rows);
       if (engineState && (!engineState.finished || match.status === 'PLAYING')) {
+        const botActorId = this.getPendingBotActorId(engineState, rows);
+        if (botActorId) {
+          // Không chạy vòng Bot khi toàn bộ người chơi thật đều đã mất kết nối
+          if (connectedHumans === 0) {
+            await this.scheduleNextAlarm(nowMs);
+            return;
+          }
+          if (!engineState.finished) {
+            const botAction = chooseBotAction(engineState, botActorId);
+            let applied = false;
+            if (botAction) {
+              try {
+                const botRes = applyPlayerGameAction(engineState, botActorId, botAction, nowMs);
+                applied = botRes.ok;
+              } catch {
+                applied = false;
+              }
+            }
+            if (!applied) {
+              if (engineState.pendingChoice) {
+                applyPendingChoiceTimeout(engineState, nowMs);
+              } else {
+                const endRes = applyPlayerGameAction(
+                  engineState,
+                  botActorId,
+                  { type: 'END_TURN' },
+                  nowMs,
+                );
+                if (!endRes.ok) {
+                  applyTimeoutAutoTurn(engineState, nowMs);
+                }
+              }
+            }
+          }
+          const nextStatus: BoardGameMatchStatus = engineState.finished ? 'FINISHED' : 'PLAYING';
+          const nextDeadline = engineState.finished
+            ? null
+            : this.computeNextTurnDeadline(engineState, rows, match.turn_timeout_ms, nowMs);
+          if (engineState.finished) {
+            this.sql.exec('UPDATE match_players SET ready = 0 WHERE is_bot = 0');
+          }
+          this.sql.exec(
+            `UPDATE matches
+             SET status = ?, revision = revision + 1, turn_deadline_ms = ?, updated_at_ms = ?, game_state_json = ?
+             WHERE match_id = ?`,
+            nextStatus,
+            nextDeadline,
+            nowMs,
+            JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
+            match.match_id,
+          );
+          if (engineState.finished) {
+            logBoardGameEvent(this.env, 'MATCH_FINISHED', {
+              matchId: match.match_id,
+              tableId: match.table_id,
+              status: 'FINISHED',
+              round: engineState.round,
+              turnNumber: engineState.turnNumber,
+              winnerFaction: engineState.winnerFaction,
+            });
+            await this.recordFinishedMatchToLeaderboard(nowMs);
+          }
+          await this.scheduleNextAlarm(nowMs);
+          this.broadcastStateSync();
+          await this.syncDirectoryFromMatch();
+          return;
+        }
+
         const wasChoiceTimeout = Boolean(
           engineState.pendingChoice && nowMs >= engineState.pendingChoice.deadlineMs - 50,
         );
@@ -2016,7 +2171,7 @@ export class BoardGameRoom {
           ? null
           : this.computeNextTurnDeadline(engineState, rows, match.turn_timeout_ms, nowMs);
         if (engineState.finished) {
-          this.sql.exec('UPDATE match_players SET ready = 0');
+          this.sql.exec('UPDATE match_players SET ready = 0 WHERE is_bot = 0');
         }
         this.sql.exec(
           `UPDATE matches
@@ -2059,11 +2214,11 @@ export class BoardGameRoom {
       }
     }
 
-    // Release lobby seats of players disconnected longer than BOARD_GAME_RECONNECT_HOLD_MS
+    // Release lobby seats of human players disconnected longer than BOARD_GAME_RECONNECT_HOLD_MS
     if (match.status === 'WAITING' || match.status === 'READY_CHECK' || match.status === 'FINISHED') {
       const stalePlayers = this.sql
         .exec<MatchPlayerDbRow>(
-          'SELECT * FROM match_players WHERE connected = 0 AND last_seen_ms <= ?',
+          'SELECT * FROM match_players WHERE connected = 0 AND is_bot = 0 AND last_seen_ms <= ?',
           nowMs - BOARD_GAME_RECONNECT_HOLD_MS,
         )
         .toArray();
@@ -2074,7 +2229,9 @@ export class BoardGameRoom {
         const remainingSeated = this.listPlayerRows().filter(
           (p) => p.is_spectator === 0 && p.seat_index !== null,
         );
-        if (remainingSeated.length === 0) {
+        const remainingHumans = remainingSeated.filter((p) => !this.isBotRow(p));
+        if (remainingHumans.length === 0) {
+          this.sql.exec('DELETE FROM match_players WHERE is_bot = 1');
           this.sql.exec(
             'UPDATE matches SET status = ?, updated_at_ms = ? WHERE match_id = ?',
             'CLOSED',
@@ -2091,7 +2248,7 @@ export class BoardGameRoom {
           await this.syncDirectoryFromMatch();
           return;
         }
-        if (!remainingSeated.some((p) => p.player_id === match.host_player_id)) {
+        if (!remainingHumans.some((p) => p.player_id === match.host_player_id)) {
           this.promoteNextConnectedHost(match.host_player_id);
         }
         this.recomputeLobbyStatus();
@@ -2220,7 +2377,19 @@ export class BoardGameRoom {
           const effectiveControllerId = engineState
             ? getEffectiveTurnControllerId(engineState)
             : null;
-          if (engineState?.pendingChoice) {
+          if (this.getPendingBotActorId(engineState, postRows)) {
+            const botDeadline = this.computeNextTurnDeadline(
+              engineState!,
+              postRows,
+              latestMatch.turn_timeout_ms,
+              nowMs,
+            );
+            this.sql.exec(
+              'UPDATE matches SET turn_deadline_ms = ? WHERE match_id = ?',
+              botDeadline,
+              latestMatch.match_id,
+            );
+          } else if (engineState?.pendingChoice) {
             // BUG-8B-02 fix: NEVER clear turn_deadline_ms while a pendingChoice is active!
             this.sql.exec(
               'UPDATE matches SET turn_deadline_ms = ? WHERE match_id = ?',
@@ -2511,7 +2680,10 @@ export class BoardGameRoom {
     );
     if (match.status === 'FINISHED' && canTransitionBoardGameStatus('FINISHED', 'WAITING')) {
       this.sql.exec('DELETE FROM processed_requests');
-      this.sql.exec('UPDATE match_players SET ready = 0 WHERE player_id != ?', player.player_id);
+      this.sql.exec(
+        'UPDATE match_players SET ready = 0 WHERE player_id != ? AND is_bot = 0',
+        player.player_id,
+      );
       this.sql.exec(
         'UPDATE matches SET status = ?, game_state_json = NULL, turn_deadline_ms = NULL, updated_at_ms = ? WHERE match_id = ?',
         'WAITING',
@@ -2597,6 +2769,133 @@ export class BoardGameRoom {
     await this.syncDirectoryFromMatch();
   }
 
+  private async handleAddBot(
+    ws: WebSocket,
+    player: MatchPlayerDbRow,
+    requestId?: string,
+  ): Promise<void> {
+    const match = this.getMatchRow();
+    if (!match) return;
+    if (match.host_player_id !== player.player_id) {
+      this.sendError(ws, 'NOT_HOST', 'Chỉ trưởng bàn (Host) mới được thêm Bot.', { requestId });
+      return;
+    }
+    if (match.status === 'PLAYING' || match.status === 'STARTING' || match.status === 'CLOSED') {
+      this.sendError(ws, 'INVALID_ACTION', 'Không thể thêm Bot khi ván đấu đã bắt đầu hoặc đã đóng.', {
+        requestId,
+      });
+      return;
+    }
+
+    const currentPlayers = this.listPlayerRows();
+    const seatedPlayers = currentPlayers.filter((p) => p.is_spectator === 0 && p.seat_index !== null);
+    if (seatedPlayers.length >= BOARD_GAME_MAX_PLAYERS) {
+      this.sendError(ws, 'ROOM_FULL', 'Bàn chơi đã đủ 8/8 ghế.', { requestId });
+      return;
+    }
+
+    const takenSeats = new Set(seatedPlayers.map((p) => p.seat_index));
+    let assignedSeat: number | null = null;
+    for (let i = 0; i < BOARD_GAME_MAX_PLAYERS; i++) {
+      if (!takenSeats.has(i)) {
+        assignedSeat = i;
+        break;
+      }
+    }
+    if (assignedSeat === null) {
+      this.sendError(ws, 'ROOM_FULL', 'Không còn ghế trống để thêm Bot.', { requestId });
+      return;
+    }
+
+    const usedNames = new Set(seatedPlayers.map((p) => p.display_name));
+    const botName =
+      BOT_ROSTER_NAMES.find((n) => !usedNames.has(n)) ?? `Bot ${seatedPlayers.length + 1}`;
+    const appearance = sanitizeBoardGameAppearance(
+      BOT_APPEARANCE_PRESETS[assignedSeat % BOT_APPEARANCE_PRESETS.length],
+    );
+    const botId = `${BOT_PLAYER_ID_PREFIX}${randomBase64Url(8)}`;
+    const tokenHash = `bot_${randomBase64Url(24)}`;
+    const nowMs = Date.now();
+
+    try {
+      this.sql.exec(
+        `INSERT INTO match_players (
+          player_id, seat_index, display_name, outfit_json, is_spectator, ready, connected, reconnect_token_hash, last_seen_ms, leaderboard_key, is_bot
+        ) VALUES (?, ?, ?, ?, 0, 1, 1, ?, ?, NULL, 1)`,
+        botId,
+        assignedSeat,
+        botName,
+        JSON.stringify(appearance),
+        tokenHash,
+        nowMs,
+      );
+    } catch {
+      this.sendError(ws, 'SEAT_TAKEN', 'Không thể xếp ghế cho Bot lúc này, vui lòng thử lại.', {
+        requestId,
+      });
+      return;
+    }
+
+    this.recomputeLobbyStatus();
+    this.bumpMatchRevisionOnly(nowMs);
+    const updated = this.getMatchRow();
+    if (requestId) {
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId,
+        ok: true,
+        revision: updated?.revision ?? match.revision + 1,
+      });
+    }
+    this.broadcastStateSync();
+    await this.syncDirectoryFromMatch();
+  }
+
+  private async handleRemoveBot(
+    ws: WebSocket,
+    player: MatchPlayerDbRow,
+    targetBotId?: string,
+    requestId?: string,
+  ): Promise<void> {
+    const match = this.getMatchRow();
+    if (!match) return;
+    if (match.host_player_id !== player.player_id) {
+      this.sendError(ws, 'NOT_HOST', 'Chỉ trưởng bàn (Host) mới được xóa Bot.', { requestId });
+      return;
+    }
+    if (match.status === 'PLAYING' || match.status === 'STARTING' || match.status === 'CLOSED') {
+      this.sendError(ws, 'INVALID_ACTION', 'Không thể xóa Bot khi ván đấu đã bắt đầu hoặc đã đóng.', {
+        requestId,
+      });
+      return;
+    }
+
+    const bots = this.listPlayerRows().filter((p) => this.isBotRow(p));
+    const victim = targetBotId
+      ? bots.find((b) => b.player_id === targetBotId)
+      : bots[bots.length - 1];
+    if (!victim) {
+      this.sendError(ws, 'INVALID_ACTION', 'Không tìm thấy Bot nào trên bàn để xóa.', { requestId });
+      return;
+    }
+
+    const nowMs = Date.now();
+    this.sql.exec('DELETE FROM match_players WHERE player_id = ? AND is_bot = 1', victim.player_id);
+    this.recomputeLobbyStatus();
+    this.bumpMatchRevisionOnly(nowMs);
+    const updated = this.getMatchRow();
+    if (requestId) {
+      this.send(ws, {
+        type: 'BG_ACTION_ACK',
+        requestId,
+        ok: true,
+        revision: updated?.revision ?? match.revision + 1,
+      });
+    }
+    this.broadcastStateSync();
+    await this.syncDirectoryFromMatch();
+  }
+
   private async handleStartMatch(
     ws: WebSocket,
     player: MatchPlayerDbRow,
@@ -2672,7 +2971,6 @@ export class BoardGameRoom {
     }
 
     const timeoutMs = turnTimeoutOverrideMs ?? match.turn_timeout_ms ?? BOARD_GAME_DEFAULT_TURN_TIMEOUT_MS;
-    const deadlineMs = timeoutMs <= 0 ? null : nowMs + timeoutMs;
 
     const seedArr = new Uint32Array(1);
     globalThis.crypto.getRandomValues(seedArr);
@@ -2700,6 +2998,8 @@ export class BoardGameRoom {
         connected: p.connected === 1,
       })),
     });
+
+    const deadlineMs = this.computeNextTurnDeadline(engineState, seated, timeoutMs, nowMs);
 
     this.sql.exec('DELETE FROM processed_requests');
     this.sql.exec(
@@ -2992,18 +3292,21 @@ export class BoardGameRoom {
     const hasPendingChoice = Boolean(engineState.pendingChoice);
     const nextControllerId = getEffectiveTurnControllerId(engineState);
     const controllerChanged = nextControllerId !== prevControllerId;
+    const nextBotActorId = this.getPendingBotActorId(engineState, playerRows);
     const nextDeadline = engineState.finished
       ? null
-      : hasPendingChoice
-        ? engineState.pendingChoice!.deadlineMs
-        : match.turn_timeout_ms <= 0 || turnChanged || prevHadPendingChoice || controllerChanged
-          ? this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs)
-          : match.turn_deadline_ms ??
-            this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs);
+      : nextBotActorId
+        ? this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs)
+        : hasPendingChoice
+          ? engineState.pendingChoice!.deadlineMs
+          : match.turn_timeout_ms <= 0 || turnChanged || prevHadPendingChoice || controllerChanged
+            ? this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs)
+            : match.turn_deadline_ms ??
+              this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs);
     const newRevision = match.revision + 1;
 
     if (engineState.finished) {
-      this.sql.exec('UPDATE match_players SET ready = 0');
+      this.sql.exec('UPDATE match_players SET ready = 0 WHERE is_bot = 0');
     }
 
     this.sql.exec(
@@ -3076,7 +3379,9 @@ export class BoardGameRoom {
       const remainingSeated = this.listPlayerRows().filter(
         (p) => p.is_spectator === 0 && p.seat_index !== null,
       );
-      if (remainingSeated.length === 0) {
+      const remainingHumans = remainingSeated.filter((p) => !this.isBotRow(p));
+      if (remainingHumans.length === 0) {
+        this.sql.exec('DELETE FROM match_players WHERE is_bot = 1');
         this.sql.exec(
           'UPDATE matches SET status = ?, revision = revision + 1, updated_at_ms = ? WHERE match_id = ?',
           'CLOSED',
@@ -3185,8 +3490,13 @@ export class BoardGameRoom {
   private promoteNextConnectedHost(formerHostId: string): void {
     const match = this.getMatchRow();
     if (!match) return;
+    // Tuyệt đối không thăng Bot làm chủ bàn (Host)
     const candidates = this.listPlayerRows().filter(
-      (p) => p.is_spectator === 0 && p.seat_index !== null && p.player_id !== formerHostId,
+      (p) =>
+        p.is_spectator === 0 &&
+        p.seat_index !== null &&
+        p.player_id !== formerHostId &&
+        !this.isBotRow(p),
     );
     const connectedCandidate = candidates.find((p) => p.connected === 1) ?? candidates[0];
     if (!connectedCandidate) return;
@@ -3241,19 +3551,20 @@ export class BoardGameRoom {
       return;
     }
 
+    const minAlarmLeadMs = this.env.ALLOW_SHORT_TURN_TIMEOUT === '1' ? 40 : 250;
     const candidates: number[] = [];
     if (match.status === 'CREATED') {
       candidates.push(Math.max(nowMs + 250, match.created_at_ms + BOARD_GAME_RECONNECT_HOLD_MS));
     }
     if (match.status === 'PLAYING' && typeof match.turn_deadline_ms === 'number') {
-      candidates.push(Math.max(nowMs + 250, match.turn_deadline_ms));
+      candidates.push(Math.max(nowMs + minAlarmLeadMs, match.turn_deadline_ms));
     }
     if (match.status === 'PLAYING') {
       const disconnAgg = this.sql
         .exec<{ connected_count: number | null; max_seen: number | null }>(
           `SELECT
-             SUM(CASE WHEN connected = 1 AND is_spectator = 0 THEN 1 ELSE 0 END) AS connected_count,
-             MAX(CASE WHEN is_spectator = 0 THEN last_seen_ms ELSE NULL END) AS max_seen
+             SUM(CASE WHEN connected = 1 AND is_spectator = 0 AND is_bot = 0 THEN 1 ELSE 0 END) AS connected_count,
+             MAX(CASE WHEN is_spectator = 0 AND is_bot = 0 THEN last_seen_ms ELSE NULL END) AS max_seen
            FROM match_players`,
         )
         .one();
@@ -3269,7 +3580,7 @@ export class BoardGameRoom {
     if (match.status === 'WAITING' || match.status === 'READY_CHECK' || match.status === 'FINISHED') {
       const disconn = this.sql
         .exec<{ min_seen: number | null }>(
-          'SELECT MIN(last_seen_ms) AS min_seen FROM match_players WHERE connected = 0',
+          'SELECT MIN(last_seen_ms) AS min_seen FROM match_players WHERE connected = 0 AND is_bot = 0',
         )
         .one();
       if (typeof disconn?.min_seen === 'number') {
@@ -3367,7 +3678,7 @@ export class BoardGameRoom {
     const preservedWinReason =
       wasFinished && typeof rawEngine.winReason === 'string'
         ? rawEngine.winReason
-        : 'Bóng Đêm KTX đã nâng cấp lên Luật v4 (Săn Bóng Đêm KTX với xúc xắc 1d6+1d4 & 3 Cụm). Phiên cũ đã được khép an toàn; hãy bấm Sẵn sàng để bắt đầu ván mới!';
+        : 'Bóng Đêm KTX đã nâng cấp lên Luật v4 (Săn Bóng Đêm KTX với xs 6 mặt + xs 4 mặt & 3 Cụm). Phiên cũ đã được khép an toàn; hãy bấm Sẵn sàng để bắt đầu ván mới!';
     const preservedWinnerFaction =
       wasFinished &&
       (rawEngine.winnerFaction === 'lantern-guard' ||
@@ -3524,6 +3835,10 @@ export class BoardGameRoom {
     nowMs: number,
   ): number | null {
     if (engineState.finished) return null;
+    const botActorId = this.getPendingBotActorId(engineState, playerRows);
+    if (botActorId) {
+      return nowMs + this.getBotActionDelayMs(Boolean(engineState.pendingChoice));
+    }
     if (engineState.pendingChoice) {
       return engineState.pendingChoice.deadlineMs;
     }
@@ -3545,6 +3860,7 @@ export class BoardGameRoom {
     const match = this.getMatchRow();
     if (!match) return null;
     const rows = this.listPlayerRows();
+    const botIdSet = new Set(rows.filter((p) => this.isBotRow(p)).map((p) => p.player_id));
     const spectators = rows.filter((p) => p.is_spectator === 1);
     const players: BoardGameLobbyPlayerView[] = rows
       .filter((p) => p.is_spectator === 0)
@@ -3558,6 +3874,7 @@ export class BoardGameRoom {
         isHost: p.player_id === match.host_player_id,
         isSpectator: false,
         connected: p.connected === 1,
+        ...(this.isBotRow(p) ? { isBot: true } : {}),
         appearance: sanitizeBoardGameAppearance(parseJsonObject(p.outfit_json)),
         lastSeenMs: p.last_seen_ms,
       }));
@@ -3568,7 +3885,7 @@ export class BoardGameRoom {
         : null;
     if (match.status === 'PLAYING' && engineState?.finished) {
       const nowMs = Date.now();
-      this.sql.exec('UPDATE match_players SET ready = 0');
+      this.sql.exec('UPDATE match_players SET ready = 0 WHERE is_bot = 0');
       this.sql.exec(
         `UPDATE matches
          SET status = 'FINISHED', revision = revision + 1, turn_deadline_ms = NULL, updated_at_ms = ?, game_state_json = ?
@@ -3587,9 +3904,18 @@ export class BoardGameRoom {
       });
     }
     const effectiveMatch = this.getMatchRow() ?? match;
-    const publicGame: BoardGamePublicGameView | null = engineState
+    const rawPublicGame: BoardGamePublicGameView | null = engineState
       ? getPublicGameView(engineState)
       : null;
+    const publicGame: BoardGamePublicGameView | null =
+      rawPublicGame && botIdSet.size > 0
+        ? {
+            ...rawPublicGame,
+            players: rawPublicGame.players.map((p) =>
+              botIdSet.has(p.playerId) ? { ...p, isBot: true } : p,
+            ),
+          }
+        : rawPublicGame;
     const privateView: BoardGamePrivateGameView | null =
       !engineState || isSpectator || !forPlayerId
         ? null

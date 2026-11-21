@@ -324,7 +324,11 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
       ? { winningFactions: [...state.winningFactions] }
       : {}),
     winnerPlayerIds: [...state.winnerPlayerIds],
-    winReason: state.winReason,
+    winReason: state.winReason
+      ? state.winReason
+          .replace('(Đạt "Cảm Tử")', '(Daniel)')
+          .replace('(Trang "Kiên Cường")', '(Allie)')
+      : null,
     finalReveal: state.finished ? state.finalReveal : null,
   };
 }

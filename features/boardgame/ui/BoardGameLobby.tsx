@@ -69,6 +69,8 @@ export interface BoardGameLobbyProps {
   onJoinByCode?: (code: string, asSpectator?: boolean) => void;
   onJoinDirectoryMatch?: (matchId: string, inviteCode: string, asSpectator: boolean) => void;
   onSelectRuleset?: (rulesetId: BoardGameRulesetId) => void;
+  onAddBot?: () => void;
+  onRemoveBot?: (playerId?: string) => void;
   onToggleReady?: () => void;
   onStartMatch?: () => void;
   onLeaveMatch?: () => void;
@@ -109,6 +111,8 @@ export default function BoardGameLobby({
   onJoinByCode,
   onJoinDirectoryMatch,
   onSelectRuleset,
+  onAddBot,
+  onRemoveBot,
   onToggleReady,
   onStartMatch,
   onLeaveMatch,
@@ -456,37 +460,54 @@ export default function BoardGameLobby({
                         return (
                           <div
                             key={p.playerId}
-                            className={`flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-xs ${
+                            className={`flex items-center justify-between gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${
                               isMe
                                 ? 'border-amber-400/45 bg-amber-950/30'
-                                : 'border-slate-800 bg-slate-900/75'
+                                : p.isBot
+                                  ? 'border-cyan-500/35 bg-cyan-950/20'
+                                  : 'border-slate-800 bg-slate-900/75'
                             }`}
                           >
                             <span className="truncate font-medium text-slate-100">
                               <span className="mr-1.5 text-[11px] text-slate-400">
                                 #{(p.seatIndex ?? 0) + 1}
                               </span>
-                              {p.isHost ? '👑 ' : ''}
+                              {p.isHost ? '👑 ' : p.isBot ? '🤖 ' : ''}
                               {p.displayName}
                               {isMe ? ' (Bạn)' : ''}
                             </span>
-                            <span
-                              className={`shrink-0 text-[11px] font-semibold ${
-                                !p.connected
-                                  ? 'text-rose-300'
-                                  : p.ready || p.isHost
-                                    ? 'text-emerald-300'
-                                    : 'text-amber-300'
-                              }`}
-                            >
-                              {!p.connected
-                                ? 'Mất kết nối'
-                                : p.isHost
-                                  ? 'Chủ bàn'
-                                  : p.ready
-                                    ? '✓ Sẵn sàng'
-                                    : 'Đang chờ'}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span
+                                className={`text-[11px] font-semibold ${
+                                  !p.connected
+                                    ? 'text-rose-300'
+                                    : p.ready || p.isHost
+                                      ? 'text-emerald-300'
+                                      : 'text-amber-300'
+                                }`}
+                              >
+                                {!p.connected
+                                  ? 'Mất kết nối'
+                                  : p.isHost
+                                    ? 'Chủ bàn'
+                                    : p.isBot
+                                      ? '✓ Bot'
+                                      : p.ready
+                                        ? '✓ Sẵn sàng'
+                                        : 'Đang chờ'}
+                              </span>
+                              {p.isBot && isHost && !rulesetLockedByMatch && onRemoveBot && (
+                                <button
+                                  type="button"
+                                  data-testid={`bg-remove-bot-${p.playerId}`}
+                                  aria-label={`Xóa ${p.displayName}`}
+                                  onClick={() => onRemoveBot(p.playerId)}
+                                  className="rounded bg-rose-900/70 px-1.5 py-0.5 text-[10px] font-bold text-rose-200 hover:bg-rose-700 cursor-pointer"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
@@ -507,6 +528,30 @@ export default function BoardGameLobby({
                           {localReady ? '✓ Đã sẵn sàng' : 'Sẵn sàng'}
                         </button>
                       )}
+                      {isHost && !rulesetLockedByMatch && onAddBot && (
+                        <button
+                          type="button"
+                          data-testid="bg-add-bot-btn"
+                          disabled={activePlayers.length >= 8}
+                          onClick={onAddBot}
+                          className="rounded-lg border border-cyan-400/55 bg-cyan-950/70 px-3 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-900/80 disabled:opacity-40 cursor-pointer"
+                        >
+                          🤖 + Thêm Bot ({activePlayers.length}/8)
+                        </button>
+                      )}
+                      {isHost &&
+                        !rulesetLockedByMatch &&
+                        onRemoveBot &&
+                        activePlayers.some((p) => p.isBot) && (
+                          <button
+                            type="button"
+                            data-testid="bg-remove-bot-btn"
+                            onClick={() => onRemoveBot()}
+                            className="rounded-lg border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 cursor-pointer"
+                          >
+                            🤖 - Bớt Bot
+                          </button>
+                        )}
                       {isHost && onStartMatch && (
                         <button
                           type="button"
@@ -775,7 +820,7 @@ export default function BoardGameLobby({
                 <div className="rounded-xl border border-amber-500/35 bg-amber-950/30 p-2.5">
                   <div className="font-bold text-amber-300">🧭 Kẻ Độc Hành (4 vai)</div>
                   <p className="mt-1 text-xs text-slate-300">
-                    <strong>Hải</strong> đủ 5 Trang bị · <strong>Trang</strong> sống hết trận · <strong>Bách</strong> giết khi xác ≥ 3 · <strong>Đạt</strong> chết đầu tiên hoặc thắng cùng Săn Đêm.
+                    <strong>Bob</strong> đủ 5 Trang bị · <strong>Allie</strong> sống hết trận · <strong>Charles</strong> giết khi xác ≥ 3 · <strong>Daniel</strong> chết đầu tiên hoặc thắng cùng Săn Đêm.
                   </p>
                 </div>
               </div>
@@ -787,13 +832,13 @@ export default function BoardGameLobby({
                   </h4>
                   <ol className="mt-1 list-inside list-decimal space-y-1 text-xs text-slate-300">
                     <li>
-                      <strong>Pha 1 · Tung xúc xắc di chuyển (ROLL_MOVE):</strong> Tung đồng thời <strong>1d6 + 1d4</strong> để tới ô tương ứng (2–3 Radio, 4–5 Cổng Hầm, 6 Sảnh, 8 Sân Cũ, 9 Hành Lang, 10 Sân Bóng). Ra <strong>7</strong>: chọn ô bất kỳ; trùng ô đang đứng: <strong>ĐỔ LẠI</strong>!
+                      <strong>Pha 1 · Tung xúc xắc di chuyển (ROLL_MOVE):</strong> Tung đồng thời <strong>xs 6 mặt + xs 4 mặt</strong> để tới ô tương ứng (2–3 Hermit&apos;s Cabin, 4–5 Underworld Gate, 6 Church, 8 Cemetery, 9 Weird Woods, 10 Erstwhile Altar). Ra <strong>7</strong>: chọn ô bất kỳ; trùng ô đang đứng: <strong>ĐỔ LẠI</strong>!
                     </li>
                     <li>
                       <strong>Pha 2 · Hành động khu vực (LOCATION_ACTION):</strong> Ô 2–3 rút Khám Phá (Xanh), <strong>Ô 4–5 chọn bất kỳ bộ nào</strong>, Ô 6 rút Cung Ứng (Trắng), <strong>Ô 8 rút Đột Kích (Đen)</strong>, Ô 9 gây 2 ST / hồi 1 máu, Ô 10 cướp 1 Trang bị. Rút trúng Trang bị được <strong>đặt ngửa đeo ngay</strong> không giới hạn số món!
                     </li>
                     <li>
-                      <strong>Pha 3 · Giải quyết thẻ &amp; Tấn công (MAIN_ACTION):</strong> Dùng hết thẻ vừa rút ngay trong lượt, có thể đánh thường <strong>|1d6 - 1d4|</strong> cùng Cụm (trừ khi cầm Súng Bắn Đinh bắn Cụm khác; Kiếm Masamune bắt buộc phải đánh nếu có mục tiêu) rồi Kết thúc lượt.
+                      <strong>Pha 3 · Giải quyết thẻ &amp; Tấn công (MAIN_ACTION):</strong> Dùng hết thẻ vừa rút ngay trong lượt, có thể đánh thường <strong>|xs 6 mặt - xs 4 mặt|</strong> cùng Cụm (trừ khi cầm Súng Bắn Đinh bắn Cụm khác; Kiếm Masamune bắt buộc phải đánh nếu có mục tiêu) rồi Kết thúc lượt.
                     </li>
                   </ol>
                 </div>

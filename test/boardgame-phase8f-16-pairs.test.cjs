@@ -886,7 +886,7 @@ test('8F2-C5 — Pair #12: exp1_voodoo × exp1_clairvoyant — private peek clue
     const clairPriv = getPrivateGameView(st, 'p2');
     const voodooPriv = getPrivateGameView(st, 'p1');
     const pub = getPublicGameView(st);
-    assert.ok(clairPriv.privateClues.some((c) => c.targetPlayerId === 'p3' && c.detail.includes('Minh')), 'Clairvoyant received private peek clue');
+    assert.ok(clairPriv.privateClues.some((c) => c.targetPlayerId === 'p3' && c.detail.includes('George')), 'Clairvoyant received private peek clue');
     assert.equal(voodooPriv.privateClues.length, 0, 'Voodoo controller MUST NEVER receive Clairvoyant private peek clue');
     assert.equal(pub.players.find((p) => p.playerId === 'p3').revealedRoleId, null, 'Peeked target stays hidden publicly');
     assert.equal(st.publicLog.some((l) => l.text.includes('Minh') || l.text.includes('George')), false, 'Public log never leaks peeked role');

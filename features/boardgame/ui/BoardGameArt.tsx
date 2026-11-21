@@ -71,71 +71,71 @@ export interface RoleVisualMeta {
 
 export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
   'gac-ky-thuat': {
-    codeName: 'Minh "Kỹ Thuật"',
-    title: 'George · 14 HP',
+    codeName: 'George',
+    title: 'Hunter Classic · 14 HP',
     accentHex: '#34d399',
     motif: 'Cờ lê & Ánh đèn pha',
-    shortAbility: '1 lần/trận: Tung 1d4 gây sát thương toàn bàn',
+    shortAbility: '1 lần/trận: Tung xs 4 mặt gây sát thương toàn bàn',
   },
   'gac-truc-ban': {
-    codeName: 'Lan "Trực Ban"',
-    title: 'Emi · 10 HP',
+    codeName: 'Emi',
+    title: 'Hunter Classic · 10 HP',
     accentHex: '#10b981',
     motif: 'Thẻ từ & Cổng dịch chuyển',
     shortAbility: 'Pha 1: Bước thẳng sang ô cặp đôi cùng Cụm',
   },
   'gac-radio': {
-    codeName: 'Vy "Radio"',
-    title: 'Franklin · 12 HP',
+    codeName: 'Franklin',
+    title: 'Hunter Classic · 12 HP',
     accentHex: '#38bdf8',
     motif: 'Tai nghe & Sét cao áp',
-    shortAbility: '1 lần/trận: Tung 1d6 gây sát thương toàn bàn',
+    shortAbility: '1 lần/trận: Tung xs 6 mặt gây sát thương toàn bàn',
   },
   'suong-an-danh': {
-    codeName: 'Tú "Ẩn Danh"',
-    title: 'Vampire · 13 HP',
+    codeName: 'Vampire',
+    title: 'Shadow Classic · 13 HP',
     accentHex: '#fb7185',
     motif: 'Bóng áo choàng đêm',
     shortAbility: 'Nội tại: Đánh trúng (> 0) hồi lại 2 máu',
   },
   'suong-tin-gia': {
-    codeName: 'Khánh "Tin Giả"',
-    title: 'Unknown · 11 HP',
+    codeName: 'Unknown',
+    title: 'Shadow Classic · 11 HP',
     accentHex: '#f43f5e',
     motif: 'Mặt nạ Ngụy Trang',
     shortAbility: 'Nội tại khi úp vai: Nói dối trước Thẻ Khám Phá Kín',
   },
   'suong-gac-cong': {
-    codeName: 'Dũng "Gác Cổng"',
-    title: 'Werewolf · 14 HP',
+    codeName: 'Werewolf',
+    title: 'Shadow Classic · 14 HP',
     accentHex: '#a78bfa',
     motif: 'Ổ khóa sắt & Khiên phản đòn',
-    shortAbility: 'Nội tại: Bị đánh thường & sống → đánh trả |1d6-1d4|',
+    shortAbility: 'Nội tại: Bị đánh thường & sống → đánh trả |xs 6 mặt - xs 4 mặt|',
   },
   'lang-anh-san': {
-    codeName: 'Hải "Sưu Tầm"',
-    title: 'Bob · 10 HP',
+    codeName: 'Bob',
+    title: 'Neutral Classic · 10 HP',
     accentHex: '#fbbf24',
     motif: 'Túi đồ nghề KTX',
     shortAbility: 'Thắng đủ 5 đồ · Cướp đồ thay ST (4–6p) / lột sạch khi giết (7–8p)',
   },
   'lang-quan-sat': {
-    codeName: 'Trang "Kiên Cường"',
-    title: 'Allie · 8 HP',
+    codeName: 'Allie',
+    title: 'Neutral Classic · 8 HP',
     accentHex: '#f59e0b',
     motif: 'Ngọn lửa hồi sinh',
     shortAbility: '1 lần/trận: Hồi sạch thương tích về 0 · Thắng nếu sống cuối trận',
   },
   'lang-cuu-ho': {
-    codeName: 'Bách "Cuồng Chiến"',
-    title: 'Charles · 11 HP',
+    codeName: 'Charles',
+    title: 'Neutral Classic · 11 HP',
     accentHex: '#fb923c',
     motif: 'Dấu ấn Đẫm Máu',
     shortAbility: 'Tự mất 2 máu để chém bồi đòn thứ 2 · Thắng khi giết xác >= 3',
   },
   'lang-tien-phong': {
-    codeName: 'Đạt "Cảm Tử"',
-    title: 'Daniel · 13 HP',
+    codeName: 'Daniel',
+    title: 'Neutral Classic · 13 HP',
     accentHex: '#2dd4bf',
     motif: 'Còi báo động Cảm Tử',
     shortAbility: 'Tự lộ khi có người đầu tiên ngã · Thắng nếu chết ĐẦU TIÊN',
@@ -214,29 +214,29 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
     codeName: 'Warlock',
     title: 'Shadow MR2 · 14 HP',
     accentHex: '#a855f7',
-    motif: 'Cổ Ngữ Sân Bóng (10)',
-    shortAbility: 'Nội tại sau lật vai: Đứng tại Sân Bóng (10) đánh trúng gây thêm +3 ST',
+    motif: 'Cổ Ngữ Erstwhile Altar (10)',
+    shortAbility: 'Nội tại sau lật vai: Đứng tại Erstwhile Altar (10) đánh trúng gây thêm +3 ST',
   },
   exp2_witch: {
     codeName: 'Witch',
     title: 'Shadow MR2 · 14 HP',
     accentHex: '#c084fc',
-    motif: 'Màn Sương Hành Lang (9)',
-    shortAbility: 'Nội tại sau lật vai: Miễn toàn bộ sát thương HP khi đứng tại Hành Lang (9)',
+    motif: 'Màn Sương Weird Woods (9)',
+    shortAbility: 'Nội tại sau lật vai: Miễn toàn bộ sát thương HP khi đứng tại Weird Woods (9)',
   },
   exp2_father_harrison: {
     codeName: 'Father Harrison',
     title: 'Hunter MR2 · 12 HP',
     accentHex: '#fbbf24',
     motif: 'Đèn Lồng Lễ Chủ Nhật',
-    shortAbility: 'Pha di chuyển (đã lật vai): Chọn bước thẳng vào Sảnh Tầng 1 (6) thay vì đổ xúc xắc',
+    shortAbility: 'Pha di chuyển (đã lật vai): Chọn bước thẳng vào Church (6) thay vì đổ xúc xắc',
   },
   exp2_gloria: {
     codeName: 'Gloria',
     title: 'Hunter MR2 · 14 HP',
     accentHex: '#34d399',
     motif: 'Phước Lành Thẻ Trắng',
-    shortAbility: 'Nội tại sau lật vai: Rút 2 thẻ Trắng tuần tự khi đi vào Sảnh Tầng 1 (6)',
+    shortAbility: 'Nội tại sau lật vai: Rút 2 thẻ Trắng tuần tự khi đi vào Church (6)',
   },
   exp1_cindy: {
     codeName: 'Cindy',
@@ -250,7 +250,7 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
     title: 'Neutral MR1 · 10 HP',
     accentHex: '#f59e0b',
     motif: 'Đồng Xu Định Mệnh',
-    shortAbility: '1 lần/trận (đầu lượt): Chọn tự hồi hoặc tự nhận d4+2 ST · Thắng khi sống (Hunter thắng) hoặc chết (Shadow thắng)',
+    shortAbility: '1 lần/trận (đầu lượt): Chọn tự hồi hoặc tự nhận xs 4 mặt + 2 ST · Thắng khi sống (Hunter thắng) hoặc chết (Shadow thắng)',
   },
   exp1_fallen: {
     codeName: 'Fallen',
@@ -299,7 +299,7 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
     title: 'Shadow MR1 · 13 HP',
     accentHex: '#e11d48',
     motif: 'Xiềng Báo Thù',
-    shortAbility: '1 lần/trận sau khi hạ gục người khác: Chọn 2 người chơi khác cùng chịu 1d4 ST kỹ năng',
+    shortAbility: '1 lần/trận sau khi hạ gục người khác: Chọn 2 người chơi khác cùng chịu xs 4 mặt ST kỹ năng',
   },
   exp2_visions: {
     codeName: 'Visions',
@@ -550,8 +550,8 @@ export interface LocationVisualMeta {
 
 export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMeta> = {
   radio: {
-    name: 'Trạm Radio KTX',
-    shortName: 'Radio',
+    name: "Hermit's Cabin",
+    shortName: "Hermit's Cabin",
     clusterId: 'north',
     clusterTitle: 'Cụm Bắc',
     diceLabel: '2–3',
@@ -563,8 +563,8 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     badgeText: 'Khám Phá',
   },
   breaker: {
-    name: 'Cổng Hầm KTX',
-    shortName: 'Cổng Hầm',
+    name: 'Underworld Gate',
+    shortName: 'Underworld Gate',
     clusterId: 'north',
     clusterTitle: 'Cụm Bắc',
     diceLabel: '4–5',
@@ -576,8 +576,8 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     badgeText: 'Tự Chọn',
   },
   lobby: {
-    name: 'Sảnh Tầng 1',
-    shortName: 'Sảnh',
+    name: 'Church',
+    shortName: 'Church',
     clusterId: 'central',
     clusterTitle: 'Cụm Trung Tâm',
     diceLabel: '6',
@@ -589,8 +589,8 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     badgeText: 'Cung Ứng',
   },
   canteen: {
-    name: 'Khu Sân Cũ Đêm',
-    shortName: 'Sân Cũ',
+    name: 'Cemetery',
+    shortName: 'Cemetery',
     clusterId: 'central',
     clusterTitle: 'Cụm Trung Tâm',
     diceLabel: '8',
@@ -602,8 +602,8 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     badgeText: 'Đột Kích',
   },
   corridor: {
-    name: 'Hành Lang Tầng 4',
-    shortName: 'Hành Lang',
+    name: 'Weird Woods',
+    shortName: 'Weird Woods',
     clusterId: 'south',
     clusterTitle: 'Cụm Nam',
     diceLabel: '9',
@@ -615,8 +615,8 @@ export const LOCATION_VISUAL_META: Record<BoardGameLocationId, LocationVisualMet
     badgeText: '2 ST / Hồi 1',
   },
   court: {
-    name: 'Sân Bóng Rổ Đêm',
-    shortName: 'Sân Bóng',
+    name: 'Erstwhile Altar',
+    shortName: 'Erstwhile Altar',
     clusterId: 'south',
     clusterTitle: 'Cụm Nam',
     diceLabel: '10',
@@ -661,19 +661,19 @@ export const BOARD_CLUSTERS_ORDER: readonly {
   {
     clusterId: 'north',
     ...CLUSTER_STYLE_META.north,
-    subtitle: '2–3 Radio · 4–5 Cổng Hầm',
+    subtitle: "2–3 Hermit's Cabin · 4–5 Underworld Gate",
     locations: ['radio', 'breaker'],
   },
   {
     clusterId: 'central',
     ...CLUSTER_STYLE_META.central,
-    subtitle: '6 Sảnh · 8 Sân Cũ',
+    subtitle: '6 Church · 8 Cemetery',
     locations: ['lobby', 'canteen'],
   },
   {
     clusterId: 'south',
     ...CLUSTER_STYLE_META.south,
-    subtitle: '9 Hành Lang · 10 Sân Bóng',
+    subtitle: '9 Weird Woods · 10 Erstwhile Altar',
     locations: ['corridor', 'court'],
   },
 ];
@@ -955,7 +955,7 @@ export function DiceD6Svg({ value, size = 44 }: { value: number; size?: number }
     ],
   };
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-label={`1d6 ra ${v}`}>
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-label={`xs 6 mặt ra ${v}`}>
       <rect x="3" y="3" width="42" height="42" rx="10" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="2.5" />
       {(pips[v] ?? pips[1]).map(([cx, cy], idx) => (
         <circle key={idx} cx={cx} cy={cy} r="3.8" fill={v === 1 ? '#e11d48' : '#0f172a'} />
@@ -967,7 +967,7 @@ export function DiceD6Svg({ value, size = 44 }: { value: number; size?: number }
 export function DiceD4Svg({ value, size = 44 }: { value: number; size?: number }) {
   const v = Math.max(1, Math.min(4, Math.round(value)));
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-label={`1d4 ra ${v}`}>
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-label={`xs 4 mặt ra ${v}`}>
       <polygon
         points="24,4 44,41 4,41"
         fill="#f59e0b"

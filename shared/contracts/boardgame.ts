@@ -494,11 +494,21 @@ export interface BoardGamePrivateClueEntry {
   id: string;
   round: number;
   atMs: number;
+  cardId?: string;
   cardTitle: string;
   targetPlayerId: string;
   targetName: string;
   outcome: 'condition-met' | 'no-reaction';
   detail: string;
+  /** Phân biệt chiều mật báo: người nhận thẻ xanh (bật popup bí mật), người soi, hoặc kỹ năng. */
+  direction?: 'received' | 'sent' | 'skill';
+  /** Thành phần cấu trúc rõ ràng: Hiệu ứng / Tên / Chi tiết / Diễn biến / Kết quả. */
+  effectCategory?: string;
+  cardShortName?: string;
+  ruleDetail?: string;
+  progression?: string;
+  resultSummary?: string;
+  senderName?: string;
 }
 
 export interface BoardGameLobbyPlayerView {
@@ -509,6 +519,7 @@ export interface BoardGameLobbyPlayerView {
   ready: boolean;
   isHost: boolean;
   isSpectator: boolean;
+  isBot?: boolean;
   connected: boolean;
   appearance: RemoteAppearance;
   lastSeenMs: number;
@@ -597,6 +608,8 @@ export interface BoardGamePublicPlayerView {
   copiedSkillRoleId?: string | null;
   /** Phase 7A: Mã liên minh công khai (CHỈ xuất khi đã lộ diện hoặc FINISHED — vd. N.C. Soldier). */
   allianceId?: string | null;
+  /** True nếu ghế này do AI Bot của server điều khiển. */
+  isBot?: boolean;
   appearance: RemoteAppearance;
 }
 
@@ -1013,6 +1026,17 @@ export interface BoardGameClientSetRulesetMessage {
   requestId?: string;
 }
 
+export interface BoardGameClientAddBotMessage {
+  type: 'BG_ADD_BOT';
+  requestId?: string;
+}
+
+export interface BoardGameClientRemoveBotMessage {
+  type: 'BG_REMOVE_BOT';
+  playerId?: string;
+  requestId?: string;
+}
+
 export interface BoardGameClientStartMatchMessage {
   type: 'BG_START_MATCH';
   requestId?: string;
@@ -1059,6 +1083,8 @@ export type BoardGameClientMessage =
   | BoardGameClientStandUpMessage
   | BoardGameClientSetReadyMessage
   | BoardGameClientSetRulesetMessage
+  | BoardGameClientAddBotMessage
+  | BoardGameClientRemoveBotMessage
   | BoardGameClientStartMatchMessage
   | BoardGameClientGameActionMessage
   | BoardGameClientLeaveMessage
@@ -1572,6 +1598,8 @@ const CLIENT_MSG_ALLOWED_KEYS: Record<BoardGameClientMessage['type'], ReadonlySe
   BG_STAND_UP: new Set(['type', 'requestId']),
   BG_SET_READY: new Set(['type', 'ready', 'requestId']),
   BG_SET_RULESET: new Set(['type', 'rulesetId', 'requestId']),
+  BG_ADD_BOT: new Set(['type', 'requestId']),
+  BG_REMOVE_BOT: new Set(['type', 'playerId', 'requestId']),
   BG_START_MATCH: new Set(['type', 'requestId', 'turnTimeoutMs', 'rulesetId']),
   BG_GAME_ACTION: new Set(['type', 'requestId', 'expectedRevision', 'action']),
   BG_LEAVE: new Set(['type', 'requestId']),
@@ -1771,6 +1799,37 @@ export function validateBoardGameClientMessage(
         message: {
           type: 'BG_SET_RULESET',
           rulesetId: raw.rulesetId,
+          ...(reqId ? { requestId: reqId } : {}),
+        },
+      };
+    }
+    case 'BG_ADD_BOT':
+      return {
+        ok: true,
+        requestId: reqId,
+        message: {
+          type: 'BG_ADD_BOT',
+          ...(reqId ? { requestId: reqId } : {}),
+        },
+      };
+    case 'BG_REMOVE_BOT': {
+      if (
+        raw.playerId !== undefined &&
+        (typeof raw.playerId !== 'string' || !/^bgbot_[A-Za-z0-9_-]{3,40}$/.test(raw.playerId))
+      ) {
+        return {
+          ok: false,
+          code: 'INVALID_ACTION',
+          error: 'Mã Bot (playerId) không hợp lệ.',
+          requestId: reqId,
+        };
+      }
+      return {
+        ok: true,
+        requestId: reqId,
+        message: {
+          type: 'BG_REMOVE_BOT',
+          ...(typeof raw.playerId === 'string' ? { playerId: raw.playerId } : {}),
           ...(reqId ? { requestId: reqId } : {}),
         },
       };

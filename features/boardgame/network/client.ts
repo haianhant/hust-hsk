@@ -875,6 +875,96 @@ export class BoardGameClient {
     });
   }
 
+  addBot(): Promise<{ ok: boolean; reason?: string }> {
+    const snap = this.snap;
+    if (!snap.matchId) {
+      return Promise.resolve({ ok: false, reason: 'Chưa vào phòng đấu.' });
+    }
+    if (snap.status === 'STARTING' || snap.status === 'PLAYING' || snap.status === 'CLOSED') {
+      const reason = 'Không thể thêm Bot khi ván đấu đã bắt đầu hoặc đã đóng.';
+      this.emit({ lastError: reason });
+      return Promise.resolve({ ok: false, reason });
+    }
+    if (!snap.playerId || snap.hostPlayerId !== snap.playerId || snap.isSpectator) {
+      const reason = 'Chỉ chủ bàn (Host) mới được thêm Bot.';
+      this.emit({ lastError: reason });
+      return Promise.resolve({ ok: false, reason });
+    }
+    if (!this.ws || this.ws.readyState !== 1) {
+      const reason = 'Chưa kết nối tới phòng đấu.';
+      this.emit({ lastError: reason });
+      return Promise.resolve({ ok: false, reason });
+    }
+    const requestId = this.nextRequestId();
+    this.emit({ lastError: null });
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingAck.delete(requestId);
+        resolve({ ok: false, reason: 'Hết thời gian chờ máy chủ thêm Bot.' });
+      }, 6000);
+      this.pendingAck.set(requestId, {
+        resolve: (ok, reason) => {
+          if (!ok && reason) this.emit({ lastError: reason });
+          resolve({ ok, reason });
+        },
+        timer,
+      });
+      const sent = this.rawSend({ type: 'BG_ADD_BOT', requestId });
+      if (!sent) {
+        clearTimeout(timer);
+        this.pendingAck.delete(requestId);
+        resolve({ ok: false, reason: 'Không thể gửi yêu cầu thêm Bot tới máy chủ.' });
+      }
+    });
+  }
+
+  removeBot(playerId?: string): Promise<{ ok: boolean; reason?: string }> {
+    const snap = this.snap;
+    if (!snap.matchId) {
+      return Promise.resolve({ ok: false, reason: 'Chưa vào phòng đấu.' });
+    }
+    if (snap.status === 'STARTING' || snap.status === 'PLAYING' || snap.status === 'CLOSED') {
+      const reason = 'Không thể xóa Bot khi ván đấu đã bắt đầu hoặc đã đóng.';
+      this.emit({ lastError: reason });
+      return Promise.resolve({ ok: false, reason });
+    }
+    if (!snap.playerId || snap.hostPlayerId !== snap.playerId || snap.isSpectator) {
+      const reason = 'Chỉ chủ bàn (Host) mới được xóa Bot.';
+      this.emit({ lastError: reason });
+      return Promise.resolve({ ok: false, reason });
+    }
+    if (!this.ws || this.ws.readyState !== 1) {
+      const reason = 'Chưa kết nối tới phòng đấu.';
+      this.emit({ lastError: reason });
+      return Promise.resolve({ ok: false, reason });
+    }
+    const requestId = this.nextRequestId();
+    this.emit({ lastError: null });
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingAck.delete(requestId);
+        resolve({ ok: false, reason: 'Hết thời gian chờ máy chủ xóa Bot.' });
+      }, 6000);
+      this.pendingAck.set(requestId, {
+        resolve: (ok, reason) => {
+          if (!ok && reason) this.emit({ lastError: reason });
+          resolve({ ok, reason });
+        },
+        timer,
+      });
+      const sent = this.rawSend({
+        type: 'BG_REMOVE_BOT',
+        ...(playerId ? { playerId } : {}),
+        requestId,
+      });
+      if (!sent) {
+        clearTimeout(timer);
+        this.pendingAck.delete(requestId);
+        resolve({ ok: false, reason: 'Không thể gửi yêu cầu xóa Bot tới máy chủ.' });
+      }
+    });
+  }
+
   sendGameAction(
     action: BoardGameActionPayload,
   ): Promise<{ ok: boolean; reason?: string }> {
@@ -978,6 +1068,13 @@ export class BoardGameClient {
   ): void {
     const reveals = publicGame.finalReveal;
     if (!reveals || reveals.length === 0) return;
+    // Trận có Bot không ghi vào bảng xếp hạng local để tránh làm lệch thành tích người chơi thật
+    if (
+      lobbyPlayers.some((p) => p.isBot || p.playerId.startsWith('bgbot_')) ||
+      publicGame.players.some((p) => p.isBot || p.playerId.startsWith('bgbot_'))
+    ) {
+      return;
+    }
     const dedupKey = `${matchId}:${publicGame.round}:${publicGame.turnNumber}`;
     if (this.recordedLocalMatches.has(dedupKey)) return;
     this.recordedLocalMatches.add(dedupKey);

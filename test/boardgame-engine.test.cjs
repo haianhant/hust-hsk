@@ -311,7 +311,7 @@ test('V4.3 — Rút Trang bị đeo ngay, chặn giữ bài qua lượt, Thẻ K
     1_750_000_002_300,
   );
   const actorPriv = getPrivateGameView(state, actor.playerId);
-  assert.ok(actorPriv.privateClues.at(-1).detail.includes('Khánh "Tin Giả"'));
+  assert.ok(actorPriv.privateClues.at(-1).detail.includes('Unknown'));
 });
 
 test('V4.4 — Tầm đánh Handgun (ev-05), Machine Gun (ev-06), Spear (eq-04), Holy Robe (eq-01), Masamune, Tú, Dũng & 10 vai', () => {

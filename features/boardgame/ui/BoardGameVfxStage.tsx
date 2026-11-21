@@ -3917,7 +3917,7 @@ export function useBoardGameVfxQueue({
                 id: `${ev.id}::deck-burst`,
                 kind: 'COMBAT_VFX',
                 order: ev.order,
-                durationMs: Math.min(820, ev.durationMs),
+                durationMs: Math.min(1450, ev.durationMs),
                 effect: 'HEAL_AURA',
                 sourcePlayerId: ev.actorId,
                 targetPlayerIds: [],
@@ -3926,7 +3926,7 @@ export function useBoardGameVfxQueue({
               source: deckOrigin,
               targets: [{ x: cw * 0.5, y: ch * 0.5 }],
               startedAt: performance.now(),
-              durationMs: Math.min(820, ev.durationMs),
+              durationMs: Math.min(1450, ev.durationMs),
               deckThemeBurst: ev.deck,
             });
             setActiveCombatCount(activeCombatAnimsRef.current.length);
@@ -3938,7 +3938,7 @@ export function useBoardGameVfxQueue({
                 setActiveCardDraw((curr) =>
                   curr?.event.id === ev.id ? { ...curr, revealedFace: true } : curr,
                 );
-              }, Math.min(260, Math.round(ev.durationMs * 0.3)));
+              }, Math.min(720, Math.round(ev.durationMs * 0.34)));
             }
             scheduleTimeout(() => {
               setActiveCardDraw((curr) => (curr?.event.id === ev.id ? null : curr));
@@ -4932,13 +4932,16 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
               className={`pointer-events-none absolute inset-0 z-[29] ${
                 vfx.reducedMotion ? '' : 'bg-vfx-reveal-vignette'
               }`}
-              style={{
-                background: [
-                  `radial-gradient(ellipse 520px 270px at 50% 136px, ${cutInAccent}52 0%, ${cutInSecondary}22 34%, rgba(2,6,23,0.64) 66%, rgba(2,6,23,0.90) 100%)`,
-                  `radial-gradient(circle 165px at ${spotX} ${spotY}, ${cutInSecondary}44 0%, ${cutInAccent}24 45%, transparent 76%)`,
-                  'radial-gradient(circle at 50% 50%, rgba(2,6,23,0.28) 0%, rgba(2,6,23,0.62) 58%, rgba(2,6,23,0.92) 100%)',
-                ].join(', '),
-              }}
+              style={
+                {
+                  '--bg-reveal-duration': `${cutIn.durationMs}ms`,
+                  background: [
+                    `radial-gradient(ellipse 520px 270px at 50% 136px, ${cutInAccent}52 0%, ${cutInSecondary}22 34%, rgba(2,6,23,0.64) 66%, rgba(2,6,23,0.90) 100%)`,
+                    `radial-gradient(circle 165px at ${spotX} ${spotY}, ${cutInSecondary}44 0%, ${cutInAccent}24 45%, transparent 76%)`,
+                    'radial-gradient(circle at 50% 50%, rgba(2,6,23,0.28) 0%, rgba(2,6,23,0.62) 58%, rgba(2,6,23,0.92) 100%)',
+                  ].join(', '),
+                } as React.CSSProperties
+              }
             />
 
             <div
@@ -4952,16 +4955,19 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                 className={`relative flex w-full max-w-3xl items-center gap-5 overflow-visible rounded-2xl border-2 bg-slate-950/95 px-5 py-3.5 sm:py-4 shadow-2xl ${blurCls} ${
                   vfx.reducedMotion ? '' : 'bg-vfx-reveal-push'
                 }`}
-                style={{
-                  borderColor:
-                    revealPhase === 'faction-reveal' || revealPhase === 'impact'
-                      ? cutInSecondary
-                      : cutInAccent,
-                  boxShadow:
-                    revealPhase === 'faction-reveal' || revealPhase === 'impact'
-                      ? `0 28px 80px -8px ${cutInAccent}dd, 0 0 44px ${cutInSecondary}77`
-                      : `0 22px 60px -10px ${cutInAccent}a6`,
-                }}
+                style={
+                  {
+                    '--bg-reveal-duration': `${cutIn.durationMs}ms`,
+                    borderColor:
+                      revealPhase === 'faction-reveal' || revealPhase === 'impact'
+                        ? cutInSecondary
+                        : cutInAccent,
+                    boxShadow:
+                      revealPhase === 'faction-reveal' || revealPhase === 'impact'
+                        ? `0 28px 80px -8px ${cutInAccent}dd, 0 0 44px ${cutInSecondary}77`
+                        : `0 22px 60px -10px ${cutInAccent}a6`,
+                  } as React.CSSProperties
+                }
               >
                 {/* Vệt sáng chéo, ấn ký phe & tia flash lướt qua khi mở bài */}
                 <div
@@ -5909,7 +5915,7 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                   </span>
                   <p className="text-xs sm:text-sm font-extrabold text-white">
                     {cutIn.openingIsSelfFirstTurn && !isSpectatorOpening
-                      ? 'Bàn đấu đã sẵn sàng — hãy tung xúc xắc 1d6 + 1d4!'
+                      ? 'Bàn đấu đã sẵn sàng — hãy tung xs 6 mặt + xs 4 mặt!'
                       : `${cutIn.openingFirstPlayerName ?? 'Người chơi 1'} bắt đầu lượt tung xúc xắc đầu tiên!`}
                   </p>
                 </div>
@@ -5931,10 +5937,13 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
             className={`relative flex w-full max-w-xl items-center gap-3 overflow-hidden rounded-2xl border-2 bg-slate-950/95 px-3.5 py-2 shadow-2xl ${blurCls} ${
               vfx.reducedMotion ? '' : 'bg-vfx-cutin-enter'
             }`}
-            style={{
-              borderColor: cutInAccent,
-              boxShadow: `0 20px 50px -10px ${cutInAccent}88`,
-            }}
+            style={
+              {
+                borderColor: cutInAccent,
+                boxShadow: `0 20px 50px -10px ${cutInAccent}88`,
+                '--bg-cutin-duration': `${cutIn.durationMs}ms`,
+              } as React.CSSProperties
+            }
           >
             {/* Vệt chéo ánh sáng Anime Noir nền */}
             <div

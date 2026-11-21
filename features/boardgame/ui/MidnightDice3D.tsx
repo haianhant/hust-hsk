@@ -46,15 +46,15 @@ export interface DiceRollChoreographyTimeline {
 }
 
 const DEFAULT_GLIDE_MS_BY_TIER: Record<DiceRollQualityTier, number> = {
-  high: 520,
-  balanced: 340,
+  high: 1650,
+  balanced: 1350,
   low: 0,
 };
 
 /**
- * Chia 4 giai đoạn lăn xúc xắc tất định từ tổng thời lượng (mặc định 1.2–1.5s):
+ * Chia 4 giai đoạn lăn xúc xắc tất định từ tổng thời lượng (mặc định 2.2–2.9s mượt mà):
  * - Reduced motion: chốt kết quả tức thì ở `settled` (<= 260ms).
- * - Đầy đủ: Chuẩn bị (13%) -> Lăn 3 trục & nảy (13%–62%) -> Giảm tốc (62%–77%) -> Khóa mặt server (77%–100%).
+ * - Đầy đủ: Chuẩn bị (12%) -> Lăn 3 trục & nảy (12%–60%) -> Giảm tốc êm (60%–78%) -> Khóa mặt server (78%–100%).
  */
 export function resolveDiceStageTimings(
   durationMs: number,
@@ -69,11 +69,11 @@ export function resolveDiceStageTimings(
       totalMs: Math.min(260, safeDuration),
     };
   }
-  const totalMs = Math.max(1200, Math.min(1550, safeDuration));
+  const totalMs = Math.max(2200, Math.min(2900, safeDuration));
   return {
-    windupEndMs: Math.round(totalMs * 0.13),
-    tumbleEndMs: Math.round(totalMs * 0.62),
-    settleAtMs: Math.round(totalMs * 0.77),
+    windupEndMs: Math.round(totalMs * 0.12),
+    tumbleEndMs: Math.round(totalMs * 0.6),
+    settleAtMs: Math.round(totalMs * 0.78),
     totalMs,
   };
 }
@@ -108,30 +108,30 @@ export function buildDiceRollTimeline({
   const baseDurationByTier =
     qualityTier === 'low'
       ? diceKind === 'attack'
-        ? 1200
-        : 1220
+        ? 2250
+        : 2350
       : qualityTier === 'balanced'
         ? diceKind === 'attack'
-          ? 1240
-          : 1300
+          ? 2450
+          : 2600
         : diceKind === 'attack'
-          ? 1320
-          : 1420;
+          ? 2650
+          : 2800;
 
   const stageTimings = resolveDiceStageTimings(baseDurationByTier, false);
   const glideMs = Math.max(
     0,
     Math.round(pawnGlideDurationMs ?? DEFAULT_GLIDE_MS_BY_TIER[qualityTier]),
   );
-  const highlightLeadMs = glideMs > 0 ? (qualityTier === 'high' ? 85 : 70) : 0;
+  const highlightLeadMs = glideMs > 0 ? (qualityTier === 'high' ? 140 : 110) : 0;
   const destHighlightStartMs = stageTimings.settleAtMs;
   const pawnGlideStartMs = destHighlightStartMs + highlightLeadMs;
   const pawnTouchdownAtMs = pawnGlideStartMs + glideMs;
-  const pawnCushionDurationMs = glideMs > 0 ? 150 : 0;
+  const pawnCushionDurationMs = glideMs > 0 ? 260 : 0;
   const destHighlightEndMs = hasDestinationMove
     ? Math.max(
-        stageTimings.totalMs + 220,
-        pawnTouchdownAtMs + pawnCushionDurationMs + 320,
+        stageTimings.totalMs + 340,
+        pawnTouchdownAtMs + pawnCushionDurationMs + 420,
       )
     : 0;
 
@@ -153,16 +153,16 @@ export function buildDiceRollTimeline({
  * Timeline đồng bộ cho di chuyển chọn trực tiếp không qua bước lăn xúc xắc (ví dụ tổng 7 / La Bàn).
  */
 export function buildDirectMoveTimeline({
-  pawnGlideDurationMs = 520,
+  pawnGlideDurationMs = 1650,
   reducedMotion = false,
 }: {
   pawnGlideDurationMs?: number;
   reducedMotion?: boolean;
 }): DiceRollChoreographyTimeline {
   const glideMs = reducedMotion ? 0 : Math.max(0, Math.round(pawnGlideDurationMs));
-  const pawnGlideStartMs = glideMs > 0 ? 75 : 0;
+  const pawnGlideStartMs = glideMs > 0 ? 110 : 0;
   const pawnTouchdownAtMs = pawnGlideStartMs + glideMs;
-  const pawnCushionDurationMs = glideMs > 0 ? 150 : 0;
+  const pawnCushionDurationMs = glideMs > 0 ? 260 : 0;
 
   return {
     windupEndMs: 0,
@@ -176,7 +176,7 @@ export function buildDirectMoveTimeline({
     diceOverlayEndMs: 0,
     destHighlightEndMs: reducedMotion
       ? 550
-      : Math.max(650, pawnTouchdownAtMs + pawnCushionDurationMs + 280),
+      : Math.max(900, pawnTouchdownAtMs + pawnCushionDurationMs + 380),
   };
 }
 
@@ -334,7 +334,7 @@ export function MidnightDieD6_3D({
       data-die-kind="d6"
       data-die-stage={stage}
       data-settled-value={revealed ? String(clamped) : 'hidden'}
-      aria-label={revealed ? `1d6 ra ${clamped}` : '1d6 đang lăn'}
+      aria-label={revealed ? `xs 6 mặt ra ${clamped}` : 'xs 6 mặt đang lăn'}
       style={{ width: size, height: size + 8 }}
       className="relative inline-flex shrink-0 flex-col items-center justify-start select-none"
     >
@@ -447,7 +447,7 @@ export function MidnightDieD4_3D({
       data-die-kind="d4"
       data-die-stage={stage}
       data-settled-value={revealed ? String(clamped) : 'hidden'}
-      aria-label={revealed ? `1d4 ra ${clamped}` : '1d4 đang lăn'}
+      aria-label={revealed ? `xs 4 mặt ra ${clamped}` : 'xs 4 mặt đang lăn'}
       style={{ width: size, height: size + 8 }}
       className="relative inline-flex shrink-0 flex-col items-center justify-start select-none"
     >

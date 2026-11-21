@@ -222,7 +222,7 @@ export function createInitialGameState(
   appendPublicLog(
     state,
     'system',
-    `🌙 Ván Săn Bóng Đêm KTX bắt đầu (${turnOrder.length} SV · ${split.lanternGuard} Săn / ${split.mistOrder} Bóng / ${split.wanderer} Độc hành)! 3 Cụm đã xáo ngẫu nhiên — tung 1d6+1d4 để di chuyển.`,
+    `🌙 Ván Săn Bóng Đêm KTX bắt đầu (${turnOrder.length} SV · ${split.lanternGuard} Săn / ${split.mistOrder} Bóng / ${split.wanderer} Độc hành)! 3 Cụm đã xáo ngẫu nhiên — tung xs 6 mặt + xs 4 mặt để di chuyển.`,
     input.nowMs,
   );
   return state;

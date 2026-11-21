@@ -5,11 +5,12 @@
 // Hiển thị diễn biến rõ ràng, chữ lớn dễ theo dõi.
 // ---------------------------------------------------------------------------
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import type {
   BoardGameDiceRollEvent,
   BoardGamePublicGameView,
 } from '@/shared/contracts/boardgame';
+import { tokenizeGameLogText, type LogTokenKind } from './game-log-format';
 
 export interface GameLogProps {
   publicGame: BoardGamePublicGameView;
@@ -18,9 +19,9 @@ export interface GameLogProps {
 }
 
 const LOG_STYLE_MAP: Record<string, string> = {
-  victory: 'bg-amber-950/60 border-amber-400/50 text-amber-100 font-bold',
-  elimination: 'bg-rose-950/60 border-rose-500/45 text-rose-100 font-semibold',
-  reveal: 'bg-indigo-950/60 border-indigo-400/45 text-indigo-100 font-semibold',
+  victory: 'bg-amber-950/60 border-amber-400/50 text-amber-100',
+  elimination: 'bg-rose-950/60 border-rose-500/45 text-rose-100',
+  reveal: 'bg-indigo-950/60 border-indigo-400/45 text-indigo-100',
   attack: 'bg-orange-950/45 border-orange-500/35 text-orange-100',
   investigate: 'bg-emerald-950/45 border-emerald-500/35 text-emerald-100',
   steal: 'bg-sky-950/50 border-sky-400/40 text-sky-100',
@@ -28,11 +29,37 @@ const LOG_STYLE_MAP: Record<string, string> = {
   move: 'bg-slate-900/90 border-slate-700/70 text-slate-200',
 };
 
+const LOG_TOKEN_CLASS: Record<Exclude<LogTokenKind, 'plain'>, string> = {
+  player: 'font-black text-white',
+  card: 'font-extrabold text-sky-200',
+  location: 'font-extrabold text-cyan-200',
+  damage: 'font-black text-rose-200',
+  heal: 'font-black text-emerald-300',
+  role: 'font-extrabold text-amber-200',
+};
+
+function renderFormattedLogText(text: string, playerNames: readonly string[]): React.ReactNode {
+  const tokens = tokenizeGameLogText(text, playerNames);
+  return tokens.map((tok, idx) =>
+    tok.kind === 'plain' ? (
+      <React.Fragment key={idx}>{tok.text}</React.Fragment>
+    ) : (
+      <strong key={idx} className={LOG_TOKEN_CLASS[tok.kind]}>
+        {tok.text}
+      </strong>
+    ),
+  );
+}
+
 export const GameLog = React.memo(function GameLog({
   publicGame,
   unsettledRoll = null,
   fillHeight = false,
 }: GameLogProps) {
+  const playerNames = useMemo(
+    () => publicGame.players.map((p) => p.displayName),
+    [publicGame.players],
+  );
   const recentLogs = [...publicGame.publicLog]
     .reverse()
     .filter((entry) => {
@@ -66,7 +93,9 @@ export const GameLog = React.memo(function GameLog({
               className="rounded-xl bg-amber-950/40 border border-amber-500/35 px-2.5 py-1.5 text-xs"
             >
               <p className="font-bold text-amber-200">{hl.title}</p>
-              <p className="text-slate-200 mt-0.5 leading-snug">{hl.detail}</p>
+              <p className="text-slate-200 mt-0.5 leading-snug">
+                {renderFormattedLogText(hl.detail, playerNames)}
+              </p>
             </div>
           ))}
         </div>
@@ -81,7 +110,10 @@ export const GameLog = React.memo(function GameLog({
             <span className="text-[11px] font-bold text-amber-300 mr-2">
               [V{publicGame.round}]
             </span>
-            <span>🎲 {unsettledRoll.displayName} đang tung xúc xắc...</span>
+            <span>
+              🎲 <strong className="font-black text-white">{unsettledRoll.displayName}</strong>{' '}
+              đang tung xúc xắc...
+            </span>
           </div>
         )}
         {recentLogs.length === 0 && !unsettledRoll ? (
@@ -96,7 +128,7 @@ export const GameLog = React.memo(function GameLog({
                 <span className="text-[11px] font-bold text-slate-400 mr-2">
                   [V{entry.round}]
                 </span>
-                <span>{entry.text}</span>
+                <span>{renderFormattedLogText(entry.text, playerNames)}</span>
               </div>
             );
           })

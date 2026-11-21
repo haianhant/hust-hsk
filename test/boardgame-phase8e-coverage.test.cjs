@@ -295,9 +295,9 @@ test('8E1-1A — Catalog conservation (48 copies), Investigation cards inv-01..i
     const p1Priv = getPrivateGameView(st, 'p1');
     const p4Priv = getPrivateGameView(st, 'p4');
     const pub = getPublicGameView(st);
-    assert.ok(p1Priv.privateClues.some((c) => c.detail.includes('Tú')));
+    assert.ok(p1Priv.privateClues.some((c) => c.detail.includes('Vampire')));
     assert.equal(
-      p4Priv.privateClues.some((c) => c.detail.includes('Tú') || c.detail.includes('Tiên Tri')),
+      p4Priv.privateClues.some((c) => c.detail.includes('Vampire') || c.detail.includes('Tiên Tri')),
       false,
       '3rd player p4 must never see inv-12 Prediction clue',
     );
