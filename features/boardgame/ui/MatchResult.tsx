@@ -121,12 +121,30 @@ export default function MatchResult({
         <div className={`relative overflow-hidden border-b border-slate-800 bg-gradient-to-r ${headerGradientClass} px-5 py-4`}>
           <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="shrink-0 rounded-xl border border-amber-300/40 bg-slate-950/75 p-1.5 shadow-lg">
-                <FactionCrestSvg faction={resolvedWinFaction} size={42} />
-              </div>
+              {isMultiFactionWin ? (
+                <div
+                  data-testid="bg-match-result-dual-crest"
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl border border-amber-300/60 bg-gradient-to-r from-emerald-950/85 via-slate-950/90 to-rose-950/85 px-2 py-1.5 shadow-lg"
+                >
+                  <FactionCrestSvg faction="lantern-guard" size={34} />
+                  <span className="text-sm font-black text-amber-300" aria-hidden="true">
+                    ⚖️
+                  </span>
+                  <FactionCrestSvg faction="mist-order" size={34} />
+                </div>
+              ) : (
+                <div className="shrink-0 rounded-xl border border-amber-300/40 bg-slate-950/75 p-1.5 shadow-lg">
+                  <FactionCrestSvg faction={resolvedWinFaction} size={42} />
+                </div>
+              )}
               <div>
                 <div className="text-xs font-bold uppercase tracking-widest text-amber-300">
-                  🎲 Tổng kết ván đấu · Bóng Đêm KTX{winFactionTheme ? ` · ${winFactionTheme.shortLabel}` : ''}
+                  🎲 Tổng kết ván đấu · Bóng Đêm KTX
+                  {isMultiFactionWin
+                    ? ' · ĐỒNG THẮNG SONG PHE'
+                    : winFactionTheme
+                      ? ` · ${winFactionTheme.shortLabel}`
+                      : ''}
                 </div>
                 <h2 className="mt-1 text-lg font-extrabold text-amber-100 sm:text-xl">
                   🏆 {publicGame.winnerLabel ?? 'Kết thúc ván đấu'}

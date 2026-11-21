@@ -30,6 +30,12 @@ export interface TabletopLocationTileProps {
   activePlayerId: string | null;
   selectedTargetId: string | null;
   attackableIds: ReadonlySet<string>;
+  controlledTurn?: {
+    activePlayerId: string;
+    controllerPlayerId: string;
+    pausedForOwnerDecision?: boolean;
+  } | null;
+  cainDeathModifierActivePlayerIds?: readonly string[];
   isSelfHere: boolean;
   canChooseMoveHere: boolean;
   rolledDestinationHere: boolean;
@@ -50,6 +56,8 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
   activePlayerId,
   selectedTargetId,
   attackableIds,
+  controlledTurn = null,
+  cainDeathModifierActivePlayerIds = [],
   isSelfHere,
   canChooseMoveHere,
   rolledDestinationHere,
@@ -359,6 +367,16 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
               const inAttackRange = attackableIds.has(p.playerId);
               const isSelectedTarget = selectedTargetId === p.playerId;
               const isSelfToken = p.playerId === selfPlayerId;
+              const isDormant = p.lifecycleState === 'DORMANT_PENDING_REVIVE';
+              const isPuppetControlled = Boolean(
+                controlledTurn &&
+                  controlledTurn.activePlayerId === p.playerId &&
+                  controlledTurn.controllerPlayerId !== p.playerId,
+              );
+              const isPuppetPaused = Boolean(
+                isPuppetControlled && controlledTurn?.pausedForOwnerDecision,
+              );
+              const hasCainModifier = cainDeathModifierActivePlayerIds.includes(p.playerId);
               const crowdedMode = occupants.length >= 2;
               return (
                 <button
@@ -369,8 +387,13 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                   data-testid={isSelfToken ? 'bg-loc-pawn-self' : undefined}
                   data-selected={isSelectedTarget ? 'true' : 'false'}
                   data-attackable={inAttackRange ? 'true' : 'false'}
+                  data-lifecycle-state={p.lifecycleState ?? (p.alive ? 'ACTIVE' : 'ELIMINATED')}
+                  data-puppet-controlled={isPuppetControlled ? 'true' : 'false'}
+                  data-puppet-paused={isPuppetPaused ? 'true' : 'false'}
                   aria-pressed={isSelectedTarget}
                   aria-label={`${p.displayName}${isSelfToken ? ' (Bạn)' : ''}${
+                    isDormant ? ' · Đang ngủ đông chờ hồi sinh' : ''
+                  }${isPuppetControlled ? ' · Đang bị Voodoo điều khiển' : ''}${
                     inAttackRange ? ' · Trong tầm đánh' : ''
                   }${isSelectedTarget ? ' · Đang chọn' : ''}`}
                   onClick={(e) => {
@@ -393,11 +416,15 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                       ? isSelfToken
                         ? 'bg-emerald-600/95 border-emerald-200 ring-1 ring-emerald-200 text-white'
                         : 'bg-rose-600/95 border-rose-200 ring-1 ring-rose-200 text-white'
-                      : inAttackRange
-                        ? 'bg-rose-950/90 border-rose-400/85 text-rose-100 hover:border-rose-300'
-                        : isSelfToken
-                          ? 'bg-cyan-950/90 border-cyan-300/75 text-cyan-50 hover:border-cyan-200'
-                          : 'bg-slate-950/90 border-white/25 text-slate-100 hover:border-cyan-400/70'
+                      : isDormant
+                        ? 'bg-purple-950/90 border-emerald-400/85 ring-1 ring-purple-400/70 text-emerald-100'
+                        : isPuppetControlled
+                          ? 'bg-fuchsia-950/90 border-purple-400/90 ring-1 ring-fuchsia-400/75 text-purple-100'
+                          : inAttackRange
+                            ? 'bg-rose-950/90 border-rose-400/85 text-rose-100 hover:border-rose-300'
+                            : isSelfToken
+                              ? 'bg-cyan-950/90 border-cyan-300/75 text-cyan-50 hover:border-cyan-200'
+                              : 'bg-slate-950/90 border-white/25 text-slate-100 hover:border-cyan-400/70'
                   }`}
                 >
                   <PlayerPawnToken
@@ -405,7 +432,7 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                     elevated={!crowdedMode}
                     displayName={p.displayName}
                     seatIndex={p.seatIndex}
-                    alive={p.alive}
+                    alive={p.alive || isDormant}
                     isActive={p.playerId === activePlayerId}
                     isSelf={isSelfToken}
                     revealedFaction={p.revealedFaction}
@@ -414,10 +441,41 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                   <span
                     className={`truncate ${
                       crowdedMode ? 'min-w-0 flex-1 text-left' : 'max-w-[120px]'
-                    } ${!p.alive ? 'line-through text-slate-400' : ''}`}
+                    } ${!p.alive && !isDormant ? 'line-through text-slate-400' : isDormant ? 'text-emerald-200' : ''}`}
                   >
                     {p.displayName}
                   </span>
+                  {isDormant && (
+                    <span
+                      className="text-xs shrink-0"
+                      title="Đang ngủ đông (Undead) — hồi sinh 6 HP đầu lượt kế"
+                      aria-hidden="true"
+                    >
+                      💤
+                    </span>
+                  )}
+                  {isPuppetControlled && (
+                    <span
+                      className="text-xs shrink-0"
+                      title={
+                        isPuppetPaused
+                          ? 'Đang tạm dừng chờ chủ lượt xử lý bài kín'
+                          : 'Đang bị Voodoo điều khiển lượt'
+                      }
+                      aria-hidden="true"
+                    >
+                      {isPuppetPaused ? '🔒' : '🧵'}
+                    </span>
+                  )}
+                  {hasCainModifier && (
+                    <span
+                      className="text-xs shrink-0"
+                      title="Cain — Nước Cờ Quyền Lực đang kích hoạt"
+                      aria-hidden="true"
+                    >
+                      ⚖️
+                    </span>
+                  )}
                   {isSelectedTarget && (
                     <span className="text-xs font-black text-white shrink-0" aria-hidden="true">
                       ✓

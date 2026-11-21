@@ -2425,3 +2425,65 @@ test('Phase 8C Structured Visual Events (27) — All 8 Tier-4 Mappings, Lloyd Ca
   });
   assert.equal(dup.length, 0, 'Duplicate snapshot after reconnect must emit 0 events');
 });
+
+test('Phase 8C Tier-4 Signature Audio (28) — All 9 Tier-4 WebAudio Cues Dispatch, Dedupe, Mute & Stop Cleanly', () => {
+  resetBoardGameAudioForTests();
+  setBoardGameSoundMuted(false);
+
+  const tier4Effects = [
+    { effect: 'LLOYD_INTERCEPT', roleId: 'exp1_lloyd', outcome: 'cancelled' },
+    { effect: 'VENGEFUL_ECHO', roleId: 'exp1_vengeful_spirit' },
+    { effect: 'VOODOO_PUPPET', roleId: 'exp1_voodoo' },
+    { effect: 'UNDEAD_SHROUD', roleId: 'exp1_undead' },
+    { effect: 'UNDEAD_REVIVE', roleId: 'exp1_undead' },
+    { effect: 'ANTIMONY_MIRROR', roleId: 'exp1_antimony' },
+    { effect: 'CAIN_POWER_PLAY', roleId: 'exp2_cain' },
+    { effect: 'BONNIE_SUCCESSION', roleId: 'exp2_bonnie' },
+    { effect: 'NC_SOLDIER_RECRUIT', roleId: 'exp2_nc_soldier', outcome: 'success' },
+    { effect: 'NC_SOLDIER_RECRUIT', roleId: 'exp2_nc_soldier', outcome: 'failed' },
+  ];
+
+  for (let i = 0; i < tier4Effects.length; i++) {
+    const item = tier4Effects[i];
+    const ev = {
+      id: `p8c-t4-audio-${i}`,
+      kind: 'COMBAT_VFX',
+      order: 40,
+      durationMs: 1000,
+      effect: item.effect,
+      sourcePlayerId: 'p1',
+      targetPlayerIds: ['p2'],
+      shake: 'light',
+      roleId: item.roleId,
+      ...(item.outcome ? { outcome: item.outcome } : {}),
+    };
+    const now = 60000 + i * 250;
+    assert.equal(playSoundForVisualEvent(ev, now), true, `Tier-4 audio cue ${item.effect} must trigger`);
+    assert.equal(playSoundForVisualEvent(ev, now + 300), false, `Duplicate Tier-4 cue ${item.effect} must dedupe`);
+  }
+
+  const diag = getBoardGameAudioDiagnostics();
+  assert.equal(diag.totalTriggeredCount, tier4Effects.length);
+  assert.equal(diag.dedupedCount, tier4Effects.length);
+
+  setBoardGameSoundMuted(true);
+  assert.equal(
+    playSoundForVisualEvent(
+      {
+        id: 'p8c-t4-muted-check',
+        kind: 'COMBAT_VFX',
+        order: 40,
+        durationMs: 900,
+        effect: 'LLOYD_INTERCEPT',
+        sourcePlayerId: 'p1',
+        targetPlayerIds: ['p2'],
+        shake: 'none',
+      },
+      90000,
+    ),
+    false,
+    'Muted state must suppress Tier-4 WebAudio cues',
+  );
+  stopAllBoardGameSounds();
+  setBoardGameSoundMuted(false);
+});

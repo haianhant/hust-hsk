@@ -891,6 +891,10 @@ export function GameBoard({
                             activePlayerId={publicGame.activePlayerId}
                             selectedTargetId={selectedTargetId}
                             attackableIds={attackableIdsOnBoard}
+                            controlledTurn={publicGame.controlledTurn ?? null}
+                            cainDeathModifierActivePlayerIds={
+                              publicGame.cainDeathModifierActivePlayerIds ?? []
+                            }
                             isSelfHere={isSelfHere}
                             canChooseMoveHere={canChooseMoveHere}
                             rolledDestinationHere={rolledDestinationHere}
@@ -1060,24 +1064,35 @@ export function GameBoard({
                   const isTurnHolder = p.playerId === publicGame.activePlayerId;
                   const inAttackRange = attackableIdsOnBoard.has(p.playerId);
                   const isSelfCard = p.playerId === selfPlayerId;
+                  const isDormantCard = p.lifecycleState === 'DORMANT_PENDING_REVIVE';
+                  const isPuppetCard = Boolean(
+                    publicGame.controlledTurn &&
+                      publicGame.controlledTurn.activePlayerId === p.playerId &&
+                      publicGame.controlledTurn.controllerPlayerId !== p.playerId,
+                  );
                   const factionTheme = p.revealedFaction ? FACTION_THEME[p.revealedFaction] : null;
                   const locMeta = LOCATION_VISUAL_META[getCommittedLocation(p)];
                   return (
                     <div
                       key={p.playerId}
                       data-testid={`bg-player-strip-card-${p.seatIndex}`}
+                      data-lifecycle-state={p.lifecycleState ?? (p.alive ? 'ACTIVE' : 'ELIMINATED')}
                       className={`min-w-0 rounded-xl border px-2 py-1 flex items-center justify-between gap-1.5 transition ${
-                        !p.alive
-                          ? 'opacity-55 border-slate-800 bg-slate-950/60'
-                          : selected
-                            ? isSelfCard
-                              ? 'border-emerald-400 bg-emerald-950/35 ring-1 ring-emerald-400/45'
-                              : 'border-cyan-400 bg-cyan-950/35 ring-1 ring-cyan-400/45'
-                            : isTurnHolder
-                              ? 'border-amber-400 bg-slate-900'
-                              : inAttackRange
-                                ? 'border-rose-500/60 bg-slate-900/90 hover:border-rose-400'
-                                : 'border-slate-700/80 bg-slate-900/80 hover:border-cyan-400/50'
+                        isDormantCard
+                          ? 'border-emerald-400/75 bg-purple-950/65 ring-1 ring-purple-400/50'
+                          : !p.alive
+                            ? 'opacity-55 border-slate-800 bg-slate-950/60'
+                            : isPuppetCard
+                              ? 'border-fuchsia-400/80 bg-purple-950/55 ring-1 ring-fuchsia-400/50'
+                              : selected
+                                ? isSelfCard
+                                  ? 'border-emerald-400 bg-emerald-950/35 ring-1 ring-emerald-400/45'
+                                  : 'border-cyan-400 bg-cyan-950/35 ring-1 ring-cyan-400/45'
+                                : isTurnHolder
+                                  ? 'border-amber-400 bg-slate-900'
+                                  : inAttackRange
+                                    ? 'border-rose-500/60 bg-slate-900/90 hover:border-rose-400'
+                                    : 'border-slate-700/80 bg-slate-900/80 hover:border-cyan-400/50'
                       }`}
                     >
                       <button

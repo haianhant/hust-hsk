@@ -85,6 +85,7 @@ interface ActiveCombatAnim {
   factionReveal?: BoardGameFactionId | null;
   deckThemeBurst?: BoardGameDeckId | null;
   victoryFactionBurst?: BoardGameFactionId | null;
+  victoryMultiFactions?: readonly BoardGameFactionId[] | null;
   victoryOutcome?: MatchOutcomeView | null;
   openingAmbientBurst?: boolean;
 }
@@ -192,6 +193,19 @@ function resolvePlayerElements(
 
 function getCombatAccentColor(ev: CombatVfxVisualEvent): { primary: string; secondary: string } {
   if (ev.isMiss) return { primary: '#94a3b8', secondary: '#e2e8f0' };
+  if (ev.effect === 'LLOYD_INTERCEPT') return { primary: '#38bdf8', secondary: '#fde047' };
+  if (ev.effect === 'VENGEFUL_ECHO') return { primary: '#a855f7', secondary: '#fb7185' };
+  if (ev.effect === 'VOODOO_PUPPET') return { primary: '#c084fc', secondary: '#f472b6' };
+  if (ev.effect === 'UNDEAD_SHROUD') return { primary: '#6ee7b7', secondary: '#a78bfa' };
+  if (ev.effect === 'UNDEAD_REVIVE') return { primary: '#34d399', secondary: '#fde047' };
+  if (ev.effect === 'ANTIMONY_MIRROR') return { primary: '#67e8f9', secondary: '#e879f9' };
+  if (ev.effect === 'CAIN_POWER_PLAY') return { primary: '#f59e0b', secondary: '#10b981' };
+  if (ev.effect === 'BONNIE_SUCCESSION') return { primary: '#f43f5e', secondary: '#f59e0b' };
+  if (ev.effect === 'NC_SOLDIER_RECRUIT') {
+    return ev.outcome === 'failed'
+      ? { primary: '#94a3b8', secondary: '#cbd5e1' }
+      : { primary: '#f59e0b', secondary: '#fef08a' };
+  }
   if (ev.effect === 'COUNTER_STRIKE') return { primary: '#c084fc', secondary: '#f43f5e' };
   if (ev.effect === 'SHIELD_GUARD') return { primary: '#38bdf8', secondary: '#bae6fd' };
   if (ev.effect === 'HEAL_AURA') return { primary: '#34d399', secondary: '#fde047' };
@@ -273,14 +287,27 @@ function runCombatPawnAndTileChoreography(
   const uy = rawLen > 4 ? rawDy / rawLen : 0;
 
   const isCounter = ev.effect === 'COUNTER_STRIKE';
-  const isShield = ev.effect === 'SHIELD_GUARD';
-  const isHeal = ev.effect === 'HEAL_AURA';
-  const isSteal = ev.effect === 'STEAL_TETHER';
-  const isMiss = Boolean(ev.isMiss);
+  const isShield =
+    ev.effect === 'SHIELD_GUARD' ||
+    ev.effect === 'LLOYD_INTERCEPT' ||
+    ev.effect === 'ANGEL_SANCTUARY';
+  const isHeal = ev.effect === 'HEAL_AURA' || ev.effect === 'UNDEAD_REVIVE';
+  const isSteal =
+    ev.effect === 'STEAL_TETHER' ||
+    ev.effect === 'NC_SOLDIER_RECRUIT' ||
+    ev.effect === 'BOND_TETHER';
+  const isPuppet = ev.effect === 'VOODOO_PUPPET';
+  const isDormantShroud = ev.effect === 'UNDEAD_SHROUD';
+  const isTransformAura =
+    ev.effect === 'BONNIE_SUCCESSION' ||
+    ev.effect === 'CAIN_POWER_PLAY' ||
+    ev.effect === 'VENGEFUL_ECHO' ||
+    ev.effect === 'ANTIMONY_MIRROR';
+  const isMiss = Boolean(ev.isMiss) || (ev.effect === 'NC_SOLDIER_RECRUIT' && ev.outcome === 'failed');
   const isCrit = Boolean(ev.isCritical);
 
   // 1) QUÂN TẤN CÔNG — Phân biệt rõ CHUYỂN ĐỘNG giữa Đòn thường, Chí mạng (kéo sâu -> đập mạnh) & Phản kích (đỡ -> xoay đảo hướng -> phản đòn)
-  if (ev.sourcePlayerId && !isShield && !isHeal) {
+  if (ev.sourcePlayerId && !isShield && !isHeal && !isDormantShroud && !isTransformAura) {
     const srcEls = resolvePlayerElements(container, ev.sourcePlayerId);
     for (const srcEl of srcEls) {
       if (isCounter) {
@@ -407,7 +434,66 @@ function runCombatPawnAndTileChoreography(
 
     const tgtEls = resolvePlayerElements(container, tid);
     for (const tgtEl of tgtEls) {
-      if (isShield) {
+      if (isDormantShroud) {
+        // Ngủ đông chờ hồi sinh: chìm nhẹ phủ sương tím-lục bảo (khác hẳn đỏ hạ gục)
+        trackAnim(
+          tgtEl,
+          [
+            { transform: 'translate3d(0, 0, 0) scale(1)', filter: 'brightness(1)', offset: 0 },
+            {
+              transform: 'translate3d(0, 3px, 0) scale(0.95)',
+              boxShadow: '0 0 0 3px rgba(167,139,250,0.9), 0 0 24px rgba(110,231,183,0.65)',
+              filter: 'brightness(0.86) saturate(1.25)',
+              offset: impF,
+              easing: 'ease-in-out',
+            },
+            { transform: 'translate3d(0, 0, 0) scale(1)', filter: 'brightness(1)', boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 1 },
+          ],
+          true,
+          targetStaggerMs,
+        );
+      } else if (isPuppet) {
+        // Voodoo rối dây: lắc nghiêng theo dây điều khiển tím huyền bí
+        trackAnim(
+          tgtEl,
+          [
+            { transform: 'translate3d(0, 0, 0) rotate(0deg)', offset: 0 },
+            {
+              transform: 'translate3d(0, -4px, 0) rotate(-5deg)',
+              boxShadow: '0 0 0 2px rgba(192,132,252,0.95), 0 0 22px rgba(244,114,182,0.65)',
+              offset: antF,
+              easing: 'ease-in-out',
+            },
+            {
+              transform: 'translate3d(0, -3px, 0) rotate(5deg)',
+              boxShadow: '0 0 0 3px rgba(244,114,182,0.95), 0 0 24px rgba(192,132,252,0.75)',
+              offset: impEndF,
+              easing: 'ease-in-out',
+            },
+            { transform: 'translate3d(0, 0, 0) rotate(0deg)', boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 1 },
+          ],
+          true,
+          targetStaggerMs,
+        );
+      } else if (isTransformAura) {
+        // Hào quang chuyển hóa / sao chép / Nước Cờ Quyền Lực: nâng sáng tại chỗ sắc nét
+        trackAnim(
+          tgtEl,
+          [
+            { transform: 'translate3d(0, 0, 0) scale(1)', offset: 0 },
+            {
+              transform: 'translate3d(0, -5px, 0) scale(1.08)',
+              boxShadow: `0 0 0 3px ${colors.primary}, 0 0 26px ${colors.secondary}99`,
+              filter: 'brightness(1.28)',
+              offset: impF,
+              easing: 'ease-out',
+            },
+            { transform: 'translate3d(0, 0, 0) scale(1)', filter: 'brightness(1)', boxShadow: '0 0 0 0 rgba(0,0,0,0)', offset: 1 },
+          ],
+          true,
+          targetStaggerMs,
+        );
+      } else if (isShield) {
         // Khiên chặn: đứng vững tuyệt đối (0px knockback), phát sáng lục giác xanh dương sắc gọn
         trackAnim(
           tgtEl,
@@ -1217,6 +1303,75 @@ function drawRoleSignatureAura(
       }
       break;
     }
+    case 'exp1_lloyd': {
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, 22 + p * 20, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+    case 'exp1_vengeful_spirit':
+    case 'exp1_voodoo': {
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 2.2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, 20 + p * 24, p * 2, p * 2 + Math.PI * 1.6);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      break;
+    }
+    case 'exp1_undead': {
+      ctx.strokeStyle = '#6ee7b7';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, 24 + p * 22, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+    case 'exp1_antimony': {
+      ctx.save();
+      ctx.translate(source.x, source.y);
+      ctx.rotate(-p * Math.PI * 0.75);
+      const r = 20 + p * 18;
+      ctx.strokeStyle = '#67e8f9';
+      ctx.lineWidth = 2.2;
+      ctx.strokeRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.4);
+      ctx.restore();
+      break;
+    }
+    case 'exp2_cain': {
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, 24 + p * 24, -Math.PI * 0.5, Math.PI * 0.5);
+      ctx.stroke();
+      ctx.strokeStyle = '#fb7185';
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, 24 + p * 24, Math.PI * 0.5, Math.PI * 1.5);
+      ctx.stroke();
+      break;
+    }
+    case 'exp2_bonnie': {
+      ctx.strokeStyle = '#f43f5e';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.arc(source.x, source.y, 22 + p * 26, p * 3, p * 3 + Math.PI * 1.5);
+      ctx.stroke();
+      break;
+    }
+    case 'exp2_nc_soldier': {
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2.2;
+      const r = 20 + p * 18;
+      ctx.beginPath();
+      ctx.moveTo(source.x - r, source.y + 6);
+      ctx.lineTo(source.x, source.y - r * 0.6);
+      ctx.lineTo(source.x + r, source.y + 6);
+      ctx.stroke();
+      break;
+    }
   }
   ctx.restore();
 }
@@ -1229,22 +1384,28 @@ function drawVictoryFireworks(
   particleScale: number,
 ): void {
   const faction = anim.victoryFactionBurst ?? 'lantern-guard';
+  const isMultiFaction =
+    Array.isArray(anim.victoryMultiFactions) && anim.victoryMultiFactions.length >= 2;
   const outcome = anim.victoryOutcome ?? 'victory';
   const isDefeat = outcome === 'defeat';
   const primary = isDefeat
     ? '#e11d48'
-    : faction === 'mist-order'
-      ? '#fb7185'
-      : faction === 'wanderer'
-        ? '#f59e0b'
-        : '#10b981';
+    : isMultiFaction
+      ? '#10b981'
+      : faction === 'mist-order'
+        ? '#fb7185'
+        : faction === 'wanderer'
+          ? '#f59e0b'
+          : '#10b981';
   const secondary = isDefeat
     ? '#94a3b8'
-    : faction === 'mist-order'
-      ? '#c084fc'
-      : faction === 'wanderer'
-        ? '#e2e8f0'
-        : '#fbbf24';
+    : isMultiFaction
+      ? '#fb7185'
+      : faction === 'mist-order'
+        ? '#c084fc'
+        : faction === 'wanderer'
+          ? '#e2e8f0'
+          : '#fbbf24';
   const count =
     reducedMotion || particleScale <= 0
       ? 6
@@ -1288,7 +1449,26 @@ function drawVictoryFireworks(
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(0.88, centerFade));
 
-  if (faction === 'lantern-guard') {
+  if (isMultiFaction) {
+    // Đồng thắng song phe (Cain MultiFactionVictory): hai vòng cung Hunter lục bảo + Shadow đỏ thẫm & hào quang vàng cân bằng
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 3.4 * (1 - p * 0.4);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 48 + p * 112, -Math.PI * 0.55 + p * 1.1, Math.PI * 0.55 + p * 1.1);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#fb7185';
+    ctx.lineWidth = 3.4 * (1 - p * 0.4);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 48 + p * 112, Math.PI * 0.45 + p * 1.1, Math.PI * 1.55 + p * 1.1);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2.0 * (1 - p * 0.45);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 30 + p * 82, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (faction === 'lantern-guard') {
     // Đội Săn Đêm: Tia bình minh vàng-lục bảo rọi lên + tinh tú 4 cánh thăng hoa
     const beamGrad = ctx.createLinearGradient(center.x, center.y - 160, center.x, center.y + 120);
     beamGrad.addColorStop(0, 'rgba(251, 191, 36, 0)');
@@ -2257,6 +2437,446 @@ function drawCombatAnimation(
       }
       break;
     }
+
+    // -----------------------------------------------------------------------
+    // PHASE 8C: ALL 8 TIER-4 SIGNATURE VFX (9 Effect Kinds)
+    // -----------------------------------------------------------------------
+    case 'LLOYD_INTERCEPT': {
+      // Lloyd "Lạc Lối": kết giới lục giác cyan-vàng xen vào giữa nguồn & mục tiêu -> vỡ tia hủy đòn
+      const bell = Math.sin(p * Math.PI);
+      const primaryTgt = targets[0] ?? source;
+      const barrierPt: Point2D =
+        targets.length >= 2
+          ? { x: (targets[0].x + targets[1].x) * 0.5, y: (targets[0].y + targets[1].y) * 0.5 }
+          : { x: (source.x + primaryTgt.x) * 0.5, y: (source.y + primaryTgt.y) * 0.5 };
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+      // Tia lao tới điểm chặn từ Lloyd
+      const linkGrad = ctx.createLinearGradient(source.x, source.y, barrierPt.x, barrierPt.y);
+      linkGrad.addColorStop(0, 'rgba(56, 189, 248, 0.2)');
+      linkGrad.addColorStop(0.6, '#38bdf8');
+      linkGrad.addColorStop(1, '#fde047');
+      ctx.strokeStyle = linkGrad;
+      ctx.lineWidth = 4.2;
+      ctx.beginPath();
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(barrierPt.x, barrierPt.y);
+      ctx.stroke();
+
+      // Khiên lục giác chặn đòn kép
+      const r = (28 + Math.min(1, p * 1.4) * 20) * multiScale;
+      ctx.strokeStyle = '#38bdf8';
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.24)';
+      ctx.lineWidth = 3.8;
+      ctx.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const ang = (Math.PI / 3) * k - Math.PI / 2 + p * 0.25;
+        const hx = barrierPt.x + Math.cos(ang) * r;
+        const hy = barrierPt.y + Math.sin(ang) * r;
+        if (k === 0) ctx.moveTo(hx, hy);
+        else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Dấu X vàng khóa hủy đòn ngay tâm kết giới
+      const xArm = 16 * multiScale * Math.min(1, p * 1.8);
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 4.2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(barrierPt.x - xArm, barrierPt.y - xArm);
+      ctx.lineTo(barrierPt.x + xArm, barrierPt.y + xArm);
+      ctx.moveTo(barrierPt.x + xArm, barrierPt.y - xArm);
+      ctx.lineTo(barrierPt.x - xArm, barrierPt.y + xArm);
+      ctx.stroke();
+
+      // Mảnh vỡ ánh sáng văng ra khi hủy đòn
+      if (!reducedMotion && particleScale > 0 && p > 0.28) {
+        const shardP = (p - 0.28) / 0.72;
+        const shards = Math.max(6, Math.round(10 * particleScale));
+        for (let k = 0; k < shards; k++) {
+          const ang = (Math.PI * 2 * k) / shards + 0.2;
+          const d = r + shardP * 38 * multiScale;
+          ctx.fillStyle = k % 2 === 0 ? '#fde047' : '#bae6fd';
+          ctx.beginPath();
+          ctx.arc(barrierPt.x + Math.cos(ang) * d, barrierPt.y + Math.sin(ang) * d, 3.2 * (1 - shardP * 0.6), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+      break;
+    }
+
+    case 'VENGEFUL_ECHO': {
+      // Vengeful Spirit: dòng linh hồn tím-đỏ xoắn ốc chảy từ nạn nhân đã gục về Vengeful Spirit
+      const bell = Math.sin(p * Math.PI);
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        const dx = tgt.x - source.x;
+        const dy = tgt.y - source.y;
+        const dist = Math.max(1, Math.hypot(dx, dy));
+        const nx = (-dy / dist) * 34;
+        const ny = (dx / dist) * 34;
+
+        for (let strand = 0; strand < 2; strand++) {
+          const sign = strand === 0 ? 1 : -1;
+          ctx.strokeStyle = strand === 0 ? '#a855f7' : '#fb7185';
+          ctx.lineWidth = strand === 0 ? 4 : 2.8;
+          ctx.beginPath();
+          for (let s = 0; s <= 16; s++) {
+            const frac = (s / 16) * Math.min(1, p * 1.25);
+            const wave = Math.sin(frac * Math.PI * 2.5 + p * 6) * sign * (1 - frac * 0.4);
+            const px = source.x + dx * frac + nx * wave;
+            const py = source.y + dy * frac + ny * wave;
+            if (s === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+        }
+
+        // Quả cầu linh hồn hấp thụ tại người nhận
+        const orbFrac = Math.min(1, p * 1.18);
+        const ox = source.x + dx * orbFrac;
+        const oy = source.y + dy * orbFrac;
+        const rad = ctx.createRadialGradient(ox, oy, 2, ox, oy, 18 * multiScale);
+        rad.addColorStop(0, '#ffffff');
+        rad.addColorStop(0.45, '#c084fc');
+        rad.addColorStop(1, 'rgba(251, 113, 133, 0)');
+        ctx.fillStyle = rad;
+        ctx.beginPath();
+        ctx.arc(ox, oy, 18 * multiScale, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Vòng đồng vọng nở ra trên Vengeful Spirit
+        if (p > 0.4) {
+          const rp = (p - 0.4) / 0.6;
+          ctx.strokeStyle = '#c084fc';
+          ctx.lineWidth = 3 * (1 - rp * 0.5);
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, (18 + rp * 40) * multiScale, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      break;
+    }
+
+    case 'VOODOO_PUPPET': {
+      // Voodoo: thanh chữ thập điều khiển rối phía trên mục tiêu + 4 sợi dây tím phát sáng nối từ Voodoo
+      const bell = Math.sin(p * Math.PI);
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        const barY = tgt.y - 54 * multiScale;
+        const sway = reducedMotion ? 0 : Math.sin(p * Math.PI * 4) * 7;
+
+        // Dây dẫn năng lượng từ Voodoo tới thanh điều khiển
+        ctx.strokeStyle = '#c084fc';
+        ctx.lineWidth = 2.6;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(source.x, source.y);
+        ctx.quadraticCurveTo((source.x + tgt.x) * 0.5, Math.min(source.y, barY) - 24, tgt.x + sway, barY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Thanh gỗ chữ thập marionette
+        ctx.strokeStyle = '#f472b6';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(tgt.x - 28 * multiScale + sway, barY - 4);
+        ctx.lineTo(tgt.x + 28 * multiScale + sway, barY + 4);
+        ctx.moveTo(tgt.x + sway, barY - 14);
+        ctx.lineTo(tgt.x + sway, barY + 12);
+        ctx.stroke();
+
+        // 4 sợi chỉ rối rủ xuống ôm quanh nạn nhân
+        const offsets = [-22, -8, 8, 22];
+        ctx.strokeStyle = '#e879f9';
+        ctx.lineWidth = 1.8;
+        for (const ox of offsets) {
+          ctx.beginPath();
+          ctx.moveTo(tgt.x + ox * multiScale + sway, barY);
+          ctx.lineTo(tgt.x + ox * 0.72 * multiScale, tgt.y + 8);
+          ctx.stroke();
+        }
+
+        // Vòng ấn chú tím dưới chân nạn nhân
+        ctx.strokeStyle = '#a855f7';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.ellipse(tgt.x, tgt.y + 10, (24 + p * 18) * multiScale, (9 + p * 6) * multiScale, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      break;
+    }
+
+    case 'UNDEAD_SHROUD': {
+      // Undead Ngủ Đông: màn sương tím-ngọc lục bảo xoáy khép lại + 2 vòng ngưng đọng (khác hẳn đỏ KO!)
+      const bell = Math.sin(p * Math.PI);
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        const shroudR = (38 + p * 22) * multiScale;
+        const grad = ctx.createRadialGradient(tgt.x, tgt.y, 4, tgt.x, tgt.y, shroudR);
+        grad.addColorStop(0, 'rgba(167, 139, 250, 0.42)');
+        grad.addColorStop(0.55, 'rgba(110, 231, 183, 0.28)');
+        grad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, shroudR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2 vòng phong ấn ngủ đông xoay ngược chiều
+        ctx.strokeStyle = '#a78bfa';
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, (22 + p * 22) * multiScale, p * 2.2, p * 2.2 + Math.PI * 1.5);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#6ee7b7';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, (30 + (1 - p) * 14) * multiScale, -p * 2.5, -p * 2.5 + Math.PI * 1.35);
+        ctx.stroke();
+
+        // Hạt linh khí bay lơ lửng chậm (không rơi nổ như tử vong)
+        if (!reducedMotion && particleScale > 0) {
+          const wisps = Math.max(4, Math.round(7 * particleScale));
+          for (let i = 0; i < wisps; i++) {
+            const ang = (Math.PI * 2 * i) / wisps + p * 1.8;
+            const d = (24 + Math.sin(p * Math.PI + i) * 10) * multiScale;
+            ctx.fillStyle = i % 2 === 0 ? '#6ee7b7' : '#c4b5fd';
+            ctx.beginPath();
+            ctx.arc(tgt.x + Math.cos(ang) * d, tgt.y + Math.sin(ang) * d - p * 14, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+      break;
+    }
+
+    case 'UNDEAD_REVIVE': {
+      // Undead Hồi Sinh (+6 HP): cột ánh sáng ngọc lục bảo-vàng trỗi dậy mạnh + sóng chấn động hồi sinh
+      const bell = Math.sin(p * Math.PI);
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        const pillarH = (86 + p * 44) * multiScale;
+        const pillarW = (34 + (1 - p) * 10) * multiScale;
+        const grad = ctx.createLinearGradient(tgt.x, tgt.y + 24, tgt.x, tgt.y - pillarH);
+        grad.addColorStop(0, 'rgba(16, 185, 129, 0.55)');
+        grad.addColorStop(0.5, 'rgba(52, 211, 153, 0.35)');
+        grad.addColorStop(0.85, 'rgba(253, 224, 71, 0.2)');
+        grad.addColorStop(1, 'rgba(253, 224, 71, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(tgt.x - pillarW, tgt.y - pillarH, pillarW * 2, pillarH + 24);
+
+        // Sóng trỗi dậy 2 tầng
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 4 * bell;
+        ctx.beginPath();
+        ctx.ellipse(tgt.x, tgt.y + 10, (16 + p * 54) * multiScale, (8 + p * 20) * multiScale, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 2.8 * bell;
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, (14 + p * 46) * multiScale, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Tia sáng trỗi lên
+        if (!reducedMotion && particleScale > 0) {
+          const sparks = Math.max(6, Math.round(10 * particleScale));
+          for (let i = 0; i < sparks; i++) {
+            const ox = (i - (sparks - 1) / 2) * 10 * multiScale;
+            const oy = 14 - p * (64 + (i % 3) * 16) * multiScale;
+            ctx.fillStyle = i % 2 === 0 ? '#fde047' : '#6ee7b7';
+            ctx.beginPath();
+            ctx.arc(tgt.x + ox, tgt.y + oy, 3.2 * bell, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+      break;
+    }
+
+    case 'ANTIMONY_MIRROR': {
+      // Antimony: chùm tia phản chiếu lăng kính tinh thể từ nguồn công khai sang Antimony + mặt gương kim cương
+      const bell = Math.sin(p * Math.PI);
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        const curX = source.x + (tgt.x - source.x) * Math.min(1, p * 1.25);
+        const curY = source.y + (tgt.y - source.y) * Math.min(1, p * 1.25);
+        const prismGrad = ctx.createLinearGradient(source.x, source.y, curX, curY);
+        prismGrad.addColorStop(0, '#67e8f9');
+        prismGrad.addColorStop(0.5, '#ffffff');
+        prismGrad.addColorStop(1, '#e879f9');
+        ctx.strokeStyle = prismGrad;
+        ctx.lineWidth = 4.6;
+        ctx.beginPath();
+        ctx.moveTo(source.x, source.y);
+        ctx.lineTo(curX, curY);
+        ctx.stroke();
+
+        // Khung gương tinh thể hình thoi xoay quanh Antimony
+        const r = (24 + p * 22) * multiScale;
+        ctx.save();
+        ctx.translate(tgt.x, tgt.y);
+        ctx.rotate(p * 0.8);
+        ctx.strokeStyle = '#67e8f9';
+        ctx.fillStyle = 'rgba(103, 232, 249, 0.16)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -r);
+        ctx.lineTo(r * 0.78, 0);
+        ctx.lineTo(0, r);
+        ctx.lineTo(-r * 0.78, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#e879f9';
+        ctx.lineWidth = 2;
+        ctx.rotate(Math.PI / 4);
+        ctx.strokeRect(-r * 0.56, -r * 0.56, r * 1.12, r * 1.12);
+        ctx.restore();
+        ctx.restore();
+      }
+      break;
+    }
+
+    case 'CAIN_POWER_PLAY': {
+      // Cain "Nước Cờ Quyền Lực": vòng cân bằng Song Phe (nửa Lục Bảo Hunter, nửa Đỏ Thẫm Shadow) + cán cân vàng
+      const bell = Math.sin(p * Math.PI);
+      const center = targets[0] ?? source;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+      const r = (26 + p * 44) * multiScale;
+
+      // Nửa vòng Hunter (Lục bảo)
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 4.8 * bell;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, r, -Math.PI * 0.5 + p * 1.2, Math.PI * 0.5 + p * 1.2);
+      ctx.stroke();
+
+      // Nửa vòng Shadow (Đỏ thẫm)
+      ctx.strokeStyle = '#fb7185';
+      ctx.lineWidth = 4.8 * bell;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, r, Math.PI * 0.5 + p * 1.2, Math.PI * 1.5 + p * 1.2);
+      ctx.stroke();
+
+      // Vòng vàng trung tâm & thanh cân bằng
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(center.x - 24 * multiScale, center.y - 6);
+      ctx.lineTo(center.x + 24 * multiScale, center.y - 6);
+      ctx.moveTo(center.x, center.y - 20 * multiScale);
+      ctx.lineTo(center.x, center.y + 18 * multiScale);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(center.x - 22 * multiScale, center.y + 4, 6, 0, Math.PI);
+      ctx.arc(center.x + 22 * multiScale, center.y + 4, 6, 0, Math.PI);
+      ctx.stroke();
+      ctx.restore();
+      break;
+    }
+
+    case 'BONNIE_SUCCESSION': {
+      // Bonnie Chuyển Phe sang Hội Bóng Đêm: xoáy lửa hổ phách -> biến đổi đỏ thẫm Shadow
+      const bell = Math.sin(p * Math.PI);
+      const center = targets[0] ?? source;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+      const r = (22 + p * 46) * multiScale;
+
+      const vortexGrad = ctx.createRadialGradient(center.x, center.y, 4, center.x, center.y, r);
+      vortexGrad.addColorStop(0, p < 0.45 ? 'rgba(245, 158, 11, 0.5)' : 'rgba(244, 63, 94, 0.55)');
+      vortexGrad.addColorStop(0.6, 'rgba(168, 85, 247, 0.28)');
+      vortexGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      ctx.fillStyle = vortexGrad;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 3 cánh xoáy biến hình hổ phách -> đỏ thẫm
+      for (let arm = 0; arm < 3; arm++) {
+        ctx.strokeStyle = p < 0.45 ? '#f59e0b' : arm === 0 ? '#f43f5e' : '#c084fc';
+        ctx.lineWidth = 3.4;
+        ctx.beginPath();
+        const baseAng = (Math.PI * 2 * arm) / 3 + p * 5.2;
+        ctx.arc(center.x, center.y, (16 + p * 34) * multiScale, baseAng, baseAng + Math.PI * 0.72);
+        ctx.stroke();
+      }
+      ctx.restore();
+      break;
+    }
+
+    case 'NC_SOLDIER_RECRUIT': {
+      // N.C. Soldier Chiêu Mộ: tia hiệu lệnh chiến thuật hổ phách-vàng + cấp hiệu chevron (thành công rực rỡ, trượt xám tan)
+      const isFailed = anim.event.outcome === 'failed';
+      const bell = Math.sin(p * Math.PI);
+      for (const tgt of targets) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, bell * 1.15));
+        const curX = source.x + (tgt.x - source.x) * Math.min(1, p * 1.35);
+        const curY = source.y + (tgt.y - source.y) * Math.min(1, p * 1.35);
+
+        ctx.strokeStyle = isFailed ? '#94a3b8' : '#f59e0b';
+        ctx.lineWidth = isFailed ? 2.6 : 4;
+        if (isFailed) ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(source.x, source.y);
+        ctx.lineTo(curX, curY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (isFailed) {
+          // Fizzle vòng xám đứt nét trên mục tiêu
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 2.4;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, (18 + p * 22) * multiScale, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else {
+          // 2 cấp hiệu vàng chevron thăng hoa quanh mục tiêu chiêu mộ thành công
+          const chevR = 16 * multiScale;
+          for (let c = 0; c < 2; c++) {
+            const cy = tgt.y + 8 - (p * 32 + c * 11) * multiScale;
+            ctx.strokeStyle = c === 0 ? '#fef08a' : '#f59e0b';
+            ctx.lineWidth = 3.6;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(tgt.x - chevR, cy + 7);
+            ctx.lineTo(tgt.x, cy - 5);
+            ctx.lineTo(tgt.x + chevR, cy + 7);
+            ctx.stroke();
+          }
+          ctx.strokeStyle = '#fbbf24';
+          ctx.lineWidth = 2.8;
+          ctx.beginPath();
+          ctx.arc(tgt.x, tgt.y, (20 + p * 30) * multiScale, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      break;
+    }
   }
 
   ctx.restore();
@@ -2657,6 +3277,7 @@ export function useBoardGameVfxQueue({
             startedAt: performance.now(),
             durationMs: burstDurMs,
             victoryFactionBurst: nextBanner.faction ?? 'lantern-guard',
+            victoryMultiFactions: nextBanner.winningFactions ?? null,
             victoryOutcome: nextBanner.matchOutcome ?? 'victory',
           },
         ];
@@ -4286,6 +4907,8 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
         const outcome: MatchOutcomeView = cutIn.matchOutcome ?? 'victory';
         const isDefeat = outcome === 'defeat';
         const isSpectatorView = outcome === 'spectator';
+        const isMultiFactionVictory =
+          Array.isArray(cutIn.winningFactions) && cutIn.winningFactions.length >= 2;
         const vicPhase: VictoryCinematicPhase = vfx.reducedMotion ? 'settle' : vfx.victoryPhase;
         const isAnticipation = !vfx.reducedMotion && vicPhase === 'anticipation';
         const showFactionCrest = vfx.reducedMotion || vicPhase !== 'anticipation';
@@ -4293,10 +4916,19 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
           vfx.reducedMotion || vicPhase === 'impact' || vicPhase === 'settle';
         const showImpactBurst =
           !vfx.reducedMotion && (vicPhase === 'impact' || vicPhase === 'settle');
-        const primaryHex = isDefeat ? '#e11d48' : cutInAccent;
-        const secondaryHex = isDefeat ? '#94a3b8' : cutInSecondary;
-        const factionMotif =
-          cutIn.faction === 'mist-order'
+        const primaryHex = isDefeat
+          ? '#e11d48'
+          : isMultiFactionVictory
+            ? '#10b981'
+            : cutInAccent;
+        const secondaryHex = isDefeat
+          ? '#94a3b8'
+          : isMultiFactionVictory
+            ? '#fbbf24'
+            : cutInSecondary;
+        const factionMotif = isMultiFactionVictory
+          ? '⚖️ ĐỒNG THẮNG SONG PHE · ĐỘI SĂN ĐÊM & HỘI BÓNG ĐÊM'
+          : cutIn.faction === 'mist-order'
             ? '🌒 BÓNG TỐI THỐNG TRỊ KTX · HỘI BÓNG ĐÊM'
             : cutIn.faction === 'wanderer'
               ? '🧭 KẺ ĐỘC HÀNH TOÀN THẮNG · PHE THỨ BA'
@@ -4315,15 +4947,21 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
               'radial-gradient(ellipse 460px 310px at 50% 48%, rgba(190,18,60,0.3) 0%, rgba(30,41,59,0.55) 42%, rgba(2,6,23,0.88) 76%, rgba(2,6,23,0.96) 100%)',
               'radial-gradient(circle at 50% 50%, transparent 28%, rgba(2,6,23,0.75) 100%)',
             ].join(', ')
-          : isSpectatorView
+          : isMultiFactionVictory
             ? [
-                `radial-gradient(ellipse 520px 340px at 50% 48%, ${primaryHex}42 0%, ${secondaryHex}1e 38%, rgba(2,6,23,0.8) 72%, rgba(2,6,23,0.95) 100%)`,
-                'radial-gradient(circle at 50% 50%, transparent 32%, rgba(2,6,23,0.68) 100%)',
+                'radial-gradient(ellipse 360px 300px at 34% 48%, rgba(16,185,129,0.38) 0%, transparent 66%)',
+                'radial-gradient(ellipse 360px 300px at 66% 48%, rgba(244,63,94,0.38) 0%, transparent 66%)',
+                'radial-gradient(ellipse 580px 360px at 50% 48%, rgba(251,191,36,0.22) 0%, rgba(2,6,23,0.82) 72%, rgba(2,6,23,0.96) 100%)',
               ].join(', ')
-            : [
-                `radial-gradient(ellipse 560px 360px at 50% 48%, ${primaryHex}52 0%, ${secondaryHex}24 36%, rgba(2,6,23,0.78) 70%, rgba(2,6,23,0.95) 100%)`,
-                'radial-gradient(circle at 50% 50%, transparent 32%, rgba(2,6,23,0.66) 100%)',
-              ].join(', ');
+            : isSpectatorView
+              ? [
+                  `radial-gradient(ellipse 520px 340px at 50% 48%, ${primaryHex}42 0%, ${secondaryHex}1e 38%, rgba(2,6,23,0.8) 72%, rgba(2,6,23,0.95) 100%)`,
+                  'radial-gradient(circle at 50% 50%, transparent 32%, rgba(2,6,23,0.68) 100%)',
+                ].join(', ')
+              : [
+                  `radial-gradient(ellipse 560px 360px at 50% 48%, ${primaryHex}52 0%, ${secondaryHex}24 36%, rgba(2,6,23,0.78) 70%, rgba(2,6,23,0.95) 100%)`,
+                  'radial-gradient(circle at 50% 50%, transparent 32%, rgba(2,6,23,0.66) 100%)',
+                ].join(', ');
         const winnerDisplayLabel =
           cutIn.winnerFactionLabel ?? cutInTheme?.label ?? 'Kết thúc ván đấu';
 
@@ -4334,7 +4972,8 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
               data-testid="bg-vfx-victory-spotlight"
               data-victory-phase={vicPhase}
               data-outcome={outcome}
-              data-faction={cutIn.faction ?? 'unknown'}
+              data-faction={isMultiFactionVictory ? 'multi-faction' : (cutIn.faction ?? 'unknown')}
+              data-multi-faction={String(isMultiFactionVictory)}
               aria-hidden="true"
               className={`pointer-events-none absolute inset-0 z-[29] ${
                 vfx.reducedMotion ? '' : 'bg-vfx-victory-vignette'
@@ -4350,11 +4989,14 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
               data-banner-type={cutIn.bannerType}
               data-victory-phase={vicPhase}
               data-outcome={outcome}
-              data-faction={cutIn.faction ?? 'unknown'}
+              data-faction={isMultiFactionVictory ? 'multi-faction' : (cutIn.faction ?? 'unknown')}
+              data-multi-faction={String(isMultiFactionVictory)}
+              data-winning-factions={cutIn.winningFactions?.join(',') ?? ''}
               className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4"
             >
               <div
                 data-testid="bg-vfx-victory-stage"
+                data-multi-faction={String(isMultiFactionVictory)}
                 className={`relative flex w-full max-w-xl flex-col items-center overflow-visible rounded-3xl border-2 px-6 py-6 sm:px-8 sm:py-7 text-center shadow-2xl ${blurCls} ${
                   isDefeat ? 'bg-slate-950/95' : 'bg-slate-950/92'
                 } ${
@@ -4460,7 +5102,11 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                   />
                   <div
                     data-testid="bg-vfx-victory-crest"
-                    className={`relative flex h-24 w-24 sm:h-28 sm:w-28 items-center justify-center rounded-full border-2 bg-slate-950/90 shadow-2xl transition-transform duration-300 ${
+                    className={`relative flex ${
+                      isMultiFactionVictory
+                        ? 'h-24 px-5 gap-3 rounded-full'
+                        : 'h-24 w-24 sm:h-28 sm:w-28 rounded-full'
+                    } items-center justify-center border-2 bg-slate-950/90 shadow-2xl transition-transform duration-300 ${
                       showFactionCrest
                         ? vfx.reducedMotion
                           ? 'scale-100'
@@ -4471,10 +5117,22 @@ export const BoardGameVfxStage = React.memo(function BoardGameVfxStage({
                       borderColor: showFactionCrest ? secondaryHex : `${primaryHex}88`,
                       boxShadow: isDefeat
                         ? '0 12px 34px rgba(2,6,23,0.92), 0 0 22px rgba(225,29,72,0.45)'
-                        : `0 16px 40px rgba(2,6,23,0.92), 0 0 32px ${primaryHex}aa`,
+                        : isMultiFactionVictory
+                          ? '0 16px 40px rgba(2,6,23,0.92), -14px 0 28px rgba(16,185,129,0.55), 14px 0 28px rgba(244,63,94,0.55)'
+                          : `0 16px 40px rgba(2,6,23,0.92), 0 0 32px ${primaryHex}aa`,
                     }}
                   >
-                    <FactionCrestSvg faction={cutIn.faction} size={74} />
+                    {isMultiFactionVictory ? (
+                      <>
+                        <FactionCrestSvg faction="lantern-guard" size={62} />
+                        <span className="text-xl font-black text-amber-300" aria-hidden="true">
+                          ⚖️
+                        </span>
+                        <FactionCrestSvg faction="mist-order" size={62} />
+                      </>
+                    ) : (
+                      <FactionCrestSvg faction={cutIn.faction} size={74} />
+                    )}
                   </div>
                 </div>
 

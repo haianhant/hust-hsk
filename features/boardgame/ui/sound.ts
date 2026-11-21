@@ -1113,6 +1113,202 @@ export function playStealSnatch(opts: CombatAudioCueOptions = {}): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// PHASE 8C: ALL 8 TIER-4 SIGNATURE WEBAUDIO CUES (9 Procedural Cues)
+// ---------------------------------------------------------------------------
+
+/** Lloyd — Ngắt đòn (Attack Intercept): kết giới kim loại dội mạnh + khóa hủy đòn sắc gọn */
+export function playLloydIntercept(opts: CombatAudioCueOptions = {}): void {
+  const base = opts.anticipationAtSec ? Math.min(0.14, opts.anticipationAtSec * 0.7) : 0.02;
+  playLayeredCue(
+    [
+      { freq: 980, endFreq: 640, startOffsetSec: base, durationSec: 0.12, type: 'triangle', gainPeak: 0.062 },
+      { freq: 1480, endFreq: 1320, startOffsetSec: base + 0.02, durationSec: 0.22, type: 'sine', gainPeak: 0.048 },
+      { freq: 440, endFreq: 220, startOffsetSec: base + 0.08, durationSec: 0.18, type: 'sawtooth', gainPeak: 0.034, filterType: 'lowpass', filterFreq: 1200 },
+    ],
+    [
+      {
+        bufferKey: 'diceClick',
+        startOffsetSec: base,
+        durationSec: 0.05,
+        playbackRate: 1.65,
+        gainPeak: 0.058,
+        filterType: 'highpass',
+        filterFreq: 2400,
+      },
+    ],
+  );
+}
+
+/** Vengeful Spirit — Linh Hồn Bất Diệt: đồng vọng u linh quấn lên (echo minor swell) */
+export function playVengefulEcho(): void {
+  playLayeredCue(
+    [
+      { freq: 220, endFreq: 329.63, startOffsetSec: 0, durationSec: 0.28, type: 'sine', gainPeak: 0.046, attackSec: 0.05 },
+      { freq: 311.13, endFreq: 466.16, startOffsetSec: 0.08, durationSec: 0.3, type: 'triangle', gainPeak: 0.042, filterType: 'bandpass', filterFreq: 1400 },
+      { freq: 622.25, endFreq: 440, startOffsetSec: 0.22, durationSec: 0.26, type: 'sine', gainPeak: 0.036 },
+    ],
+    [
+      {
+        bufferKey: 'paper',
+        startOffsetSec: 0.02,
+        durationSec: 0.26,
+        playbackRate: 0.65,
+        gainPeak: 0.034,
+        filterType: 'bandpass',
+        filterFreq: 1600,
+        filterEndFreq: 2900,
+      },
+    ],
+  );
+}
+
+/** Voodoo — Rối Dây Cướp Lượt: gảy dây rối sắc lạnh + nhịp gỗ marionette */
+export function playVoodooPuppet(): void {
+  playLayeredCue(
+    [
+      { freq: 370, endFreq: 349.23, startOffsetSec: 0, durationSec: 0.12, type: 'sawtooth', gainPeak: 0.036, filterType: 'bandpass', filterFreq: 1800 },
+      { freq: 523.25, endFreq: 493.88, startOffsetSec: 0.09, durationSec: 0.13, type: 'triangle', gainPeak: 0.04 },
+      { freq: 698.46, endFreq: 659.25, startOffsetSec: 0.18, durationSec: 0.18, type: 'sine', gainPeak: 0.042 },
+    ],
+    [
+      {
+        bufferKey: 'diceClick',
+        startOffsetSec: 0.02,
+        durationSec: 0.04,
+        playbackRate: 1.25,
+        gainPeak: 0.048,
+        filterType: 'bandpass',
+        filterFreq: 2200,
+      },
+      {
+        bufferKey: 'diceClick',
+        startOffsetSec: 0.15,
+        durationSec: 0.04,
+        playbackRate: 1.48,
+        gainPeak: 0.044,
+        filterType: 'bandpass',
+        filterFreq: 2600,
+      },
+    ],
+  );
+}
+
+/** Undead — Ngủ Đông Chờ Hồi Sinh: âm trầm rỗng hạ xuống + sương lạnh (tách biệt hẳn chuông tử vong) */
+export function playUndeadDormant(): void {
+  playLayeredCue(
+    [
+      { freq: 311.13, endFreq: 185, startOffsetSec: 0, durationSec: 0.34, type: 'sine', gainPeak: 0.052, attackSec: 0.03 },
+      { freq: 466.16, endFreq: 277.18, startOffsetSec: 0.06, durationSec: 0.3, type: 'triangle', gainPeak: 0.034, filterType: 'lowpass', filterFreq: 1100 },
+    ],
+    [
+      {
+        bufferKey: 'paper',
+        startOffsetSec: 0.02,
+        durationSec: 0.28,
+        playbackRate: 0.52,
+        gainPeak: 0.038,
+        filterType: 'lowpass',
+        filterFreq: 950,
+      },
+    ],
+  );
+}
+
+/** Undead — Trỗi Dậy +6 HP: hợp âm hồi sinh dâng vọt mạnh mẽ từ trầm lên cao */
+export function playUndeadRevive(): void {
+  playLayeredCue(
+    [
+      { freq: 146.83, endFreq: 293.66, startOffsetSec: 0, durationSec: 0.28, type: 'triangle', gainPeak: 0.052 },
+      { freq: 440, startOffsetSec: 0.12, durationSec: 0.2, type: 'sine', gainPeak: 0.05 },
+      { freq: 587.33, startOffsetSec: 0.2, durationSec: 0.24, type: 'triangle', gainPeak: 0.054 },
+      { freq: 880, startOffsetSec: 0.28, durationSec: 0.34, type: 'sine', gainPeak: 0.052 },
+    ],
+    [
+      {
+        bufferKey: 'arcCrackle',
+        startOffsetSec: 0.14,
+        durationSec: 0.22,
+        playbackRate: 1.1,
+        gainPeak: 0.032,
+        filterType: 'bandpass',
+        filterFreq: 2200,
+      },
+    ],
+  );
+}
+
+/** Antimony — Phản Chiếu Gương Tinh Thể: chuỗi chuông thủy tinh sáng trong phản chiếu */
+export function playAntimonyMirror(): void {
+  playLayeredCue([
+    { freq: 783.99, startOffsetSec: 0, durationSec: 0.14, type: 'sine', gainPeak: 0.044 },
+    { freq: 1174.66, startOffsetSec: 0.055, durationSec: 0.18, type: 'sine', gainPeak: 0.046 },
+    { freq: 1567.98, startOffsetSec: 0.11, durationSec: 0.24, type: 'triangle', gainPeak: 0.04 },
+    { freq: 2093, startOffsetSec: 0.17, durationSec: 0.22, type: 'sine', gainPeak: 0.026 },
+  ]);
+}
+
+/** Cain — Nước Cờ Quyền Lực: hợp âm cân bằng song âm vực uy nghiêm */
+export function playCainPowerPlay(): void {
+  playLayeredCue(
+    [
+      { freq: 220, startOffsetSec: 0, durationSec: 0.36, type: 'triangle', gainPeak: 0.048 },
+      { freq: 329.63, startOffsetSec: 0.06, durationSec: 0.34, type: 'sine', gainPeak: 0.048 },
+      { freq: 440, startOffsetSec: 0.14, durationSec: 0.32, type: 'triangle', gainPeak: 0.052 },
+      { freq: 659.25, startOffsetSec: 0.22, durationSec: 0.32, type: 'sine', gainPeak: 0.044 },
+    ],
+    [
+      {
+        bufferKey: 'arcCrackle',
+        startOffsetSec: 0.14,
+        durationSec: 0.2,
+        playbackRate: 0.95,
+        gainPeak: 0.028,
+        filterType: 'bandpass',
+        filterFreq: 1800,
+      },
+    ],
+  );
+}
+
+/** Bonnie — Chuyển Phe Hội Bóng Đêm: chuyển sắc từ hổ phách sáng sang hợp âm đỏ thẫm Shadow */
+export function playBonnieSuccession(): void {
+  playLayeredCue(
+    [
+      { freq: 440, endFreq: 311.13, startOffsetSec: 0, durationSec: 0.22, type: 'triangle', gainPeak: 0.052 },
+      { freq: 293.66, endFreq: 207.65, startOffsetSec: 0.14, durationSec: 0.28, type: 'sawtooth', gainPeak: 0.044, filterType: 'lowpass', filterFreq: 1500 },
+      { freq: 110, endFreq: 73.42, startOffsetSec: 0.2, durationSec: 0.36, type: 'sine', gainPeak: 0.062 },
+    ],
+    [
+      {
+        bufferKey: 'blade',
+        startOffsetSec: 0.16,
+        durationSec: 0.22,
+        playbackRate: 0.85,
+        gainPeak: 0.046,
+        filterType: 'bandpass',
+        filterFreq: 1400,
+      },
+    ],
+  );
+}
+
+/** N.C. Soldier — Chiêu Mộ Quân Lực (thành công: kèn lệnh chiến thuật; trượt: tụt âm xám gọn) */
+export function playNcSoldierRecruit(failed = false): void {
+  if (failed) {
+    playLayeredCue([
+      { freq: 340, endFreq: 190, startOffsetSec: 0, durationSec: 0.18, type: 'triangle', gainPeak: 0.04 },
+      { freq: 240, endFreq: 150, startOffsetSec: 0.09, durationSec: 0.16, type: 'sine', gainPeak: 0.032 },
+    ]);
+    return;
+  }
+  playLayeredCue([
+    { freq: 392, startOffsetSec: 0, durationSec: 0.11, type: 'triangle', gainPeak: 0.048 },
+    { freq: 523.25, startOffsetSec: 0.09, durationSec: 0.13, type: 'triangle', gainPeak: 0.052 },
+    { freq: 783.99, startOffsetSec: 0.18, durationSec: 0.24, type: 'sine', gainPeak: 0.056 },
+  ]);
+}
+
 /** Lộ diện nhân vật (1.48s 5-pha) — anticipation, lật thẻ 3D, lộ phe & impact theo phe công khai */
 export function playRoleReveal(faction?: BoardGameFactionId | null): void {
   const isMist = faction === 'mist-order';
@@ -1557,6 +1753,33 @@ export function playSoundForVisualEvent(
     case 'COMBAT_VFX': {
       const schedule = buildCombatAudioSchedule(event, options);
       switch (event.effect) {
+        case 'LLOYD_INTERCEPT':
+          playLloydIntercept(schedule);
+          return true;
+        case 'VENGEFUL_ECHO':
+          playVengefulEcho();
+          return true;
+        case 'VOODOO_PUPPET':
+          playVoodooPuppet();
+          return true;
+        case 'UNDEAD_SHROUD':
+          playUndeadDormant();
+          return true;
+        case 'UNDEAD_REVIVE':
+          playUndeadRevive();
+          return true;
+        case 'ANTIMONY_MIRROR':
+          playAntimonyMirror();
+          return true;
+        case 'CAIN_POWER_PLAY':
+          playCainPowerPlay();
+          return true;
+        case 'BONNIE_SUCCESSION':
+          playBonnieSuccession();
+          return true;
+        case 'NC_SOLDIER_RECRUIT':
+          playNcSoldierRecruit(event.outcome === 'failed');
+          return true;
         case 'LIGHTNING_STRIKE':
           playLightningStrike(schedule);
           return true;
