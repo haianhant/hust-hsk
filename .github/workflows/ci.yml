@@ -176,5 +176,9 @@ jobs:
           echo ""
           curl -fsS https://hust-hsk-rooms.hunganhz179.workers.dev/api/boardgame/health
           echo ""
+          curl -fsS https://hust-hsk-rooms.hunganhz179.workers.dev/api/boardgame/rulesets
+          echo ""
           curl -fsS https://hust-hsk-rooms.hunganhz179.workers.dev/api/boardgame/matches
+          echo ""
+          curl -fsS https://hust-hsk-rooms.hunganhz179.workers.dev/api/boardgame/telemetry
           echo ""

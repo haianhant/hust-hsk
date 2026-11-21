@@ -88,8 +88,33 @@ function buildTempToml(baseSection, liveTag, existingDoClasses) {
   );
 }
 
-function buildWorkerFormData(scriptContent, migrations) {
+function parseTopLevelVarsFromToml(rawToml) {
+  const vars = {};
+  const lines = rawToml.split(/\r?\n/);
+  let inVars = false;
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (line.startsWith('[')) {
+      inVars = line === '[vars]';
+      continue;
+    }
+    if (!inVars) continue;
+    const match = /^([A-Za-z0-9_]+)\s*=\s*"([^"]*)"$/.exec(line);
+    if (match) {
+      vars[match[1]] = match[2];
+    }
+  }
+  return vars;
+}
+
+function buildWorkerFormData(scriptContent, migrations, topLevelVars = {}) {
   const form = new FormData();
+  const varBindings = Object.entries(topLevelVars).map(([name, text]) => ({
+    type: 'plain_text',
+    name,
+    text: String(text),
+  }));
   const metadata = {
     main_module: 'index.js',
     compatibility_date: '2025-01-01',
@@ -98,6 +123,7 @@ function buildWorkerFormData(scriptContent, migrations) {
     bindings: [
       { type: 'durable_object_namespace', name: 'HSK_ROOM', class_name: 'HskRoom' },
       { type: 'durable_object_namespace', name: 'BOARD_GAME_ROOM', class_name: 'BoardGameRoom' },
+      ...varBindings,
     ],
     ...(migrations ? { migrations } : {}),
   };
@@ -109,8 +135,8 @@ function buildWorkerFormData(scriptContent, migrations) {
   return form;
 }
 
-async function putWorkerDirect({ accountId, token, scriptContent, migrations }) {
-  const form = buildWorkerFormData(scriptContent, migrations);
+async function putWorkerDirect({ accountId, token, scriptContent, migrations, topLevelVars }) {
+  const form = buildWorkerFormData(scriptContent, migrations, topLevelVars);
   const res = await fetch(
     `${CF_API_BASE}/accounts/${accountId}/workers/scripts/${SCRIPT_NAME}?excludeScript=true`,
     {
@@ -205,9 +231,11 @@ async function main() {
   );
 
   const rawToml = fs.readFileSync(path.join(CWD, 'wrangler.toml'), 'utf8');
+  const topLevelVars = parseTopLevelVarsFromToml(rawToml);
   const baseSection = extractBaseToml(rawToml);
   const ciToml = buildTempToml(baseSection, liveTag, existingDoClasses);
   fs.writeFileSync(TEMP_CONFIG, ciToml, 'utf8');
+  console.log(`::notice::Cloudflare deployment vars keys: ${JSON.stringify(Object.keys(topLevelVars))}`);
 
   // Attempt A: Wrangler CLI with aligned temporary config
   const initialArgs = ['--yes', 'wrangler@3', 'deploy', '-c', '.wrangler.ci.toml'];
@@ -266,6 +294,7 @@ async function main() {
       token,
       scriptContent,
       migrations: candidates[i],
+      topLevelVars,
     });
     if (res.ok) {
       deployed = true;
@@ -287,6 +316,7 @@ async function main() {
         token,
         scriptContent,
         migrations: undefined,
+        topLevelVars,
       });
       if (noMigRes.ok) {
         deployed = true;

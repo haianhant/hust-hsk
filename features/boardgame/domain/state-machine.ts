@@ -8,6 +8,7 @@ import {
   BOARD_GAME_VALID_LOCATIONS,
   type BoardGameClusterPair,
   type BoardGameDeckId,
+  type BoardGameProductionBetaConfig,
   type BoardGameRoleId,
   type BoardGameRulesetId,
 } from '../../../shared/contracts/boardgame';
@@ -37,6 +38,7 @@ export interface CreateGameStateInput {
   nowMs: number;
   rulesetId?: BoardGameRulesetId;
   allowExperimental?: boolean;
+  productionBeta?: BoardGameProductionBetaConfig;
   choiceTimeoutMs?: number;
   players: readonly CreateGamePlayerInput[];
 }
@@ -49,7 +51,10 @@ export function createInitialGameState(
   const resolvedPool = DEFAULT_RULESET_REGISTRY.resolvePlayableRolePoolOrThrow(
     requestedRulesetId,
     orderedInputs.length,
-    { allowExperimental: Boolean(input.allowExperimental) },
+    {
+      allowExperimental: Boolean(input.allowExperimental),
+      productionBeta: input.productionBeta,
+    },
   );
   let rngState = (input.seed >>> 0) || 135792468;
 

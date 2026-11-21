@@ -19,11 +19,18 @@ import {
   BOARD_GAME_CATALOG_VERSION,
   BOARD_GAME_MAX_PLAYERS,
   BOARD_GAME_MIN_PLAYERS,
+  BOARD_GAME_RULESET_VERSION,
+  isProductionBetaRulesetEnabled,
   isValidBoardGameRulesetId,
   type BoardGameFactionId,
+  type BoardGameProductionBetaConfig,
+  type BoardGameProductionRulesetId,
   type BoardGameRoleId,
   type BoardGameRulesetAvailability,
   type BoardGameRulesetId,
+  type BoardGameRulesetReleaseStatus,
+  type BoardGameServerCapabilities,
+  type BoardGameServerRulesetCapability,
   type ClassicBoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
 import {
@@ -105,10 +112,7 @@ export interface CharacterRegistryEntry {
   readonly uiMeta: CharacterUiPresentation;
 }
 
-export type RulesetReleaseStatus =
-  | 'IMPLEMENTED'
-  | 'INTERNAL_VALIDATED'
-  | 'PUBLIC_RELEASE_APPROVED';
+export type RulesetReleaseStatus = BoardGameRulesetReleaseStatus;
 
 export interface RulesetDefinition {
   readonly id: BoardGameRulesetId;
@@ -117,7 +121,7 @@ export interface RulesetDefinition {
   readonly description: string;
   readonly availability: BoardGameRulesetAvailability;
   readonly enabledInProduction: boolean;
-  /** Phase 7 (Section 28): Phân tách rõ trạng thái hoàn thiện kỹ thuật vs kiểm chứng nội bộ vs mở rộng public. */
+  /** Phase 7/8A: Phân tách rõ IMPLEMENTED · INTERNAL_VALIDATED · PRODUCTION_BETA_ENABLED · PUBLIC_RELEASE_APPROVED. */
   readonly releaseStatus?: RulesetReleaseStatus;
   readonly isExperimental?: boolean;
   readonly allowExperimentalHouseRules?: boolean;
@@ -133,6 +137,8 @@ export interface CharacterPlayabilityOptions {
 
 export interface RulesetValidationOptions {
   readonly allowExperimental?: boolean;
+  /** Cấu hình Production Beta mặc định TẮT; chỉ cho phép allowlist `expansion-1 | expansion-2 | full-expansion`. */
+  readonly productionBeta?: BoardGameProductionBetaConfig;
 }
 
 export interface PlayableRolePools {
@@ -700,7 +706,8 @@ export class RulesetRegistry {
     if (!def) return [];
     const allowedByMode = def.isExperimental
       ? Boolean(options?.allowExperimental)
-      : def.enabledInProduction && def.availability === 'available';
+      : (def.enabledInProduction && def.availability === 'available') ||
+        isProductionBetaRulesetEnabled(def.id, options?.productionBeta);
     if (!allowedByMode) {
       return [];
     }
@@ -709,6 +716,66 @@ export class RulesetRegistry {
         allowExperimentalHouseRules: Boolean(def.allowExperimentalHouseRules),
       }),
     );
+  }
+
+  /**
+   * Tổng hợp danh sách 4 bộ luật công khai (`classic`, `expansion-1`, `expansion-2`, `full-expansion`)
+   * theo cấu hình Production Beta phía server. Tuyệt đối KHÔNG lộ các pool `starter-*` ra public API.
+   */
+  getPublicServerCapabilities(
+    options?: Pick<RulesetValidationOptions, 'productionBeta'>,
+  ): BoardGameServerCapabilities {
+    const betaConfig = options?.productionBeta;
+    const betaEnabledIds: ('expansion-1' | 'expansion-2' | 'full-expansion')[] = [];
+    const rulesets: BoardGameServerRulesetCapability[] = this.orderedRulesets.map((def) => {
+      const prodId = def.id as BoardGameProductionRulesetId;
+      if (prodId === 'classic') {
+        return {
+          id: prodId,
+          label: def.label,
+          shortLabel: def.shortLabel,
+          description: def.description,
+          expectedCharacterCount: def.expectedCharacterCount,
+          status: 'stable',
+          releaseStatus: 'PUBLIC_RELEASE_APPROVED',
+          selectable: true,
+          isBeta: false,
+          isDefault: true,
+          catalogVersion: def.catalogVersion,
+        };
+      }
+      const betaRequested = isProductionBetaRulesetEnabled(prodId, betaConfig);
+      const valid = betaRequested
+        ? this.validateRulesetForMatch(prodId, BOARD_GAME_MIN_PLAYERS, {
+            productionBeta: betaConfig,
+          }).ok
+        : false;
+      if (valid && (prodId === 'expansion-1' || prodId === 'expansion-2' || prodId === 'full-expansion')) {
+        betaEnabledIds.push(prodId);
+      }
+      return {
+        id: prodId,
+        label: def.label,
+        shortLabel: def.shortLabel,
+        description: def.description,
+        expectedCharacterCount: def.expectedCharacterCount,
+        status: valid ? 'beta' : 'unavailable',
+        releaseStatus: valid ? 'PRODUCTION_BETA_ENABLED' : (def.releaseStatus ?? 'IMPLEMENTED'),
+        selectable: valid,
+        isBeta: valid,
+        isDefault: false,
+        catalogVersion: def.catalogVersion,
+      };
+    });
+
+    return {
+      defaultRulesetId: 'classic',
+      catalogVersion: BOARD_GAME_CATALOG_VERSION,
+      rulesetVersion: BOARD_GAME_RULESET_VERSION,
+      betaEnabled: betaEnabledIds.length > 0,
+      betaAllowedRulesets: betaEnabledIds,
+      rulesets,
+    };
   }
 
   validateRulesetForMatch(
@@ -740,15 +807,19 @@ export class RulesetRegistry {
         return {
           ok: false,
           code: 'RULESET_UNAVAILABLE',
-          error: `Bộ luật thử nghiệm "${def.shortLabel}" bị khóa trên production — chỉ cho phép chế độ Classic.`,
+          error: `Bộ luật thử nghiệm "${def.shortLabel}" bị khóa trên production — chỉ cho phép chế độ Classic hoặc gói Beta được kích hoạt.`,
         };
       }
-    } else if (!def.enabledInProduction || def.availability !== 'available') {
-      return {
-        ok: false,
-        code: 'RULESET_UNAVAILABLE',
-        error: `Bộ luật "${def.shortLabel}" hiện chưa mở khóa (Coming Soon) — chỉ cho phép chế độ Classic.`,
-      };
+    } else {
+      const enabledByBeta = isProductionBetaRulesetEnabled(def.id, options?.productionBeta);
+      const enabledByStable = def.enabledInProduction && def.availability === 'available';
+      if (!enabledByStable && !enabledByBeta) {
+        return {
+          ok: false,
+          code: 'RULESET_UNAVAILABLE',
+          error: `Bộ luật "${def.shortLabel}" hiện chưa được bật trên máy chủ — chỉ cho phép các bộ luật đang mở.`,
+        };
+      }
     }
 
     const allInRuleset = this.resolveEntriesForDefinition(def);

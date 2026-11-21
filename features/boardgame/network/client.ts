@@ -16,6 +16,7 @@
 import { useSyncExternalStore } from 'react';
 import { sanitizeBoardGameAppearance } from '../../../shared/contracts/boardgame';
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
+import { DEFAULT_RULESET_REGISTRY } from '../domain/registry';
 import {
   BOARD_GAME_DEFAULT_RULESET_ID,
   BOARD_GAME_PROTOCOL_VERSION,
@@ -45,6 +46,8 @@ import {
   type BoardGamePublicGameView,
   type BoardGameRoleId,
   type BoardGameRulesetId,
+  type BoardGameServerCapabilities,
+  type BoardGameServerRulesetCapability,
   type BoardGameTableId,
 } from './contracts';
 
@@ -117,6 +120,8 @@ export type BoardGameConnectionState =
 export interface BoardGameClientSnapshot {
   connectionState: BoardGameConnectionState;
   directoryMatches: readonly BoardGameMatchSummary[];
+  serverRulesets: readonly BoardGameServerRulesetCapability[];
+  betaEnabled: boolean;
   matchId: string | null;
   inviteCode: string | null;
   tableId: BoardGameTableId | null;
@@ -137,9 +142,14 @@ export interface BoardGameClientSnapshot {
   fencedByNewTab: boolean;
 }
 
+const DEFAULT_FALLBACK_CAPABILITIES: BoardGameServerCapabilities =
+  DEFAULT_RULESET_REGISTRY.getPublicServerCapabilities();
+
 const EMPTY_SNAPSHOT: BoardGameClientSnapshot = {
   connectionState: 'idle',
   directoryMatches: [],
+  serverRulesets: DEFAULT_FALLBACK_CAPABILITIES.rulesets,
+  betaEnabled: DEFAULT_FALLBACK_CAPABILITIES.betaEnabled,
   matchId: null,
   inviteCode: null,
   tableId: null,
@@ -234,9 +244,33 @@ export class BoardGameClient {
     }
   }
 
+  async refreshServerRulesets(): Promise<readonly BoardGameServerRulesetCapability[]> {
+    const eps = resolveBoardGameEndpoints();
+    if (!eps.ok) return this.snap.serverRulesets;
+    try {
+      const res = await fetch(`${eps.httpBaseUrl}/api/boardgame/rulesets`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return this.snap.serverRulesets;
+      const data = (await res.json()) as Partial<BoardGameServerCapabilities> & { ok?: boolean };
+      if (!data.ok || !Array.isArray(data.rulesets) || data.rulesets.length === 0) {
+        return this.snap.serverRulesets;
+      }
+      this.emit({
+        serverRulesets: data.rulesets,
+        betaEnabled: Boolean(data.betaEnabled),
+      });
+      return data.rulesets;
+    } catch {
+      return this.snap.serverRulesets;
+    }
+  }
+
   subscribeDirectory(): () => void {
     const eps = resolveBoardGameEndpoints();
     void this.refreshDirectory();
+    void this.refreshServerRulesets();
     if (!eps.ok || typeof WebSocket === 'undefined') {
       return () => undefined;
     }
@@ -659,6 +693,12 @@ export class BoardGameClient {
           status: msg.status,
           rulesetId: sanitizeBoardGameRulesetId(msg.rulesetId ?? msg.publicGame?.rulesetId),
           catalogVersion: msg.catalogVersion ?? msg.publicGame?.catalogVersion ?? null,
+          ...(Array.isArray(msg.availableRulesets) && msg.availableRulesets.length > 0
+            ? {
+                serverRulesets: msg.availableRulesets,
+                betaEnabled: Boolean(msg.betaEnabled),
+              }
+            : {}),
           revision: msg.revision,
           hostPlayerId: msg.hostPlayerId,
           players: msg.players,
@@ -798,6 +838,8 @@ export class BoardGameClient {
     this.emit({
       ...EMPTY_SNAPSHOT,
       directoryMatches: this.snap.directoryMatches,
+      serverRulesets: this.snap.serverRulesets,
+      betaEnabled: this.snap.betaEnabled,
     });
   }
 

@@ -30,11 +30,14 @@ export const BOARD_GAME_RULESET_VERSION = 4 as const;
 export const BOARD_GAME_PROTOCOL_VERSION = 1 as const;
 export const BOARD_GAME_CATALOG_VERSION = '2026.11-p7b' as const;
 
-export type BoardGameProductionRulesetId =
-  | 'classic'
+export type BoardGameProductionBetaRulesetId =
   | 'expansion-1'
   | 'expansion-2'
   | 'full-expansion';
+
+export type BoardGameProductionRulesetId =
+  | 'classic'
+  | BoardGameProductionBetaRulesetId;
 
 export type BoardGameExperimentalRulesetId =
   | 'starter-four'
@@ -49,16 +52,111 @@ export type BoardGameRulesetId =
   | BoardGameProductionRulesetId
   | BoardGameExperimentalRulesetId;
 
-export type BoardGameRulesetAvailability = 'available' | 'coming-soon' | 'disabled' | 'experimental';
+export type BoardGameRulesetAvailability =
+  | 'available'
+  | 'beta'
+  | 'coming-soon'
+  | 'disabled'
+  | 'experimental';
+
+export type BoardGameRulesetReleaseStatus =
+  | 'IMPLEMENTED'
+  | 'INTERNAL_VALIDATED'
+  | 'PRODUCTION_BETA_ENABLED'
+  | 'PUBLIC_RELEASE_APPROVED';
 
 export const BOARD_GAME_DEFAULT_RULESET_ID: BoardGameRulesetId = 'classic';
 
+export const BOARD_GAME_PRODUCTION_BETA_ELIGIBLE_RULESETS: readonly BoardGameProductionBetaRulesetId[] =
+  ['expansion-1', 'expansion-2', 'full-expansion'];
+
 export const BOARD_GAME_VALID_RULESETS: readonly BoardGameProductionRulesetId[] = [
   'classic',
-  'expansion-1',
-  'expansion-2',
-  'full-expansion',
+  ...BOARD_GAME_PRODUCTION_BETA_ELIGIBLE_RULESETS,
 ];
+
+export interface BoardGameProductionBetaConfig {
+  readonly enableProductionBetaExpansions: boolean;
+  readonly betaAllowedRulesets: readonly BoardGameProductionBetaRulesetId[];
+}
+
+export interface BoardGameProductionBetaEnvInput {
+  readonly ENABLE_PRODUCTION_BETA_EXPANSIONS?: string;
+  readonly BETA_ALLOWED_RULESETS?: string;
+}
+
+export const DEFAULT_PRODUCTION_BETA_CONFIG: BoardGameProductionBetaConfig = {
+  enableProductionBetaExpansions: false,
+  betaAllowedRulesets: [],
+};
+
+export function isProductionBetaEligibleRulesetId(
+  value: unknown,
+): value is BoardGameProductionBetaRulesetId {
+  return (
+    typeof value === 'string' &&
+    (BOARD_GAME_PRODUCTION_BETA_ELIGIBLE_RULESETS as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Phân tích cấu hình Production Beta phía server (mặc định TẮT tuyệt đối).
+ * - Chỉ chấp nhận danh sách allowlist thuộc `expansion-1 | expansion-2 | full-expansion`.
+ * - TUYỆT ĐỐI không bao giờ mở khóa các pool `starter-*` hoặc role pool tùy biến từ client.
+ */
+export function resolveProductionBetaConfigFromEnv(
+  env?: BoardGameProductionBetaEnvInput | null,
+): BoardGameProductionBetaConfig {
+  const rawToggle = env?.ENABLE_PRODUCTION_BETA_EXPANSIONS?.trim().toLowerCase() ?? '';
+  const enabled = rawToggle === '1' || rawToggle === 'true';
+  if (!enabled) {
+    return DEFAULT_PRODUCTION_BETA_CONFIG;
+  }
+  const rawList = env?.BETA_ALLOWED_RULESETS ?? '';
+  const allowed: BoardGameProductionBetaRulesetId[] = [];
+  for (const token of rawList.split(',')) {
+    const clean = token.trim();
+    if (isProductionBetaEligibleRulesetId(clean) && !allowed.includes(clean)) {
+      allowed.push(clean);
+    }
+  }
+  return {
+    enableProductionBetaExpansions: allowed.length > 0,
+    betaAllowedRulesets: allowed,
+  };
+}
+
+export function isProductionBetaRulesetEnabled(
+  rulesetId: string,
+  betaConfig?: BoardGameProductionBetaConfig | null,
+): boolean {
+  if (!betaConfig?.enableProductionBetaExpansions) return false;
+  if (!isProductionBetaEligibleRulesetId(rulesetId)) return false;
+  return betaConfig.betaAllowedRulesets.includes(rulesetId);
+}
+
+export interface BoardGameServerRulesetCapability {
+  readonly id: BoardGameProductionRulesetId;
+  readonly label: string;
+  readonly shortLabel: string;
+  readonly description: string;
+  readonly expectedCharacterCount: number;
+  readonly status: 'stable' | 'beta' | 'unavailable';
+  readonly releaseStatus: BoardGameRulesetReleaseStatus;
+  readonly selectable: boolean;
+  readonly isBeta: boolean;
+  readonly isDefault: boolean;
+  readonly catalogVersion: string;
+}
+
+export interface BoardGameServerCapabilities {
+  readonly defaultRulesetId: BoardGameProductionRulesetId;
+  readonly catalogVersion: string;
+  readonly rulesetVersion: number;
+  readonly betaEnabled: boolean;
+  readonly betaAllowedRulesets: readonly BoardGameProductionBetaRulesetId[];
+  readonly rulesets: readonly BoardGameServerRulesetCapability[];
+}
 
 export const BOARD_GAME_EXPERIMENTAL_RULESETS: readonly BoardGameExperimentalRulesetId[] = [
   'starter-four',
@@ -748,6 +846,8 @@ export interface BoardGameStateSyncMessage {
   status: BoardGameMatchStatus;
   rulesetId?: BoardGameRulesetId;
   catalogVersion?: string;
+  betaEnabled?: boolean;
+  availableRulesets?: readonly BoardGameServerRulesetCapability[];
   revision: number;
   hostPlayerId: string;
   players: readonly BoardGameLobbyPlayerView[];

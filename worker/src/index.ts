@@ -12,7 +12,7 @@
  */
 
 import { HskRoom } from './room';
-import { BoardGameRoom } from './boardgame-room';
+import { BoardGameRoom, type BoardGameEnv } from './boardgame-room';
 import { handleBoardGameRequest } from './boardgame-router';
 import { ROOM_CAPACITY, ROOM_IDS } from '../../shared/contracts/multiplayer';
 
@@ -21,9 +21,8 @@ export { HskRoom, BoardGameRoom };
 const ROOMS: readonly string[] = ROOM_IDS;
 const CAPACITY = ROOM_CAPACITY;
 
-interface Env {
+interface Env extends BoardGameEnv {
   HSK_ROOM: DurableObjectNamespace;
-  BOARD_GAME_ROOM?: DurableObjectNamespace;
 }
 
 function corsHeaders(): Record<string, string> {

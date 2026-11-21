@@ -4,6 +4,11 @@ compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
+[vars]
+ENVIRONMENT = "production"
+ENABLE_PRODUCTION_BETA_EXPANSIONS = "1"
+BETA_ALLOWED_RULESETS = "expansion-1,expansion-2,full-expansion"
+
 [durable_objects]
 bindings = [
   { name = "HSK_ROOM", class_name = "HskRoom" },
@@ -23,6 +28,8 @@ name = "hust-hsk-rooms-staging"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
+ENABLE_PRODUCTION_BETA_EXPANSIONS = "1"
+BETA_ALLOWED_RULESETS = "expansion-1,expansion-2,full-expansion"
 
 [[env.staging.durable_objects.bindings]]
 name = "HSK_ROOM"

@@ -32,6 +32,7 @@ import {
   canTransitionBoardGameStatus,
   isValidBoardGameLeaderboardFactionFilter,
   isValidBoardGameLeaderboardPeriod,
+  resolveProductionBetaConfigFromEnv,
   sanitizeBoardGameAppearance,
   sanitizeBoardGameChatText,
   sanitizeBoardGameMatchId,
@@ -103,6 +104,12 @@ export interface BoardGameEnv {
   ALLOW_SHORT_TURN_TIMEOUT?: string;
   /** Chỉ bật trong test/alpha harness nội bộ — KHÔNG cấu hình trong production wrangler.toml. */
   ALLOW_EXPERIMENTAL_RULESETS?: string;
+  /** Cờ bật Production Beta mặc định TẮT (`'1'` / `'true'` để bật các gói trong `BETA_ALLOWED_RULESETS`). */
+  ENABLE_PRODUCTION_BETA_EXPANSIONS?: string;
+  /** Allowlist phân tách dấu phẩy gồm tối đa: `expansion-1,expansion-2,full-expansion`. */
+  BETA_ALLOWED_RULESETS?: string;
+  /** Token tùy chọn bảo vệ chi tiết per-character trong endpoint `/api/boardgame/telemetry`. */
+  BETA_TELEMETRY_TOKEN?: string;
   /** Ghi đè thời hạn pending choice trong test (ms). */
   CHOICE_TIMEOUT_OVERRIDE_MS?: string;
 }
@@ -435,7 +442,80 @@ export class BoardGameRoom {
       CREATE INDEX IF NOT EXISTS idx_bg_lb_points
       ON boardgame_leaderboard(rating_points DESC, wins_total DESC)
     `);
+    // Phase 8A — Bảng telemetry tổng hợp Production Beta (additive 100%, ZERO dữ liệu bí mật/PII)
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS boardgame_telemetry_counters (
+        metric_key TEXT PRIMARY KEY,
+        count INTEGER NOT NULL DEFAULT 0,
+        updated_at_ms INTEGER NOT NULL
+      )
+    `);
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS boardgame_telemetry_roles (
+        role_id TEXT PRIMARY KEY,
+        appearances INTEGER NOT NULL DEFAULT 0,
+        wins INTEGER NOT NULL DEFAULT 0,
+        survivals INTEGER NOT NULL DEFAULT 0,
+        skill_activations INTEGER NOT NULL DEFAULT 0,
+        updated_at_ms INTEGER NOT NULL
+      )
+    `);
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS boardgame_telemetry_recorded_matches (
+        record_key TEXT PRIMARY KEY,
+        ruleset_id TEXT NOT NULL,
+        catalog_version TEXT,
+        player_count INTEGER NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        winner_faction TEXT,
+        recorded_at_ms INTEGER NOT NULL
+      )
+    `);
     this.schemaReady = true;
+  }
+
+  private getRulesetValidationOptions() {
+    return {
+      allowExperimental: this.env.ALLOW_EXPERIMENTAL_RULESETS === '1',
+      productionBeta: resolveProductionBetaConfigFromEnv(this.env),
+    };
+  }
+
+  private incrementTelemetryCounterLocal(
+    metricKey: string,
+    delta: number,
+    nowMs: number,
+  ): void {
+    const cleanKey = metricKey.trim().slice(0, 64);
+    if (!cleanKey || !Number.isFinite(delta) || delta === 0) return;
+    const step = Math.round(delta);
+    this.sql.exec(
+      `INSERT INTO boardgame_telemetry_counters (metric_key, count, updated_at_ms)
+       VALUES (?, ?, ?)
+       ON CONFLICT(metric_key) DO UPDATE SET
+         count = count + excluded.count,
+         updated_at_ms = excluded.updated_at_ms`,
+      cleanKey,
+      step,
+      nowMs,
+    );
+  }
+
+  private async emitBetaTelemetryCounters(
+    metrics: readonly string[],
+    deltas?: Record<string, number>,
+  ): Promise<void> {
+    const ns = this.env.BOARD_GAME_ROOM;
+    if (!ns) return;
+    if (metrics.length === 0 && (!deltas || Object.keys(deltas).length === 0)) return;
+    const stub = ns.get(ns.idFromName(BG_DIRECTORY_ROOM_NAME));
+    await stub
+      .fetch('https://internal/__dir/telemetry-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ metrics, deltas }),
+      })
+      .catch(() => undefined);
   }
 
   private getMatchRow(): MatchDbRow | null {
@@ -968,6 +1048,233 @@ export class BoardGameRoom {
       return Response.json(body);
     }
 
+    // Phase 8A — Directory DO: ghi nhận sự kiện vận hành Production Beta (aggregate-only, zero PII/secrets)
+    if (url.pathname === '/__dir/telemetry-event' && request.method === 'POST') {
+      this.roomName = BG_DIRECTORY_ROOM_NAME;
+      const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!body) return Response.json({ ok: false, error: 'invalid-json' }, { status: 400 });
+      const metrics = Array.isArray(body.metrics) ? body.metrics : [];
+      for (const rawKey of metrics) {
+        if (typeof rawKey === 'string' && /^[a-z0-9:_-]{1,64}$/i.test(rawKey)) {
+          this.incrementTelemetryCounterLocal(rawKey, 1, nowMs);
+        }
+      }
+      if (body.deltas && typeof body.deltas === 'object' && !Array.isArray(body.deltas)) {
+        for (const [k, v] of Object.entries(body.deltas as Record<string, unknown>)) {
+          if (
+            /^[a-z0-9:_-]{1,64}$/i.test(k) &&
+            typeof v === 'number' &&
+            Number.isFinite(v) &&
+            v >= 0 &&
+            v <= 86_400_000
+          ) {
+            this.incrementTelemetryCounterLocal(k, Math.round(v), nowMs);
+          }
+        }
+      }
+      return Response.json({ ok: true });
+    }
+
+    // Phase 8A — Directory DO: ghi nhận trận ĐÃ KẾT THÚC vào telemetry tổng hợp (idempotent, ẩn danh 100%)
+    if (url.pathname === '/__dir/telemetry-match' && request.method === 'POST') {
+      this.roomName = BG_DIRECTORY_ROOM_NAME;
+      const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!body || typeof body.recordKey !== 'string') {
+        return Response.json({ ok: false, error: 'invalid-payload' }, { status: 400 });
+      }
+      const recordKey = body.recordKey.trim().slice(0, 128);
+      if (!recordKey) {
+        return Response.json({ ok: false, error: 'missing-record-key' }, { status: 400 });
+      }
+      const existing = this.sql
+        .exec<{ record_key: string }>(
+          'SELECT record_key FROM boardgame_telemetry_recorded_matches WHERE record_key = ? LIMIT 1',
+          recordKey,
+        )
+        .toArray();
+      if (existing.length > 0) {
+        return Response.json({ ok: true, alreadyRecorded: true });
+      }
+      const rulesetId = sanitizeBoardGameRulesetId(body.rulesetId);
+      const catalogVersion =
+        typeof body.catalogVersion === 'string'
+          ? body.catalogVersion.slice(0, 32)
+          : BOARD_GAME_CATALOG_VERSION;
+      const playerCount =
+        typeof body.playerCount === 'number' && Number.isFinite(body.playerCount)
+          ? Math.max(BOARD_GAME_MIN_PLAYERS, Math.min(BOARD_GAME_MAX_PLAYERS, Math.floor(body.playerCount)))
+          : BOARD_GAME_MIN_PLAYERS;
+      const durationMs =
+        typeof body.durationMs === 'number' && Number.isFinite(body.durationMs)
+          ? Math.max(0, Math.min(14_400_000, Math.round(body.durationMs)))
+          : 0;
+      const winnerFaction =
+        typeof body.winnerFaction === 'string' && /^[a-z0-9-]{1,32}$/.test(body.winnerFaction)
+          ? body.winnerFaction
+          : 'none';
+      const unexpectedEnding = Boolean(body.unexpectedEnding);
+
+      this.sql.exec(
+        `INSERT INTO boardgame_telemetry_recorded_matches (
+          record_key, ruleset_id, catalog_version, player_count, duration_ms, winner_faction, recorded_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        recordKey,
+        rulesetId,
+        catalogVersion,
+        playerCount,
+        durationMs,
+        winnerFaction,
+        nowMs,
+      );
+
+      this.incrementTelemetryCounterLocal('matches_completed', 1, nowMs);
+      this.incrementTelemetryCounterLocal(`ruleset_completed:${rulesetId}`, 1, nowMs);
+      this.incrementTelemetryCounterLocal(`player_count_completed:${playerCount}`, 1, nowMs);
+      this.incrementTelemetryCounterLocal(`winner_faction:${winnerFaction}`, 1, nowMs);
+      if (durationMs > 0) {
+        this.incrementTelemetryCounterLocal('duration_ms_sum', durationMs, nowMs);
+        this.incrementTelemetryCounterLocal('duration_ms_count', 1, nowMs);
+      }
+      if (unexpectedEnding) {
+        this.incrementTelemetryCounterLocal('unexpected_endings', 1, nowMs);
+      }
+
+      if (Array.isArray(body.roles)) {
+        for (const rawRole of body.roles) {
+          if (!rawRole || typeof rawRole !== 'object') continue;
+          const r = rawRole as Record<string, unknown>;
+          if (!isKnownBoardGameRoleId(r.roleId)) continue;
+          const won = r.won ? 1 : 0;
+          const survived = r.survived ? 1 : 0;
+          const activations =
+            typeof r.skillActivations === 'number' && Number.isFinite(r.skillActivations)
+              ? Math.max(0, Math.min(200, Math.floor(r.skillActivations)))
+              : 0;
+          this.sql.exec(
+            `INSERT INTO boardgame_telemetry_roles (
+              role_id, appearances, wins, survivals, skill_activations, updated_at_ms
+            ) VALUES (?, 1, ?, ?, ?, ?)
+            ON CONFLICT(role_id) DO UPDATE SET
+              appearances = appearances + 1,
+              wins = wins + excluded.wins,
+              survivals = survivals + excluded.survivals,
+              skill_activations = skill_activations + excluded.skill_activations,
+              updated_at_ms = excluded.updated_at_ms`,
+            r.roleId,
+            won,
+            survived,
+            activations,
+            nowMs,
+          );
+        }
+      }
+      return Response.json({ ok: true, recorded: true });
+    }
+
+    // Phase 8A — Directory DO: xuất snapshot telemetry ẩn danh cho vận hành Beta
+    if (url.pathname === '/__dir/telemetry' && request.method === 'GET') {
+      this.roomName = BG_DIRECTORY_ROOM_NAME;
+      const includePerRole = url.searchParams.get('includePerRole') !== '0';
+      const counterRows = this.sql
+        .exec<{ metric_key: string; count: number; updated_at_ms: number }>(
+          'SELECT metric_key, count, updated_at_ms FROM boardgame_telemetry_counters',
+        )
+        .toArray();
+      const counters: Record<string, number> = {};
+      let lastUpdatedMs = 0;
+      for (const row of counterRows) {
+        counters[row.metric_key] = Number(row.count ?? 0);
+        if (row.updated_at_ms > lastUpdatedMs) lastUpdatedMs = row.updated_at_ms;
+      }
+
+      const rulesetCreated: Record<string, number> = {};
+      const rulesetCompleted: Record<string, number> = {};
+      const playerCountDistribution: Record<string, number> = {};
+      const victoryDistribution: Record<string, number> = {};
+      for (const [k, v] of Object.entries(counters)) {
+        if (k.startsWith('ruleset_created:')) rulesetCreated[k.slice(16)] = v;
+        else if (k.startsWith('ruleset_completed:')) rulesetCompleted[k.slice(18)] = v;
+        else if (k.startsWith('player_count_started:')) playerCountDistribution[k.slice(21)] = v;
+        else if (k.startsWith('winner_faction:')) victoryDistribution[k.slice(15)] = v;
+      }
+
+      const durCount = counters.duration_ms_count ?? 0;
+      const avgMatchDurationMs =
+        durCount > 0 ? Math.round((counters.duration_ms_sum ?? 0) / durCount) : 0;
+
+      const roleRows = includePerRole
+        ? this.sql
+            .exec<{
+              role_id: string;
+              appearances: number;
+              wins: number;
+              survivals: number;
+              skill_activations: number;
+            }>(
+              'SELECT role_id, appearances, wins, survivals, skill_activations FROM boardgame_telemetry_roles ORDER BY appearances DESC, role_id ASC',
+            )
+            .toArray()
+        : [];
+
+      const activeMatchesCount = this.sql
+        .exec<{ c: number }>(
+          "SELECT COUNT(*) AS c FROM directory_matches WHERE status IN ('CREATED', 'WAITING', 'READY_CHECK', 'STARTING', 'PLAYING')",
+        )
+        .one()?.c ?? 0;
+
+      return Response.json({
+        ok: true,
+        generatedAtMs: nowMs,
+        lastUpdatedMs,
+        retentionDays: 90,
+        privacyGuarantees: {
+          noReconnectTokens: true,
+          noPlayerPiiOrNames: true,
+          noActiveMatchHiddenRoles: true,
+          postMatchAggregateOnly: true,
+        },
+        summary: {
+          activeMatchesNow: Number(activeMatchesCount),
+          matchesCreated: counters.matches_created ?? 0,
+          matchesStarted: counters.matches_started ?? 0,
+          matchesCompleted: counters.matches_completed ?? 0,
+          matchesAbandoned: counters.matches_abandoned ?? 0,
+          avgMatchDurationMs,
+          humanPlaytestTargetMatches: 100,
+          humanPlaytestProgressCompleted: counters.matches_completed ?? 0,
+        },
+        operational: {
+          disconnections: counters.disconnections ?? 0,
+          reconnectAttempts: counters.reconnect_attempts ?? 0,
+          invalidActionAttempts: counters.invalid_actions ?? 0,
+          pendingChoiceTimeouts: counters.choice_timeouts ?? 0,
+          turnTimeouts: counters.turn_timeouts ?? 0,
+          engineErrors: counters.engine_errors ?? 0,
+          workerErrors: counters.worker_errors ?? 0,
+          unhandledExceptions: counters.unhandled_exceptions ?? 0,
+          stateRestoreFailures: counters.state_restore_failures ?? 0,
+          unexpectedMatchEndings: counters.unexpected_endings ?? 0,
+        },
+        rulesetPopularity: {
+          created: rulesetCreated,
+          completed: rulesetCompleted,
+        },
+        playerCountDistribution,
+        victoryDistribution,
+        perCharacterStats: includePerRole
+          ? roleRows.map((r) => ({
+              roleId: r.role_id,
+              appearances: r.appearances,
+              wins: r.wins,
+              winRatePct:
+                r.appearances > 0 ? Number(((r.wins / r.appearances) * 100).toFixed(2)) : 0,
+              survivals: r.survivals,
+              skillActivations: r.skill_activations,
+            }))
+          : null,
+      });
+    }
+
     // Match DO initialization (`POST /__init`)
     if (url.pathname === '/__init' && request.method === 'POST') {
       const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
@@ -980,7 +1287,7 @@ export class BoardGameRoom {
       const rulesetCheck = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
         requestedRuleset,
         BOARD_GAME_MIN_PLAYERS,
-        { allowExperimental: this.env.ALLOW_EXPERIMENTAL_RULESETS === '1' },
+        this.getRulesetValidationOptions(),
       );
       if (!rulesetCheck.ok) {
         return Response.json(
@@ -1022,9 +1329,12 @@ export class BoardGameRoom {
       logBoardGameEvent(this.env, 'MATCH_CREATED', {
         matchId,
         tableId,
+        rulesetId,
+        catalogVersion: rulesetCheck.catalogVersion,
         status: 'CREATED',
         revision: 1,
       });
+      await this.emitBetaTelemetryCounters(['matches_created', `ruleset_created:${rulesetId}`]);
       return Response.json({ ok: true, matchId, inviteCode, tableId, rulesetId }, { status: 201 });
     }
 
@@ -1184,6 +1494,60 @@ export class BoardGameRoom {
         match.match_id,
       );
     }
+
+    // Phase 8A: ghi nhận telemetry tổng hợp trận ĐÃ KẾT THÚC (idempotent, ẩn danh 100%, ZERO PII/token)
+    const expActivations = engineState.expansionState?.stats?.activationsByRole ?? {};
+    const durationMs = Math.max(0, nowMs - match.created_at_ms);
+    const unexpectedEnding =
+      !engineState.winnerPlayerIds ||
+      engineState.winnerPlayerIds.length === 0 ||
+      engineState.round >= engineState.maxRounds;
+    const rulesetId = engineState.rulesetId ?? sanitizeBoardGameRulesetId(match.ruleset_id);
+    const catalogVersion =
+      engineState.catalogVersion ?? match.catalog_version ?? BOARD_GAME_CATALOG_VERSION;
+    if (unexpectedEnding) {
+      logBoardGameEvent(this.env, 'UNEXPECTED_MATCH_END', {
+        matchId: match.match_id,
+        tableId: match.table_id,
+        rulesetId,
+        catalogVersion,
+        round: engineState.round,
+        turnNumber: engineState.turnNumber,
+        reason:
+          !engineState.winnerPlayerIds || engineState.winnerPlayerIds.length === 0
+            ? 'no-winner-recorded'
+            : 'reached-max-rounds',
+      });
+    }
+    const roleCounts = new Map<string, number>();
+    for (const ep of allEnginePlayers) {
+      roleCounts.set(ep.roleId, (roleCounts.get(ep.roleId) ?? 0) + 1);
+    }
+    const roleStatsPayload = allEnginePlayers.map((ep) => ({
+      roleId: ep.roleId,
+      won: winnerSet.has(ep.playerId),
+      survived: ep.alive,
+      skillActivations: Math.round(
+        (expActivations[ep.roleId] ?? 0) / Math.max(1, roleCounts.get(ep.roleId) ?? 1),
+      ),
+    }));
+    const anonMatchHash = await sha256Hex(`bg-tel:${match.match_id}:${engineState.seed}`);
+    await stub
+      .fetch('https://internal/__dir/telemetry-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordKey: `tm_${anonMatchHash.slice(0, 28)}`,
+          rulesetId,
+          catalogVersion,
+          playerCount: allEnginePlayers.length,
+          durationMs,
+          winnerFaction: engineState.winnerFaction ?? 'none',
+          unexpectedEnding,
+          roles: roleStatsPayload,
+        }),
+      })
+      .catch(() => undefined);
   }
 
   private async syncDirectoryFromMatch(): Promise<void> {
@@ -1466,11 +1830,15 @@ export class BoardGameRoom {
     logBoardGameEvent(this.env, 'PLAYER_DISCONNECTED', {
       matchId: match.match_id,
       tableId: match.table_id,
+      rulesetId: sanitizeBoardGameRulesetId(match.ruleset_id),
       playerId: player.player_id,
       seatIndex: player.seat_index,
       isSpectator: player.is_spectator === 1,
       status: match.status,
     });
+    if (player.is_spectator === 0) {
+      await this.emitBetaTelemetryCounters(['disconnections']);
+    }
 
     if (player.is_spectator === 1) {
       // Remove disconnected spectators cleanly so they don't occupy spectator cap
@@ -1593,12 +1961,21 @@ export class BoardGameRoom {
           nowMs,
           match.match_id,
         );
-        logBoardGameEvent(this.env, 'MATCH_CLEANED_UP', {
+        logBoardGameEvent(this.env, 'MATCH_ABANDONED', {
           matchId: match.match_id,
           tableId: match.table_id,
+          rulesetId: sanitizeBoardGameRulesetId(match.ruleset_id),
           status: 'CLOSED',
           reason: 'all-players-abandoned',
         });
+        logBoardGameEvent(this.env, 'MATCH_CLEANED_UP', {
+          matchId: match.match_id,
+          tableId: match.table_id,
+          rulesetId: sanitizeBoardGameRulesetId(match.ruleset_id),
+          status: 'CLOSED',
+          reason: 'all-players-abandoned',
+        });
+        await this.emitBetaTelemetryCounters(['matches_abandoned']);
         await this.syncDirectoryFromMatch();
         return;
       }
@@ -1613,15 +1990,22 @@ export class BoardGameRoom {
       const rows = this.listPlayerRows();
       const engineState = this.loadEngineState(match, rows);
       if (engineState && (!engineState.finished || match.status === 'PLAYING')) {
+        const wasChoiceTimeout = Boolean(
+          engineState.pendingChoice && nowMs >= engineState.pendingChoice.deadlineMs - 50,
+        );
+        const choiceKindForLog = engineState.pendingChoice
+          ? engineState.pendingChoice.isSecret
+            ? 'secret'
+            : engineState.pendingChoice.kind
+          : undefined;
         const timedOutPlayerId =
-          engineState.pendingChoice?.ownerPlayerId ??
-          getEffectiveTurnControllerId(engineState) ??
-          getActivePlayer(engineState)?.playerId;
+          engineState.pendingChoice?.isSecret
+            ? undefined
+            : (engineState.pendingChoice?.ownerPlayerId ??
+              getEffectiveTurnControllerId(engineState) ??
+              getActivePlayer(engineState)?.playerId);
         if (!engineState.finished) {
-          if (
-            engineState.pendingChoice &&
-            nowMs >= engineState.pendingChoice.deadlineMs - 50
-          ) {
+          if (wasChoiceTimeout) {
             applyPendingChoiceTimeout(engineState, nowMs);
           } else {
             applyTimeoutAutoTurn(engineState, nowMs);
@@ -1644,14 +2028,19 @@ export class BoardGameRoom {
           JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
           match.match_id,
         );
-        logBoardGameEvent(this.env, 'TURN_TIMEOUT', {
+        logBoardGameEvent(this.env, wasChoiceTimeout ? 'CHOICE_TIMEOUT' : 'TURN_TIMEOUT', {
           matchId: match.match_id,
           tableId: match.table_id,
+          rulesetId: engineState.rulesetId ?? sanitizeBoardGameRulesetId(match.ruleset_id),
           playerId: timedOutPlayerId,
+          pendingChoiceKind: choiceKindForLog,
           status: nextStatus,
           round: engineState.round,
           turnNumber: engineState.turnNumber,
         });
+        await this.emitBetaTelemetryCounters([
+          wasChoiceTimeout ? 'choice_timeouts' : 'turn_timeouts',
+        ]);
         if (engineState.finished) {
           logBoardGameEvent(this.env, 'MATCH_FINISHED', {
             matchId: match.match_id,
@@ -1847,11 +2236,13 @@ export class BoardGameRoom {
         logBoardGameEvent(this.env, 'PLAYER_RECONNECTED', {
           matchId: latestMatch.match_id,
           tableId: latestMatch.table_id,
+          rulesetId: sanitizeBoardGameRulesetId(latestMatch.ruleset_id),
           playerId: existing.player_id,
           seatIndex: existing.seat_index,
           isSpectator: existing.is_spectator === 1,
           status: latestMatch.status,
         });
+        await this.emitBetaTelemetryCounters(['reconnect_attempts']);
         this.broadcastStateSync();
         await this.syncDirectoryFromMatch();
         return;
@@ -2159,11 +2550,11 @@ export class BoardGameRoom {
       return;
     }
 
-    const allowExperimental = this.env.ALLOW_EXPERIMENTAL_RULESETS === '1';
+    const validationOpts = this.getRulesetValidationOptions();
     const validation = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
       rulesetId,
       BOARD_GAME_MIN_PLAYERS,
-      { allowExperimental },
+      validationOpts,
     );
     if (!validation.ok) {
       this.sendError(ws, validation.code, validation.error, { requestId });
@@ -2179,6 +2570,14 @@ export class BoardGameRoom {
       match.match_id,
     );
     const updated = this.getMatchRow();
+    logBoardGameEvent(this.env, 'RULESET_CHANGED', {
+      matchId: match.match_id,
+      tableId: match.table_id,
+      rulesetId: validation.ruleset.id,
+      catalogVersion: validation.catalogVersion,
+      playerId: player.player_id,
+      revision: updated?.revision ?? match.revision + 1,
+    });
     if (requestId && updated) {
       this.send(ws, {
         type: 'BG_ACTION_ACK',
@@ -2234,13 +2633,13 @@ export class BoardGameRoom {
     }
 
     // Khóa và xác thực bộ luật & phiên bản catalog tại server trước khi khởi tạo ván
-    const allowExperimental = this.env.ALLOW_EXPERIMENTAL_RULESETS === '1';
+    const validationOpts = this.getRulesetValidationOptions();
     const requestedRulesetId =
       rulesetOverrideId ?? match.ruleset_id ?? BOARD_GAME_DEFAULT_RULESET_ID;
     const rulesetValidation = DEFAULT_RULESET_REGISTRY.validateRulesetForMatch(
       requestedRulesetId,
       seated.length,
-      { allowExperimental },
+      validationOpts,
     );
     if (!rulesetValidation.ok) {
       this.sendError(ws, rulesetValidation.code, rulesetValidation.error, { requestId });
@@ -2283,7 +2682,8 @@ export class BoardGameRoom {
       seed,
       nowMs,
       rulesetId: lockedRulesetId,
-      allowExperimental,
+      allowExperimental: validationOpts.allowExperimental,
+      productionBeta: validationOpts.productionBeta,
       choiceTimeoutMs,
       players: seated.map((p) => ({
         playerId: p.player_id,
@@ -2320,12 +2720,18 @@ export class BoardGameRoom {
     logBoardGameEvent(this.env, 'MATCH_STARTED', {
       matchId: match.match_id,
       tableId: match.table_id,
+      rulesetId: lockedRulesetId,
+      catalogVersion: lockedCatalogVersion,
       status: 'PLAYING',
       playerCount: seated.length,
       revision: match.revision + 1,
       round: engineState.round,
       turnNumber: engineState.turnNumber,
     });
+    await this.emitBetaTelemetryCounters([
+      'matches_started',
+      `player_count_started:${seated.length}`,
+    ]);
     if (requestId) {
       this.send(ws, {
         type: 'BG_ACTION_ACK',
@@ -2496,23 +2902,38 @@ export class BoardGameRoom {
     }
 
     const prevTurnNumber = engineState.turnNumber;
-    const res = applyPlayerGameAction(
-      engineState,
-      player.player_id,
-      actionPayload,
-      nowMs,
-    );
+    let res: ReturnType<typeof applyPlayerGameAction>;
+    try {
+      res = applyPlayerGameAction(engineState, player.player_id, actionPayload, nowMs);
+    } catch (err) {
+      logBoardGameEvent(this.env, 'ENGINE_ERROR', {
+        matchId: match.match_id,
+        tableId: match.table_id,
+        rulesetId: engineState.rulesetId ?? sanitizeBoardGameRulesetId(match.ruleset_id),
+        playerId: player.player_id,
+        actionType: actionPayload.type,
+        reason: err instanceof Error ? err.message.slice(0, 120) : 'engine-exception',
+      });
+      await this.emitBetaTelemetryCounters(['engine_errors', 'unhandled_exceptions']);
+      this.sendError(ws, 'INVALID_ACTION', 'Lỗi xử lý nước đi trên máy chủ, trạng thái ván được bảo toàn.', {
+        requestId: reqId,
+        revision: match.revision,
+      });
+      return;
+    }
     if (!res.ok) {
       const reason = res.reason || res.error || 'Hành động không hợp lệ ở pha hiện tại.';
       const errCode = reason.toLowerCase().includes('chưa tới lượt') ? 'NOT_YOUR_TURN' : 'INVALID_ACTION';
       logBoardGameEvent(this.env, 'ACTION_REJECTED', {
         matchId: match.match_id,
         tableId: match.table_id,
+        rulesetId: engineState.rulesetId ?? sanitizeBoardGameRulesetId(match.ruleset_id),
         playerId: player.player_id,
         actionType: actionPayload.type,
         code: errCode,
         reason,
       });
+      await this.emitBetaTelemetryCounters(['invalid_actions']);
       this.send(ws, {
         type: 'BG_ACTION_ACK',
         requestId: reqId,
@@ -3018,7 +3439,19 @@ export class BoardGameRoom {
   ): AuthoritativeGameState | null {
     const parsedState = parseJsonObject(match.game_state_json);
     const rawEngine = parsedState?.engineState;
-    if (!rawEngine || typeof rawEngine !== 'object') return null;
+    if (!rawEngine || typeof rawEngine !== 'object') {
+      if (match.game_state_json && (match.status === 'PLAYING' || match.status === 'FINISHED')) {
+        logBoardGameEvent(this.env, 'STATE_RESTORE_ERROR', {
+          matchId: match.match_id,
+          tableId: match.table_id,
+          rulesetId: sanitizeBoardGameRulesetId(match.ruleset_id),
+          status: match.status,
+          reason: 'corrupt-or-missing-engine-state-json',
+        });
+        void this.emitBetaTelemetryCounters(['state_restore_failures']);
+      }
+      return null;
+    }
     const rawRecord = rawEngine as Record<string, unknown>;
     const outerVersion = parsedState?.rulesetVersion;
     if (
@@ -3151,6 +3584,10 @@ export class BoardGameRoom {
         ? null
         : getPrivateGameView(engineState, forPlayerId);
 
+    const publicCaps = DEFAULT_RULESET_REGISTRY.getPublicServerCapabilities({
+      productionBeta: resolveProductionBetaConfigFromEnv(this.env),
+    });
+
     return {
       type: 'BG_STATE_SYNC',
       protocolVersion: BOARD_GAME_PROTOCOL_VERSION,
@@ -3163,6 +3600,8 @@ export class BoardGameRoom {
         engineState?.catalogVersion ??
         effectiveMatch.catalog_version ??
         BOARD_GAME_CATALOG_VERSION,
+      betaEnabled: publicCaps.betaEnabled,
+      availableRulesets: publicCaps.rulesets,
       revision: effectiveMatch.revision,
       hostPlayerId: effectiveMatch.host_player_id,
       players,

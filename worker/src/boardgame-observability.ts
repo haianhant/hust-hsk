@@ -11,6 +11,7 @@
 
 export type BoardGameLogEventType =
   | 'MATCH_CREATED'
+  | 'RULESET_CHANGED'
   | 'PLAYER_JOINED'
   | 'PLAYER_RECONNECTED'
   | 'PLAYER_DISCONNECTED'
@@ -18,8 +19,14 @@ export type BoardGameLogEventType =
   | 'ACTION_APPLIED'
   | 'ACTION_REJECTED'
   | 'TURN_TIMEOUT'
+  | 'CHOICE_TIMEOUT'
   | 'MATCH_FINISHED'
+  | 'MATCH_ABANDONED'
   | 'MATCH_CLEANED_UP'
+  | 'UNEXPECTED_MATCH_END'
+  | 'ENGINE_ERROR'
+  | 'STATE_RESTORE_ERROR'
+  | 'UNHANDLED_EXCEPTION'
   | 'ORIGIN_REJECTED'
   | 'RATE_LIMITED'
   | 'WEBSOCKET_ERROR';
@@ -31,17 +38,21 @@ export interface BoardGameLogEntry {
   event: BoardGameLogEventType;
   matchId?: string;
   tableId?: string;
+  rulesetId?: string;
+  catalogVersion?: string;
   status?: string;
   revision?: number;
   playerId?: string;
   seatIndex?: number | null;
   isSpectator?: boolean;
   actionType?: string;
+  pendingChoiceKind?: string;
   code?: string;
   reason?: string;
   round?: number;
   turnNumber?: number;
   playerCount?: number;
+  durationMs?: number;
   cleanedCount?: number;
   pathname?: string;
   winnerFaction?: string | null;
@@ -61,6 +72,7 @@ function sanitizeLogString(raw: unknown, maxLen = 160): string | undefined {
 
 const eventCounters: Record<BoardGameLogEventType, number> = {
   MATCH_CREATED: 0,
+  RULESET_CHANGED: 0,
   PLAYER_JOINED: 0,
   PLAYER_RECONNECTED: 0,
   PLAYER_DISCONNECTED: 0,
@@ -68,8 +80,14 @@ const eventCounters: Record<BoardGameLogEventType, number> = {
   ACTION_APPLIED: 0,
   ACTION_REJECTED: 0,
   TURN_TIMEOUT: 0,
+  CHOICE_TIMEOUT: 0,
   MATCH_FINISHED: 0,
+  MATCH_ABANDONED: 0,
   MATCH_CLEANED_UP: 0,
+  UNEXPECTED_MATCH_END: 0,
+  ENGINE_ERROR: 0,
+  STATE_RESTORE_ERROR: 0,
+  UNHANDLED_EXCEPTION: 0,
   ORIGIN_REJECTED: 0,
   RATE_LIMITED: 0,
   WEBSOCKET_ERROR: 0,
@@ -121,6 +139,12 @@ export function logBoardGameEvent(
     ...(fields.tableId !== undefined
       ? { tableId: sanitizeLogString(fields.tableId, 16) }
       : {}),
+    ...(fields.rulesetId !== undefined
+      ? { rulesetId: sanitizeLogString(fields.rulesetId, 32) }
+      : {}),
+    ...(fields.catalogVersion !== undefined
+      ? { catalogVersion: sanitizeLogString(fields.catalogVersion, 32) }
+      : {}),
     ...(fields.status !== undefined
       ? { status: sanitizeLogString(fields.status, 24) }
       : {}),
@@ -137,6 +161,9 @@ export function logBoardGameEvent(
     ...(fields.actionType !== undefined
       ? { actionType: sanitizeLogString(fields.actionType, 32) }
       : {}),
+    ...(fields.pendingChoiceKind !== undefined
+      ? { pendingChoiceKind: sanitizeLogString(fields.pendingChoiceKind, 48) }
+      : {}),
     ...(fields.code !== undefined ? { code: sanitizeLogString(fields.code, 32) } : {}),
     ...(fields.reason !== undefined
       ? { reason: sanitizeLogString(fields.reason, 160) }
@@ -149,6 +176,9 @@ export function logBoardGameEvent(
       : {}),
     ...(typeof fields.playerCount === 'number' && Number.isFinite(fields.playerCount)
       ? { playerCount: fields.playerCount }
+      : {}),
+    ...(typeof fields.durationMs === 'number' && Number.isFinite(fields.durationMs)
+      ? { durationMs: Math.max(0, Math.round(fields.durationMs)) }
       : {}),
     ...(typeof fields.cleanedCount === 'number' && Number.isFinite(fields.cleanedCount)
       ? { cleanedCount: fields.cleanedCount }
@@ -164,10 +194,17 @@ export function logBoardGameEvent(
   if (activeLogSink) {
     activeLogSink(entry);
   } else if (
+    event === 'ENGINE_ERROR' ||
+    event === 'STATE_RESTORE_ERROR' ||
+    event === 'UNHANDLED_EXCEPTION'
+  ) {
+    console.error(JSON.stringify(entry));
+  } else if (
     event === 'ACTION_REJECTED' ||
     event === 'ORIGIN_REJECTED' ||
     event === 'RATE_LIMITED' ||
-    event === 'WEBSOCKET_ERROR'
+    event === 'WEBSOCKET_ERROR' ||
+    event === 'UNEXPECTED_MATCH_END'
   ) {
     console.warn(JSON.stringify(entry));
   } else {

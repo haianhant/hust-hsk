@@ -113,6 +113,7 @@ import {
   BOARD_GAME_MIN_PLAYERS,
   sanitizeInviteCode,
   seatIdToTableAndIndex,
+  type BoardGameRulesetId,
   type BoardGameTableId,
 } from '../shared/contracts/boardgame';
 import type { MemoryBoardId } from '../features/social/memory-wall/memory-wall';
@@ -1847,7 +1848,7 @@ export default function HomePage() {
   }, [inBoardGameClub, bgSnap.matchId, bgSnap.playerId, bgSnap.players, bgSnap.isSpectator, boardGameSeatId]);
 
   const handleCreateBoardGameMatch = useCallback(
-    async (tableId: BoardGameTableId) => {
+    async (tableId: BoardGameTableId, rulesetId?: BoardGameRulesetId) => {
       const parsedSeat = seatIdToTableAndIndex(boardGameSeatId);
       const preferredSeatIndex =
         parsedSeat && parsedSeat.tableId === tableId ? parsedSeat.seatIndex : 0;
@@ -1856,6 +1857,7 @@ export default function HomePage() {
         displayName: characterProfile.name,
         appearance: bgAppearance,
         preferredSeatIndex,
+        ...(rulesetId ? { rulesetId } : {}),
       });
       if (res.ok) {
         showToast(`🎲 Đã tạo phòng Bóng Đêm KTX · Mã mời: ${res.inviteCode}`);
@@ -3175,8 +3177,10 @@ export default function HomePage() {
               selfPlayerId={bgSnap.playerId}
               isSpectator={bgSnap.isSpectator}
               inviteCode={bgSnap.inviteCode}
+              matchStatus={bgSnap.status}
               matchStatusLabel={bgStatusLabel}
               rulesetId={bgSnap.rulesetId}
+              serverRulesets={bgSnap.serverRulesets}
               isHost={isBgHost}
               localReady={Boolean(selfBgPlayer?.ready)}
               serverNotice={bgSnap.lastError}

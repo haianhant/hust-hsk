@@ -327,6 +327,7 @@ async function startStandaloneBoardGameTestServer(port = 0, envOverrides = {}) {
     port: actualPort,
     httpBaseUrl: `http://127.0.0.1:${actualPort}`,
     wsBaseUrl: `ws://127.0.0.1:${actualPort}`,
+    env: bgHandler.env,
     containers: bgHandler.containers,
     close: async () => {
       for (const c of bgHandler.containers.values()) {

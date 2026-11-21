@@ -14,11 +14,13 @@ import {
 } from '../../campus/world-data';
 import type {
   BoardGameLobbyPlayerView,
+  BoardGameMatchStatus,
   BoardGameMatchSummary,
   BoardGameRulesetId,
+  BoardGameServerRulesetCapability,
 } from '../network/contracts';
 import { CARDS_CATALOG } from '../domain/cards';
-import { DEFAULT_RULESET_DEFINITIONS } from '../domain/registry';
+import { DEFAULT_RULESET_REGISTRY } from '../domain/registry';
 import {
   FACTION_LABELS,
   ROLES_CATALOG,
@@ -41,8 +43,10 @@ export interface BoardGameLobbyProps {
   selfPlayerId?: string | null;
   isSpectator?: boolean;
   inviteCode?: string | null;
+  matchStatus?: BoardGameMatchStatus | null;
   matchStatusLabel?: string | null;
   rulesetId?: BoardGameRulesetId;
+  serverRulesets?: readonly BoardGameServerRulesetCapability[];
   isHost?: boolean;
   localReady?: boolean;
   serverNotice?: string | null;
@@ -55,7 +59,7 @@ export interface BoardGameLobbyProps {
   onConfirmExit: () => void;
   onSelectSeat: (seatId: string) => void;
   onStandUpSeat: () => void;
-  onCreateMatch?: (tableId: BoardGameTableId) => void;
+  onCreateMatch?: (tableId: BoardGameTableId, rulesetId?: BoardGameRulesetId) => void;
   onJoinByCode?: (code: string, asSpectator?: boolean) => void;
   onJoinDirectoryMatch?: (matchId: string, inviteCode: string, asSpectator: boolean) => void;
   onSelectRuleset?: (rulesetId: BoardGameRulesetId) => void;
@@ -78,8 +82,10 @@ export default function BoardGameLobby({
   selfPlayerId = null,
   isSpectator = false,
   inviteCode = null,
+  matchStatus = null,
   matchStatusLabel = null,
   rulesetId = 'classic',
+  serverRulesets,
   isHost = false,
   localReady = false,
   serverNotice = null,
@@ -101,6 +107,7 @@ export default function BoardGameLobby({
   onLeaveMatch,
 }: BoardGameLobbyProps) {
   const [selectedTable, setSelectedTable] = useState<BoardGameTableId>('table-1');
+  const [createRulesetId, setCreateRulesetId] = useState<BoardGameRulesetId>('classic');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [localInfoMsg, setLocalInfoMsg] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -108,6 +115,25 @@ export default function BoardGameLobby({
   const [rulesFilter, setRulesFilter] = useState<
     'all' | 'lantern-guard' | 'mist-order' | 'wanderer' | 'cards'
   >('all');
+
+  const effectiveRulesets: readonly BoardGameServerRulesetCapability[] =
+    serverRulesets && serverRulesets.length > 0
+      ? serverRulesets
+      : DEFAULT_RULESET_REGISTRY.getPublicServerCapabilities().rulesets;
+  const rulesetLockedByMatch = matchStatus === 'STARTING' || matchStatus === 'PLAYING';
+  const activeRulesetMeta =
+    effectiveRulesets.find((r) => r.id === rulesetId) ?? effectiveRulesets[0];
+  const anyBetaEnabled = effectiveRulesets.some((r) => r.isBeta && r.selectable);
+  const safeCreateRulesetId: BoardGameRulesetId = effectiveRulesets.some(
+    (r) => r.id === createRulesetId && r.selectable,
+  )
+    ? createRulesetId
+    : 'classic';
+  const rulesetBadgeLabel = (id?: BoardGameRulesetId): string => {
+    const found = effectiveRulesets.find((r) => r.id === id);
+    if (!found || found.id === 'classic') return 'Classic';
+    return `${found.shortLabel}${found.isBeta ? ' · Beta' : ''}`;
+  };
 
   const occupiedMap = new Map<string, BoardGameSeatOccupant>();
   for (const occ of occupants) {
@@ -335,22 +361,31 @@ export default function BoardGameLobby({
                           Bộ luật & Kho tướng
                         </span>
                         <span className="text-[11px] text-slate-400">
-                          {isHost
-                            ? 'Trưởng bàn chọn bộ luật (khóa tại server khi bắt đầu)'
-                            : 'Đồng bộ từ trưởng bàn'}
+                          {rulesetLockedByMatch
+                            ? 'Đã khóa bộ luật trong trận'
+                            : isHost
+                              ? 'Trưởng bàn chọn bộ luật (khóa tại server khi bắt đầu)'
+                              : 'Đồng bộ từ trưởng bàn'}
                         </span>
                       </div>
                       <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                        {DEFAULT_RULESET_DEFINITIONS.map((rs) => {
+                        {effectiveRulesets.map((rs) => {
                           const selected = rulesetId === rs.id;
-                          const playable = rs.enabledInProduction && rs.availability === 'available';
-                          const interactive = isHost && playable && Boolean(onSelectRuleset);
+                          const playable = rs.selectable;
+                          const interactive =
+                            isHost && playable && !rulesetLockedByMatch && Boolean(onSelectRuleset);
+                          const badgeText =
+                            rs.status === 'stable'
+                              ? 'Stable'
+                              : rs.status === 'beta'
+                                ? 'Beta'
+                                : 'Unavailable';
                           return (
                             <button
                               key={rs.id}
                               type="button"
                               data-testid={`bg-ruleset-opt-${rs.id}`}
-                              disabled={!playable || !isHost}
+                              disabled={!interactive}
                               title={rs.description}
                               onClick={() => {
                                 if (interactive && onSelectRuleset) {
@@ -359,7 +394,9 @@ export default function BoardGameLobby({
                               }}
                               className={`flex flex-col items-start rounded-lg border px-2 py-1.5 text-left transition ${
                                 selected
-                                  ? 'border-amber-400/80 bg-amber-950/45 text-amber-100'
+                                  ? rs.isBeta
+                                    ? 'border-violet-400/85 bg-violet-950/50 text-violet-100'
+                                    : 'border-amber-400/80 bg-amber-950/45 text-amber-100'
                                   : playable
                                     ? 'border-slate-700 bg-slate-950/60 text-slate-200 hover:border-amber-400/50'
                                     : 'cursor-not-allowed border-slate-800 bg-slate-950/40 text-slate-500 opacity-70'
@@ -368,13 +405,16 @@ export default function BoardGameLobby({
                               <div className="flex w-full items-center justify-between gap-1">
                                 <span className="text-[11px] font-bold">{rs.shortLabel}</span>
                                 <span
+                                  data-testid={`bg-ruleset-badge-${rs.id}`}
                                   className={`rounded px-1 py-0.5 text-[9px] font-semibold uppercase ${
-                                    playable
+                                    rs.status === 'stable'
                                       ? 'bg-emerald-500/20 text-emerald-300'
-                                      : 'bg-slate-800 text-slate-400'
+                                      : rs.status === 'beta'
+                                        ? 'bg-violet-500/25 text-violet-200'
+                                        : 'bg-slate-800 text-slate-400'
                                   }`}
                                 >
-                                  {playable ? 'Available' : 'Coming Soon'}
+                                  {badgeText}
                                 </span>
                               </div>
                               <span className="mt-0.5 text-[10px] text-slate-400">
@@ -384,6 +424,17 @@ export default function BoardGameLobby({
                           );
                         })}
                       </div>
+                      {(activeRulesetMeta?.isBeta || anyBetaEnabled) && (
+                        <p
+                          data-testid="bg-lobby-beta-notice"
+                          className="mt-2 rounded-md border border-violet-400/35 bg-violet-950/35 px-2.5 py-1.5 text-[11px] leading-snug text-violet-100"
+                        >
+                          <strong>⚠️ Production Beta (Early Access):</strong>{' '}
+                          {activeRulesetMeta?.isBeta
+                            ? `Đang chọn ${activeRulesetMeta.shortLabel} (${activeRulesetMeta.expectedCharacterCount} tướng). Các gói Mở rộng đang trong giai đoạn thử nghiệm cộng đồng và có thể tiếp tục điều chỉnh cân bằng kỹ năng.`
+                            : 'Classic (10 tướng) là chế độ ổn định mặc định. Expansion 1, Expansion 2 & Full Expansion đang mở Beta và có thể tiếp tục điều chỉnh cân bằng qua dữ liệu thực tế.'}
+                        </p>
+                      )}
                     </div>
 
                     {/* Danh sách thành viên đang ngồi bàn */}
@@ -476,31 +527,72 @@ export default function BoardGameLobby({
                         </p>
                         <div
                           data-testid="bg-lobby-ruleset-preview"
-                          className="flex flex-wrap gap-1 text-[10px]"
+                          className="grid grid-cols-2 gap-1.5 text-[10px]"
                         >
-                          {DEFAULT_RULESET_DEFINITIONS.map((rs) => {
-                            const playable = rs.enabledInProduction && rs.availability === 'available';
+                          {effectiveRulesets.map((rs) => {
+                            const playable = rs.selectable;
+                            const picked = safeCreateRulesetId === rs.id;
+                            const statusTag =
+                              rs.status === 'stable'
+                                ? 'Stable'
+                                : rs.status === 'beta'
+                                  ? 'Beta'
+                                  : 'Unavailable';
                             return (
-                              <span
+                              <button
                                 key={rs.id}
+                                type="button"
+                                data-testid={`bg-create-ruleset-${rs.id}`}
+                                disabled={!playable}
                                 title={rs.description}
-                                className={`rounded border px-1.5 py-0.5 font-medium ${
-                                  playable
-                                    ? 'border-emerald-400/50 bg-emerald-950/40 text-emerald-200'
-                                    : 'border-slate-800 bg-slate-900/70 text-slate-500'
+                                onClick={() => {
+                                  if (playable) setCreateRulesetId(rs.id);
+                                }}
+                                className={`flex flex-col items-start rounded-lg border px-2 py-1 text-left transition ${
+                                  picked
+                                    ? rs.isBeta
+                                      ? 'border-violet-400 bg-violet-950/50 text-violet-100'
+                                      : 'border-emerald-400 bg-emerald-950/45 text-emerald-100'
+                                    : playable
+                                      ? 'border-slate-700 bg-slate-900/80 text-slate-200 hover:border-amber-400/50'
+                                      : 'cursor-not-allowed border-slate-800 bg-slate-900/50 text-slate-500 opacity-65'
                                 }`}
                               >
-                                {rs.shortLabel} · {playable ? 'Available' : 'Coming Soon'}
-                              </span>
+                                <div className="flex w-full items-center justify-between gap-1">
+                                  <span className="font-bold">{rs.shortLabel}</span>
+                                  <span
+                                    className={`rounded px-1 py-0.5 text-[8px] font-semibold uppercase ${
+                                      rs.status === 'stable'
+                                        ? 'bg-emerald-500/20 text-emerald-300'
+                                        : rs.status === 'beta'
+                                          ? 'bg-violet-500/25 text-violet-200'
+                                          : 'bg-slate-800 text-slate-400'
+                                    }`}
+                                  >
+                                    {statusTag}
+                                  </span>
+                                </div>
+                                <span className="text-[9px] text-slate-400">
+                                  {rs.expectedCharacterCount} tướng
+                                </span>
+                              </button>
                             );
                           })}
                         </div>
+                        {anyBetaEnabled && (
+                          <p
+                            data-testid="bg-lobby-beta-notice"
+                            className="rounded-lg border border-violet-400/35 bg-violet-950/30 px-2 py-1 text-[10px] leading-snug text-violet-200"
+                          >
+                            ⚠️ Gói Mở rộng đang ở giai đoạn <strong>Beta</strong> (tiếp tục điều chỉnh cân bằng). <strong>Classic (10 tướng)</strong> luôn là chế độ ổn định mặc định.
+                          </p>
+                        )}
                         <button
                           type="button"
                           data-testid="bg-create-match-btn"
                           onClick={() => {
                             if (supportsOnlineLobby && onCreateMatch) {
-                              onCreateMatch(selectedTable);
+                              onCreateMatch(selectedTable, safeCreateRulesetId);
                             } else {
                               setLocalInfoMsg(
                                 'Sảnh 3D đã sẵn sàng! Máy chủ đồng bộ trận đấu Bóng Đêm KTX đang được kích hoạt.',
@@ -509,7 +601,7 @@ export default function BoardGameLobby({
                           }}
                           className="w-full rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400"
                         >
-                          ✨ Tạo trận Bóng Đêm KTX
+                          ✨ Tạo trận Bóng Đêm KTX ({rulesetBadgeLabel(safeCreateRulesetId)})
                         </button>
                       </div>
 
@@ -568,7 +660,10 @@ export default function BoardGameLobby({
                                 <span className="text-slate-200">
                                   {m.tableId === 'table-1' ? 'Bàn 1' : 'Bàn 2'} · Chủ: {m.hostName}
                                 </span>
-                                <span className="ml-2 text-[11px] text-slate-400">
+                                <span className="ml-1.5 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-semibold text-violet-200">
+                                  {rulesetBadgeLabel(m.rulesetId)}
+                                </span>
+                                <span className="ml-1.5 text-[11px] text-slate-400">
                                   ({m.playerCount}/{m.maxPlayers})
                                 </span>
                               </div>
