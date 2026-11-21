@@ -45,6 +45,7 @@ import {
   WAVE3_ROLE_IDS,
   WAVE4_ROLE_IDS,
   WAVE5_ROLE_IDS,
+  WAVE6_ROLE_IDS,
   resolveActionCardPresentation,
   resolveRoleCardPresentation,
   type ActionCardZone,
@@ -283,6 +284,7 @@ export default function BoardGameVisualPrototypeView() {
   const [wave5FactionFilter, setWave5FactionFilter] = useState<
     'all' | 'lantern-guard' | 'wanderer'
   >('all');
+  const [wave6FactionFilter, setWave6FactionFilter] = useState<'all' | BoardGameFactionId>('all');
   const [libraryDeckFilter, setLibraryDeckFilter] = useState<'all' | BoardGameDeckId>('all');
   const [pawnStep, setPawnStep] = useState<number>(0);
   const [pawnsRevealed, setPawnsRevealed] = useState<boolean>(false);
@@ -396,6 +398,19 @@ export default function BoardGameVisualPrototypeView() {
         ? wave5Roles
         : wave5Roles.filter((r) => r.faction === wave5FactionFilter),
     [wave5FactionFilter, wave5Roles],
+  );
+
+  const wave6Roles = useMemo(
+    () => WAVE6_ROLE_IDS.map((roleId) => getRoleDesign(roleId)),
+    [],
+  );
+
+  const filteredWave6Roles = useMemo(
+    () =>
+      wave6FactionFilter === 'all'
+        ? wave6Roles
+        : wave6Roles.filter((r) => r.faction === wave6FactionFilter),
+    [wave6FactionFilter, wave6Roles],
   );
 
   const filteredLibraryCards = useMemo(
@@ -1446,6 +1461,94 @@ export default function BoardGameVisualPrototypeView() {
                 <div key={role.id} className="mx-auto w-full max-w-[270px]">
                   <MidnightCharacterCard
                     testId={`proto-wave5-card-${role.id}`}
+                    roleId={role.id}
+                    revealed={eff.revealed}
+                    viewerMode={eff.viewerMode}
+                    woundsTaken={woundsTaken}
+                    foilEnabled={foilEnabled}
+                    reducedMotion={gfx.profile.reducedMotion}
+                    showGoalFooter={false}
+                    onFlipToggle={() => toggleFlipKey(role.id)}
+                    onZoom={() =>
+                      setZoomTarget({
+                        kind: 'role',
+                        roleId: role.id,
+                        revealed: eff.revealed,
+                        viewerMode: eff.viewerMode,
+                        woundsTaken,
+                      })
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* PHẦN 5G: WAVE 6 (STARTER FIFTY-SIX) — 8 NHÂN VẬT TIER-4 CUỐI CÙNG / 66/66 COMPLETE CATALOG (PHASE 7C) */}
+        <section
+          data-testid="proto-section-wave6"
+          className="space-y-4 rounded-3xl border border-violet-500/45 bg-gradient-to-b from-violet-950/25 via-slate-900/60 to-slate-950/75 p-4 sm:p-6"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-violet-400/60 bg-violet-950/85 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-violet-200">
+                  Phase 7C · Wave 6 Final Tier-4
+                </span>
+                <span className="rounded-full border border-emerald-400/45 bg-emerald-950/60 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-200">
+                  Experimental: starter-fifty-six (66/66 Complete)
+                </span>
+                <span className="rounded-full border border-amber-400/45 bg-amber-950/60 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+                  113 Midnight WebP Assets
+                </span>
+                <span className="rounded-full border border-slate-600/60 bg-slate-900/80 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                  Production: Classic Only
+                </span>
+              </div>
+              <h2 className="text-lg font-black text-white sm:text-2xl">
+                5G. Wave 6 — 8 Nhân Vật Tier-4 Cuối Cùng Full-Art 2:3 ({wave6Roles.length}/8 Vai Trò · 66/66 Trọn Bộ)
+              </h2>
+              <p className="text-xs text-slate-400 sm:text-sm">
+                Hoàn thiện 100% danh mục 66/66 nhân vật HUSTVerse Midnight — Anime Noir (1024×1536 WebP) với 1 Hunter (Lloyd), 3 Shadow (Vengeful Spirit, Voodoo, Undead) &amp; 4 Neutral (Antimony, Cain, Bonnie, N.C. Soldier); bảo mật P0, lật 3D &amp; phóng lớn 🔍.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ['all', 'Tất cả (8)'],
+                  ['lantern-guard', 'Đội Săn Đêm (1)'],
+                  ['mist-order', 'Hội Bóng Đêm (3)'],
+                  ['wanderer', 'Kẻ Độc Hành (4)'],
+                ] as const
+              ).map(([fid, label]) => (
+                <button
+                  key={fid}
+                  type="button"
+                  data-testid={`proto-wave6-tab-${fid}`}
+                  onClick={() => setWave6FactionFilter(fid)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-extrabold transition cursor-pointer ${
+                    wave6FactionFilter === fid
+                      ? 'bg-violet-400 text-slate-950 shadow'
+                      : 'border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div
+            data-testid="proto-wave6-grid"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            {filteredWave6Roles.map((role) => {
+              const eff = effectiveCharacterSecrecy(role.id);
+              return (
+                <div key={role.id} className="mx-auto w-full max-w-[270px]">
+                  <MidnightCharacterCard
+                    testId={`proto-wave6-card-${role.id}`}
                     roleId={role.id}
                     revealed={eff.revealed}
                     viewerMode={eff.viewerMode}

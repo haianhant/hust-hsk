@@ -260,8 +260,8 @@ export const WAVE6_ROLE_IDS: readonly Phase7RoleId[] = [
   'exp2_nc_soldier',
 ];
 
-/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (tạm nới Partial trong Phase 7B với 58/58 WebP thật; Phase 7C hoàn tất strict 66/66). */
-export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, string>>> = {
+/** Thư viện chân dung nhân vật full-art HUSTVerse Midnight (66/66 playable: 10 Classic + 56 Expansion). */
+export const MIDNIGHT_CHARACTER_ART: Readonly<Record<BoardGameRoleId, string>> = {
   // 10 Classic Roles (preserved untouched)
   'gac-ky-thuat': '/assets/boardgame/prototype/role-minh-ky-thuat.webp',
   'gac-truc-ban': '/assets/boardgame/roles/role-lan-truc-ban.webp',
@@ -326,6 +326,15 @@ export const MIDNIGHT_CHARACTER_ART: Readonly<Partial<Record<BoardGameRoleId, st
   exp2_colt: '/assets/boardgame/roles/role-exp2-colt.webp',
   exp2_diana: '/assets/boardgame/roles/role-exp2-diana.webp',
   exp2_aaron: '/assets/boardgame/roles/role-exp2-aaron.webp',
+  // 8 Wave 6 Final Expansion Roles (Phase 7C — Tier-4 Completion — 1024x1536 WebP)
+  exp1_lloyd: '/assets/boardgame/roles/role-exp1-lloyd.webp',
+  exp1_vengeful_spirit: '/assets/boardgame/roles/role-exp1-vengeful-spirit.webp',
+  exp1_voodoo: '/assets/boardgame/roles/role-exp1-voodoo.webp',
+  exp1_undead: '/assets/boardgame/roles/role-exp1-undead.webp',
+  exp1_antimony: '/assets/boardgame/roles/role-exp1-antimony.webp',
+  exp2_cain: '/assets/boardgame/roles/role-exp2-cain.webp',
+  exp2_bonnie: '/assets/boardgame/roles/role-exp2-bonnie.webp',
+  exp2_nc_soldier: '/assets/boardgame/roles/role-exp2-nc-soldier.webp',
 };
 
 /** Thư viện đầy đủ 40 loại thẻ riêng biệt (tổng 48 bản sao) phong cách HUSTVerse Midnight (2:3 WebP). */
