@@ -7023,6 +7023,9 @@ export function applyExpandedUseSkill(
     if (expAn.anathemaCurses?.[actor.playerId]) {
       return { ok: false, error: 'Lời Nguyền chỉ được sử dụng 1 lần duy nhất mỗi trận.' };
     }
+    if (expAn.anathemaPromptedTurnNumber === state.turnNumber) {
+      return { ok: false, error: 'Bạn đã cân nhắc Lời Nguyền trong lượt này rồi.' };
+    }
     const candidates = state.turnOrder
       .map((id) => state.players[id])
       .filter((p): p is AuthoritativePlayerState => Boolean(p && p.alive && p.playerId !== actor.playerId));
