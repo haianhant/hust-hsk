@@ -64,10 +64,14 @@ export function createInitialGameState(
     rngState,
   );
   rngState = shadows.nextState;
-  const wanderers = shuffleWithRng(
-    resolvedPool.pools.wanderer as readonly BoardGameRoleId[],
-    rngState,
-  );
+  // Phase 7 experimental house rule (Section 17): ở bàn 5P (chỉ có 1 Neutral duy nhất),
+  // loại trừ `exp2_nc_soldier` khỏi pool chia vai Wanderer (KHÔNG chạm Classic PRNG!).
+  const rawWandererPool = resolvedPool.pools.wanderer as readonly BoardGameRoleId[];
+  const eligibleWandererPool =
+    resolvedPool.ruleset.id !== 'classic' && orderedInputs.length === 5
+      ? rawWandererPool.filter((id) => (id as string) !== 'exp2_nc_soldier')
+      : rawWandererPool;
+  const wanderers = shuffleWithRng(eligibleWandererPool, rngState);
   rngState = wanderers.nextState;
 
   const pickedRoleIds: BoardGameRoleId[] = [
@@ -197,6 +201,7 @@ export function createInitialGameState(
       processedEventIds: [],
       resolvedChoiceIds: [],
       pendingSteps: [],
+      originallyDealtNeutralIds: turnOrder.filter((pid) => players[pid].faction === 'wanderer'),
       ...(typeof input.choiceTimeoutMs === 'number' && input.choiceTimeoutMs >= 300
         ? { choiceTimeoutMs: input.choiceTimeoutMs }
         : {}),

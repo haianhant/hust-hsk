@@ -110,6 +110,18 @@ const INVITE_CODE_RE = /^[A-HJ-NP-Z2-9]{6}$/;
 
 export type BoardGameFactionId = 'lantern-guard' | 'mist-order' | 'wanderer';
 
+export type BoardGameWinnerFaction =
+  | BoardGameFactionId
+  | 'wanderer-solo'
+  | 'wanderer'
+  | 'multi-faction';
+
+export type BoardGamePlayerLifecycleState =
+  | 'ALIVE'
+  | 'DORMANT_PENDING_REVIVE'
+  | 'REVIVED'
+  | 'FINAL_ELIMINATED';
+
 export type ClassicBoardGameRoleId =
   | 'gac-ky-thuat'
   | 'gac-truc-ban'
@@ -412,6 +424,14 @@ export interface BoardGamePublicPlayerView {
   revealedMaxHp: number | null;
   revealedSkillCooldown: number;
   revealedSkillUsedOnce: boolean;
+  /** Phase 7A: Trạng thái vòng đời mở rộng (CHỈ xuất khi ở chế độ mở rộng và không phải ALIVE mặc định). */
+  lifecycleState?: BoardGamePlayerLifecycleState;
+  /** Phase 7A: Phe hiệu lực động khi khác phe gốc (CHỈ xuất khi đã lộ diện hoặc FINISHED — vd. Bonnie). */
+  effectiveFaction?: BoardGameFactionId;
+  /** Phase 7A: Mã kỹ năng hiệu lực đang sao chép/chiêu mộ (CHỈ xuất khi đã lộ diện hoặc FINISHED). */
+  copiedSkillRoleId?: string | null;
+  /** Phase 7A: Mã liên minh công khai (CHỈ xuất khi đã lộ diện hoặc FINISHED — vd. N.C. Soldier). */
+  allianceId?: string | null;
   appearance: RemoteAppearance;
 }
 
@@ -451,6 +471,12 @@ export interface BoardGameRevealRecord {
   roleId: BoardGameRoleId;
   roleName: string;
   faction: BoardGameFactionId;
+  /** Phase 7A: Phe hiệu lực cuối trận (khi khác phe gốc, vd. Bonnie -> Shadow). */
+  effectiveFaction?: BoardGameFactionId;
+  /** Phase 7A: Mã kỹ năng hiệu lực cuối trận nếu đã sao chép hoặc chiêu mộ. */
+  copiedSkillRoleId?: string | null;
+  /** Phase 7A: Mã liên minh cuối trận nếu tham gia liên minh N.C. Soldier. */
+  allianceId?: string | null;
   won: boolean;
   alive: boolean;
   hp: number;
@@ -531,6 +557,21 @@ export interface BoardGamePrivatePendingChoice {
   isSecret: boolean;
 }
 
+export interface BoardGamePublicControlledTurnView {
+  readonly controlGrantId: string;
+  readonly activePlayerId: string;
+  readonly controllerPlayerId: string;
+  readonly pausedForOwnerDecision: boolean;
+  /** CHỈ chứa các lá Trắng/Đen công khai rút trong lượt điều khiển; TUYỆT ĐỐI không chứa lá Điều tra (inv-*). */
+  readonly publicDrawnCards: readonly BoardGameCardPublicMeta[];
+}
+
+export interface BoardGamePublicAllianceView {
+  readonly allianceId: string;
+  readonly leaderPlayerId: string;
+  readonly memberPlayerIds: readonly string[];
+}
+
 export interface BoardGamePublicGameView {
   rulesetVersion: 4;
   rulesetId?: BoardGameRulesetId;
@@ -563,6 +604,12 @@ export interface BoardGamePublicGameView {
   aaronSpouseByPlayer?: Readonly<Record<string, string>>;
   /** Đếm ngược sống sót của April & Skipps (CHỈ xuất sau khi bị ép lộ vai ở ô 7). */
   aprilSkippsCountdownByPlayer?: Readonly<Record<string, number>>;
+  /** Phase 7A: Chỉ báo lượt đang bị chiếm quyền điều khiển (Voodoo — tuyệt đối không lộ thông tin bí mật). */
+  controlledTurn?: BoardGamePublicControlledTurnView | null;
+  /** Phase 7A: Danh sách playerId đã lộ diện và kích hoạt điều kiện thắng song phe của Cain. */
+  cainDeathModifierActivePlayerIds?: readonly string[];
+  /** Phase 7A: Các nhóm liên minh công khai (CHỈ gồm thành viên đã lộ diện — zero hidden role leak). */
+  alliances?: readonly BoardGamePublicAllianceView[];
   deadCount: number;
   players: readonly BoardGamePublicPlayerView[];
   deckCounts: Record<BoardGameDeckId, number>;
@@ -572,7 +619,9 @@ export interface BoardGamePublicGameView {
   publicLog: readonly BoardGamePublicLogEntry[];
   highlights: readonly BoardGameHighlightEntry[];
   winnerLabel: string | null;
-  winnerFaction: BoardGameFactionId | 'wanderer-solo' | 'wanderer' | null;
+  winnerFaction: BoardGameWinnerFaction | null;
+  /** Phase 7A: Danh sách đầy đủ các phe đồng thắng (hỗ trợ MultiFactionVictory song phe Hunter + Shadow). */
+  winningFactions?: readonly BoardGameFactionId[];
   winnerPlayerIds: readonly string[];
   winReason: string | null;
   /** Chỉ điền đầy đủ sau khi trận đấu kết thúc (`FINISHED`). */
@@ -613,8 +662,20 @@ export interface BoardGamePrivateGameView {
   reactionPolicy?: BoardGameReactionPolicy;
   /** Kết quả soi vai bí mật của Clairvoyant (BẢO MẬT P0: CHỈ gửi unicast cho chủ sở hữu Clairvoyant!). */
   clairvoyantReveals?: readonly BoardGameClairvoyantRevealView[];
-  /** Tóm tắt mục tiêu chiến thắng đang sao chép/gắn kết của riêng chủ sở hữu (Cassie / Clairvoyant / Diana). */
+  /** Tóm tắt mục tiêu chiến thắng đang sao chép/gắn kết của riêng chủ sở hữu (Cassie / Clairvoyant / Diana / Antimony). */
   copiedVictoryGoalSummary?: string | null;
+  /** Phase 7A: Phe hiệu lực động của chính chủ sở hữu (mở rộng). */
+  effectiveFaction?: BoardGameFactionId;
+  /** Phase 7A: Trạng thái vòng đời hồi sinh của chính chủ sở hữu (mở rộng). */
+  lifecycleState?: BoardGamePlayerLifecycleState;
+  /** Phase 7A: Mã kỹ năng hiệu lực đang sao chép/chiêu mộ của chính chủ sở hữu. */
+  copiedSkillRoleId?: string | null;
+  /** Phase 7A: Mã liên minh hiện tại của chính chủ sở hữu (N.C. Soldier). */
+  allianceId?: string | null;
+  /** Phase 7A: True khi chính bạn đang là controller tạm thời điều khiển lượt của người khác (Voodoo). */
+  isControllingActiveTurn?: boolean;
+  /** Phase 7A: True khi lượt hiện tại của bạn đang bị người khác chiếm quyền (Voodoo). */
+  isTurnHijacked?: boolean;
   pendingChoice?: BoardGamePrivatePendingChoice | null;
 }
 

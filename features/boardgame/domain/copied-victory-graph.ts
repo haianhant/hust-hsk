@@ -110,6 +110,7 @@ const LINKED_GOAL_ROLE_IDS: ReadonlySet<string> = new Set([
   'exp1_clairvoyant',
   'exp2_diana',
   'exp2_aaron',
+  'exp1_antimony',
 ]);
 
 export function isLinkedVictoryRoleId(roleId: string | null | undefined): boolean {

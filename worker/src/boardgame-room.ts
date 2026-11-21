@@ -72,6 +72,7 @@ import {
   applyTimeoutAutoTurn,
   createInitialGameState,
   getActivePlayer,
+  getEffectiveTurnControllerId,
   getPrivateGameView,
   getPublicGameView,
   getRoleDesign,
@@ -1491,7 +1492,7 @@ export class BoardGameRoom {
     // If active turn holder OR pending choice owner disconnects mid-PLAYING, start/cap timer cleanly
     if (match.status === 'PLAYING') {
       const engineState = this.loadEngineState(match);
-      const active = engineState ? getActivePlayer(engineState) : null;
+      const effectiveControllerId = engineState ? getEffectiveTurnControllerId(engineState) : null;
       if (engineState?.pendingChoice?.ownerPlayerId === player.player_id) {
         const disconnChoiceMs =
           this.env.ALLOW_SHORT_TURN_TIMEOUT === '1'
@@ -1513,7 +1514,7 @@ export class BoardGameRoom {
           JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
           match.match_id,
         );
-      } else if (active && active.playerId === player.player_id) {
+      } else if (effectiveControllerId && effectiveControllerId === player.player_id) {
         const holdWindow =
           match.turn_timeout_ms <= 0
             ? BOARD_GAME_RECONNECT_HOLD_MS
@@ -1613,7 +1614,9 @@ export class BoardGameRoom {
       const engineState = this.loadEngineState(match, rows);
       if (engineState && (!engineState.finished || match.status === 'PLAYING')) {
         const timedOutPlayerId =
-          engineState.pendingChoice?.ownerPlayerId ?? getActivePlayer(engineState)?.playerId;
+          engineState.pendingChoice?.ownerPlayerId ??
+          getEffectiveTurnControllerId(engineState) ??
+          getActivePlayer(engineState)?.playerId;
         if (!engineState.finished) {
           if (
             engineState.pendingChoice &&
@@ -1825,8 +1828,14 @@ export class BoardGameRoom {
         if (latestMatch.status === 'PLAYING') {
           const postRows = this.listPlayerRows();
           const engineState = this.loadEngineState(latestMatch, postRows);
-          const active = engineState ? getActivePlayer(engineState) : null;
-          if (active && active.playerId === existing.player_id && latestMatch.turn_timeout_ms <= 0) {
+          const effectiveControllerId = engineState
+            ? getEffectiveTurnControllerId(engineState)
+            : null;
+          if (
+            effectiveControllerId &&
+            effectiveControllerId === existing.player_id &&
+            latestMatch.turn_timeout_ms <= 0
+          ) {
             this.sql.exec(
               'UPDATE matches SET turn_deadline_ms = NULL WHERE match_id = ?',
               latestMatch.match_id,
@@ -2669,7 +2678,7 @@ export class BoardGameRoom {
       this.promoteNextConnectedHost(player.player_id);
     }
     const engineState = this.loadEngineState(match);
-    const active = engineState ? getActivePlayer(engineState) : null;
+    const effectiveControllerId = engineState ? getEffectiveTurnControllerId(engineState) : null;
     if (engineState?.pendingChoice?.ownerPlayerId === player.player_id) {
       const disconnChoiceMs =
         this.env.ALLOW_SHORT_TURN_TIMEOUT === '1'
@@ -2689,7 +2698,7 @@ export class BoardGameRoom {
         JSON.stringify({ rulesetVersion: BOARD_GAME_RULESET_VERSION, engineState }),
         match.match_id,
       );
-    } else if (active && active.playerId === player.player_id) {
+    } else if (effectiveControllerId && effectiveControllerId === player.player_id) {
       const holdWindow =
         match.turn_timeout_ms <= 0
           ? BOARD_GAME_RECONNECT_HOLD_MS
@@ -2932,7 +2941,8 @@ export class BoardGameRoom {
       (rawEngine.winnerFaction === 'lantern-guard' ||
         rawEngine.winnerFaction === 'mist-order' ||
         rawEngine.winnerFaction === 'wanderer-solo' ||
-        rawEngine.winnerFaction === 'wanderer')
+        rawEngine.winnerFaction === 'wanderer' ||
+        rawEngine.winnerFaction === 'multi-faction')
         ? rawEngine.winnerFaction
         : null;
     const preservedWinnerPlayerIds =
@@ -3073,10 +3083,11 @@ export class BoardGameRoom {
     if (engineState.pendingChoice) {
       return engineState.pendingChoice.deadlineMs;
     }
-    const active = getActivePlayer(engineState);
-    if (!active) return null;
-    const row = playerRows.find((r) => r.player_id === active.playerId);
-    const isConnected = row ? row.connected === 1 : active.connected;
+    const controllerId = getEffectiveTurnControllerId(engineState);
+    if (!controllerId) return null;
+    const controllerPlayer = engineState.players[controllerId];
+    const row = playerRows.find((r) => r.player_id === controllerId);
+    const isConnected = row ? row.connected === 1 : Boolean(controllerPlayer?.connected);
     if (turnTimeoutMs <= 0) {
       return isConnected ? null : nowMs + BOARD_GAME_RECONNECT_HOLD_MS;
     }

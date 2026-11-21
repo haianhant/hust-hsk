@@ -23,15 +23,24 @@ import type {
   BoardGameRoleId,
   BoardGameRulesetId,
   BoardGameTurnPhase,
+  BoardGameWinnerFaction,
   BoardGameZoneClusterId,
 } from '../../../shared/contracts/boardgame';
 import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
 import type { DamageRedirectionTrace } from './damage-redirection';
+import type {
+  AllianceGroupRecord,
+  DynamicFactionChangeRecord,
+} from './dynamic-allegiance';
+import type { CopiedSkillBinding } from './dynamic-skill-copy';
 import type { EquipmentTransferTransaction } from './equipment-transactions';
+import type { PendingDeclaredAttack } from './global-attack-interrupt';
+import type { PlayerLifecycleRecord } from './pending-resurrection';
 import type {
   AuthoritativeRevealTriggerReason,
   AuthoritativeRoleRevealRecord,
 } from './reveal-events';
+import type { TurnControlGrant } from './turn-ownership';
 
 export type GameCardEffectKind =
   | 'inv_anger'
@@ -702,6 +711,16 @@ export interface ExpansionRuntimeStats {
   clairvoyantInspections?: number;
   copiedVictoryLinksBound?: number;
   victoryCyclesDetected?: number;
+  // ---- Phase 7 (Tier-4 Advanced Engine Telemetry) ----
+  copiedSkillActivations?: number;
+  resurrectionsTriggered?: number;
+  hijackedTurnsCount?: number;
+  hijackedActionsCount?: number;
+  unauthorizedControlAttempts?: number;
+  dynamicFactionChangesCount?: number;
+  recruitmentsCount?: number;
+  multiFactionVictoriesCount?: number;
+  lloydInterruptedAttacksCount?: number;
 }
 
 export interface GloriaQueuedCardEntry {
@@ -760,6 +779,30 @@ export interface ExpansionRuntimeState {
   bethanyPromptedTurnNumber?: number;
   cassiePromptedTurnNumber?: number;
   clairvoyantPromptedTurnNumber?: number;
+  // ---- Phase 7 (Tier-4 Advanced Engine Foundations) ----
+  /** TurnOwnershipOverride (Voodoo): grant điều khiển lượt đang hoạt động, hàng đợi chờ & sổ chống phát lại. */
+  activeTurnControl?: TurnControlGrant | null;
+  pendingTurnControlGrants?: TurnControlGrant[];
+  expiredControlGrantIds?: string[];
+  voodooPromptedTurnNumber?: number;
+  /** PendingResurrection (Undead): trạng thái vòng đời từng người chơi. */
+  lifecycleByPlayer?: Record<string, PlayerLifecycleRecord>;
+  /** DynamicSkillCopy (Vengeful Spirit / Antimony / N.C. Soldier alliance): gắn kết kỹ năng hiệu lực. */
+  copiedSkillsByPlayer?: Record<string, CopiedSkillBinding>;
+  /** Antimony `COPY_GOAL` binding đi qua CopiedVictoryGraph. */
+  antimonyCopiedGoalByPlayer?: Record<string, CopiedGoalBindingEntry>;
+  /** DynamicAllegiance (Bonnie): phe hiệu lực động tách biệt khỏi `baseFaction` bất biến. */
+  effectiveFactionByPlayer?: Record<string, DynamicFactionChangeRecord>;
+  /** Alliance Groups (N.C. Soldier): liên minh Neutral độc lập với `effectiveFaction`. */
+  alliances?: Record<string, AllianceGroupRecord>;
+  /** Danh sách playerId Neutral được chia lúc khởi tạo trận (dùng cho điều kiện chiêu mộ đủ của N.C. Soldier). */
+  originallyDealtNeutralIds?: string[];
+  /** MultiFactionVictory (Cain): danh sách playerId đã kích hoạt điều kiện thắng song phe khi chính họ chết. */
+  cainDeathVictoryModifierIds?: string[];
+  /** Ghi nhận các phe bị từng playerId trực tiếp kết liễu (dùng cho điều kiện thắng 5P của Cain). */
+  killedFactionsByPlayer?: Record<string, BoardGameFactionId[]>;
+  /** GlobalAttackInterrupt (Lloyd): đòn tấn công đang chờ cửa sổ ngắt trước khi đổ xúc xắc. */
+  pendingDeclaredAttack?: PendingDeclaredAttack | null;
   competitiveReactionTiming?: boolean;
   choiceTimeoutMs?: number;
   stats: ExpansionRuntimeStats;
@@ -794,7 +837,9 @@ export interface AuthoritativeGameState {
   publicLog: BoardGamePublicLogEntry[];
   highlights: BoardGameHighlightEntry[];
   finished: boolean;
-  winnerFaction: BoardGameFactionId | 'wanderer-solo' | 'wanderer' | null;
+  winnerFaction: BoardGameWinnerFaction | null;
+  /** Phase 7A: Danh sách các phe đồng thắng khi kích hoạt MultiFactionVictory (bỏ qua ở Classic). */
+  winningFactions?: BoardGameFactionId[];
   winnerLabel: string | null;
   winnerPlayerIds: string[];
   winReason: string | null;
@@ -803,7 +848,9 @@ export interface AuthoritativeGameState {
 
 export interface VictoryEvaluation {
   finished: boolean;
-  winnerFaction: BoardGameFactionId | 'wanderer-solo' | 'wanderer' | null;
+  winnerFaction: BoardGameWinnerFaction | null;
+  /** Phase 7A: Danh sách các phe đồng thắng (hỗ trợ đồng thắng Hunter + Shadow cho Cain & đòn đồng quy). */
+  winningFactions?: BoardGameFactionId[];
   winnerLabel: string | null;
   winnerPlayerIds: string[];
   winReason: string | null;

@@ -29,6 +29,19 @@ import {
   type CopiedVictoryGraphResult,
   type VictoryDependencyLink,
 } from './copied-victory-graph';
+import {
+  getEffectiveFaction,
+  getPlayerAlliance,
+  isEffectiveNeutral,
+  isNcSoldierAllianceVictorySatisfied,
+  isPlayerInAlliance,
+  listAlliances,
+} from './dynamic-allegiance';
+import {
+  isPlayerDormantPendingRevive,
+  isPlayerFinallyEliminated,
+  isPlayerLivingOrPendingRevive,
+} from './pending-resurrection';
 import { FACTION_LABELS, getRoleDesign } from './roles';
 import { getRemainingHp, isPlayerAtExactLocationAlias } from './rules';
 import type {
@@ -147,6 +160,39 @@ export function isAprilSkippsCountdownVictorySatisfied(
   );
 }
 
+/**
+ * Phase 7A: Điều kiện thắng cá nhân tức thì của Cain (`exp2_cain` — Section 15):
+ * - 6P–8P: Cain còn sống (không ngủ đông) AND có ít nhất 1 Hunter, 1 Shadow và 1 Neutral KHÁC đã bị loại vĩnh viễn.
+ * - 5P: Cain còn sống (không ngủ đông) AND chính Cain được ghi nhận kết liễu ít nhất 1 Hunter và 1 Shadow.
+ * - 4P: Không chia Neutral -> luôn false.
+ */
+export function isCainPersonalVictorySatisfied(
+  state: AuthoritativeGameState,
+  player: AuthoritativePlayerState,
+): boolean {
+  if (!player.alive || isPlayerDormantPendingRevive(state, player)) return false;
+  const allPlayers = Object.values(state.players);
+  const seatCount = state.turnOrder.length > 0 ? state.turnOrder.length : allPlayers.length;
+  if (seatCount <= 4) return false;
+
+  if (seatCount === 5) {
+    const killedFactions = state.expansionState?.killedFactionsByPlayer?.[player.playerId] ?? [];
+    return killedFactions.includes('lantern-guard') && killedFactions.includes('mist-order');
+  }
+
+  let deadHunters = 0;
+  let deadShadows = 0;
+  let deadOtherNeutrals = 0;
+  for (const other of allPlayers) {
+    if (!isPlayerFinallyEliminated(state, other)) continue;
+    const eff = getEffectiveFaction(state, other);
+    if (eff === 'lantern-guard') deadHunters += 1;
+    else if (eff === 'mist-order') deadShadows += 1;
+    else if (eff === 'wanderer' && other.playerId !== player.playerId) deadOtherNeutrals += 1;
+  }
+  return deadHunters >= 1 && deadShadows >= 1 && deadOtherNeutrals >= 1;
+}
+
 /** CAP-07: Xây dựng toàn bộ tập liên kết phụ thuộc chiến thắng từ trạng thái hiện tại (thuần túy). */
 export function buildVictoryDependencyLinks(
   state: AuthoritativeGameState,
@@ -258,15 +304,52 @@ export function buildVictoryDependencyLinks(
         fallbackCondition: 'aaron_dead_before_end',
         unresolved: !hasSpouse,
       });
+    } else if (roleId === 'exp1_antimony') {
+      const bind = exp?.antimonyCopiedGoalByPlayer?.[pid];
+      const targetId = bind?.targetPlayerId ?? null;
+      links.push({
+        linkId: `link:antimony:${pid}`,
+        ownerPlayerId: pid,
+        targetPlayerId: targetId,
+        relation: 'COPY_GOAL',
+        sourceRoleId: bind?.sourceRoleId ?? null,
+        sourceGoalRef: bind ? `role:${bind.sourceRoleId}` : 'unresolved:antimony-unactivated',
+        boundEventId: bind?.boundEventId ?? 'unbound',
+        boundAtMs: bind?.boundAtMs ?? 0,
+        boundTurnNumber: bind?.boundTurnNumber ?? 0,
+        active: Boolean(targetId && bind?.sourceRoleId),
+        fallbackCondition: 'none',
+        unresolved: !(targetId && bind?.sourceRoleId),
+      });
     }
   }
 
   return links;
 }
 
+function normalizeResolvedWinningFactions(
+  resolvedWinnerFaction: VictoryEvaluation['winnerFaction'],
+  resolvedWinningFactions?: readonly BoardGameFactionId[],
+): readonly BoardGameFactionId[] {
+  if (resolvedWinningFactions && resolvedWinningFactions.length > 0) {
+    return resolvedWinningFactions;
+  }
+  if (resolvedWinnerFaction === 'multi-faction') {
+    return ['lantern-guard', 'mist-order'];
+  }
+  if (
+    resolvedWinnerFaction === 'lantern-guard' ||
+    resolvedWinnerFaction === 'mist-order' ||
+    resolvedWinnerFaction === 'wanderer'
+  ) {
+    return [resolvedWinnerFaction];
+  }
+  return [];
+}
+
 /**
  * Đánh giá điều kiện thắng trực tiếp (non-linked) của một `asRoleId` áp lên trạng thái của `subject`.
- * Thuần túy — dùng chung cho đánh giá vai gốc và đánh giá `COPY_GOAL` (Cassie / Clairvoyant).
+ * Thuần túy — dùng chung cho đánh giá vai gốc và đánh giá `COPY_GOAL` (Cassie / Clairvoyant / Antimony).
  */
 export function evaluateDirectRoleGoalForSubject(
   state: AuthoritativeGameState,
@@ -276,12 +359,19 @@ export function evaluateDirectRoleGoalForSubject(
   allWanderers: readonly AuthoritativePlayerState[],
   timing: 'immediate' | 'end-of-match',
   isFinalFallback = false,
+  resolvedWinningFactions?: readonly BoardGameFactionId[],
 ): boolean {
   const allPlayers = Object.values(state.players);
-  const alivePlayers = allPlayers.filter((p) => p.alive);
-  const deadCount = allPlayers.length - alivePlayers.length;
-  const huntersWon = resolvedWinnerFaction === 'lantern-guard';
-  const shadowsWon = resolvedWinnerFaction === 'mist-order';
+  const alivePlayers = allPlayers.filter(
+    (p) => p.alive && !isPlayerDormantPendingRevive(state, p),
+  );
+  const deadCount = allPlayers.filter((p) => isPlayerFinallyEliminated(state, p)).length;
+  const winningFactions = normalizeResolvedWinningFactions(
+    resolvedWinnerFaction,
+    resolvedWinningFactions,
+  );
+  const huntersWon = winningFactions.includes('lantern-guard');
+  const shadowsWon = winningFactions.includes('mist-order');
 
   const design = getRoleDesign(asRoleId as BoardGameRoleId);
   if (design.faction === 'lantern-guard') {
@@ -300,7 +390,11 @@ export function evaluateDirectRoleGoalForSubject(
       return subject.alive && subject.charlesKillWon;
     case 'lang-tien-phong': {
       // Daniel: người ĐẦU TIÊN bị loại, HOẶC còn sống khi Đội Săn Đêm thắng
-      if (!subject.alive && state.firstDeadPlayerId === subject.playerId && deadCount === 1) {
+      if (
+        isPlayerFinallyEliminated(state, subject) &&
+        state.firstDeadPlayerId === subject.playerId &&
+        deadCount === 1
+      ) {
         return true;
       }
       return timing === 'end-of-match' && subject.alive && huntersWon;
@@ -311,12 +405,13 @@ export function evaluateDirectRoleGoalForSubject(
       if (otherNeutrals.length === 0) {
         return timing === 'end-of-match';
       }
-      return otherNeutrals.every((w) => !w.alive);
+      return otherNeutrals.every((w) => isPlayerFinallyEliminated(state, w));
     }
     case 'exp1_bipolar': {
       if (timing !== 'end-of-match') return false;
+      if (huntersWon && shadowsWon) return true;
       if (huntersWon) return subject.alive;
-      if (shadowsWon) return !subject.alive;
+      if (shadowsWon) return isPlayerFinallyEliminated(state, subject);
       return false;
     }
     case 'exp2_cruz':
@@ -325,7 +420,11 @@ export function evaluateDirectRoleGoalForSubject(
           state.expansionState?.cruzWinTriggeredIds?.includes(subject.playerId),
       );
     case 'exp2_bryon':
-      return timing === 'end-of-match' && subject.alive && allWanderers.every((w) => w.alive);
+      return (
+        timing === 'end-of-match' &&
+        subject.alive &&
+        allWanderers.every((w) => isPlayerLivingOrPendingRevive(state, w))
+      );
     case 'exp2_arlene':
       return isArleneImmediateVictorySatisfied(state, subject);
     case 'exp1_angel':
@@ -346,6 +445,19 @@ export function evaluateDirectRoleGoalForSubject(
       return timing === 'end-of-match' && subject.alive && !subject.revealed;
     case 'exp2_colt':
       return isColtImmediateVictorySatisfied(subject);
+    case 'exp2_cain':
+      return isCainPersonalVictorySatisfied(state, subject);
+    case 'exp2_bonnie':
+      // Bonnie chỉ thắng khi đã chuyển phe động thành Shadow và phe Shadow thắng
+      return (
+        timing === 'end-of-match' &&
+        getEffectiveFaction(state, subject) === 'mist-order' &&
+        shadowsWon
+      );
+    case 'exp2_nc_soldier': {
+      const grp = getPlayerAlliance(state, subject.playerId);
+      return Boolean(grp && isNcSoldierAllianceVictorySatisfied(state, grp));
+    }
     default:
       return false;
   }
@@ -438,7 +550,7 @@ function buildVictoryContext(
     allPlayers,
     alivePlayers,
     getEffectiveFaction(player) {
-      return overrides[player.playerId] ?? player.faction;
+      return overrides[player.playerId] ?? getEffectiveFaction(state, player);
     },
     resolveLinkedWinner(sourcePlayerId, targetPlayerId, predicate, visitedArg) {
       const visited = visitedArg ?? new Set<string>([sourcePlayerId]);
@@ -462,8 +574,11 @@ function qualifiesClassicOrExpandedWanderer(
   resolvedWinnerFaction: VictoryEvaluation['winnerFaction'],
   allWanderers: readonly AuthoritativePlayerState[],
   isFinalFallback = false,
+  resolvedWinningFactions?: readonly BoardGameFactionId[],
 ): boolean {
-  if (player.faction !== 'wanderer') return false;
+  if (!isEffectiveNeutral(state, player)) return false;
+  // Thành viên đã gia nhập liên minh N.C. Soldier thay thế mục tiêu cũ bằng mục tiêu chung của liên minh!
+  if (isPlayerInAlliance(state, player.playerId)) return false;
   if (isLinkedVictoryRoleId(player.roleId)) return false;
   return evaluateDirectRoleGoalForSubject(
     state,
@@ -473,6 +588,7 @@ function qualifiesClassicOrExpandedWanderer(
     allWanderers,
     'end-of-match',
     isFinalFallback,
+    resolvedWinningFactions,
   );
 }
 
@@ -483,6 +599,7 @@ function resolveWinnersWithCopiedGraph(
   wanderers: readonly AuthoritativePlayerState[],
   links: readonly VictoryDependencyLink[],
   isFinalFallback = false,
+  resolvedWinningFactions?: readonly BoardGameFactionId[],
 ): { readonly winnerIds: string[]; readonly graph: CopiedVictoryGraphResult } {
   const graph = evaluateCopiedVictoryGraph({
     state,
@@ -498,6 +615,7 @@ function resolveWinnersWithCopiedGraph(
         wanderers,
         timing,
         isFinalFallback,
+        resolvedWinningFactions,
       ),
   });
   return {
@@ -509,78 +627,119 @@ function resolveWinnersWithCopiedGraph(
 /**
  * Bộ đánh giá điều kiện thắng cho các ruleset mở rộng kèm chẩn đoán đồ thị `CopiedVictoryGraph`
  * (thuần túy — tuyệt đối không mutate `state` và không chạm vào `victory.ts` của Classic).
+ *
+ * Phase 7A: Hỗ trợ đầy đủ DynamicAllegiance (Bonnie), Alliance Groups (N.C. Soldier),
+ * PendingResurrection (Undead dormancy), MultiFactionVictory (Cain song phe Hunter + Shadow),
+ * và gộp đồng thời các ứng viên thắng tức thì trong cùng một lô sự kiện.
  */
 export function evaluateExpandedVictoryWithDiagnostics(
   state: AuthoritativeGameState,
 ): ExpandedVictoryDiagnostics {
   const allPlayers = Object.values(state.players);
-  const alivePlayers = allPlayers.filter((p) => p.alive);
-  const deadCount = allPlayers.length - alivePlayers.length;
+  const alivePlayers = allPlayers.filter(
+    (p) => p.alive && !isPlayerDormantPendingRevive(state, p),
+  );
+  const deadCount = allPlayers.filter((p) => isPlayerFinallyEliminated(state, p)).length;
 
-  const hunterPlayers = allPlayers.filter((p) => p.faction === 'lantern-guard');
-  const shadowPlayers = allPlayers.filter((p) => p.faction === 'mist-order');
-  const wanderers = allPlayers.filter((p) => p.faction === 'wanderer');
+  // DynamicAllegiance: phân nhóm theo `effectiveFaction` (không bao giờ đếm Bonnie ở cả 2 phe!)
+  const hunterPlayers = allPlayers.filter(
+    (p) => getEffectiveFaction(state, p) === 'lantern-guard',
+  );
+  const shadowPlayers = allPlayers.filter(
+    (p) => getEffectiveFaction(state, p) === 'mist-order',
+  );
+  const wanderers = allPlayers.filter(
+    (p) => getEffectiveFaction(state, p) === 'wanderer',
+  );
   const links = buildVictoryDependencyLinks(state);
 
-  const huntersAlive = hunterPlayers.filter((p) => p.alive).length;
-  const shadowsAlive = shadowPlayers.filter((p) => p.alive).length;
-  const wanderersDead = wanderers.filter((w) => !w.alive).length;
+  // PendingResurrection: Undead ở `DORMANT_PENDING_REVIVE` VẪN ĐƯỢC TÍNH LÀ CHƯA BỊ LOẠI!
+  const huntersAlive = hunterPlayers.filter((p) => isPlayerLivingOrPendingRevive(state, p)).length;
+  const shadowsAlive = shadowPlayers.filter((p) => isPlayerLivingOrPendingRevive(state, p)).length;
+  const wanderersDead = wanderers.filter((w) => isPlayerFinallyEliminated(state, w)).length;
+
+  // MultiFactionVictory (Cain global death modifier): khi người đã kích hoạt kỹ năng Cain bị loại vĩnh viễn
+  const cainModifierDeadPlayers = (state.expansionState?.cainDeathVictoryModifierIds ?? [])
+    .map((pid) => state.players[pid])
+    .filter((p): p is AuthoritativePlayerState => Boolean(p && isPlayerFinallyEliminated(state, p)));
+  const cainDualFactionTriggered = cainModifierDeadPlayers.length > 0;
 
   const allShadowsDead = shadowPlayers.length > 0 && shadowsAlive === 0;
   const allHuntersDead = hunterPlayers.length > 0 && huntersAlive === 0;
   const shadowsReachedThreeNeutralKills = shadowPlayers.length > 0 && wanderersDead >= 3;
-  const huntersTriggered = allShadowsDead;
-  const shadowsTriggered = allHuntersDead || shadowsReachedThreeNeutralKills;
+  const huntersTriggered = allShadowsDead || cainDualFactionTriggered;
+  const shadowsTriggered =
+    allHuntersDead || shadowsReachedThreeNeutralKills || cainDualFactionTriggered;
 
-  // Các điều kiện thắng tức thì của Kẻ Độc Hành (Classic + Waves 1–5 + Copied Immediate Goals)
-  const bobWinners = wanderers.filter(
+  // Các điều kiện thắng tức thì của Kẻ Độc Hành (loại trừ thành viên đã vào liên minh N.C. Soldier)
+  const unalignedWanderers = wanderers.filter((w) => !isPlayerInAlliance(state, w.playerId));
+
+  const bobWinners = unalignedWanderers.filter(
     (w) => w.alive && w.roleId === 'lang-anh-san' && w.equipped.length >= 5,
   );
-  const charlesWinners = wanderers.filter(
+  const charlesWinners = unalignedWanderers.filter(
     (w) => w.alive && w.roleId === 'lang-cuu-ho' && w.charlesKillWon,
   );
-  const danielFirstDeathWinners = wanderers.filter(
+  const danielFirstDeathWinners = unalignedWanderers.filter(
     (w) =>
-      !w.alive &&
+      isPlayerFinallyEliminated(state, w) &&
       w.roleId === 'lang-tien-phong' &&
       state.firstDeadPlayerId === w.playerId &&
       deadCount === 1,
   );
-  const soleSurvivorNeutralWinners = wanderers.filter(
+  const soleSurvivorNeutralWinners = unalignedWanderers.filter(
     (w) =>
       w.alive &&
       alivePlayers.length === 1 &&
+      !allPlayers.some((p) => isPlayerDormantPendingRevive(state, p)) &&
       (w.roleId === 'lang-quan-sat' || (w.roleId as string) === 'exp1_anathema'),
   );
-  const cindySoloWinners = wanderers.filter((w) => {
+  const cindySoloWinners = unalignedWanderers.filter((w) => {
     if (!w.alive || w.roleId !== 'exp1_cindy') return false;
     const otherNeutrals = wanderers.filter((other) => other.playerId !== w.playerId);
     // Bàn 5P (0 Neutral khác): KHÔNG tự thắng ngay lúc phân vai hay giữa trận!
     if (otherNeutrals.length === 0) return false;
-    return otherNeutrals.every((other) => !other.alive);
+    return otherNeutrals.every((other) => isPlayerFinallyEliminated(state, other));
   });
-  const cruzSoloWinners = wanderers.filter(
+  const cruzSoloWinners = unalignedWanderers.filter(
     (w) =>
       w.alive &&
       w.roleId === 'exp2_cruz' &&
       Boolean(state.expansionState?.cruzWinTriggeredIds?.includes(w.playerId)),
   );
-  const arleneSoloWinners = wanderers.filter(
+  const arleneSoloWinners = unalignedWanderers.filter(
     (w) => w.roleId === 'exp2_arlene' && isArleneImmediateVictorySatisfied(state, w),
   );
-  const daltonSoloWinners = wanderers.filter(
+  const daltonSoloWinners = unalignedWanderers.filter(
     (w) => w.roleId === 'exp2_dalton' && isDaltonImmediateVictorySatisfied(state, w),
   );
-  const coltSoloWinners = wanderers.filter(
+  const coltSoloWinners = unalignedWanderers.filter(
     (w) => (w.roleId as string) === 'exp2_colt' && isColtImmediateVictorySatisfied(w),
   );
-  const aprilCountdownWinners = wanderers.filter(
+  const aprilCountdownWinners = unalignedWanderers.filter(
     (w) =>
       (w.roleId as string) === 'exp2_april_skipps' &&
       isAprilSkippsCountdownVictorySatisfied(state, w),
   );
+  const cainSoloWinners = unalignedWanderers.filter(
+    (w) => (w.roleId as string) === 'exp2_cain' && isCainPersonalVictorySatisfied(state, w),
+  );
 
-  // Kiểm tra mục tiêu tức thì thông qua `COPY_GOAL` (vd. Cassie/Clairvoyant sao chép Colt/Bob và tự gom đủ đồ!)
+  // Điều kiện thắng tức thì của Liên minh N.C. Soldier (thủ lĩnh + mọi thành viên được chiêu mộ)
+  const satisfiedAlliances = listAlliances(state).filter((grp) =>
+    isNcSoldierAllianceVictorySatisfied(state, grp),
+  );
+  const allianceWinnerPlayers: AuthoritativePlayerState[] = [];
+  for (const grp of satisfiedAlliances) {
+    for (const memberId of grp.memberPlayerIds) {
+      const m = state.players[memberId];
+      if (m && !allianceWinnerPlayers.some((x) => x.playerId === m.playerId)) {
+        allianceWinnerPlayers.push(m);
+      }
+    }
+  }
+
+  // Kiểm tra mục tiêu tức thì thông qua `COPY_GOAL` (Cassie / Clairvoyant / Antimony)
   const copiedImmediateWinners: AuthoritativePlayerState[] = [];
   if (links.some((l) => l.relation === 'COPY_GOAL' && l.active && !l.unresolved)) {
     const immGraph = evaluateCopiedVictoryGraph({
@@ -602,109 +761,18 @@ export function evaluateExpandedVictoryWithDiagnostics(
     for (const pid of immGraph.qualifiedPlayerIds) {
       const node = immGraph.evaluatedByPlayer[pid];
       const p = state.players[pid];
-      if (p && node && node.won && node.via === 'copy_goal') {
+      if (
+        p &&
+        node &&
+        node.won &&
+        node.via === 'copy_goal' &&
+        !isPlayerInAlliance(state, p.playerId)
+      ) {
         copiedImmediateWinners.push(p);
       }
     }
   }
 
-  // 1. Đòn quyết tử đồng quy (Hunter & Shadow cùng kích hoạt)
-  if (huntersTriggered && shadowsTriggered) {
-    const activeActor = state.activePlayerId ? state.players[state.activePlayerId] : null;
-    const tiebreakFaction: BoardGameFactionId =
-      activeActor &&
-      (activeActor.faction === 'lantern-guard' || activeActor.faction === 'mist-order')
-        ? activeActor.faction
-        : hunterPlayers.reduce((s, p) => s + p.woundsTaken, 0) <=
-            shadowPlayers.reduce((s, p) => s + p.woundsTaken, 0)
-          ? 'lantern-guard'
-          : 'mist-order';
-    const baseWinners = tiebreakFaction === 'lantern-guard' ? hunterPlayers : shadowPlayers;
-    const winnerSet = new Set<string>(baseWinners.map((p) => p.playerId));
-    for (const w of wanderers) {
-      if (qualifiesClassicOrExpandedWanderer(state, w, tiebreakFaction, wanderers)) {
-        winnerSet.add(w.playerId);
-      }
-    }
-    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
-      state,
-      winnerSet,
-      tiebreakFaction,
-      wanderers,
-      links,
-    );
-    return {
-      graph,
-      evaluation: {
-        finished: true,
-        winnerFaction: tiebreakFaction,
-        winnerLabel: `${FACTION_LABELS[tiebreakFaction]} (Đòn quyết tử)`,
-        winnerPlayerIds: winnerIds,
-        winReason: `Đòn quyết tử đồng quy — ${FACTION_LABELS[tiebreakFaction]} giành chiến thắng chung cuộc!`,
-        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
-      },
-    };
-  }
-
-  // 2. Đội Săn Đêm tiêu diệt hết Hội Bóng Đêm
-  if (huntersTriggered) {
-    const winnerSet = new Set<string>(hunterPlayers.map((p) => p.playerId));
-    for (const w of wanderers) {
-      if (qualifiesClassicOrExpandedWanderer(state, w, 'lantern-guard', wanderers)) {
-        winnerSet.add(w.playerId);
-      }
-    }
-    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
-      state,
-      winnerSet,
-      'lantern-guard',
-      wanderers,
-      links,
-    );
-    return {
-      graph,
-      evaluation: {
-        finished: true,
-        winnerFaction: 'lantern-guard',
-        winnerLabel: FACTION_LABELS['lantern-guard'],
-        winnerPlayerIds: winnerIds,
-        winReason: 'Toàn bộ Hội Bóng Đêm đã bị loại khỏi KTX!',
-        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
-      },
-    };
-  }
-
-  // 3. Hội Bóng Đêm tiêu diệt hết Đội Săn Đêm HOẶC có đủ 3 Kẻ Độc Hành gục ngã
-  if (shadowsTriggered) {
-    const winnerSet = new Set<string>(shadowPlayers.map((p) => p.playerId));
-    for (const w of wanderers) {
-      if (qualifiesClassicOrExpandedWanderer(state, w, 'mist-order', wanderers)) {
-        winnerSet.add(w.playerId);
-      }
-    }
-    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
-      state,
-      winnerSet,
-      'mist-order',
-      wanderers,
-      links,
-    );
-    return {
-      graph,
-      evaluation: {
-        finished: true,
-        winnerFaction: 'mist-order',
-        winnerLabel: FACTION_LABELS['mist-order'],
-        winnerPlayerIds: winnerIds,
-        winReason: allHuntersDead
-          ? 'Toàn bộ Đội Săn Đêm đã gục ngã — Hội Bóng Đêm làm chủ KTX!'
-          : `Đã có ${wanderersDead} Kẻ Độc Hành gục ngã — Hội Bóng Đêm kích hoạt thắng lợi!`,
-        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
-      },
-    };
-  }
-
-  // 4. Các điều kiện thắng tức thì của Kẻ Độc Hành
   const soloTriggers = [
     ...bobWinners,
     ...charlesWinners,
@@ -716,14 +784,166 @@ export function evaluateExpandedVictoryWithDiagnostics(
     ...daltonSoloWinners,
     ...coltSoloWinners,
     ...aprilCountdownWinners,
+    ...cainSoloWinners,
+    ...allianceWinnerPlayers,
     ...copiedImmediateWinners,
   ];
+
+  // 1. MultiFactionVictory — Đồng thắng cả Đội Săn Đêm & Hội Bóng Đêm (Cain hoặc đồng quy)
+  if (huntersTriggered && shadowsTriggered) {
+    const winningFactions: BoardGameFactionId[] = ['lantern-guard', 'mist-order'];
+    const winnerSet = new Set<string>([
+      ...hunterPlayers.map((p) => p.playerId),
+      ...shadowPlayers.map((p) => p.playerId),
+      ...soloTriggers.map((p) => p.playerId),
+    ]);
+    for (const w of wanderers) {
+      if (
+        qualifiesClassicOrExpandedWanderer(
+          state,
+          w,
+          'multi-faction',
+          wanderers,
+          false,
+          winningFactions,
+        )
+      ) {
+        winnerSet.add(w.playerId);
+      }
+    }
+    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
+      state,
+      winnerSet,
+      'multi-faction',
+      wanderers,
+      links,
+      false,
+      winningFactions,
+    );
+    const cainNames = cainModifierDeadPlayers.map((p) => p.displayName).join(', ');
+    return {
+      graph,
+      evaluation: {
+        finished: true,
+        winnerFaction: 'multi-faction',
+        winningFactions,
+        winnerLabel: `${FACTION_LABELS['lantern-guard']} & ${FACTION_LABELS['mist-order']} (Đồng Thắng)`,
+        winnerPlayerIds: winnerIds,
+        winReason: cainDualFactionTriggered
+          ? `Nước Cờ Quyền Lực: ${cainNames} bị loại vĩnh viễn — cả ${FACTION_LABELS['lantern-guard']} và ${FACTION_LABELS['mist-order']} đồng thời giành chiến thắng!`
+          : `Đòn quyết tử đồng quy — cả ${FACTION_LABELS['lantern-guard']} và ${FACTION_LABELS['mist-order']} đồng thời thỏa mãn điều kiện thắng!`,
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      },
+    };
+  }
+
+  // 2. Đội Săn Đêm tiêu diệt hết Hội Bóng Đêm
+  if (huntersTriggered) {
+    const winningFactions: BoardGameFactionId[] = ['lantern-guard'];
+    const winnerSet = new Set<string>([
+      ...hunterPlayers.map((p) => p.playerId),
+      ...soloTriggers.map((p) => p.playerId),
+    ]);
+    for (const w of wanderers) {
+      if (
+        qualifiesClassicOrExpandedWanderer(
+          state,
+          w,
+          'lantern-guard',
+          wanderers,
+          false,
+          winningFactions,
+        )
+      ) {
+        winnerSet.add(w.playerId);
+      }
+    }
+    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
+      state,
+      winnerSet,
+      'lantern-guard',
+      wanderers,
+      links,
+      false,
+      winningFactions,
+    );
+    return {
+      graph,
+      evaluation: {
+        finished: true,
+        winnerFaction: 'lantern-guard',
+        winningFactions,
+        winnerLabel: FACTION_LABELS['lantern-guard'],
+        winnerPlayerIds: winnerIds,
+        winReason: 'Toàn bộ Hội Bóng Đêm đã bị loại khỏi KTX!',
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      },
+    };
+  }
+
+  // 3. Hội Bóng Đêm tiêu diệt hết Đội Săn Đêm HOẶC có đủ 3 Kẻ Độc Hành gục ngã
+  if (shadowsTriggered) {
+    const winningFactions: BoardGameFactionId[] = ['mist-order'];
+    const winnerSet = new Set<string>([
+      ...shadowPlayers.map((p) => p.playerId),
+      ...soloTriggers.map((p) => p.playerId),
+    ]);
+    for (const w of wanderers) {
+      if (
+        qualifiesClassicOrExpandedWanderer(
+          state,
+          w,
+          'mist-order',
+          wanderers,
+          false,
+          winningFactions,
+        )
+      ) {
+        winnerSet.add(w.playerId);
+      }
+    }
+    const { winnerIds, graph } = resolveWinnersWithCopiedGraph(
+      state,
+      winnerSet,
+      'mist-order',
+      wanderers,
+      links,
+      false,
+      winningFactions,
+    );
+    return {
+      graph,
+      evaluation: {
+        finished: true,
+        winnerFaction: 'mist-order',
+        winningFactions,
+        winnerLabel: FACTION_LABELS['mist-order'],
+        winnerPlayerIds: winnerIds,
+        winReason: allHuntersDead
+          ? 'Toàn bộ Đội Săn Đêm đã gục ngã — Hội Bóng Đêm làm chủ KTX!'
+          : `Đã có ${wanderersDead} Kẻ Độc Hành gục ngã — Hội Bóng Đêm kích hoạt thắng lợi!`,
+        winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
+      },
+    };
+  }
+
+  // 4. Các điều kiện thắng tức thì của Kẻ Độc Hành & Liên minh N.C. Soldier
   if (soloTriggers.length > 0) {
     const lead = soloTriggers[0];
     const leadDesign = getRoleDesign(lead.roleId);
+    const winningFactions: BoardGameFactionId[] = ['wanderer'];
     const winnerSet = new Set<string>(soloTriggers.map((p) => p.playerId));
     for (const w of wanderers) {
-      if (qualifiesClassicOrExpandedWanderer(state, w, 'wanderer-solo', wanderers)) {
+      if (
+        qualifiesClassicOrExpandedWanderer(
+          state,
+          w,
+          'wanderer-solo',
+          wanderers,
+          false,
+          winningFactions,
+        )
+      ) {
         winnerSet.add(w.playerId);
       }
     }
@@ -733,10 +953,16 @@ export function evaluateExpandedVictoryWithDiagnostics(
       'wanderer-solo',
       wanderers,
       links,
+      false,
+      winningFactions,
     );
     const leadRoleStr = lead.roleId as string;
-    const winReason =
-      leadRoleStr === 'lang-anh-san'
+    const isAllianceLead = satisfiedAlliances.some(
+      (grp) => grp.leaderPlayerId === lead.playerId || grp.memberPlayerIds.includes(lead.playerId),
+    );
+    const winReason = isAllianceLead
+      ? `Liên minh Chiêu Mộ (${lead.displayName}) đã chiêu mộ toàn bộ Kẻ Độc Hành khác và thu thập đủ 3 vũ khí (Súng Máy, Súng Ngắn, Cưa Máy) — chiến thắng tức thì!`
+      : leadRoleStr === 'lang-anh-san'
         ? `${lead.displayName} sở hữu đủ ${lead.equipped.length} Trang bị — hoàn thành mục tiêu Độc Hành!`
         : leadRoleStr === 'lang-cuu-ho'
           ? `${lead.displayName} đã hạ gục mục tiêu khi có ${deadCount} người ngã xuống (≥ 3)!`
@@ -754,15 +980,22 @@ export function evaluateExpandedVictoryWithDiagnostics(
                       ? `${lead.displayName} (Colt) đã thu thập đủ ${countColtQualifyingWeapons(lead.equipped)} vũ khí chuẩn — hoàn thành mục tiêu Độc Hành tức thì!`
                       : leadRoleStr === 'exp2_april_skipps'
                         ? `${lead.displayName} (April & Skipps) đã sống sót qua cuối lượt kế tiếp sau khi bị phát hiện ở ô 7 — chiến thắng tức thì!`
-                        : leadRoleStr === 'exp1_cassie' || leadRoleStr === 'exp1_clairvoyant'
-                          ? `${lead.displayName} (${leadDesign.name}) đã hoàn thành điều kiện thắng sao chép tức thì!`
-                          : `${lead.displayName} (${leadDesign.name}) trụ lại sống sót cuối cùng!`;
+                        : leadRoleStr === 'exp2_cain'
+                          ? `${lead.displayName} (Cain) đã hoàn thành điều kiện loại các phe mục tiêu — chiến thắng Độc Hành tức thì!`
+                          : leadRoleStr === 'exp1_cassie' ||
+                              leadRoleStr === 'exp1_clairvoyant' ||
+                              leadRoleStr === 'exp1_antimony'
+                            ? `${lead.displayName} (${leadDesign.name}) đã hoàn thành điều kiện thắng sao chép tức thì!`
+                            : `${lead.displayName} (${leadDesign.name}) trụ lại sống sót cuối cùng!`;
     return {
       graph,
       evaluation: {
         finished: true,
         winnerFaction: 'wanderer-solo',
-        winnerLabel: `Kẻ Độc Hành — ${lead.displayName} (${leadDesign.name})`,
+        winningFactions,
+        winnerLabel: isAllianceLead
+          ? `Liên minh Chiêu Mộ — ${lead.displayName}`
+          : `Kẻ Độc Hành — ${lead.displayName} (${leadDesign.name})`,
         winnerPlayerIds: winnerIds,
         winReason,
         winningRoleIds: winnerIds.map((id) => state.players[id].roleId),
@@ -784,10 +1017,20 @@ export function evaluateExpandedVictoryWithDiagnostics(
           shadowPlayers.reduce((sum, p) => sum + p.woundsTaken, 0);
     const topFaction: BoardGameFactionId =
       hunterRatio >= shadowRatio ? 'lantern-guard' : 'mist-order';
+    const winningFactions: BoardGameFactionId[] = [topFaction];
     const baseWinners = topFaction === 'lantern-guard' ? hunterPlayers : shadowPlayers;
     const winnerSet = new Set<string>(baseWinners.map((p) => p.playerId));
     for (const w of wanderers) {
-      if (qualifiesClassicOrExpandedWanderer(state, w, topFaction, wanderers, true)) {
+      if (
+        qualifiesClassicOrExpandedWanderer(
+          state,
+          w,
+          topFaction,
+          wanderers,
+          true,
+          winningFactions,
+        )
+      ) {
         winnerSet.add(w.playerId);
       }
     }
@@ -798,12 +1041,14 @@ export function evaluateExpandedVictoryWithDiagnostics(
       wanderers,
       links,
       true,
+      winningFactions,
     );
     return {
       graph,
       evaluation: {
         finished: true,
         winnerFaction: topFaction,
+        winningFactions,
         winnerLabel: `${FACTION_LABELS[topFaction]} (Ưu thế sinh tồn)`,
         winnerPlayerIds: winnerIds,
         winReason: `Hết ${state.maxRounds} vòng an toàn — ${FACTION_LABELS[topFaction]} chiếm ưu thế sinh tồn!`,

@@ -12,6 +12,14 @@
 // ---------------------------------------------------------------------------
 
 import type { ClassicBoardGameRoleId } from '../../../shared/contracts/boardgame';
+import {
+  getCopiedSkillBinding,
+  getEffectiveSkillCooldown,
+  getEffectiveSkillRoleId,
+  hasEffectiveSkillUsedOnce,
+  markEffectiveSkillUsedOnce,
+} from './dynamic-skill-copy';
+import { isPlayerDormantPendingRevive } from './pending-resurrection';
 import { nextDeterministicRandom } from './rules';
 import type { AuthoritativeGameState, AuthoritativePlayerState } from './types';
 
@@ -275,15 +283,19 @@ export class SkillEngine {
         }> = [];
 
         for (const owner of Object.values(state.players)) {
+          const effectiveRoleId = getEffectiveSkillRoleId(state, owner);
+          const effectiveUsedOnce = hasEffectiveSkillUsedOnce(state, owner);
+          const effectiveCooldown = getEffectiveSkillCooldown(state, owner);
+          const isDormant = isPlayerDormantPendingRevive(state, owner);
           for (const handler of handlers) {
-            if (owner.roleId !== handler.roleId) continue;
-            if ((handler.requiresAlive ?? true) && !owner.alive) continue;
+            if (effectiveRoleId !== handler.roleId) continue;
+            if ((handler.requiresAlive ?? true) && (!owner.alive || isDormant)) continue;
             if ((handler.requiresRevealed ?? false) && !owner.revealed) continue;
-            if (handler.oncePerMatch && owner.skillUsedOnce) continue;
+            if (handler.oncePerMatch && effectiveUsedOnce) continue;
             if (
               typeof handler.cooldownRounds === 'number' &&
               handler.cooldownRounds > 0 &&
-              owner.skillCooldown > 0
+              effectiveCooldown > 0
             ) {
               continue;
             }
@@ -358,13 +370,18 @@ export class SkillEngine {
 
           if (applied) {
             if (item.handler.oncePerMatch) {
-              item.owner.skillUsedOnce = true;
+              markEffectiveSkillUsedOnce(state, item.owner);
             }
             if (
               typeof item.handler.cooldownRounds === 'number' &&
               item.handler.cooldownRounds > 0
             ) {
-              item.owner.skillCooldown = item.handler.cooldownRounds;
+              const copied = getCopiedSkillBinding(state, item.owner.playerId);
+              if (copied) {
+                copied.skillCooldown = item.handler.cooldownRounds;
+              } else {
+                item.owner.skillCooldown = item.handler.cooldownRounds;
+              }
             }
           }
 

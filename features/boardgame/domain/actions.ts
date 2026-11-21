@@ -4,6 +4,11 @@
 // ---------------------------------------------------------------------------
 
 import type { BoardGameActionPayload } from '../../../shared/contracts/boardgame';
+import { getEffectiveFaction, getPlayerAlliance } from './dynamic-allegiance';
+import {
+  getCopiedSkillBinding,
+  tickEffectiveSkillCooldown,
+} from './dynamic-skill-copy';
 import {
   appendHighlight,
   appendPublicLog,
@@ -45,11 +50,24 @@ import {
   type TurnContinuationCallbacks,
 } from './expansion-skills';
 import {
+  isPlayerDormantPendingRevive,
+  isPlayerTurnEligible,
+  reviveDormantPlayerAtTurnStart,
+} from './pending-resurrection';
+import {
   canPlayerAttackTarget,
   listReachableAttackTargets,
   LOCATIONS_CATALOG,
   nextRandomInt,
 } from './rules';
+import {
+  activateScheduledTurnControlForTurn,
+  expireActiveTurnControl,
+  getActiveTurnControlGrant,
+  recordPublicCardDrawnDuringControlledTurn,
+  resolveTurnCommandAuthority,
+  syncControlledTurnPublicDrawnCards,
+} from './turn-ownership';
 import type {
   AuthoritativeGameState,
   AuthoritativePlayerState,
@@ -76,13 +94,41 @@ function finalizeIfFinished(state: AuthoritativeGameState, nowMs: number): boole
   state.pendingChoice = null;
   if (state.expansionState) {
     state.expansionState.pendingSteps = [];
+    state.expansionState.pendingDeclaredAttack = null;
+    expireActiveTurnControl(state, 'match-finished', nowMs);
+    if (victory.winningFactions && victory.winningFactions.length >= 2) {
+      state.expansionState.stats.multiFactionVictoriesCount =
+        (state.expansionState.stats.multiFactionVictoriesCount ?? 0) + 1;
+    }
   }
   state.extraTurnPending = false;
   state.winnerFaction = victory.winnerFaction;
+  if (isExpandedRuleset(state) && victory.winningFactions && victory.winningFactions.length > 0) {
+    state.winningFactions = [...victory.winningFactions];
+  } else {
+    state.winningFactions = undefined;
+  }
   state.winnerLabel = victory.winnerLabel;
   state.winnerPlayerIds = [...victory.winnerPlayerIds];
   state.winReason = victory.winReason;
-  state.finalReveal = buildFinalRevealSummary(state, victory.winnerPlayerIds);
+  const baseFinalReveal = buildFinalRevealSummary(state, victory.winnerPlayerIds);
+  if (isExpandedRuleset(state)) {
+    state.finalReveal = baseFinalReveal.map((rec) => {
+      const p = state.players[rec.playerId];
+      if (!p) return rec;
+      const eff = getEffectiveFaction(state, p);
+      const copied = getCopiedSkillBinding(state, p.playerId);
+      const alliance = getPlayerAlliance(state, p.playerId);
+      return {
+        ...rec,
+        ...(eff !== p.faction ? { effectiveFaction: eff } : {}),
+        ...(copied ? { copiedSkillRoleId: copied.effectiveSkillRoleId } : {}),
+        ...(alliance ? { allianceId: alliance.allianceId } : {}),
+      };
+    });
+  } else {
+    state.finalReveal = baseFinalReveal;
+  }
 
   appendPublicLog(
     state,
@@ -104,11 +150,17 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
   const order = state.turnOrder;
   if (order.length === 0) return;
 
+  const expanded = isExpandedRuleset(state);
+  if (expanded) {
+    // Kết thúc dứt điểm mọi grant chiếm quyền điều khiển lượt trước khi chuyển lượt mới
+    expireActiveTurnControl(state, 'turn-completed', nowMs);
+  }
+
   // Lượt đi phụ từ Sổ Tay Bí Truyền (eq-15 / Concealed Knowledge)
   if (state.extraTurnPending && state.activePlayerId) {
     const current = state.players[state.activePlayerId];
     state.extraTurnPending = false;
-    if (current && current.alive) {
+    if (current && current.alive && (!expanded || !isPlayerDormantPendingRevive(state, current))) {
       current.guardianShieldActive = false;
       current.consecutiveSameZoneRolls = 0;
       current.attacksThisTurn = 0;
@@ -123,7 +175,7 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
         nowMs,
         current.playerId,
       );
-      if (!finalizeIfFinished(state, nowMs) && isExpandedRuleset(state)) {
+      if (!finalizeIfFinished(state, nowMs) && expanded) {
         triggerExpandedTurnStart(state, current, nowMs, TURN_CONTINUATION_CALLBACKS);
       }
       return;
@@ -141,7 +193,10 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
       wrappedRound = true;
     }
     const candidate = state.players[order[wrappedIdx]];
-    if (candidate && candidate.alive) {
+    const eligible = expanded
+      ? isPlayerTurnEligible(state, candidate)
+      : Boolean(candidate && candidate.alive);
+    if (candidate && eligible) {
       nextPlayer = candidate;
       break;
     }
@@ -159,6 +214,9 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
   if (nextPlayer.skillCooldown > 0) {
     nextPlayer.skillCooldown = Math.max(0, nextPlayer.skillCooldown - 1);
   }
+  if (expanded) {
+    tickEffectiveSkillCooldown(state, nextPlayer);
+  }
   nextPlayer.guardianShieldActive = false;
   nextPlayer.consecutiveSameZoneRolls = 0;
   nextPlayer.attacksThisTurn = 0;
@@ -169,7 +227,50 @@ export function advanceTurn(state: AuthoritativeGameState, nowMs: number): void 
   state.activePlayerId = nextPlayer.playerId;
   state.turnPhase = 'ROLL_MOVE';
 
-  if (!finalizeIfFinished(state, nowMs) && isExpandedRuleset(state)) {
+  // Phase 7A PendingResurrection: Hồi sinh Undead (hoặc người sao chép Undead) ngay đầu lượt kế tiếp!
+  if (expanded && isPlayerDormantPendingRevive(state, nextPlayer)) {
+    const rev = reviveDormantPlayerAtTurnStart(state, nextPlayer, nowMs);
+    if (rev.revived) {
+      if (state.expansionState) {
+        state.expansionState.stats.resurrectionsTriggered =
+          (state.expansionState.stats.resurrectionsTriggered ?? 0) + 1;
+      }
+      appendPublicLog(
+        state,
+        'skill',
+        `🧟 Xác Sống Trỗi Dậy: ${nextPlayer.displayName} hồi sinh ngay đầu lượt với ${rev.restoredHp} HP (${nextPlayer.woundsTaken} thương tích) và tiếp tục lượt chơi!`,
+        nowMs,
+        nextPlayer.playerId,
+      );
+      appendHighlight(
+        state,
+        `Hồi sinh: ${nextPlayer.displayName}`,
+        `${nextPlayer.displayName} trỗi dậy với ${rev.restoredHp} HP ở đầu vòng ${state.round}.`,
+        nowMs,
+      );
+    }
+  }
+
+  // Phase 7A TurnOwnershipOverride: Kích hoạt grant Con Rối (Voodoo) đã xếp lịch cho lượt này
+  if (expanded) {
+    const activatedGrant = activateScheduledTurnControlForTurn(state, nextPlayer.playerId, nowMs);
+    if (activatedGrant) {
+      const controller = state.players[activatedGrant.controllerPlayerId];
+      if (state.expansionState) {
+        state.expansionState.stats.hijackedTurnsCount =
+          (state.expansionState.stats.hijackedTurnsCount ?? 0) + 1;
+      }
+      appendPublicLog(
+        state,
+        'skill',
+        `🎭 Con Rối: ${controller?.displayName ?? activatedGrant.controllerPlayerId} tạm thời điều khiển các hành động công khai trong lượt của ${nextPlayer.displayName} (không truy cập thông tin bí mật hay kỹ năng nhân vật).`,
+        nowMs,
+        activatedGrant.controllerPlayerId,
+      );
+    }
+  }
+
+  if (!finalizeIfFinished(state, nowMs) && expanded) {
     triggerExpandedTurnStart(state, nextPlayer, nowMs, TURN_CONTINUATION_CALLBACKS);
   }
 }
@@ -222,9 +323,13 @@ export function applyPlayerGameAction(
   if (state.finished || state.turnPhase === 'ENDED') {
     return { ok: false, error: 'Trận đấu đã kết thúc.', reason: 'Trận đấu đã kết thúc.' };
   }
-  const actor = state.players[playerId];
-  if (!actor || !actor.alive) {
-    return { ok: false, error: 'Bạn không thể hành động khi đã bị loại.', reason: 'Bạn không thể hành động khi đã bị loại.' };
+  const sender = state.players[playerId];
+  if (!sender || !sender.alive || isPlayerDormantPendingRevive(state, sender)) {
+    return {
+      ok: false,
+      error: 'Bạn không thể hành động khi đã bị loại hoặc đang chờ hồi sinh.',
+      reason: 'Bạn không thể hành động khi đã bị loại hoặc đang chờ hồi sinh.',
+    };
   }
 
   // CAP-05: Cập nhật chính sách phản ứng riêng tư (`SET_REACTION_PREF`) hợp lệ ngoài lượt & kể cả khi đang mở choice!
@@ -272,11 +377,28 @@ export function applyPlayerGameAction(
     return { ok: false, error: msg, reason: msg };
   }
 
-  if (state.activePlayerId !== playerId) {
-    return { ok: false, error: 'Chưa tới lượt của bạn.', reason: 'Chưa tới lượt của bạn.' };
+  const expanded = isExpandedRuleset(state);
+  const authority = resolveTurnCommandAuthority(state, playerId, action);
+  if (!authority.authorized || !authority.actingPawnPlayerId) {
+    if (
+      expanded &&
+      state.expansionState &&
+      (authority.code === 'PROHIBITED_CONTROLLER_ACTION' ||
+        authority.code === 'CONTROLLED_BY_OTHER' ||
+        authority.code === 'CONTROL_GRANT_EXPIRED')
+    ) {
+      state.expansionState.stats.unauthorizedControlAttempts =
+        (state.expansionState.stats.unauthorizedControlAttempts ?? 0) + 1;
+    }
+    const msg = authority.reason ?? 'Chưa tới lượt của bạn.';
+    return { ok: false, error: msg, reason: msg };
   }
 
-  const expanded = isExpandedRuleset(state);
+  const actor = state.players[authority.actingPawnPlayerId];
+  if (!actor || !actor.alive || isPlayerDormantPendingRevive(state, actor)) {
+    return { ok: false, error: 'Chủ lượt không còn khả dụng.', reason: 'Chủ lượt không còn khả dụng.' };
+  }
+  const handBeforeAction = expanded && authority.viaControlGrantId ? [...actor.hand] : null;
   let result: EngineActionResult;
   let autoEndTurnAfterAction = false;
   let continuationManaged = false;
@@ -510,6 +632,22 @@ export function applyPlayerGameAction(
     return { ok: false, error: msg, reason: msg };
   }
 
+  // Phase 7A TurnOwnershipOverride: đồng bộ bài Trắng/Đen công khai rút trong lượt bị chiếm quyền & telemetry
+  if (expanded && authority.viaControlGrantId) {
+    if (playerId !== actor.playerId && state.expansionState) {
+      state.expansionState.stats.hijackedActionsCount =
+        (state.expansionState.stats.hijackedActionsCount ?? 0) + 1;
+    }
+    if (handBeforeAction && getActiveTurnControlGrant(state)) {
+      for (const cid of actor.hand) {
+        if (!handBeforeAction.includes(cid)) {
+          recordPublicCardDrawnDuringControlledTurn(state, cid);
+        }
+      }
+      syncControlledTurnPublicDrawnCards(state);
+    }
+  }
+
   if (continuationManaged) {
     return { ok: true };
   }
@@ -539,8 +677,15 @@ export function applyTimeoutAutoTurn(
   }
   const actor = getActivePlayer(state);
   if (!actor || !actor.alive) {
+    if (isExpandedRuleset(state)) {
+      expireActiveTurnControl(state, 'timeout-auto-turn', nowMs);
+    }
     advanceTurn(state, nowMs);
     return;
+  }
+
+  if (isExpandedRuleset(state)) {
+    expireActiveTurnControl(state, 'timeout-auto-turn', nowMs);
   }
 
   appendPublicLog(

@@ -11,13 +11,29 @@ import {
   type BoardGameClairvoyantRevealView,
   type BoardGamePrivateGameView,
   type BoardGamePrivatePendingChoice,
+  type BoardGamePublicAllianceView,
+  type BoardGamePublicControlledTurnView,
   type BoardGamePublicGameView,
   type BoardGamePublicPendingChoice,
   type BoardGamePublicPlayerView,
 } from '../../../shared/contracts/boardgame';
 import { getCardById, toCardPublicMeta } from './cards';
+import {
+  getEffectiveFaction,
+  getPlayerAlliance,
+  listAlliances,
+} from './dynamic-allegiance';
+import { getCopiedSkillBinding } from './dynamic-skill-copy';
+import {
+  getPlayerLifecycleState,
+  isPlayerFinallyEliminated,
+} from './pending-resurrection';
 import { getRoleDesign } from './roles';
 import { DEFAULT_CLUSTER_PAIRS } from './rules';
+import {
+  getActiveTurnControlGrant,
+  isTurnControlPausedForOwnerDecision,
+} from './turn-ownership';
 import type { AuthoritativeGameState, AuthoritativePlayerState } from './types';
 
 function mapCardIdsToMeta(cardIds: readonly string[]): BoardGameCardPublicMeta[] {
@@ -32,8 +48,20 @@ function mapCardIdsToMeta(cardIds: readonly string[]): BoardGameCardPublicMeta[]
 export function getPublicPlayerView(
   player: AuthoritativePlayerState,
   matchFinished: boolean,
+  state?: AuthoritativeGameState,
 ): BoardGamePublicPlayerView {
   const showRole = player.revealed || matchFinished;
+  const isExpanded = Boolean(state?.rulesetId && state.rulesetId !== 'classic');
+
+  const lifecycleState =
+    isExpanded && state ? getPlayerLifecycleState(state, player) : undefined;
+  const effectiveFaction =
+    isExpanded && state && showRole ? getEffectiveFaction(state, player) : undefined;
+  const copiedBinding =
+    isExpanded && state && showRole ? getCopiedSkillBinding(state, player.playerId) : null;
+  const alliance =
+    isExpanded && state && showRole ? getPlayerAlliance(state, player.playerId) : null;
+
   return {
     playerId: player.playerId,
     displayName: player.displayName,
@@ -54,16 +82,23 @@ export function getPublicPlayerView(
     revealedMaxHp: showRole ? player.maxHp : null,
     revealedSkillCooldown: showRole ? player.skillCooldown : 0,
     revealedSkillUsedOnce: showRole ? player.skillUsedOnce : false,
+    ...(lifecycleState && lifecycleState !== 'ALIVE' ? { lifecycleState } : {}),
+    ...(effectiveFaction && effectiveFaction !== player.faction ? { effectiveFaction } : {}),
+    ...(copiedBinding ? { copiedSkillRoleId: copiedBinding.effectiveSkillRoleId } : {}),
+    ...(alliance ? { allianceId: alliance.allianceId } : {}),
     appearance: player.appearance,
   };
 }
 
 export function getPublicGameView(state: AuthoritativeGameState): BoardGamePublicGameView {
+  const isExpanded = Boolean(state.rulesetId && state.rulesetId !== 'classic');
   const orderedPlayers = state.turnOrder
     .map((pid) => state.players[pid])
     .filter((p): p is AuthoritativePlayerState => Boolean(p))
-    .map((player) => getPublicPlayerView(player, state.finished));
-  const deadCount = Object.values(state.players).filter((p) => !p.alive).length;
+    .map((player) => getPublicPlayerView(player, state.finished, state));
+  const deadCount = isExpanded
+    ? Object.values(state.players).filter((p) => isPlayerFinallyEliminated(state, p)).length
+    : Object.values(state.players).filter((p) => !p.alive).length;
 
   const publicPendingChoice: BoardGamePublicPendingChoice | null = state.pendingChoice
     ? {
@@ -184,6 +219,49 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     }
   }
 
+  // Phase 7A: Chỉ báo lượt bị chiếm quyền (Voodoo — CHỈ xuất lá Trắng/Đen công khai, TUYỆT ĐỐI không xuất `inv-*`!)
+  let controlledTurn: BoardGamePublicControlledTurnView | undefined;
+  const activeGrant = isExpanded ? getActiveTurnControlGrant(state) : null;
+  if (activeGrant) {
+    const safePublicCardIds = activeGrant.publicDrawnCardIds.filter((cid) => !cid.startsWith('inv-'));
+    controlledTurn = {
+      controlGrantId: activeGrant.controlGrantId,
+      activePlayerId: activeGrant.activePlayerId,
+      controllerPlayerId: activeGrant.controllerPlayerId,
+      pausedForOwnerDecision: isTurnControlPausedForOwnerDecision(state, activeGrant),
+      publicDrawnCards: mapCardIdsToMeta(safePublicCardIds),
+    };
+  }
+
+  // Phase 7A: Huy hiệu Cain công khai (CHỈ xuất cho người đã lộ diện hoặc FINISHED)
+  const cainDeathModifierActivePlayerIds: string[] = [];
+  if (isExpanded && state.expansionState?.cainDeathVictoryModifierIds) {
+    for (const pid of state.expansionState.cainDeathVictoryModifierIds) {
+      const owner = state.players[pid];
+      if (owner && (owner.revealed || state.finished)) {
+        cainDeathModifierActivePlayerIds.push(pid);
+      }
+    }
+  }
+
+  // Phase 7A: Liên minh N.C. Soldier công khai (CHỈ xuất các thành viên đã lộ diện hoặc FINISHED)
+  const publicAlliances: BoardGamePublicAllianceView[] = [];
+  if (isExpanded) {
+    for (const grp of listAlliances(state)) {
+      const visibleMembers = grp.memberPlayerIds.filter((mid) => {
+        const m = state.players[mid];
+        return Boolean(m && (m.revealed || state.finished));
+      });
+      if (visibleMembers.length > 0) {
+        publicAlliances.push({
+          allianceId: grp.allianceId,
+          leaderPlayerId: grp.leaderPlayerId,
+          memberPlayerIds: visibleMembers,
+        });
+      }
+    }
+  }
+
   return {
     rulesetVersion: 4,
     rulesetId: state.rulesetId ?? BOARD_GAME_DEFAULT_RULESET_ID,
@@ -217,6 +295,11 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     ...(Object.keys(aprilSkippsCountdownByPlayer).length > 0
       ? { aprilSkippsCountdownByPlayer }
       : {}),
+    ...(controlledTurn ? { controlledTurn } : {}),
+    ...(cainDeathModifierActivePlayerIds.length > 0
+      ? { cainDeathModifierActivePlayerIds }
+      : {}),
+    ...(publicAlliances.length > 0 ? { alliances: publicAlliances } : {}),
     deadCount,
     players: orderedPlayers,
     deckCounts: {
@@ -231,6 +314,9 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     highlights: [...state.highlights],
     winnerLabel: state.winnerLabel,
     winnerFaction: state.winnerFaction,
+    ...(isExpanded && state.finished && state.winningFactions && state.winningFactions.length > 0
+      ? { winningFactions: [...state.winningFactions] }
+      : {}),
     winnerPlayerIds: [...state.winnerPlayerIds],
     winReason: state.winReason,
     finalReveal: state.finished ? state.finalReveal : null,
@@ -296,6 +382,11 @@ export function getPrivateGameView(
     const copiedDesign = getRoleDesign(cassieBind.sourceRoleId as Parameters<typeof getRoleDesign>[0]);
     const boundPlayer = state.players[cassieBind.targetPlayerId];
     copiedVictoryGoalSummary = `Sao chép mục tiêu của ${boundPlayer?.displayName ?? cassieBind.targetPlayerId} (${copiedDesign.name}): ${copiedDesign.secretGoalText}`;
+  } else if (state.expansionState?.antimonyCopiedGoalByPlayer?.[player.playerId]) {
+    const antiBind = state.expansionState.antimonyCopiedGoalByPlayer[player.playerId];
+    const copiedDesign = getRoleDesign(antiBind.sourceRoleId as Parameters<typeof getRoleDesign>[0]);
+    const boundPlayer = state.players[antiBind.targetPlayerId];
+    copiedVictoryGoalSummary = `Nhân Bản — Sao chép mục tiêu của ${boundPlayer?.displayName ?? antiBind.targetPlayerId} (${copiedDesign.name}): ${copiedDesign.secretGoalText}`;
   } else if (state.expansionState?.dianaContracts?.[player.playerId]) {
     const contract = state.expansionState.dianaContracts[player.playerId];
     const custName = state.players[contract.customerPlayerId]?.displayName ?? contract.customerPlayerId;
@@ -306,6 +397,19 @@ export function getPrivateGameView(
           ? `Khách hàng chờ kích hoạt vào đầu lượt kế của họ: ${custName}.`
           : 'Khách hàng đã bị loại trước khi kích hoạt — cần sống sót với đầy máu cuối trận.';
   }
+
+  // Phase 7A: Trường mở rộng riêng tư cho CHÍNH chủ sở hữu (tuyệt đối không rò thông tin nạn nhân sang controller!)
+  const effectiveFaction = isExpanded ? getEffectiveFaction(state, player) : undefined;
+  const lifecycleState = isExpanded ? getPlayerLifecycleState(state, player) : undefined;
+  const copiedBinding = isExpanded ? getCopiedSkillBinding(state, player.playerId) : null;
+  const alliance = isExpanded ? getPlayerAlliance(state, player.playerId) : null;
+  const activeGrant = isExpanded ? getActiveTurnControlGrant(state) : null;
+  const isControllingActiveTurn = Boolean(
+    activeGrant && activeGrant.controllerPlayerId === player.playerId,
+  );
+  const isTurnHijacked = Boolean(
+    activeGrant && activeGrant.activePlayerId === player.playerId,
+  );
 
   return {
     playerId: player.playerId,
@@ -329,6 +433,12 @@ export function getPrivateGameView(
     ...(reactionPolicy ? { reactionPolicy } : {}),
     ...(clairvoyantReveals ? { clairvoyantReveals } : {}),
     ...(copiedVictoryGoalSummary !== undefined ? { copiedVictoryGoalSummary } : {}),
+    ...(effectiveFaction && effectiveFaction !== player.faction ? { effectiveFaction } : {}),
+    ...(lifecycleState && lifecycleState !== 'ALIVE' ? { lifecycleState } : {}),
+    ...(copiedBinding ? { copiedSkillRoleId: copiedBinding.effectiveSkillRoleId } : {}),
+    ...(alliance ? { allianceId: alliance.allianceId } : {}),
+    ...(isControllingActiveTurn ? { isControllingActiveTurn: true } : {}),
+    ...(isTurnHijacked ? { isTurnHijacked: true } : {}),
     ...(privatePendingChoice ? { pendingChoice: privatePendingChoice } : {}),
   };
 }

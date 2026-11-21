@@ -52,12 +52,12 @@ Toàn bộ **8 nhân vật Tier-4** còn lại hiện vẫn bị khóa cứng (`
 | # | Role ID | Nhân vật | Gói | Phe | HP | Hạ tầng Cần thiết ở Phase 7A |
 |---:|---|---|---|---|---:|---|
 | 1 | `exp1_lloyd` | Lloyd | Exp 1 | Hunter | 12 | `GlobalAttackInterrupt` (can thiệp đòn tấn công toàn bàn ngoài cụm) |
-| 2 | `exp1_vengeful_spirit` | Vengeful Spirit | Exp 1 | Shadow | 10 | `DynamicSkillCopy` / sao chép năng lực hậu tử vong |
-| 3 | `exp1_voodoo` | Voodoo | Exp 1 | Shadow | 11 | `TurnOwnershipOverride` (chiếm quyền điều khiển lượt của người khác) |
+| 2 | `exp1_vengeful_spirit` | Vengeful Spirit | Exp 1 | Shadow | 13 | `DynamicSkillCopy` / sao chép năng lực hậu tử vong |
+| 3 | `exp1_voodoo` | Voodoo | Exp 1 | Shadow | 13 | `TurnOwnershipOverride` (chiếm quyền điều khiển lượt của người khác) |
 | 4 | `exp1_undead` | Undead | Exp 1 | Shadow | 11 | `PendingResurrection` (hồi sinh sau khi bị loại không gây loại kép) |
-| 5 | `exp1_antimony` | Antimony | Exp 1 | Neutral | 12 | `DynamicSkillCopy` + tích hợp `CopiedVictoryGraph` đã sẵn sàng từ Phase 6A |
-| 6 | `exp2_cain` | Cain | Exp 2 | Neutral | 13 | `MultiFactionVictory` (liên kết thắng đa phe / điều kiện kết hợp) |
+| 5 | `exp1_antimony` | Antimony | Exp 1 | Neutral | 8 | `DynamicSkillCopy` + tích hợp `CopiedVictoryGraph` đã sẵn sàng từ Phase 6A |
+| 6 | `exp2_cain` | Cain | Exp 2 | Neutral | 11 | `MultiFactionVictory` (liên kết thắng đa phe / điều kiện kết hợp) |
 | 7 | `exp2_bonnie` | Bonnie | Exp 2 | Neutral | 10 | `DynamicAllegiance` (đổi phe động trong trận không phá bất biến phe) |
-| 8 | `exp2_nc_soldier` | N.C. Soldier | Exp 2 | Neutral | 12 | `DynamicAllegiance` + kiểm soát mục tiêu biến thiên theo trạng thái bàn |
+| 8 | `exp2_nc_soldier` | N.C. Soldier | Exp 2 | Neutral | 13 | `DynamicAllegiance` + kiểm soát mục tiêu biến thiên theo trạng thái bàn |
 
 - **Lộ trình Mở rộng sau Phase 7:** Sau khi hoàn tất 8 tướng Tier-4 + 8 chân dung cuối (`66/66`), thực hiện Human Beta Playtest cho các điểm ưu tiên (`Anathema` `79.4%`, `Colt` `7.2%`, `Bethany` `56.4%`, `Dalton` `RC-15`, `G43 + Holy Robe`) rồi lần lượt xem xét mở `expansion-1` (26/26), `expansion-2` (30/30) và `full-expansion` (66/66).
