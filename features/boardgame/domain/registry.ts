@@ -753,11 +753,19 @@ export class RulesetRegistry {
       if (valid && (prodId === 'expansion-1' || prodId === 'expansion-2' || prodId === 'full-expansion')) {
         betaEnabledIds.push(prodId);
       }
+      const betaDescriptionMap: Record<string, string> = {
+        'expansion-1':
+          'Bổ sung 26 nhân vật Mở rộng 1 (8 Hunter · 9 Shadow · 9 Neutral). Đang mở thử nghiệm Production Beta — cân bằng và kiểm thử cộng đồng đang tiếp tục hoàn thiện.',
+        'expansion-2':
+          'Bổ sung 30 nhân vật Mở rộng 2 (9 Hunter · 9 Shadow · 12 Neutral). Đang mở thử nghiệm Production Beta — cân bằng và kiểm thử cộng đồng đang tiếp tục hoàn thiện.',
+        'full-expansion':
+          'Tổng hợp toàn bộ 66 nhân vật (10 Classic + 26 MR1 + 30 MR2). Đang mở thử nghiệm Production Beta — cân bằng và kiểm thử cộng đồng đang tiếp tục hoàn thiện.',
+      };
       return {
         id: prodId,
         label: def.label,
         shortLabel: def.shortLabel,
-        description: def.description,
+        description: valid ? (betaDescriptionMap[prodId] ?? def.description) : def.description,
         expectedCharacterCount: def.expectedCharacterCount,
         status: valid ? 'beta' : 'unavailable',
         releaseStatus: valid ? 'PRODUCTION_BETA_ENABLED' : (def.releaseStatus ?? 'IMPLEMENTED'),
