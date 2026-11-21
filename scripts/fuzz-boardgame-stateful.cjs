@@ -44,6 +44,7 @@ const {
   hasEffectiveSkillUsedOnce,
   hasGloriaQueuedCards,
   isEligibleNcSoldierRecruitTarget,
+  isKnownBoardGameRoleId,
   isPlayerDormantPendingRevive,
   isPlayerTargetable,
   isTurnControlPausedForOwnerDecision,
@@ -417,8 +418,14 @@ function canonicalGameplaySnapshot(s) {
   });
 }
 
+const {
+  PHASE8E_RISK_WEIGHTED_ROSTERS,
+} = require('./phase8e-interaction-matrix.cjs');
+
 /**
  * Targeted high-interaction rosters forcing Tier-4 + Tier-3 interactions that rare random deals may hit infrequently.
+ * Phase 8E-2: Fixed Phase 8B role ID typos (`exp1_felicia`, `exp1_ernest`) and extended with
+ * risk-weighted interaction rosters covering Critical Families A–E + 3-way scenarios.
  */
 const TARGETED_HIGH_INTERACTION_ROSTERS = [
   {
@@ -427,7 +434,7 @@ const TARGETED_HIGH_INTERACTION_ROSTERS = [
     roles: [
       'exp1_voodoo',
       'exp2_father_harrison',
-      'exp2_felicia',
+      'exp1_felicia',
       'exp2_gloria',
       'exp2_cruz',
       'exp1_lloyd',
@@ -442,7 +449,7 @@ const TARGETED_HIGH_INTERACTION_ROSTERS = [
       'exp1_antimony',
       'exp2_gideon',
       'exp2_cain',
-      'exp2_ernest',
+      'exp1_ernest',
     ],
   },
   {
@@ -471,16 +478,21 @@ const TARGETED_HIGH_INTERACTION_ROSTERS = [
       'exp1_wrath',
     ],
   },
+  ...PHASE8E_RISK_WEIGHTED_ROSTERS,
 ];
 
 function applyForcedRoster(state, roleIds) {
   const exp = ensureExpansionState(state);
   const origNeutrals = [];
   for (let i = 0; i < state.turnOrder.length && i < roleIds.length; i++) {
+    const rid = roleIds[i];
+    if (!isKnownBoardGameRoleId(rid)) {
+      throw new Error(`applyForcedRoster: unknown roleId "${rid}" (refusing silent fallback to George)`);
+    }
     const pid = state.turnOrder[i];
     const p = state.players[pid];
-    const design = getRoleDesign(roleIds[i]);
-    p.roleId = roleIds[i];
+    const design = getRoleDesign(rid);
+    p.roleId = rid;
     p.faction = design.faction;
     p.maxHp = design.maxHp;
     p.hp = design.maxHp;
@@ -751,6 +763,8 @@ function runValidFuzzMatch(seed, rulesetId, playerCount, maxSteps = 450, forcedR
     winnerFaction: state.winnerFaction,
     winnerPlayerIds: [...state.winnerPlayerIds],
     finalHash: sha256(JSON.stringify(state)),
+    dealtRoles: Object.values(state.players).map((p) => p.roleId),
+    activationsByRole: { ...(state.expansionState?.stats?.activationsByRole ?? {}) },
     config,
     trace,
   };
@@ -1007,6 +1021,23 @@ function main() {
   let validStepsTotal = 0;
   let validFinishedCount = 0;
   const byRuleset = Object.create(null);
+  const rolesDealtCount = Object.create(null);
+  const runtimeActivationsByRole = Object.create(null);
+  const observedPairs = new Set();
+
+  const recordCoverage = (res) => {
+    const roles = Array.isArray(res.dealtRoles) ? res.dealtRoles : [];
+    for (const r of roles) rolesDealtCount[r] = (rolesDealtCount[r] || 0) + 1;
+    for (let a = 0; a < roles.length; a++) {
+      for (let b = a + 1; b < roles.length; b++) {
+        const pair = roles[a] < roles[b] ? `${roles[a]}::${roles[b]}` : `${roles[b]}::${roles[a]}`;
+        observedPairs.add(pair);
+      }
+    }
+    for (const [r, cnt] of Object.entries(res.activationsByRole || {})) {
+      runtimeActivationsByRole[r] = (runtimeActivationsByRole[r] || 0) + cnt;
+    }
+  };
 
   for (let i = 0; i < validCount; i++) {
     const rulesetId = ALL_RULESETS[i % ALL_RULESETS.length];
@@ -1025,6 +1056,7 @@ function main() {
       });
     } else {
       validStepsTotal += res.stepsApplied;
+      recordCoverage(res);
       if (res.finished) validFinishedCount += 1;
       if (completedValidSamples.length < replayCount) {
         completedValidSamples.push(res);
@@ -1032,7 +1064,7 @@ function main() {
     }
   }
 
-  const targetedCount = getNumArg('targeted', 40);
+  const targetedCount = getNumArg('targeted', 60);
   const targetedFailures = [];
   let targetedStepsTotal = 0;
   for (let i = 0; i < targetedCount; i++) {
@@ -1049,7 +1081,8 @@ function main() {
       });
     } else {
       targetedStepsTotal += res.stepsApplied;
-      if (completedValidSamples.length < replayCount + 12) {
+      recordCoverage(res);
+      if (completedValidSamples.length < replayCount + 16) {
         completedValidSamples.push(res);
       }
     }
@@ -1123,6 +1156,13 @@ function main() {
       totalRejections: totalAdversarialRejections,
       failureCount: advFailures.length,
       failures: advFailures.slice(0, 10),
+    },
+    instrumentation: {
+      uniqueRolesDealt: Object.keys(rolesDealtCount).length,
+      uniqueExpansionRolesActivated: Object.keys(runtimeActivationsByRole).filter((k) => runtimeActivationsByRole[k] > 0).length,
+      totalExpansionSkillActivations: Object.values(runtimeActivationsByRole).reduce((a, b) => a + b, 0),
+      uniquePairsCoOccurred: observedPairs.size,
+      activationsByRole: runtimeActivationsByRole,
     },
   };
 

@@ -1,0 +1,52 @@
+name: Extended Stability & Reliability Certification
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly at 21:00 UTC (04:00 Asia/Ho_Chi_Minh)
+    - cron: '0 21 * * *'
+
+jobs:
+  extended-stability:
+    name: Extended Stability — Deep Fuzzing, Replay, Mutation & DO Chaos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create artifact output directory
+        run: mkdir -p .ci-stability-artifacts
+
+      - name: Interaction Risk Graph Snapshot
+        run: node scripts/phase8e-interaction-matrix.cjs --json > .ci-stability-artifacts/interaction-matrix.json
+
+      - name: Deep Stateful Fuzzing, Risk-Weighted Rosters, Adversarial & Replay
+        run: node scripts/fuzz-boardgame-stateful.cjs --valid=400 --targeted=120 --adversarial=150 --replay=60 --json > .ci-stability-artifacts/fuzz-report.json
+
+      - name: Targeted 8-Predicate Mutation Testing
+        run: node scripts/phase8e-mutation-test.cjs --json > .ci-stability-artifacts/mutation-report.json
+
+      - name: Real SQLite DO Chaos & Persistence Suite
+        run: node --test test/boardgame-phase8e-do-chaos.test.cjs
+
+      - name: Classic Zero-Regression Simulation & Fingerprints
+        run: node test/boardgame-sim.cjs
+
+      - name: Upload Stability Reports & Failing Seeds
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stability-extended-reports
+          path: .ci-stability-artifacts/
+          retention-days: 14

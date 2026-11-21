@@ -5642,7 +5642,7 @@ export function applyExpandedUseCard(
 
     case 'ev_banana_peel': {
       if (actor.equipped.length > 0) {
-        return resolveUseCard(
+        const res = resolveUseCard(
           state,
           actor,
           cardId,
@@ -5652,6 +5652,11 @@ export function applyExpandedUseCard(
           equipCardId,
           skipEffect,
         );
+        if (res.ok) {
+          deliverNextGloriaQueuedCard(state, actor, nowMs);
+          callbacks.finalizeIfFinished(state, nowMs);
+        }
+        return res;
       }
       actor.hand.splice(idx, 1);
       discardCardId(state, card.id);
@@ -10180,23 +10185,35 @@ function executeGideonDrawWhiteCardStep(
 
     case 'eq_advent': {
       discardCardId(state, card.id);
-      exp.pendingSteps.unshift(
-        {
-          kind: 'HEAL',
-          healEventId: nextExpansionEventId(state, 'heal-gideon'),
-          sourceCardId: card.id,
-          actorPlayerId: gideon.playerId,
-          targetPlayerId: gideon.playerId,
-          rawAmount: gideon.woundsTaken,
-          sourceKind: 'white-card',
-          sourceLabel: card.title,
-          postLogKind: 'equipment',
-          postLogPrefix: `🔦✨ Gideon (${gideon.displayName}) [Thẻ Trắng #${step.drawIndex}/3] dùng "${card.title}" (Hunter): hồi sạch `,
-          postLogSuffix: ' thương tích!',
-          postLogActorId: gideon.playerId,
-        },
-        ...nextDraws,
-      );
+      // BUG-8E-02 fix: Kiểm tra phe hiệu lực thực sự (chặn Shadow Vengeful Spirit / Neutral Antimony sao chép Gideon hưởng hồi máu Advent chỉ dành cho Hunter!)
+      if (getEffectiveFaction(state, gideon) === 'lantern-guard') {
+        exp.pendingSteps.unshift(
+          {
+            kind: 'HEAL',
+            healEventId: nextExpansionEventId(state, 'heal-gideon'),
+            sourceCardId: card.id,
+            actorPlayerId: gideon.playerId,
+            targetPlayerId: gideon.playerId,
+            rawAmount: gideon.woundsTaken,
+            sourceKind: 'white-card',
+            sourceLabel: card.title,
+            postLogKind: 'equipment',
+            postLogPrefix: `🔦✨ Gideon (${gideon.displayName}) [Thẻ Trắng #${step.drawIndex}/3] dùng "${card.title}" (Hunter): hồi sạch `,
+            postLogSuffix: ' thương tích!',
+            postLogActorId: gideon.playerId,
+          },
+          ...nextDraws,
+        );
+      } else {
+        appendPublicLog(
+          state,
+          'equipment',
+          `🃏✨ ${gideon.displayName} [Thẻ Trắng #${step.drawIndex}/3] rút "${card.title}" (chỉ áp dụng Đội Săn Đêm) — bỏ qua.`,
+          nowMs,
+          gideon.playerId,
+        );
+        if (nextDraws.length > 0) exp.pendingSteps.unshift(...nextDraws);
+      }
       return true;
     }
 
@@ -10224,8 +10241,41 @@ function executeGideonDrawWhiteCardStep(
       return true;
     }
 
-    case 'eq_mirror':
     case 'eq_chocolate': {
+      discardCardId(state, card.id);
+      // BUG-8E-02 fix: Hỗ trợ nhân vật chữ A/E/U (ví dụ Antimony sao chép Gideon) hưởng hồi máu Chocolate qua HealPipeline!
+      if (isEligibleForChocolateHeal(gideon.roleId, true) && gideon.woundsTaken > 0) {
+        exp.pendingSteps.unshift(
+          {
+            kind: 'HEAL',
+            healEventId: nextExpansionEventId(state, 'heal-gideon'),
+            sourceCardId: card.id,
+            actorPlayerId: gideon.playerId,
+            targetPlayerId: gideon.playerId,
+            rawAmount: gideon.woundsTaken,
+            sourceKind: 'white-card',
+            sourceLabel: card.title,
+            postLogKind: 'equipment',
+            postLogPrefix: `🍫✨ ${gideon.displayName} [Thẻ Trắng #${step.drawIndex}/3] dùng "${card.title}": hồi sạch `,
+            postLogSuffix: ' thương tích!',
+            postLogActorId: gideon.playerId,
+          },
+          ...nextDraws,
+        );
+      } else {
+        appendPublicLog(
+          state,
+          'equipment',
+          `🃏✨ ${gideon.displayName} [Thẻ Trắng #${step.drawIndex}/3] dùng "${card.title}" — không có hiệu ứng bổ sung.`,
+          nowMs,
+          gideon.playerId,
+        );
+        if (nextDraws.length > 0) exp.pendingSteps.unshift(...nextDraws);
+      }
+      return true;
+    }
+
+    case 'eq_mirror': {
       discardCardId(state, card.id);
       appendPublicLog(
         state,
