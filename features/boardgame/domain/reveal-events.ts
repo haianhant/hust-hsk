@@ -19,6 +19,7 @@ import type {
   BoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
 import { isEligibleFemaleRole } from './character-metadata';
+import { getEffectiveFaction } from './dynamic-allegiance';
 import type { AuthoritativeGameState } from './types';
 
 const MAX_REVEAL_HISTORY = 128;
@@ -116,7 +117,7 @@ export function recordAuthoritativeRevealEvent(
     isDeathReveal,
     isFinalMatchDisclosure,
     roleIdAtReveal: player.roleId,
-    factionAtReveal: player.faction,
+    factionAtReveal: getEffectiveFaction(state, player),
   };
 
   exp.revealHistory.push(record);

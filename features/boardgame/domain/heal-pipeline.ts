@@ -20,6 +20,7 @@ import type {
   BoardGamePublicLogEntry,
   BoardGameReactionPolicy,
 } from '../../../shared/contracts/boardgame';
+import { getEffectiveSkillRoleId } from './dynamic-skill-copy';
 import { appendPublicLog, applyHeal } from './effects';
 import type {
   AuthoritativeGameState,
@@ -68,7 +69,7 @@ export function findRevealedUsurperBlockingHeal(
       p &&
       p.alive &&
       p.revealed &&
-      (p.roleId as string) === 'exp2_usurper' &&
+      (getEffectiveSkillRoleId(state, p) as string) === 'exp2_usurper' &&
       p.playerId !== targetPlayerId
     ) {
       return p;
@@ -90,7 +91,7 @@ export function findHiddenUsurperEligibleForHeal(
       p &&
       p.alive &&
       !p.revealed &&
-      (p.roleId as string) === 'exp2_usurper' &&
+      (getEffectiveSkillRoleId(state, p) as string) === 'exp2_usurper' &&
       p.playerId !== targetPlayerId
     ) {
       return p;

@@ -231,6 +231,9 @@ export function revealPlayerNow(
   if (player.revealed) return false;
   player.revealed = true;
   const role = getRoleDesign(player.roleId);
+  const effectiveFaction =
+    state.expansionState?.effectiveFactionByPlayer?.[player.playerId]?.effectiveFaction ??
+    player.faction;
   state.lastRevealEvent = {
     id: `rev-${state.turnNumber}-${player.playerId}-${nowMs}`,
     round: state.round,
@@ -239,7 +242,7 @@ export function revealPlayerNow(
     displayName: player.displayName,
     roleId: player.roleId,
     roleName: role.name,
-    faction: player.faction,
+    faction: effectiveFaction,
     reason,
   };
   return true;

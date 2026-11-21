@@ -100,11 +100,15 @@ export function hasHighestRemainingHpAmongSurvivors(
   return maxHp !== null && getRemainingHp(player) === maxHp;
 }
 
-/** True khi toàn bộ nhân vật Neutral trong trận đều đang còn sống. */
+/** True khi toàn bộ nhân vật Neutral trong trận đều đang còn sống (hoặc đang ngủ đông chờ hồi sinh). */
 export function areAllNeutralsAlive(
   allWanderers: readonly AuthoritativePlayerState[],
+  state?: AuthoritativeGameState,
 ): boolean {
-  return allWanderers.length > 0 && allWanderers.every((w) => w.alive);
+  return (
+    allWanderers.length > 0 &&
+    allWanderers.every((w) => (state ? isPlayerLivingOrPendingRevive(state, w) : w.alive))
+  );
 }
 
 /** CAP-07: Điều kiện thắng tức thì khi bị phe chỉ định hạ gục (Arlene bị Hunter giết). */
@@ -133,10 +137,11 @@ export function isDaltonImmediateVictorySatisfied(
 export function isAngelEndOfMatchVictorySatisfied(
   player: AuthoritativePlayerState,
   allWanderers: readonly AuthoritativePlayerState[],
+  state?: AuthoritativeGameState,
 ): boolean {
   if (!player.alive) return false;
   return (
-    areAllNeutralsAlive(allWanderers) ||
+    areAllNeutralsAlive(allWanderers, state) ||
     isPlayerAtExactLocationAlias(player, 'church')
   );
 }
@@ -306,21 +311,61 @@ export function buildVictoryDependencyLinks(
       });
     } else if (roleId === 'exp1_antimony') {
       const bind = exp?.antimonyCopiedGoalByPlayer?.[pid];
-      const targetId = bind?.targetPlayerId ?? null;
-      links.push({
-        linkId: `link:antimony:${pid}`,
-        ownerPlayerId: pid,
-        targetPlayerId: targetId,
-        relation: 'COPY_GOAL',
-        sourceRoleId: bind?.sourceRoleId ?? null,
-        sourceGoalRef: bind ? `role:${bind.sourceRoleId}` : 'unresolved:antimony-unactivated',
-        boundEventId: bind?.boundEventId ?? 'unbound',
-        boundAtMs: bind?.boundAtMs ?? 0,
-        boundTurnNumber: bind?.boundTurnNumber ?? 0,
-        active: Boolean(targetId && bind?.sourceRoleId),
-        fallbackCondition: 'none',
-        unresolved: !(targetId && bind?.sourceRoleId),
-      });
+      const ownBethanyChosen =
+        bind?.sourceRoleId === 'exp1_bethany' ? exp?.bethanyChosenByPlayer?.[pid] : undefined;
+      const ownClairvoyantVision =
+        bind?.sourceRoleId === 'exp1_clairvoyant' ? exp?.clairvoyantVisions?.[pid] : undefined;
+
+      if (ownBethanyChosen?.chosenPlayerId) {
+        const chosenTarget = state.players[ownBethanyChosen.chosenPlayerId] ?? null;
+        links.push({
+          linkId: `link:antimony:bethany:${pid}`,
+          ownerPlayerId: pid,
+          targetPlayerId: ownBethanyChosen.chosenPlayerId,
+          relation: 'SHARE_OUTCOME',
+          sourceRoleId: chosenTarget?.roleId ?? null,
+          sourceGoalRef: `outcome:${ownBethanyChosen.chosenPlayerId}`,
+          boundEventId: ownBethanyChosen.boundEventId ?? bind?.boundEventId ?? 'unbound',
+          boundAtMs: ownBethanyChosen.boundAtMs ?? bind?.boundAtMs ?? 0,
+          boundTurnNumber: ownBethanyChosen.designatedOnTurnNumber ?? bind?.boundTurnNumber ?? 0,
+          active: true,
+          requireOwnerAlive: false,
+          bondMode: 'target-wins',
+          fallbackCondition: 'none',
+          unresolved: false,
+        });
+      } else if (ownClairvoyantVision?.targetPlayerId && ownClairvoyantVision.sourceRoleId) {
+        links.push({
+          linkId: `link:antimony:clairvoyant:${pid}`,
+          ownerPlayerId: pid,
+          targetPlayerId: ownClairvoyantVision.targetPlayerId,
+          relation: 'COPY_GOAL',
+          sourceRoleId: ownClairvoyantVision.sourceRoleId,
+          sourceGoalRef: `role:${ownClairvoyantVision.sourceRoleId}`,
+          boundEventId: ownClairvoyantVision.boundEventId ?? bind?.boundEventId ?? 'unbound',
+          boundAtMs: ownClairvoyantVision.boundAtMs ?? bind?.boundAtMs ?? 0,
+          boundTurnNumber: ownClairvoyantVision.boundTurnNumber ?? bind?.boundTurnNumber ?? 0,
+          active: true,
+          fallbackCondition: 'none',
+          unresolved: false,
+        });
+      } else {
+        const targetId = bind?.targetPlayerId ?? null;
+        links.push({
+          linkId: `link:antimony:${pid}`,
+          ownerPlayerId: pid,
+          targetPlayerId: targetId,
+          relation: 'COPY_GOAL',
+          sourceRoleId: bind?.sourceRoleId ?? null,
+          sourceGoalRef: bind ? `role:${bind.sourceRoleId}` : 'unresolved:antimony-unactivated',
+          boundEventId: bind?.boundEventId ?? 'unbound',
+          boundAtMs: bind?.boundAtMs ?? 0,
+          boundTurnNumber: bind?.boundTurnNumber ?? 0,
+          active: Boolean(targetId && bind?.sourceRoleId),
+          fallbackCondition: 'none',
+          unresolved: !(targetId && bind?.sourceRoleId),
+        });
+      }
     }
   }
 
@@ -381,11 +426,14 @@ export function evaluateDirectRoleGoalForSubject(
     return timing === 'end-of-match' && shadowsWon;
   }
 
+  const hasDormantPlayer = allPlayers.some((p) => isPlayerDormantPendingRevive(state, p));
   switch (asRoleId) {
     case 'lang-anh-san': // Bob: 5+ Trang bị
       return subject.alive && (isFinalFallback ? subject.equipped.length >= 3 : subject.equipped.length >= 5);
-    case 'lang-quan-sat': // Allie: sống sót cuối trận (hoặc sống sót duy nhất)
-      return timing === 'immediate' ? subject.alive && alivePlayers.length === 1 : subject.alive;
+    case 'lang-quan-sat': // Allie: sống sót cuối trận (hoặc sống sót duy nhất khi không ai đang ngủ đông chờ hồi sinh)
+      return timing === 'immediate'
+        ? subject.alive && alivePlayers.length === 1 && !hasDormantPlayer
+        : subject.alive;
     case 'lang-cuu-ho': // Charles: giết người khi deadCount >= 3
       return subject.alive && subject.charlesKillWon;
     case 'lang-tien-phong': {
@@ -428,15 +476,17 @@ export function evaluateDirectRoleGoalForSubject(
     case 'exp2_arlene':
       return isArleneImmediateVictorySatisfied(state, subject);
     case 'exp1_angel':
-      return timing === 'end-of-match' && isAngelEndOfMatchVictorySatisfied(subject, allWanderers);
+      return timing === 'end-of-match' && isAngelEndOfMatchVictorySatisfied(subject, allWanderers, state);
     case 'exp2_bianca':
       return timing === 'end-of-match' && hasLowestRemainingHpAmongSurvivors(subject, alivePlayers);
     case 'exp2_dalton':
       if (isDaltonImmediateVictorySatisfied(state, subject)) return true;
       return timing === 'end-of-match' && hasHighestRemainingHpAmongSurvivors(subject, alivePlayers);
     case 'exp1_anathema':
-      // Anathema: sống sót đến khi trận kết thúc (hoặc là người sống sót duy nhất)
-      return timing === 'immediate' ? subject.alive && alivePlayers.length === 1 : subject.alive;
+      // Anathema: sống sót đến khi trận kết thúc (hoặc là người sống sót duy nhất khi không ai đang ngủ đông chờ hồi sinh)
+      return timing === 'immediate'
+        ? subject.alive && alivePlayers.length === 1 && !hasDormantPlayer
+        : subject.alive;
     case 'exp1_arnold':
       // Arnold: còn sống cuối trận với > 2 tổng số người chơi còn sống trên bàn
       return timing === 'end-of-match' && subject.alive && alivePlayers.length > 2;

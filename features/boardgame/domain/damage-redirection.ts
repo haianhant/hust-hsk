@@ -16,6 +16,10 @@
 // - Lưu trace nội bộ (`expansionState.damageTraces`) để kiểm toán, KHÔNG xuất công khai.
 // ---------------------------------------------------------------------------
 
+import {
+  getEffectiveSkillRoleId,
+  hasEffectiveSkillUsedOnce,
+} from './dynamic-skill-copy';
 import type {
   AuthoritativeGameState,
   DamageSourceKind,
@@ -132,7 +136,12 @@ export function evaluateAnathemaRedirection(
   }
 
   const target = state.players[step.targetPlayerId];
-  if (!target || !target.alive || !target.revealed || (target.roleId as string) !== 'exp1_anathema') {
+  if (
+    !target ||
+    !target.alive ||
+    !target.revealed ||
+    (getEffectiveSkillRoleId(state, target) as string) !== 'exp1_anathema'
+  ) {
     return { redirected: false, reason: 'not-anathema' };
   }
 
@@ -220,10 +229,10 @@ export function evaluateArnoldLethalReflection(
   postMitigationDmg: number,
 ): ArnoldReflectionEligibility {
   const target = state.players[step.targetPlayerId];
-  if (!target || !target.alive || (target.roleId as string) !== 'exp1_arnold') {
+  if (!target || !target.alive || (getEffectiveSkillRoleId(state, target) as string) !== 'exp1_arnold') {
     return { eligible: false, reason: 'not-arnold' };
   }
-  if (target.skillUsedOnce) {
+  if (hasEffectiveSkillUsedOnce(state, target)) {
     return { eligible: false, reason: 'already-used' };
   }
   if (step.arnoldChecked) {

@@ -7,6 +7,7 @@ import type { BoardGameActionPayload } from '../../../shared/contracts/boardgame
 import { getEffectiveFaction, getPlayerAlliance } from './dynamic-allegiance';
 import {
   getCopiedSkillBinding,
+  getEffectiveSkillRoleId,
   tickEffectiveSkillCooldown,
 } from './dynamic-skill-copy';
 import {
@@ -285,10 +286,11 @@ function canTriggerCharlesBloodyFeast(
     (isExpandedRuleset(state)
       ? canExpandedPlayerAttackTarget(state, actor, lastTarget)
       : canPlayerAttackTarget(state, actor, lastTarget));
+  const effRoleId = isExpandedRuleset(state) ? getEffectiveSkillRoleId(state, actor) : actor.roleId;
   return Boolean(
     actor.alive &&
       actor.revealed &&
-      actor.roleId === 'lang-cuu-ho' &&
+      effRoleId === 'lang-cuu-ho' &&
       actor.attacksThisTurn >= 1 &&
       actor.hp > 2 &&
       actor.hand.length === 0 &&
@@ -485,6 +487,7 @@ export function applyPlayerGameAction(
           TURN_CONTINUATION_CALLBACKS,
           action.equipCardId,
           action.skipEffect,
+          Boolean(authority.viaControlGrantId && playerId !== actor.playerId),
         );
         continuationManaged = true;
       } else {
@@ -678,9 +681,10 @@ export function applyTimeoutAutoTurn(
   nowMs: number,
 ): void {
   if (state.finished || state.turnPhase === 'ENDED') return;
+  const startTurnNumber = state.turnNumber;
   if (state.pendingChoice) {
     clearPendingChoiceOnForcedAutoTurn(state, nowMs, TURN_CONTINUATION_CALLBACKS);
-    if (state.finished) return;
+    if (state.finished || state.turnNumber !== startTurnNumber) return;
   }
   const actor = getActivePlayer(state);
   if (!actor || !actor.alive) {

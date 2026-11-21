@@ -23,7 +23,10 @@ import {
   getPlayerAlliance,
   listAlliances,
 } from './dynamic-allegiance';
-import { getCopiedSkillBinding } from './dynamic-skill-copy';
+import {
+  getCopiedSkillBinding,
+  getEffectiveSkillRoleId,
+} from './dynamic-skill-copy';
 import {
   getPlayerLifecycleState,
   isPlayerFinallyEliminated,
@@ -140,7 +143,7 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
     if (hasActiveRevealedAngel) {
       for (const pid of state.turnOrder) {
         const p = state.players[pid];
-        if (p && p.alive && p.revealed && p.faction === 'wanderer') {
+        if (p && p.alive && p.revealed && getEffectiveFaction(state, p) === 'wanderer') {
           angelProtectedPlayerIds.push(p.playerId);
         }
       }
@@ -148,7 +151,7 @@ export function getPublicGameView(state: AuthoritativeGameState): BoardGamePubli
   }
 
   const usurperAuraActive = Object.values(state.players).some(
-    (p) => p.alive && p.revealed && (p.roleId as string) === 'exp2_usurper',
+    (p) => p.alive && p.revealed && (getEffectiveSkillRoleId(state, p) as string) === 'exp2_usurper',
   );
 
   const daltonActivatedPlayerIds: string[] = [];

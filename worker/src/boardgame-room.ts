@@ -2220,7 +2220,14 @@ export class BoardGameRoom {
           const effectiveControllerId = engineState
             ? getEffectiveTurnControllerId(engineState)
             : null;
-          if (
+          if (engineState?.pendingChoice) {
+            // BUG-8B-02 fix: NEVER clear turn_deadline_ms while a pendingChoice is active!
+            this.sql.exec(
+              'UPDATE matches SET turn_deadline_ms = ? WHERE match_id = ?',
+              engineState.pendingChoice.deadlineMs,
+              latestMatch.match_id,
+            );
+          } else if (
             effectiveControllerId &&
             effectiveControllerId === existing.player_id &&
             latestMatch.turn_timeout_ms <= 0
@@ -2902,6 +2909,8 @@ export class BoardGameRoom {
     }
 
     const prevTurnNumber = engineState.turnNumber;
+    const prevHadPendingChoice = Boolean(engineState.pendingChoice);
+    const prevControllerId = getEffectiveTurnControllerId(engineState);
     let res: ReturnType<typeof applyPlayerGameAction>;
     try {
       res = applyPlayerGameAction(engineState, player.player_id, actionPayload, nowMs);
@@ -2981,11 +2990,13 @@ export class BoardGameRoom {
     const nextStatus: BoardGameMatchStatus = engineState.finished ? 'FINISHED' : 'PLAYING';
     const turnChanged = engineState.turnNumber !== prevTurnNumber;
     const hasPendingChoice = Boolean(engineState.pendingChoice);
+    const nextControllerId = getEffectiveTurnControllerId(engineState);
+    const controllerChanged = nextControllerId !== prevControllerId;
     const nextDeadline = engineState.finished
       ? null
       : hasPendingChoice
         ? engineState.pendingChoice!.deadlineMs
-        : match.turn_timeout_ms <= 0 || turnChanged
+        : match.turn_timeout_ms <= 0 || turnChanged || prevHadPendingChoice || controllerChanged
           ? this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs)
           : match.turn_deadline_ms ??
             this.computeNextTurnDeadline(engineState, playerRows, match.turn_timeout_ms, nowMs);
