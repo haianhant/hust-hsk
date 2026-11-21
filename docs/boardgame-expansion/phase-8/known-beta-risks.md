@@ -32,3 +32,18 @@ Kế thừa đánh giá trung thực từ [`phase-7/security-and-privacy-audit.m
 1. **Chưa có môi trường Staging Worker thường trực (`hust-hsk-rooms-staging` = HTTP 404):** Cấu hình `[env.staging]` đã sẵn sàng trong `worker/wrangler.toml`, nhưng CI hiện tại kiểm thử trên real SQLite DO cục bộ + 5 shard Playwright E2E rồi deploy trực tiếp lên `hust-hsk-rooms`. Khuyến nghị bổ sung job deploy staging nếu lượng người chơi đồng thời tăng cao.
 2. **Câu hỏi đối chiếu luật gốc (`house-rule-approved`):** `52/56` nhân vật mở rộng giữ nhãn `house-rule-approved` (nổi bật: `RC-02` Undead 6 HP vs 6 vết thương, `RC-04` Vengeful Spirit ngưỡng Neutral, `RC-15` Dalton rãnh vết thương). Mọi thay đổi luật sẽ được gắn phiên bản `catalogVersion` mới và công bố trong changelog Beta.
 3. **Giới hạn khi lùi quá sâu về engine cũ:** Xem [`rollback-runbook.md`](./rollback-runbook.md) — Rollback bằng cờ `ENABLE_PRODUCTION_BETA_EXPANSIONS="0"` an toàn tuyệt đối và giữ nguyên mọi trận đang chạy; chỉ lùi mã nguồn về bản trước Phase 7B mới làm mất khả năng đọc trạng thái các trận Tier-4 đang dang dở.
+
+---
+
+## 5. Nhật ký Bản vá Production Beta (Phase 8B–8C Patch · 2026-11-21)
+
+Bản vá **Phase 8B–8C** được phát hành nhằm nâng cao độ đúng đắn gameplay, bảo mật vai ẩn và độ hoàn thiện hiệu ứng nhân vật trong Production Beta (không thay đổi chỉ số cân bằng nhân vật, không thay đổi bộ cờ rollout Beta và giữ nguyên 100% hành vi Classic):
+
+- **Sửa 9 lỗi gameplay & multiplayer đã xác nhận (3 P0, 6 P1 — [`phase-8b-bug-register.md`](./phase-8b-bug-register.md)):**
+  - Chặn lỗ hổng lộ phe/bắt lộ vai ẩn trên `eq-13`/`eq-14`/`ev-13` khi đang bị Voodoo điều khiển lượt (`BUG-8B-01`).
+  - Bảo toàn `turn_deadline_ms` cho `pendingChoice` sau F5/reconnect khi `turn_timeout_ms <= 0` (`BUG-8B-02`) và làm mới deadline lượt khi `pendingChoice` kết thúc trong cùng lượt (`BUG-8B-03`).
+  - Khắc phục bỏ qua lượt kế khi timeout `pendingChoice` đã tự kết thúc lượt (`BUG-8B-04`), chặn Undead lách luật tự lộ vai trước đòn chí tử qua `ev-13` (`BUG-8B-05`), đồng bộ `DynamicAllegiance` của Bonnie sau khi chuyển sang Shadow (`BUG-8B-06`), hợp nhất `DynamicSkillCopy` xuyên suốt 13+ hook runtime (`BUG-8B-07`), vá các biên `COPY_GOAL`/Angel/Cruz/Arlene/Dalton/Charles/Antimony (`BUG-8B-08`), và sửa lỗi Father Harrison Sunday Service cướp `ON_MOVE` khi `ROLL_DICE` (`BUG-8B-09`).
+- **Nâng cấp Hệ thống Sự kiện Hình ảnh Có cấu trúc & VFX 66 Nhân vật ([`character-vfx-coverage-matrix.md`](./character-vfx-coverage-matrix.md), [`tier4-signature-vfx-report.md`](./tier4-signature-vfx-report.md)):**
+  - Triển khai luồng `visualEvents` công khai có rào chắn bảo mật P0 tập trung, giới hạn 48 sự kiện/trận và khử trùng lặp tuyệt đối khi F5/reconnect.
+  - Hoàn thiện VFX Canvas 2D, chỉ báo quân cờ (`💤 Ngủ Đông`, `🧵`/`🔒` Con rối Voodoo, `⚖️` Cain), màn hình **Đồng thắng song phe (`MultiFactionVictory`)** và âm thanh WebAudio đồng bộ cho toàn bộ **8/8 nhân vật Tier-4** cùng **7 họ hiệu ứng Tier-3**; sửa độ tương phản nền màn hình Chiến Thắng trên Mobile/Low tier (`bg-slate-950/95`).
+- **Trạng thái chưa thay đổi:** Số trận người thật hoàn tất vẫn là **`0 / 100`** tính tới lúc phát hành bản vá; các rủi ro cân bằng bot-meta (Mục 2), kênh phụ thời gian tồn dư (Mục 3) và việc chưa có staging Worker thường trực (Mục 4) vẫn giữ nguyên để theo dõi qua dữ liệu người chơi thật.
