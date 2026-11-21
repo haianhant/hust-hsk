@@ -466,6 +466,53 @@ test('P7D-2 — Scenarios #9-#17: Voodoo hijack/privacy/disconnect & Undead dorm
     assert.equal(domain.ensureExpansionState(s).activeTurnControl ?? null, null, '#12 control grant expired');
   }
 
+  // #9b Regression: Voodoo hijacks Felicia -> Felicia resolves felicia_draw_choice -> kept White/Black card syncs into publicDrawnCards without deadlock!
+  {
+    const s = makeState(
+      [
+        { id: 'voodoo', roleId: 'exp1_voodoo', location: 'lobby', revealed: true },
+        { id: 'felicia', roleId: 'exp1_felicia', location: 'canteen', revealed: true },
+        { id: 'p3', roleId: 'suong-an-danh', location: 'court' },
+        { id: 'p4', roleId: 'lang-anh-san', location: 'radio' },
+      ],
+      { turnPhase: 'ROLL_MOVE', activePlayerId: 'voodoo' },
+    );
+    s.decks.event = ['ev-07', 'ev-08', 'ev-09'];
+    assert.equal(
+      domain.applyPlayerGameAction(s, 'voodoo', { type: 'USE_SKILL', targetPlayerId: 'felicia' }, 1500).ok,
+      true,
+    );
+    s.turnPhase = 'MAIN_ACTION';
+    assert.equal(domain.applyPlayerGameAction(s, 'voodoo', { type: 'END_TURN' }, 1510).ok, true);
+    assert.equal(s.activePlayerId, 'felicia');
+    assert.equal(domain.getEffectiveTurnControllerId(s), 'voodoo');
+    s.turnPhase = 'LOCATION_ACTION';
+    s.players.felicia.location = 'canteen';
+    assert.equal(
+      domain.applyPlayerGameAction(s, 'voodoo', { type: 'DRAW_CARD', deck: 'event' }, 1520).ok,
+      true,
+    );
+    assert.equal(s.pendingChoice?.kind, 'felicia_draw_choice');
+    assert.equal(
+      domain.applyPlayerGameAction(
+        s,
+        'felicia',
+        { type: 'RESOLVE_CHOICE', choiceId: s.pendingChoice.choiceId, optionId: 'pick_0' },
+        1530,
+      ).ok,
+      true,
+    );
+    const pubAfterChoice = domain.getPublicGameView(s);
+    assert.equal(pubAfterChoice.controlledTurn?.publicDrawnCards?.length, 1, 'Felicia kept public card synced to Voodoo controller');
+    const keptId = pubAfterChoice.controlledTurn.publicDrawnCards[0].id;
+    assert.equal(
+      domain.applyPlayerGameAction(s, 'voodoo', { type: 'USE_CARD', cardId: keptId, targetPlayerId: 'p3' }, 1540).ok,
+      true,
+    );
+    assert.equal(domain.applyPlayerGameAction(s, 'voodoo', { type: 'END_TURN' }, 1550).ok, true);
+    assert.notEqual(s.activePlayerId, 'felicia', 'Voodoo ends Felicia hijacked turn cleanly with 0 deadlock');
+  }
+
   // #13, #14, #15, #16, #17 Undead dormancy, 6 HP revival, final elimination, last Shadow, Gideon & VS ignored during dormancy
   {
     const s = makeState(

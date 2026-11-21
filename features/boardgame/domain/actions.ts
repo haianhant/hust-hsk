@@ -311,7 +311,11 @@ export function applyPendingChoiceTimeout(
   if (state.finished || state.turnPhase === 'ENDED' || !state.pendingChoice) {
     return false;
   }
-  return resolveExpiredPendingChoice(state, nowMs, TURN_CONTINUATION_CALLBACKS);
+  const resolved = resolveExpiredPendingChoice(state, nowMs, TURN_CONTINUATION_CALLBACKS);
+  if (resolved && isExpandedRuleset(state) && getActiveTurnControlGrant(state)) {
+    syncControlledTurnPublicDrawnCards(state);
+  }
+  return resolved;
 }
 
 export function applyPlayerGameAction(
@@ -360,6 +364,9 @@ export function applyPlayerGameAction(
     if (!res.ok) {
       const msg = res.reason ?? res.error ?? 'Lựa chọn không hợp lệ.';
       return { ok: false, error: msg, reason: msg };
+    }
+    if (isExpandedRuleset(state) && getActiveTurnControlGrant(state)) {
+      syncControlledTurnPublicDrawnCards(state);
     }
     return { ok: true };
   }

@@ -375,7 +375,11 @@ export function recordPublicCardDrawnDuringControlledTurn(
   }
 }
 
-/** Gỡ bỏ mã thẻ công khai sau khi đã trang bị / kích hoạt / hủy bỏ. */
+/**
+ * Đồng bộ mọi lá Trắng/Đen công khai đang nằm trên tay nạn nhân trong lượt bị chiếm quyền
+ * (bao gồm lá giữ lại sau `felicia_draw_choice`, `cruz_black_redraw`, hoặc lá #2 hàng đợi Gloria)
+ * và gỡ bỏ lá đã trang bị/sử dụng. Lá Điều tra (`inv-*`) bị chặn tuyệt đối bởi `recordPublicCardDrawnDuringControlledTurn`.
+ */
 export function syncControlledTurnPublicDrawnCards(
   state: AuthoritativeGameState,
 ): void {
@@ -385,6 +389,9 @@ export function syncControlledTurnPublicDrawnCards(
   if (!victim) {
     grant.publicDrawnCardIds = [];
     return;
+  }
+  for (const cid of victim.hand) {
+    recordPublicCardDrawnDuringControlledTurn(state, cid);
   }
   grant.publicDrawnCardIds = grant.publicDrawnCardIds.filter((cid) =>
     victim.hand.includes(cid),
