@@ -1,8 +1,9 @@
 {
-  "schemaVersion": "1.0.0",
-  "phase": "8E",
-  "generatedAt": "2026-11-21T14:03:35.862Z",
-  "baselineHead": "7ff5c257327e4aa4d16ba8f752df4a58e678fa09",
+  "schemaVersion": "2.0.0",
+  "phase": "8F",
+  "generatedAt": "2026-11-21T15:02:00.000Z",
+  "baselineHead": "8a5096be73d469bbf987cf8372f2e55912cfe53c",
+  "phase8EBaselineHead": "7ff5c257327e4aa4d16ba8f752df4a58e678fa09",
   "roles": {
     "totalCatalog": 66,
     "audited": 66,
@@ -15,7 +16,7 @@
     "neutralVictoryPositiveAndNegative": 25,
     "expansionRolesActivatedInFuzz": 56,
     "expansionRolesTotal": 56,
-    "totalExpansionSkillActivationsMeasured": 3187
+    "totalExpansionSkillActivationsMeasured": 3200
   },
   "cards": {
     "distinctCardIds": 40,
@@ -31,15 +32,78 @@
     ]
   },
   "interactions": {
+    "note": "Historical Phase 8E numbers preserved verbatim under historicalPhase8ECoOccurrence (deprecated); authoritative verified deterministic metrics are under phase8FRecalculated.",
     "totalUnorderedPairs": 2145,
     "eligibleOverlappingPairs": 598,
-    "criticalPairsTotal": 6,
-    "criticalPairsCovered": 6,
-    "highRiskPairsTotal": 72,
-    "highRiskCoveredExisting": 30,
-    "highRiskNewlyCoveredPhase8E": 26,
-    "highRiskTotalCovered": 56,
-    "highRiskUncovered": 16,
+    "historicalPhase8ECoOccurrence": {
+      "deprecated": true,
+      "warning": "Naive test-block string co-occurrence; 41 of 56 claimed high-risk pairs and 3 of 6 claimed critical pairs were CO_OCCURRENCE_ONLY.",
+      "criticalPairsTotal": 6,
+      "criticalPairsCovered": 6,
+      "highRiskPairsTotal": 72,
+      "highRiskCoveredExisting": 30,
+      "highRiskNewlyCoveredPhase8E": 26,
+      "highRiskTotalCovered": 56,
+      "highRiskUncovered": 16
+    },
+    "phase8FRecalculated": {
+      "methodology": "Only INTERACTION_ASSERTED and DO_E2E_ASSERTED entries machine-validated in scripts/phase8f-interaction-evidence.cjs count as verified deterministic pairwise coverage.",
+      "artifact": "docs/boardgame-expansion/phase-8/phase-8f/interaction-coverage-recalculated.json",
+      "pre8FVerifiedBaseline": {
+        "highRiskVerified": 15,
+        "highRiskTotal": 72,
+        "highRiskVerifiedPct": 20.83,
+        "highRiskByCategory": {
+          "DO_E2E_ASSERTED": 3,
+          "INTERACTION_ASSERTED": 12,
+          "INTERACTION_EXECUTED": 29,
+          "CO_OCCURRENCE_ONLY": 23,
+          "NONE": 5
+        },
+        "criticalVerified": 3,
+        "criticalTotal": 6,
+        "criticalVerifiedPct": 50
+      },
+      "post8FVerified": {
+        "highRiskVerified": 31,
+        "highRiskTotal": 72,
+        "highRiskVerifiedPct": 43.06,
+        "highRiskNewlyVerifiedIn8F": 16,
+        "highRiskUncoveredBacklog": 41,
+        "highRiskByCategory": {
+          "DO_E2E_ASSERTED": 4,
+          "INTERACTION_ASSERTED": 27,
+          "INTERACTION_EXECUTED": 21,
+          "CO_OCCURRENCE_ONLY": 20,
+          "NONE": 0
+        },
+        "historical16UncoveredGapsClosed": 16,
+        "historical16UncoveredGapsTotal": 16,
+        "criticalVerified": 3,
+        "criticalTotal": 6,
+        "criticalVerifiedPct": 50,
+        "criticalBacklogPairs": [
+          "exp1_antimony::exp2_nc_soldier",
+          "exp1_antimony::exp2_bonnie",
+          "exp1_undead::exp2_nc_soldier"
+        ],
+        "allPairsVerified": 47,
+        "allPairsByCategory": {
+          "DO_E2E_ASSERTED": 5,
+          "INTERACTION_ASSERTED": 42,
+          "INTERACTION_EXECUTED": 1201,
+          "CO_OCCURRENCE_ONLY": 692,
+          "NONE": 205
+        }
+      },
+      "eligibilityCorrections": {
+        "totalPairsMinPlayersCorrected": 1025,
+        "highRiskPairsMinPlayersCorrected": 24,
+        "pairsIneligibleIn4P": 1325,
+        "pairsIneligibleIn5P": 341,
+        "pairsFullExpansionOnly": 780
+      }
+    },
     "mandatoryCriticalFamiliesVerified": [
       "A",
       "B",
@@ -50,24 +114,45 @@
   },
   "statefulFuzzing": {
     "ok": true,
-    "validMatches": 400,
-    "validSteps": 76161,
-    "targetedMatches": 120,
-    "targetedSteps": 21040,
-    "targetedRostersCount": 12,
-    "totalStepsExecuted": 97201,
-    "adversarialMatches": 150,
-    "adversarialProbesRejected": 56763,
-    "adversarialProbesTotal": 56763,
-    "deterministicReplaysVerified": 76,
-    "deterministicReplayFailures": 0,
-    "uniquePairsCoOccurred": 1746,
-    "violations": 0
+    "phase8ERun": {
+      "validMatches": 400,
+      "validSteps": 76161,
+      "targetedMatches": 120,
+      "targetedSteps": 21040,
+      "totalStepsExecuted": 97201,
+      "adversarialMatches": 150,
+      "adversarialProbesRejected": 56763,
+      "deterministicReplaysVerified": 76,
+      "violations": 0
+    },
+    "phase8FRun": {
+      "validMatches": 400,
+      "validFinished": 399,
+      "validSteps": 76269,
+      "targetedMatches": 120,
+      "targetedSteps": 21033,
+      "targetedRostersCount": 12,
+      "totalStepsExecuted": 97302,
+      "adversarialMatches": 150,
+      "adversarialProbesRejected": 56763,
+      "adversarialProbesTotal": 56763,
+      "deterministicReplaysVerified": 76,
+      "deterministicReplayFailures": 0,
+      "uniqueRolesDealt": 66,
+      "uniqueExpansionRolesActivated": 56,
+      "totalExpansionSkillActivations": 3200,
+      "uniquePairsCoOccurred": 1746,
+      "uniquePairsBothActivatedInSameMatch": 1232,
+      "violations": 0
+    }
   },
   "doChaosAndPersistence": {
-    "suiteFile": "test/boardgame-phase8e-do-chaos.test.cjs",
-    "testGroupsPassed": 5,
-    "testGroupsTotal": 5,
+    "suiteFiles": [
+      "test/boardgame-phase8e-do-chaos.test.cjs",
+      "test/boardgame-phase8f-16-pairs.test.cjs (8F2-C-DO)"
+    ],
+    "testGroupsPassed": 6,
+    "testGroupsTotal": 6,
     "roomSizesVerified": [
       "4P",
       "5P",
@@ -80,7 +165,7 @@
     "betaRollbackBackwardCompatible": true
   },
   "concurrencyAndSoak": {
-    "environment": "isolated-local-sqlite-do-harness (non-production)",
+    "environment": "isolated-local-sqlite-do-harness (non-production, measured in Phase 8E)",
     "levelsTested": [
       {
         "concurrentRooms": 5,
@@ -155,58 +240,102 @@
       "resurrection-status",
       "damage-redirection",
       "effective-faction",
-      "equipment-conservation"
+      "equipment-conservation",
+      "reveal-restriction-cards",
+      "copied-skill-dispatch",
+      "card-continuation-pipeline"
     ],
-    "nonEquivalentMutantsTotal": 12,
-    "nonEquivalentMutantsKilled": 12,
-    "nonEquivalentMutantsSurvived": 0,
-    "equivalentDefenseInDepthGuardsDocumented": 2,
-    "initialGapClosedByNewTest": [
-      "MUT-08 (Undead last-Shadow dormancy -> 8E2-B)"
-    ]
+    "phase8EBaseline": {
+      "nonEquivalentMutantsTotal": 12,
+      "nonEquivalentMutantsKilled": 12,
+      "nonEquivalentMutantsSurvived": 0
+    },
+    "phase8FExpanded": {
+      "nonEquivalentMutantsTotal": 16,
+      "nonEquivalentMutantsKilled": 16,
+      "nonEquivalentMutantsSurvived": 0,
+      "newMutantsAddedIn8F": [
+        "MUT-13 (BUG-8F-01a Undead pre-lethal eq-14 Chocolate)",
+        "MUT-14 (BUG-8F-01b Fallen <8HP eq-13 Advent)",
+        "MUT-15 (BUG-8F-02 Copied Classic Emi gac-truc-ban)",
+        "MUT-16 (BUG-8F-03 ev-09 Dynamite roll-7 Gloria queue)"
+      ]
+    },
+    "equivalentDefenseInDepthGuardsDocumented": 2
+  },
+  "extendedCI": {
+    "workflowFile": ".github/workflows/ci-extended.yml",
+    "localParityStatus": "PASS",
+    "remoteWorkflowDispatchStatus": "UNVERIFIED",
+    "remoteUnverifiedReason": "Local sandbox lacks gh CLI and GitHub API token; manual trigger instructions documented in docs/boardgame-expansion/phase-8/phase-8f/extended-ci-verification.md."
   },
   "defects": {
-    "confirmedBySeverity": {
-      "P0": 0,
-      "P1": 2,
-      "P2": 1,
-      "P3": 0
+    "phase8E": {
+      "confirmedBySeverity": { "P0": 0, "P1": 2, "P2": 1, "P3": 0 },
+      "fixedBySeverity": { "P0": 0, "P1": 2, "P2": 1, "P3": 0 },
+      "openBySeverity": { "P0": 0, "P1": 0, "P2": 0, "P3": 0 },
+      "register": [
+        {
+          "id": "BUG-8E-01",
+          "severity": "P1",
+          "status": "FIXED",
+          "summary": "ev-12 Banana Peel with equipped gear skipped Gloria queued-card delivery & immediate Colt/Bob victory finalization"
+        },
+        {
+          "id": "BUG-8E-02",
+          "severity": "P1",
+          "status": "FIXED",
+          "summary": "Copied Gideon GIDEON_DRAW_WHITE_CARD unconditionally healed non-Hunter on eq-13 Advent and ignored A/E/U eq-14 Chocolate"
+        },
+        {
+          "id": "BUG-8E-03",
+          "severity": "P2",
+          "status": "FIXED",
+          "summary": "Phase 8B targeted fuzzer rosters had invalid role IDs exp2_felicia/exp2_ernest silently falling back to George"
+        }
+      ]
     },
-    "fixedBySeverity": {
-      "P0": 0,
-      "P1": 2,
-      "P2": 1,
-      "P3": 0
-    },
-    "openBySeverity": {
-      "P0": 0,
-      "P1": 0,
-      "P2": 0,
-      "P3": 0
-    },
-    "register": [
-      {
-        "id": "BUG-8E-01",
-        "severity": "P1",
-        "status": "FIXED",
-        "summary": "ev-12 Banana Peel with equipped gear skipped Gloria queued-card delivery & immediate Colt/Bob victory finalization"
-      },
-      {
-        "id": "BUG-8E-02",
-        "severity": "P1",
-        "status": "FIXED",
-        "summary": "Copied Gideon GIDEON_DRAW_WHITE_CARD unconditionally healed non-Hunter on eq-13 Advent and ignored A/E/U eq-14 Chocolate"
-      },
-      {
-        "id": "BUG-8E-03",
-        "severity": "P2",
-        "status": "FIXED",
-        "summary": "Phase 8B targeted fuzzer rosters had invalid role IDs exp2_felicia/exp2_ernest silently falling back to George"
-      }
-    ]
+    "phase8F": {
+      "confirmedBySeverity": { "P0": 0, "P1": 3, "P2": 2, "P3": 0 },
+      "fixedBySeverity": { "P0": 0, "P1": 3, "P2": 2, "P3": 0 },
+      "openBySeverity": { "P0": 0, "P1": 0, "P2": 0, "P3": 0 },
+      "register": [
+        {
+          "id": "BUG-8F-01",
+          "severity": "P1",
+          "status": "FIXED",
+          "summary": "Unrevealed Undead ('U') bypassed pre-lethal reveal lock via eq-14 Chocolate & unrevealed Fallen (<8 HP) bypassed voluntary reveal lock via eq-13 Advent"
+        },
+        {
+          "id": "BUG-8F-02",
+          "severity": "P1",
+          "status": "FIXED",
+          "summary": "Vengeful Spirit & Antimony copying Classic Emi (gac-truc-ban) were rejected on USE_SKILL because applyExpandedUseSkill returned null and fell back to base roleId passive check"
+        },
+        {
+          "id": "BUG-8F-03",
+          "severity": "P1",
+          "status": "FIXED",
+          "summary": "ev-09 Dynamite roll-7 dud early return skipped deliverNextGloriaQueuedCard(), causing turn deadlock when Gloria held a queued 2nd card"
+        },
+        {
+          "id": "BUG-8F-04",
+          "severity": "P2",
+          "status": "FIXED",
+          "summary": "Phase 8E pairwise coverage metric counted regex test-block co-occurrence as verified coverage (41 high-risk / 3 critical false positives)"
+        },
+        {
+          "id": "BUG-8F-05",
+          "severity": "P2",
+          "status": "FIXED",
+          "summary": "Phase 8E pair eligibility heuristic misclassified 1,025/2,145 pairs (24/72 high-risk) by ignoring 4P zero-Neutral split, 5P exp2_nc_soldier exclusion & pack boundaries"
+        }
+      ]
+    }
   },
   "residualRisks": [
-    "16 high-risk role pairs (score>=15) lack standalone deterministic pairwise assertions (covered only via risk-weighted fuzzer co-occurrence).",
+    "41 remaining high-risk pairs (score>=15) — including 3 critical full-expansion 6P-8P pairs (Antimony x N.C. Soldier, Antimony x Bonnie, Undead x N.C. Soldier) — lack standalone deterministic pairwise assertions (21 are INTERACTION_EXECUTED in 520-match stateful fuzzing, 20 are CO_OCCURRENCE_ONLY).",
+    "Remote Extended CI (ci-extended.yml) has not yet been manually triggered via workflow_dispatch from this sandbox (local parity is 100% PASS; remote status UNVERIFIED until triggered or nightly run completes).",
     "Load/soak tests ran against isolated local SQLite DO harness; Cloudflare edge isolate CPU limits, WAN WebSocket jitter, and regional DO cold starts are not replicated identically locally.",
     "Expansion 1, Expansion 2 and Full Expansion remain Production Beta pending ongoing human playtest balance telemetry."
   ]
