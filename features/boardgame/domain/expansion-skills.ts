@@ -1050,7 +1050,7 @@ function createExpandedHealHooks(): HealPipelineHooks {
         blockedLogText: req.blockedLogText,
       });
 
-      const choiceId = nextExpansionEventId(state, 'choice-usurper');
+      const choiceId = nextExpansionEventId(state, 'choice-secret');
       const timeoutMs = getChoiceTimeoutMs(state, usurper);
       const sourceText = req.sourceKind === 'white-card' ? 'Thẻ Trắng' : 'Kỹ năng';
       state.pendingChoice = {
@@ -7385,7 +7385,7 @@ function executeDamageStep(
           urbanLegendConverted: false,
         });
         const cardTitle = (step.sourceCardId ? getCardById(step.sourceCardId)?.title : null) ?? 'thẻ Đột Kích';
-        const choiceId = nextExpansionEventId(state, 'choice-urban-legend');
+        const choiceId = nextExpansionEventId(state, 'choice-secret');
         const timeoutMs = getChoiceTimeoutMs(state, target);
         state.pendingChoice = {
           choiceId,
@@ -7555,7 +7555,7 @@ function executeDamageStep(
               preUndyingDmg: dmg,
               undyingReduced: false,
             });
-            const choiceId = nextExpansionEventId(state, 'choice-undying');
+            const choiceId = nextExpansionEventId(state, 'choice-secret');
             const timeoutMs = getChoiceTimeoutMs(state, target);
             state.pendingChoice = {
               choiceId,
@@ -7723,7 +7723,7 @@ function executeDamageStep(
           });
           const attackerObj = state.players[arnoldCheck.reflectTargetPlayerId];
           const isSecretChoice = !target.revealed;
-          const choiceId = nextExpansionEventId(state, 'choice-arnold');
+          const choiceId = nextExpansionEventId(state, isSecretChoice ? 'choice-secret' : 'choice-arnold');
           const timeoutMs = getChoiceTimeoutMs(state, target);
           const publicTimeoutMs = getNormalizedPublicChoiceTimeoutMs(state);
           state.pendingChoice = {
@@ -8314,7 +8314,7 @@ function executeAfterDamageTriggersStep(
       return true;
     }
 
-    const choiceId = nextExpansionEventId(state, 'choice-cindy');
+    const choiceId = nextExpansionEventId(state, 'choice-secret');
     const timeoutMs = getChoiceTimeoutMs(state, target);
     state.pendingChoice = {
       choiceId,
@@ -8545,7 +8545,7 @@ function executeEliminationTriggersStep(
       // Đặt lại step lên đầu hàng đợi để hoàn tất sau khi Wendigo quyết định
       exp.pendingSteps.unshift(step);
 
-      const choiceId = nextExpansionEventId(state, 'choice-wendigo');
+      const choiceId = nextExpansionEventId(state, 'choice-secret');
       const timeoutMs = getChoiceTimeoutMs(state, wendigo);
       const victimName = victim?.displayName ?? '1 người chơi';
       state.pendingChoice = {
