@@ -9,6 +9,7 @@ import React from 'react';
 import { getCardById } from '@/features/boardgame/domain/cards';
 import { getRoleDesign } from '@/features/boardgame/domain/roles';
 import type {
+  BoardGameLocationId,
   BoardGamePrivateGameView,
   BoardGamePublicGameView,
   BoardGamePublicPlayerView,
@@ -16,15 +17,21 @@ import type {
 import {
   FACTION_THEME,
   FactionCrestSvg,
+  LOCATION_VISUAL_META,
   PlayerPawnToken,
   ROLE_VISUAL_META,
   RolePortraitSvg,
 } from './BoardGameArt';
 import {
+  computePublicDamageChipState,
+  getPublicPlayerNameFactionClass,
+} from './DamageTrack';
+import {
   MIDNIGHT_CARD_ART,
   type ActionCardZone,
 } from './midnight-noir-tokens';
 import { MidnightCharacterCard } from './MidnightCharacterCard';
+import { toggleSelectedTargetId } from './target-selection';
 
 export interface RoleCardProps {
   publicGame: BoardGamePublicGameView;
@@ -32,9 +39,13 @@ export interface RoleCardProps {
   isSpectator: boolean;
   section?: 'all' | 'character' | 'gear';
   selfPlayerId?: string | null;
+  selectedTargetId?: string | null;
+  attackableIds?: ReadonlySet<string>;
   visualStyle?: 'classic' | 'midnight-noir';
   reducedMotion?: boolean;
   foilEnabled?: boolean;
+  getPlayerLocation?: (player: BoardGamePublicPlayerView) => BoardGameLocationId;
+  onSelectPlayer?: (updater: (prev: string | null) => string | null) => void;
   onZoomRole?: () => void;
   onZoomRevealedRole?: (player: BoardGamePublicPlayerView) => void;
   onZoomCard?: (cardId: string, zone?: ActionCardZone) => void;
@@ -46,15 +57,22 @@ export const RoleCard = React.memo(function RoleCard({
   isSpectator,
   section = 'all',
   selfPlayerId = null,
+  selectedTargetId = null,
+  attackableIds,
   visualStyle = 'midnight-noir',
   reducedMotion = false,
   foilEnabled = true,
+  getPlayerLocation,
+  onSelectPlayer,
   onZoomRole,
   onZoomRevealedRole,
   onZoomCard,
 }: RoleCardProps) {
   const renderTableEquipmentOverview = () => (
-    <div className="rounded-xl bg-slate-950/85 border border-slate-800 p-2.5 space-y-2">
+    <div
+      data-testid="bg-table-equipment-list"
+      className="rounded-xl bg-slate-950/85 border border-slate-800 p-2.5 space-y-2"
+    >
       <p
         data-testid="bg-table-equipment-heading"
         className="text-[11px] font-extrabold uppercase tracking-wider text-cyan-300"
@@ -65,49 +83,190 @@ export const RoleCard = React.memo(function RoleCard({
         {publicGame.players.map((p) => {
           const isSelf = p.playerId === selfPlayerId;
           const isActive = p.playerId === publicGame.activePlayerId;
+          const isSelected = selectedTargetId === p.playerId;
+          const inAttackRange = Boolean(attackableIds?.has(p.playerId));
+          const isDormant = p.lifecycleState === 'DORMANT_PENDING_REVIVE';
+          const isPuppet = Boolean(
+            publicGame.controlledTurn &&
+              publicGame.controlledTurn.activePlayerId === p.playerId &&
+              publicGame.controlledTurn.controllerPlayerId !== p.playerId,
+          );
+          const chip = computePublicDamageChipState(p, publicGame.activePlayerId);
+          const nameColorCls = getPublicPlayerNameFactionClass(p);
+          const locId = getPlayerLocation ? getPlayerLocation(p) : p.location;
+          const locMeta = LOCATION_VISUAL_META[locId];
+          const revealedRoleName = p.revealedRoleId ? getRoleDesign(p.revealedRoleId).name : null;
+
+          const woundBadgeCls = chip.isEliminated
+            ? 'bg-slate-800/90 text-slate-400 border border-slate-700'
+            : chip.isNearThreshold
+              ? 'bg-rose-500/25 text-rose-200 border border-rose-400/50'
+              : chip.isTurnHolder
+                ? 'bg-amber-500/20 text-amber-100 border border-amber-400/40'
+                : 'bg-slate-800/90 text-rose-200 border border-slate-700/80';
+
+          const roleInspectBtnCls =
+            p.revealedFaction === 'lantern-guard'
+              ? 'border-emerald-400/55 bg-emerald-950/75 text-emerald-200 hover:bg-emerald-900/80'
+              : p.revealedFaction === 'mist-order'
+                ? 'border-rose-400/55 bg-rose-950/75 text-rose-200 hover:bg-rose-900/80'
+                : 'border-amber-400/55 bg-amber-950/75 text-amber-200 hover:bg-amber-900/80';
+
           return (
             <div
               key={p.playerId}
-              className={`rounded-lg border px-2 py-1.5 space-y-1 ${
-                !p.alive
-                  ? 'opacity-55 border-slate-800 bg-slate-950/60'
-                  : isSelf
-                    ? 'border-cyan-500/45 bg-cyan-950/25'
-                    : isActive
-                      ? 'border-amber-400/50 bg-slate-900/90'
-                      : 'border-slate-800 bg-slate-900/75'
+              data-testid={`bg-table-player-row-${p.seatIndex}`}
+              data-player-id={p.playerId}
+              data-turn-holder={chip.isTurnHolder ? 'true' : 'false'}
+              data-near-threshold={chip.isNearThreshold ? 'true' : 'false'}
+              data-eliminated={chip.isEliminated ? 'true' : 'false'}
+              data-lifecycle-state={p.lifecycleState ?? (p.alive ? 'ALIVE' : 'FINAL_ELIMINATED')}
+              className={`rounded-lg border px-2 py-1.5 space-y-1 transition ${
+                isDormant
+                  ? 'border-emerald-400/75 bg-purple-950/60 ring-1 ring-purple-400/45'
+                  : !p.alive
+                    ? 'opacity-55 border-slate-800 bg-slate-950/60'
+                    : isPuppet
+                      ? 'border-fuchsia-400/80 bg-purple-950/50 ring-1 ring-fuchsia-400/45'
+                      : isSelected
+                        ? isSelf
+                          ? 'border-emerald-400 bg-emerald-950/35 ring-1 ring-emerald-400/45'
+                          : 'border-cyan-400 bg-cyan-950/35 ring-1 ring-cyan-400/45'
+                        : isActive
+                          ? 'border-amber-400/65 bg-slate-900/95'
+                          : inAttackRange
+                            ? 'border-rose-500/55 bg-slate-900/90'
+                            : isSelf
+                              ? 'border-cyan-500/45 bg-cyan-950/25'
+                              : 'border-slate-800 bg-slate-900/75'
               }`}
             >
-              <div className="flex items-center justify-between gap-1.5">
-                <div className="flex items-center gap-1.5 min-w-0">
+              {/* HÀNG 1: TÊN NGƯỜI CHƠI (MÀU THEO PHE KHI LỘ) + THƯƠNG TÍCH CẠNH TÊN + NÚT TÊN NHÂN VẬT / SOI VAI */}
+              <div className="flex items-center justify-between gap-1.5 min-w-0">
+                <button
+                  type="button"
+                  data-vfx-player-strip={p.playerId}
+                  data-testid={`bg-table-player-select-${p.seatIndex}`}
+                  aria-pressed={isSelected}
+                  disabled={!onSelectPlayer}
+                  title={`${p.displayName} · Ô ${locMeta.diceLabel} ${locMeta.name}`}
+                  onClick={() =>
+                    onSelectPlayer?.((prev) => toggleSelectedTargetId(prev, p.playerId, p.alive))
+                  }
+                  className={`flex items-center gap-1.5 min-w-0 flex-1 text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                    onSelectPlayer ? 'cursor-pointer' : 'cursor-default'
+                  }`}
+                >
                   <PlayerPawnToken
                     compact
                     elevated={false}
                     displayName={p.displayName}
                     seatIndex={p.seatIndex}
-                    alive={p.alive}
+                    alive={p.alive || isDormant}
                     isActive={isActive}
                     isSelf={isSelf}
                     revealedFaction={p.revealedFaction}
                     revealedRoleId={p.revealedRoleId}
                   />
-                  <p className="text-xs font-bold text-white truncate">
+                  <span
+                    data-testid={`bg-table-player-name-${p.seatIndex}`}
+                    className={`text-xs font-black truncate ${nameColorCls}`}
+                  >
                     {p.isBot ? '🤖 ' : ''}
                     {p.displayName}
                     {isSelf ? ' (Bạn)' : ''}
-                  </p>
-                </div>
-                <span className="text-[10px] font-bold text-sky-300 shrink-0">
-                  {p.equipped.length} món
-                </span>
+                  </span>
+                  <span
+                    data-testid={`bg-wound-count-${p.seatIndex}`}
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black tabular-nums leading-none ${woundBadgeCls}`}
+                    title={`${p.woundsTaken} vết thương${
+                      p.revealedMaxHp !== null ? ` / Ngưỡng ${p.revealedMaxHp}` : ''
+                    }`}
+                  >
+                    {chip.isEliminated ? `💀 ${chip.woundBadgeText}` : `🩸 ${chip.woundBadgeText}`}
+                  </span>
+                </button>
+
+                {p.revealedRoleId && revealedRoleName ? (
+                  <button
+                    type="button"
+                    data-testid={`bg-role-inspect-btn-${p.seatIndex}`}
+                    onClick={() => {
+                      if (isSelf && onZoomRole) {
+                        onZoomRole();
+                      } else {
+                        onZoomRevealedRole?.(p);
+                      }
+                    }}
+                    title={`Xem thẻ nhân vật ${revealedRoleName}`}
+                    className={`shrink-0 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-extrabold whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${roleInspectBtnCls}`}
+                  >
+                    <span aria-hidden="true">🔍</span>
+                    <span>{revealedRoleName}</span>
+                  </button>
+                ) : isSelf && !isSpectator && onZoomRole ? (
+                  <button
+                    type="button"
+                    data-testid={`bg-role-self-peek-btn-${p.seatIndex}`}
+                    onClick={onZoomRole}
+                    title="Xem thẻ nhân vật bí mật của bạn"
+                    className="shrink-0 inline-flex items-center gap-1 rounded-md border border-cyan-400/45 bg-cyan-950/70 px-1.5 py-0.5 text-[10px] font-extrabold text-cyan-200 hover:bg-cyan-900/75 whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+                  >
+                    <span aria-hidden="true">🔍</span>
+                    <span>Vai của bạn</span>
+                  </button>
+                ) : (
+                  <span
+                    data-testid={`bg-role-hidden-badge-${p.seatIndex}`}
+                    className="shrink-0 rounded-md border border-slate-700/80 bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 whitespace-nowrap"
+                  >
+                    🔒 Ẩn vai
+                  </span>
+                )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+              {/* HÀNG 2: VỊ TRÍ KHU VỰC + TRẠNG THÁI CHIẾN THUẬT GỘP TỪ DẢI DƯỚI XÚC XẮC */}
+              <div className="flex flex-wrap items-center gap-1 text-[10px] font-semibold text-slate-300">
+                <span className="rounded bg-slate-950/85 border border-slate-800 px-1.5 py-0.5 text-slate-300 truncate max-w-full">
+                  📍 Ô {locMeta.diceLabel} {locMeta.name}
+                </span>
+                {isActive && p.alive && (
+                  <span className="rounded bg-amber-500/20 border border-amber-400/45 px-1.5 py-0.5 font-bold text-amber-200">
+                    ⚡ Đang đi
+                  </span>
+                )}
+                {inAttackRange && (
+                  <span className="rounded bg-rose-500/20 border border-rose-400/45 px-1.5 py-0.5 font-bold text-rose-200">
+                    ⚔️ Tầm đánh
+                  </span>
+                )}
+                {isDormant && (
+                  <span className="rounded bg-purple-950/90 border border-emerald-400/50 px-1.5 py-0.5 font-bold text-emerald-200">
+                    💤 Ngủ đông
+                  </span>
+                )}
+                {isPuppet && (
+                  <span className="rounded bg-fuchsia-950/85 border border-fuchsia-400/50 px-1.5 py-0.5 font-bold text-fuchsia-200">
+                    🧵 Voodoo
+                  </span>
+                )}
+                {p.handCount > 0 && (
+                  <span
+                    className="rounded bg-slate-800 px-1.5 py-0.5 font-bold text-slate-200"
+                    title={`${p.handCount} thẻ chờ`}
+                  >
+                    🃏 {p.handCount}
+                  </span>
+                )}
                 {p.guardianShieldActive && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-400/35">
+                  <span className="rounded bg-amber-500/20 text-amber-200 border border-amber-400/35 px-1.5 py-0.5 font-bold">
                     🛡️ Khiên bảo vệ
                   </span>
                 )}
+              </div>
+
+              {/* HÀNG 3: TRANG BỊ ĐANG ĐEO */}
+              <div className="flex flex-wrap items-center gap-1 pt-0.5">
                 {p.equipped.length > 0 ? (
                   p.equipped.map((eq, idx) => (
                     <button
@@ -115,22 +274,13 @@ export const RoleCard = React.memo(function RoleCard({
                       type="button"
                       onClick={() => onZoomCard?.(eq.id, 'equipped-table')}
                       title={`${eq.summary} (Bấm để phóng lớn)`}
-                      className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-sky-200 hover:border-sky-300 truncate max-w-full cursor-pointer"
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-sky-200 hover:border-sky-300 truncate max-w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                     >
                       🎒 {eq.title}
                     </button>
                   ))
                 ) : (
                   <span className="text-[10px] text-slate-500 italic">Chưa có trang bị</span>
-                )}
-                {p.revealedRoleId && onZoomRevealedRole && (
-                  <button
-                    type="button"
-                    onClick={() => onZoomRevealedRole(p)}
-                    className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-950/75 border border-amber-400/45 text-amber-200 hover:bg-amber-900/75 cursor-pointer"
-                  >
-                    🔍 Soi vai
-                  </button>
                 )}
               </div>
             </div>
@@ -453,8 +603,8 @@ export const RoleCard = React.memo(function RoleCard({
   if (section === 'gear') {
     return (
       <aside data-testid="bg-sidebar-gear-panel" className="space-y-2.5 text-slate-100">
-        {gearAndCluesBlocks}
         {renderTableEquipmentOverview()}
+        {gearAndCluesBlocks}
       </aside>
     );
   }
@@ -550,6 +700,7 @@ export const RoleCard = React.memo(function RoleCard({
         {characterDetailsBlocks}
         {section === 'all' && gearAndCluesBlocks}
       </div>
+      {section === 'all' && renderTableEquipmentOverview()}
     </aside>
   );
 });

@@ -25,6 +25,9 @@ const {
 } = require('../features/boardgame/domain/index.ts');
 const { tokenizeGameLogText } = require('../features/boardgame/ui/game-log-format.ts');
 const {
+  getPublicPlayerNameFactionClass,
+} = require('../features/boardgame/ui/DamageTrack.tsx');
+const {
   resolveGraphicsProfile,
   DEFAULT_GRAPHICS_PREFERENCES,
 } = require('../features/boardgame/ui/graphics-settings.ts');
@@ -226,6 +229,28 @@ test('UX-7 — Nhật ký tô đậm tên người chơi, trang bị/tên thẻ,
   assert.ok(tokens.some((t) => t.kind === 'card' && t.text === '"Kiếm Gỗ Masamune"'));
   assert.ok(tokens.some((t) => t.kind === 'location' && t.text.includes('Weird Woods')));
   assert.ok(tokens.some((t) => t.kind === 'damage' && t.text === '3 sát thương'));
+
+  // UX Feedback #1: Tên nhân vật trong danh sách đổi màu theo phe khi đã lộ role, ẩn vai giữ trắng trung tính
+  assert.equal(
+    getPublicPlayerNameFactionClass({ alive: true, revealedFaction: null }),
+    'text-white',
+  );
+  assert.equal(
+    getPublicPlayerNameFactionClass({ alive: true, revealedFaction: 'lantern-guard' }),
+    'text-emerald-300',
+  );
+  assert.equal(
+    getPublicPlayerNameFactionClass({ alive: true, revealedFaction: 'mist-order' }),
+    'text-rose-300',
+  );
+  assert.equal(
+    getPublicPlayerNameFactionClass({ alive: true, revealedFaction: 'wanderer' }),
+    'text-amber-300',
+  );
+  assert.equal(
+    getPublicPlayerNameFactionClass({ alive: false, revealedFaction: 'lantern-guard' }),
+    'line-through text-slate-400',
+  );
 });
 
 test('UX-3 — Animation mượt và chậm hơn (~+1.5s) nhưng giữ nguyên tốc độ cho reducedMotion', () => {

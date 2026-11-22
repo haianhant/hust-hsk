@@ -1133,7 +1133,21 @@ export function ActionPanel({
             }`}
           >
             {inRange && <span aria-hidden="true">⚔️</span>}
-            <span>{p.displayName}</span>
+            <span
+              className={
+                selected
+                  ? 'text-white'
+                  : p.revealedFaction === 'lantern-guard'
+                    ? 'text-emerald-300'
+                    : p.revealedFaction === 'mist-order'
+                      ? 'text-rose-300'
+                      : p.revealedFaction === 'wanderer'
+                        ? 'text-amber-300'
+                        : undefined
+              }
+            >
+              {p.displayName}
+            </span>
           </button>
         );
       })}

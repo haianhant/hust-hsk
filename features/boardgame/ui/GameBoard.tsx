@@ -26,9 +26,7 @@ import { areInSameCluster, getLocationDefinition } from '../domain/rules';
 import {
   buildBoardClustersView,
   DeckCardBackSvg,
-  FACTION_THEME,
   LOCATION_VISUAL_META,
-  PlayerPawnToken,
 } from './BoardGameArt';
 import { MIDNIGHT_CARD_ART } from './midnight-noir-tokens';
 import { MidnightDicePair3D } from './MidnightDice3D';
@@ -37,7 +35,6 @@ import ActionPanel from './ActionPanel';
 import GameLog from './GameLog';
 import MatchPostcard from './MatchPostcard';
 import MatchResult from './MatchResult';
-import { toggleSelectedTargetId } from './target-selection';
 import { BoardGameVfxStage, useBoardGameVfxQueue } from './BoardGameVfxStage';
 import { computeDiceSig } from './vfx-queue';
 import { TabletopLocationTile } from './TabletopLocationTile';
@@ -123,7 +120,6 @@ export function GameBoard({
   const [mobileTab, setMobileTab] = useState<'board' | 'role' | 'log'>('board');
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<BoardGameLocationId | null>(null);
-  const [damageTrackExpanded, setDamageTrackExpanded] = useState(false);
   const [chatText, setChatText] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -225,7 +221,6 @@ export function GameBoard({
     setSeenLogCount(publicGame.publicLog.length);
     setSelectedTargetId(null);
     setSelectedLocationId(null);
-    setDamageTrackExpanded(false);
     setZoomTarget(null);
     setPendingGreenClues([]);
     seenReceivedClueIdsRef.current = {
@@ -287,13 +282,11 @@ export function GameBoard({
         setLeaveConfirmOpen(false);
       } else if (settingsPanelOpen) {
         setSettingsPanelOpen(false);
-      } else if (damageTrackExpanded) {
-        setDamageTrackExpanded(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [zoomTarget, activeGreenClue, dismissActiveGreenClue, leaveConfirmOpen, settingsPanelOpen, damageTrackExpanded]);
+  }, [zoomTarget, activeGreenClue, dismissActiveGreenClue, leaveConfirmOpen, settingsPanelOpen]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -889,16 +882,13 @@ export function GameBoard({
               data-testid="bg-board-scroll-area"
               className="flex-1 min-h-0 flex flex-col justify-start gap-2 xl:gap-2.5 lg:overflow-y-auto lg:pr-0.5"
             >
-              {/* 1. THANG THƯƠNG TÍCH COMPACT (MỞ RỘNG ĐƯỢC SANG 0..14) */}
+              {/* 1. THANG THƯƠNG TÍCH CHI TIẾT (0 → 14) */}
               <DamageTrack
                 players={publicGame.players}
                 activePlayerId={publicGame.activePlayerId}
                 selfPlayerId={selfPlayerId}
                 selectedTargetId={selectedTargetId}
                 selfSecretMaxHp={privateView?.maxHp ?? null}
-                expanded={damageTrackExpanded}
-                onToggleExpanded={() => setDamageTrackExpanded((v) => !v)}
-                reducedMotion={vfx.reducedMotion}
                 onSelectPlayer={handleSelectPlayer}
               />
 
@@ -1109,170 +1099,9 @@ export function GameBoard({
                   })}
                 </div>
               </section>
-
-              {/* 4. DẢI NGƯỜI CHƠI TACTICAL TINH GỌN (THƯƠNG TÍCH ĐÃ HIỂN THỊ DUY NHẤT Ở DAMAGE TRACK) */}
-              <section className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                {publicGame.players.map((p) => {
-                  const selected = selectedTargetId === p.playerId;
-                  const isTurnHolder = p.playerId === publicGame.activePlayerId;
-                  const inAttackRange = attackableIdsOnBoard.has(p.playerId);
-                  const isSelfCard = p.playerId === selfPlayerId;
-                  const isDormantCard = p.lifecycleState === 'DORMANT_PENDING_REVIVE';
-                  const isPuppetCard = Boolean(
-                    publicGame.controlledTurn &&
-                      publicGame.controlledTurn.activePlayerId === p.playerId &&
-                      publicGame.controlledTurn.controllerPlayerId !== p.playerId,
-                  );
-                  const factionTheme = p.revealedFaction ? FACTION_THEME[p.revealedFaction] : null;
-                  const locMeta = LOCATION_VISUAL_META[getCommittedLocation(p)];
-                  return (
-                    <div
-                      key={p.playerId}
-                      data-testid={`bg-player-strip-card-${p.seatIndex}`}
-                      data-lifecycle-state={p.lifecycleState ?? (p.alive ? 'ALIVE' : 'FINAL_ELIMINATED')}
-                      className={`min-w-0 rounded-xl border px-2 py-1 flex items-center justify-between gap-1.5 transition ${
-                        isDormantCard
-                          ? 'border-emerald-400/75 bg-purple-950/65 ring-1 ring-purple-400/50'
-                          : !p.alive
-                            ? 'opacity-55 border-slate-800 bg-slate-950/60'
-                            : isPuppetCard
-                              ? 'border-fuchsia-400/80 bg-purple-950/55 ring-1 ring-fuchsia-400/50'
-                              : selected
-                                ? isSelfCard
-                                  ? 'border-emerald-400 bg-emerald-950/35 ring-1 ring-emerald-400/45'
-                                  : 'border-cyan-400 bg-cyan-950/35 ring-1 ring-cyan-400/45'
-                                : isTurnHolder
-                                  ? 'border-amber-400 bg-slate-900'
-                                  : inAttackRange
-                                    ? 'border-rose-500/60 bg-slate-900/90 hover:border-rose-400'
-                                    : 'border-slate-700/80 bg-slate-900/80 hover:border-cyan-400/50'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        data-vfx-player-strip={p.playerId}
-                        data-testid={isSelfCard ? 'bg-player-strip-self' : undefined}
-                        aria-pressed={selected}
-                        title={`${p.displayName} · Ô ${locMeta.diceLabel} ${locMeta.name}`}
-                        onClick={() =>
-                          handleSelectPlayer((prev) =>
-                            toggleSelectedTargetId(prev, p.playerId, p.alive),
-                          )
-                        }
-                        className="min-w-0 flex-1 text-left rounded-lg cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <PlayerPawnToken
-                            compact
-                            elevated={false}
-                            displayName={p.displayName}
-                            seatIndex={p.seatIndex}
-                            alive={p.alive}
-                            isActive={isTurnHolder}
-                            isSelf={isSelfCard}
-                            revealedFaction={p.revealedFaction}
-                            revealedRoleId={p.revealedRoleId}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1">
-                              <p className="text-xs font-black text-white truncate">
-                                {p.isBot ? '🤖 ' : ''}
-                                {p.displayName}
-                              </p>
-                              {inAttackRange && (
-                                <span
-                                  className="text-xs font-black text-amber-200 shrink-0"
-                                  aria-hidden="true"
-                                >
-                                  ⚔️
-                                </span>
-                              )}
-                            </div>
-                            <p
-                              className={`text-[11px] xl:text-xs font-semibold truncate ${
-                                factionTheme ? factionTheme.textClass : 'text-slate-400'
-                              }`}
-                            >
-                              {p.revealedRoleId
-                                ? `${FACTION_LABELS[p.revealedFaction!]} · Max ${p.revealedMaxHp}`
-                                : `Ô ${locMeta.diceLabel} · Vai ẩn`}
-                            </p>
-                          </div>
-                        </div>
-                      </button>
-
-                      {(p.handCount > 0 ||
-                        p.guardianShieldActive ||
-                        p.equipped.length > 0 ||
-                        Boolean(p.revealedRoleId)) && (
-                        <div className="flex items-center gap-1 shrink-0 text-[11px] font-bold">
-                          {p.handCount > 0 && (
-                            <span
-                              className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200"
-                              title={`${p.handCount} thẻ chờ`}
-                            >
-                              🃏{p.handCount}
-                            </span>
-                          )}
-                          {p.guardianShieldActive && (
-                            <span
-                              className="px-1 py-0.5 rounded bg-amber-500/25 text-amber-200"
-                              title="Đang có Khiên Bảo Vệ"
-                            >
-                              🛡️
-                            </span>
-                          )}
-                          {p.equipped.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isDesktopLayout) {
-                                  setSideDrawerOpen(true);
-                                  setDesktopSidebarTab('gear');
-                                } else {
-                                  setZoomTarget({
-                                    kind: 'card',
-                                    cardId: p.equipped[0].id,
-                                    zone: 'equipped-table',
-                                  });
-                                }
-                              }}
-                              title={`Xem ${p.equipped.length} trang bị của ${p.displayName}`}
-                              className="px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-sky-200 hover:border-sky-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
-                            >
-                              🎒{p.equipped.length}
-                            </button>
-                          )}
-                          {p.revealedRoleId && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setZoomTarget({
-                                  kind: 'role',
-                                  roleId: p.revealedRoleId!,
-                                  revealed: true,
-                                  viewerMode: 'other-player',
-                                  woundsTaken: p.woundsTaken,
-                                  currentHp: p.revealedMaxHp
-                                    ? Math.max(0, p.revealedMaxHp - p.woundsTaken)
-                                    : undefined,
-                                })
-                              }
-                              title={`Phóng lớn thẻ vai đã lộ của ${p.displayName}`}
-                              className="px-1 py-0.5 rounded bg-amber-950/70 border border-amber-400/45 text-amber-200 hover:bg-amber-900/70 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
-                            >
-                              🔍
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </section>
             </div>
 
-            {/* 5. THANH HÀNH ĐỘNG CONTEXTUAL ACTION-FIRST NEO CỐ ĐỊNH Ở ĐÁY */}
+            {/* 4. THANH HÀNH ĐỘNG CONTEXTUAL ACTION-FIRST NEO CỐ ĐỊNH Ở ĐÁY */}
             <div className="relative shrink-0">
               <ActionPanel
                 publicGame={publicGame}
@@ -1413,7 +1242,22 @@ export function GameBoard({
                     isSpectator={isSpectator}
                     section="gear"
                     selfPlayerId={selfPlayerId}
+                    selectedTargetId={selectedTargetId}
+                    attackableIds={attackableIdsOnBoard}
                     visualStyle="midnight-noir"
+                    getPlayerLocation={getCommittedLocation}
+                    onSelectPlayer={handleSelectPlayer}
+                    onZoomRole={() =>
+                      privateView &&
+                      setZoomTarget({
+                        kind: 'role',
+                        roleId: privateView.roleId,
+                        revealed: privateView.revealed,
+                        viewerMode: 'owner-peek',
+                        woundsTaken: privateView.woundsTaken,
+                        currentHp: privateView.hp,
+                      })
+                    }
                     onZoomRevealedRole={(p) =>
                       p.revealedRoleId &&
                       setZoomTarget({
@@ -1516,9 +1360,13 @@ export function GameBoard({
                   isSpectator={isSpectator}
                   section="all"
                   selfPlayerId={selfPlayerId}
+                  selectedTargetId={selectedTargetId}
+                  attackableIds={attackableIdsOnBoard}
                   visualStyle="midnight-noir"
                   foilEnabled={gfx.profile.enableFoil}
                   reducedMotion={!gfx.profile.enable3DTilt || vfx.reducedMotion}
+                  getPlayerLocation={getCommittedLocation}
+                  onSelectPlayer={handleSelectPlayer}
                   onZoomRole={() =>
                     privateView &&
                     setZoomTarget({
@@ -1528,6 +1376,19 @@ export function GameBoard({
                       viewerMode: 'owner-peek',
                       woundsTaken: privateView.woundsTaken,
                       currentHp: privateView.hp,
+                    })
+                  }
+                  onZoomRevealedRole={(p) =>
+                    p.revealedRoleId &&
+                    setZoomTarget({
+                      kind: 'role',
+                      roleId: p.revealedRoleId,
+                      revealed: true,
+                      viewerMode: 'other-player',
+                      woundsTaken: p.woundsTaken,
+                      currentHp: p.revealedMaxHp
+                        ? Math.max(0, p.revealedMaxHp - p.woundsTaken)
+                        : undefined,
                     })
                   }
                   onZoomCard={(cardId, zone = 'equipped-table') =>

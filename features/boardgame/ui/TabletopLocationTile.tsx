@@ -17,6 +17,7 @@ import {
   LOCATION_VISUAL_META,
   PlayerPawnToken,
 } from './BoardGameArt';
+import { getPublicPlayerNameFactionClass } from './DamageTrack';
 import {
   MIDNIGHT_LOCATION_AMBIENCE,
   MIDNIGHT_LOCATION_ART,
@@ -441,7 +442,11 @@ export const TabletopLocationTile = React.memo(function TabletopLocationTile({
                   <span
                     className={`truncate ${
                       crowdedMode ? 'min-w-0 flex-1 text-left' : 'max-w-[120px]'
-                    } ${!p.alive && !isDormant ? 'line-through text-slate-400' : isDormant ? 'text-emerald-200' : ''}`}
+                    } ${
+                      isSelectedTarget
+                        ? 'text-white'
+                        : getPublicPlayerNameFactionClass(p)
+                    }`}
                   >
                     {p.displayName}
                   </span>

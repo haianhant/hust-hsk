@@ -112,6 +112,32 @@ export interface PublicDamageChipState {
 }
 
 /**
+ * Đổi màu tên người chơi theo phe KHI ĐÃ LỘ DIỆN (`revealedFaction`),
+ * giữ nguyên màu trung tính khi đang ẩn vai để bảo toàn tuyệt đối P0 secrecy.
+ */
+export function getPublicPlayerNameFactionClass(
+  player: Pick<BoardGamePublicPlayerView, 'alive' | 'lifecycleState' | 'revealedFaction'>,
+): string {
+  const isDormant = player.lifecycleState === 'DORMANT_PENDING_REVIVE';
+  if (!player.alive && !isDormant) {
+    return 'line-through text-slate-400';
+  }
+  if (isDormant) {
+    return 'text-emerald-200';
+  }
+  if (player.revealedFaction === 'lantern-guard') {
+    return 'text-emerald-300';
+  }
+  if (player.revealedFaction === 'mist-order') {
+    return 'text-rose-300';
+  }
+  if (player.revealedFaction === 'wanderer') {
+    return 'text-amber-300';
+  }
+  return 'text-white';
+}
+
+/**
  * Tính trạng thái hiển thị công khai cho 1 chip thương tích.
  * Tuyệt đối chỉ dùng dữ liệu publicGame (`revealedMaxHp`, `woundsTaken`, `alive`),
  * KHÔNG đọc hoặc suy đoán từ HP tối đa bí mật khi nhân vật chưa lật vai.
@@ -148,9 +174,9 @@ export interface DamageTrackProps {
   selfPlayerId: string | null;
   selectedTargetId: string | null;
   selfSecretMaxHp: number | null;
-  expanded: boolean;
-  onToggleExpanded: () => void;
-  reducedMotion: boolean;
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
+  reducedMotion?: boolean;
   onSelectPlayer: (updater: (prev: string | null) => string | null) => void;
 }
 
@@ -160,9 +186,6 @@ export const DamageTrack = React.memo(function DamageTrack({
   selfPlayerId,
   selectedTargetId,
   selfSecretMaxHp,
-  expanded,
-  onToggleExpanded,
-  reducedMotion,
   onSelectPlayer,
 }: DamageTrackProps) {
   const playersByWoundNotch = useMemo(() => {
@@ -174,260 +197,98 @@ export const DamageTrack = React.memo(function DamageTrack({
     return buckets;
   }, [players]);
 
-  const drawerMotionCls = reducedMotion
-    ? 'transition-none'
-    : expanded
-      ? 'transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none'
-      : '[transition:grid-template-rows_200ms_ease-out,opacity_160ms_ease-out,visibility_0ms_linear_200ms] motion-reduce:transition-none';
-
-  const isCrowded = players.length >= 7;
-
   return (
     <section
       data-testid="bg-damage-track"
-      data-expanded={expanded ? 'true' : 'false'}
-      className={`shrink-0 rounded-2xl border border-slate-800/95 bg-slate-900/90 py-1 ${
-        isCrowded ? 'px-2 min-[1380px]:px-2.5' : 'px-2.5'
-      }`}
+      className="shrink-0 rounded-2xl border border-slate-800/95 bg-slate-900/90 px-2.5 py-1 space-y-1"
     >
-      {/* HÀNG COMPACT MẶC ĐỊNH: TIÊU ĐỀ + CHIP NGƯỜI CHƠI + NÚT MỞ RỘNG THANG 0..14 */}
-      <div
-        data-testid="bg-damage-track-compact"
-        className={`flex flex-wrap lg:flex-nowrap items-center ${
-          isCrowded ? 'gap-1 min-[1380px]:gap-1.5' : 'gap-1.5'
-        }`}
-      >
-        <h2
-          aria-label="Thang thương tích công khai"
-          className="order-1 shrink-0 pr-0.5 text-xs font-extrabold uppercase tracking-wider text-slate-300 whitespace-nowrap select-none"
-        >
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-200 flex items-center gap-1 whitespace-nowrap shrink-0 select-none">
           <span aria-hidden="true">🩸</span>
-          <span className={isCrowded ? 'hidden 2xl:inline' : ''}> Thương tích</span>
+          <span>Thang thương tích chi tiết (0 → 14)</span>
         </h2>
-
-        <div
-          className={`order-3 w-full lg:order-2 lg:w-auto lg:flex-1 min-w-0 grid gap-1 ${
-            players.length > 4
-              ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-8'
-              : 'grid-cols-2 sm:grid-cols-4'
-          }`}
-        >
-          {players.map((p) => {
-            const chip = computePublicDamageChipState(p, activePlayerId, {
-              compact: isCrowded,
-            });
-            const selected = selectedTargetId === p.playerId;
-
-            const chipToneCls = chip.isEliminated
-              ? 'border-slate-800/90 bg-slate-950/60 opacity-55 grayscale cursor-default'
-              : selected
-                ? 'border-cyan-400 bg-cyan-950/35 ring-1 ring-cyan-400/45'
-                : chip.isTurnHolder && chip.isNearThreshold
-                  ? 'border-amber-400/90 bg-rose-950/40'
-                  : chip.isTurnHolder
-                    ? 'border-amber-400/85 bg-amber-950/25'
-                    : chip.isNearThreshold
-                      ? 'border-rose-400/75 bg-rose-950/35'
-                      : 'border-slate-800 bg-slate-950/80 hover:border-slate-600';
-
-            const badgeToneCls = chip.isEliminated
-              ? 'text-slate-400'
-              : chip.isNearThreshold
-                ? 'bg-rose-500/25 text-rose-200 border border-rose-400/45'
-                : chip.isTurnHolder
-                  ? 'bg-amber-500/20 text-amber-100'
-                  : 'bg-slate-800/90 text-slate-200';
-
-            return (
-              <button
-                key={p.playerId}
-                type="button"
-                data-testid={`bg-wound-chip-${p.seatIndex}`}
-                data-player-id={p.playerId}
-                data-turn-holder={chip.isTurnHolder ? 'true' : 'false'}
-                data-near-threshold={chip.isNearThreshold ? 'true' : 'false'}
-                data-eliminated={chip.isEliminated ? 'true' : 'false'}
-                aria-pressed={selected}
-                title={`${p.displayName} · ${p.woundsTaken} vết thương${
-                  p.revealedMaxHp !== null ? ` / Ngưỡng ${p.revealedMaxHp}` : ''
-                }${
-                  chip.isEliminated
-                    ? ' (Đã bị loại)'
-                    : chip.isTurnHolder
-                      ? ' (Đang tới lượt)'
-                      : chip.isNearThreshold
-                        ? ' (Gần ngưỡng gục)'
-                        : ''
-                }`}
-                onClick={() =>
-                  onSelectPlayer((prev) => toggleSelectedTargetId(prev, p.playerId, p.alive))
-                }
-                className={`min-h-[30px] min-w-0 overflow-hidden py-0.5 rounded-xl border flex items-center justify-between transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
-                  isCrowded ? 'px-1 gap-0.5' : 'px-1.5 gap-1'
-                } ${chipToneCls}`}
-              >
-                <span
-                  className={`flex items-center min-w-0 flex-1 ${
-                    isCrowded ? 'gap-0.5' : 'gap-1'
-                  }`}
-                >
-                  <span className={isCrowded ? 'shrink-0 -ml-0.5 -mr-1 scale-[0.8]' : 'shrink-0'}>
-                    <PlayerPawnToken
-                      size="2xs"
-                      elevated={false}
-                      isActive={false}
-                      displayName={p.displayName}
-                      seatIndex={p.seatIndex}
-                      alive={p.alive}
-                      isSelf={p.playerId === selfPlayerId}
-                      revealedFaction={p.revealedFaction}
-                      revealedRoleId={p.revealedRoleId}
-                    />
-                  </span>
-                  <span
-                    data-testid={`bg-wound-name-${p.seatIndex}`}
-                    className={`truncate text-xs ${
-                      chip.isEliminated
-                        ? 'line-through text-slate-400 font-medium'
-                        : chip.isTurnHolder
-                          ? 'text-amber-100 font-bold'
-                          : chip.isNearThreshold
-                            ? 'text-rose-100 font-bold'
-                            : 'text-slate-200 font-semibold'
-                    }`}
-                  >
-                    {chip.shortName}
-                  </span>
-                </span>
-                <span
-                  data-testid={`bg-wound-count-${p.seatIndex}`}
-                  className={`shrink-0 rounded py-0.5 font-black tabular-nums leading-none ${
-                    isCrowded ? 'px-0.5 text-[11px] min-[1380px]:text-xs' : 'px-1 text-xs'
-                  } ${badgeToneCls}`}
-                >
-                  {chip.isEliminated ? `💀${p.woundsTaken}` : chip.woundBadgeText}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          data-testid="bg-damage-track-toggle"
-          aria-expanded={expanded}
-          aria-controls="bg-damage-track-drawer"
-          onClick={onToggleExpanded}
-          className={`order-2 ml-auto lg:order-3 lg:ml-0 shrink-0 min-h-[30px] py-0.5 rounded-xl border border-slate-700 bg-slate-950/90 hover:border-cyan-400/60 hover:text-cyan-100 text-xs font-bold text-slate-200 whitespace-nowrap transition cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
-            isCrowded ? 'px-1.5 min-[1380px]:px-2' : 'px-2.5'
-          }`}
-        >
-          {isCrowded ? (
-            expanded ? (
-              <>
-                <span className="min-[1380px]:hidden">Ẩn ▴</span>
-                <span className="hidden min-[1380px]:inline">Thu gọn ▴</span>
-              </>
-            ) : (
-              <>
-                <span className="min-[1380px]:hidden">0–14 ▾</span>
-                <span className="hidden min-[1380px]:inline">Thang 0–14 ▾</span>
-              </>
-            )
-          ) : expanded ? (
-            'Thu gọn ▴'
-          ) : (
-            'Thang 0–14 ▾'
-          )}
-        </button>
+        <span className="text-[11px] text-slate-400 truncate">
+          🎯 Mốc của bạn · 💀 Ngưỡng gục đã lộ
+        </span>
       </div>
-
-      {/* NGĂN MỞ RỘNG MƯỢT XEM ĐẦY ĐỦ THANG THƯƠNG TÍCH 0..14 */}
       <div
-        id="bg-damage-track-drawer"
-        data-testid="bg-damage-track-drawer"
-        aria-hidden={!expanded}
-        className={`grid overflow-hidden ${drawerMotionCls} ${
-          expanded ? 'grid-rows-[1fr] opacity-100 visible' : 'grid-rows-[0fr] opacity-0 invisible'
-        }`}
+        data-testid="bg-damage-track-grid"
+        className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-[minmax(108px,2.2fr)_repeat(14,minmax(0,1fr))] gap-1"
       >
-        <div className="min-h-0 overflow-hidden">
-          <div className="pt-1.5 mt-1 border-t border-slate-800/90 space-y-1">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-bold text-slate-300">
-                Thang thương tích chi tiết (0 → 14)
-              </span>
-              <span className="text-xs text-slate-400">
-                Máu tối đa ẩn tới khi lật vai · 🎯 Mốc của bạn · 💀 Ngưỡng gục đã lộ
-              </span>
-            </div>
-            <div
-              data-testid="bg-damage-track-grid"
-              className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-[minmax(86px,1.9fr)_repeat(14,minmax(0,1fr))] gap-1"
-            >
-              {WOUND_NOTCHES.map((notch) => {
-                const occupants = playersByWoundNotch[notch];
-                const isSelfMaxNotch = selfSecretMaxHp === notch;
-                const revealedAtNotch = players.filter((p) => p.revealedMaxHp === notch);
-                const tone = isSelfMaxNotch
-                  ? 'border-cyan-400/75 bg-cyan-950/35 text-cyan-100'
-                  : notch === 0
-                    ? 'border-emerald-500/40 bg-emerald-950/35 text-emerald-200'
-                    : notch <= 6
-                      ? 'border-slate-700 bg-slate-950/80 text-slate-200'
-                      : notch <= 10
-                        ? 'border-amber-500/45 bg-amber-950/35 text-amber-200'
-                        : 'border-rose-500/55 bg-rose-950/45 text-rose-200';
-                const cellTitle = [
-                  `Mốc ${notch} vết thương`,
-                  isSelfMaxNotch ? 'Ngưỡng gục của bạn' : null,
-                  revealedAtNotch.length > 0
-                    ? `Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ');
+        {WOUND_NOTCHES.map((notch) => {
+          const occupants = playersByWoundNotch[notch];
+          const isSelfMaxNotch = selfSecretMaxHp === notch;
+          const revealedAtNotch = players.filter((p) => p.revealedMaxHp === notch);
+          const tone = isSelfMaxNotch
+            ? 'border-cyan-400/75 bg-cyan-950/35 text-cyan-100'
+            : notch === 0
+              ? 'border-emerald-500/40 bg-emerald-950/35 text-emerald-200'
+              : notch <= 6
+                ? 'border-slate-700 bg-slate-950/80 text-slate-200'
+                : notch <= 10
+                  ? 'border-amber-500/45 bg-amber-950/35 text-amber-200'
+                  : 'border-rose-500/55 bg-rose-950/45 text-rose-200';
+          const cellTitle = [
+            `Mốc ${notch} vết thương`,
+            isSelfMaxNotch ? 'Ngưỡng gục của bạn' : null,
+            revealedAtNotch.length > 0
+              ? `Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' · ');
 
-                return (
-                  <div
-                    key={notch}
-                    title={cellTitle}
-                    className={`min-h-[38px] rounded-lg border px-1 py-1 flex flex-col items-center justify-between gap-1 ${tone}`}
+          return (
+            <div
+              key={notch}
+              title={cellTitle}
+              className={`min-h-[34px] min-w-0 overflow-hidden rounded-lg border px-1 py-0.5 flex flex-col items-center justify-between gap-0.5 ${tone}`}
+            >
+              <span className="text-[11px] font-black leading-none flex items-center gap-0.5 shrink-0">
+                <span>{notch === 14 ? '14💀' : notch}</span>
+                {isSelfMaxNotch && <span title="Mốc tử trận của bạn">🎯</span>}
+                {!isSelfMaxNotch && revealedAtNotch.length > 0 && notch !== 14 && (
+                  <span
+                    title={`Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`}
                   >
-                    <span className="text-[11px] sm:text-xs font-black leading-none flex items-center gap-0.5 shrink-0">
-                      <span>{notch === 14 ? '14💀' : notch}</span>
-                      {isSelfMaxNotch && <span title="Mốc tử trận của bạn">🎯</span>}
-                      {!isSelfMaxNotch && revealedAtNotch.length > 0 && notch !== 14 && (
-                        <span
-                          title={`Ngưỡng gục: ${revealedAtNotch.map((p) => p.displayName).join(', ')}`}
-                        >
-                          💀
-                        </span>
-                      )}
-                    </span>
-                    <div className="min-h-[22px] flex flex-wrap items-center justify-center -space-x-2 gap-y-0.5 pt-0.5">
-                      {occupants.map((p) => (
-                        <div key={p.playerId} className="origin-center scale-[0.78]">
-                          <PlayerPawnToken
-                            size="xs"
-                            elevated={false}
-                            displayName={p.displayName}
-                            seatIndex={p.seatIndex}
-                            alive={p.alive}
-                            isActive={p.playerId === activePlayerId}
-                            isSelf={p.playerId === selfPlayerId}
-                            revealedFaction={p.revealedFaction}
-                            revealedRoleId={p.revealedRoleId}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+                    💀
+                  </span>
+                )}
+              </span>
+              <div className="h-[20px] max-w-full flex items-center justify-center -space-x-2.5 overflow-hidden">
+                {occupants.map((p) => {
+                  const isSelected = selectedTargetId === p.playerId;
+                  return (
+                    <button
+                      key={p.playerId}
+                      type="button"
+                      aria-pressed={isSelected}
+                      title={`${p.displayName} · ${p.woundsTaken} vết thương`}
+                      onClick={() =>
+                        onSelectPlayer((prev) => toggleSelectedTargetId(prev, p.playerId, p.alive))
+                      }
+                      className={`shrink-0 origin-center scale-[0.72] rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                        isSelected ? 'ring-2 ring-cyan-300' : ''
+                      }`}
+                    >
+                      <PlayerPawnToken
+                        size="xs"
+                        elevated={false}
+                        displayName={p.displayName}
+                        seatIndex={p.seatIndex}
+                        alive={p.alive}
+                        isActive={p.playerId === activePlayerId}
+                        isSelf={p.playerId === selfPlayerId}
+                        revealedFaction={p.revealedFaction}
+                        revealedRoleId={p.revealedRoleId}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
     </section>
   );
