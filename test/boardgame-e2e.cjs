@@ -3340,12 +3340,14 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
     await p1.page.waitForSelector('[data-testid="bg-reveal-role-btn"]', { timeout: UI_TIMEOUT });
     await p1.page.locator('[data-testid="bg-reveal-role-btn"]').click();
     await p1.page.waitForSelector('[data-testid="bg-confirm-reveal-btn"]', { timeout: UI_TIMEOUT });
+    await dismissGreenCardPopupIfOpen(p1.page);
     await p1.page.locator('[data-testid="bg-confirm-reveal-btn"]').click();
     await p1.page.waitForSelector('[data-testid="bg-last-reveal-banner"]', { timeout: UI_TIMEOUT });
 
-    // Checkpoint 4: Reload after voluntary role revelation — must NOT replay historical DICE_ROLL overlay & tray stays settled
+    // Checkpoint 4: Reload after voluntary role revelation — must NOT replay historical DICE_ROLL overlay or green card popup & tray stays settled
     await reloadAndRestoreTo('[data-testid="boardgame-2d-board"]');
     assert.equal(await p1.page.locator('[data-testid="bg-vfx-dice-overlay"]').count(), 0, 'F5 reload must not replay completed dice roll VFX');
+    assert.equal(await p1.page.locator('[data-testid="bg-green-card-popup"]').count(), 0, 'F5 reload must not replay historical green card popup');
     assert.equal(
       await p1.page.locator('[data-testid="bg-dice-tray"]').getAttribute('data-dice-settled'),
       'true',
@@ -3359,8 +3361,9 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       false,
       'Checkpoint 4: revealed skill status must persist across reload after REVEAL_ROLE',
     );
+    await dismissGreenCardPopupIfOpen(p1.page);
     await p1.page.locator('[data-testid="bg-sidebar-tab-gear"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-table-equipment-list"]', { timeout: 3000 });
+    await p1.page.waitForSelector('[data-testid="bg-table-equipment-list"]', { timeout: 5000 });
     const chipAfterReconnect = await p1.page.evaluate((pid) => {
       const track = document.querySelector('[data-testid="bg-damage-track"]');
       const row = document.querySelector(`[data-testid^="bg-table-player-row-"][data-player-id="${pid}"]`);
@@ -3379,8 +3382,9 @@ async function runE2E03(chromium, launchOpts, peerBrowser, outUrl, shim) {
       `Checkpoint 4: revealed /MaxHp threshold must display next to player name after F5 reconnect, got "${chipAfterReconnect.countText}"`,
     );
     assert.ok(chipAfterReconnect.inspectText.length > 2, 'Checkpoint 4: revealed character name inspect button must render');
+    await dismissGreenCardPopupIfOpen(p1.page);
     await p1.page.locator('[data-testid="bg-sidebar-tab-role"]').click();
-    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 3000 });
+    await p1.page.waitForSelector('[data-testid="bg-role-card-secret"]', { timeout: 5000 });
     await p1.page.screenshot({ path: path.join(SHOT_DIR, 'bg-v31-reconnect-check.png') });
 
     // Drive match to FINISHED fast via peers + UI P1

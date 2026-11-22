@@ -130,8 +130,13 @@ export function GameBoard({
   const [seenLogCount, setSeenLogCount] = useState(() => publicGame.publicLog.length);
   const [zoomTarget, setZoomTarget] = useState<MidnightZoomTarget | null>(null);
   const [pendingGreenClues, setPendingGreenClues] = useState<BoardGamePrivateClueEntry[]>([]);
-  const seenReceivedClueIdsRef = useRef<{ matchId: string; ids: Set<string> }>({
+  const seenReceivedClueIdsRef = useRef<{
+    matchId: string;
+    seeded: boolean;
+    ids: Set<string>;
+  }>({
     matchId: publicGame.matchId,
+    seeded: Boolean(privateView),
     ids: new Set((privateView?.privateClues ?? []).map((c) => c.id)),
   });
   const boardStageRef = useRef<HTMLDivElement>(null);
@@ -225,6 +230,7 @@ export function GameBoard({
     setPendingGreenClues([]);
     seenReceivedClueIdsRef.current = {
       matchId: publicGame.matchId,
+      seeded: Boolean(privateView),
       ids: new Set((privateView?.privateClues ?? []).map((c) => c.id)),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,9 +248,13 @@ export function GameBoard({
   // Phát hiện Thẻ Xanh bí mật mới được người chơi khác đưa cho MÌNH để bật popup riêng tư (chống lặp khi F5)
   useEffect(() => {
     if (isSpectator || !privateView || isMatchFinished) return;
-    if (seenReceivedClueIdsRef.current.matchId !== publicGame.matchId) {
+    if (
+      seenReceivedClueIdsRef.current.matchId !== publicGame.matchId ||
+      !seenReceivedClueIdsRef.current.seeded
+    ) {
       seenReceivedClueIdsRef.current = {
         matchId: publicGame.matchId,
+        seeded: true,
         ids: new Set(privateView.privateClues.map((c) => c.id)),
       };
       return;
