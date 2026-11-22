@@ -238,6 +238,11 @@ async function runLiveRoomSmoke({ workerBase, wsBase, rulesetId, playerCount, te
         false,
         'exp2_nc_soldier must never be dealt in 5P',
       );
+      assert.equal(
+        dealtRoles.includes('exp1_cassie'),
+        false,
+        'exp1_cassie must never be dealt in 5P',
+      );
     }
 
     // Host attempting BG_SET_RULESET after match started MUST fail

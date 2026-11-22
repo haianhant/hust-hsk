@@ -362,7 +362,8 @@ export const ROLE_VISUAL_META: Record<BoardGameRoleId, RoleVisualMeta> = {
     title: 'Hunter MR1 · 14 HP',
     accentHex: '#34d399',
     motif: 'Khiên Thép Che Chở',
-    shortAbility: 'Nội tại sau lật vai: Phản công kẻ đánh Hunter/Neutral đã lộ diện trong cùng Cụm',
+    shortAbility:
+      'Khi một Hunter hoặc Neutral khác đã lộ diện trong cùng cụm địa điểm với bạn bị tấn công, bạn có thể phản công người tấn công đó nếu mục tiêu nằm trong tầm đánh hợp lệ. Phản công không ngăn sát thương của đòn đánh gốc và không tạo chuỗi phản công vô hạn.',
   },
   exp2_freyja: {
     codeName: 'Freyja',

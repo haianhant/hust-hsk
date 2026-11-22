@@ -16,7 +16,11 @@ import type { RemoteAppearance } from '../../../shared/contracts/multiplayer';
 import { listCardIdsByDeck } from './cards';
 import { appendPublicLog } from './effects';
 import { DEFAULT_RULESET_REGISTRY } from './registry';
-import { getRoleDesign, getRoleDistribution } from './roles';
+import {
+  filterEligibleWandererPoolForPlayerCount,
+  getRoleDesign,
+  getRoleDistribution,
+} from './roles';
 import {
   BOARD_GAME_SAFETY_MAX_ROUNDS,
   LOCATIONS_CATALOG,
@@ -69,12 +73,16 @@ export function createInitialGameState(
     rngState,
   );
   rngState = shadows.nextState;
-  // Phase 7 experimental house rule (Section 17): ở bàn 5P (chỉ có 1 Neutral duy nhất),
-  // loại trừ `exp2_nc_soldier` khỏi pool chia vai Wanderer (KHÔNG chạm Classic PRNG!).
+  // Ở bàn 5P (chỉ có 1 Neutral duy nhất), loại trừ các Neutral phụ thuộc bắt buộc vào Neutral khác
+  // (`exp2_nc_soldier`, `exp1_cassie`) khỏi pool chia vai Wanderer của mọi ruleset mở rộng (KHÔNG chạm Classic PRNG!).
   const rawWandererPool = resolvedPool.pools.wanderer as readonly BoardGameRoleId[];
   const eligibleWandererPool =
     resolvedPool.ruleset.id !== 'classic' && orderedInputs.length === 5
-      ? rawWandererPool.filter((id) => (id as string) !== 'exp2_nc_soldier')
+      ? filterEligibleWandererPoolForPlayerCount(
+          rawWandererPool,
+          resolvedPool.ruleset.id,
+          orderedInputs.length,
+        )
       : rawWandererPool;
   const wanderers = shuffleWithRng(eligibleWandererPool, rngState);
   rngState = wanderers.nextState;

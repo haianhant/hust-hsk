@@ -105,6 +105,7 @@ function makeLegalScenario(roles, opts = {}) {
     assert.ok(allowedSet.has(rid), `Role ${rid} is NOT legal in ruleset ${rulesetId}`);
     if (count === 5) {
       assert.notEqual(rid, 'exp2_nc_soldier', 'exp2_nc_soldier is illegal in 5P');
+      assert.notEqual(rid, 'exp1_cassie', 'exp1_cassie is illegal in 5P');
     }
     counts[getRoleDesign(rid).faction] += 1;
   }
@@ -229,6 +230,13 @@ test('8F1-ELIG — Legal role-pair eligibility respects getRoleDistribution(4..8
   assert.deepEqual(bonnieNc.eligiblePlayerCounts, [6, 7, 8]);
   assert.equal(bonnieNc.eligiblePlayerCounts.includes(4), false);
   assert.equal(bonnieNc.eligiblePlayerCounts.includes(5), false, 'Bonnie × N.C. Soldier MUST NOT be eligible in 5P');
+
+  // 2b. Cassie (Neutral, exp1) × Hunter/Shadow (e.g. Gwendolen): expansion-1 + full-expansion, ONLY 6P–8P (NOT 4P, NOT 5P)!
+  const cassieGwen = computePairEligibility('exp1_cassie', 'exp1_gwendolen');
+  assert.deepEqual(cassieGwen.eligibleRulesets, ['expansion-1', 'full-expansion']);
+  assert.deepEqual(cassieGwen.eligiblePlayerCounts, [6, 7, 8]);
+  assert.equal(cassieGwen.eligiblePlayerCounts.includes(4), false, 'Cassie × Gwendolen MUST NOT be eligible in 4P');
+  assert.equal(cassieGwen.eligiblePlayerCounts.includes(5), false, 'Cassie × Gwendolen MUST NOT be eligible in 5P');
 
   // 3. Any Shadow × Neutral (e.g. Undead × Daniel): NOT eligible in 4P (0 Neutral seats!), eligible in 5P–8P!
   const undeadDaniel = computePairEligibility('exp1_undead', 'lang-tien-phong');

@@ -233,10 +233,10 @@ for (const rulesetId of PRODUCTION_RULESETS) {
     const resolved = DEFAULT_RULESET_REGISTRY.resolvePlayableRolePoolOrThrow(rulesetId, pc, {
       productionBeta: PROD_BETA_ALL,
     });
-    // Mirror exact 5P exp2_nc_soldier exclusion from features/boardgame/domain/state-machine.ts:75-78
+    // Mirror exact 5P Neutral dealing exclusions (exp2_nc_soldier, exp1_cassie) from features/boardgame/domain/state-machine.ts
     const wandererPool =
       rulesetId !== 'classic' && pc === 5
-        ? resolved.pools.wanderer.filter((id) => id !== 'exp2_nc_soldier')
+        ? resolved.pools.wanderer.filter((id) => id !== 'exp2_nc_soldier' && id !== 'exp1_cassie')
         : resolved.pools.wanderer;
     RULESET_POOL_SETS[rulesetId][pc] = {
       'lantern-guard': new Set(resolved.pools.lanternGuard),
@@ -297,7 +297,7 @@ function computePairEligibility(idA, idB) {
       const cap = SEAT_CAPACITY_BY_PC[pc];
       const pool = RULESET_POOL_SETS[rulesetId][pc].all;
 
-      // 1. Check 5P exp2_nc_soldier explicit deal exclusion
+      // 1. Check 5P explicit Neutral deal exclusions (exp2_nc_soldier, exp1_cassie)
       if (!pool.has(idA) || !pool.has(idB)) {
         const excluded = [!pool.has(idA) ? idA : null, !pool.has(idB) ? idB : null]
           .filter(Boolean)

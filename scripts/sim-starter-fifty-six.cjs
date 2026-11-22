@@ -126,7 +126,10 @@ function createBotMemory(playerIds, myPrivateViews) {
             (r) =>
               r.id !== priv.roleId &&
               (dist.wanderer > 0 || r.faction !== 'wanderer') &&
-              !(playerIds.length === 5 && r.id === 'exp2_nc_soldier'),
+              !(
+                playerIds.length === 5 &&
+                (r.id === 'exp2_nc_soldier' || r.id === 'exp1_cassie')
+              ),
           ).map((r) => r.id),
         );
       }

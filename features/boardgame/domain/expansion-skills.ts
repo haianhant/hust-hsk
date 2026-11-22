@@ -2380,7 +2380,7 @@ const bryonGenerousServiceHandler: SkillHandlerDefinition = {
     const hasGiftable = ctx.owner.equipped.some((cid) => cid !== MASAMUNE_CARD_ID);
     if (!hasGiftable) return false;
     return listLivingPlayersInSameCluster(ctx.state, ctx.owner, { includeSelf: false }).some(
-      (p) => p.faction === 'wanderer' && p.revealed,
+      (p) => getEffectiveFaction(ctx.state, p) === 'wanderer' && p.revealed,
     );
   },
   execute(ctx) {
@@ -10543,13 +10543,13 @@ export function drainPendingSteps(
           kind: 'gwendolen_counter_attack',
           isSecret: false,
           title: 'Sự Che Chở (Gwendolen)',
-          description: `${origAttacker.displayName} vừa tấn công ${victimNames} (Hunter/Neutral đã lộ diện trong Cụm của bạn). Bạn có muốn tung đòn phản công vào ${origAttacker.displayName} không? (Hết giờ tự bỏ qua).`,
+          description: `${origAttacker.displayName} vừa tấn công ${victimNames} (Hunter/Neutral khác đã lộ diện trong cùng cụm địa điểm với bạn). Bạn có thể phản công ${origAttacker.displayName} trong tầm đánh hợp lệ (không ngăn sát thương của đòn đánh gốc, không tạo chuỗi phản công vô hạn; hết giờ mặc định Bỏ qua).`,
           publicPromptLabel: `🛡️⚔️ Gwendolen (${gwendolen.displayName}) đang cân nhắc phản công bảo vệ ${victimNames}...`,
           options: [
             {
               optionId: 'counter',
               label: `Phản công ${origAttacker.displayName} ngay`,
-              detail: `Tung đòn tấn công trả đũa (${gwendolen.equipped.includes('ev-01') ? 'xs 4 mặt' : '|xs 6 mặt - xs 4 mặt|'}) lên ${origAttacker.displayName} (không gây vòng lặp).`,
+              detail: `Tung đòn phản công (${gwendolen.equipped.includes('ev-01') ? 'xs 4 mặt' : '|xs 6 mặt - xs 4 mặt|'}) lên ${origAttacker.displayName} (không ngăn sát thương gốc, không tạo chuỗi phản công vô hạn).`,
               targetPlayerId: origAttacker.playerId,
             },
             {
@@ -11807,7 +11807,7 @@ export function resolvePendingChoice(
       const sameClusterNeutral =
         recipient &&
         recipient.alive &&
-        recipient.faction === 'wanderer' &&
+        getEffectiveFaction(state, recipient) === 'wanderer' &&
         recipient.revealed &&
         listLivingPlayersInSameCluster(state, actor, { includeSelf: false }).some(
           (p) => p.playerId === recipient.playerId,
@@ -11974,6 +11974,7 @@ export function resolvePendingChoice(
         options?.isTimeoutFallback ||
         !gwen ||
         !gwen.alive ||
+        !gwen.revealed ||
         !origAttacker ||
         !origAttacker.alive ||
         !canExpandedPlayerAttackTarget(state, gwen, origAttacker)

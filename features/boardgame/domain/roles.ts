@@ -6,6 +6,7 @@
 import type {
   BoardGameFactionId,
   BoardGameRoleId,
+  BoardGameRulesetId,
   ClassicBoardGameRoleId,
 } from '../../../shared/contracts/boardgame';
 import { EXPANSION_CHARACTER_CATALOG, type ExpansionCatalogRecord } from './expansion-catalog';
@@ -372,4 +373,25 @@ export function getRoleDistribution(playerCount: number): FactionCountSplit {
 
 export function listRolesForFaction(faction: BoardGameFactionId): CharacterDesign[] {
   return ROLES_CATALOG.filter((r) => r.faction === faction);
+}
+
+/**
+ * Các nhân vật Neutral có điều kiện thắng phụ thuộc cấu trúc vào ít nhất 1 Neutral khác
+ * trên bàn (không có điều kiện thắng dự phòng độc lập). Ở bàn 5P (`wanderer = 1`),
+ * bắt buộc loại khỏi pool chia vai của mọi chế độ mở rộng để không chia ra nhân vật bất khả thắng:
+ * - `exp2_nc_soldier` (N.C. Soldier): phải chiêu mộ toàn bộ Neutral gốc khác (`>= 1`).
+ * - `exp1_cassie` (Cassie): phải sao chép mục tiêu của Neutral khác đầu tiên lộ diện (`>= 1`).
+ */
+export const FIVE_PLAYER_EXCLUDED_NEUTRAL_ROLE_IDS: ReadonlySet<BoardGameRoleId> =
+  new Set<BoardGameRoleId>(['exp2_nc_soldier', 'exp1_cassie']);
+
+export function filterEligibleWandererPoolForPlayerCount<T extends BoardGameRoleId>(
+  rawWandererPool: readonly T[],
+  rulesetId: BoardGameRulesetId,
+  playerCount: number,
+): T[] {
+  if (rulesetId === 'classic' || playerCount !== 5) {
+    return [...rawWandererPool];
+  }
+  return rawWandererPool.filter((id) => !FIVE_PLAYER_EXCLUDED_NEUTRAL_ROLE_IDS.has(id));
 }

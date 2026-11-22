@@ -192,7 +192,7 @@ export const EXPANSION_CHARACTER_CATALOG: readonly ExpansionCatalogRecord[] = [
     "faction": "hunter",
     "maxHp": 14,
     "skillName": "Sự che chở",
-    "skillDescription": "Bạn có thể tấn công lại cho những Hunter hoặc Neutral đã bị tấn công trong khu vực đó.",
+    "skillDescription": "Khi một Hunter hoặc Neutral khác đã lộ diện trong cùng cụm địa điểm với bạn bị tấn công, bạn có thể phản công người tấn công đó nếu mục tiêu nằm trong tầm đánh hợp lệ. Phản công không ngăn sát thương của đòn đánh gốc và không tạo chuỗi phản công vô hạn.",
     "trigger": "AFTER_ATTACK",
     "activationConditions": "Khi một Hunter hoặc Neutral bị tấn công trong 'khu vực đó' (chưa rõ cùng 1 ô hay cùng cụm 2 ô, và nạn nhân có cần đã lộ diện hay không).",
     "effect": "Thực hiện đòn phản công thay cho Hunter/Neutral vừa bị tấn công.",
